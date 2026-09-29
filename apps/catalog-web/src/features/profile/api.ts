@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import i18n from 'i18next';
 import { request, requestNoContent } from '../../api/request';
 
 const uuid = z.uuid();
@@ -17,10 +18,9 @@ const permissionSchema = z.object({
 });
 const permissionCodesSchema = z
   .array(z.string())
-  .refine(
-    (permissions) => new Set(permissions).size === permissions.length,
-    'Permissions must be unique',
-  )
+  .refine((permissions) => new Set(permissions).size === permissions.length, {
+    error: () => i18n.t('errors.permissionsUnique'),
+  })
   .min(1);
 const tokenInputSchema = z.object({
   label: z.string().trim().min(1).max(120),
@@ -41,7 +41,7 @@ export const listTokenPermissions = () =>
 export const createToken = (input: z.input<typeof tokenInputSchema>) => {
   const parsed = tokenInputSchema.parse(input);
   if (parsed.expires_at && new Date(parsed.expires_at) <= new Date()) {
-    throw new Error('Token expiry must be in the future.');
+    throw new Error(i18n.t('errors.tokenExpiryFuture'));
   }
   return request(
     '/api/personal-access-tokens',

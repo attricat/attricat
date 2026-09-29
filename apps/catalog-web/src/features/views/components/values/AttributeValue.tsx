@@ -5,6 +5,8 @@ import type { Attribute } from '../../../entities/api';
 import { fileDownloadUrl } from '../../../files/api';
 import { FileThumbnail } from '../../../files/FileThumbnail';
 import { formatAttributeValue } from './formatAttributeValue';
+import { attributeValueTypes } from '../../../entities/valueTypes';
+import { FILE_THUMBNAIL_SIZE } from '../../constants';
 
 type RelationshipValue = {
   items?: { id: string; display?: string }[];
@@ -42,7 +44,10 @@ export const AttributeValue = ({
   compact?: boolean;
 }) => {
   const { t } = useTranslation();
-  if (attribute.value_type === 'relationship' && isRelationshipValue(value)) {
+  if (
+    attribute.value_type === attributeValueTypes.relationship &&
+    isRelationshipValue(value)
+  ) {
     const items = value.items ?? [];
     if (compact)
       return (
@@ -72,7 +77,7 @@ export const AttributeValue = ({
       </Stack>
     );
   }
-  if (attribute.value_type === 'file') {
+  if (attribute.value_type === attributeValueTypes.file) {
     if (!isFileValue(value)) {
       return (
         <Typography variant="body2">{t('views.fileValueNotSet')}</Typography>
@@ -92,7 +97,7 @@ export const AttributeValue = ({
         {value.map((file) => (
           <Stack direction="row" key={file.id} spacing={1}>
             {attribute.file_policy?.image_only && (
-              <FileThumbnail file={file} size={64} />
+              <FileThumbnail file={file} size={FILE_THUMBNAIL_SIZE} />
             )}
             <Typography
               component="a"
@@ -108,7 +113,7 @@ export const AttributeValue = ({
   }
 
   if (
-    attribute.value_type === 'boolean' &&
+    attribute.value_type === attributeValueTypes.boolean &&
     value !== null &&
     value !== undefined &&
     !compact

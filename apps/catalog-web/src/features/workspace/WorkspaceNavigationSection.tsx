@@ -18,6 +18,7 @@ import {
   updateExploreNavigation,
   type ExploreNavigationEntry,
 } from './api';
+import { navigationSelectMinWidth } from './constants';
 import { workspaceQueryKeys } from './queryKeys';
 
 export const WorkspaceNavigationSection = ({
@@ -106,7 +107,7 @@ export const WorkspaceNavigationSection = ({
               }}
               select
               value={entry.blueprint_code}
-              sx={{ minWidth: 250 }}
+              sx={{ minWidth: navigationSelectMinWidth }}
             >
               {(blueprints.data ?? []).map((blueprint) => (
                 <MenuItem
@@ -152,7 +153,7 @@ export const WorkspaceNavigationSection = ({
                 roleDrafts[entry.blueprint_code] ??
                 entry.visible_to_role_codes.join(', ')
               }
-              sx={{ minWidth: 250 }}
+              sx={{ minWidth: navigationSelectMinWidth }}
             />
             <Button
               disabled={save.isPending}

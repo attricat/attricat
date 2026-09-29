@@ -1,8 +1,8 @@
-import { byteDisplayPrecision, bytesPerKilobyte } from './constants';
+import { byteDisplayPrecision, bytesPerKilobyte, byteUnits } from './constants';
 
 export const formatBytes = (bytes: number) => {
   if (bytes < bytesPerKilobyte) return `${bytes} B`;
-  const units = ['KB', 'MB', 'GB', 'TB'];
+  const units = byteUnits;
   const unit = Math.min(
     Math.floor(Math.log(bytes) / Math.log(bytesPerKilobyte)),
     units.length,

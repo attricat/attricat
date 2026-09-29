@@ -37,6 +37,9 @@ type Props = {
   };
 };
 
+const relationshipSelectorDialogHeight = 680;
+const relationshipSelectorDialogMaxHeight = 'calc(100dvh - 64px)';
+
 export const RelationshipSelectorDialog = ({
   actions,
   children,
@@ -61,8 +64,8 @@ export const RelationshipSelectorDialog = ({
       slotProps={{
         paper: {
           sx: {
-            height: { sm: 680 },
-            maxHeight: { sm: 'calc(100dvh - 64px)' },
+            height: { sm: relationshipSelectorDialogHeight },
+            maxHeight: { sm: relationshipSelectorDialogMaxHeight },
           },
         },
       }}

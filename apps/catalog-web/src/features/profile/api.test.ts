@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiRequestError } from '../../api/request';
 import { createToken, listTokens, revokeToken } from './api';
+import '../../i18n';
 
 const id = '123e4567-e89b-12d3-a456-426614174000';
 const fetchMock = vi.fn();

@@ -1,6 +1,7 @@
 import { Button, Paper } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { RelationshipPickerIcon } from '../../../components/systemIcons';
+import { RELATIONSHIP_PICKER_ACTION_MIN_WIDTH } from '../constants';
 import { relationshipPickerMessageType } from './useRecentlyPreviewedEntities';
 
 export const RelationshipPickerActionBar = ({
@@ -44,7 +45,7 @@ export const RelationshipPickerActionBar = ({
         onClick={selectAndClose}
         size="large"
         startIcon={<RelationshipPickerIcon />}
-        sx={{ minWidth: { sm: 300 } }}
+        sx={{ minWidth: { sm: RELATIONSHIP_PICKER_ACTION_MIN_WIDTH } }}
         variant="contained"
       >
         {t('entities.selectThisEntityAndClose')}

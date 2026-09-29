@@ -83,15 +83,17 @@ value_type = "string"
 
 export const minimumTomlEditorHeight = 480;
 
+export const tomlLanguageId = 'toml';
+
 export const configureToml = (monaco: Monaco) => {
   if (
     monaco.languages
       .getLanguages()
-      .some((language: { id: string }) => language.id === 'toml')
+      .some((language: { id: string }) => language.id === tomlLanguageId)
   )
     return;
-  monaco.languages.register({ id: 'toml' });
-  monaco.languages.setMonarchTokensProvider('toml', {
+  monaco.languages.register({ id: tomlLanguageId });
+  monaco.languages.setMonarchTokensProvider(tomlLanguageId, {
     tokenizer: {
       root: [
         [/^\s*#.*$/, 'comment'],

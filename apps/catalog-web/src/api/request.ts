@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import i18n from 'i18next';
 import { apiFetch, csrfToken } from './fetch';
 
 export const apiErrorSchema = z.object({
@@ -20,7 +21,7 @@ export class ApiRequestError extends Error {
 export const apiRequestError = (
   status: number,
   body: unknown,
-  fallbackMessage = `Request failed (${status})`,
+  fallbackMessage = i18n.t('errors.requestFailed', { status }),
 ) => {
   const error = apiErrorSchema.safeParse(body);
   return new ApiRequestError(
@@ -48,7 +49,11 @@ export const request = async <T>(
     response.status === 204 ? undefined : await response.json(),
   );
   if (!result.success)
-    throw new Error(`Invalid API response: ${z.prettifyError(result.error)}`);
+    throw new Error(
+      i18n.t('errors.invalidApiResponse', {
+        details: z.prettifyError(result.error),
+      }),
+    );
   return result.data;
 };
 
@@ -82,7 +87,7 @@ export const requestUpload = async <T>(
         onProgress?.(Math.round((event.loaded / event.total) * 100));
     };
     upload.onerror = () =>
-      reject(apiRequestError(0, undefined, 'Upload failed'));
+      reject(apiRequestError(0, undefined, i18n.t('errors.uploadFailed')));
     upload.onload = () => {
       let body: unknown;
       try {
@@ -97,7 +102,11 @@ export const requestUpload = async <T>(
       const result = schema.safeParse(body);
       if (!result.success) {
         reject(
-          new Error(`Invalid API response: ${z.prettifyError(result.error)}`),
+          new Error(
+            i18n.t('errors.invalidApiResponse', {
+              details: z.prettifyError(result.error),
+            }),
+          ),
         );
         return;
       }

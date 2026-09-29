@@ -22,11 +22,17 @@ import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
 import { listWorkflowRuns, listWorkflows, type Workflow } from './api';
 import { workflowQueryKeys } from './queryKeys';
+import {
+  workflowCapabilities,
+  workflowRoutes,
+  workflowRunStatus,
+  workflowStatus,
+} from './constants';
 import { formatWorkflowDateTime } from './dateTime';
 
 const WorkflowDetailLink = Link as unknown as ComponentType<{
   params: { workflowId: string };
-  to: '/manage/workflows/$workflowId';
+  to: typeof workflowRoutes.detail;
 }>;
 
 export const WorkflowsPage = () => {
@@ -35,8 +41,10 @@ export const WorkflowsPage = () => {
     queryKey: authQueryKeys.session(),
     queryFn: currentSession,
   });
-  const canRead = session.data?.capabilities?.workflows_read === true;
-  const canManage = session.data?.capabilities?.workflows_manage === true;
+  const canRead =
+    session.data?.capabilities?.[workflowCapabilities.read] === true;
+  const canManage =
+    session.data?.capabilities?.[workflowCapabilities.manage] === true;
   const workflows = useQuery({
     queryKey: workflowQueryKeys.all(),
     queryFn: listWorkflows,
@@ -73,7 +81,7 @@ export const WorkflowsPage = () => {
       deadLetters: 0,
       latest: run,
     };
-    if (run.status === 'dead_letter') summary.deadLetters += 1;
+    if (run.status === workflowRunStatus.deadLetter) summary.deadLetters += 1;
     if (run.created_at > summary.latest.created_at) summary.latest = run;
     runSummaries.set(run.workflow_id, summary);
   }
@@ -98,7 +106,7 @@ export const WorkflowsPage = () => {
           canManage ? (
             <Button
               component={Link}
-              to="/manage/workflows/new"
+              to={workflowRoutes.create}
               variant="contained"
             >
               {t('workflows.newWorkflow')}
@@ -144,7 +152,7 @@ export const WorkflowsPage = () => {
                         <Stack spacing={0.25}>
                           <Link
                             params={{ workflowId: workflow.id }}
-                            to="/manage/workflows/$workflowId"
+                            to={workflowRoutes.detail}
                           >
                             {workflow.name}
                           </Link>
@@ -168,7 +176,7 @@ export const WorkflowsPage = () => {
                         <Stack direction="row" spacing={1}>
                           <Chip
                             color={
-                              workflow.status === 'published'
+                              workflow.status === workflowStatus.published
                                 ? 'success'
                                 : 'warning'
                             }
@@ -218,7 +226,7 @@ export const WorkflowsPage = () => {
                         <Button
                           component={WorkflowDetailLink}
                           params={{ workflowId: workflow.id }}
-                          to="/manage/workflows/$workflowId"
+                          to={workflowRoutes.detail}
                           size="small"
                         >
                           {t('workflows.inspect')}

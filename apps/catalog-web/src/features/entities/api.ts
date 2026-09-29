@@ -1,6 +1,11 @@
 import { z } from 'zod';
 import { request, requestNoContent } from '../../api/request';
 import {
+  ENTITY_CHANGES_PAGE_SIZE,
+  ENTITY_PREVIEW_QUERY,
+  ENTITY_SEARCH_PAGE_SIZE,
+} from './constants';
+import {
   blueprintSchema,
   blueprintWithAttributesSchema,
   createEntityRequestSchema,
@@ -87,7 +92,7 @@ export const searchEntities = ({
       : {}),
     sort,
     ...(includeTotal ? { include_total: true } : {}),
-    page: { size: 25, cursor },
+    page: { size: ENTITY_SEARCH_PAGE_SIZE, cursor },
   });
   return request('/api/v1/entities/search', entitySearchResponseSchema, {
     method: 'POST',
@@ -105,7 +110,7 @@ export const listEntityBlueprints = (signal?: AbortSignal) =>
   );
 export const getEntityPreview = (id: string, signal?: AbortSignal) =>
   request(
-    `/api/entities/${encodeURIComponent(uuidSchema.parse(id))}/preview?relationship_depth=0&relationship_limit=1`,
+    `/api/entities/${encodeURIComponent(uuidSchema.parse(id))}/preview?relationship_depth=${ENTITY_PREVIEW_QUERY.relationshipDepth}&relationship_limit=${ENTITY_PREVIEW_QUERY.relationshipLimit}`,
     entityPreviewResponseSchema,
     signal === undefined ? undefined : { signal },
   );
@@ -148,8 +153,6 @@ export const getCurrentBlueprint = (id: string) =>
     `/api/blueprints/${encodeURIComponent(uuidSchema.parse(id))}`,
     blueprintWithAttributesSchema,
   );
-export const ENTITY_CHANGES_PAGE_SIZE = 25;
-
 export const getEntityChanges = (id: string, offset: number) =>
   request(
     `/api/entities/${encodeURIComponent(uuidSchema.parse(id))}/changes?limit=${ENTITY_CHANGES_PAGE_SIZE}&offset=${offset}`,

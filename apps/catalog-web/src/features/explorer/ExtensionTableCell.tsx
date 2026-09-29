@@ -9,10 +9,8 @@ import {
 import { ExtensionFrame } from '../extensions/ExtensionFrame';
 import type { ExtensionContribution } from '../extensions/api';
 import { recordFrameTiming } from '../inspector/timing';
-
+import { extensionCellStartTimeout } from './constants';
 import type { ExplorerTableCellContext } from './schemas';
-
-const cellStartTimeout = 1_500;
 
 type Props = {
   contribution?: ExtensionContribution;
@@ -42,7 +40,10 @@ const ExtensionTableCellContent = ({
 
   useEffect(() => {
     if (!contribution || !frameAllowed || ready || failed) return;
-    const timer = window.setTimeout(() => setFailed(true), cellStartTimeout);
+    const timer = window.setTimeout(
+      () => setFailed(true),
+      extensionCellStartTimeout,
+    );
     return () => window.clearTimeout(timer);
   }, [contribution, failed, frameAllowed, ready]);
 

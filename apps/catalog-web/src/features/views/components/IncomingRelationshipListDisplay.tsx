@@ -20,6 +20,7 @@ import { getIncomingRelationships } from '../../entities/api';
 import { displayLabel } from '../../entities/entityDisplay';
 import { entityQueryKeys } from '../../entities/queryKeys';
 import type { ViewComponentDefinition } from './componentTypes';
+import { VIEW_COMPONENT_IDS, VIEW_COMPONENT_VERSION } from '../constants';
 
 export const IncomingRelationshipListDisplay = ({
   entityId,
@@ -124,8 +125,8 @@ export const IncomingRelationshipListDisplay = ({
 };
 
 export const incomingRelationshipListDisplayComponent = {
-  id: 'catalog.incoming_relationship_list_display',
-  version: 1,
+  id: VIEW_COMPONENT_IDS.incomingRelationshipListDisplay,
+  version: VIEW_COMPONENT_VERSION,
   capabilities: ['display'],
   placements: ['incoming_relationship_list'],
   value_types: [],

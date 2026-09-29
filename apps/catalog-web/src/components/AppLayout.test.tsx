@@ -5,7 +5,8 @@ import userEvent from '@testing-library/user-event';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import '../i18n';
-import { AppLayout, SessionErrorState } from './AppLayout';
+import { AppLayout } from './AppLayout';
+import { SessionErrorState } from './SessionErrorStates';
 import { authQueryKeys } from '../features/auth/queryKeys';
 
 let pathname = '/catalog';
@@ -38,9 +39,6 @@ vi.mock('../features/auth/api', () => ({
 }));
 
 vi.mock('./SideNavigation', () => ({
-  compactNavigationWidth: 88,
-  expandedNavigationWidth: 264,
-  managementSidebarWidth: 248,
   SideNavigation: ({
     onCompactExploreOpenChange,
     onSignOut,

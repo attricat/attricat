@@ -21,6 +21,7 @@ import { PageContainer } from '../../components/PageContainer';
 import { RouterButton } from '../../components/RouterLink';
 import { PageHeader } from '../../components/PageHeader';
 import { listBlueprints } from './api';
+import { blueprintFilterWidth, blueprintStatusChipColor } from './constants';
 import { formatBlueprintDateTime } from './dateTime';
 import { blueprintQueryKeys } from './queryKeys';
 
@@ -60,7 +61,7 @@ export const BlueprintsPage = () => {
         label={t('blueprints.filterBlueprints')}
         onChange={(event) => setQuery(event.target.value)}
         placeholder={t('blueprints.filterBlueprintsPlaceholder')}
-        sx={{ mt: 3, width: { xs: '100%', sm: 420 } }}
+        sx={{ mt: 3, width: { xs: '100%', sm: blueprintFilterWidth } }}
         value={query}
       />
       {blueprints.isPending && (
@@ -118,15 +119,17 @@ export const BlueprintsPage = () => {
                         variant="outlined"
                       />
                     </TableCell>
-                    <TableCell>v{blueprint.version}</TableCell>
+                    <TableCell>
+                      {t('blueprints.versionNumber', {
+                        version: blueprint.version,
+                      })}
+                    </TableCell>
                     <TableCell>
                       <Chip
-                        color={
-                          blueprint.status === 'published'
-                            ? 'success'
-                            : 'warning'
-                        }
-                        label={blueprint.status}
+                        color={blueprintStatusChipColor(blueprint.status)}
+                        label={t(
+                          `blueprints.revisionStatuses.${blueprint.status}`,
+                        )}
                         size="small"
                       />
                     </TableCell>

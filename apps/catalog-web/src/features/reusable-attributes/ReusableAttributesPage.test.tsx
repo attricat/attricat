@@ -7,6 +7,7 @@ import {
   listReusableAttributeGroups,
   listReusableAttributes,
 } from './api';
+import '../../i18n';
 import { ReusableAttributesPage } from './ReusableAttributesPage';
 
 vi.mock('@tanstack/react-router', async () => {

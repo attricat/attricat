@@ -10,3 +10,7 @@ export const backgroundProcessingStatusSchema = z.array(
     oldest_due_seconds: z.number().nonnegative().nullable(),
   }),
 );
+
+export type BackgroundProcessingStatus = z.infer<
+  typeof backgroundProcessingStatusSchema
+>;

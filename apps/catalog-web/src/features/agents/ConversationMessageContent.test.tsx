@@ -29,7 +29,11 @@ describe('ConversationMessageContent', () => {
 
     const tool = renderToStaticMarkup(
       <ConversationMessageContent
-        content={{ tool_call_id: 'call-1', name: 'get_entity_preview_link', result: { entity_id: id, url } }}
+        content={{
+          tool_call_id: 'call-1',
+          name: 'get_entity_preview_link',
+          result: { entity_id: id, url },
+        }}
         messageRole="tool"
       />,
     );
@@ -41,7 +45,11 @@ describe('ConversationMessageContent', () => {
     const id = '123e4567-e89b-12d3-a456-426614174000';
     const markup = renderToStaticMarkup(
       <ConversationMessageContent
-        content={{ tool_call_id: 'call-2', name: 'create_saved_search', result: { id, name: 'Spring products', url: `/?savedView=${id}` } }}
+        content={{
+          tool_call_id: 'call-2',
+          name: 'create_saved_search',
+          result: { id, name: 'Spring products', url: `/?savedView=${id}` },
+        }}
         messageRole="tool"
       />,
     );
@@ -53,7 +61,11 @@ describe('ConversationMessageContent', () => {
   it('does not turn untrusted tool result URLs into links', () => {
     const markup = renderToStaticMarkup(
       <ConversationMessageContent
-        content={{ tool_call_id: 'call-1', name: 'get_entity_preview_link', result: { url: 'https://example.com' } }}
+        content={{
+          tool_call_id: 'call-1',
+          name: 'get_entity_preview_link',
+          result: { url: 'https://example.com' },
+        }}
         messageRole="tool"
       />,
     );

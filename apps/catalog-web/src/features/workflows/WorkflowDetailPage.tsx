@@ -1,24 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
-import {
-  Alert,
-  Box,
-  Button,
-  Chip,
-  MenuItem,
-  Paper,
-  Stack,
-  Tab,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  Tabs,
-  TextField,
-  Typography,
-} from '@mui/material';
-import { type ComponentType, useState } from 'react';
+import { Alert, Box, Chip, Stack, Tab, Tabs, Typography } from '@mui/material';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useResourcePageTitle } from '../../app/useResourcePageTitle';
 import { PageContainer } from '../../components/PageContainer';
@@ -34,27 +16,35 @@ import {
   publishWorkflowRevision,
   runWorkflowNow,
 } from './api';
+import {
+  workflowCapabilities,
+  workflowDetailTab,
+  type WorkflowDetailTab,
+  workflowStatus,
+} from './constants';
 import { workflowQueryKeys } from './queryKeys';
-import { formatWorkflowDateTime } from './dateTime';
-
-const WorkflowRevisionLink = Link as unknown as ComponentType<{
-  params: { version: string; workflowId: string };
-  to: '/manage/workflows/$workflowId/revisions/$version/new';
-}>;
+import { WorkflowActions } from './WorkflowActions';
+import { WorkflowComparePanel } from './WorkflowComparePanel';
+import { WorkflowRevisionTable } from './WorkflowRevisionTable';
+import { WorkflowRunTable } from './WorkflowRunTable';
+import { WorkflowSourcePanel } from './WorkflowSourcePanel';
 
 export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
   const { i18n, t } = useTranslation();
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState(0);
+  const [tab, setTab] = useState<WorkflowDetailTab>(
+    workflowDetailTab.revisions,
+  );
   const [leftVersion, setLeftVersion] = useState<number>();
-  const [manualEntityId, setManualEntityId] = useState('');
   const tabId = useTabAccessibility();
   const session = useQuery({
     queryKey: authQueryKeys.session(),
     queryFn: currentSession,
   });
-  const canRead = session.data?.capabilities?.workflows_read === true;
-  const canManage = session.data?.capabilities?.workflows_manage === true;
+  const canRead =
+    session.data?.capabilities?.[workflowCapabilities.read] === true;
+  const canManage =
+    session.data?.capabilities?.[workflowCapabilities.manage] === true;
   const revisions = useQuery({
     queryKey: workflowQueryKeys.revisions(workflowId),
     queryFn: () => listWorkflowRevisions(workflowId),
@@ -137,68 +127,14 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
       <PageHeader
         actions={
           canManage ? (
-            <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
-              <Button
-                component={WorkflowRevisionLink}
-                params={{ workflowId, version: String(current.version) }}
-                to="/manage/workflows/$workflowId/revisions/$version/new"
-                variant="outlined"
-              >
-                {t('workflows.newRevision')}
-              </Button>
-              {current.status === 'draft' && (
-                <Button
-                  disabled={publish.isPending}
-                  onClick={() => publish.mutate(current.version)}
-                  variant="contained"
-                >
-                  {t('workflows.publish')}
-                </Button>
-              )}
-              {current.status === 'published' &&
-                current.enabled_version !== current.version && (
-                  <Button
-                    disabled={enable.isPending}
-                    onClick={() => enable.mutate(current.version)}
-                    variant="contained"
-                  >
-                    {t('workflows.enable')}
-                  </Button>
-                )}
-              {current.enabled_version === current.version &&
-                current.manual_enabled && (
-                  <Stack direction="row" spacing={1}>
-                    <TextField
-                      disabled={runNow.isPending}
-                      label="Entity ID"
-                      slotProps={{
-                        htmlInput: { 'aria-label': 'Manual run entity ID' },
-                      }}
-                      onChange={(event) =>
-                        setManualEntityId(event.target.value)
-                      }
-                      size="small"
-                      value={manualEntityId}
-                    />
-                    <Button
-                      disabled={runNow.isPending || !manualEntityId.trim()}
-                      onClick={() => runNow.mutate(manualEntityId.trim())}
-                      variant="outlined"
-                    >
-                      Run now
-                    </Button>
-                  </Stack>
-                )}
-              {current.enabled_version !== null && (
-                <Button
-                  color="warning"
-                  disabled={disable.isPending}
-                  onClick={() => disable.mutate()}
-                >
-                  {t('workflows.disable')}
-                </Button>
-              )}
-            </Stack>
+            <WorkflowActions
+              current={current}
+              disable={disable}
+              enable={enable}
+              publish={publish}
+              runNow={runNow}
+              workflowId={workflowId}
+            />
           ) : undefined
         }
         eyebrow={t('workflows.workflow')}
@@ -207,7 +143,9 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
       <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', mt: 1 }}>
         <Chip label={current.code} variant="outlined" />
         <Chip
-          color={current.status === 'published' ? 'success' : 'warning'}
+          color={
+            current.status === workflowStatus.published ? 'success' : 'warning'
+          }
           label={t(`workflows.statuses.${current.status}`)}
         />
         <Chip
@@ -238,251 +176,65 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
       )}
       <Tabs
         allowScrollButtonsMobile
-        onChange={(_, value: number) => setTab(value)}
+        onChange={(_, value: WorkflowDetailTab) => setTab(value)}
         scrollButtons="auto"
         sx={{ mt: 3 }}
         value={tab}
         variant="scrollable"
       >
-        <Tab {...tabId.tab(0)} label={t('workflows.revisions')} />
-        <Tab {...tabId.tab(1)} label={t('workflows.source')} />
-        <Tab {...tabId.tab(2)} label={t('workflows.compare')} />
-        <Tab {...tabId.tab(3)} label={t('workflows.runDiagnostics')} />
+        <Tab
+          {...tabId.tab(workflowDetailTab.revisions)}
+          label={t('workflows.revisions')}
+          value={workflowDetailTab.revisions}
+        />
+        <Tab
+          {...tabId.tab(workflowDetailTab.source)}
+          label={t('workflows.source')}
+          value={workflowDetailTab.source}
+        />
+        <Tab
+          {...tabId.tab(workflowDetailTab.compare)}
+          label={t('workflows.compare')}
+          value={workflowDetailTab.compare}
+        />
+        <Tab
+          {...tabId.tab(workflowDetailTab.runDiagnostics)}
+          label={t('workflows.runDiagnostics')}
+          value={workflowDetailTab.runDiagnostics}
+        />
       </Tabs>
-      {tab === 0 && (
-        <Box {...tabId.panel(0)}>
-          <RevisionTable revisions={revisions.data} />
+      {tab === workflowDetailTab.revisions && (
+        <Box {...tabId.panel(workflowDetailTab.revisions)}>
+          <WorkflowRevisionTable revisions={revisions.data} />
         </Box>
       )}
-      {tab === 1 && (
-        <Box {...tabId.panel(1)}>
-          <Source
+      {tab === workflowDetailTab.source && (
+        <Box {...tabId.panel(workflowDetailTab.source)}>
+          <WorkflowSourcePanel
             definition={current.definition}
             title={t('workflows.source')}
           />
         </Box>
       )}
-      {tab === 2 && (
-        <Box {...tabId.panel(2)}>
-          <Paper component="section" sx={{ mt: 3, p: 2 }}>
-            <TextField
-              label={t('workflows.compareRevision')}
-              onChange={(event) => setLeftVersion(Number(event.target.value))}
-              select
-              sx={{ minWidth: 220 }}
-              value={compared?.version ?? ''}
-            >
-              {revisions.data.map((revision) => (
-                <MenuItem key={revision.version} value={revision.version}>
-                  v{revision.version} (
-                  {t(`workflows.statuses.${revision.status}`)})
-                </MenuItem>
-              ))}
-            </TextField>
-            <Box
-              sx={{
-                display: 'grid',
-                gap: 2,
-                gridTemplateColumns: { md: '1fr 1fr' },
-                mt: 2,
-              }}
-            >
-              <Source
-                definition={compared?.definition ?? ''}
-                title={t('workflows.compareRevision')}
-              />
-              <Source
-                definition={current.definition}
-                title={t('workflows.currentRevision')}
-              />
-            </Box>
-          </Paper>
+      {tab === workflowDetailTab.compare && (
+        <Box {...tabId.panel(workflowDetailTab.compare)}>
+          <WorkflowComparePanel
+            compared={compared}
+            current={current}
+            onSelectVersion={setLeftVersion}
+            revisions={revisions.data}
+          />
         </Box>
       )}
-      {tab === 3 && (
-        <Box {...tabId.panel(3)}>
-          <RunTable canManage={canManage} locale={locale} runs={workflowRuns} />
+      {tab === workflowDetailTab.runDiagnostics && (
+        <Box {...tabId.panel(workflowDetailTab.runDiagnostics)}>
+          <WorkflowRunTable
+            canManage={canManage}
+            locale={locale}
+            runs={workflowRuns}
+          />
         </Box>
       )}
     </PageContainer>
-  );
-};
-
-const RevisionTable = ({
-  revisions,
-}: {
-  revisions: Awaited<ReturnType<typeof listWorkflowRevisions>>;
-}) => {
-  const { i18n, t } = useTranslation();
-  const locale = i18n.resolvedLanguage ?? i18n.language;
-  return (
-    <Paper component="section" sx={{ mt: 3 }}>
-      <Box sx={{ overflowX: 'auto' }}>
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>{t('workflows.currentRevision')}</TableCell>
-              <TableCell>{t('workflows.status')}</TableCell>
-              <TableCell>{t('workflows.created')}</TableCell>
-              <TableCell>{t('workflows.published')}</TableCell>
-              <TableCell>{t('workflows.definitionHash')}</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {revisions.map((revision) => (
-              <TableRow key={revision.version}>
-                <TableCell>v{revision.version}</TableCell>
-                <TableCell>
-                  <Chip
-                    color={
-                      revision.status === 'published' ? 'success' : 'warning'
-                    }
-                    label={t(`workflows.statuses.${revision.status}`)}
-                    size="small"
-                  />
-                </TableCell>
-                <TableCell>
-                  {formatWorkflowDateTime(
-                    revision.created_at,
-                    locale,
-                    t('workflows.notAvailable'),
-                  )}
-                </TableCell>
-                <TableCell>
-                  {formatWorkflowDateTime(
-                    revision.published_at,
-                    locale,
-                    t('workflows.notAvailable'),
-                  )}
-                </TableCell>
-                <TableCell sx={{ fontFamily: 'monospace' }}>
-                  {revision.definition_hash}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </Box>
-    </Paper>
-  );
-};
-
-const Source = ({
-  definition,
-  title,
-}: {
-  definition: string;
-  title?: string;
-}) => (
-  <Paper component="section" sx={{ mt: title ? 0 : 3, p: 2 }}>
-    <Typography component="h2" variant="h6">
-      {title}
-    </Typography>
-    <Box
-      aria-label={title}
-      component="pre"
-      sx={{
-        fontFamily: 'monospace',
-        m: 0,
-        mt: title ? 1 : 0,
-        overflow: 'auto',
-        whiteSpace: 'pre-wrap',
-      }}
-    >
-      {definition}
-    </Box>
-  </Paper>
-);
-
-const RunTable = ({
-  canManage,
-  locale,
-  runs,
-}: {
-  canManage: boolean;
-  locale: string;
-  runs: Awaited<ReturnType<typeof listWorkflowRuns>>;
-}) => {
-  const { t } = useTranslation();
-  const queryClient = useQueryClient();
-  const replay = useMutation({
-    mutationFn: (id: string) =>
-      import('./api').then(({ replayWorkflowRun }) => replayWorkflowRun(id)),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: workflowQueryKeys.runs() }),
-  });
-  return (
-    <Paper component="section" sx={{ mt: 3 }}>
-      <Box sx={{ overflowX: 'auto' }}>
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>{t('workflows.status')}</TableCell>
-              <TableCell>Source</TableCell>
-              <TableCell>{t('workflows.attempts')}</TableCell>
-              <TableCell>{t('workflows.created')}</TableCell>
-              <TableCell>{t('workflows.outcomeEvidence')}</TableCell>
-              <TableCell />
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {runs.map((run) => (
-              <TableRow key={run.id}>
-                <TableCell>
-                  <Chip
-                    color={
-                      run.status === 'dead_letter'
-                        ? 'error'
-                        : run.status === 'completed'
-                          ? 'success'
-                          : 'default'
-                    }
-                    label={t(`workflows.statuses.${run.status}`)}
-                    size="small"
-                  />
-                </TableCell>
-                <TableCell>{run.source}</TableCell>
-                <TableCell>{run.attempts}</TableCell>
-                <TableCell>
-                  {formatWorkflowDateTime(
-                    run.completed_at ?? run.failed_at ?? run.created_at,
-                    locale,
-                    t('workflows.notAvailable'),
-                  )}
-                </TableCell>
-                <TableCell>
-                  {run.last_error ??
-                    (run.status === 'completed'
-                      ? t('workflows.completedEvidence')
-                      : t('workflows.noOutcomeEvidence'))}
-                </TableCell>
-                <TableCell>
-                  {canManage && run.status === 'dead_letter' && (
-                    <Button
-                      aria-label={t('workflows.replayRun', { id: run.id })}
-                      disabled={replay.isPending}
-                      onClick={() => replay.mutate(run.id)}
-                      size="small"
-                    >
-                      {t('workflows.replay')}
-                    </Button>
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
-            {runs.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={5}>{t('workflows.noRuns')}</TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </Box>
-      {replay.isError && (
-        <Alert severity="error" sx={{ m: 2 }}>
-          {replay.error.message}
-        </Alert>
-      )}
-    </Paper>
   );
 };

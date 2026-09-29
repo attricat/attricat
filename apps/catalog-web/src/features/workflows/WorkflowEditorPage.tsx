@@ -15,19 +15,13 @@ import {
   getWorkflowRevision,
   validateWorkflow,
 } from './api';
+import {
+  editorHeight,
+  starterWorkflowDefinition,
+  workflowCapabilities,
+  workflowRoutes,
+} from './constants';
 import { workflowQueryKeys } from './queryKeys';
-
-const starterDefinition = `format_version = 1
-code = "example-workflow"
-name = "Example workflow"
-
-[[triggers]]
-event_type = "entity.created.v1"
-
-[[actions]]
-type = "system_tags_add"
-tags = ["example"]
-`;
 
 export const WorkflowEditorPage = ({
   workflowId,
@@ -43,7 +37,8 @@ export const WorkflowEditorPage = ({
     queryKey: authQueryKeys.session(),
     queryFn: currentSession,
   });
-  const canManage = session.data?.capabilities?.workflows_manage === true;
+  const canManage =
+    session.data?.capabilities?.[workflowCapabilities.manage] === true;
   const source = useQuery({
     queryKey: workflowQueryKeys.revision(workflowId ?? '', sourceVersion ?? 0),
     queryFn: () => getWorkflowRevision(workflowId!, sourceVersion!),
@@ -62,12 +57,12 @@ export const WorkflowEditorPage = ({
       });
       await navigate({
         params: { workflowId: workflow.id },
-        to: '/manage/workflows/$workflowId',
+        to: workflowRoutes.detail,
       });
     },
   });
   const form = useForm({
-    defaultValues: { definition: workflowId ? '' : starterDefinition },
+    defaultValues: { definition: workflowId ? '' : starterWorkflowDefinition },
     onSubmit: ({ value }) => {
       if (!save.isPending) save.mutate(value.definition);
     },
@@ -126,7 +121,7 @@ export const WorkflowEditorPage = ({
             {(field) => (
               <TomlEditor
                 ariaLabel={t('workflows.tomlDefinition')}
-                height="calc(100vh - 380px)"
+                height={editorHeight}
                 onChange={(value) => {
                   if (save.isPending) return;
                   validate.reset();

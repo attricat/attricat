@@ -18,6 +18,11 @@ import { LoadMoreButton } from '../../components/LoadMoreButton';
 import { RouterListItemButton } from '../../components/RouterLink';
 import { searchConversations } from './api';
 import { useTranslation } from 'react-i18next';
+import {
+  agentRoutes,
+  maximumSearchLength,
+  titlePollIntervalMs,
+} from './constants';
 import { agentQueryKeys } from './queryKeys';
 import { isTitlePending } from './titlePolling';
 
@@ -27,7 +32,7 @@ export const ConversationsPage = ({ search }: { search: { q?: string } }) => {
   const [draftQuery, setDraftQuery] = useState(search.q ?? '');
   const submitSearch = () =>
     void navigate({
-      to: '/agents',
+      to: agentRoutes.list,
       search: { q: draftQuery.trim() || undefined },
     });
   const query = search.q ?? '';
@@ -38,7 +43,7 @@ export const ConversationsPage = ({ search }: { search: { q?: string } }) => {
     getNextPageParam: (page) => page.next_cursor ?? undefined,
     refetchInterval: (state) =>
       state.state.data?.pages.some((page) => page.items.some(isTitlePending))
-        ? 3_000
+        ? titlePollIntervalMs
         : false,
   });
   const items = conversations.data?.pages.flatMap((page) => page.items) ?? [];
@@ -46,7 +51,7 @@ export const ConversationsPage = ({ search }: { search: { q?: string } }) => {
     <PageContainer>
       <PageHeader
         actions={
-          <Button component={Link} to="/agents/new" variant="contained">
+          <Button component={Link} to={agentRoutes.create} variant="contained">
             {t('agents.newConversation')}
           </Button>
         }
@@ -65,7 +70,7 @@ export const ConversationsPage = ({ search }: { search: { q?: string } }) => {
           fullWidth
           label={t('agents.searchConversations')}
           onChange={(event) => setDraftQuery(event.target.value)}
-          slotProps={{ htmlInput: { maxLength: 120 } }}
+          slotProps={{ htmlInput: { maxLength: maximumSearchLength } }}
           value={draftQuery}
         />
         <Button type="submit" variant="outlined">
@@ -84,7 +89,7 @@ export const ConversationsPage = ({ search }: { search: { q?: string } }) => {
               <RouterListItemButton
                 params={{ conversationId: conversation.id }}
                 sx={{ width: '100%' }}
-                to="/agents/$conversationId"
+                to={agentRoutes.detail}
               >
                 <ListItemText
                   primary={

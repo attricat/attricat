@@ -45,6 +45,13 @@ export const navigationRoutes = {
   workspace: '/manage/workspace/members',
 } as const;
 
+// Routes rendered outside the authenticated application shell.
+export const publicRoutes = {
+  login: '/login',
+  onboarding: '/onboarding',
+  passwordReset: '/password-reset',
+} as const;
+
 export const primaryNavigationItems = [
   {
     icon: ExplorerIcon,

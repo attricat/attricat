@@ -36,7 +36,9 @@ describe('ConversationDetailPage', () => {
       await screen.findByRole('button', { name: 'Change conversation title' }),
     );
     await waitFor(() =>
-      expect(document.title).toBe('Agent conversation · Original title · Attricat'),
+      expect(document.title).toBe(
+        'Agent conversation · Original title · Attricat',
+      ),
     );
     expect(screen.getByRole('dialog')).toBeTruthy();
     expect(

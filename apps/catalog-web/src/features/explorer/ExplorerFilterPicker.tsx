@@ -1,31 +1,26 @@
 import AddIcon from '@mui/icons-material/Add';
-import {
-  Button,
-  Chip,
-  MenuItem,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material';
-import { useState, type KeyboardEvent } from 'react';
-import { useQueries } from '@tanstack/react-query';
+import { Button, Chip, Stack, Typography } from '@mui/material';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { compactOutlinedActionButtonSx } from '../../components/CompactOutlinedActionButton';
-import { RelationshipSelectorDialog } from '../../components/RelationshipSelectorDialog';
-import { getBlueprintByCode, type Attribute } from '../entities/api';
-import { entityQueryKeys } from '../entities/queryKeys';
+import type { Attribute } from '../entities/api';
+import { isHiddenByDefault } from '../entities/attributeVisibility';
 import { attributeLabel } from '../entities/entityDisplay';
+import { AttributeFilterDialog } from './AttributeFilterDialog';
 import {
+  attributeFilterKey,
+  attributeFilterLabel,
   isFilterableAttribute,
-  operatorsForValueType,
-  type AttributeFilterOperator,
 } from './attributeFilters';
 import {
-  isRelationshipFilterAttribute,
-  type RelationshipFilterAttribute,
-} from './relationshipFilterTypes';
-import { maximumAttributeFilters, type AttributeFilter } from './search';
-import { isHiddenByDefault } from '../entities/attributeVisibility';
+  attributeFilterInputValue,
+  emptyAttributeFilterDraft,
+  type AttributeFilterDraft,
+} from './attributeFilterValues';
+import { explorerVisibilityScope, maximumAttributeFilters } from './constants';
+import type { RelationshipFilterAttribute } from './relationshipFilterTypes';
+import type { AttributeFilter } from './search';
+import { useRelationshipFilterPaths } from './useRelationshipFilterPaths';
 
 type Props = {
   filters: AttributeFilter[];
@@ -37,6 +32,13 @@ type Props = {
   onAddRelationship: (attribute: RelationshipFilterAttribute) => void;
   onRemove: (index: number) => void;
   onUpdate: (index: number, filter: AttributeFilter) => void;
+};
+
+type EditorState = {
+  // Remounts the dialog form for every opening so it starts from its draft.
+  session: number;
+  editingIndex: number | null;
+  draft: AttributeFilterDraft;
 };
 
 export const ExplorerFilterPicker = ({
@@ -52,84 +54,29 @@ export const ExplorerFilterPicker = ({
 }: Props) => {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
-  const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const [field, setField] = useState('');
-  const [operator, setOperator] = useState<AttributeFilterOperator>('eq');
-  const [value, setValue] = useState('');
-  const discoverRelationshipPaths = open && editingIndex === null;
-  const directRelationships = relationshipAttributes;
-  const firstTargets = useQueries({
-    queries: directRelationships.map((attribute) => ({
-      queryKey: entityQueryKeys.blueprintByCode(
-        attribute.target_blueprint_code,
-        undefined,
-      ),
-      queryFn: ({ signal }: { signal: AbortSignal }) =>
-        getBlueprintByCode(attribute.target_blueprint_code, undefined, signal),
-      enabled: discoverRelationshipPaths,
-    })),
+  const [editor, setEditor] = useState<EditorState>({
+    session: 0,
+    editingIndex: null,
+    draft: emptyAttributeFilterDraft,
   });
-  const secondRelationships = firstTargets.flatMap((result, index) =>
-    (result.data?.attributes ?? [])
-      .filter(isRelationshipFilterAttribute)
-      .filter((attribute) => !isHiddenByDefault(attribute, 'explorer'))
-      .map((attribute) => ({
-        ...attribute,
-        code: `${directRelationships[index].code}.${attribute.code}`,
-      })),
+  const relationshipPaths = useRelationshipFilterPaths(
+    relationshipAttributes,
+    open && editor.editingIndex === null,
   );
-  const secondTargets = useQueries({
-    queries: secondRelationships.map((attribute) => ({
-      queryKey: entityQueryKeys.blueprintByCode(
-        attribute.target_blueprint_code,
-        undefined,
-      ),
-      queryFn: ({ signal }: { signal: AbortSignal }) =>
-        getBlueprintByCode(attribute.target_blueprint_code, undefined, signal),
-      enabled: discoverRelationshipPaths,
-    })),
-  });
-  const thirdRelationships = secondTargets.flatMap((result, index) =>
-    (result.data?.attributes ?? [])
-      .filter(isRelationshipFilterAttribute)
-      .filter((attribute) => !isHiddenByDefault(attribute, 'explorer'))
-      .map((attribute) => ({
-        ...attribute,
-        code: `${secondRelationships[index].code}.${attribute.code}`,
-      })),
-  );
-  const relationshipPathsLoading =
-    discoverRelationshipPaths &&
-    [...firstTargets, ...secondTargets].some((result) => result.isFetching);
-  const filterableAttributes = [
+  const filterableAttributes: Attribute[] = [
     ...new Map(
       [
         ...attributes.filter(
           (attribute) =>
             isFilterableAttribute(attribute) &&
-            !isHiddenByDefault(attribute, 'explorer'),
+            !isHiddenByDefault(attribute, explorerVisibilityScope),
         ),
         ...pathAttributes.map(({ code, value_type }) => ({ code, value_type })),
-        ...directRelationships,
-        ...secondRelationships,
-        ...thirdRelationships,
+        ...relationshipAttributes,
+        ...relationshipPaths.relationshipPaths,
       ].map((attribute) => [attribute.code, attribute]),
     ).values(),
   ];
-  const selectableAttributes =
-    editingIndex === null
-      ? filterableAttributes
-      : filterableAttributes.filter(
-          (item) => !isRelationshipFilterAttribute(item),
-        );
-  const attribute = filterableAttributes.find((item) => item.code === field);
-  const availableOperators = operatorsForValueType(
-    attribute?.value_type ?? 'string',
-  );
-  const effectiveOperator = availableOperators.includes(operator)
-    ? operator
-    : 'eq';
-  const relationship = attribute && isRelationshipFilterAttribute(attribute);
   const maximumReached = filters.length >= maximumAttributeFilters;
 
   if (!filterableAttributes.length) {
@@ -140,93 +87,38 @@ export const ExplorerFilterPicker = ({
     );
   }
 
-  const valueAsFilterValue = () => {
-    if (!attribute) return value;
-    if (attribute.value_type === 'number') return Number(value);
-    if (attribute.value_type === 'integer') return Number.parseInt(value, 10);
-    if (attribute.value_type === 'boolean') return value === 'true';
-    if (attribute.value_type === 'datetime')
-      return new Date(value).toISOString();
-    return value;
-  };
-  const numericValue = Number(value);
-  const valueIsValid =
-    value !== '' &&
-    (attribute?.value_type !== 'number' || Number.isFinite(numericValue)) &&
-    (attribute?.value_type !== 'integer' ||
-      (/^-?\d+$/.test(value) && Number.isSafeInteger(numericValue))) &&
-    (attribute?.value_type !== 'datetime' ||
-      !Number.isNaN(new Date(value).getTime()));
-  const inputType =
-    attribute?.value_type === 'number' || attribute?.value_type === 'integer'
-      ? 'number'
-      : attribute?.value_type === 'date'
-        ? 'date'
-        : attribute?.value_type === 'datetime'
-          ? 'datetime-local'
-          : attribute?.value_type === 'time'
-            ? 'time'
-            : 'text';
-  const close = () => {
-    setOpen(false);
-    setEditingIndex(null);
-    setField('');
-    setOperator('eq');
-    setValue('');
-  };
-  const openNewFilter = () => {
-    setEditingIndex(null);
-    setField('');
-    setOperator('eq');
-    setValue('');
+  const findAttribute = (code: string) =>
+    filterableAttributes.find((item) => item.code === code);
+  const openEditor = (
+    editingIndex: number | null,
+    draft: AttributeFilterDraft,
+  ) => {
+    setEditor((current) => ({
+      session: current.session + 1,
+      editingIndex,
+      draft,
+    }));
     setOpen(true);
   };
-  const openFilter = (filter: AttributeFilter, index: number) => {
-    const filterAttribute = filterableAttributes.find(
-      (item) => item.code === filter.field,
-    );
-    const inputValue = String(filter.value);
-    const datetimeValue =
-      filterAttribute?.value_type === 'datetime'
-        ? new Date(
-            new Date(inputValue).getTime() -
-              new Date(inputValue).getTimezoneOffset() * 60_000,
-          )
-            .toISOString()
-            .slice(0, 16)
-        : inputValue;
-    setEditingIndex(index);
-    setField(filter.field);
-    setOperator(filter.operator);
-    setValue(datetimeValue);
-    setOpen(true);
-  };
-  const apply = () => {
-    if (!attribute) return;
-    if (relationship) {
-      onAddRelationship(attribute);
-      close();
-      return;
-    }
-    if (!valueIsValid || (maximumReached && editingIndex === null)) return;
-    const filter = {
-      field: attribute.code,
-      operator: effectiveOperator,
-      value: valueAsFilterValue(),
-    };
-    if (editingIndex === null) onAdd(filter);
-    else onUpdate(editingIndex, filter);
+  const openFilter = (filter: AttributeFilter, index: number) =>
+    openEditor(index, {
+      field: filter.field,
+      operator: filter.operator,
+      value: attributeFilterInputValue(
+        filter,
+        findAttribute(filter.field)?.value_type,
+      ),
+    });
+  const close = () => setOpen(false);
+  const submit = (filter: AttributeFilter) => {
+    if (editor.editingIndex === null) onAdd(filter);
+    else onUpdate(editor.editingIndex, filter);
     close();
   };
-  const applyOnEnter = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key !== 'Enter') return;
-    event.preventDefault();
-    apply();
+  const selectRelationship = (attribute: RelationshipFilterAttribute) => {
+    onAddRelationship(attribute);
+    close();
   };
-  const filterValueLabel = (filter: AttributeFilter) =>
-    typeof filter.value === 'boolean'
-      ? t(filter.value ? 'explorer.true' : 'explorer.false')
-      : String(filter.value);
 
   return (
     <Stack spacing={1} sx={{ mt: 1 }}>
@@ -238,14 +130,14 @@ export const ExplorerFilterPicker = ({
       >
         {filters.map((filter, index) => (
           <Chip
-            key={`${filter.field}-${index}`}
-            label={`${attributeLabel(
-              filterableAttributes.find(
-                (item) => item.code === filter.field,
-              ) ?? { code: filter.field },
-            )} ${t(
-              `explorer.filterOperatorSymbols.${filter.operator}`,
-            )} ${JSON.stringify(filterValueLabel(filter))}`}
+            key={attributeFilterKey(filter, index)}
+            label={attributeFilterLabel(
+              t,
+              filter,
+              attributeLabel(
+                findAttribute(filter.field) ?? { code: filter.field },
+              ),
+            )}
             onClick={() => openFilter(filter, index)}
             onDelete={() => onRemove(index)}
             size="small"
@@ -253,7 +145,7 @@ export const ExplorerFilterPicker = ({
         ))}
         <Button
           color="primary"
-          onClick={openNewFilter}
+          onClick={() => openEditor(null, emptyAttributeFilterDraft)}
           size="small"
           startIcon={<AddIcon fontSize="small" />}
           sx={compactOutlinedActionButtonSx}
@@ -269,130 +161,19 @@ export const ExplorerFilterPicker = ({
           })}
         </Typography>
       )}
-      <RelationshipSelectorDialog
-        actions={{
-          applyDisabled:
-            !attribute ||
-            (!relationship &&
-              (!valueIsValid || (maximumReached && editingIndex === null))),
-          applyLabel: t(
-            editingIndex === null
-              ? 'explorer.applyAttributeFilter'
-              : 'explorer.updateAttributeFilter',
-          ),
-          cancelLabel: t('explorer.cancelAttributeFilter'),
-          clearLabel: t('explorer.clearAttributeFilter'),
-          onApply: apply,
-          onClear: () => setValue(''),
-        }}
-        closeLabel={t('explorer.closeAttributeFilter')}
+      <AttributeFilterDialog
+        attributes={filterableAttributes}
+        blueprintName={blueprintName}
+        editing={editor.editingIndex !== null}
+        initialDraft={editor.draft}
+        key={editor.session}
+        maximumReached={maximumReached}
         onClose={close}
+        onSelectRelationship={selectRelationship}
+        onSubmit={submit}
         open={open}
-        selectedLabel={t('explorer.attributeFilterDescription')}
-        title={t(
-          editingIndex === null
-            ? 'explorer.addAttributeFilterTitle'
-            : 'explorer.editAttributeFilterTitle',
-        )}
-      >
-        <Stack spacing={1.5}>
-          <TextField
-            fullWidth
-            label={t('explorer.filterField')}
-            onChange={(event) => {
-              const nextField = event.target.value;
-              const nextAttribute = filterableAttributes.find(
-                (item) => item.code === nextField,
-              );
-              if (
-                nextAttribute &&
-                isRelationshipFilterAttribute(nextAttribute)
-              ) {
-                onAddRelationship(nextAttribute);
-                close();
-                return;
-              }
-              setField(nextField);
-              setOperator('eq');
-              setValue('');
-            }}
-            select
-            value={field}
-          >
-            {selectableAttributes.map((item) => (
-              <MenuItem key={item.code} value={item.code}>
-                <Stack
-                  direction="row"
-                  spacing={1}
-                  sx={{ alignItems: 'center' }}
-                >
-                  <Chip label={blueprintName} size="small" />
-                  {item.value_type === 'relationship' && (
-                    <Chip label={t('explorer.relationship')} size="small" />
-                  )}
-                  <Typography>{attributeLabel(item)}</Typography>
-                </Stack>
-              </MenuItem>
-            ))}
-          </TextField>
-          {relationshipPathsLoading && (
-            <Typography color="text.secondary" variant="caption">
-              {t('explorer.loadingRelationshipFields')}
-            </Typography>
-          )}
-          {attribute && !relationship && (
-            <>
-              <TextField
-                fullWidth
-                label={t('explorer.operator')}
-                onChange={(event) => {
-                  const nextOperator = event.target.value;
-                  const validOperator = availableOperators.find(
-                    (item) => item === nextOperator,
-                  );
-                  if (validOperator) setOperator(validOperator);
-                }}
-                select
-                value={effectiveOperator}
-              >
-                {availableOperators.map((item) => (
-                  <MenuItem key={item} value={item}>
-                    {t(`explorer.filterOperators.${item}`)}
-                  </MenuItem>
-                ))}
-              </TextField>
-              {attribute.value_type === 'boolean' ? (
-                <TextField
-                  fullWidth
-                  label={t('explorer.value')}
-                  onChange={(event) => setValue(event.target.value)}
-                  onKeyDown={applyOnEnter}
-                  select
-                  value={value}
-                >
-                  <MenuItem value="true">{t('explorer.true')}</MenuItem>
-                  <MenuItem value="false">{t('explorer.false')}</MenuItem>
-                </TextField>
-              ) : (
-                <TextField
-                  fullWidth
-                  slotProps={{
-                    htmlInput:
-                      attribute.value_type === 'integer'
-                        ? { step: 1 }
-                        : undefined,
-                  }}
-                  label={t('explorer.value')}
-                  onChange={(event) => setValue(event.target.value)}
-                  onKeyDown={applyOnEnter}
-                  type={inputType}
-                  value={value}
-                />
-              )}
-            </>
-          )}
-        </Stack>
-      </RelationshipSelectorDialog>
+        relationshipPathsLoading={relationshipPaths.loading}
+      />
     </Stack>
   );
 };

@@ -12,10 +12,9 @@ import {
   DialogTitle,
   TextField,
 } from '@mui/material';
+import { maximumTitleBytes } from './constants';
 import { updateConversationTitle } from './api';
 import { agentQueryKeys } from './queryKeys';
-
-const maximumTitleBytes = 512;
 
 export const RenameConversationDialog = ({
   conversationId,

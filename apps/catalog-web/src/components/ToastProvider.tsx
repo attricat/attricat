@@ -6,6 +6,12 @@ import { useToastStore } from './toastStore';
 
 const maximumVisibleToasts = 3;
 const defaultToastAutoHideDuration = 6_000;
+const toastWidth = 480;
+const toastViewportMaxWidth = 'calc(100vw - 32px)';
+const toastCountBadgeOffset = -10;
+const toastCountBadgeMinWidth = 20;
+const toastMessageMaxLines = 3;
+
 const ToastAlert = ({
   dismiss,
   toast,
@@ -25,7 +31,11 @@ const ToastAlert = ({
 
   return (
     <Box
-      sx={{ maxWidth: 'calc(100vw - 32px)', position: 'relative', width: 480 }}
+      sx={{
+        maxWidth: toastViewportMaxWidth,
+        position: 'relative',
+        width: toastWidth,
+      }}
     >
       <Alert
         action={toast.action}
@@ -41,7 +51,7 @@ const ToastAlert = ({
           component="span"
           sx={{
             WebkitBoxOrient: 'vertical',
-            WebkitLineClamp: 3,
+            WebkitLineClamp: toastMessageMaxLines,
             display: '-webkit-box',
             overflow: 'hidden',
             overflowWrap: 'anywhere',
@@ -66,14 +76,14 @@ const ToastAlert = ({
             color: 'text.primary',
             fontSize: '0.75rem',
             fontWeight: 700,
-            left: -10,
+            left: toastCountBadgeOffset,
             lineHeight: 1,
-            minWidth: 20,
+            minWidth: toastCountBadgeMinWidth,
             position: 'absolute',
             px: 0.75,
             py: 0.5,
             textAlign: 'center',
-            top: -10,
+            top: toastCountBadgeOffset,
             zIndex: 1,
           }}
         >
@@ -96,11 +106,11 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
         aria-live="polite"
         spacing={1}
         sx={{
-          bottom: 24,
-          maxWidth: 'calc(100vw - 32px)',
+          bottom: (theme) => theme.spacing(6),
+          maxWidth: toastViewportMaxWidth,
           pointerEvents: 'none',
           position: 'fixed',
-          right: 24,
+          right: (theme) => theme.spacing(6),
           zIndex: (theme) => theme.zIndex.snackbar,
         }}
       >

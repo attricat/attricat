@@ -2,6 +2,11 @@ import { z } from 'zod';
 import { attributeContextSchema } from '../contexts/api';
 import { fileMetadataSchema } from '../files/schemas';
 import { attributeValueKinds, attributeValueTypes } from './valueTypes';
+import {
+  MAX_COMPONENT_PROTOCOL_VERSION,
+  SMART_FILL_MAX_ATTACHMENTS,
+  SMART_FILL_MAX_CONTENT_LENGTH,
+} from './constants';
 
 export const viewBlockTypes = {
   dropdownOption: 'dropdown_option',
@@ -101,7 +106,7 @@ const componentReferenceSchema = z.object({
   id: z.string().regex(/^[a-z][a-z0-9_-]*(\.[a-z][a-z0-9_-]*)*$/),
   // Rust stores component protocol versions as u32; reject values that would
   // otherwise overflow the API contract.
-  version: z.number().int().positive().max(4_294_967_295),
+  version: z.number().int().positive().max(MAX_COMPONENT_PROTOCOL_VERSION),
   props: jsonObjectSchema.nullish().transform((props) => props ?? {}),
 });
 const viewNodeSchema: z.ZodType<ViewNode> = z.lazy(() =>
@@ -315,7 +320,7 @@ export const newAttributeValueSchema = z.discriminatedUnion('kind', [
 export const formAttributeValueSchema = z.discriminatedUnion('kind', [
   ...newAttributeValueSchema.options,
   z.object({
-    kind: z.literal('file'),
+    kind: z.literal(attributeValueKinds.file),
     attribute_code: z.string().min(1),
     context_id: uuidSchema.nullable().optional(),
     files: z.array(fileMetadataSchema),
@@ -590,10 +595,13 @@ export const smartFillEntityFormRequestSchema = z.object({
   entity_id: uuidSchema,
   context_id: uuidSchema.nullable(),
   is_default_context: z.boolean(),
-  content: z.string().max(32_768),
+  content: z.string().max(SMART_FILL_MAX_CONTENT_LENGTH),
   conversation_id: uuidSchema.optional(),
   draft_values: z.record(z.string(), z.string()).optional(),
-  attachment_ids: z.array(uuidSchema).max(16).optional(),
+  attachment_ids: z
+    .array(uuidSchema)
+    .max(SMART_FILL_MAX_ATTACHMENTS)
+    .optional(),
 });
 export const smartFillEntityFormResponseSchema = z.object({
   fields: z.record(z.string(), z.string()),

@@ -8,7 +8,9 @@ import { getEntityChanges, getEntityForm } from './api';
 import { EntityChangesPage } from './EntityChangesPage';
 
 vi.mock('@tanstack/react-router', () => ({
-  Link: ({ children }: { children: React.ReactNode }) => <span>{children}</span>,
+  Link: ({ children }: { children: React.ReactNode }) => (
+    <span>{children}</span>
+  ),
 }));
 vi.mock('./api', () => ({
   getEntityChanges: vi.fn(),
@@ -33,14 +35,16 @@ const change = (code: string) => ({
   attribute_code: code,
   context_id: null,
   context_code: null,
-  change_kind: 'replace',
+  change_kind: 'replace' as const,
   before_value: null,
   after_value: code,
 });
 
 beforeEach(() => {
   vi.resetAllMocks();
-  vi.mocked(getEntityForm).mockResolvedValue({ blueprint: { blueprint: { name: 'Product' } } } as Awaited<ReturnType<typeof getEntityForm>>);
+  vi.mocked(getEntityForm).mockResolvedValue({
+    blueprint: { blueprint: { name: 'Product' } },
+  } as Awaited<ReturnType<typeof getEntityForm>>);
 });
 
 it('loads successive pages of entity changes without discarding prior changes', async () => {
@@ -48,12 +52,22 @@ it('loads successive pages of entity changes without discarding prior changes', 
   vi.mocked(getEntityChanges)
     .mockResolvedValueOnce({ items: [change('title')], next_offset: 25 })
     .mockResolvedValueOnce({ items: [change('subtitle')], next_offset: null });
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(<QueryClientProvider client={client}><EntityChangesPage entityId={entityId} /></QueryClientProvider>);
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={client}>
+      <EntityChangesPage entityId={entityId} />
+    </QueryClientProvider>,
+  );
   expect(await screen.findByText('title', { selector: 'strong' })).toBeTruthy();
   await userEvent.click(screen.getByRole('button', { name: 'Load more' }));
-  await waitFor(() => expect(getEntityChanges).toHaveBeenCalledWith(entityId, 25));
-  expect(await screen.findByText('subtitle', { selector: 'strong' })).toBeTruthy();
+  await waitFor(() =>
+    expect(getEntityChanges).toHaveBeenCalledWith(entityId, 25),
+  );
+  expect(
+    await screen.findByText('subtitle', { selector: 'strong' }),
+  ).toBeTruthy();
   expect(screen.getByText('title', { selector: 'strong' })).toBeTruthy();
   expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull();
 });

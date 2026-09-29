@@ -6,38 +6,37 @@ import {
   Divider,
   Paper,
   Stack,
-  Tab,
-  Tabs,
   Typography,
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import { createElement, useId, useState, type ReactNode } from 'react';
+import { createElement, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   viewBlockTypes,
   type Attribute,
-  type ComponentReference,
   type ViewDefinition,
   type ViewNode,
 } from '../../entities/api';
 import { FieldErrorBoundary } from './boundaries/FieldErrorBoundary';
 import {
   resolveIncomingRelationshipRenderer,
-  resolveValueRenderer,
   resolveViewComponent,
 } from './registry';
-import { attributeLabel } from '../../entities/entityDisplay';
-import { AttributeValue } from './values/AttributeValue';
 import { IncomingRelationshipListDisplay } from './IncomingRelationshipListDisplay';
 import {
   isHiddenByDefault,
   type AttributeVisibilityScope,
 } from '../../entities/attributeVisibility';
+import {
+  ROOT_NODE_KEY,
+  VIEW_COMPONENT_LOG_LABEL,
+  VIEW_GRID_COLUMNS,
+  VIEW_LAYOUT_SPACING,
+  VIEW_SECTION_PADDING,
+} from '../constants';
+import { ValueField, type ResolvedValue } from './ValueField';
+import { ViewTabs } from './ViewTabs';
 
-type ResolvedValue = {
-  value: unknown;
-  source_context?: { id: string; code: string };
-};
 type Props = {
   view?: ViewDefinition;
   attributes: readonly Attribute[];
@@ -48,110 +47,6 @@ type Props = {
   contextId?: string;
   entityId?: string;
   fallbackVisibilityScope?: AttributeVisibilityScope;
-};
-
-const ValueField = ({
-  attribute,
-  resolved,
-  renderEditor,
-  renderAttributeDecoration,
-  component,
-  contextId,
-  entityId,
-}: {
-  attribute: Attribute;
-  resolved?: ResolvedValue;
-  renderEditor?: (attribute: Attribute) => ReactNode;
-  renderAttributeDecoration?: (attribute: Attribute) => ReactNode;
-  component?: ComponentReference | null;
-  contextId?: string;
-  entityId?: string;
-}) => {
-  const { t } = useTranslation();
-  const label = attributeLabel(attribute);
-  return (
-    <FieldErrorBoundary
-      fallbackMessage={t('views.unableToRenderAttribute', { attribute: label })}
-      logLabel={label}
-    >
-      <Stack spacing={0.5}>
-        {renderEditor ? (
-          renderEditor(attribute)
-        ) : (
-          <>
-            <Box sx={{ alignItems: 'center', display: 'flex', gap: 0.5 }}>
-              <Typography sx={{ fontWeight: 700 }} variant="subtitle2">
-                {attributeLabel(attribute)}
-              </Typography>
-              {renderAttributeDecoration?.(attribute)}
-            </Box>
-            {(() => {
-              const ValueRenderer =
-                resolveValueRenderer(component) ?? AttributeValue;
-              return (
-                <ValueRenderer
-                  attribute={attribute}
-                  component={component}
-                  contextId={contextId}
-                  entityId={entityId}
-                  value={resolved?.value}
-                />
-              );
-            })()}
-            {resolved?.source_context &&
-              contextId &&
-              resolved.source_context.id !== contextId && (
-                <Typography color="text.secondary" variant="caption">
-                  {t('views.inheritedFromContext', {
-                    context: resolved.source_context.code,
-                  })}
-                </Typography>
-              )}
-          </>
-        )}
-        {renderEditor && renderAttributeDecoration?.(attribute)}
-      </Stack>
-    </FieldErrorBoundary>
-  );
-};
-
-const ViewTabs = ({
-  tabs,
-  render,
-}: {
-  tabs: { label: string; children: ViewNode[] }[];
-  render: (nodes: ViewNode[]) => ReactNode;
-}) => {
-  const [value, setValue] = useState(0);
-  const tabId = useId();
-  return (
-    <>
-      <Tabs
-        onChange={(_, next) => setValue(next)}
-        value={value}
-        variant="scrollable"
-      >
-        {tabs.map((tab, index) => (
-          <Tab
-            aria-controls={`${tabId}-tabpanel-${index}`}
-            id={`${tabId}-tab-${index}`}
-            key={tab.label}
-            label={tab.label}
-          />
-        ))}
-      </Tabs>
-      {tabs[value] && (
-        <Box
-          aria-labelledby={`${tabId}-tab-${value}`}
-          id={`${tabId}-tabpanel-${value}`}
-          role="tabpanel"
-          sx={{ pt: 2 }}
-        >
-          {render(tabs[value].children)}
-        </Box>
-      )}
-    </>
-  );
 };
 
 export const EntityView = ({
@@ -180,7 +75,7 @@ export const EntityView = ({
       field: attribute.code,
     }));
   const renderNodes = (nodes: ViewNode[]): ReactNode => (
-    <Stack spacing={2}>
+    <Stack spacing={VIEW_LAYOUT_SPACING}>
       {nodes.map((node, index) => renderNode(node, `${node.type}-${index}`))}
     </Stack>
   );
@@ -190,7 +85,7 @@ export const EntityView = ({
         <FieldErrorBoundary
           fallbackMessage={t('views.unableToRenderComponent')}
           key={key}
-          logLabel="view component"
+          logLabel={VIEW_COMPONENT_LOG_LABEL}
         >
           {t('views.unableToRenderComponent')}
         </FieldErrorBoundary>
@@ -216,8 +111,8 @@ export const EntityView = ({
           key={key}
           sx={{
             display: 'grid',
-            gap: 2,
-            gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' },
+            gap: VIEW_LAYOUT_SPACING,
+            gridTemplateColumns: VIEW_GRID_COLUMNS,
           }}
         >
           {node.children.map((child, index) =>
@@ -227,7 +122,7 @@ export const EntityView = ({
       );
     if (node.type === viewBlockTypes.section)
       return (
-        <Paper key={key} sx={{ p: 2.5 }}>
+        <Paper key={key} sx={{ p: VIEW_SECTION_PADDING }}>
           {renderNodes(node.children)}
         </Paper>
       );
@@ -254,7 +149,7 @@ export const EntityView = ({
       );
     if (node.type === viewBlockTypes.stack)
       return (
-        <Stack key={key} spacing={2}>
+        <Stack key={key} spacing={VIEW_LAYOUT_SPACING}>
           {node.children.map((child, index) =>
             renderNode(child, `${key}-${index}`),
           )}
@@ -264,7 +159,7 @@ export const EntityView = ({
       if (!entityId)
         return (
           <Typography color="text.secondary" key={key}>
-            {node.label} is available on entity previews.
+            {t('views.availableOnPreviews', { label: node.label })}
           </Typography>
         );
       const Renderer =
@@ -301,5 +196,5 @@ export const EntityView = ({
   )
     return <>{renderNodes(fallback)}</>;
 
-  return <>{renderNode(view, 'root')}</>;
+  return <>{renderNode(view, ROOT_NODE_KEY)}</>;
 };

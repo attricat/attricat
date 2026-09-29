@@ -20,6 +20,11 @@ import {
   ConversationPanel,
   type DraftContext,
 } from '../../agents/ConversationPanel';
+import {
+  CONVERSATION_ENTITY_ID_PREFIX_LENGTH,
+  CONVERSATION_TITLE_POLL_INTERVAL,
+  ENTITY_DRAWER_WIDTH,
+} from '../constants';
 
 export const EntityAgentDrawer = ({
   entityId,
@@ -42,7 +47,9 @@ export const EntityAgentDrawer = ({
     queryFn: listConversations,
     enabled: open,
     refetchInterval: (query) =>
-      query.state.data?.some(isTitlePending) ? 3_000 : false,
+      query.state.data?.some(isTitlePending)
+        ? CONVERSATION_TITLE_POLL_INTERVAL
+        : false,
   });
   const existing = conversations.data?.find(
     (item) =>
@@ -51,7 +58,9 @@ export const EntityAgentDrawer = ({
   const create = useMutation({
     mutationFn: () =>
       createConversation(
-        `${t('entities.askAboutEntity')} · ${entityId.slice(0, 8)}`,
+        t('entities.entityConversationTitle', {
+          entityId: entityId.slice(0, CONVERSATION_ENTITY_ID_PREFIX_LENGTH),
+        }),
         {
           entity_id: entityId,
           context_id: contextId,
@@ -81,7 +90,7 @@ export const EntityAgentDrawer = ({
           flexDirection: 'column',
           height: '100%',
           p: 2,
-          width: { xs: '100vw', sm: 480 },
+          width: { xs: '100vw', sm: ENTITY_DRAWER_WIDTH },
         }}
       >
         <Box sx={{ alignItems: 'center', display: 'flex' }}>

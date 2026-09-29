@@ -6,6 +6,7 @@ import {
   type ExtensionStorageRequest,
   runtimeSchema,
 } from './schemas';
+import { utf8ByteLength } from './utf8';
 
 export {
   extensionCommandRequestSchema,
@@ -39,7 +40,7 @@ const parseExtensionResponse = (
   text: string,
   operation: 'command' | 'storage',
 ): unknown => {
-  if (new TextEncoder().encode(text).length > maximumExtensionResponseBytes)
+  if (utf8ByteLength(text) > maximumExtensionResponseBytes)
     throw new Error(`Extension ${operation} response is too large`);
   try {
     return JSON.parse(text) as unknown;

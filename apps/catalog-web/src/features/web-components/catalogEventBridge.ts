@@ -17,14 +17,18 @@ export type CatalogEventBridgeOptions = {
 
 const validatedHandler =
   <T>(
-    schema: { safeParse: (detail: unknown) => { success: boolean; data?: T } },
+    schema: {
+      safeParse: (
+        detail: unknown,
+      ) => { success: true; data: T } | { success: false };
+    },
     callback: (detail: T) => void,
   ) =>
   (event: Event) => {
     const result = schema.safeParse((event as CustomEvent<unknown>).detail);
     if (!result.success) return;
 
-    callback(result.data!);
+    callback(result.data);
     event.preventDefault();
   };
 

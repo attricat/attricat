@@ -1,9 +1,10 @@
+import { extensionManagementTabIndex } from './constants';
 import { ExtensionManagementPage } from './ExtensionManagementPage';
 import { ExtensionsLayoutPage } from './ExtensionsLayoutPage';
 
 /** @deprecated Use one of the route-specific extension management pages. */
 export const ExtensionsPage = () => (
-  <ExtensionManagementPage tab={2}>
+  <ExtensionManagementPage tab={extensionManagementTabIndex.layout}>
     <ExtensionsLayoutPage />
   </ExtensionManagementPage>
 );

@@ -23,6 +23,7 @@ import {
   updatePublicationChannel,
   type PublicationChannel,
 } from './api';
+import { EXPORT_TABLE_COLUMN_COUNT } from './constants';
 import { exportQueryKeys } from './queryKeys';
 
 export const ExportsPage = () => {
@@ -130,7 +131,9 @@ export const ExportsPage = () => {
               })}
               {!contexts.data.length && (
                 <TableRow>
-                  <TableCell colSpan={3}>{t('exports.noContexts')}</TableCell>
+                  <TableCell colSpan={EXPORT_TABLE_COLUMN_COUNT}>
+                    {t('exports.noContexts')}
+                  </TableCell>
                 </TableRow>
               )}
             </TableBody>

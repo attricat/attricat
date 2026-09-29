@@ -1,60 +1,60 @@
-import { useNavigate } from '@tanstack/react-router';
+import { useQuery } from '@tanstack/react-query';
+import { getCoreRowModel, useLegacyTable } from '@tanstack/react-table/legacy';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import {
-  useMutation,
-  useQueries,
-  useQuery,
-  useQueryClient,
-} from '@tanstack/react-query';
-import {
-  getCoreRowModel,
-  legacyCreateColumnHelper,
-  type LegacyColumnDef,
-  useLegacyTable,
-} from '@tanstack/react-table/legacy';
-import {
-  Alert,
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  Paper,
-  Typography,
-} from '@mui/material';
+import { Alert, Paper, Typography } from '@mui/material';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import {
-  duplicateEntity,
-  getEntityPublications,
-  publishEntity,
-  unpublishEntity,
-  type BlueprintWithAttributes,
-  type EntityItem,
-  type EntityPublicationStatus,
-} from '../entities/api';
+import type { BlueprintWithAttributes, EntityItem } from '../entities/api';
 import { DeleteEntityDialog } from '../entities/components/DeleteEntityDialog';
 import { getExtensionRuntime } from '../extensions/api';
-import { extensionQueryKeys } from '../extensions/queryKeys';
 import { extensionRuntimeRefetchInterval } from '../extensions/constants';
-import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
+import { extensionQueryKeys } from '../extensions/queryKeys';
+import {
+  estimatedResultRowHeight,
+  maximumExplorerCellFrames,
+  resultRowOverscan,
+} from './constants';
 import { EntityActionsMenu } from './EntityActionsMenu';
 import { ExplorerColumnPreferencesDialog } from './ExplorerColumnPreferencesDialog';
-import { ExplorerResultsToolbar } from './ExplorerResultsToolbar';
+import { ExplorerExtensionActions } from './ExplorerExtensionActions';
 import {
+  arrangeExplorerColumns,
   buildExplorerColumnDefinitions,
-  type ExplorerTableColumn,
 } from './ExplorerResultColumns';
-import { SendSelectedToAgentDialog } from './SendSelectedToAgentDialog';
-import { VirtualizedExplorerTable } from './VirtualizedExplorerTable';
-import { useExplorerSelection } from './useExplorerSelection';
-import { entityQueryKeys } from '../entities/queryKeys';
+import { ExplorerResultsToolbar } from './ExplorerResultsToolbar';
+import type { ActionMenuPosition } from './ExplorerTableCells';
 import {
-  clearExplorerColumnPreferences,
-  getExplorerColumnPreferences,
-  setExplorerColumnPreferences,
-  type ExplorerColumnPreferences,
-} from './columnPreferences';
+  buildExplorerTableColumns,
+  configurableColumnIds,
+  explorerColumnLabel,
+} from './explorerTableColumns';
+import type { ExplorerSort } from './search';
+import { SearchInfoDialog } from './SearchInfoDialog';
+import { SendSelectedToAgentDialog } from './SendSelectedToAgentDialog';
+import { useEntityPublicationActions } from './useEntityPublicationActions';
+import { useExplorerColumnPreferences } from './useExplorerColumnPreferences';
+import { useExplorerSelection } from './useExplorerSelection';
+import { VirtualizedExplorerTable } from './VirtualizedExplorerTable';
 
-const maximumExplorerCellFrames = 32;
+type Props = {
+  blueprint: BlueprintWithAttributes;
+  hasNextPage: boolean;
+  isFetching: boolean;
+  isFetchingNextPage: boolean;
+  items: EntityItem[];
+  onLoadMore: () => void;
+  onSortChange: (field: string) => void;
+  publicationContextCode: string;
+  publicationContextId: string | undefined;
+  publicationSortAvailable: boolean;
+  canPublish: boolean;
+  canDelete: boolean;
+  relationshipSortAvailable?: boolean;
+  showExplorerActions?: boolean;
+  sort?: ExplorerSort;
+  totalCount: number | null;
+  totalCountCapped: boolean;
+};
 
 export const ExplorerResultsTable = ({
   blueprint,
@@ -74,25 +74,7 @@ export const ExplorerResultsTable = ({
   sort,
   totalCount,
   totalCountCapped,
-}: {
-  blueprint: BlueprintWithAttributes;
-  hasNextPage: boolean;
-  isFetching: boolean;
-  isFetchingNextPage: boolean;
-  items: EntityItem[];
-  onLoadMore: () => void;
-  onSortChange: (field: string) => void;
-  publicationContextCode: string;
-  publicationContextId: string | undefined;
-  publicationSortAvailable: boolean;
-  canPublish: boolean;
-  canDelete: boolean;
-  relationshipSortAvailable?: boolean;
-  showExplorerActions?: boolean;
-  sort?: { field: string; direction: 'asc' | 'desc' };
-  totalCount: number | null;
-  totalCountCapped: boolean;
-}) => {
+}: Props) => {
   const { t } = useTranslation();
   const selection = useExplorerSelection(items);
   const [deleteEntityId, setDeleteEntityId] = useState<string | null>(null);
@@ -104,136 +86,30 @@ export const ExplorerResultsTable = ({
   );
   const [actionMenu, setActionMenu] = useState<{
     entityId: string;
-    position: { left: number; top: number };
+    position: ActionMenuPosition;
   } | null>(null);
-  const queryClient = useQueryClient();
-  const navigate = useNavigate();
-  const publicationQueries = useQueries({
-    queries: items.map((entity) => ({
-      queryKey: entityQueryKeys.publication(entity.id),
-      queryFn: () => getEntityPublications(entity.id),
-      enabled: Boolean(publicationContextId),
-    })),
-  });
-  const publicationsByEntityId = new Map(
-    items.map((entity, index) => [
-      entity.id,
-      publicationQueries[index]?.data?.find(
-        (publication) => publication.context_id === publicationContextId,
-      ),
-    ]),
-  );
-  const updatePublication = (
-    entityId: string,
-    publication: EntityPublicationStatus,
-  ) =>
-    queryClient.setQueryData<EntityPublicationStatus[]>(
-      entityQueryKeys.publication(entityId),
-      (current) => [
-        ...(current ?? []).filter(
-          (item) => item.context_id !== publication.context_id,
-        ),
-        publication,
-      ],
-    );
-  const invalidatePublication = (entityId: string) =>
-    queryClient.invalidateQueries({
-      queryKey: entityQueryKeys.publication(entityId),
-    });
-  const publish = useMutation({
-    mutationFn: (entityId: string) => {
-      if (!publicationContextId)
-        throw new Error('Publication context is unavailable');
-      return publishEntity(entityId, publicationContextId);
-    },
-    onSuccess: (publication, entityId) => {
-      updatePublication(entityId, publication);
-      void invalidatePublication(entityId);
-    },
-  });
-  const unpublish = useMutation({
-    mutationFn: (entityId: string) => {
-      if (!publicationContextId)
-        throw new Error('Publication context is unavailable');
-      return unpublishEntity(entityId, publicationContextId);
-    },
-    onSuccess: (_, entityId) => void invalidatePublication(entityId),
-  });
-  const duplicate = useMutation({
-    mutationFn: (entityId: string) => duplicateEntity(entityId),
-    onSuccess: (entity) => {
-      void queryClient.invalidateQueries({
-        queryKey: entityQueryKeys.searches(),
-      });
-      void navigate({
-        params: { entityId: entity.id },
-        to: '/entities/$entityId/edit',
-      });
-    },
-  });
-  const columnHelper = legacyCreateColumnHelper<EntityItem>();
-  const tableView =
-    blueprint.blueprint.views.table?.type === 'table'
-      ? blueprint.blueprint.views.table
-      : undefined;
-  const tableColumns: ExplorerTableColumn[] = tableView?.columns?.length
-    ? tableView.columns.map((column) => {
-        const configuredSortable =
-          blueprint.table_path_attributes.find(
-            (attribute) => attribute.code === column.field,
-          )?.sortable ?? false;
-        const relationshipSortBlocked =
-          configuredSortable &&
-          column.field.includes('.') &&
-          !relationshipSortAvailable;
-        return {
-          ...column,
-          relationshipSortBlocked,
-          sortable: configuredSortable && !relationshipSortBlocked,
-        };
-      })
-    : (tableView?.fields ?? []).map((field) => ({
-        field,
-        relationshipSortBlocked: false,
-        sortable: false,
-      }));
-  const configurableColumnIds = [
-    'id',
-    'display',
-    'publication',
-    'schema',
-    ...tableColumns.map((column) => column.field),
-  ];
-  const [columnPreferences, setColumnPreferences] =
-    useState<ExplorerColumnPreferences>(() =>
-      getExplorerColumnPreferences(
-        blueprint.blueprint.id,
-        configurableColumnIds,
-      ),
-    );
   const [columnPreferencesOpen, setColumnPreferencesOpen] = useState(false);
-  const updateColumnPreferences = (preferences: ExplorerColumnPreferences) => {
-    setColumnPreferences(preferences);
-    setExplorerColumnPreferences(blueprint.blueprint.id, preferences);
-  };
+  const { duplicate, error, publicationsByEntityId, publish, unpublish } =
+    useEntityPublicationActions(items, publicationContextId);
+  const tableColumns = buildExplorerTableColumns(
+    blueprint,
+    relationshipSortAvailable,
+  );
+  const columnIds = configurableColumnIds(tableColumns);
+  const columnPreferences = useExplorerColumnPreferences(
+    blueprint.blueprint.id,
+    columnIds,
+  );
   const runtime = useQuery({
     queryKey: extensionQueryKeys.runtime(),
     queryFn: () => getExtensionRuntime(),
     refetchInterval: extensionRuntimeRefetchInterval,
     retry: false,
   });
-  // `flexRender` is only called for virtual rows. This bounded allocator keeps
-  // a pathological blueprint from turning one Explorer viewport into hundreds
-  // of opaque-origin frames.
+  // `flexRender` is only called for virtual rows; see
+  // `maximumExplorerCellFrames` for why frames are bounded per render.
   let cellFrames = 0;
   const takeCellFrame = () => cellFrames++ < maximumExplorerCellFrames;
-  // Render selection outside the legacy table's memoized column definitions so
-  // checkbox state follows selection changes even when result rows do not.
-  const selectionColumn = columnHelper.display({
-    id: 'select',
-    header: '',
-    cell: () => null,
-  }) as LegacyColumnDef<EntityItem, unknown>;
   const columnDefinitions = buildExplorerColumnDefinitions({
     blueprint,
     tableColumns,
@@ -248,32 +124,14 @@ export const ExplorerResultsTable = ({
     takeCellFrame,
     t,
   });
-  const actionColumn = columnDefinitions.pop();
-  const columns = [
-    ...(selection.selectionMode ? [selectionColumn] : []),
-    ...columnPreferences.order.flatMap((id) => {
-      const column = columnDefinitions.find(
-        (definition) => definition.id === id,
-      );
-      return column && !columnPreferences.hidden.includes(id) ? [column] : [];
-    }),
-    ...(actionColumn ? [actionColumn] : []),
-  ];
-  const preferenceColumns = configurableColumnIds.map((id) => ({
+  const columns = arrangeExplorerColumns(
+    columnDefinitions,
+    columnPreferences.preferences,
+    selection.selectionMode,
+  );
+  const preferenceColumns = columnIds.map((id) => ({
     id,
-    label:
-      id === 'id'
-        ? t('explorer.id')
-        : id === 'display'
-          ? t('explorer.display')
-          : id === 'publication'
-            ? t('explorer.publicationForContext', {
-                context: publicationContextCode,
-              })
-            : id === 'schema'
-              ? t('explorer.schema')
-              : (tableColumns.find((column) => column.field === id)?.label ??
-                id.replaceAll('_', ' ')),
+    label: explorerColumnLabel(t, id, tableColumns, publicationContextCode),
   }));
   const table = useLegacyTable({
     data: items,
@@ -287,10 +145,10 @@ export const ExplorerResultsTable = ({
   // eslint-disable-next-line react-hooks/incompatible-library
   const rowVirtualizer = useVirtualizer({
     count: rows.length + (hasNextPage ? 1 : 0),
-    estimateSize: () => 53,
+    estimateSize: () => estimatedResultRowHeight,
     getScrollElement: () => tableContainerRef.current,
     measureElement: (element) => element?.getBoundingClientRect().height,
-    overscan: 10,
+    overscan: resultRowOverscan,
   });
   const virtualRows = rowVirtualizer.getVirtualItems();
   const paddingTop = virtualRows[0]?.start ?? 0;
@@ -302,11 +160,9 @@ export const ExplorerResultsTable = ({
 
   return (
     <Paper component="section">
-      {(publish.isError || unpublish.isError || duplicate.isError) && (
+      {error && (
         <Alert severity="error" sx={{ m: 2 }}>
-          {publish.error?.message ??
-            unpublish.error?.message ??
-            duplicate.error?.message}
+          {error.message}
         </Alert>
       )}
       <ExplorerResultsToolbar
@@ -321,39 +177,13 @@ export const ExplorerResultsTable = ({
         onOpenColumnPreferences={() => setColumnPreferencesOpen(true)}
       />
       {showExplorerActions && (
-        <ExtensionOutlet
-          context={{
-            context_version: 1,
-            blueprint_id: blueprint.blueprint.id,
-            blueprint_version: blueprint.blueprint.version,
-          }}
-          outlet="explorer_action"
-          runtimeScope={{
-            blueprintId: blueprint.blueprint.id,
-            blueprintVersion: blueprint.blueprint.version,
-          }}
+        <ExplorerExtensionActions
+          blueprint={blueprint.blueprint}
+          selectedItems={
+            selection.selectionMode ? selection.selectedItems : null
+          }
         />
       )}
-      {showExplorerActions &&
-        selection.selectionMode &&
-        selection.selectedItems.length > 0 &&
-        selection.selectedItems.every(
-          (item) => item.blueprint_version === blueprint.blueprint.version,
-        ) && (
-          <ExtensionOutlet
-            context={{
-              context_version: 1,
-              blueprint_id: blueprint.blueprint.id,
-              blueprint_version: blueprint.blueprint.version,
-              entity_ids: selection.selectedItems.map((item) => item.id),
-            }}
-            outlet="explorer_bulk_action"
-            runtimeScope={{
-              blueprintId: blueprint.blueprint.id,
-              blueprintVersion: blueprint.blueprint.version,
-            }}
-          />
-        )}
       <VirtualizedExplorerTable
         table={table}
         columnsLength={columns.length}
@@ -416,43 +246,16 @@ export const ExplorerResultsTable = ({
       )}
       <ExplorerColumnPreferencesDialog
         columns={preferenceColumns}
-        onChange={updateColumnPreferences}
-        onClear={() => {
-          clearExplorerColumnPreferences(blueprint.blueprint.id);
-          setColumnPreferences({
-            hidden: [],
-            order: configurableColumnIds,
-          });
-        }}
+        onChange={columnPreferences.update}
+        onClear={columnPreferences.clear}
         onClose={() => setColumnPreferencesOpen(false)}
         open={columnPreferencesOpen}
-        preferences={columnPreferences}
+        preferences={columnPreferences.preferences}
       />
-      <Dialog
+      <SearchInfoDialog
+        entity={searchInfoEntity}
         onClose={() => setSearchInfoEntity(null)}
-        open={Boolean(searchInfoEntity)}
-      >
-        <DialogTitle>{t('explorer.searchInfo')}</DialogTitle>
-        <DialogContent>
-          <Typography>
-            {searchInfoEntity?.match_explanations
-              .map((explanation) =>
-                explanation.traversal_depth
-                  ? t('explorer.matchViaRelationship', {
-                      count: explanation.traversal_depth,
-                      term: explanation.term,
-                    })
-                  : explanation.matching_attribute_code
-                    ? t('explorer.matchInAttribute', {
-                        attribute: explanation.matching_attribute_code,
-                        term: explanation.term,
-                      })
-                    : explanation.term,
-              )
-              .join('; ') || t('explorer.noSearchDetails')}
-          </Typography>
-        </DialogContent>
-      </Dialog>
+      />
     </Paper>
   );
 };

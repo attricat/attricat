@@ -15,7 +15,30 @@ import {
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Blueprint } from '../entities/api';
+import {
+  blueprintSelectWidth,
+  pendingVersionPlaceholder,
+  searchSyntaxPopoverMaxWidth,
+  versionScopeSelectMinWidth,
+  versionScopes,
+} from './constants';
 import type { ExplorerSearch } from './search';
+
+type SearchFormValues = {
+  blueprint: string;
+  query: string;
+  versionScope: string;
+};
+
+const searchFormValues = (search: ExplorerSearch): SearchFormValues => ({
+  blueprint: search.blueprint ?? '',
+  query: search.query ?? '',
+  versionScope: search.allVersions
+    ? versionScopes.all
+    : search.version === undefined
+      ? versionScopes.current
+      : String(search.version),
+});
 
 type Props = {
   blueprints: Blueprint[];
@@ -42,15 +65,11 @@ export const ExplorerSearchForm = ({
 }: Props) => {
   const { t } = useTranslation();
   const [syntaxAnchor, setSyntaxAnchor] = useState<HTMLElement | null>(null);
-  const submitValues = (value: {
-    blueprint: string;
-    query: string;
-    versionScope: string;
-  }) => {
+  const submitValues = (value: SearchFormValues) => {
     const historicalVersion = Number(value.versionScope);
     onSubmit({
       blueprint: value.blueprint || undefined,
-      ...(value.versionScope === 'all'
+      ...(value.versionScope === versionScopes.all
         ? { allVersions: true }
         : Number.isInteger(historicalVersion)
           ? { version: historicalVersion }
@@ -59,28 +78,19 @@ export const ExplorerSearchForm = ({
     });
   };
   const form = useForm({
-    defaultValues: {
-      blueprint: search.blueprint ?? '',
-      query: search.query ?? '',
-      versionScope: search.allVersions
-        ? 'all'
-        : search.version === undefined
-          ? 'current'
-          : String(search.version),
-    },
+    defaultValues: searchFormValues(search),
     onSubmit: ({ value }) => submitValues(value),
   });
 
   useEffect(() => {
-    form.reset({
-      blueprint: search.blueprint ?? '',
-      query: search.query ?? '',
-      versionScope: search.allVersions
-        ? 'all'
-        : search.version === undefined
-          ? 'current'
-          : String(search.version),
-    });
+    form.reset(
+      searchFormValues({
+        allVersions: search.allVersions,
+        blueprint: search.blueprint,
+        query: search.query,
+        version: search.version,
+      }),
+    );
   }, [
     form,
     search.allVersions,
@@ -110,12 +120,15 @@ export const ExplorerSearchForm = ({
                 label={t('explorer.selectBlueprint')}
                 onChange={(event) => field.handleChange(event.target.value)}
                 select
-                sx={{ width: 280 }}
+                sx={{ width: blueprintSelectWidth }}
                 value={field.state.value}
               >
                 {blueprints.map((blueprint) => (
                   <MenuItem key={blueprint.code} value={blueprint.code}>
-                    {blueprint.name} ({blueprint.code})
+                    {t('explorer.blueprintOption', {
+                      code: blueprint.code,
+                      name: blueprint.name,
+                    })}
                   </MenuItem>
                 ))}
               </TextField>
@@ -136,12 +149,12 @@ export const ExplorerSearchForm = ({
                   submitValues({ ...form.state.values, versionScope });
                 }}
                 select
-                sx={{ minWidth: 190 }}
+                sx={{ minWidth: versionScopeSelectMinWidth }}
                 value={field.state.value}
               >
-                <MenuItem value="current">
+                <MenuItem value={versionScopes.current}>
                   {t('explorer.currentVersion', {
-                    version: currentVersion ?? '…',
+                    version: currentVersion ?? pendingVersionPlaceholder,
                   })}
                 </MenuItem>
                 {revisions
@@ -155,14 +168,16 @@ export const ExplorerSearchForm = ({
                       {t('explorer.version', { version: revision.version })}
                     </MenuItem>
                   ))}
-                <MenuItem value="all">{t('explorer.allVersions')}</MenuItem>
+                <MenuItem value={versionScopes.all}>
+                  {t('explorer.allVersions')}
+                </MenuItem>
               </TextField>
             )}
           </form.Field>
         )}
         {revisionsError && onRetryRevisions && (
           <Button onClick={onRetryRevisions} variant="text">
-            {t('common.retry')}
+            {t('explorer.retry')}
           </Button>
         )}
         <form.Field name="query">
@@ -205,7 +220,9 @@ export const ExplorerSearchForm = ({
         anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
         onClose={() => setSyntaxAnchor(null)}
         open={Boolean(syntaxAnchor)}
-        slotProps={{ paper: { sx: { maxWidth: 440, p: 2 } } }}
+        slotProps={{
+          paper: { sx: { maxWidth: searchSyntaxPopoverMaxWidth, p: 2 } },
+        }}
         transformOrigin={{ horizontal: 'right', vertical: 'top' }}
       >
         <Typography variant="body2">{t('explorer.queryExamples')}</Typography>

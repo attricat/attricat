@@ -1,10 +1,13 @@
+import { migrationBatchStatuses } from './constants';
 import type { BlueprintMigrationBatchStatus } from './schemas';
 
 export const ACTIVE_MIGRATION_POLL_INTERVAL_MS = 2_000;
 
 export const isMigrationBatchActive = (
   batch: BlueprintMigrationBatchStatus,
-): boolean => batch.status === 'queued' || batch.status === 'running';
+): boolean =>
+  batch.status === migrationBatchStatuses.queued ||
+  batch.status === migrationBatchStatuses.running;
 
 export const hasActiveMigrationForVersion = (
   batches: BlueprintMigrationBatchStatus[] | undefined,

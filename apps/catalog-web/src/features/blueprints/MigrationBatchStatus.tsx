@@ -16,13 +16,23 @@ import {
   Typography,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import {
+  completePercentage,
+  emptyValuePlaceholder,
+  migrationBatchStatuses,
+  migrationProgressMinWidth,
+} from './constants';
 import { formatBlueprintDateTime } from './dateTime';
 import type { BlueprintMigrationBatchStatus as MigrationBatch } from './schemas';
 
 const statusColor = (status: MigrationBatch['status']) => {
-  if (status === 'completed') return 'success';
-  if (status === 'queued' || status === 'running') return 'info';
-  if (status === 'superseded') return 'default';
+  if (status === migrationBatchStatuses.completed) return 'success';
+  if (
+    status === migrationBatchStatuses.queued ||
+    status === migrationBatchStatuses.running
+  )
+    return 'info';
+  if (status === migrationBatchStatuses.superseded) return 'default';
   return 'warning';
 };
 
@@ -32,8 +42,16 @@ const removalPolicyLabel = (
   const codes = policy?.attribute_codes;
   return Array.isArray(codes) && codes.every((code) => typeof code === 'string')
     ? codes.join(', ')
-    : '—';
+    : emptyValuePlaceholder;
 };
+
+const progressPercentage = ({
+  processed_entities: processed,
+  total_entities: total,
+}: MigrationBatch) =>
+  total === 0
+    ? completePercentage
+    : Math.min(completePercentage, (processed / total) * completePercentage);
 
 export const MigrationBatchStatus = ({
   batches,
@@ -105,7 +123,11 @@ export const MigrationBatchStatus = ({
             <TableBody>
               {batches.data.map((batch) => (
                 <TableRow key={batch.id}>
-                  <TableCell>v{batch.target_version}</TableCell>
+                  <TableCell>
+                    {t('blueprints.versionNumber', {
+                      version: batch.target_version,
+                    })}
+                  </TableCell>
                   <TableCell>
                     <Chip
                       color={statusColor(batch.status)}
@@ -113,7 +135,7 @@ export const MigrationBatchStatus = ({
                       size="small"
                     />
                   </TableCell>
-                  <TableCell sx={{ minWidth: 150 }}>
+                  <TableCell sx={{ minWidth: migrationProgressMinWidth }}>
                     <Typography variant="body2">
                       {t('blueprints.processedEntities', {
                         processed: batch.processed_entities,
@@ -123,16 +145,7 @@ export const MigrationBatchStatus = ({
                     <LinearProgress
                       aria-label={t('blueprints.migrationProgress')}
                       sx={{ mt: 0.5 }}
-                      value={
-                        batch.total_entities === 0
-                          ? 100
-                          : Math.min(
-                              100,
-                              (batch.processed_entities /
-                                batch.total_entities) *
-                                100,
-                            )
-                      }
+                      value={progressPercentage(batch)}
                       variant="determinate"
                     />
                   </TableCell>

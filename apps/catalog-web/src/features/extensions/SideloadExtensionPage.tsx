@@ -2,7 +2,6 @@ import { useForm } from '@tanstack/react-form';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Alert, Button, Paper, Typography } from '@mui/material';
-import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
@@ -11,6 +10,7 @@ import { authQueryKeys } from '../auth/queryKeys';
 import { sideloadExtension } from './managementApi';
 import { ErrorNotice } from './ExtensionErrorNotice';
 import { invalidateExtensions } from './extensionPageUtils';
+import { extensionArchiveAccept } from './constants';
 
 export const SideloadExtensionPage = () => {
   const { t } = useTranslation();
@@ -23,7 +23,6 @@ export const SideloadExtensionPage = () => {
     mutationFn: sideloadExtension,
     onSuccess: () => invalidateExtensions(client),
   });
-  const [archive, setArchive] = useState<File | null>(null);
   const form = useForm({
     defaultValues: { archive: null as File | null },
     onSubmit: ({ value }) => {
@@ -62,13 +61,11 @@ export const SideloadExtensionPage = () => {
               <Button component="label" variant="outlined">
                 {field.state.value?.name ?? t('extensions.chooseArchive')}
                 <input
-                  accept=".tar.zst,application/zstd"
+                  accept={extensionArchiveAccept}
                   hidden
-                  onChange={(event) => {
-                    const archive = event.target.files?.[0] ?? null;
-                    field.handleChange(archive);
-                    setArchive(archive);
-                  }}
+                  onChange={(event) =>
+                    field.handleChange(event.target.files?.[0] ?? null)
+                  }
                   type="file"
                 />
               </Button>
@@ -77,16 +74,20 @@ export const SideloadExtensionPage = () => {
           <Typography color="text.secondary" sx={{ mt: 1 }} variant="body2">
             {t('extensions.archiveHelp')}
           </Typography>
-          <Button
-            disabled={!canManage || !archive || sideload.isPending}
-            sx={{ mt: 2 }}
-            type="submit"
-            variant="contained"
-          >
-            {sideload.isPending
-              ? t('extensions.installing')
-              : t('extensions.installArchive')}
-          </Button>
+          <form.Subscribe selector={(state) => state.values.archive}>
+            {(archive) => (
+              <Button
+                disabled={!canManage || !archive || sideload.isPending}
+                sx={{ mt: 2 }}
+                type="submit"
+                variant="contained"
+              >
+                {sideload.isPending
+                  ? t('extensions.installing')
+                  : t('extensions.installArchive')}
+              </Button>
+            )}
+          </form.Subscribe>
         </form>
       </Paper>
     </PageContainer>

@@ -69,3 +69,23 @@ describe('context API client', () => {
     });
   });
 });
+
+describe('context code validation', () => {
+  it('reports invalid codes in the active language', async () => {
+    const { default: i18n } = await import('../../i18n');
+    const invalid = () => createContext('not valid', {}, contextId);
+    try {
+      await i18n.changeLanguage('pl');
+      expect(invalid).toThrow(
+        'Używaj tylko liter, cyfr, łączników i podkreśleń',
+      );
+      await i18n.changeLanguage('en');
+      expect(invalid).toThrow(
+        'Use only letters, numbers, hyphens, and underscores',
+      );
+    } finally {
+      await i18n.changeLanguage('en');
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});

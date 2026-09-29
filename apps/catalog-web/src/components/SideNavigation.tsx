@@ -1,77 +1,45 @@
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
-import DarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined';
-import LightModeOutlinedIcon from '@mui/icons-material/LightModeOutlined';
 import { useQuery } from '@tanstack/react-query';
-import { Link, useRouterState } from '@tanstack/react-router';
-import { createElement, useState } from 'react';
+import { useRouterState } from '@tanstack/react-router';
+import { createElement } from 'react';
 import { useTranslation } from 'react-i18next';
 import { currentSession } from '../features/auth/api';
 import { authQueryKeys } from '../features/auth/queryKeys';
 import { ExtensionOutlet } from '../features/extensions/ExtensionOutlet';
 import { listSidebarExploreNavigation } from '../features/workspace/api';
 import { workspaceQueryKeys } from '../features/workspace/queryKeys';
+import { ExploreNavigationLinks } from './ExploreNavigationLinks';
+import { ManagementNavigationLinks } from './ManagementNavigationLinks';
 import { useSetMobileExplorePanelTarget } from './mobileNavigationPanelContext';
-import { QueryErrorNotice } from './QueryErrorNotice';
-import { RouterListItemButton } from './RouterLink';
-import {
-  ExplorerIcon,
-  AppsIcon,
-  BrandIcon,
-  ExplorerShortcutIcon,
-  ManagementIcon,
-} from './systemIcons';
 import {
   getVisibleManagementNavigationItems,
   navigationRoutes,
   primaryNavigationItems,
-  profileNavigationItem,
 } from './navigation';
+import { NavigationFlyout } from './NavigationFlyout';
+import { NavigationFooter } from './NavigationFooter';
+import { NavigationItem } from './NavigationItem';
+import { QueryErrorNotice } from './QueryErrorNotice';
 import {
-  Box,
-  Divider,
-  IconButton,
-  List,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
-  ListSubheader,
-  Tooltip,
-  Typography,
-  useTheme,
-} from '@mui/material';
-import { useColorMode } from '../app/colorMode';
-
-export const compactNavigationWidth = 88;
-export const expandedNavigationWidth = 264;
-export const managementSidebarWidth = 248;
-const navigationHeaderHeight = 64;
-
-const compactNavigationLabelSx = {
-  fontSize: '0.65rem',
-  lineHeight: 1.1,
-  textAlign: 'center',
-};
-
-type MobileNavigationSection = 'primary' | 'explore' | 'extensions' | 'manage';
-
-const mobileSectionForPathname = (
-  pathname: string,
-): MobileNavigationSection => {
-  if (
-    pathname === navigationRoutes.manage ||
-    pathname.startsWith(`${navigationRoutes.manage}/`)
-  )
-    return 'manage';
-  if (pathname === navigationRoutes.explore) return 'explore';
-  if (
-    pathname === navigationRoutes.extensionContributions ||
-    pathname.startsWith(`${navigationRoutes.extensionContributions}/`)
-  )
-    return 'extensions';
-  return 'primary';
-};
+  compactNavigationWidth,
+  expandedNavigationWidth,
+  isWithinRoute,
+  mobileExplorePanelId,
+  navigationHeaderSx,
+} from './sideNavigationLayout';
+import {
+  AppsIcon,
+  BrandIcon,
+  ExplorerIcon,
+  ManagementIcon,
+} from './systemIcons';
+import { useCompactNavigationPanels } from './useCompactNavigationPanels';
+import {
+  mobileSectionTitleKeys,
+  useMobileNavigationSection,
+} from './useMobileNavigationSection';
+import { Box, Divider, IconButton, List, Typography } from '@mui/material';
 
 type SideNavigationProps = {
   compact?: boolean;
@@ -97,66 +65,26 @@ export const SideNavigation = ({
   onSignOut,
 }: SideNavigationProps) => {
   const { t } = useTranslation();
-  const mode = useTheme().palette.mode;
-  const setColorMode = useColorMode((state) => state.setPreference);
   const setMobileExplorePanelTarget = useSetMobileExplorePanelTarget();
   const { pathname, search } = useRouterState({
     select: (state) => state.location,
   });
-  // Manual pane navigation applies only to the route where it was chosen.
-  // Browser history and outside links take precedence when the route changes.
-  const [mobileNavigation, setMobileNavigation] = useState({
-    pathname,
-    section: mobileSectionForPathname(pathname),
+  const [mobileSection, setMobileSection] =
+    useMobileNavigationSection(pathname);
+  const panels = useCompactNavigationPanels(pathname, {
+    explore: {
+      onOpenChange: onCompactExploreOpenChange,
+      open: compactExploreOpen,
+    },
+    extensions: {
+      onOpenChange: onCompactExtensionsOpenChange,
+      open: compactExtensionsOpen,
+    },
+    manage: {
+      onOpenChange: onCompactManageOpenChange,
+      open: compactManageOpen,
+    },
   });
-  if (mobileNavigation.pathname !== pathname) {
-    setMobileNavigation({
-      pathname,
-      section: mobileSectionForPathname(pathname),
-    });
-  }
-  const mobileSection =
-    mobileNavigation.pathname === pathname
-      ? mobileNavigation.section
-      : mobileSectionForPathname(pathname);
-  const setMobileSection = (section: MobileNavigationSection) =>
-    setMobileNavigation({ pathname, section });
-  const mobileSubNavigationOpen = mobileSection !== 'primary';
-  const showPrimaryNavigation = compact || mobileSection === 'primary';
-  const [localCompactManageOpen, setLocalCompactManageOpen] = useState(
-    pathname.startsWith(`${navigationRoutes.manage}/`),
-  );
-  const [localCompactExploreOpen, setLocalCompactExploreOpen] = useState(
-    pathname === navigationRoutes.explore,
-  );
-  const [localCompactExtensionsOpen, setLocalCompactExtensionsOpen] = useState(
-    pathname === navigationRoutes.extensionContributions ||
-      pathname.startsWith(`${navigationRoutes.extensionContributions}/`),
-  );
-  const isCompactManageOpen = compactManageOpen ?? localCompactManageOpen;
-  const isCompactExploreOpen = compactExploreOpen ?? localCompactExploreOpen;
-  const isCompactExtensionsOpen =
-    compactExtensionsOpen ?? localCompactExtensionsOpen;
-  const setCompactManageOpen = (open: boolean) => {
-    setLocalCompactManageOpen(open);
-    onCompactManageOpenChange?.(open);
-  };
-  const setCompactExplore = (open: boolean) => {
-    setLocalCompactExploreOpen(open);
-    onCompactExploreOpenChange?.(open);
-    if (open) {
-      setCompactExtensionsOpen(false);
-      setCompactManageOpen(false);
-    }
-  };
-  const setCompactExtensionsOpen = (open: boolean) => {
-    setLocalCompactExtensionsOpen(open);
-    onCompactExtensionsOpenChange?.(open);
-    if (open) {
-      setCompactExplore(false);
-      setCompactManageOpen(false);
-    }
-  };
   const session = useQuery({
     queryKey: authQueryKeys.session(),
     queryFn: currentSession,
@@ -168,20 +96,20 @@ export const SideNavigation = ({
   const managementItems = getVisibleManagementNavigationItems(
     session.data?.capabilities,
   );
-  const itemSx = compact
-    ? {
-        '&.Mui-selected': {
-          '& .MuiListItemIcon-root': { color: 'inherit' },
-          color: 'primary.main',
-        },
-        borderRadius: 1.5,
-        flexDirection: 'column',
-        justifyContent: 'center',
-        minHeight: 64,
-        px: 0.5,
-        width: '100%',
-      }
-    : undefined;
+  const canBrowseExtensions =
+    session.data?.capabilities?.extensions_read === true;
+  const exploreActive = pathname === navigationRoutes.explore;
+  const exploreLinkProps = {
+    allEntitiesSelected: exploreActive && !search.locked,
+    selectedBlueprintCode: exploreActive ? search.blueprint : undefined,
+    shortcuts: pinnedExplore.data,
+  };
+  const mobilePrimary = !compact && mobileSection === 'primary';
+  const mobileSubNavigationOpen = !compact && mobileSection !== 'primary';
+  const navigateAway = () => {
+    if (compact) panels.closeAll();
+    onNavigate?.();
+  };
 
   return (
     <Box
@@ -199,30 +127,13 @@ export const SideNavigation = ({
       }}
     >
       <Box
-        sx={
-          compact
-            ? {
-                alignItems: 'center',
-                display: 'flex',
-                height: navigationHeaderHeight,
-                justifyContent: 'center',
-              }
-            : mobileSubNavigationOpen
-              ? {
-                  alignItems: 'center',
-                  display: 'flex',
-                  height: navigationHeaderHeight,
-                  px: 1,
-                }
-              : {
-                  alignItems: 'center',
-                  display: 'flex',
-                  height: navigationHeaderHeight,
-                  px: 3,
-                }
-        }
+        sx={{
+          ...navigationHeaderSx,
+          justifyContent: compact ? 'center' : undefined,
+          px: compact ? undefined : mobileSubNavigationOpen ? 1 : 3,
+        }}
       >
-        {!compact && mobileSubNavigationOpen ? (
+        {mobileSubNavigationOpen ? (
           <>
             <IconButton
               aria-label={t('navigation.back')}
@@ -231,13 +142,7 @@ export const SideNavigation = ({
               <ArrowBackIcon />
             </IconButton>
             <Typography sx={{ ml: 1 }} variant="h6">
-              {t(
-                mobileSection === 'explore'
-                  ? 'navigation.entityExplorer'
-                  : mobileSection === 'extensions'
-                    ? 'navigation.apps'
-                    : 'navigation.manage',
-              )}
+              {t(mobileSectionTitleKeys[mobileSection])}
             </Typography>
           </>
         ) : (
@@ -262,64 +167,38 @@ export const SideNavigation = ({
           width: '100%',
         }}
       >
-        {!compact && mobileSection === 'primary' && (
-          <ListItemButton
-            aria-controls="mobile-explore-panel"
-            aria-expanded={false}
-            aria-label={t('navigation.entityExplorer')}
+        {mobilePrimary && (
+          <NavigationItem
+            ariaControls={mobileExplorePanelId}
+            ariaExpanded={false}
+            compact={false}
+            icon={<ExplorerIcon />}
+            label={t('navigation.entityExplorer')}
             onClick={() => setMobileSection('explore')}
-          >
-            <ListItemIcon>
-              <ExplorerIcon />
-            </ListItemIcon>
-            <ListItemText primary={t('navigation.entityExplorer')} />
-            <ChevronRightIcon />
-          </ListItemButton>
+            trailing={<ChevronRightIcon />}
+          />
         )}
-        {showPrimaryNavigation &&
+        {(compact || mobilePrimary) &&
           primaryNavigationItems
             .filter((item) => compact || item.to !== navigationRoutes.explore)
             .map((item) => (
-              <Tooltip
+              <NavigationItem
+                compact={compact}
+                icon={createElement(item.icon)}
                 key={item.to}
-                placement="right"
-                title={compact ? t(item.labelKey) : ''}
-              >
-                <ListItemButton
-                  aria-label={t(item.labelKey)}
-                  component={Link}
-                  onClick={() => {
-                    if (compact && item.to === navigationRoutes.explore) {
-                      setCompactExplore(!isCompactExploreOpen);
-                      return;
-                    }
-                    if (compact) {
-                      setCompactExtensionsOpen(false);
-                      setCompactManageOpen(false);
-                      setCompactExplore(false);
-                    }
-                    onNavigate?.();
-                  }}
-                  selected={
-                    item.to === navigationRoutes.explore
-                      ? pathname === item.to && !search.locked
-                      : pathname.startsWith(item.to)
-                  }
-                  sx={itemSx}
-                  to={item.to}
-                >
-                  <ListItemIcon sx={compact ? { minWidth: 0 } : undefined}>
-                    {createElement(item.icon)}
-                  </ListItemIcon>
-                  {compact ? (
-                    <Typography sx={compactNavigationLabelSx} variant="caption">
-                      {t(item.labelKey)}
-                    </Typography>
-                  ) : (
-                    <ListItemText primary={t(item.labelKey)} />
-                  )}
-                </ListItemButton>
-              </Tooltip>
+                label={t(item.labelKey)}
+                onClick={
+                  compact && item.to === navigationRoutes.explore
+                    ? () => panels.toggle('explore')
+                    : navigateAway
+                }
+                selected={
+                  item.to === navigationRoutes.explore
+                    ? exploreLinkProps.allEntitiesSelected
+                    : pathname.startsWith(item.to)
+                }
+                to={item.to}
+              />
             ))}
         {(compact || mobileSection === 'explore') && (
           <Box sx={compact ? { width: '100%' } : { px: 1 }}>
@@ -334,459 +213,113 @@ export const SideNavigation = ({
           <Box
             aria-label={t('navigation.entityExplorer')}
             component="nav"
-            id="mobile-explore-panel"
+            id={mobileExplorePanelId}
           >
             <List disablePadding>
-              <ListItemButton
-                component={Link}
-                onClick={onNavigate}
-                selected={
-                  pathname === navigationRoutes.explore && !search.locked
-                }
-                to={navigationRoutes.explore}
-              >
-                <ListItemIcon>
-                  <ExplorerIcon />
-                </ListItemIcon>
-                <ListItemText primary={t('navigation.allEntities')} />
-              </ListItemButton>
-              {pinnedExplore.data?.length ? (
-                <ListSubheader disableSticky>
-                  {t('navigation.shortcuts')}
-                </ListSubheader>
-              ) : null}
-              {pinnedExplore.data?.map((item) => (
-                <RouterListItemButton
-                  aria-label={item.blueprint_name}
-                  key={item.blueprint_code}
-                  onClick={onNavigate}
-                  search={{ blueprint: item.blueprint_code, locked: true }}
-                  selected={
-                    pathname === navigationRoutes.explore &&
-                    search.blueprint === item.blueprint_code
-                  }
-                  style={{ color: 'inherit', textDecoration: 'none' }}
-                  to={navigationRoutes.explore}
-                >
-                  <ListItemIcon>
-                    <ExplorerShortcutIcon />
-                  </ListItemIcon>
-                  <ListItemText primary={item.blueprint_name} />
-                </RouterListItemButton>
-              ))}
+              <ExploreNavigationLinks
+                {...exploreLinkProps}
+                onNavigate={onNavigate}
+              />
             </List>
             <Box ref={setMobileExplorePanelTarget} sx={{ mt: 2 }} />
           </Box>
         )}
         {compact && (
-          <Tooltip placement="right" title={t('navigation.apps')}>
-            <ListItemButton
-              aria-expanded={isCompactExtensionsOpen}
-              aria-label={t('navigation.apps')}
-              component={Link}
-              onClick={() => setCompactExtensionsOpen(true)}
-              selected={
-                pathname === navigationRoutes.extensionContributions ||
-                pathname.startsWith(
-                  `${navigationRoutes.extensionContributions}/`,
-                )
-              }
-              sx={itemSx}
-              to={navigationRoutes.extensionContributions}
-            >
-              <ListItemIcon sx={{ minWidth: 0 }}>
-                <AppsIcon />
-              </ListItemIcon>
-              <Typography sx={compactNavigationLabelSx} variant="caption">
-                {t('navigation.apps')}
-              </Typography>
-            </ListItemButton>
-          </Tooltip>
+          <NavigationItem
+            ariaExpanded={panels.isOpen('extensions')}
+            compact
+            icon={<AppsIcon />}
+            label={t('navigation.apps')}
+            onClick={() => panels.openOnly('extensions')}
+            selected={isWithinRoute(
+              pathname,
+              navigationRoutes.extensionContributions,
+            )}
+            to={navigationRoutes.extensionContributions}
+          />
         )}
-        {!compact && mobileSection === 'primary' && (
-          <ListItemButton
-            aria-label={t('navigation.apps')}
-            component={Link}
+        {mobilePrimary && (
+          <NavigationItem
+            compact={false}
+            icon={<AppsIcon />}
+            label={t('navigation.apps')}
             onClick={() => setMobileSection('extensions')}
             sx={{ mt: 1 }}
             to={navigationRoutes.extensionContributions}
-          >
-            <ListItemIcon>
-              <AppsIcon />
-            </ListItemIcon>
-            <ListItemText primary={t('navigation.apps')} />
-            <ChevronRightIcon />
-          </ListItemButton>
+            trailing={<ChevronRightIcon />}
+          />
         )}
         {!compact && mobileSection === 'extensions' && (
           <ExtensionOutlet
-            canBrowseExtensions={
-              session.data?.capabilities?.extensions_read === true
-            }
+            canBrowseExtensions={canBrowseExtensions}
             navigationDisplay="all"
             onNavigate={onNavigate}
             outlet="navigation"
           />
         )}
         {compact && (
-          <Tooltip placement="right" title={t('navigation.manage')}>
-            <ListItemButton
-              aria-expanded={isCompactManageOpen}
-              aria-label={t('navigation.manage')}
-              component={Link}
-              onClick={() => {
-                setCompactExtensionsOpen(false);
-                setCompactExplore(false);
-                setCompactManageOpen(true);
-              }}
-              selected={
-                pathname === navigationRoutes.manage ||
-                pathname.startsWith(`${navigationRoutes.manage}/`)
-              }
-              sx={itemSx}
-              to={navigationRoutes.manage}
-            >
-              <ListItemIcon sx={{ minWidth: 0 }}>
-                <ManagementIcon />
-              </ListItemIcon>
-              <Typography sx={compactNavigationLabelSx} variant="caption">
-                {t('navigation.manage')}
-              </Typography>
-            </ListItemButton>
-          </Tooltip>
+          <NavigationItem
+            ariaExpanded={panels.isOpen('manage')}
+            compact
+            icon={<ManagementIcon />}
+            label={t('navigation.manage')}
+            onClick={() => panels.openOnly('manage')}
+            selected={isWithinRoute(pathname, navigationRoutes.manage)}
+            to={navigationRoutes.manage}
+          />
         )}
-        {!compact && mobileSection === 'primary' && (
-          <ListItemButton
-            aria-label={t('navigation.manage')}
+        {mobilePrimary && (
+          <NavigationItem
+            compact={false}
+            icon={<ManagementIcon />}
+            label={t('navigation.manage')}
             onClick={() => setMobileSection('manage')}
             sx={{ mt: 1 }}
-          >
-            <ListItemIcon>
-              <ManagementIcon />
-            </ListItemIcon>
-            <ListItemText primary={t('navigation.manage')} />
-            <ChevronRightIcon />
-          </ListItemButton>
+            trailing={<ChevronRightIcon />}
+          />
         )}
         {!compact && mobileSection === 'manage' && (
-          <>
-            <ListItemButton
-              component={Link}
-              onClick={onNavigate}
-              selected={
-                pathname === navigationRoutes.manage ||
-                pathname === `${navigationRoutes.manage}/`
-              }
-              to={navigationRoutes.manage}
-            >
-              <ListItemIcon>
-                <ManagementIcon />
-              </ListItemIcon>
-              <ListItemText primary={t('navigation.dashboard')} />
-            </ListItemButton>
-            {managementItems.map((item) => (
-              <ListItemButton
-                aria-label={t(item.labelKey)}
-                component={Link}
-                key={item.to}
-                onClick={onNavigate}
-                selected={pathname.startsWith(item.to)}
-                to={item.to}
-              >
-                <ListItemIcon>{createElement(item.icon)}</ListItemIcon>
-                <ListItemText primary={t(item.labelKey)} />
-              </ListItemButton>
-            ))}
-          </>
+          <ManagementNavigationLinks
+            items={managementItems}
+            onNavigate={onNavigate}
+            pathname={pathname}
+          />
         )}
       </List>
-      {compact && isCompactManageOpen && (
-        <Box
-          aria-label={t('navigation.manage')}
-          component="nav"
-          sx={{
-            backgroundColor: 'background.paper',
-            borderColor: 'divider',
-            borderRight: 1,
-            boxShadow: 3,
-            height: '100%',
-            left: compactNavigationWidth,
-            overflowY: 'auto',
-            position: 'absolute',
-            top: 0,
-            width: managementSidebarWidth,
-            zIndex: 1,
-          }}
-        >
-          <Box
-            sx={{
-              alignItems: 'center',
-              display: 'flex',
-              height: navigationHeaderHeight,
-              px: 3,
-            }}
-          >
-            <Typography variant="h6">{t('navigation.manage')}</Typography>
-          </Box>
-          <Divider />
-          <List sx={{ px: 1, py: 1.5 }}>
-            <ListItemButton
-              component={Link}
-              selected={
-                pathname === navigationRoutes.manage ||
-                pathname === `${navigationRoutes.manage}/`
-              }
-              to={navigationRoutes.manage}
-            >
-              <ListItemIcon>
-                <ManagementIcon />
-              </ListItemIcon>
-              <ListItemText primary={t('navigation.dashboard')} />
-            </ListItemButton>
-            {managementItems.map((item) => (
-              <ListItemButton
-                component={Link}
-                key={item.to}
-                onClick={onNavigate}
-                selected={pathname.startsWith(item.to)}
-                to={item.to}
-              >
-                <ListItemIcon>{createElement(item.icon)}</ListItemIcon>
-                <ListItemText primary={t(item.labelKey)} />
-              </ListItemButton>
-            ))}
-          </List>
-        </Box>
+      {compact && panels.isOpen('manage') && (
+        <NavigationFlyout title={t('navigation.manage')}>
+          <ManagementNavigationLinks
+            items={managementItems}
+            onNavigate={onNavigate}
+            pathname={pathname}
+          />
+        </NavigationFlyout>
       )}
-      {compact && isCompactExtensionsOpen && (
-        <Box
-          aria-label={t('navigation.apps')}
-          component="nav"
-          sx={{
-            backgroundColor: 'background.paper',
-            borderColor: 'divider',
-            borderRight: 1,
-            boxShadow: 3,
-            height: '100%',
-            left: compactNavigationWidth,
-            overflowY: 'auto',
-            position: 'absolute',
-            top: 0,
-            width: managementSidebarWidth,
-            zIndex: 1,
-          }}
-        >
-          <Box
-            sx={{
-              alignItems: 'center',
-              display: 'flex',
-              height: navigationHeaderHeight,
-              px: 3,
-            }}
-          >
-            <Typography variant="h6">{t('navigation.apps')}</Typography>
-          </Box>
-          <Divider />
-          <List sx={{ px: 1, py: 1.5 }}>
-            <ExtensionOutlet
-              canBrowseExtensions={
-                session.data?.capabilities?.extensions_read === true
-              }
-              onBrowseExtensions={() => {
-                setCompactExtensionsOpen(false);
-                setCompactManageOpen(true);
-              }}
-              navigationDisplay="all"
-              onNavigate={onNavigate}
-              outlet="navigation"
-            />
-          </List>
-        </Box>
+      {compact && panels.isOpen('extensions') && (
+        <NavigationFlyout title={t('navigation.apps')}>
+          <ExtensionOutlet
+            canBrowseExtensions={canBrowseExtensions}
+            onBrowseExtensions={() => panels.openOnly('manage')}
+            navigationDisplay="all"
+            onNavigate={onNavigate}
+            outlet="navigation"
+          />
+        </NavigationFlyout>
       )}
-      {compact && isCompactExploreOpen && (
-        <Box
-          aria-label={t('navigation.entityExplorer')}
-          component="nav"
-          sx={{
-            backgroundColor: 'background.paper',
-            borderColor: 'divider',
-            borderRight: 1,
-            boxShadow: 3,
-            height: '100%',
-            left: compactNavigationWidth,
-            overflowY: 'auto',
-            position: 'absolute',
-            top: 0,
-            width: managementSidebarWidth,
-            zIndex: 1,
-          }}
-        >
-          <Box
-            sx={{
-              alignItems: 'center',
-              display: 'flex',
-              height: navigationHeaderHeight,
-              px: 3,
-            }}
-          >
-            <Typography variant="h6">
-              {t('navigation.entityExplorer')}
-            </Typography>
-          </Box>
-          <Divider />
-          <List sx={{ px: 1, py: 1.5 }}>
-            <ListItemButton
-              component={Link}
-              selected={pathname === navigationRoutes.explore && !search.locked}
-              to={navigationRoutes.explore}
-            >
-              <ListItemIcon>
-                <ExplorerIcon />
-              </ListItemIcon>
-              <ListItemText primary={t('navigation.allEntities')} />
-            </ListItemButton>
-            {pinnedExplore.data?.length ? (
-              <ListSubheader disableSticky>
-                {t('navigation.shortcuts')}
-              </ListSubheader>
-            ) : null}
-            {pinnedExplore.data?.map((item) => (
-              <RouterListItemButton
-                key={item.blueprint_code}
-                search={{ blueprint: item.blueprint_code, locked: true }}
-                selected={
-                  pathname === navigationRoutes.explore &&
-                  search.blueprint === item.blueprint_code
-                }
-                style={{ color: 'inherit', textDecoration: 'none' }}
-                to={navigationRoutes.explore}
-              >
-                <ListItemIcon>
-                  <ExplorerShortcutIcon />
-                </ListItemIcon>
-                <ListItemText primary={item.blueprint_name} />
-              </RouterListItemButton>
-            ))}
-            <Box ref={setMobileExplorePanelTarget} sx={{ mt: 2 }} />
-          </List>
-        </Box>
+      {compact && panels.isOpen('explore') && (
+        <NavigationFlyout title={t('navigation.entityExplorer')}>
+          <ExploreNavigationLinks {...exploreLinkProps} />
+          <Box ref={setMobileExplorePanelTarget} sx={{ mt: 2 }} />
+        </NavigationFlyout>
       )}
       {compact && <Box sx={{ flexGrow: 1 }} />}
-      {(compact || mobileSection === 'primary') && (
-        <>
-          <Divider />
-          <List
-            sx={{
-              display: compact ? 'flex' : 'block',
-              flexDirection: compact ? 'column' : undefined,
-              px: compact ? 0.5 : 1,
-              py: 1.5,
-            }}
-          >
-            {[profileNavigationItem].map((item) => (
-              <Tooltip
-                key={item.to}
-                placement="right"
-                title={compact ? t(item.labelKey) : ''}
-              >
-                <ListItemButton
-                  aria-label={t(item.labelKey)}
-                  component={Link}
-                  onClick={() => {
-                    if (compact) {
-                      setCompactManageOpen(false);
-                      setCompactExplore(false);
-                      setCompactExtensionsOpen(false);
-                    }
-                    onNavigate?.();
-                  }}
-                  selected={pathname.startsWith(item.to)}
-                  sx={itemSx}
-                  to={item.to}
-                >
-                  <ListItemIcon sx={compact ? { minWidth: 0 } : undefined}>
-                    {createElement(item.icon)}
-                  </ListItemIcon>
-                  {compact ? (
-                    <Typography sx={compactNavigationLabelSx} variant="caption">
-                      {t(item.labelKey)}
-                    </Typography>
-                  ) : (
-                    <ListItemText primary={t(item.labelKey)} />
-                  )}
-                </ListItemButton>
-              </Tooltip>
-            ))}
-            <Tooltip
-              placement="right"
-              title={
-                compact
-                  ? t(
-                      mode === 'dark'
-                        ? 'navigation.lightMode'
-                        : 'navigation.darkMode',
-                    )
-                  : ''
-              }
-            >
-              <ListItemButton
-                aria-label={t(
-                  mode === 'dark'
-                    ? 'navigation.lightMode'
-                    : 'navigation.darkMode',
-                )}
-                onClick={() => setColorMode(mode === 'dark' ? 'light' : 'dark')}
-                sx={itemSx}
-              >
-                <ListItemIcon sx={compact ? { minWidth: 0 } : undefined}>
-                  {mode === 'dark' ? (
-                    <LightModeOutlinedIcon />
-                  ) : (
-                    <DarkModeOutlinedIcon />
-                  )}
-                </ListItemIcon>
-                {compact ? (
-                  <Typography sx={compactNavigationLabelSx} variant="caption">
-                    {t(
-                      mode === 'dark'
-                        ? 'navigation.lightMode'
-                        : 'navigation.darkMode',
-                    )}
-                  </Typography>
-                ) : (
-                  <ListItemText
-                    primary={t(
-                      mode === 'dark'
-                        ? 'navigation.lightMode'
-                        : 'navigation.darkMode',
-                    )}
-                  />
-                )}
-              </ListItemButton>
-            </Tooltip>
-            <Tooltip
-              placement="right"
-              title={compact ? t('navigation.signOut') : ''}
-            >
-              <ListItemButton
-                aria-label={t('navigation.signOut')}
-                onClick={onSignOut}
-                sx={itemSx}
-              >
-                <ListItemIcon sx={compact ? { minWidth: 0 } : undefined}>
-                  <LogoutOutlinedIcon />
-                </ListItemIcon>
-                {compact ? (
-                  <Typography sx={compactNavigationLabelSx} variant="caption">
-                    {t('navigation.signOut')}
-                  </Typography>
-                ) : (
-                  <ListItemText primary={t('navigation.signOut')} />
-                )}
-              </ListItemButton>
-            </Tooltip>
-          </List>
-        </>
+      {(compact || mobilePrimary) && (
+        <NavigationFooter
+          compact={compact}
+          onProfileClick={navigateAway}
+          onSignOut={onSignOut}
+          pathname={pathname}
+        />
       )}
     </Box>
   );

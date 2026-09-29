@@ -1,11 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
 import { Alert, CircularProgress } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import { Explorer } from '../explorer/Explorer';
 import type { ExplorerSearch } from '../explorer/search';
 import { getSavedView } from './api';
 import { savedViewQueryKeys } from './queryKeys';
 
 export const SavedExplorer = ({ search }: { search: ExplorerSearch }) => {
+  const { t } = useTranslation();
   const id = search.savedView ?? search.viewState ?? '';
   const link = Boolean(search.viewState && !search.savedView);
   const view = useQuery({
@@ -15,7 +17,7 @@ export const SavedExplorer = ({ search }: { search: ExplorerSearch }) => {
   });
   if (!id) return <Explorer search={search} />;
   if (view.isPending)
-    return <CircularProgress aria-label="Loading saved search" />;
+    return <CircularProgress aria-label={t('explorer.loadingSavedSearch')} />;
   if (view.isError) return <Alert severity="error">{view.error.message}</Alert>;
   return (
     <Explorer

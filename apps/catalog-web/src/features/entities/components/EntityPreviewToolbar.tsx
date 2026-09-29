@@ -1,17 +1,16 @@
-import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
 import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
-import UpgradeOutlinedIcon from '@mui/icons-material/UpgradeOutlined';
 import ViewSidebarOutlinedIcon from '@mui/icons-material/ViewSidebarOutlined';
 import { AgentIcon } from '../../../components/systemIcons';
-import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import { Box, Button, IconButton, Tooltip } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { RouterIconButton } from '../../../components/RouterLink';
 import { EntityToolbar } from './EntityToolbar';
+import { EntitySchemaStatus } from './EntitySchemaStatus';
 import type { EntityPublicationStatus } from '../schemas';
+import { ENTITY_EXTENSION_DRAWER_ID, publicationStatuses } from '../constants';
 
 type Props = {
   entityId: string;
@@ -84,27 +83,12 @@ export const EntityPreviewToolbar = ({
           </IconButton>
         </span>
       </Tooltip>
-      {schemaOutdated !== undefined &&
-        (schemaOutdated ? (
-          <>
-            <Tooltip title={t('entities.schemaOutdated')}>
-              <WarningAmberOutlinedIcon color="warning" fontSize="small" />
-            </Tooltip>
-            <Tooltip title={t('entities.upgradeBlueprint')}>
-              <RouterIconButton
-                aria-label={t('entities.upgradeBlueprint')}
-                params={{ entityId }}
-                to="/entities/$entityId/migrate"
-              >
-                <UpgradeOutlinedIcon />
-              </RouterIconButton>
-            </Tooltip>
-          </>
-        ) : (
-          <Tooltip title={t('entities.matchesCurrentSchema')}>
-            <CheckCircleOutlinedIcon color="success" fontSize="small" />
-          </Tooltip>
-        ))}
+      {schemaOutdated !== undefined && (
+        <EntitySchemaStatus
+          entityId={entityId}
+          schemaOutdated={schemaOutdated}
+        />
+      )}
       {canDelete && (
         <Tooltip title={t('entities.deleteEntity')}>
           <IconButton
@@ -120,7 +104,8 @@ export const EntityPreviewToolbar = ({
       {publication ? (
         <Tooltip
           title={
-            publication.status === 'published' && publication.published_at
+            publication.status === publicationStatuses.published &&
+            publication.published_at
               ? t('entities.publication.publishedDetails', {
                   publishedAt: new Date(
                     publication.published_at,
@@ -143,7 +128,7 @@ export const EntityPreviewToolbar = ({
       )}
       {canPublish &&
         publication &&
-        (publication.status === 'not_published' ? (
+        (publication.status === publicationStatuses.notPublished ? (
           <Button
             disabled={publicationPending}
             onClick={onPublish}
@@ -184,7 +169,7 @@ export const EntityPreviewToolbar = ({
       {showExtensions && (
         <Tooltip title={t('entities.extensionContributions')}>
           <IconButton
-            aria-controls="entity-extension-contributions"
+            aria-controls={ENTITY_EXTENSION_DRAWER_ID}
             aria-expanded={extensionPanelOpen}
             aria-label={t('entities.extensionContributions')}
             onClick={onOpenExtensions}

@@ -20,6 +20,12 @@ import { agentQueryKeys } from '../agents/queryKeys';
 import type { EntityItem } from '../entities/api';
 import { displayLabel } from '../entities/entityDisplay';
 import { selectedEntitiesMessage } from './agentSelection';
+import {
+  agentEntityListMaxHeight,
+  agentInstructionsRows,
+  maximumAgentConversationBlueprintNameLength,
+  maximumAgentInstructionsLength,
+} from './constants';
 
 export const SendSelectedToAgentDialog = ({
   blueprintName,
@@ -36,12 +42,6 @@ export const SendSelectedToAgentDialog = ({
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [conversationId, setConversationId] = useState<string | null>(null);
-  const form = useForm({
-    defaultValues: { instructions: t('explorer.agentDefaultInstructions') },
-    onSubmit: ({ value }) => {
-      start.mutate(value.instructions);
-    },
-  });
   const start = useMutation({
     meta: { toast: false },
     mutationFn: async (instructions: string) => {
@@ -50,7 +50,10 @@ export const SendSelectedToAgentDialog = ({
         const conversation = await createConversation(
           t('explorer.agentConversationTitle', {
             count: entities.length,
-            blueprint: blueprintName.slice(0, 120),
+            blueprint: blueprintName.slice(
+              0,
+              maximumAgentConversationBlueprintNameLength,
+            ),
           }),
         );
         id = conversation.id;
@@ -58,7 +61,7 @@ export const SendSelectedToAgentDialog = ({
       }
       await sendMessage(
         id,
-        selectedEntitiesMessage(instructions, blueprintName, entities),
+        selectedEntitiesMessage(t, instructions, blueprintName, entities),
       );
       return id;
     },
@@ -69,6 +72,12 @@ export const SendSelectedToAgentDialog = ({
         to: '/agents/$conversationId',
         params: { conversationId: id },
       });
+    },
+  });
+  const form = useForm({
+    defaultValues: { instructions: t('explorer.agentDefaultInstructions') },
+    onSubmit: ({ value }) => {
+      start.mutate(value.instructions);
     },
   });
 
@@ -83,17 +92,27 @@ export const SendSelectedToAgentDialog = ({
       <DialogContent>
         <Stack spacing={2} sx={{ pt: 1 }}>
           <Typography>
-            {t('explorer.selectedCount', { count: entities.length })} ·{' '}
-            {blueprintName}
+            {t('explorer.selectedCountForBlueprint', {
+              blueprint: blueprintName,
+              count: entities.length,
+            })}
           </Typography>
           <Box
             component="ul"
-            sx={{ maxHeight: 140, my: 0, overflowY: 'auto', pl: 3 }}
+            sx={{
+              maxHeight: agentEntityListMaxHeight,
+              my: 0,
+              overflowY: 'auto',
+              pl: 3,
+            }}
           >
             {entities.map((entity) => (
               <li key={entity.id}>
                 <Typography variant="body2">
-                  {displayLabel(entity.display, entity.id)} · {entity.id}
+                  {t('explorer.agentEntityListItem', {
+                    entityId: entity.id,
+                    label: displayLabel(entity.display, entity.id),
+                  })}
                 </Typography>
               </li>
             ))}
@@ -105,10 +124,12 @@ export const SendSelectedToAgentDialog = ({
                 fullWidth
                 label={t('explorer.agentInstructions')}
                 multiline
-                slotProps={{ htmlInput: { maxLength: 1000 } }}
+                slotProps={{
+                  htmlInput: { maxLength: maximumAgentInstructionsLength },
+                }}
                 onBlur={field.handleBlur}
                 onChange={(event) => field.handleChange(event.target.value)}
-                rows={3}
+                rows={agentInstructionsRows}
                 value={field.state.value}
               />
             )}
@@ -120,7 +141,7 @@ export const SendSelectedToAgentDialog = ({
       </DialogContent>
       <DialogActions>
         <Button disabled={start.isPending} onClick={onClose}>
-          {t('explorer.cancelAttributeFilter')}
+          {t('explorer.cancel')}
         </Button>
         <form.Subscribe selector={(state) => state.values.instructions}>
           {(instructions) => (

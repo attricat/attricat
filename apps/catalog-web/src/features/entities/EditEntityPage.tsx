@@ -1,80 +1,41 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Link, useNavigate } from '@tanstack/react-router';
-import { BlueprintIcon } from '../../components/systemIcons';
-import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
-import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
-import UpgradeOutlinedIcon from '@mui/icons-material/UpgradeOutlined';
-import ViewListOutlinedIcon from '@mui/icons-material/ViewListOutlined';
-import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
-import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
-import {
-  Alert,
-  Box,
-  Button,
-  Chip,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  MenuItem,
-  Stack,
-  TextField,
-  Tooltip,
-  Typography,
-} from '@mui/material';
-import { createElement, useRef, useState } from 'react';
+import { useNavigate } from '@tanstack/react-router';
+import { Alert, Button, Typography } from '@mui/material';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { listContexts } from '../contexts/api';
-import { contextQueryKeys } from '../contexts/queryKeys';
-import { defaultContextCode } from '../contexts/constants';
-import {
-  getEntityForm,
-  getCurrentBlueprint,
-  getResolvedEntityPreview,
-  updateEntity,
-} from './api';
-import {
-  attachReusableAttribute,
-  attachReusableAttributeGroup,
-  listReusableAttributeGroups,
-  listReusableAttributes,
-} from '../reusable-attributes/api';
-import { reusableAttributeQueryKeys } from '../reusable-attributes/queryKeys';
-import { latestReusableAttributeRevisions } from '../reusable-attributes/latestRevisions';
-import { RouterButton, RouterIconButton } from '../../components/RouterLink';
+import { getEntityForm, getCurrentBlueprint, updateEntity } from './api';
+import { EDIT_ENTITY_FORM_ID } from './constants';
+import { EditEntityToolbar } from './components/EditEntityToolbar';
+import { EntityBlueprintHeaderActions } from './components/EntityBlueprintHeaderActions';
 import { EntityContextPicker } from './components/EntityContextPicker';
 import { EntityForm, type EntityFormHandle } from './components/EntityForm';
 import { EntityAgentDrawer } from './components/EntityAgentDrawer';
+import { EntityHeading } from './components/EntityHeading';
+import { EntityPageEyebrow } from './components/EntityPageEyebrow';
 import { EntitySchemaSubheader } from './components/EntitySchemaSubheader';
-import { EntityToolbar } from './components/EntityToolbar';
+import { ReusableAttributeAttachDialog } from './components/ReusableAttributeAttachDialog';
+import { SmartFillButton } from './components/SmartFillButton';
+import { useReusableAttributeAttachment } from './components/useReusableAttributeAttachment';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { valuesForForm } from './entityForm';
 import { entityQueryKeys } from './queryKeys';
-import { findEntityHeading } from '../views/components/blocks/EntityHeadingDefinition';
-import { resolveHeadingRenderer } from '../views/components/registry';
-
-const editEntityFormId = 'edit-entity-form';
+import {
+  useEntityContextSelection,
+  useResolvedEntityPreview,
+} from './useEntityContexts';
 
 export const EditEntityPage = ({ entityId }: { entityId: string }) => {
   const { t } = useTranslation();
   const navigate = useNavigate({ from: '/entities/$entityId/edit' });
-  const [selectedContext, setSelectedContext] = useState('');
   const [agentOpen, setAgentOpen] = useState(false);
   const entityFormRef = useRef<EntityFormHandle>(null);
-  const [isReusableAttributeDialogOpen, setReusableAttributeDialogOpen] =
-    useState(false);
-  const [reusableSelectionType, setReusableSelectionType] = useState<
-    'attribute' | 'group' | null
-  >(null);
-  const [selectedReusableAttribute, setSelectedReusableAttribute] =
-    useState('');
-  const [selectedReusableGroup, setSelectedReusableGroup] = useState('');
-  const closeReusableAttributeDialog = () => {
-    setReusableAttributeDialogOpen(false);
-    setReusableSelectionType(null);
-    setSelectedReusableAttribute('');
-    setSelectedReusableGroup('');
+  const [reusableDialogOpen, setReusableDialogOpen] = useState(false);
+  // Remounts the dialog on every opening so its selections start empty.
+  const [reusableDialogSession, setReusableDialogSession] = useState(0);
+  const openReusableDialog = () => {
+    setReusableDialogSession((session) => session + 1);
+    setReusableDialogOpen(true);
   };
   const entityForm = useQuery({
     queryKey: entityQueryKeys.form(entityId),
@@ -90,36 +51,9 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
       });
     },
   });
-  const reusableAttributes = useQuery({
-    queryKey: reusableAttributeQueryKeys.definitions(),
-    queryFn: ({ signal }) => listReusableAttributes(false, signal),
-  });
-  const reusableGroups = useQuery({
-    queryKey: reusableAttributeQueryKeys.groups(),
-    queryFn: ({ signal }) => listReusableAttributeGroups(signal),
-  });
-  const latestReusableAttributes = latestReusableAttributeRevisions(
-    reusableAttributes.data ?? [],
-  ).sort(
-    (first, second) =>
-      first.namespace.localeCompare(second.namespace) ||
-      first.code.localeCompare(second.code),
-  );
-  const attach = useMutation({
-    mutationFn: (revisionId: string) =>
-      attachReusableAttribute(entityId, revisionId),
-    onSuccess: () => {
-      closeReusableAttributeDialog();
-      void entityForm.refetch();
-    },
-  });
-  const attachGroup = useMutation({
-    mutationFn: (groupId: string) =>
-      attachReusableAttributeGroup(entityId, groupId),
-    onSuccess: () => {
-      closeReusableAttributeDialog();
-      void entityForm.refetch();
-    },
+  const reusable = useReusableAttributeAttachment(entityId, () => {
+    setReusableDialogOpen(false);
+    void entityForm.refetch();
   });
   const blueprintId = entityForm.data?.entity.blueprint_id;
   const currentBlueprint = useQuery({
@@ -127,163 +61,59 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
     queryFn: () => getCurrentBlueprint(blueprintId!),
     enabled: Boolean(blueprintId),
   });
-  const contexts = useQuery({
-    queryKey: contextQueryKeys.all(),
-    queryFn: ({ signal }) => listContexts(signal),
-  });
-  const contextId =
-    selectedContext ||
-    (contexts.data?.find((context) => context.code === defaultContextCode)
-      ?.id ??
-      null);
-  const defaultContextId =
-    contexts.data?.find((context) => context.code === defaultContextCode)?.id ??
-    null;
-  const resolvedPreview = useQuery({
-    queryKey: entityQueryKeys.resolvedPreview(entityId, contextId ?? undefined),
-    queryFn: () => {
-      if (!contextId) throw new Error('Preview context is unavailable');
-      return getResolvedEntityPreview(entityId, contextId);
-    },
-    enabled: contextId !== null,
-  });
-  const detailView = entityForm.data?.blueprint.blueprint.views?.detail;
-  const heading = findEntityHeading(detailView);
-  const HeadingRenderer = resolveHeadingRenderer(heading?.component);
+  const { contextId, contexts, defaultContextId, setSelectedContext } =
+    useEntityContextSelection();
+  const resolvedPreview = useResolvedEntityPreview(entityId, contextId);
+  const blueprint = entityForm.data?.blueprint.blueprint;
+  const schemaOutdated =
+    currentBlueprint.data && entityForm.data
+      ? currentBlueprint.data.blueprint.version >
+        (entityForm.data.entity.blueprint_version ?? Infinity)
+      : undefined;
+  const error = entityForm.error ?? update.error ?? reusable.error;
+
   return (
     <PageContainer>
       <PageHeader
         actions={
           entityForm.data && (
-            <Box sx={{ alignItems: 'center', display: 'flex', gap: 1 }}>
-              {entityForm.data.entity.is_sample && (
-                <Chip color="info" label={t('entities.sample')} size="small" />
-              )}
-              <Tooltip title={entityForm.data.blueprint.blueprint.name}>
-                <RouterButton
-                  params={{ blueprintId: entityForm.data.entity.blueprint_id }}
-                  size="small"
-                  startIcon={<BlueprintIcon />}
-                  to="/manage/blueprints/$blueprintId"
-                  variant="text"
-                >
-                  {t('entities.blueprint')}:{' '}
-                  {entityForm.data.blueprint.blueprint.name}
-                </RouterButton>
-              </Tooltip>
-            </Box>
+            <EntityBlueprintHeaderActions
+              blueprint={{
+                id: entityForm.data.entity.blueprint_id,
+                name: entityForm.data.blueprint.blueprint.name,
+              }}
+              isSample={entityForm.data.entity.is_sample}
+            />
           )
         }
         eyebrow={
-          entityForm.data ? (
-            <>
-              {t('entities.editEntity')} ·{' '}
-              <Link
-                search={{
-                  blueprint: entityForm.data.blueprint.blueprint.code,
-                  version: entityForm.data.blueprint.blueprint.version,
-                }}
-                to="/"
-              >
-                {t('entities.viewAll')}
-              </Link>
-            </>
-          ) : (
-            t('entities.editEntity')
-          )
+          <EntityPageEyebrow
+            blueprint={blueprint}
+            label={t('entities.editEntity')}
+          />
         }
       />
-      {entityForm.data && resolvedPreview.data && HeadingRenderer
-        ? createElement(HeadingRenderer, {
-            attributes: entityForm.data.blueprint.attributes,
-            entityId,
-            values: resolvedPreview.data.values,
-            view: detailView,
-          })
-        : null}
-      <EntityToolbar label={t('entities.editEntity')}>
-        <Tooltip title={t('entities.viewPreview')}>
-          <RouterIconButton
-            aria-label={t('entities.viewPreview')}
-            params={{ entityId }}
-            to="/entities/$entityId"
-          >
-            <VisibilityOutlinedIcon />
-          </RouterIconButton>
-        </Tooltip>
-        {entityForm.data && (
-          <Tooltip title={t('entities.viewAll')}>
-            <RouterIconButton
-              aria-label={t('entities.viewAll')}
-              search={{
-                blueprint: entityForm.data.blueprint.blueprint.code,
-                version: entityForm.data.blueprint.blueprint.version,
-              }}
-              to="/"
-            >
-              <ViewListOutlinedIcon />
-            </RouterIconButton>
-          </Tooltip>
-        )}
-        {currentBlueprint.data &&
-          entityForm.data &&
-          (currentBlueprint.data.blueprint.version >
-          (entityForm.data.entity.blueprint_version ?? Infinity) ? (
-            <>
-              <Tooltip title={t('entities.schemaOutdated')}>
-                <WarningAmberOutlinedIcon color="warning" fontSize="small" />
-              </Tooltip>
-              <Tooltip title={t('entities.upgradeBlueprint')}>
-                <RouterIconButton
-                  aria-label={t('entities.upgradeBlueprint')}
-                  params={{ entityId }}
-                  to="/entities/$entityId/migrate"
-                >
-                  <UpgradeOutlinedIcon />
-                </RouterIconButton>
-              </Tooltip>
-            </>
-          ) : (
-            <Tooltip title={t('entities.matchesCurrentSchema')}>
-              <CheckCircleOutlinedIcon color="success" fontSize="small" />
-            </Tooltip>
-          ))}
-        {entityForm.data && (
-          <Button
-            disabled={update.isPending}
-            form={editEntityFormId}
-            sx={{ ml: 'auto' }}
-            type="submit"
-            variant="contained"
-          >
-            {t('entities.saveChanges')}
-          </Button>
-        )}
-      </EntityToolbar>
-      <EntitySchemaSubheader
+      {entityForm.data && resolvedPreview.data && (
+        <EntityHeading
+          attributes={entityForm.data.blueprint.attributes}
+          entityId={entityId}
+          values={resolvedPreview.data.values}
+          view={blueprint?.views?.detail}
+        />
+      )}
+      <EditEntityToolbar
+        blueprint={blueprint}
         entityId={entityId}
-        name={entityForm.data?.blueprint.blueprint.name}
+        saving={update.isPending}
+        schemaOutdated={schemaOutdated}
       />
+      <EntitySchemaSubheader entityId={entityId} name={blueprint?.name} />
       {entityForm.isPending && (
         <Typography sx={{ mt: 4 }}>{t('entities.loadingEntity')}</Typography>
       )}
-      {(entityForm.error ||
-        update.error ||
-        attach.error ||
-        attachGroup.error ||
-        reusableAttributes.error ||
-        reusableGroups.error) && (
+      {error && (
         <Alert severity="error" sx={{ mt: 4 }}>
-          {
-            (
-              entityForm.error ??
-              update.error ??
-              attach.error ??
-              attachGroup.error ??
-              reusableAttributes.error ??
-              reusableGroups.error
-            )?.message
-          }
+          {error.message}
         </Alert>
       )}
       {resolvedPreview.isError && (
@@ -293,120 +123,23 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
       )}
       {entityForm.data && (
         <>
-          <Dialog
-            fullWidth
-            maxWidth="sm"
-            onClose={closeReusableAttributeDialog}
-            open={isReusableAttributeDialogOpen}
-          >
-            <DialogTitle>
-              {t('entities.addReusableAttributeOrGroup')}
-            </DialogTitle>
-            <DialogContent>
-              {reusableSelectionType === null && (
-                <Stack spacing={2} sx={{ pt: 1 }}>
-                  <Typography>
-                    {t('entities.chooseReusableAttributeOrGroup')}
-                  </Typography>
-                  <Stack direction={{ sm: 'row' }} spacing={1}>
-                    <Button
-                      onClick={() => setReusableSelectionType('attribute')}
-                      variant="outlined"
-                    >
-                      {t('entities.additionalAttributes')}
-                    </Button>
-                    <Button
-                      onClick={() => setReusableSelectionType('group')}
-                      variant="outlined"
-                    >
-                      {t('entities.attributeGroup')}
-                    </Button>
-                  </Stack>
-                </Stack>
-              )}
-              {reusableSelectionType === 'attribute' && (
-                <TextField
-                  fullWidth
-                  label={t('entities.additionalAttributes')}
-                  onChange={(event) =>
-                    setSelectedReusableAttribute(event.target.value)
-                  }
-                  select
-                  sx={{ mt: 1 }}
-                  value={selectedReusableAttribute}
-                >
-                  <MenuItem value="">
-                    {t('entities.selectAdditionalAttribute')}
-                  </MenuItem>
-                  {latestReusableAttributes.map((attribute) => (
-                    <MenuItem key={attribute.id} value={attribute.id}>
-                      {attribute.namespace}:{attribute.code} · {attribute.name}{' '}
-                      v{attribute.version}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              )}
-              {reusableSelectionType === 'group' && (
-                <TextField
-                  fullWidth
-                  label={t('entities.attributeGroup')}
-                  onChange={(event) =>
-                    setSelectedReusableGroup(event.target.value)
-                  }
-                  select
-                  sx={{ mt: 1 }}
-                  value={selectedReusableGroup}
-                >
-                  <MenuItem value="">
-                    {t('entities.selectAttributeGroup')}
-                  </MenuItem>
-                  {(reusableGroups.data ?? []).map((group) => (
-                    <MenuItem key={group.id} value={group.id}>
-                      {group.name}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              )}
-            </DialogContent>
-            <DialogActions>
-              {reusableSelectionType !== null && (
-                <Button onClick={() => setReusableSelectionType(null)}>
-                  {t('entities.back')}
-                </Button>
-              )}
-              <Button onClick={closeReusableAttributeDialog}>
-                {t('common.cancel')}
-              </Button>
-              {reusableSelectionType === 'attribute' && (
-                <Button
-                  disabled={
-                    !selectedReusableAttribute ||
-                    attach.isPending ||
-                    reusableAttributes.isPending ||
-                    reusableAttributes.isError
-                  }
-                  onClick={() => attach.mutate(selectedReusableAttribute)}
-                  variant="contained"
-                >
-                  {t('entities.addAttribute')}
-                </Button>
-              )}
-              {reusableSelectionType === 'group' && (
-                <Button
-                  disabled={
-                    !selectedReusableGroup ||
-                    attachGroup.isPending ||
-                    reusableGroups.isPending ||
-                    reusableGroups.isError
-                  }
-                  onClick={() => attachGroup.mutate(selectedReusableGroup)}
-                  variant="contained"
-                >
-                  {t('entities.addAttributeGroup')}
-                </Button>
-              )}
-            </DialogActions>
-          </Dialog>
+          <ReusableAttributeAttachDialog
+            attachAttributeDisabled={
+              reusable.attach.isPending || reusable.attributesUnavailable
+            }
+            attachGroupDisabled={
+              reusable.attachGroup.isPending || reusable.groupsUnavailable
+            }
+            attributes={reusable.attributes}
+            groups={reusable.groups}
+            key={reusableDialogSession}
+            onAttachAttribute={(revisionId) =>
+              reusable.attach.mutate(revisionId)
+            }
+            onAttachGroup={(groupId) => reusable.attachGroup.mutate(groupId)}
+            onClose={() => setReusableDialogOpen(false)}
+            open={reusableDialogOpen}
+          />
           <EntityForm
             key={`${entityForm.data.entity.id}:${contextId ?? ''}`}
             blueprint={entityForm.data.blueprint}
@@ -421,12 +154,9 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
             }
             entityId={entityId}
             defaultContextId={defaultContextId}
-            formId={editEntityFormId}
+            formId={EDIT_ENTITY_FORM_ID}
             footerActions={
-              <Button
-                onClick={() => setReusableAttributeDialogOpen(true)}
-                variant="outlined"
-              >
+              <Button onClick={openReusableDialog} variant="outlined">
                 {t('entities.addReusableAttributeOrGroup')}
               </Button>
             }
@@ -471,20 +201,10 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
         />
       )}
       {entityForm.data && (
-        <Tooltip title={t('entities.smartFill')}>
-          <span>
-            <Button
-              aria-label={t('entities.smartFill')}
-              disabled={update.isPending || contextId === null}
-              onClick={() => setAgentOpen(true)}
-              startIcon={<AutoAwesomeOutlinedIcon />}
-              sx={{ bottom: 24, position: 'fixed', right: 24, zIndex: 1 }}
-              variant="contained"
-            >
-              {t('entities.smartFill')}
-            </Button>
-          </span>
-        </Tooltip>
+        <SmartFillButton
+          disabled={update.isPending || contextId === null}
+          onClick={() => setAgentOpen(true)}
+        />
       )}
     </PageContainer>
   );

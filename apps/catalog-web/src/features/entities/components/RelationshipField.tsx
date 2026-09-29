@@ -1,14 +1,9 @@
 import { useRef, useState } from 'react';
-import { useInfiniteQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
-  Box,
   Button,
-  Chip,
   FormControl,
-  Link,
   List,
-  ListItem,
   Stack,
   TextField,
   Typography,
@@ -17,19 +12,19 @@ import { compactOutlinedActionButtonSx } from '../../../components/CompactOutlin
 import { LoadMoreButton } from '../../../components/LoadMoreButton';
 import { RelationshipSelectorDialog } from '../../../components/RelationshipSelectorDialog';
 import { RelationshipPickerIcon } from '../../../components/systemIcons';
-import { searchEntities, type Attribute } from '../api';
+import type { Attribute } from '../api';
+import { attributeCardinalities, RELATIONSHIP_ID_JOINER } from '../constants';
+import { relationshipIdsForField } from '../entityForm';
+import { attributeLabel } from '../entityDisplay';
+import { RelationshipDraftSelection } from './RelationshipDraftSelection';
 import { RelationshipSelectionPills } from './RelationshipSelectionPills';
+import { RelationshipTargetOption } from './RelationshipTargetOption';
 import { useRelationshipSelectionLabels } from './useRelationshipSelectionLabels';
+import { useRelationshipTargets } from './useRelationshipTargets';
 import {
   scrollRelationshipPickerToTop,
   useRecentlyPreviewedEntities,
 } from './useRecentlyPreviewedEntities';
-import {
-  attributeLabel,
-  displayLabel,
-  dropdownOptionLabel,
-} from '../entityDisplay';
-import { entityQueryKeys } from '../queryKeys';
 
 export const RelationshipField = ({
   attribute,
@@ -53,11 +48,9 @@ export const RelationshipField = ({
   const [knownLabels, setKnownLabels] = useState<Record<string, string>>({});
   const pickerContentRoot = useRef<HTMLDivElement>(null);
   const targetBlueprint = attribute.target_blueprint_code;
-  const selectedIds = value
-    .split(',')
-    .map((targetId) => targetId.trim())
-    .filter(Boolean);
-  const isSingle = attribute.cardinality === 'one';
+  const selectedIds = relationshipIdsForField(value);
+  const isSingle = attribute.cardinality === attributeCardinalities.one;
+  const selectorOpen = open && !disabled;
   const selectionLabels = useRelationshipSelectionLabels(
     targetBlueprint,
     selectedIds,
@@ -69,19 +62,11 @@ export const RelationshipField = ({
       );
       scrollRelationshipPickerToTop(pickerContentRoot.current);
     });
-  const targets = useInfiniteQuery({
-    queryKey: entityQueryKeys.relationshipTargets(targetBlueprint, query),
-    queryFn: ({ pageParam, signal }) =>
-      searchEntities({
-        blueprint: targetBlueprint!,
-        cursor: pageParam,
-        query,
-        signal,
-      }),
-    initialPageParam: null as string | null,
-    getNextPageParam: (page) => page.next_cursor,
-    enabled: Boolean(targetBlueprint && open),
-  });
+  const { labelById, options, targetLabel, targets } = useRelationshipTargets(
+    targetBlueprint,
+    query,
+    selectorOpen,
+  );
 
   if (!targetBlueprint) {
     return (
@@ -97,19 +82,13 @@ export const RelationshipField = ({
     );
   }
 
-  const options = targets.data?.pages.flatMap((page) => page.items) ?? [];
-  const targetViews = targets.data?.pages[0]?.blueprint.blueprint.views ?? {};
-  const targetLabel = (target: (typeof options)[number]) =>
-    dropdownOptionLabel(target.preview, targetViews) ??
-    displayLabel(target.display, target.id);
-  const labelById = new Map(
-    options.map((target) => [target.id, targetLabel(target)]),
-  );
   const labelForId = (id: string) =>
     knownLabels[id] ?? labelById.get(id) ?? selectionLabels.get(id) ?? id;
   const availableOptions = options.filter(
     (target) => !draftIds.includes(target.id),
   );
+  const removeDraftId = (id: string) =>
+    setDraftIds((current) => current.filter((selectedId) => selectedId !== id));
   const openSelector = () => {
     setDraftIds(isSingle ? selectedIds.slice(0, 1) : selectedIds);
     setKnownLabels({});
@@ -125,6 +104,10 @@ export const RelationshipField = ({
           ? current.filter((selectedId) => selectedId !== id)
           : [...current, id],
     );
+  };
+  const applySelection = () => {
+    if (!disabled) onChange(draftIds.join(RELATIONSHIP_ID_JOINER));
+    setOpen(false);
   };
 
   return (
@@ -156,7 +139,7 @@ export const RelationshipField = ({
                     onChange(
                       selectedIds
                         .filter((selectedId) => selectedId !== id)
-                        .join(', '),
+                        .join(RELATIONSHIP_ID_JOINER),
                     )
             }
           />
@@ -177,15 +160,12 @@ export const RelationshipField = ({
           applyLabel: t('entities.applyRelationshipSelection'),
           cancelLabel: t('entities.cancelRelationshipSelection'),
           clearLabel: t('entities.clearRelationshipSelection'),
-          onApply: () => {
-            onChange(draftIds.join(', '));
-            setOpen(false);
-          },
+          onApply: applySelection,
           onClear: () => setDraftIds([]),
         }}
         closeLabel={t('entities.closeRelationshipSelector')}
         onClose={() => setOpen(false)}
-        open={open}
+        open={selectorOpen}
         selectedLabel={t('entities.relationshipSelected', {
           count: draftIds.length,
         })}
@@ -203,96 +183,27 @@ export const RelationshipField = ({
             onChange={(event) => setQuery(event.target.value)}
             value={query}
           />
-          {draftIds.length > 0 && (
-            <Stack spacing={0.5}>
-              <Typography variant="subtitle2">
-                {t('entities.selectedRelationships')}
-              </Typography>
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                {draftIds.map((id) => (
-                  <Chip
-                    color="primary"
-                    key={id}
-                    label={labelForId(id)}
-                    onDelete={() =>
-                      setDraftIds((current) =>
-                        current.filter((selectedId) => selectedId !== id),
-                      )
-                    }
-                    size="small"
-                    variant="outlined"
-                  />
-                ))}
-              </Box>
-            </Stack>
-          )}
+          <RelationshipDraftSelection
+            ids={draftIds}
+            labelForId={labelForId}
+            onRemove={removeDraftId}
+          />
           <Stack spacing={0.5}>
             <Typography variant="subtitle2">
               {t('entities.relationshipOptions')}
             </Typography>
             <List dense disablePadding>
               {availableOptions.map((target) => (
-                <ListItem
+                <RelationshipTargetOption
+                  isSample={target.is_sample === true}
                   key={target.id}
-                  sx={{
-                    alignItems: 'center',
-                    bgcolor: isPreviewed(target.id)
-                      ? 'action.selected'
-                      : undefined,
-                    borderRadius: 1,
-                    '&:hover': { bgcolor: 'action.hover' },
-                  }}
-                >
-                  <Box
-                    sx={{
-                      alignItems: 'center',
-                      display: 'flex',
-                      flexGrow: 1,
-                      gap: 1,
-                      minWidth: 0,
-                      mr: 1,
-                    }}
-                  >
-                    <Link
-                      href={previewHref(target.id)}
-                      onClick={() => markPreviewed(target.id)}
-                      rel="opener"
-                      target="_blank"
-                    >
-                      {targetLabel(target)}
-                    </Link>
-                    {target.is_sample && (
-                      <Chip
-                        color="info"
-                        label={t('entities.sample')}
-                        size="small"
-                      />
-                    )}
-                  </Box>
-                  <Stack direction="row" spacing={0.5}>
-                    <Button
-                      aria-label={t('entities.previewRelationshipOptionLabel', {
-                        option: targetLabel(target),
-                      })}
-                      color={isPreviewed(target.id) ? 'secondary' : 'inherit'}
-                      onClick={() => openPreview(target.id)}
-                      size="small"
-                    >
-                      {t('entities.previewRelationshipOption')}
-                    </Button>
-                    <Button
-                      aria-label={t('entities.selectRelationshipOptionLabel', {
-                        option: targetLabel(target),
-                      })}
-                      onClick={() =>
-                        selectTarget(target.id, targetLabel(target))
-                      }
-                      size="small"
-                    >
-                      {t('entities.selectRelationshipOption')}
-                    </Button>
-                  </Stack>
-                </ListItem>
+                  label={targetLabel(target)}
+                  onPreview={() => openPreview(target.id)}
+                  onPreviewLinkClick={() => markPreviewed(target.id)}
+                  onSelect={() => selectTarget(target.id, targetLabel(target))}
+                  previewHref={previewHref(target.id)}
+                  previewed={isPreviewed(target.id)}
+                />
               ))}
             </List>
             {!targets.isPending &&

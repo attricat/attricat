@@ -5,6 +5,7 @@ import {
   fileMetadataSchema,
   fileUploadResultSchema,
 } from './schemas';
+import { uploadFormFields } from './constants';
 
 export const getFileMetadata = (fileId: string) =>
   request(
@@ -29,9 +30,13 @@ export const uploadFiles = async ({
   onProgress?: (progress: number) => void;
 }) => {
   const data = new FormData();
-  if (contextId) data.append('context_id', z.uuid().parse(contextId));
+  if (contextId)
+    data.append(uploadFormFields.contextId, z.uuid().parse(contextId));
   files.forEach((file) =>
-    data.append(files.length === 1 ? 'file' : 'files', file),
+    data.append(
+      files.length === 1 ? uploadFormFields.file : uploadFormFields.files,
+      file,
+    ),
   );
   const path = `/api/entities/${encodeURIComponent(z.uuid().parse(entityId))}/file-attributes/${encodeURIComponent(attributeCode)}/uploads`;
   return requestUpload(path, data, fileUploadResultSchema, onProgress);
@@ -43,7 +48,10 @@ export const uploadConversationFiles = async (
 ) => {
   const data = new FormData();
   files.forEach((file) =>
-    data.append(files.length === 1 ? 'file' : 'files', file),
+    data.append(
+      files.length === 1 ? uploadFormFields.file : uploadFormFields.files,
+      file,
+    ),
   );
   return request(
     `/api/agent/conversations/${encodeURIComponent(z.uuid().parse(conversationId))}/uploads`,

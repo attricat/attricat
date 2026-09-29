@@ -5,6 +5,12 @@ import type { Attribute } from '../api';
 import type { FileMetadata } from '../../files/schemas';
 import { attributeLabel } from '../entityDisplay';
 import { attributeValueTypes } from '../valueTypes';
+import {
+  booleanFieldValues,
+  JSON_EDITOR_MIN_ROWS,
+  JSON_VALUE_PLACEHOLDER,
+  TIME_VALUE_PLACEHOLDER,
+} from '../constants';
 import { FileAttributeEditor } from '../../files/FileAttributeEditor';
 import { RelationshipField } from './RelationshipField';
 
@@ -81,8 +87,12 @@ export const EntityAttributeEditor = ({
           value={value}
         >
           <MenuItem value="">{t('entities.notSet')}</MenuItem>
-          <MenuItem value="true">{t('entities.true')}</MenuItem>
-          <MenuItem value="false">{t('entities.false')}</MenuItem>
+          <MenuItem value={booleanFieldValues.true}>
+            {t('entities.true')}
+          </MenuItem>
+          <MenuItem value={booleanFieldValues.false}>
+            {t('entities.false')}
+          </MenuItem>
         </TextField>
       </>
     );
@@ -98,13 +108,15 @@ export const EntityAttributeEditor = ({
         onChange={(event) => onChange(event.target.value)}
         multiline={attribute.value_type === attributeValueTypes.json}
         minRows={
-          attribute.value_type === attributeValueTypes.json ? 4 : undefined
+          attribute.value_type === attributeValueTypes.json
+            ? JSON_EDITOR_MIN_ROWS
+            : undefined
         }
         placeholder={
           attribute.value_type === attributeValueTypes.time
-            ? '09:30:00 America/New_York'
+            ? TIME_VALUE_PLACEHOLDER
             : attribute.value_type === attributeValueTypes.json
-              ? '{\n  "key": "value"\n}'
+              ? JSON_VALUE_PLACEHOLDER
               : undefined
         }
         slotProps={{

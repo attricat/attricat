@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { createReusableAttribute, listReusableAttributes } from './api';
+import '../../i18n';
 import { ReusableAttributeEditorPage } from './ReusableAttributeEditorPage';
 
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => vi.fn() }));

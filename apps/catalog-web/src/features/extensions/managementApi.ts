@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { request, requestNoContent } from '../../api/request';
+import { manualQuarantineDiagnosticCode, type GrantKind } from './constants';
 import {
   detailSchema,
   discoveredSchema,
@@ -40,20 +41,25 @@ export const updateWorkspaceExtensionLayout = (
 ) => requestNoContent('/api/workspace/extension-layout', body(layout, 'PUT'));
 export const extensionDetail = (id: string) =>
   request(`/api/extensions/${encodeURIComponent(id)}`, detailSchema);
-export const installExtension = (input: {
-  owner: string;
-  repository: string;
-  release_id: number;
-}) => request('/api/extensions', installationSchema, body(input));
+export const installExtension = (input: ExtensionReleaseReference) =>
+  request('/api/extensions', installationSchema, body(input));
 export const sideloadExtension = (archive: File) =>
   request('/api/extensions/sideload', installationSchema, {
     method: 'POST',
     headers: { 'Content-Type': 'application/zstd' },
     body: archive,
   });
+export type ExtensionReleaseReference = {
+  owner: string;
+  repository: string;
+  release_id: number;
+};
+
+export type ExtensionLifecycleAction = 'enable' | 'disable' | 'quarantine';
+
 export const upgradeExtension = (
   id: string,
-  input: { owner: string; repository: string; release_id: number },
+  input: ExtensionReleaseReference,
 ) =>
   request(
     `/api/extensions/${encodeURIComponent(id)}/upgrade`,
@@ -68,28 +74,31 @@ export const configureExtension = (id: string, configuration: unknown) =>
   );
 export const grantExtension = (
   id: string,
-  grant_kind:
-    'capability' | 'host_permission' | 'event_publish' | 'event_subscribe',
+  grant_kind: GrantKind,
   grant_id: string,
 ) =>
   requestNoContent(
     `/api/extensions/${encodeURIComponent(id)}/grants`,
     body({ grant_kind, grant_id }),
   );
-export const revokeExtensionGrant = (id: string, kind: string, grant: string) =>
+export const revokeExtensionGrant = (
+  id: string,
+  kind: GrantKind,
+  grant: string,
+) =>
   requestNoContent(
     `/api/extensions/${encodeURIComponent(id)}/grants/${encodeURIComponent(kind)}/${encodeURIComponent(grant)}`,
     { method: 'DELETE' },
   );
 export const lifecycleExtension = (
   id: string,
-  action: 'enable' | 'disable' | 'quarantine',
+  action: ExtensionLifecycleAction,
 ) =>
   request(
     `/api/extensions/${encodeURIComponent(id)}/${action}`,
     installationSchema,
     action === 'quarantine'
-      ? body({ diagnostic_code: 'manual_quarantine' })
+      ? body({ diagnostic_code: manualQuarantineDiagnosticCode })
       : { method: 'POST' },
   );
 export const removeExtension = (id: string) =>

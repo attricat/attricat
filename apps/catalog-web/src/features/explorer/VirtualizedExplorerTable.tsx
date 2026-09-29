@@ -18,15 +18,35 @@ import { useTranslation } from 'react-i18next';
 import { LoadMoreButton } from '../../components/LoadMoreButton';
 import type { EntityItem } from '../entities/api';
 import { displayLabel } from '../entities/entityDisplay';
-import { maximumAgentSelection } from './agentSelection';
+import {
+  displayColumnMinWidth,
+  explorerColumnIds,
+  idColumnWidth,
+  loadMoreRowKey,
+  maximumAgentSelection,
+  resultsTableHeight,
+  stickyBodyLayer,
+  stickyHeaderLayer,
+} from './constants';
 import type { ExplorerSelection } from './useExplorerSelection';
 
-const resultColumnCellSx = (columnId: string): SxProps<Theme> =>
-  columnId === 'display'
-    ? { minWidth: 280 }
-    : columnId === 'id'
-      ? { textAlign: 'center', width: 48 }
-      : {};
+const resultColumnCellSx = (
+  columnId: string,
+  stickyLayer: number,
+): SxProps<Theme> =>
+  columnId === explorerColumnIds.actions
+    ? {
+        bgcolor: 'background.paper',
+        boxShadow: 1,
+        position: 'sticky',
+        right: 0,
+        zIndex: stickyLayer,
+      }
+    : columnId === explorerColumnIds.display
+      ? { minWidth: displayColumnMinWidth }
+      : columnId === explorerColumnIds.id
+        ? { textAlign: 'center', width: idColumnWidth }
+        : {};
 
 type Props = {
   table: ReturnType<typeof useLegacyTable<EntityItem>>;
@@ -68,7 +88,11 @@ export const VirtualizedExplorerTable = ({
       }
       onChange={selection.toggleLoaded}
       slotProps={{
-        input: { 'aria-label': t('explorer.selectLoadedEntities') },
+        input: {
+          'aria-label': t('explorer.selectLoadedEntities', {
+            limit: maximumAgentSelection,
+          }),
+        },
       }}
     />
   );
@@ -96,17 +120,14 @@ export const VirtualizedExplorerTable = ({
       sx={{
         // On desktop this leaves room for the sticky search form and result
         // summary while using the rest of the viewport for rows.
-        height: {
-          xs: 'calc(100dvh - 220px)',
-          md: 'calc(100dvh - 165px)',
-        },
+        height: resultsTableHeight,
         overflowY: 'auto',
       }}
     >
       {isFetching && items.length > 0 && (
         <LinearProgress
           aria-label={t('explorer.loading')}
-          sx={{ position: 'sticky', top: 0, zIndex: 3 }}
+          sx={{ position: 'sticky', top: 0, zIndex: stickyHeaderLayer }}
         />
       )}
       <Table aria-label={t('explorer.results')} size="small" stickyHeader>
@@ -116,19 +137,9 @@ export const VirtualizedExplorerTable = ({
               {group.headers.map((header) => (
                 <TableCell
                   key={header.id}
-                  sx={
-                    header.column.id === 'actions'
-                      ? {
-                          bgcolor: 'background.paper',
-                          boxShadow: 1,
-                          position: 'sticky',
-                          right: 0,
-                          zIndex: 3,
-                        }
-                      : resultColumnCellSx(header.column.id)
-                  }
+                  sx={resultColumnCellSx(header.column.id, stickyHeaderLayer)}
                 >
-                  {header.column.id === 'select'
+                  {header.column.id === explorerColumnIds.select
                     ? selectionHeader
                     : header.isPlaceholder
                       ? null
@@ -153,7 +164,7 @@ export const VirtualizedExplorerTable = ({
           {virtualRows.map((virtualRow) => {
             if (virtualRow.index === rows.length) {
               return (
-                <TableRow data-index={virtualRow.index} key="load-more">
+                <TableRow data-index={virtualRow.index} key={loadMoreRowKey}>
                   <TableCell colSpan={columnsLength} sx={{ py: 2 }}>
                     <Box
                       sx={{
@@ -182,19 +193,9 @@ export const VirtualizedExplorerTable = ({
                 {row.getVisibleCells().map((cell) => (
                   <TableCell
                     key={cell.id}
-                    sx={
-                      cell.column.id === 'actions'
-                        ? {
-                            bgcolor: 'background.paper',
-                            boxShadow: 1,
-                            position: 'sticky',
-                            right: 0,
-                            zIndex: 1,
-                          }
-                        : resultColumnCellSx(cell.column.id)
-                    }
+                    sx={resultColumnCellSx(cell.column.id, stickyBodyLayer)}
                   >
-                    {cell.column.id === 'select'
+                    {cell.column.id === explorerColumnIds.select
                       ? selectionCheckbox(row.original)
                       : flexRender(
                           cell.column.columnDef.cell,

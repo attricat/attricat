@@ -2,6 +2,11 @@ import { Menu, MenuItem } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import type { EntityItem, EntityPublicationStatus } from '../entities/api';
 import { ExtensionPopoverOutlet } from '../extensions/ExtensionOutlet';
+import {
+  explorerExtensionContextVersion,
+  explorerExtensionOutlets,
+  publicationStatuses,
+} from './constants';
 
 type Props = {
   blueprintId: string;
@@ -88,7 +93,7 @@ export const EntityActionsMenu = ({
           >
             {t('entities.publish')}
           </MenuItem>
-          {publication.status !== 'not_published' && (
+          {publication.status !== publicationStatuses.notPublished && (
             <MenuItem
               disabled={unpublishing}
               onClick={() => {
@@ -103,13 +108,13 @@ export const EntityActionsMenu = ({
       )}
       <ExtensionPopoverOutlet
         context={{
-          context_version: 1,
+          context_version: explorerExtensionContextVersion,
           blueprint_id: blueprintId,
           blueprint_version: entity.blueprint_version,
           entity_id: entity.id,
         }}
         label={t('explorer.extensionActions')}
-        outlet="explorer_row_action"
+        outlet={explorerExtensionOutlets.rowAction}
       />
     </Menu>
   );

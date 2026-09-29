@@ -6,9 +6,6 @@ import {
   Box,
   Button,
   Checkbox,
-  Dialog,
-  DialogContent,
-  DialogTitle,
   FormControlLabel,
   Paper,
   Stack,
@@ -17,77 +14,14 @@ import {
 } from '@mui/material';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { copyToClipboard } from '../../components/clipboard';
 import { SettingsPage } from '../../components/CenteredPage';
 import { useToast } from '../../components/useToast';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
+import { personalTokensHash, tokenPermissionPresets } from './constants';
+import { SecretDialog } from './SecretDialog';
 import { createToken, listTokenPermissions } from './api';
 import { profileQueryKeys } from './queryKeys';
-
-const tokenPermissionPresets = [
-  {
-    nameKey: 'profile.catalogGenerator',
-    descriptionKey: 'profile.catalogGeneratorDescription',
-    permissions: [
-      'blueprints.read',
-      'blueprints.write',
-      'blueprints.publish',
-      'contexts.read',
-      'contexts.write',
-      'entities.read',
-      'entities.write',
-      'entities.publish',
-    ],
-  },
-  {
-    nameKey: 'profile.readOnlyCatalog',
-    descriptionKey: 'profile.readOnlyCatalogDescription',
-    permissions: ['blueprints.read', 'contexts.read', 'entities.read'],
-  },
-  {
-    nameKey: 'profile.entityImporter',
-    descriptionKey: 'profile.entityImporterDescription',
-    permissions: ['blueprints.read', 'contexts.read', 'entities.write'],
-  },
-];
-
-const SecretDialog = ({
-  secret,
-  onClose,
-}: {
-  secret?: string;
-  onClose: () => void;
-}) => {
-  const { t } = useTranslation();
-  const { show } = useToast();
-  const copySecret = async () => {
-    try {
-      await copyToClipboard(secret ?? '');
-      show({ message: t('common.copied'), severity: 'success' });
-    } catch {
-      show({ message: t('common.copyFailed'), severity: 'error' });
-    }
-  };
-
-  return (
-    <Dialog onClose={onClose} open={Boolean(secret)}>
-      <DialogTitle>{t('profile.copySecretTitle')}</DialogTitle>
-      <DialogContent>
-        <Stack spacing={2} sx={{ minWidth: 360 }}>
-          <Alert severity="warning">{t('profile.copySecretWarning')}</Alert>
-          <TextField
-            slotProps={{ input: { readOnly: true } }}
-            value={secret ?? ''}
-          />
-          <Button onClick={() => void copySecret()} variant="contained">
-            {t('profile.copySecret')}
-          </Button>
-        </Stack>
-      </DialogContent>
-    </Dialog>
-  );
-};
 
 export const PersonalTokensPage = () => {
   const { t } = useTranslation();
@@ -160,7 +94,7 @@ export const PersonalTokensPage = () => {
       <Typography variant="h4">{t('profile.createToken')}</Typography>
       <SecretDialog
         onClose={() =>
-          void navigate({ to: '/profile', hash: 'personal-api-tokens' })
+          void navigate({ to: '/profile', hash: personalTokensHash })
         }
         secret={secret}
       />

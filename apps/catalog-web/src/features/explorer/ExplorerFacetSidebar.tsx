@@ -1,50 +1,19 @@
-import {
-  Box,
-  Button,
-  Chip,
-  Link,
-  MenuItem,
-  List,
-  ListItem,
-  Paper,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material';
-import { useInfiniteQuery } from '@tanstack/react-query';
-import { useRef, useState } from 'react';
+import { MenuItem, Paper, Stack, TextField, Typography } from '@mui/material';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { Attribute, Blueprint } from '../entities/api';
 import type { AttributeContext } from '../contexts/api';
 import { defaultContextCode } from '../contexts/constants';
-import { searchEntities } from '../entities/api';
-import { entityQueryKeys } from '../entities/queryKeys';
-import { compactOutlinedActionButtonSx } from '../../components/CompactOutlinedActionButton';
-import { RelationshipSelectorDialog } from '../../components/RelationshipSelectorDialog';
-import {
-  RelationshipIcon,
-  RelationshipPickerIcon,
-} from '../../components/systemIcons';
-import { RelationshipSelectionPills } from '../entities/components/RelationshipSelectionPills';
-import { useRelationshipSelectionLabels } from '../entities/components/useRelationshipSelectionLabels';
-import {
-  scrollRelationshipPickerToTop,
-  useRecentlyPreviewedEntities,
-} from '../entities/components/useRecentlyPreviewedEntities';
+import type { Attribute, Blueprint } from '../entities/api';
+import { attributeLabel } from '../entities/entityDisplay';
+import { facetSidebarMaxHeight, facetSidebarStickyTop } from './constants';
 import { ExplorerFilterPicker } from './ExplorerFilterPicker';
-import { LoadMoreButton } from '../../components/LoadMoreButton';
-import {
-  attributeLabel,
-  dropdownOptionLabel,
-  displayLabel,
-} from '../entities/entityDisplay';
-import type { RelationshipFilterAttribute } from './relationshipFilterTypes';
+import { RelationshipFacetFilter } from './RelationshipFacetFilter';
+import type {
+  ExplorerRelationshipFacet,
+  RelationshipFacetUpdate,
+  RelationshipFilterAttribute,
+} from './relationshipFilterTypes';
 import type { AttributeFilter } from './search';
-
-export type ExplorerRelationshipFacet = {
-  selectedIds: string[];
-  sourceRelationship: RelationshipFilterAttribute;
-};
 
 type Props = {
   blueprint: string;
@@ -62,19 +31,27 @@ type Props = {
   onAddAttributeFilter: (filter: AttributeFilter) => void;
   onRemoveAttributeFilter: (index: number) => void;
   onUpdateAttributeFilter: (index: number, filter: AttributeFilter) => void;
-  onUpdate: (
-    field: string,
-    updates: { selectedIds?: string[]; targetBlueprint?: string },
-  ) => void;
+  onUpdate: (field: string, updates: RelationshipFacetUpdate) => void;
 };
 
-type FacetProps = Pick<Props, 'onUpdate'> & {
-  facet: ExplorerRelationshipFacet;
-  label: string;
-  onClose: () => void;
-  onOpen: () => void;
-  open: boolean;
-};
+/** Keeps the facet being picked visible even before it has selections. */
+const withOpenFacet = (
+  facets: ExplorerRelationshipFacet[],
+  relationshipToOpen: RelationshipFilterAttribute | undefined,
+) =>
+  relationshipToOpen
+    ? [
+        ...facets.filter(
+          (facet) => facet.sourceRelationship.code !== relationshipToOpen.code,
+        ),
+        facets.find(
+          (facet) => facet.sourceRelationship.code === relationshipToOpen.code,
+        ) ?? {
+          selectedIds: [],
+          sourceRelationship: relationshipToOpen,
+        },
+      ]
+    : facets;
 
 export const ExplorerFacetSidebar = ({
   attributeFilters,
@@ -97,19 +74,9 @@ export const ExplorerFacetSidebar = ({
   const { t } = useTranslation();
   const [relationshipToOpen, setRelationshipToOpen] =
     useState<RelationshipFilterAttribute>();
-  const displayedFacets = relationshipToOpen
-    ? [
-        ...facets.filter(
-          (facet) => facet.sourceRelationship.code !== relationshipToOpen.code,
-        ),
-        facets.find(
-          (facet) => facet.sourceRelationship.code === relationshipToOpen.code,
-        ) ?? {
-          selectedIds: [],
-          sourceRelationship: relationshipToOpen,
-        },
-      ]
-    : facets;
+  const blueprintName = (code: string) =>
+    blueprints.find((item) => item.code === code)?.name ?? code;
+
   return (
     <Paper
       component="aside"
@@ -117,11 +84,11 @@ export const ExplorerFacetSidebar = ({
         alignSelf: 'start',
         borderRadius: fullHeight ? 0 : undefined,
         height: fullHeight ? '100dvh' : undefined,
-        maxHeight: fullHeight ? undefined : { md: 'calc(100dvh - 104px)' },
+        maxHeight: fullHeight ? undefined : { md: facetSidebarMaxHeight },
         overflowY: fullHeight ? 'auto' : { md: 'auto' },
         p: 2,
         position: fullHeight ? 'sticky' : { md: 'sticky' },
-        top: fullHeight ? 0 : { md: 88 },
+        top: fullHeight ? 0 : { md: facetSidebarStickyTop },
       }}
     >
       {onBlueprintChange && (
@@ -135,7 +102,10 @@ export const ExplorerFacetSidebar = ({
         >
           {blueprints.map((item) => (
             <MenuItem key={item.code} value={item.code}>
-              {item.name} ({item.code})
+              {t('explorer.blueprintOption', {
+                code: item.code,
+                name: item.name,
+              })}
             </MenuItem>
           ))}
         </TextField>
@@ -170,16 +140,16 @@ export const ExplorerFacetSidebar = ({
             </MenuItem>
           ))}
         </TextField>
-        {displayedFacets.map((facet) => (
-          <Facet
+        {withOpenFacet(facets, relationshipToOpen).map((facet) => (
+          <RelationshipFacetFilter
             facet={facet}
             key={facet.sourceRelationship.code}
-            label={`${attributeLabel(facet.sourceRelationship)} (${
-              blueprints.find(
-                (item) =>
-                  item.code === facet.sourceRelationship.target_blueprint_code,
-              )?.name ?? facet.sourceRelationship.target_blueprint_code
-            })`}
+            label={t('explorer.relationshipFacetLabel', {
+              attribute: attributeLabel(facet.sourceRelationship),
+              blueprint: blueprintName(
+                facet.sourceRelationship.target_blueprint_code,
+              ),
+            })}
             onClose={() => setRelationshipToOpen(undefined)}
             onOpen={() => setRelationshipToOpen(facet.sourceRelationship)}
             onUpdate={onUpdate}
@@ -188,10 +158,7 @@ export const ExplorerFacetSidebar = ({
         ))}
         <ExplorerFilterPicker
           attributes={attributes}
-          blueprintName={
-            blueprints.find((item) => item.code === blueprint)?.name ??
-            blueprint
-          }
+          blueprintName={blueprintName(blueprint)}
           filters={attributeFilters}
           pathAttributes={pathAttributes}
           relationshipAttributes={relationshipAttributes}
@@ -202,223 +169,5 @@ export const ExplorerFacetSidebar = ({
         />
       </Stack>
     </Paper>
-  );
-};
-
-const Facet = ({
-  facet,
-  label,
-  onClose,
-  onOpen,
-  onUpdate,
-  open,
-}: FacetProps) => {
-  const { t } = useTranslation();
-  const selectionLabels = useRelationshipSelectionLabels(
-    facet.sourceRelationship.target_blueprint_code,
-    facet.selectedIds,
-  );
-  return (
-    <>
-      {facet.selectedIds.length > 0 && (
-        <Stack spacing={0.5}>
-          <Stack
-            direction="row"
-            spacing={0.5}
-            sx={{ alignItems: 'center', color: 'primary.main' }}
-          >
-            <RelationshipIcon sx={{ fontSize: 15 }} />
-            <Typography
-              color="inherit"
-              component="h3"
-              sx={{ fontWeight: 700, letterSpacing: '0.01em', lineHeight: 1.4 }}
-              variant="subtitle2"
-            >
-              {label}
-            </Typography>
-          </Stack>
-          <RelationshipSelectionPills
-            action={
-              <Button
-                aria-label={label}
-                color="primary"
-                onClick={onOpen}
-                size="small"
-                startIcon={<RelationshipPickerIcon fontSize="small" />}
-                sx={compactOutlinedActionButtonSx}
-                variant="outlined"
-              >
-                {t('entities.openRelationshipSelector')}
-              </Button>
-            }
-            ids={facet.selectedIds}
-            labels={selectionLabels}
-            onRemove={(id) =>
-              onUpdate(facet.sourceRelationship.code, {
-                selectedIds: facet.selectedIds.filter(
-                  (selectedId) => selectedId !== id,
-                ),
-              })
-            }
-          />
-        </Stack>
-      )}
-      <RelationshipSelectorDialog
-        closeLabel={t('entities.closeRelationshipSelector')}
-        onClose={onClose}
-        open={open}
-        selectedLabel={t('entities.relationshipSelected', {
-          count: facet.selectedIds.length,
-        })}
-        title={t('entities.selectRelationships', { blueprint: label })}
-        topAction={{ label: t('explorer.done'), onClick: onClose }}
-      >
-        <RelationshipTargetPicker
-          onSelectedIdsChange={(ids) =>
-            onUpdate(facet.sourceRelationship.code, {
-              selectedIds: ids,
-              targetBlueprint: facet.sourceRelationship.target_blueprint_code,
-            })
-          }
-          selectedIds={facet.selectedIds}
-          targetBlueprint={facet.sourceRelationship.target_blueprint_code!}
-        />
-      </RelationshipSelectorDialog>
-    </>
-  );
-};
-
-const RelationshipTargetPicker = ({
-  onSelectedIdsChange,
-  selectedIds,
-  targetBlueprint,
-}: {
-  onSelectedIdsChange: (ids: string[]) => void;
-  selectedIds: string[];
-  targetBlueprint: string;
-}) => {
-  const { t } = useTranslation();
-  const [query, setQuery] = useState('');
-  const pickerContentRoot = useRef<HTMLDivElement>(null);
-  const { isPreviewed, markPreviewed, openPreview, previewHref } =
-    useRecentlyPreviewedEntities((id) => {
-      if (!selectedIds.includes(id)) onSelectedIdsChange([...selectedIds, id]);
-      scrollRelationshipPickerToTop(pickerContentRoot.current);
-    });
-  const targets = useInfiniteQuery({
-    queryKey: entityQueryKeys.relationshipTargets(targetBlueprint, query),
-    queryFn: ({ pageParam, signal }) =>
-      searchEntities({
-        blueprint: targetBlueprint,
-        cursor: pageParam,
-        query,
-        signal,
-      }),
-    initialPageParam: null as string | null,
-    getNextPageParam: (page) => page.next_cursor,
-  });
-  const options = targets.data?.pages.flatMap((page) => page.items) ?? [];
-  const selectedLabels = useRelationshipSelectionLabels(
-    targetBlueprint,
-    selectedIds,
-  );
-  const views = targets.data?.pages[0]?.blueprint.blueprint.views ?? {};
-  const toggle = (id: string) =>
-    onSelectedIdsChange(
-      selectedIds.includes(id)
-        ? selectedIds.filter((selectedId) => selectedId !== id)
-        : [...selectedIds, id],
-    );
-  return (
-    <Stack ref={pickerContentRoot} spacing={1.5}>
-      <TextField
-        fullWidth
-        label={t('entities.searchRelationshipOptions')}
-        onChange={(event) => setQuery(event.target.value)}
-        value={query}
-      />
-      {selectedIds.length > 0 && (
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-          {selectedIds.map((id) => (
-            <Chip
-              color="primary"
-              key={id}
-              label={selectedLabels.get(id) ?? id}
-              onDelete={() => toggle(id)}
-              size="small"
-              variant="outlined"
-            />
-          ))}
-        </Box>
-      )}
-      <List dense disablePadding>
-        {options.map((target) => {
-          const label =
-            dropdownOptionLabel(target.preview, views) ??
-            displayLabel(target.display, target.id);
-          return (
-            <ListItem
-              key={target.id}
-              sx={{
-                alignItems: 'center',
-                bgcolor: isPreviewed(target.id) ? 'action.selected' : undefined,
-                borderRadius: 1,
-                '&:hover': { bgcolor: 'action.hover' },
-              }}
-            >
-              <Link
-                href={previewHref(target.id)}
-                onClick={() => markPreviewed(target.id)}
-                rel="opener"
-                sx={{ flexGrow: 1, minWidth: 0, mr: 1 }}
-                target="_blank"
-              >
-                {label}
-              </Link>
-              <Stack direction="row" spacing={0.5}>
-                <Button
-                  aria-label={t('entities.previewRelationshipOptionLabel', {
-                    option: label,
-                  })}
-                  color={isPreviewed(target.id) ? 'secondary' : 'inherit'}
-                  onClick={() => openPreview(target.id)}
-                  size="small"
-                >
-                  {t('entities.previewRelationshipOption')}
-                </Button>
-                <Button
-                  aria-label={t(
-                    selectedIds.includes(target.id)
-                      ? 'entities.removeRelationshipOptionLabel'
-                      : 'entities.selectRelationshipOptionLabel',
-                    { option: label },
-                  )}
-                  onClick={() => toggle(target.id)}
-                  size="small"
-                >
-                  {selectedIds.includes(target.id)
-                    ? t('entities.removeRelationshipOption')
-                    : t('entities.selectRelationshipOption')}
-                </Button>
-              </Stack>
-            </ListItem>
-          );
-        })}
-      </List>
-      {targets.hasNextPage && (
-        <LoadMoreButton
-          isLoading={targets.isFetchingNextPage}
-          onLoadMore={() => void targets.fetchNextPage()}
-        />
-      )}
-      {targets.isPending && (
-        <Typography variant="body2">{t('entities.loadingOptions')}</Typography>
-      )}
-      {targets.isError && (
-        <Typography color="error" variant="body2">
-          {targets.error.message}
-        </Typography>
-      )}
-    </Stack>
   );
 };

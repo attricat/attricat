@@ -13,6 +13,13 @@
     "runs": "Uruchomienia"
   },
   "errors": {
+    "requestFailed": "Żądanie nie powiodło się ({{status}})",
+    "uploadFailed": "Przesyłanie nie powiodło się",
+    "invalidApiResponse": "Nieprawidłowa odpowiedź API: {{details}}",
+    "permissionsUnique": "Uprawnienia muszą być unikalne",
+    "tokenExpiryFuture": "Data wygaśnięcia tokenu musi być w przyszłości.",
+    "workspaceScopeMismatch": "Zakres obszaru roboczego musi wskazywać aktywny obszar roboczy.",
+    "scopeTargetRequired": "Przed wysłaniem wybierz cel z wybranego zakresu.",
     "unexpectedTitle": "Coś poszło nie tak",
     "unexpectedDescription": "Nie udało się wyświetlić tej strony. Spróbuj ponownie albo wróć do strony głównej katalogu.",
     "notFoundTitle": "Nie znaleziono strony",
@@ -140,7 +147,8 @@
     "selectParent": "Wybierz kontekst nadrzędny",
     "metadata": "Metadane",
     "invalidMetadataJson": "Metadane muszą być poprawnym JSON-em.",
-    "metadataMustBeObject": "Metadane muszą być obiektem JSON."
+    "metadataMustBeObject": "Metadane muszą być obiektem JSON.",
+    "invalidCode": "Używaj tylko liter, cyfr, łączników i podkreśleń"
   },
   "dataHealth": {
     "title": "Stan danych",
@@ -286,6 +294,27 @@
     "defaultContextUnavailable": "Domyślny kontekst jest niedostępny",
     "loadMigrationFirst": "Najpierw wczytaj podgląd migracji",
     "currentValue": "Bieżąca wartość: {{value}}.",
+    "dataQualityFindings_one": "{{count}} problem z jakością danych",
+    "dataQualityFindings_few": "{{count}} problemy z jakością danych",
+    "dataQualityFindings_many": "{{count}} problemów z jakością danych",
+    "dataQualityFindings_other": "{{count}} problemu z jakością danych",
+    "previewContextUnavailable": "Kontekst podglądu jest niedostępny",
+    "entityPreviewUnavailable": "Podgląd encji jest niedostępny",
+    "invalidTimeZone": "Oczekiwano strefy czasowej IANA",
+    "invalidJson": "Oczekiwano JSON",
+    "blueprintLabel": "Schemat: {{name}}",
+    "blueprintOption": "{{name}} ({{code}})",
+    "versionedCode": "{{code}} v{{version}}",
+    "reusableAttributeOption": "{{qualifiedCode}} · {{name}} v{{version}}",
+    "entityConversationTitle": "Zapytaj o tę encję · {{entityId}}",
+    "changeKind": {
+      "set": "ustawienie",
+      "replace": "zastąpienie",
+      "remove": "usunięcie",
+      "relationship_add": "dodanie relacji",
+      "relationship_remove": "usunięcie relacji",
+      "restore": "przywrócenie"
+    },
     "fileCount_one": "{{count}} plik",
     "fileCount_few": "{{count}} pliki",
     "fileCount_many": "{{count}} plików",
@@ -358,6 +387,7 @@
       "queued": "W kolejce",
       "running": "W toku",
       "completed": "Zakończona",
+      "failed": "Nieudana",
       "superseded": "Zastąpiona"
     },
     "automaticMigrationUnavailable": "Automatyczna migracja nie jest dostępna dla tej wersji. Istniejące encje nadal można migrować pojedynczo do sprawdzenia.",
@@ -438,9 +468,17 @@
     "revisionHistory": "Historia wersji",
     "version": "Wersja",
     "created": "Utworzono",
-    "definitionHash": "Skrót definicji"
+    "definitionHash": "Skrót definicji",
+    "revisionStatuses": {
+      "draft": "Szkic",
+      "published": "Opublikowany"
+    },
+    "versionNumber": "v{{version}}",
+    "versionOption": "v{{version}} ({{status}})",
+    "diffTitle": "{{original}} → {{modified}}"
   },
   "explorer": {
+    "loadingSavedSearch": "Wczytywanie zapisanego wyszukiwania",
     "saveSearch": "Zapisz wyszukiwanie",
     "saveChanges": "Zapisz zmiany",
     "discardSearchChanges": "Odrzuć zmiany",
@@ -557,7 +595,7 @@
     "noMatchingEntities": "Żadna encja nie pasuje do tego wyszukiwania.",
     "selectEntities": "Wybierz encje",
     "exitSelection": "Zakończ wybieranie",
-    "selectLoadedEntities": "Wybierz załadowane encje (maks. 50)",
+    "selectLoadedEntities": "Wybierz załadowane encje (maks. {{limit}})",
     "selectEntity": "Wybierz {{entity}}",
     "selectedCount_one": "Wybrano {{count}} encję",
     "selectedCount_few": "Wybrano {{count}} encje",
@@ -573,7 +611,27 @@
     "matchViaRelationship_few": "{{term}} przez {{count}} relacje",
     "matchViaRelationship_many": "{{term}} przez {{count}} relacji",
     "matchViaRelationship_other": "{{term}} przez {{count}} relacji",
-    "matchInAttribute": "{{term}} w {{attribute}}"
+    "matchInAttribute": "{{term}} w {{attribute}}",
+    "searchDetailsSeparator": "; ",
+    "retry": "Ponów",
+    "cancel": "Anuluj",
+    "blueprintOption": "{{name}} ({{code}})",
+    "relationshipFacetLabel": "{{attribute}} ({{blueprint}})",
+    "attributeFilterPill": "{{field}} {{operator}} {{value}}",
+    "schemaVersionStatus": "v{{version}} · {{status}}",
+    "unsortableColumnLabel": "{{column}}. {{reason}}",
+    "publicationContextUnavailable": "Kontekst publikacji jest niedostępny",
+    "selectedCountForBlueprint_one": "Wybrano {{count}} encję · {{blueprint}}",
+    "selectedCountForBlueprint_few": "Wybrano {{count}} encje · {{blueprint}}",
+    "selectedCountForBlueprint_many": "Wybrano {{count}} encji · {{blueprint}}",
+    "selectedCountForBlueprint_other": "Wybrano {{count}} encji · {{blueprint}}",
+    "agentEntityListItem": "{{label}} · {{entityId}}",
+    "agentMessage": {
+      "blueprint": "Schemat: {{blueprint}}",
+      "selectedEntities": "Wybrane encje (identyfikatory są wiążące; etykiety służą jedynie orientacji):",
+      "entityReference": "- {{label}} — entity_id: {{entityId}}",
+      "getEntityInstruction": "Przed przedstawieniem rekomendacji lub wprowadzeniem zmian użyj get_entity dla każdego entity_id."
+    }
   },
   "audit": {
     "title": "Aktywność / dziennik audytu",
@@ -606,6 +664,7 @@
     "safeMetadata": "Bezpieczne metadane",
     "requestId": "Identyfikator żądania",
     "correlationId": "Identyfikator korelacji",
+    "approvalDecisionBy": "{{decision}} przez {{approver}}",
     "agentApproval": "Zatwierdzenie agenta",
     "agentToolCall": "Wywołanie narzędzia agenta",
     "system": "System",
@@ -613,6 +672,9 @@
     "actionCategoryPlaceholder": "katalog"
   },
   "workflows": {
+    "runNow": "Uruchom teraz",
+    "entityId": "ID encji",
+    "manualRunEntityId": "ID encji dla ręcznego uruchomienia",
     "title": "Przepływy pracy",
     "description": "Twórz, przeglądaj i obsługuj wersjonowane przepływy pracy obszaru roboczego.",
     "workflow": "Przepływ pracy",
@@ -744,7 +806,16 @@
     "uploadCount_other": "Prześlij {{count}} pliku",
     "retryFile": "Spróbuj ponownie: {{filename}}",
     "ready": "Gotowe",
-    "downloadFile": "Pobierz {{filename}}"
+    "downloadFile": "Pobierz {{filename}}",
+    "uploadProgress": "{{progress}}%",
+    "status": {
+      "uploading": "Przesyłanie",
+      "queued": "W kolejce",
+      "processing": "Przetwarzanie",
+      "ready": "Gotowy",
+      "failed": "Niepowodzenie",
+      "deleted": "Usunięty"
+    }
   },
   "extensions": {
     "appsDescription": "Aplikacje są udostępniane przez zainstalowane rozszerzenia. Wybierz aplikację z nawigacji, aby rozpocząć.",
@@ -809,9 +880,44 @@
     "startTimedOut": "Przekroczono czas uruchamiania rozszerzenia.",
     "startFailed": "Nie udało się uruchomić rozszerzenia.",
     "loadingPage": "Ładowanie strony rozszerzenia",
-    "pageUnavailable": "Ta strona rozszerzenia jest niedostępna."
+    "pageUnavailable": "Ta strona rozszerzenia jest niedostępna.",
+    "versionSource": "v{{version}} · {{source}}",
+    "grantedPermission": "{{kind}}: {{id}}",
+    "noState": "—",
+    "lifecycleTransition": "{{operation}}: {{prior}} → {{next}}",
+    "lifecycleDiagnostics": "· {{diagnostics}}",
+    "installationStates": {
+      "disabled": "Wyłączone",
+      "enabled": "Włączone",
+      "quarantined": "W kwarantannie"
+    },
+    "grantKinds": {
+      "capability": "Uprawnienie",
+      "host_permission": "Uprawnienie hosta",
+      "event_publish": "Publikowanie zdarzeń",
+      "event_subscribe": "Subskrypcja zdarzeń"
+    },
+    "lifecycleOperations": {
+      "install": "Instalacja",
+      "configure": "Konfiguracja",
+      "grant": "Przyznanie uprawnienia",
+      "revoke": "Cofnięcie uprawnienia",
+      "enable": "Włączenie",
+      "disable": "Wyłączenie",
+      "upgrade": "Uaktualnienie",
+      "quarantine": "Kwarantanna",
+      "remove": "Usunięcie"
+    }
   },
   "workspace": {
+    "memberSummary": "{{email}} · {{state}}",
+    "memberSummaryWithRoles": "{{email}} · {{state}} · {{roles}}",
+    "memberStates": {
+      "active": "Aktywny",
+      "invited": "Zaproszony",
+      "suspended": "Zawieszony",
+      "disabled": "Wyłączony"
+    },
     "members": "Członkowie",
     "roles": "Role",
     "invitations": "Zaproszenia",
@@ -893,6 +999,7 @@
     "acceptInvitation": "Zaakceptuj zaproszenie"
   },
   "views": {
+    "availableOnPreviews": "{{label}} jest dostępne w podglądach encji.",
     "notSet": "Nie ustawiono",
     "yes": "Tak",
     "no": "Nie",
@@ -917,6 +1024,7 @@
   },
   "common": {
     "actionCompleted": "Akcja zakończona.",
+    "cancel": "Anuluj",
     "copyFailed": "Nie udało się skopiować do schowka.",
     "copied": "Skopiowano do schowka.",
     "loadMore": "Załaduj więcej",
@@ -940,7 +1048,11 @@
     "checking": "Sprawdzanie",
     "ready": "Gotowe",
     "waitingForHealthCheck": "Oczekiwanie na pomyślne sprawdzenie stanu API.",
-    "healthCheckInterval": "Sprawdzanie stanu odbywa się co 5 sekund.",
+    "healthCheckInterval": "Sprawdzanie stanu odbywa się co {{seconds}} s.",
+    "sqlPhase": "SQL",
+    "sqlPhaseNamed": "SQL {{name}}",
+    "phaseDuration": "{{name}}: {{duration}} ms",
+    "sqlPhaseDuration": "{{name}} ({{queries}}): {{duration}} ms",
     "session": "Sesja",
     "checkingSession": "Sprawdzanie sesji…",
     "signedInAs": "Zalogowano jako {{email}}",
@@ -962,7 +1074,7 @@
     "forbidden": "Nie masz uprawnień do wyświetlania przetwarzania w tle w tym obszarze roboczym.",
     "loadError": "Nie udało się wczytać stanu przetwarzania w tle. Spróbuj odświeżyć.",
     "refreshError": "Odświeżenie nie powiodło się. Wyświetlany stan może być nieaktualny.",
-    "updated": "Ostatnia aktualizacja: {{time}} · Odświeżanie co 30 sekund",
+    "updated": "Ostatnia aktualizacja: {{time}} · Odświeżanie co {{seconds}} s",
     "failures": "Niektóre zadania nie powiodły się i nie zostaną automatycznie ponowione. Sprawdź odpowiednią historię uruchomień lub skontaktuj się z administratorem.",
     "expiredWarning": "Niektóre uruchomione zadania mają wygasłe dzierżawy. Mogły zostać przerwane i oczekują na odzyskanie przez proces roboczy.",
     "empty": "Brak oczekujących, uruchomionych lub nieudanych zadań API w tym obszarze roboczym.",
@@ -982,6 +1094,108 @@
       "migration": "Partie migracji schematów",
       "extension": "Operacje rozszerzeń",
       "other": "Inne zadania"
+    }
+  },
+  "rules": {
+    "title": "Reguły jakości danych",
+    "description": "Przeglądaj definicje reguł katalogu, ustalenia i trwałe przebiegi ewaluacji.",
+    "inspectionTabs": "Inspekcja reguł",
+    "loading": "Wczytywanie reguł…",
+    "notAuthorized": "Nie masz uprawnień do wyświetlania reguł jakości danych.",
+    "sections": {
+      "rules": "Reguły",
+      "findings": "Ustalenia",
+      "runs": "Historia przebiegów"
+    },
+    "errors": {
+      "definitions": "Nie udało się wczytać definicji reguł.",
+      "findings": "Nie udało się wczytać ustaleń reguł.",
+      "runs": "Nie udało się wczytać historii przebiegów reguł."
+    },
+    "columns": {
+      "rule": "Reguła",
+      "revision": "Rewizja",
+      "lifecycle": "Cykl życia",
+      "actions": "Akcje",
+      "severity": "Waga",
+      "finding": "Ustalenie",
+      "state": "Stan",
+      "source": "Źródło",
+      "status": "Status",
+      "evaluated": "Ocenione",
+      "findings": "Ustalenia"
+    },
+    "enabled": "Włączona",
+    "disabled": "Wyłączona",
+    "dryRun": "Próbny przebieg",
+    "runNow": "Uruchom teraz",
+    "acknowledge": "Potwierdź",
+    "activeFindings": "Aktywne ustalenia",
+    "runHistory": "Historia przebiegów",
+    "dryRunSuffix": "{{source}} (próbny przebieg)",
+    "severities": {
+      "info": "Informacja",
+      "warning": "Ostrzeżenie",
+      "error": "Błąd",
+      "critical": "Krytyczny"
+    },
+    "findingStates": {
+      "open": "Otwarte",
+      "acknowledged": "Potwierdzone",
+      "resolved": "Rozwiązane"
+    },
+    "runStatuses": {
+      "pending": "Oczekuje",
+      "running": "W toku",
+      "completed": "Zakończony",
+      "failed": "Niepowodzenie"
+    }
+  },
+  "reusableAttributes": {
+    "editor": {
+      "loading": "Wczytywanie atrybutu wielokrotnego użytku…",
+      "notFound": "Nie znaleziono atrybutu wielokrotnego użytku.",
+      "description": "Przestrzeń nazw wynika z aktywnego obszaru roboczego i nie można jej ustawić w definicji.",
+      "newTitle": "Nowy atrybut wielokrotnego użytku",
+      "editTitle": "Edytuj {{name}}",
+      "cancel": "Anuluj",
+      "saveRevision": "Zapisz rewizję",
+      "createAttribute": "Utwórz atrybut",
+      "preview": "Podgląd",
+      "untitled": "Atrybut bez nazwy"
+    },
+    "title": "Atrybuty wielokrotnego użytku",
+    "description": "Twórz niezmienne rewizje atrybutów, publikuj je i składaj opublikowane rewizje w grupy.",
+    "newGroup": "Nowa grupa",
+    "newAttribute": "Nowy atrybut",
+    "loading": "Wczytywanie atrybutów wielokrotnego użytku…",
+    "loadingGroups": "Wczytywanie grup…",
+    "empty": "Brak atrybutów wielokrotnego użytku.",
+    "groupsEmpty": "Brak grup atrybutów wielokrotnego użytku.",
+    "groupsHeading": "Grupy",
+    "edit": "Edytuj",
+    "publish": "Opublikuj",
+    "columns": {
+      "attribute": "Atrybut",
+      "version": "Wersja",
+      "type": "Typ",
+      "status": "Status",
+      "actions": "Akcje",
+      "group": "Grupa",
+      "position": "Pozycja",
+      "publishedRevisions": "Opublikowane rewizje"
+    },
+    "groupDialog": {
+      "title": "Nowa grupa atrybutów wielokrotnego użytku",
+      "code": "Kod",
+      "name": "Nazwa",
+      "position": "Pozycja",
+      "revisions": "Opublikowane rewizje",
+      "revisionsHelp": "Grupować można tylko opublikowane rewizje.",
+      "cancel": "Anuluj",
+      "create": "Utwórz grupę",
+      "requiredFields": "Kod, nazwa i co najmniej jedna opublikowana rewizja są wymagane.",
+      "invalidPosition": "Pozycja musi być nieujemną liczbą całkowitą."
     }
   }
 }

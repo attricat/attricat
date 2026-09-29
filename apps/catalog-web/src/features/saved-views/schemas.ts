@@ -1,10 +1,11 @@
 import { z } from 'zod';
 import { explorerSearchSchema } from '../explorer/search';
+import { EXPLORER_SEARCH_KIND } from './constants';
 
 export const savedViewSchema = z.object({
   id: z.uuid(),
   owner_user_id: z.uuid(),
-  kind: z.literal('explorer_search'),
+  kind: z.literal(EXPLORER_SEARCH_KIND),
   name: z.string().nullable(),
   description: z.string().nullable(),
   visibility: z.enum(['private', 'workspace', 'link']),

@@ -1,57 +1,41 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useNavigate } from '@tanstack/react-router';
-import { BlueprintIcon } from '../../components/systemIcons';
-import {
-  Alert,
-  Box,
-  Chip,
-  CircularProgress,
-  Paper,
-  Tooltip,
-  Typography,
-} from '@mui/material';
-import { createElement, useState } from 'react';
+import { useNavigate } from '@tanstack/react-router';
+import { Alert, Box, CircularProgress } from '@mui/material';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { QueryErrorNotice } from '../../components/QueryErrorNotice';
-import { RouterButton } from '../../components/RouterLink';
-import { EntityContextPicker } from './components/EntityContextPicker';
+import { DataQualityFindingsChip } from './components/DataQualityFindingsChip';
+import { EntityBlueprintHeaderActions } from './components/EntityBlueprintHeaderActions';
+import { EntityHeading } from './components/EntityHeading';
+import { EntityPageEyebrow } from './components/EntityPageEyebrow';
+import { EntityPreviewContent } from './components/EntityPreviewContent';
 import { EntitySchemaSubheader } from './components/EntitySchemaSubheader';
 import { EntityExtensionDrawer } from './components/EntityExtensionDrawer';
 import { EntityAgentDrawer } from './components/EntityAgentDrawer';
 import { EntityPreviewToolbar } from './components/EntityPreviewToolbar';
 import { DeleteEntityDialog } from './components/DeleteEntityDialog';
-import {
-  ExtensionOutlet,
-  ExtensionPopoverOutlet,
-} from '../extensions/ExtensionOutlet';
-import { listContexts } from '../contexts/api';
-import { contextQueryKeys } from '../contexts/queryKeys';
-import { defaultContextCode } from '../contexts/constants';
-import { listFindings } from '../rules/api';
-import { ruleQueryKeys } from '../rules/queryKeys';
+import { RelationshipPickerActionBar } from './components/RelationshipPickerActionBar';
+import { useEntityPublications } from './components/useEntityPublications';
+import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
 import {
   duplicateEntity,
   getBlueprintRevision,
   getCurrentBlueprint,
-  getResolvedEntityPreview,
-  getEntityPublications,
-  publishEntity,
-  publishEntityAllChannels,
-  unpublishEntity,
 } from './api';
-import { attributeLabel } from './entityDisplay';
-import { entityQueryKeys } from './queryKeys';
-import { EntityView } from '../views/components/EntityView';
-import { RelationshipPickerActionBar } from './components/RelationshipPickerActionBar';
 import {
-  entityHeadingComponentId,
-  findEntityHeading,
-} from '../views/components/blocks/EntityHeadingDefinition';
-import { resolveHeadingRenderer } from '../views/components/registry';
+  ENTITY_HEADER_CONTEXT_VERSION,
+  FALLBACK_BLUEPRINT_VERSION,
+} from './constants';
+import { entityQueryKeys } from './queryKeys';
+import {
+  useEntityContextSelection,
+  useResolvedEntityPreview,
+} from './useEntityContexts';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
+
 export const EntityPreviewPage = ({
   entityId,
   relationshipPickerToken,
@@ -62,39 +46,17 @@ export const EntityPreviewPage = ({
   const { t } = useTranslation();
   const client = useQueryClient();
   const navigate = useNavigate();
-  const [selectedContext, setSelectedContext] = useState('');
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const contexts = useQuery({
-    queryKey: contextQueryKeys.all(),
-    queryFn: ({ signal }) => listContexts(signal),
-  });
-  const selectedContextId =
-    selectedContext ||
-    contexts.data?.find((context) => context.code === defaultContextCode)?.id;
+  const [extensionPanelOpen, setExtensionPanelOpen] = useState(false);
+  const [agentPanelOpen, setAgentPanelOpen] = useState(false);
+  const { contextId, contexts, setSelectedContext } =
+    useEntityContextSelection();
+  const selectedContextId = contextId ?? undefined;
   const session = useQuery({
     queryKey: authQueryKeys.session(),
     queryFn: currentSession,
   });
-  const publications = useQuery({
-    queryKey: entityQueryKeys.publication(entityId),
-    queryFn: () => getEntityPublications(entityId),
-  });
-  const invalidatePublications = () =>
-    client.invalidateQueries({
-      queryKey: entityQueryKeys.publication(entityId),
-    });
-  const publish = useMutation({
-    mutationFn: (contextId: string) => publishEntity(entityId, contextId),
-    onSuccess: invalidatePublications,
-  });
-  const publishAll = useMutation({
-    mutationFn: () => publishEntityAllChannels(entityId),
-    onSuccess: invalidatePublications,
-  });
-  const unpublish = useMutation({
-    mutationFn: (contextId: string) => unpublishEntity(entityId, contextId),
-    onSuccess: invalidatePublications,
-  });
+  const publications = useEntityPublications(entityId, contextId);
   const duplicate = useMutation({
     mutationFn: () => duplicateEntity(entityId),
     onSuccess: (entity) => {
@@ -105,105 +67,60 @@ export const EntityPreviewPage = ({
       });
     },
   });
-  const publication = publications.data?.find(
-    (item) => item.context_id === selectedContextId,
-  );
-  const resolved = useQuery({
-    queryKey: entityQueryKeys.resolvedPreview(entityId, selectedContextId),
-    queryFn: () => {
-      if (!selectedContextId) throw new Error('Preview context is unavailable');
-      return getResolvedEntityPreview(entityId, selectedContextId);
-    },
-    enabled: Boolean(selectedContextId),
-  });
+  const resolved = useResolvedEntityPreview(entityId, contextId);
+  const resolvedEntity = resolved.data?.entity;
   const blueprint = useQuery({
     queryKey: entityQueryKeys.blueprintRevision(
-      resolved.data?.entity.blueprint_id,
-      resolved.data?.entity.blueprint_version,
+      resolvedEntity?.blueprint_id,
+      resolvedEntity?.blueprint_version,
     ),
     queryFn: () => {
-      if (!resolved.data) throw new Error('Entity preview is unavailable');
+      if (!resolvedEntity)
+        throw new Error(t('entities.entityPreviewUnavailable'));
       return getBlueprintRevision(
-        resolved.data.entity.blueprint_id,
-        resolved.data.entity.blueprint_version,
+        resolvedEntity.blueprint_id,
+        resolvedEntity.blueprint_version,
       );
     },
     enabled: Boolean(
-      resolved.data?.entity.blueprint_id &&
-      resolved.data.entity.blueprint_version,
+      resolvedEntity?.blueprint_id && resolvedEntity.blueprint_version,
     ),
   });
   const currentBlueprint = useQuery({
     queryKey: entityQueryKeys.currentBlueprint(
-      resolved.data?.entity.blueprint_id ?? '',
+      resolvedEntity?.blueprint_id ?? '',
     ),
     queryFn: () => {
-      if (!resolved.data) throw new Error('Entity preview is unavailable');
-      return getCurrentBlueprint(resolved.data.entity.blueprint_id);
+      if (!resolvedEntity)
+        throw new Error(t('entities.entityPreviewUnavailable'));
+      return getCurrentBlueprint(resolvedEntity.blueprint_id);
     },
-    enabled: Boolean(resolved.data?.entity.blueprint_id),
+    enabled: Boolean(resolvedEntity?.blueprint_id),
   });
-  const findings = useQuery({
-    queryKey: ruleQueryKeys.findings(entityId),
-    queryFn: () => listFindings(entityId),
-  });
-  const detailView = blueprint.data?.blueprint.views.detail;
-  const heading = findEntityHeading(detailView);
-  const HeadingRenderer = resolveHeadingRenderer(heading?.component);
-  const [extensionPanelOpen, setExtensionPanelOpen] = useState(false);
-  const [agentPanelOpen, setAgentPanelOpen] = useState(false);
   const schemaOutdated =
-    currentBlueprint.data && resolved.data
+    currentBlueprint.data && resolvedEntity
       ? currentBlueprint.data.blueprint.version >
-        resolved.data.entity.blueprint_version
+        resolvedEntity.blueprint_version
       : undefined;
+  const actionError = publications.error ?? duplicate.error;
+  const loaded = resolved.data && blueprint.data;
+
   return (
     <PageContainer>
       <PageHeader
         actions={
-          <Box sx={{ alignItems: 'center', display: 'flex', gap: 1 }}>
-            {findings.data?.some((finding) => finding.state !== 'resolved') && (
-              <Chip
-                color="warning"
-                label={`${findings.data.filter((finding) => finding.state !== 'resolved').length} data quality finding(s)`}
-                size="small"
-              />
-            )}
-            {resolved.data?.entity.is_sample && (
-              <Chip color="info" label={t('entities.sample')} size="small" />
-            )}
-            {blueprint.data && (
-              <Tooltip title={blueprint.data.blueprint.name}>
-                <RouterButton
-                  params={{ blueprintId: blueprint.data.blueprint.id }}
-                  size="small"
-                  startIcon={<BlueprintIcon />}
-                  to="/manage/blueprints/$blueprintId"
-                  variant="text"
-                >
-                  {t('entities.blueprint')}: {blueprint.data.blueprint.name}
-                </RouterButton>
-              </Tooltip>
-            )}
-          </Box>
+          <EntityBlueprintHeaderActions
+            blueprint={blueprint.data?.blueprint}
+            isSample={resolvedEntity?.is_sample}
+          >
+            <DataQualityFindingsChip entityId={entityId} />
+          </EntityBlueprintHeaderActions>
         }
         eyebrow={
-          blueprint.data ? (
-            <>
-              {t('entities.entityPreview')} ·{' '}
-              <Link
-                search={{
-                  blueprint: blueprint.data.blueprint.code,
-                  version: blueprint.data.blueprint.version,
-                }}
-                to="/"
-              >
-                {t('entities.viewAll')}
-              </Link>
-            </>
-          ) : (
-            t('entities.entityPreview')
-          )
+          <EntityPageEyebrow
+            blueprint={blueprint.data?.blueprint}
+            label={t('entities.entityPreview')}
+          />
         }
       />
       {relationshipPickerToken && (
@@ -212,29 +129,23 @@ export const EntityPreviewPage = ({
           pickerToken={relationshipPickerToken}
         />
       )}
-      {resolved.data && blueprint.data && HeadingRenderer
-        ? createElement(HeadingRenderer, {
-            attributes: blueprint.data.attributes,
-            entityId,
-            values: resolved.data.values,
-            view: detailView,
-          })
-        : null}
-      {(publish.isError ||
-        publishAll.isError ||
-        unpublish.isError ||
-        duplicate.isError) && (
+      {resolved.data && blueprint.data && (
+        <EntityHeading
+          attributes={blueprint.data.attributes}
+          entityId={entityId}
+          values={resolved.data.values}
+          view={blueprint.data.blueprint.views.detail}
+        />
+      )}
+      {actionError && (
         <Alert severity="error" sx={{ mt: 3 }}>
-          {publish.error?.message ??
-            publishAll.error?.message ??
-            unpublish.error?.message ??
-            duplicate.error?.message}
+          {actionError.message}
         </Alert>
       )}
-      {resolved.data && blueprint.data && (
+      {blueprint.data && resolved.data && (
         <ExtensionOutlet
           context={{
-            context_version: 1,
+            context_version: ENTITY_HEADER_CONTEXT_VERSION,
             entity_id: entityId,
             blueprint_id: blueprint.data.blueprint.id,
             blueprint_version: blueprint.data.blueprint.version,
@@ -259,7 +170,7 @@ export const EntityPreviewPage = ({
           setAgentPanelOpen(true);
         }}
         schemaOutdated={schemaOutdated}
-        showExtensions={Boolean(resolved.data && blueprint.data)}
+        showExtensions={Boolean(loaded)}
         onDuplicate={() => duplicate.mutate()}
         duplicatePending={duplicate.isPending}
         canDelete={
@@ -267,16 +178,12 @@ export const EntityPreviewPage = ({
           Boolean(resolved.data)
         }
         onDelete={() => setDeleteOpen(true)}
-        publication={publication}
+        publication={publications.publication}
         canPublish={session.data?.capabilities?.entities_publish === true}
-        onPublish={() => selectedContextId && publish.mutate(selectedContextId)}
-        onPublishAll={() => publishAll.mutate()}
-        onUnpublish={() =>
-          selectedContextId && unpublish.mutate(selectedContextId)
-        }
-        publicationPending={
-          publish.isPending || publishAll.isPending || unpublish.isPending
-        }
+        onPublish={publications.publish}
+        onPublishAll={publications.publishAll}
+        onUnpublish={publications.unpublish}
+        publicationPending={publications.isPending}
       />
       {deleteOpen && (
         <DeleteEntityDialog
@@ -326,78 +233,15 @@ export const EntityPreviewPage = ({
             </Alert>
           )}
           {resolved.data && blueprint.data && (
-            <Box
-              sx={{
-                display: 'grid',
-                gap: 3,
-                gridTemplateColumns: 'minmax(0, 1fr)',
-                mt: 3,
-              }}
-            >
-              <Box>
-                <Paper component="section" sx={{ p: { xs: 2, md: 3 } }}>
-                  <EntityContextPicker
-                    contexts={contexts.data}
-                    disabled={contexts.isPending}
-                    onChange={setSelectedContext}
-                    value={selectedContextId ?? ''}
-                  />
-                  <EntityView
-                    attributes={blueprint.data.attributes}
-                    fallbackVisibilityScope="detail"
-                    contextId={selectedContextId}
-                    entityId={entityId}
-                    renderAttributeDecoration={(attribute) => (
-                      <ExtensionPopoverOutlet
-                        context={{
-                          attribute_id: attribute.id,
-                          blueprint_id: blueprint.data.blueprint.id,
-                          blueprint_version: blueprint.data.blueprint.version,
-                          context_id: selectedContextId,
-                          entity_id: entityId,
-                        }}
-                        key={String(attribute.id)}
-                        label={t('entities.viewExtensionContent', {
-                          attribute: attributeLabel(attribute),
-                        })}
-                        outlet="entity_attribute_decoration"
-                        runtimeScope={{
-                          blueprintId: blueprint.data.blueprint.id,
-                          blueprintVersion: blueprint.data.blueprint.version,
-                        }}
-                      />
-                    )}
-                    values={resolved.data.values}
-                    view={detailView}
-                    skipComponentId={entityHeadingComponentId}
-                  />
-                  {(resolved.data.reusable_attributes?.length ?? 0) > 0 && (
-                    <Box component="section" sx={{ mt: 4 }}>
-                      <Typography component="h2" variant="h6">
-                        {t('entities.additionalAttributes')}
-                      </Typography>
-                      <EntityView
-                        attributes={resolved.data.reusable_attributes}
-                        contextId={selectedContextId}
-                        entityId={entityId}
-                        values={resolved.data.reusable_values ?? {}}
-                      />
-                    </Box>
-                  )}
-                </Paper>
-                <ExtensionOutlet
-                  context={{
-                    entity_id: entityId,
-                    context_id: selectedContextId,
-                  }}
-                  outlet="entity_action"
-                  runtimeScope={{
-                    blueprintId: blueprint.data.blueprint.id,
-                    blueprintVersion: blueprint.data.blueprint.version,
-                  }}
-                />
-              </Box>
-            </Box>
+            <EntityPreviewContent
+              blueprint={blueprint.data}
+              contextId={selectedContextId}
+              contexts={contexts.data}
+              contextsPending={contexts.isPending}
+              entityId={entityId}
+              onContextChange={setSelectedContext}
+              resolved={resolved.data}
+            />
           )}
         </>
       )}
@@ -409,13 +253,15 @@ export const EntityPreviewPage = ({
         open={agentPanelOpen}
       />
       <EntityExtensionDrawer
-        blueprintId={resolved.data?.entity.blueprint_id ?? ''}
-        blueprintVersion={resolved.data?.entity.blueprint_version ?? 1}
+        blueprintId={resolvedEntity?.blueprint_id ?? ''}
+        blueprintVersion={
+          resolvedEntity?.blueprint_version ?? FALLBACK_BLUEPRINT_VERSION
+        }
         contextId={selectedContextId}
         entityId={entityId}
         onClose={() => setExtensionPanelOpen(false)}
         open={extensionPanelOpen}
-        showContent={Boolean(resolved.data && blueprint.data)}
+        showContent={Boolean(loaded)}
       />
     </PageContainer>
   );

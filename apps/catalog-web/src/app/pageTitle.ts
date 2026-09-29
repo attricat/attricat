@@ -1,94 +1,146 @@
 import type { TFunction } from 'i18next';
 
-// Match the most specific routes first. Resource names are filled in by detail pages
-// after their data loads; these labels also serve as useful loading/error fallbacks.
-export const pageTitle = (pathname: string, t: TFunction): string => {
-  const parts = pathname.split('/').filter(Boolean);
-  const [section, group, item, subpage] = parts;
-  const label = (() => {
-    if (!section) return t('navigation.entityExplorer');
-    if (section === 'login') return t('auth.signIn');
-    if (section === 'password-reset') return t('auth.resetPassword');
-    if (section === 'onboarding') return t('navigation.workspaceManagement');
-    if (section === 'invitations') return t('workspace.invitations');
-    if (section === 'profile')
-      return group === 'personal-access-tokens'
-        ? t('profile.tokenList')
-        : t('navigation.profile');
-    if (section === 'agents')
-      return group === 'new'
-        ? t('agents.newAgentConversation')
-        : group
-          ? `${t('agents.conversation')} · ${group.slice(0, 8)}`
-          : t('agents.agentConversations');
-    if (section === 'entities') {
-      if (group === 'new') return t('entities.createEntity');
-      const entity = `${t('workspace.entity')} ${group?.slice(0, 8) ?? ''}`;
-      return item === 'changes'
-        ? `${t('entities.changes')} · ${entity}`
-        : item === 'edit'
-          ? `${t('entities.editEntity')} · ${entity}`
-          : item === 'migrate'
-            ? `${t('entities.upgradeEntity')} · ${entity}`
-            : entity;
-    }
-    if (section === 'extensions')
-      return item ? `${t('navigation.apps')} · ${group}` : t('navigation.apps');
-    if (section !== 'manage') return t('errors.notFoundTitle');
-    if (!group) return t('navigation.dashboard');
-    if (group === 'blueprints')
-      return item === 'new'
-        ? t('blueprints.newBlueprint')
-        : item
-          ? subpage === 'revisions'
-            ? t('blueprints.newBlueprintRevision')
-            : `${t('navigation.blueprints')} · ${item.slice(0, 8)}`
-          : t('navigation.blueprints');
-    if (group === 'workflows')
-      return item === 'new'
-        ? t('workflows.newWorkflow')
-        : item && subpage === 'revisions'
-          ? t('workflows.newRevision')
-          : item
-            ? `${t('navigation.workflows')} · ${item.slice(0, 8)}`
-            : t('navigation.workflows');
-    if (group === 'extensions')
-      return item === 'marketplace'
-        ? t('extensions.marketplace')
-        : item === 'installed'
-          ? t('extensions.installed')
-          : item === 'layout'
-            ? t('extensions.layout')
-            : item === 'sideload'
-              ? t('extensions.uploadTitle')
-              : item
-                ? `${t('navigation.extensions')} · ${item}`
-                : t('navigation.extensions');
-    if (group === 'workspace')
+const titleSeparator = ' · ';
+const shortIdLength = 8;
+
+const joinTitle = (...parts: string[]) => parts.join(titleSeparator);
+const shortId = (id: string) => id.slice(0, shortIdLength);
+
+type Segments = (string | undefined)[];
+
+const agentsTitle = (t: TFunction, [conversation]: Segments) => {
+  if (conversation === 'new') return t('agents.newAgentConversation');
+  return conversation
+    ? joinTitle(t('agents.conversation'), shortId(conversation))
+    : t('agents.agentConversations');
+};
+
+const entitiesTitle = (t: TFunction, [entityId, subpage]: Segments) => {
+  if (entityId === 'new') return t('entities.createEntity');
+  const entity = `${t('workspace.entity')} ${entityId ? shortId(entityId) : ''}`;
+  const subpageKeys: Record<string, string> = {
+    changes: 'entities.changes',
+    edit: 'entities.editEntity',
+    migrate: 'entities.upgradeEntity',
+  };
+  const subpageKey = subpage ? subpageKeys[subpage] : undefined;
+  return subpageKey ? joinTitle(t(subpageKey), entity) : entity;
+};
+
+const blueprintsTitle = (t: TFunction, [blueprintId, subpage]: Segments) => {
+  if (blueprintId === 'new') return t('blueprints.newBlueprint');
+  if (!blueprintId) return t('navigation.blueprints');
+  return subpage === 'revisions'
+    ? t('blueprints.newBlueprintRevision')
+    : joinTitle(t('navigation.blueprints'), shortId(blueprintId));
+};
+
+const workflowsTitle = (t: TFunction, [workflowId, subpage]: Segments) => {
+  if (workflowId === 'new') return t('workflows.newWorkflow');
+  if (!workflowId) return t('navigation.workflows');
+  return subpage === 'revisions'
+    ? t('workflows.newRevision')
+    : joinTitle(t('navigation.workflows'), shortId(workflowId));
+};
+
+const extensionManagementPageKeys: Record<string, string> = {
+  installed: 'extensions.installed',
+  layout: 'extensions.layout',
+  marketplace: 'extensions.marketplace',
+  sideload: 'extensions.uploadTitle',
+};
+
+const extensionsManagementTitle = (t: TFunction, [page]: Segments) => {
+  if (!page) return t('navigation.extensions');
+  const key = extensionManagementPageKeys[page];
+  return key ? t(key) : joinTitle(t('navigation.extensions'), page);
+};
+
+const rulesSectionKeys: Record<string, string> = {
+  findings: 'app.findings',
+  runs: 'app.runs',
+};
+
+const rulesTitle = (t: TFunction, [section]: Segments) => {
+  const key = section ? rulesSectionKeys[section] : undefined;
+  return key ? joinTitle(t('navigation.rules'), t(key)) : t('navigation.rules');
+};
+
+const simpleManagementPageKeys: Record<string, string> = {
+  'audit-log': 'navigation.auditLog',
+  'background-processing': 'navigation.backgroundProcessing',
+  'data-health': 'navigation.dataHealth',
+  exports: 'navigation.exports',
+};
+
+const managementTitle = (t: TFunction, [group, ...rest]: Segments) => {
+  const [item] = rest;
+  switch (group) {
+    case undefined:
+      return t('navigation.dashboard');
+    case 'blueprints':
+      return blueprintsTitle(t, rest);
+    case 'workflows':
+      return workflowsTitle(t, rest);
+    case 'extensions':
+      return extensionsManagementTitle(t, rest);
+    case 'workspace':
       return item
-        ? `${t(`workspace.${item}`)} · ${t('navigation.workspaceManagement')}`
+        ? joinTitle(t(`workspace.${item}`), t('navigation.workspaceManagement'))
         : t('navigation.workspaceManagement');
-    if (group === 'rules')
-      return item === 'findings'
-        ? `${t('navigation.rules')} · ${t('app.findings')}`
-        : item === 'runs'
-          ? `${t('navigation.rules')} · ${t('app.runs')}`
-          : t('navigation.rules');
-    if (group === 'contexts')
+    case 'rules':
+      return rulesTitle(t, rest);
+    case 'contexts':
       return item === 'new'
         ? t('contexts.createContext')
         : t('navigation.contexts');
-    if (group === 'reusable-attributes')
+    case 'reusable-attributes':
       return item && item !== 'new'
-        ? `${t('navigation.reusableAttributes')} · ${item.slice(0, 8)}`
+        ? joinTitle(t('navigation.reusableAttributes'), shortId(item))
         : t('navigation.reusableAttributes');
-    const labels: Record<string, string> = {
-      'audit-log': t('navigation.auditLog'),
-      'background-processing': t('navigation.backgroundProcessing'),
-      'data-health': t('navigation.dataHealth'),
-      exports: t('navigation.exports'),
-    };
-    return labels[group] ?? t('errors.notFoundTitle');
-  })();
-  return `${label} · ${t('app.attricat')}`;
+    default: {
+      const key = simpleManagementPageKeys[group];
+      return key ? t(key) : t('errors.notFoundTitle');
+    }
+  }
 };
+
+const sectionTitle = (t: TFunction, [section, ...rest]: Segments) => {
+  const [group] = rest;
+  switch (section) {
+    case undefined:
+      return t('navigation.entityExplorer');
+    case 'login':
+      return t('auth.signIn');
+    case 'password-reset':
+      return t('auth.resetPassword');
+    case 'onboarding':
+      return t('navigation.workspaceManagement');
+    case 'invitations':
+      return t('workspace.invitations');
+    case 'profile':
+      return group === 'personal-access-tokens'
+        ? t('profile.tokenList')
+        : t('navigation.profile');
+    case 'agents':
+      return agentsTitle(t, rest);
+    case 'entities':
+      return entitiesTitle(t, rest);
+    case 'extensions':
+      return rest[1] && group
+        ? joinTitle(t('navigation.apps'), group)
+        : t('navigation.apps');
+    case 'manage':
+      return managementTitle(t, rest);
+    default:
+      return t('errors.notFoundTitle');
+  }
+};
+
+// Match the most specific routes first. Resource names are filled in by detail pages
+// after their data loads; these labels also serve as useful loading/error fallbacks.
+export const pageTitle = (pathname: string, t: TFunction): string =>
+  joinTitle(
+    sectionTitle(t, pathname.split('/').filter(Boolean)),
+    t('app.attricat'),
+  );

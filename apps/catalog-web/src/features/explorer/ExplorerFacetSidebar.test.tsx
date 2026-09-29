@@ -10,12 +10,12 @@ import {
   searchEntities,
   type EntitySearchResponse,
 } from '../entities/api';
-import {
-  ExplorerFacetSidebar,
-  type ExplorerRelationshipFacet,
-} from './ExplorerFacetSidebar';
+import { ExplorerFacetSidebar } from './ExplorerFacetSidebar';
 import { relationshipPickerMessageType } from '../entities/components/useRecentlyPreviewedEntities';
-import type { RelationshipFilterAttribute } from './relationshipFilterTypes';
+import type {
+  ExplorerRelationshipFacet,
+  RelationshipFilterAttribute,
+} from './relationshipFilterTypes';
 
 vi.mock('../entities/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../entities/api')>();
