@@ -320,7 +320,6 @@
     "publication": {
       "not_published": "Not published",
       "published": "Published",
-      "publishedDetails": "Published {{publishedAt}} by {{publishedBy}}",
       "channelDisabled": "Not an export channel",
       "channelDisabledDescription": "Enable this context as an export channel in Manage > Exports before publishing."
     }

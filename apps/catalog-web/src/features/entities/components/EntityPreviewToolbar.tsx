@@ -101,25 +101,7 @@ export const EntityPreviewToolbar = ({
         </Tooltip>
       )}
       <Box sx={{ flexGrow: 1 }} />
-      {publication ? (
-        <Tooltip
-          title={
-            publication.status === publicationStatuses.published &&
-            publication.published_at
-              ? t('entities.publication.publishedDetails', {
-                  publishedAt: new Date(
-                    publication.published_at,
-                  ).toLocaleString(),
-                  publishedBy: publication.published_by_user_id ?? '—',
-                })
-              : t(`entities.publication.${publication.status}`)
-          }
-        >
-          <Button color="inherit" size="small" variant="text">
-            {t(`entities.publication.${publication.status}`)}
-          </Button>
-        </Tooltip>
-      ) : (
+      {!publication && (
         <Tooltip title={t('entities.publication.channelDisabledDescription')}>
           <Button color="inherit" size="small" variant="text">
             {t('entities.publication.channelDisabled')}
