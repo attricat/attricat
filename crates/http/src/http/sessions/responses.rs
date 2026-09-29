@@ -140,78 +140,53 @@ async fn session_response_payload_with_identifier(
     })
 }
 
+/// Workspace-wide permissions reported as session capability flags.
+const CAPABILITY_PERMISSIONS: [&str; 15] = [
+    "audit.read",
+    "data_health.read",
+    "members.manage",
+    "roles.manage",
+    "roles.grant",
+    "tokens.manage",
+    "workspace_navigation.manage",
+    "extensions.read",
+    "extensions.manage",
+    "workflows.read",
+    "workflows.manage",
+    "rules.read",
+    "rules.manage",
+    "entities.publish",
+    "entities.delete",
+];
+
 async fn session_capabilities(
     state: &AppState,
     user_id: Uuid,
     workspace_id: Uuid,
 ) -> Result<SessionCapabilities, ApiError> {
+    // One query for every flag; this runs on each login, renewal, and
+    // session read.
+    let granted = state
+        .repository
+        .workspace_permissions(user_id, workspace_id, &CAPABILITY_PERMISSIONS)
+        .await?;
+    let has = |permission: &str| granted.contains(permission);
     Ok(SessionCapabilities {
-        audit_read: state
-            .repository
-            .is_authorized(user_id, workspace_id, "audit.read", None, None)
-            .await?,
-        data_health_read: state
-            .repository
-            .is_authorized(user_id, workspace_id, "data_health.read", None, None)
-            .await?,
-        members_manage: state
-            .repository
-            .is_authorized(user_id, workspace_id, "members.manage", None, None)
-            .await?,
-        roles_manage: state
-            .repository
-            .is_authorized(user_id, workspace_id, "roles.manage", None, None)
-            .await?,
-        roles_grant: state
-            .repository
-            .is_authorized(user_id, workspace_id, "roles.grant", None, None)
-            .await?,
-        tokens_manage: state
-            .repository
-            .is_authorized(user_id, workspace_id, "tokens.manage", None, None)
-            .await?,
-        workspace_navigation_manage: state
-            .repository
-            .is_authorized(
-                user_id,
-                workspace_id,
-                "workspace_navigation.manage",
-                None,
-                None,
-            )
-            .await?,
-        extensions_read: state
-            .repository
-            .is_authorized(user_id, workspace_id, "extensions.read", None, None)
-            .await?,
-        extensions_manage: state
-            .repository
-            .is_authorized(user_id, workspace_id, "extensions.manage", None, None)
-            .await?,
-        workflows_read: state
-            .repository
-            .is_authorized(user_id, workspace_id, "workflows.read", None, None)
-            .await?,
-        workflows_manage: state
-            .repository
-            .is_authorized(user_id, workspace_id, "workflows.manage", None, None)
-            .await?,
-        rules_read: state
-            .repository
-            .is_authorized(user_id, workspace_id, "rules.read", None, None)
-            .await?,
-        rules_manage: state
-            .repository
-            .is_authorized(user_id, workspace_id, "rules.manage", None, None)
-            .await?,
-        entities_publish: state
-            .repository
-            .is_authorized(user_id, workspace_id, "entities.publish", None, None)
-            .await?,
-        entities_delete: state
-            .repository
-            .is_authorized(user_id, workspace_id, "entities.delete", None, None)
-            .await?,
+        audit_read: has("audit.read"),
+        data_health_read: has("data_health.read"),
+        members_manage: has("members.manage"),
+        roles_manage: has("roles.manage"),
+        roles_grant: has("roles.grant"),
+        tokens_manage: has("tokens.manage"),
+        workspace_navigation_manage: has("workspace_navigation.manage"),
+        extensions_read: has("extensions.read"),
+        extensions_manage: has("extensions.manage"),
+        workflows_read: has("workflows.read"),
+        workflows_manage: has("workflows.manage"),
+        rules_read: has("rules.read"),
+        rules_manage: has("rules.manage"),
+        entities_publish: has("entities.publish"),
+        entities_delete: has("entities.delete"),
     })
 }
 
