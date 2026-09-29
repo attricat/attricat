@@ -31,3 +31,11 @@ export const inspectorPanelHeight = '20vh';
 export const launcherStatusDotSize = 10;
 export const launcherStatusDotOffset = 3;
 export const headerStatusDotSize = 8;
+/** Width of the bottom-edge strip that reveals the Inspector launcher. */
+export const launcherRevealZoneWidth = 200;
+/** Hover target height for precise pointers; touch gets a larger tap target. */
+export const launcherRevealZoneHeight = 10;
+export const launcherRevealZoneTouchHeight = 24;
+export const launcherGlowHeight = 3;
+/** A touch-revealed launcher hides again when left untouched. */
+export const LAUNCHER_TOUCH_REVEAL_MS = 4_000;
