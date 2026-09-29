@@ -152,6 +152,55 @@ test('saves an Explorer search and restores it through a short URL', async ({
   expect(page.url()).toBe(url);
 });
 
+test('prepares an equality filter from a hovered table cell', async ({
+  page,
+}) => {
+  const code = `cell_filter_${suffix()}`;
+  const blueprint = await createEntityBlueprint(
+    code,
+    'Cell filter products',
+    `[[attributes]]
+code = "title"
+value_type = "string"
+
+[[attributes]]
+code = "color"
+value_type = "string"`,
+    { views: '[views.table]\ntype = "table"\nfields = ["title", "color"]' },
+  );
+  await createEntity(blueprint, [
+    scalar('title', 'Red laptop'),
+    scalar('color', 'red'),
+  ]);
+  await createEntity(blueprint, [
+    scalar('title', 'Blue laptop'),
+    scalar('color', 'blue'),
+  ]);
+  await page.goto(`/?blueprint=${code}`);
+  await expect(page.getByText('2 results')).toBeVisible();
+  const filterButton = page.getByRole('button', {
+    name: 'Filter by color = red…',
+  });
+  await expect(filterButton).toHaveCSS('opacity', '0');
+  await page.getByRole('cell').filter({ hasText: /^red$/ }).hover();
+  await expect(filterButton).toHaveCSS('opacity', '1');
+  await filterButton.click();
+  const dialog = page.getByRole('dialog', { name: 'Add filter' });
+  await expect(dialog.getByRole('combobox', { name: 'Field' })).toHaveText(
+    /color/,
+  );
+  await expect(dialog.getByRole('textbox', { name: 'Value' })).toHaveValue(
+    'red',
+  );
+  await expect(page.getByText('2 results')).toBeVisible();
+  expect(new URL(page.url()).searchParams.get('attributeFilters')).toBeNull();
+  await dialog.getByRole('button', { name: 'Add filter' }).click();
+  await expect(page.getByText('1 result', { exact: true })).toBeVisible();
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get('attributeFilters'))
+    .toContain('"operator":"eq"');
+});
+
 test('applies and removes an attribute filter on mobile', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const code = `attribute_filter_${suffix()}`;

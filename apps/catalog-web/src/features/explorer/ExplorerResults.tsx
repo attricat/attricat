@@ -1,11 +1,13 @@
 import { Alert, Box } from '@mui/material';
 import { ExplorerResultsTable } from './ExplorerResultsTable';
 import { HiddenOutdatedNotice } from './HiddenOutdatedNotice';
+import type { AttributeFilterDraft } from './attributeFilterValues';
 import type { ExplorerSearch } from './search';
 import type { ExplorerData } from './useExplorerData';
 
 type Props = {
   data: ExplorerData;
+  onFilterCell: (draft: AttributeFilterDraft) => void;
   onShowAllVersions: () => void;
   onSortChange: (field: string) => void;
   search: ExplorerSearch;
@@ -13,6 +15,7 @@ type Props = {
 
 export const ExplorerResults = ({
   data,
+  onFilterCell,
   onShowAllVersions,
   onSortChange,
   search,
@@ -87,6 +90,7 @@ export const ExplorerResults = ({
                 singleVersionScope?.version ===
                 resultBlueprint.blueprint.version
               }
+              onFilterCell={onFilterCell}
               onSortChange={onSortChange}
               sort={search.sort}
             />

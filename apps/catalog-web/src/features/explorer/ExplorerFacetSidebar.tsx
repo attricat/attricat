@@ -13,10 +13,12 @@ import type {
   RelationshipFacetUpdate,
   RelationshipFilterAttribute,
 } from './relationshipFilterTypes';
+import type { AttributeFilterRequest } from './attributeFilterValues';
 import type { AttributeFilter } from './search';
 
 type Props = {
   blueprint: string;
+  filterRequest?: AttributeFilterRequest;
   blueprints?: Blueprint[];
   contexts: AttributeContext[];
   contextCode: string;
@@ -62,6 +64,7 @@ export const ExplorerFacetSidebar = ({
   contexts,
   contextCode,
   facets,
+  filterRequest,
   fullHeight = false,
   onAddAttributeFilter,
   onRemoveAttributeFilter,
@@ -159,6 +162,7 @@ export const ExplorerFacetSidebar = ({
         <ExplorerFilterPicker
           attributes={attributes}
           blueprintName={blueprintName(blueprint)}
+          filterRequest={filterRequest}
           filters={attributeFilters}
           pathAttributes={pathAttributes}
           relationshipAttributes={relationshipAttributes}

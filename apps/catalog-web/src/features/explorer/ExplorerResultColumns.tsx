@@ -10,6 +10,13 @@ import type {
 } from '../entities/api';
 import { EntityIdPopover } from '../entities/components/EntityIdPopover';
 import type { getExtensionRuntime } from '../extensions/api';
+import { FilterableCell } from './CellFilterButton';
+import type { AttributeFilterDraft } from './attributeFilterValues';
+import {
+  cellFilterDraft,
+  cellFilterValueType,
+  cellValueFilter,
+} from './cellFilters';
 import { ConfiguredColumnCell } from './ConfiguredColumnCell';
 import {
   catalogRendererPrefix,
@@ -32,11 +39,12 @@ import {
   type ActionMenuPosition,
 } from './ExplorerTableCells';
 import {
+  configuredColumnLabel,
   usesExtensionRenderer,
   type ExplorerTableColumn,
 } from './explorerTableColumns';
 import type { ExplorerColumnPreferences } from './columnPreferences';
-import type { ExplorerSort } from './search';
+import type { AttributeFilter, ExplorerSort } from './search';
 
 type ExtensionRuntime = Awaited<ReturnType<typeof getExtensionRuntime>>;
 type ExplorerColumnDef = LegacyColumnDef<EntityItem, unknown>;
@@ -50,6 +58,7 @@ type ColumnOptions = {
   runtime: ExtensionRuntime | undefined;
   sort?: ExplorerSort;
   onSortChange: (field: string) => void;
+  onFilterCell?: (draft: AttributeFilterDraft) => void;
   onOpenActions: (entityId: string, position: ActionMenuPosition) => void;
   takeCellFrame: () => boolean;
   t: TFunction;
@@ -82,6 +91,7 @@ export const buildExplorerColumnDefinitions = ({
   runtime,
   sort,
   onSortChange,
+  onFilterCell,
   onOpenActions,
   takeCellFrame,
   t,
@@ -95,6 +105,24 @@ export const buildExplorerColumnDefinitions = ({
     const attribute = attributes.get(relationship);
     if (!attribute) return [];
     const extension = findTableCellExtension(runtime, column.renderer);
+    const filterValueType = onFilterCell
+      ? cellFilterValueType(
+          column.field,
+          attribute,
+          blueprint.table_path_attributes,
+        )
+      : undefined;
+    const filterFor = (entity: EntityItem) =>
+      filterValueType
+        ? cellValueFilter(
+            column.field,
+            filterValueType,
+            entity.table_values[column.field] ?? [],
+          )
+        : undefined;
+    const openFilter = (filter: AttributeFilter) =>
+      filterValueType &&
+      onFilterCell?.(cellFilterDraft(filter, filterValueType));
     return [
       columnHelper.display({
         id: column.field,
@@ -107,13 +135,19 @@ export const buildExplorerColumnDefinitions = ({
         ),
         // Frames are allocated while rendering visible cells only.
         cell: (info) => (
-          <ConfiguredColumnCell
-            attribute={attribute}
-            column={column}
-            entity={info.row.original}
-            extension={extension}
-            frameAllowed={usesExtensionRenderer(column) && takeCellFrame()}
-          />
+          <FilterableCell
+            fieldLabel={configuredColumnLabel(column)}
+            filter={filterFor(info.row.original)}
+            onFilter={openFilter}
+          >
+            <ConfiguredColumnCell
+              attribute={attribute}
+              column={column}
+              entity={info.row.original}
+              extension={extension}
+              frameAllowed={usesExtensionRenderer(column) && takeCellFrame()}
+            />
+          </FilterableCell>
         ),
       }) as ExplorerColumnDef,
     ];

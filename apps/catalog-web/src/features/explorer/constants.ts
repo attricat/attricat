@@ -17,6 +17,8 @@ export const explorerVisibilityScope = 'explorer';
 export const relationshipPathSeparator = '.';
 
 export const defaultAttributeFilterOperator = 'eq';
+/** Cell shortcuts always filter by equality rather than guessing an operator. */
+export const cellFilterOperator = 'eq';
 
 export const versionScopes = {
   all: 'all',

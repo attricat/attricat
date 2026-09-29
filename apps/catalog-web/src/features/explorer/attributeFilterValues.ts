@@ -16,6 +16,15 @@ export type AttributeFilterDraft = {
   value: string;
 };
 
+/**
+ * Asks the filter picker to open its dialog with a prepared draft. The id
+ * distinguishes repeated requests for the same draft.
+ */
+export type AttributeFilterRequest = {
+  id: number;
+  draft: AttributeFilterDraft;
+};
+
 export const emptyAttributeFilterDraft: AttributeFilterDraft = {
   field: '',
   operator: defaultAttributeFilterOperator,

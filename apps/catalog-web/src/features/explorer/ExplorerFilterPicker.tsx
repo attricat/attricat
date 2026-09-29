@@ -16,6 +16,7 @@ import {
   attributeFilterInputValue,
   emptyAttributeFilterDraft,
   type AttributeFilterDraft,
+  type AttributeFilterRequest,
 } from './attributeFilterValues';
 import { explorerVisibilityScope, maximumAttributeFilters } from './constants';
 import type { RelationshipFilterAttribute } from './relationshipFilterTypes';
@@ -25,6 +26,7 @@ import { smallIconSize } from '../../components/iconSizes';
 
 type Props = {
   filters: AttributeFilter[];
+  filterRequest?: AttributeFilterRequest;
   attributes: Attribute[];
   blueprintName: string;
   pathAttributes?: { code: string; value_type: Attribute['value_type'] }[];
@@ -44,6 +46,7 @@ type EditorState = {
 
 export const ExplorerFilterPicker = ({
   filters,
+  filterRequest,
   attributes,
   blueprintName,
   pathAttributes = [],
@@ -60,6 +63,20 @@ export const ExplorerFilterPicker = ({
     editingIndex: null,
     draft: emptyAttributeFilterDraft,
   });
+  // Open for each new external request while rendering, so the dialog starts
+  // from the requested draft without an extra effect pass.
+  const [handledRequest, setHandledRequest] = useState(filterRequest);
+  if (filterRequest !== handledRequest) {
+    setHandledRequest(filterRequest);
+    if (filterRequest) {
+      setEditor((current) => ({
+        session: current.session + 1,
+        editingIndex: null,
+        draft: filterRequest.draft,
+      }));
+      setOpen(true);
+    }
+  }
   const relationshipPaths = useRelationshipFilterPaths(
     relationshipAttributes,
     open && editor.editingIndex === null,

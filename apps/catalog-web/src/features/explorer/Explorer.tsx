@@ -1,5 +1,5 @@
 import { Box, Typography, useMediaQuery, useTheme } from '@mui/material';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useMobileExplorePanelTarget } from '../../components/mobileNavigationPanelContext';
@@ -17,6 +17,10 @@ import { ExplorerLoadingIndicator } from './ExplorerLoadingIndicator';
 import { ExplorerPageHeader } from './ExplorerPageHeader';
 import { ExplorerResults } from './ExplorerResults';
 import { ExplorerSearchForm } from './ExplorerSearchForm';
+import type {
+  AttributeFilterDraft,
+  AttributeFilterRequest,
+} from './attributeFilterValues';
 import {
   relationshipFacetSources,
   selectedRelationshipFacets,
@@ -48,6 +52,10 @@ export const Explorer = ({ search: urlSearch, savedView }: Props) => {
   useEffect(() => {
     if (urlSearch.blueprint) setLastBlueprint(urlSearch.blueprint);
   }, [urlSearch.blueprint]);
+
+  const [filterRequest, setFilterRequest] = useState<AttributeFilterRequest>();
+  const requestFilter = (draft: AttributeFilterDraft) =>
+    setFilterRequest((current) => ({ id: (current?.id ?? 0) + 1, draft }));
 
   const data = useExplorerData(search);
   const {
@@ -112,7 +120,12 @@ export const Explorer = ({ search: urlSearch, savedView }: Props) => {
           width: facetSidebarWidth,
         }}
       >
-        <ExplorerFacetSidebar {...facetSidebarProps} fullHeight />
+        {/* Always mounted (hidden below lg), so it owns cell filter requests. */}
+        <ExplorerFacetSidebar
+          {...facetSidebarProps}
+          filterRequest={filterRequest}
+          fullHeight
+        />
       </Box>
       <Box sx={{ flexGrow: 1, minWidth: 0 }}>
         <PageContainer>
@@ -170,6 +183,7 @@ export const Explorer = ({ search: urlSearch, savedView }: Props) => {
           {loading && <ExplorerLoadingIndicator />}
           <ExplorerResults
             data={data}
+            onFilterCell={requestFilter}
             onShowAllVersions={actions.showAllVersions}
             onSortChange={actions.toggleSort}
             search={search}

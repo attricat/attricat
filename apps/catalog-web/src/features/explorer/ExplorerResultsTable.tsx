@@ -28,6 +28,7 @@ import {
   configurableColumnIds,
   explorerColumnLabel,
 } from './explorerTableColumns';
+import type { AttributeFilterDraft } from './attributeFilterValues';
 import type { ExplorerSort } from './search';
 import { SearchInfoDialog } from './SearchInfoDialog';
 import { SendSelectedToAgentDialog } from './SendSelectedToAgentDialog';
@@ -44,6 +45,7 @@ type Props = {
   items: EntityItem[];
   onLoadMore: () => void;
   onSortChange: (field: string) => void;
+  onFilterCell?: (draft: AttributeFilterDraft) => void;
   publicationContextCode: string;
   publicationContextId: string | undefined;
   publicationSortAvailable: boolean;
@@ -64,6 +66,7 @@ export const ExplorerResultsTable = ({
   items,
   onLoadMore,
   onSortChange,
+  onFilterCell,
   publicationContextCode,
   publicationContextId,
   publicationSortAvailable,
@@ -119,6 +122,7 @@ export const ExplorerResultsTable = ({
     runtime: runtime.data,
     sort,
     onSortChange,
+    onFilterCell,
     onOpenActions: (entityId, position) =>
       setActionMenu({ entityId, position }),
     takeCellFrame,
