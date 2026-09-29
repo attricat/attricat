@@ -17,7 +17,7 @@ Zaproś istniejącego użytkownika albo utwórz użytkownika i wyślij zaproszen
 
 ## Nawigacja eksploratora
 
-Przypinaj opublikowane blueprinty encji, aby często używane obszary katalogu były łatwe do znalezienia. Każdy skrót można ograniczyć do ról przestrzeni roboczej, dzięki czemu użytkownicy widzą nawigację odpowiednią do swoich obowiązków.
+Przypinaj opublikowane schematy encji, aby często używane obszary katalogu były łatwe do znalezienia. Każdy skrót można ograniczyć do ról przestrzeni roboczej, dzięki czemu użytkownicy widzą nawigację odpowiednią do swoich obowiązków.
 
 ## Dziennik aktywności
 

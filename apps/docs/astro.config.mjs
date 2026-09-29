@@ -68,7 +68,7 @@ export default defineConfig({
             {
               label: 'Blueprints',
               slug: 'builders/blueprints',
-              translations: polish('Blueprinty'),
+              translations: polish('Schematy'),
             },
             {
               label: 'Extensions',

@@ -1,35 +1,36 @@
-/* Attricat design system snapshot: design@69392ef (tokens/colors.json, typography.json,
-   spacing.json, radius.json). Update with the wordmarks in src/assets when the design changes.
+/* Attricat design system: design@2b7e49f (tokens/colors.json, typography.json,
+   spacing.json, radius.json, elevation.json). Update with the wordmarks in src/assets and
+   public/favicon.svg when the design changes.
    Starlight's gray scale runs from text (1) to borders (6) in both modes. */
 @layer starlight.base, starlight.reset, starlight.core, starlight.content, starlight.components, starlight.utils, attricat;
 
 @layer attricat {
   :root {
-    --brand-primary: #83e5d4;
-    --brand-on-primary: #142421;
-    --brand-accent: #ffbc8d;
-    --brand-surface: #1d302b;
-    --brand-inset: #182a26;
-    --brand-border: #4a6059;
-    --brand-border-subtle: #375048;
-    --brand-hover: #29463f;
-    --brand-focus: #83e5d4;
+    --brand-primary: #7cbbff;
+    --brand-on-primary: #0a1530;
+    --brand-accent: #ffb38a;
+    --brand-surface: #131d31;
+    --brand-inset: #101a2c;
+    --brand-border: #2a3752;
+    --brand-border-subtle: #1f2a42;
+    --brand-hover: #1a2842;
+    --brand-focus: #7cbbff;
 
-    --sl-color-white: #f4f9f7;
-    --sl-color-gray-1: #f4f9f7;
-    --sl-color-gray-2: #b9cbc5;
-    --sl-color-gray-3: #b9cbc5;
-    --sl-color-gray-4: #789087;
-    --sl-color-gray-5: #4a6059;
-    --sl-color-gray-6: #375048;
-    --sl-color-black: #1d302b;
-    --sl-color-accent-low: #275a4e;
-    --sl-color-accent: #83e5d4;
-    --sl-color-accent-high: #83e5d4;
-    --sl-color-text: #b9cbc5;
+    --sl-color-white: #eaf0f8;
+    --sl-color-gray-1: #eaf0f8;
+    --sl-color-gray-2: #a9b6c9;
+    --sl-color-gray-3: #a9b6c9;
+    --sl-color-gray-4: #7d8ba1;
+    --sl-color-gray-5: #2a3752;
+    --sl-color-gray-6: #1f2a42;
+    --sl-color-black: #131d31;
+    --sl-color-accent-low: #1d3558;
+    --sl-color-accent: #7cbbff;
+    --sl-color-accent-high: #7cbbff;
+    --sl-color-text: #a9b6c9;
     --sl-color-text-accent: var(--brand-primary);
     --sl-color-text-invert: var(--brand-on-primary);
-    --sl-color-bg: #142421;
+    --sl-color-bg: #0d1526;
     --sl-color-bg-nav: var(--brand-surface);
     --sl-color-bg-sidebar: var(--brand-surface);
     --sl-color-bg-inline-code: var(--brand-inset);
@@ -37,18 +38,18 @@
     --sl-color-hairline: var(--brand-border-subtle);
     --sl-color-hairline-light: var(--brand-border-subtle);
     --sl-color-hairline-shade: var(--brand-border-subtle);
-    --sl-color-orange-low: #4a3b23;
-    --sl-color-orange: #ffe7ac;
-    --sl-color-orange-high: #ffe7ac;
-    --sl-color-green-low: #193a2a;
-    --sl-color-green: #78d7a2;
-    --sl-color-green-high: #78d7a2;
-    --sl-color-blue-low: #1c3546;
-    --sl-color-blue: #8cc9f2;
-    --sl-color-blue-high: #8cc9f2;
-    --sl-color-red-low: #402522;
-    --sl-color-red: #ff9590;
-    --sl-color-red-high: #ff9590;
+    --sl-color-orange-low: #382f22;
+    --sl-color-orange: #ffd88a;
+    --sl-color-orange-high: #ffd88a;
+    --sl-color-green-low: #12302a;
+    --sl-color-green: #6fd8a0;
+    --sl-color-green-high: #6fd8a0;
+    --sl-color-blue-low: #113540;
+    --sl-color-blue: #67d4e4;
+    --sl-color-blue-high: #67d4e4;
+    --sl-color-red-low: #3a1f2a;
+    --sl-color-red: #ff9a96;
+    --sl-color-red-high: #ff9a96;
 
     --sl-font: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     --sl-font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
@@ -62,38 +63,38 @@
     --sl-line-height: 1.55;
     --sl-line-height-headings: 1.25;
     --sl-content-width: 45rem;
-    --sl-shadow-sm: none;
-    --sl-shadow-md: none;
-    --sl-shadow-lg: none;
+    --sl-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.28);
+    --sl-shadow-md: 0 16px 40px -8px rgba(0, 0, 0, 0.55);
+    --sl-shadow-lg: 0 16px 40px -8px rgba(0, 0, 0, 0.55);
   }
 
   :root[data-theme='light'] {
-    --brand-primary: #00766d;
+    --brand-primary: #006ee0;
     --brand-on-primary: #ffffff;
-    --brand-accent: #b45225;
+    --brand-accent: #b4501f;
     --brand-surface: #ffffff;
-    --brand-inset: #fcfdfc;
-    --brand-border: #d0dfd9;
-    --brand-border-subtle: #e6eeea;
-    --brand-hover: #e5f6f1;
-    --brand-focus: #00766d;
+    --brand-inset: #fafcfe;
+    --brand-border: #e3e8ee;
+    --brand-border-subtle: #edf1f6;
+    --brand-hover: #f3f8fe;
+    --brand-focus: #006ee0;
 
-    --sl-color-white: #172522;
-    --sl-color-gray-1: #172522;
-    --sl-color-gray-2: #425650;
-    --sl-color-gray-3: #425650;
-    --sl-color-gray-4: #657973;
-    --sl-color-gray-5: #d0dfd9;
-    --sl-color-gray-6: #e6eeea;
-    --sl-color-gray-7: #f7f9f8;
+    --sl-color-white: #0a2540;
+    --sl-color-gray-1: #0a2540;
+    --sl-color-gray-2: #425466;
+    --sl-color-gray-3: #425466;
+    --sl-color-gray-4: #687385;
+    --sl-color-gray-5: #e3e8ee;
+    --sl-color-gray-6: #edf1f6;
+    --sl-color-gray-7: #f6f9fc;
     --sl-color-black: #ffffff;
-    --sl-color-accent-low: #c8ebe0;
-    --sl-color-accent: #00766d;
-    --sl-color-accent-high: #00766d;
-    --sl-color-text: #425650;
+    --sl-color-accent-low: #dceafa;
+    --sl-color-accent: #006ee0;
+    --sl-color-accent-high: #006ee0;
+    --sl-color-text: #425466;
     --sl-color-text-accent: var(--brand-primary);
     --sl-color-text-invert: var(--brand-on-primary);
-    --sl-color-bg: #f7f9f8;
+    --sl-color-bg: #f6f9fc;
     --sl-color-bg-nav: var(--brand-surface);
     --sl-color-bg-sidebar: var(--brand-surface);
     --sl-color-bg-inline-code: var(--brand-inset);
@@ -101,18 +102,22 @@
     --sl-color-hairline: var(--brand-border-subtle);
     --sl-color-hairline-light: var(--brand-border-subtle);
     --sl-color-hairline-shade: var(--brand-border-subtle);
-    --sl-color-orange-low: #fff5dc;
-    --sl-color-orange: #765000;
-    --sl-color-orange-high: #765000;
-    --sl-color-green-low: #e8f5ec;
-    --sl-color-green: #20734a;
-    --sl-color-green-high: #20734a;
-    --sl-color-blue-low: #e8f2fa;
-    --sl-color-blue: #24689b;
-    --sl-color-blue-high: #24689b;
-    --sl-color-red-low: #fceae9;
-    --sl-color-red: #b33a38;
-    --sl-color-red-high: #b33a38;
+    --sl-color-orange-low: #fff6de;
+    --sl-color-orange: #7a5200;
+    --sl-color-orange-high: #7a5200;
+    --sl-color-green-low: #e7f6ee;
+    --sl-color-green: #1a7f4b;
+    --sl-color-green-high: #1a7f4b;
+    --sl-color-blue-low: #e4f5f8;
+    --sl-color-blue: #0e7490;
+    --sl-color-blue-high: #0e7490;
+    --sl-color-red-low: #fdecec;
+    --sl-color-red: #c23a3a;
+    --sl-color-red-high: #c23a3a;
+
+    --sl-shadow-sm: 0 1px 2px rgba(10, 37, 64, 0.06), 0 1px 3px rgba(50, 50, 93, 0.08);
+    --sl-shadow-md: 0 12px 28px -6px rgba(50, 50, 93, 0.18), 0 8px 16px -8px rgba(10, 37, 64, 0.14);
+    --sl-shadow-lg: 0 12px 28px -6px rgba(50, 50, 93, 0.18), 0 8px 16px -8px rgba(10, 37, 64, 0.14);
   }
 }
 
@@ -131,6 +136,15 @@
     outline-offset: 2px;
   }
 
+  .sl-markdown-content h1,
+  h1#_top {
+    letter-spacing: -0.02em;
+  }
+
+  .sl-markdown-content :where(h2, h3) {
+    letter-spacing: -0.015em;
+  }
+
   .site-title img {
     min-width: 112px;
   }
@@ -142,8 +156,9 @@
 
   .hero h1 {
     font-size: clamp(2.25rem, 5vw, 3.5rem);
+    font-weight: 500;
     line-height: 1.08;
-    letter-spacing: -0.045em;
+    letter-spacing: -0.035em;
     max-width: 18ch;
   }
 

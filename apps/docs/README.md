@@ -18,7 +18,7 @@ pnpm --dir apps/docs build
 
 ## Visual style
 
-`src/styles/brand.css` maps the semantic colors, type, and radii from the pinned [design snapshot](../catalog-web/design/README.md) into Starlight's light and dark themes. The wordmarks in `src/assets/` are copies of that snapshot's `assets/logos/wordmark-{light,dark}.svg`. When updating the snapshot, refresh the CSS tokens and both wordmarks together, then check both themes and locales.
+`src/styles/brand.css` maps the semantic colors, type, radii and elevation from the [Attricat design repository](https://github.com/attricat/design) (revision noted at the top of the file) into Starlight's light and dark themes. The wordmarks in `src/assets/` and `public/favicon.svg` are copies of that revision's `assets/logos/`. When the design changes, refresh the CSS tokens, both wordmarks and the favicon together, then check both themes and locales. Polish content follows the design repository's terminology table (for example, Blueprint → Schemat).
 
 ## Content
 

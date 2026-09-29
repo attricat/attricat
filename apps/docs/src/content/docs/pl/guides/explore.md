@@ -7,9 +7,9 @@ Otwórz **Eksplorator encji**, aby przeglądać encje dostępne w przestrzeni ro
 
 ## Wyszukiwanie rekordów
 
-Wybierz blueprint. Domyślnie zobaczysz encje z bieżącej opublikowanej rewizji; możesz wybrać starszą opublikowaną rewizję lub **Wszystkie wersje**. Gdy wyświetlana jest bieżąca rewizja, komunikat wskazuje ukryte starsze encje i, jeśli masz uprawnienia, stan migracji.
+Wybierz schemat. Domyślnie zobaczysz encje z bieżącej opublikowanej rewizji; możesz wybrać starszą opublikowaną rewizję lub **Wszystkie wersje**. Gdy wyświetlana jest bieżąca rewizja, komunikat wskazuje ukryte starsze encje i, jeśli masz uprawnienia, stan migracji.
 
-Zwykły termin przeszukuje wartości skalarne tylko na wybranym blueprintcie. Użyj `*:red`, aby jawnie przeszukać powiązane rekordy przez maksymalnie trzy krawędzie relacji. Możesz wskazać pole, np. `sku:123*`, albo powiązany atrybut, np. `family.product_type.name:red`.
+Zwykły termin przeszukuje wartości skalarne tylko na wybranym schemacie. Użyj `*:red`, aby jawnie przeszukać powiązane rekordy przez maksymalnie trzy krawędzie relacji. Możesz wskazać pole, np. `sku:123*`, albo powiązany atrybut, np. `family.product_type.name:red`.
 
 Wybierz kontekst, aby zobaczyć wartości rozstrzygnięte dla niego. Wartość może być lokalna lub odziedziczona z kontekstu nadrzędnego zgodnie z konfiguracją atrybutu.
 
@@ -25,6 +25,6 @@ Aktywne filtry pojawiają się jako usuwalne etykiety pod polem wyszukiwania. Ic
 
 Otwórz wynik, aby sprawdzić wartości, rewizję schematu, pliki, relacje i historię zmian. Jeżeli możesz edytować encję, zapisz zmiany na jej stronie szczegółów. Pola tylko do odczytu pozostają widoczne, ale nie można ich zmieniać w przeglądarce. Użytkownik z uprawnieniem `entities.delete` może usunąć encję po potwierdzeniu; znika ona ze zwykłych wyników, lecz jej historia zostaje zachowana.
 
-Gdy blueprint ma nowszą opublikowaną rewizję, Attricat oznacza rekord jako nieaktualny. Przed aktualizacją sprawdź migrację.
+Gdy schemat ma nowszą opublikowaną rewizję, Attricat oznacza rekord jako nieaktualny. Przed aktualizacją sprawdź migrację.
 
 Zobacz [Konteksty](/pl/guides/contexts/), aby dowiedzieć się, jak działają wartości dziedziczone.
