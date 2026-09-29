@@ -90,8 +90,14 @@ test('saves an Explorer search and restores it through a short URL', async ({
     '[[attributes]]\ncode = "title"\nvalue_type = "string"\ntags = ["searchable"]',
   );
   await page.goto(`/?blueprint=${code}&query=example`);
-  await expect(page.getByRole('button', { name: 'Save search' })).toBeEnabled();
-  await page.getByRole('button', { name: 'Save search' }).click();
+  await page.getByRole('button', { name: 'Saved searches' }).click();
+  const savedSearches = page.getByRole('dialog', { name: 'Saved searches' });
+  await expect(
+    savedSearches.getByRole('button', { name: 'Save current search' }),
+  ).toBeEnabled();
+  await savedSearches
+    .getByRole('button', { name: 'Save current search' })
+    .click();
   await page
     .getByRole('dialog', { name: 'Save search' })
     .getByRole('textbox', { name: 'Name' })
@@ -107,7 +113,17 @@ test('saves an Explorer search and restores it through a short URL', async ({
   await page.reload();
   await expect(page.getByLabel('Query')).toHaveValue('example');
   await expect(
-    page.getByRole('button', { name: 'Delete saved search' }),
+    page.getByRole('button', { name: 'Share search' }),
+  ).toBeEnabled();
+  const activator = page.getByRole('button', {
+    name: 'Saved search: My saved products',
+  });
+  await expect(activator).toHaveAttribute('aria-pressed', 'true');
+  await activator.click();
+  await expect(
+    page.getByRole('dialog', { name: 'Saved searches' }).getByRole('button', {
+      name: 'Delete saved search My saved products',
+    }),
   ).toBeVisible();
   expect(page.url()).toBe(url);
 });

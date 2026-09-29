@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { copyToClipboard } from '../../components/clipboard';
+import { useToast } from '../../components/useToast';
 import {
   inlineExplorerSearchParams,
   type ExplorerSearch,
@@ -41,8 +43,8 @@ export const useSavedSearchActions = ({
   const { t } = useTranslation();
   const navigate = useNavigate({ from: '/' });
   const client = useQueryClient();
-  const [open, setOpen] = useState(false);
-  const [notice, setNotice] = useState('');
+  const { show } = useToast();
+  const [saveOpen, setSaveOpen] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const list = useQuery({
@@ -55,11 +57,10 @@ export const useSavedSearchActions = ({
       getSavedView(search.sourceView ?? '', false, signal),
     enabled: Boolean(search.sourceView && !savedView),
   });
-  const canEdit = Boolean(
-    search.sourceView &&
-    userId &&
-    (savedView ?? originalView.data)?.owner_user_id === userId,
-  );
+  const sourceView = search.sourceView
+    ? (savedView ?? originalView.data)
+    : undefined;
+  const canEdit = Boolean(userId && sourceView?.owner_user_id === userId);
   const isDraft = Boolean(
     search.sourceView &&
     new URLSearchParams(window.location.search).has(SOURCE_VIEW_PARAM),
@@ -69,7 +70,7 @@ export const useSavedSearchActions = ({
       createSavedView(value.name, value.description, value.visibility, search),
     onSuccess: (view) => {
       void client.invalidateQueries({ queryKey: savedViewQueryKeys.all() });
-      setOpen(false);
+      setSaveOpen(false);
       void navigate({ to: '/', search: { savedView: view.id } });
     },
     onError: (cause) => setError(cause.message),
@@ -77,11 +78,10 @@ export const useSavedSearchActions = ({
 
   const runBusy = async (action: () => Promise<void>) => {
     setBusy(true);
-    setError('');
     try {
       await action();
     } catch (cause) {
-      setError(errorMessage(cause));
+      show({ message: errorMessage(cause), severity: 'error' });
     } finally {
       setBusy(false);
     }
@@ -105,17 +105,19 @@ export const useSavedSearchActions = ({
       void navigate({ to: '/', search: { savedView: original.id } });
     });
   };
-  const remove = () => {
-    if (
-      !search.sourceView ||
-      !window.confirm(t('explorer.deleteSavedSearchConfirm'))
-    )
+  const canDelete = (view: SavedView) =>
+    Boolean(userId && view.owner_user_id === userId);
+  const remove = (id: string) => {
+    if (!window.confirm(t('explorer.deleteSavedSearchConfirm')))
       return Promise.resolve();
-    const sourceView = search.sourceView;
     return runBusy(async () => {
-      await deleteSavedView(sourceView);
+      await deleteSavedView(id);
       await client.invalidateQueries({ queryKey: savedViewQueryKeys.all() });
-      void navigate({ to: '/', search: { ...search, sourceView: undefined } });
+      if (id === search.sourceView)
+        void navigate({
+          to: '/',
+          search: { ...search, sourceView: undefined },
+        });
     });
   };
   const copyLink = () =>
@@ -134,25 +136,37 @@ export const useSavedSearchActions = ({
           url.search = `?${VIEW_STATE_PARAM}=${view.id}`;
         }
       }
-      await navigator.clipboard.writeText(url.href);
-      setNotice(t('explorer.linkCopied'));
+      await copyToClipboard(url.href);
+      show({ message: t('explorer.linkCopied'), severity: 'success' });
     });
+
+  const openSaveDialog = () => {
+    setError('');
+    setSaveOpen(true);
+  };
+  const openView = (id: string) =>
+    navigate({ to: '/', search: { savedView: id } });
+  const discard = () =>
+    search.sourceView ? openView(search.sourceView) : Promise.resolve();
 
   return {
     busy,
+    canDelete,
     canEdit,
+    closeSaveDialog: () => setSaveOpen(false),
     copyLink,
+    discard,
     error,
     isDraft,
     list,
-    navigate,
-    notice,
-    open,
+    openSaveDialog,
+    openView,
     remove,
     save,
-    setError,
-    setNotice,
-    setOpen,
+    saveOpen,
+    sourceView,
     update,
   };
 };
+
+export type SavedSearchActions = ReturnType<typeof useSavedSearchActions>;

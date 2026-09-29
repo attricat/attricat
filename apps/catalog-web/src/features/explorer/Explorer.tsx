@@ -4,7 +4,10 @@ import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useMobileExplorePanelTarget } from '../../components/mobileNavigationPanelContext';
 import { PageContainer } from '../../components/PageContainer';
-import { SavedSearchActions } from '../saved-views/SavedSearchActions';
+import {
+  SavedSearchesButton,
+  ShareSearchButton,
+} from '../saved-views/SavedSearchControls';
 import type { SavedView } from '../saved-views/schemas';
 import { ActiveExplorerFilters } from './ActiveExplorerFilters';
 import { facetSidebarWidth } from './constants';
@@ -21,6 +24,7 @@ import {
 import { getLastBlueprint, setLastBlueprint } from './lastBlueprint';
 import type { ExplorerSearch } from './search';
 import { useExplorerData } from './useExplorerData';
+import { useSavedSearchActions } from '../saved-views/useSavedSearchActions';
 import { useExplorerSearchActions } from './useExplorerSearchActions';
 
 type Props = {
@@ -63,6 +67,11 @@ export const Explorer = ({ search: urlSearch, savedView }: Props) => {
   const actions = useExplorerSearchActions(search, {
     currentVersion: currentBlueprint?.version,
     relationshipFilters,
+  });
+  const savedSearchActions = useSavedSearchActions({
+    savedView,
+    search,
+    userId: session.data?.user_id,
   });
   const facets = selectedRelationshipFacets(
     relationshipFacetSources(relationshipFields, search),
@@ -117,11 +126,6 @@ export const Explorer = ({ search: urlSearch, savedView }: Props) => {
             blueprints={blueprints}
             selectedBlueprint={selectedBlueprint}
           />
-          <SavedSearchActions
-            search={search}
-            savedView={savedView}
-            userId={session.data?.user_id}
-          />
           <ExplorerSearchForm
             blueprints={blueprints.data ?? []}
             currentVersion={currentBlueprint?.version}
@@ -132,6 +136,15 @@ export const Explorer = ({ search: urlSearch, savedView }: Props) => {
             lockedBlueprint
             onSubmit={actions.submit}
             search={search}
+            startActions={
+              <SavedSearchesButton
+                actions={savedSearchActions}
+                search={search}
+              />
+            }
+            endActions={
+              <ShareSearchButton actions={savedSearchActions} search={search} />
+            }
           />
           <ActiveExplorerFilters
             filters={[

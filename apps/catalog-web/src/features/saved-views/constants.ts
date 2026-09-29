@@ -7,7 +7,6 @@ export const MAXIMUM_INLINE_LINK_LENGTH = 1800;
 export const SAVED_VIEW_NAME_MAX_LENGTH = 120;
 export const SAVED_VIEW_DESCRIPTION_MAX_LENGTH = 500;
 export const SAVE_SEARCH_FORM_ID = 'save-search-form';
-export const SAVED_SEARCH_SELECT_MIN_WIDTH = 180;
 
 export const SOURCE_VIEW_PARAM = 'sourceView';
 export const SAVED_VIEW_PARAM = 'savedView';

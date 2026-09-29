@@ -1,5 +1,6 @@
 import { useForm } from '@tanstack/react-form';
 import {
+  Box,
   Button,
   IconButton,
   InputAdornment,
@@ -10,9 +11,11 @@ import {
   TextField,
   Tooltip,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material';
 import { CircleQuestionMarkIcon } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Blueprint } from '../entities/api';
 import {
@@ -51,7 +54,13 @@ type Props = {
   onRetryRevisions?: () => void;
   onSubmit: (value: ExplorerSearch) => void;
   lockedBlueprint?: boolean;
+  /** Controls rendered before the search fields, such as saved searches. */
+  startActions?: ReactNode;
+  /** Controls rendered after the search button, such as sharing. */
+  endActions?: ReactNode;
 };
+
+const inlineActionSx = { alignSelf: 'center', display: 'flex' } as const;
 
 export const ExplorerSearchForm = ({
   blueprints,
@@ -63,8 +72,14 @@ export const ExplorerSearchForm = ({
   onRetryRevisions,
   onSubmit,
   lockedBlueprint = false,
+  startActions,
+  endActions,
 }: Props) => {
   const { t } = useTranslation();
+  const theme = useTheme();
+  // Wide layouts keep the actions beside the search input; narrow layouts
+  // move them above the stacked fields.
+  const inlineActions = useMediaQuery(theme.breakpoints.up('md'));
   const [syntaxAnchor, setSyntaxAnchor] = useState<HTMLElement | null>(null);
   const submitValues = (value: SearchFormValues) => {
     const historicalVersion = Number(value.versionScope);
@@ -112,7 +127,16 @@ export const ExplorerSearchForm = ({
         p: 1.5,
       }}
     >
-      <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5}>
+      {!inlineActions && (startActions || endActions) && (
+        <Stack direction="row" sx={{ justifyContent: 'space-between', mb: 1 }}>
+          <span>{startActions}</span>
+          <span>{endActions}</span>
+        </Stack>
+      )}
+      <Stack direction={inlineActions ? 'row' : 'column'} spacing={1.5}>
+        {inlineActions && startActions && (
+          <Box sx={inlineActionSx}>{startActions}</Box>
+        )}
         {!lockedBlueprint && (
           <form.Field name="blueprint">
             {(field) => (
@@ -215,6 +239,9 @@ export const ExplorerSearchForm = ({
         <Button type="submit" variant="contained">
           {t('explorer.search')}
         </Button>
+        {inlineActions && endActions && (
+          <Box sx={inlineActionSx}>{endActions}</Box>
+        )}
       </Stack>
       <Popover
         anchorEl={syntaxAnchor}
