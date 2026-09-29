@@ -696,9 +696,14 @@ contextual actions—not an application-wide navigation tree.
   values are passed automatically. The panel is read-only; it does not appear
   for attributes outside the blueprint detail view.
 
-The manifest also recognizes `file_panel`, but it is **not mounted by the
-current web client**; do not depend on runtime display until its host-owned
-context and placement are implemented.
+- **`file_panel`** (`panel`, requiring `client.file_panel`) appears beneath
+  each file link rendered by the default file-value renderer in an entity's
+  detail view. Its strict v1 context contains `context_version: 1`, `file_id`,
+  `entity_id`, `attribute_id`, `blueprint_id`, and `blueprint_version`. It
+  receives no filename, file bytes, or field value automatically. It is
+  read-only, appears only for actual file values (not empty fields), and does
+  not render in custom file-value renderers that do not forward the optional
+  file-panel callback. No separate file-detail page is implied.
 
 All of the mounted frames use the same mediated `catalog` API and capability checks
 as route contributions. The host re-authorizes every broker call and unmounts

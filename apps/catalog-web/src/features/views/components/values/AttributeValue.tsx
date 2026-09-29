@@ -1,6 +1,7 @@
 import { Chip, Stack, Typography } from '@mui/material';
 import { Link } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
+import type { ReactNode } from 'react';
 import type { Attribute } from '../../../entities/api';
 import { fileDownloadUrl } from '../../../files/api';
 import { FileThumbnail } from '../../../files/FileThumbnail';
@@ -36,10 +37,12 @@ export const AttributeValue = ({
   attribute,
   value,
   compact = false,
+  renderFilePanel,
 }: {
   attribute: Attribute;
   value: unknown;
   compact?: boolean;
+  renderFilePanel?: (fileId: string) => ReactNode;
 }) => {
   const { t } = useTranslation();
   if (attribute.value_type === 'relationship' && isRelationshipValue(value)) {
@@ -90,17 +93,20 @@ export const AttributeValue = ({
     return (
       <Stack spacing={1}>
         {value.map((file) => (
-          <Stack direction="row" key={file.id} spacing={1}>
-            {attribute.file_policy?.image_only && (
-              <FileThumbnail file={file} size={64} />
-            )}
-            <Typography
-              component="a"
-              href={fileDownloadUrl(file.id)}
-              variant="body2"
-            >
-              {file.filename}
-            </Typography>
+          <Stack key={file.id} spacing={1}>
+            <Stack direction="row" spacing={1}>
+              {attribute.file_policy?.image_only && (
+                <FileThumbnail file={file} size={64} />
+              )}
+              <Typography
+                component="a"
+                href={fileDownloadUrl(file.id)}
+                variant="body2"
+              >
+                {file.filename}
+              </Typography>
+            </Stack>
+            {renderFilePanel?.(file.id)}
           </Stack>
         ))}
       </Stack>

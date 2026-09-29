@@ -83,6 +83,50 @@ const renderOutlet = () => {
 beforeEach(() => vi.clearAllMocks());
 
 describe('ExtensionOutlet', () => {
+  it('mounts file panels only with a bounded file reference context', async () => {
+    vi.mocked(getExtensionRuntime).mockResolvedValue([
+      {
+        ...contribution,
+        id: 'file-panel',
+        kind: 'panel',
+        outlet: 'file_panel',
+      },
+      {
+        ...contribution,
+        id: 'wrong-kind',
+        kind: 'action',
+        outlet: 'file_panel',
+      },
+    ]);
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const context = {
+      context_version: 1,
+      file_id: '55555555-5555-4555-8555-555555555555',
+      entity_id: '33333333-3333-4333-8333-333333333333',
+      attribute_id: '44444444-4444-4444-8444-444444444444',
+      blueprint_id: '22222222-2222-4222-8222-222222222222',
+      blueprint_version: 1,
+    };
+    const { rerender } = render(
+      <QueryClientProvider client={queryClient}>
+        <ExtensionOutlet outlet="file_panel" context={context} />
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText('file-panel')).toBeTruthy();
+    expect(screen.queryByText('wrong-kind')).toBeNull();
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <ExtensionOutlet
+          outlet="file_panel"
+          context={{ ...context, filename: 'secret' }}
+        />
+      </QueryClientProvider>,
+    );
+    expect(screen.queryByText('file-panel')).toBeNull();
+  });
+
   it('mounts only attribute panels with a strict entity and revision context', async () => {
     vi.mocked(getExtensionRuntime).mockResolvedValue([
       {

@@ -45,6 +45,7 @@ type Props = {
   renderEditor?: (attribute: Attribute) => ReactNode;
   renderAttributeDecoration?: (attribute: Attribute) => ReactNode;
   renderAttributePanel?: (attribute: Attribute) => ReactNode;
+  renderFilePanel?: (attribute: Attribute, fileId: string) => ReactNode;
   skipComponentId?: string;
   contextId?: string;
   entityId?: string;
@@ -57,6 +58,7 @@ const ValueField = ({
   renderEditor,
   renderAttributeDecoration,
   renderAttributePanel,
+  renderFilePanel,
   component,
   contextId,
   entityId,
@@ -66,6 +68,7 @@ const ValueField = ({
   renderEditor?: (attribute: Attribute) => ReactNode;
   renderAttributeDecoration?: (attribute: Attribute) => ReactNode;
   renderAttributePanel?: (attribute: Attribute) => ReactNode;
+  renderFilePanel?: (attribute: Attribute, fileId: string) => ReactNode;
   component?: ComponentReference | null;
   contextId?: string;
   entityId?: string;
@@ -97,6 +100,11 @@ const ValueField = ({
                   component={component}
                   contextId={contextId}
                   entityId={entityId}
+                  renderFilePanel={
+                    renderFilePanel && attribute.value_type === 'file'
+                      ? (fileId) => renderFilePanel(attribute, fileId)
+                      : undefined
+                  }
                   value={resolved?.value}
                 />
               );
@@ -165,6 +173,7 @@ export const EntityView = ({
   renderEditor,
   renderAttributeDecoration,
   renderAttributePanel,
+  renderFilePanel,
   skipComponentId,
   contextId,
   entityId,
@@ -291,6 +300,7 @@ export const EntityView = ({
           key={key}
           renderAttributeDecoration={renderAttributeDecoration}
           renderAttributePanel={renderAttributePanel}
+          renderFilePanel={renderFilePanel}
           renderEditor={renderEditor}
           resolved={values[attribute.code]}
         />

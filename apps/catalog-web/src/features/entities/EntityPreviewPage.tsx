@@ -159,6 +159,9 @@ export const EntityPreviewPage = ({
   const hasAttributePanels = attributePanels.data?.some(
     (item) => item.outlet === 'entity_attribute_panel' && item.kind === 'panel',
   );
+  const hasFilePanels = attributePanels.data?.some(
+    (item) => item.outlet === 'file_panel' && item.kind === 'panel',
+  );
   const currentBlueprint = useQuery({
     queryKey: entityQueryKeys.currentBlueprint(
       resolved.data?.entity.blueprint_id ?? '',
@@ -407,6 +410,29 @@ export const EntityPreviewPage = ({
                                 context_id: selectedContextId ?? null,
                               }}
                               outlet="entity_attribute_panel"
+                              runtimeScope={{
+                                blueprintId: blueprint.data.blueprint.id,
+                                blueprintVersion:
+                                  blueprint.data.blueprint.version,
+                              }}
+                            />
+                          )
+                        : undefined
+                    }
+                    renderFilePanel={
+                      hasFilePanels
+                        ? (attribute, fileId) => (
+                            <ExtensionOutlet
+                              context={{
+                                context_version: 1,
+                                file_id: fileId,
+                                entity_id: entityId,
+                                attribute_id: attribute.id,
+                                blueprint_id: blueprint.data.blueprint.id,
+                                blueprint_version:
+                                  blueprint.data.blueprint.version,
+                              }}
+                              outlet="file_panel"
                               runtimeScope={{
                                 blueprintId: blueprint.data.blueprint.id,
                                 blueprintVersion:

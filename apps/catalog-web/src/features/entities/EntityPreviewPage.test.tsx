@@ -76,6 +76,7 @@ vi.mock('../views/components/EntityView', () => ({
   EntityView: ({
     renderAttributeDecoration,
     renderAttributePanel,
+    renderFilePanel,
   }: {
     renderAttributeDecoration?: (attribute: {
       id: string;
@@ -85,6 +86,10 @@ vi.mock('../views/components/EntityView', () => ({
       id: string;
       code: string;
     }) => React.ReactNode;
+    renderFilePanel?: (
+      attribute: { id: string; code: string },
+      fileId: string,
+    ) => React.ReactNode;
   }) => (
     <>
       {renderAttributeDecoration?.({
@@ -95,6 +100,10 @@ vi.mock('../views/components/EntityView', () => ({
         id: '44444444-4444-4444-8444-444444444444',
         code: 'title',
       })}
+      {renderFilePanel?.(
+        { id: '44444444-4444-4444-8444-444444444444', code: 'file' },
+        '55555555-5555-4555-8555-555555555555',
+      )}
     </>
   ),
 }));
@@ -142,6 +151,7 @@ describe('EntityPreviewPage', () => {
     outletRender.mockClear();
     vi.mocked(getExtensionRuntime).mockResolvedValue([
       { outlet: 'entity_attribute_panel', kind: 'panel' },
+      { outlet: 'file_panel', kind: 'panel' },
     ] as never);
     const { currentSession } = await import('../auth/api');
     const api = await import('./api');
@@ -197,6 +207,21 @@ describe('EntityPreviewPage', () => {
         },
       }),
     );
+    expect(outletRender).toHaveBeenCalledWith({
+      outlet: 'file_panel',
+      context: {
+        context_version: 1,
+        file_id: '55555555-5555-4555-8555-555555555555',
+        entity_id: '00000000-0000-4000-8000-000000000001',
+        attribute_id: '44444444-4444-4444-8444-444444444444',
+        blueprint_id: '22222222-2222-4222-8222-222222222222',
+        blueprint_version: 1,
+      },
+      runtimeScope: {
+        blueprintId: '22222222-2222-4222-8222-222222222222',
+        blueprintVersion: 1,
+      },
+    });
     expect(screen.queryByRole('button', { name: 'Delete entity' })).toBeNull();
     unmount();
 
