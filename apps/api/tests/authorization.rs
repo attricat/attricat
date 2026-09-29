@@ -294,3 +294,107 @@ async fn batched_workspace_permissions_match_per_permission_checks(pool: PgPool)
     assert_eq!(&granted_counts[2..], &[0, 0]);
     server.abort();
 }
+
+/// Agent lists authorize entity-bound items in one batched query; it must
+/// accept exactly the IDs the per-target `is_authorized` check accepts.
+#[sqlx::test]
+async fn batched_entity_authorization_matches_per_target_checks(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let owner = authenticated_client();
+    let definition = |code: &str| {
+        format!(
+            "format_version = 1\ncode = \"{code}\"\nname = \"{code}\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"name\"]\n\n[[attributes]]\ncode = \"name\"\nvalue_type = \"string\"\n"
+        )
+    };
+    let blueprint_a = create_blueprint(&owner, &base_url, &definition("batch_a")).await;
+    let blueprint_b = create_blueprint(&owner, &base_url, &definition("batch_b")).await;
+    let id = |value: &Value| value.as_str().unwrap().parse::<Uuid>().unwrap();
+    let entity_a = id(&create_entity(&owner, &base_url, &blueprint_a).await["id"]);
+    let entity_b = id(&create_entity(&owner, &base_url, &blueprint_b).await["id"]);
+    let missing = Uuid::new_v4();
+    let requested = [entity_a, entity_b, missing];
+
+    let repository = api::repository::CatalogRepository::system(pool.clone());
+    let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
+    let mut principals = vec![BOOTSTRAP_OWNER_ID.parse::<Uuid>().unwrap()];
+    for (email, scope, target, state) in [
+        ("entity-grant@example.test", "entity", entity_a, "active"),
+        (
+            "family-grant@example.test",
+            "blueprint_family",
+            id(&blueprint_b["blueprint"]["id"]),
+            "active",
+        ),
+        (
+            "context-grant@example.test",
+            "context_subtree",
+            "00000000-0000-4000-8000-000000000001".parse().unwrap(),
+            "active",
+        ),
+        (
+            "inactive-grant@example.test",
+            "workspace",
+            workspace_id,
+            "inactive",
+        ),
+    ] {
+        let user_id = Uuid::new_v4();
+        let membership_id = Uuid::new_v4();
+        sqlx::query("INSERT INTO users (id, email) VALUES ($1, $2)")
+            .bind(user_id)
+            .bind(email)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO workspace_memberships (id, workspace_id, user_id, state) VALUES ($1, $2, $3, $4)")
+            .bind(membership_id)
+            .bind(workspace_id)
+            .bind(user_id)
+            .bind(state)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO role_grants (id, workspace_id, membership_id, role_id, scope_type, scope_target_id) VALUES ($1, $2, $3, '00000000-0000-4000-8000-000000000103', $4, $5)")
+            .bind(Uuid::new_v4())
+            .bind(workspace_id)
+            .bind(membership_id)
+            .bind(scope)
+            .bind(target)
+            .execute(&pool)
+            .await
+            .unwrap();
+        principals.push(user_id);
+    }
+
+    let mut accepted = Vec::new();
+    for user_id in principals {
+        let batched = repository
+            .authorized_entity_ids(user_id, workspace_id, "entities.read", &requested)
+            .await
+            .unwrap();
+        for entity_id in requested {
+            let expected = repository
+                .is_authorized(
+                    user_id,
+                    workspace_id,
+                    "entities.read",
+                    Some(entity_id),
+                    None,
+                )
+                .await
+                .unwrap();
+            assert_eq!(
+                batched.contains(&entity_id),
+                expected,
+                "{user_id} {entity_id}"
+            );
+        }
+        accepted.push(batched);
+    }
+    // Workspace grants accept every ID; scoped grants only their own entity.
+    assert_eq!(accepted[0].len(), 3);
+    assert_eq!(accepted[1], [entity_a].into());
+    assert_eq!(accepted[2], [entity_b].into());
+    assert!(accepted[3].is_empty() && accepted[4].is_empty());
+    server.abort();
+}
