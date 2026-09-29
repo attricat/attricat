@@ -53,8 +53,7 @@ use axum::{
     routing::{get, post, put},
 };
 use metrics_exporter_prometheus::PrometheusHandle;
-use serde_json::Value;
-use tokio::sync::{Mutex, Semaphore};
+use tokio::sync::Semaphore;
 use tower_http::services::{ServeDir, ServeFile};
 use tracing::{Instrument, field::Empty};
 use uuid::Uuid;
@@ -98,7 +97,7 @@ pub struct AppState {
     pub devtools_enabled: bool,
 }
 
-pub type DataHealthCache = Arc<Mutex<HashMap<String, (Instant, Value)>>>;
+pub use self::data_health::DataHealthCache;
 
 const TIMING_PHASES: [&str; 4] = ["candidate", "page", "related", "serialize"];
 /// Only Explorer requests publish development SQL and phase breakdowns.
@@ -315,7 +314,9 @@ pub fn router(state: AppState) -> Router {
         )
         .route(
             "/agent/conversations/{conversation_id}/uploads",
-            post(files::upload_conversation),
+            // The handler streams each file to disk and enforces
+            // `max_upload_file_bytes` and `max_upload_files` itself.
+            post(files::upload_conversation).layer(axum::extract::DefaultBodyLimit::disable()),
         )
         .route(
             "/agent/conversations/{conversation_id}/runs",

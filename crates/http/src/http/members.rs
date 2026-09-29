@@ -14,7 +14,7 @@ use super::{
     extractors::{ApiJson, ApiPath},
 };
 use crate::{
-    account::{Password, hash_password, validate_password},
+    account::validate_password,
     repository::{WorkspaceInvitation, WorkspaceMember},
 };
 
@@ -197,8 +197,7 @@ pub(super) async fn complete_onboarding(
 ) -> Result<Response, ApiError> {
     validate_password(&input.password)
         .map_err(|error| ApiError::invalid_input(error.to_string()))?;
-    let password_hash = hash_password(&Password::new(input.password))
-        .map_err(|_| ApiError::internal("could not set password"))?;
+    let password_hash = super::sessions::hash_password(input.password).await?;
     let onboarding = state
         .repository
         .complete_workspace_onboarding(
@@ -238,7 +237,7 @@ pub(super) async fn complete_onboarding(
     .await
 }
 
-fn action_url(base: &str, parameters: &[(&str, &str)]) -> Result<String, ApiError> {
+pub(super) fn action_url(base: &str, parameters: &[(&str, &str)]) -> Result<String, ApiError> {
     let mut url =
         Url::parse(base).map_err(|_| ApiError::internal("workspace action URL is invalid"))?;
     url.query_pairs_mut()

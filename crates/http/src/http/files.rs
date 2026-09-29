@@ -9,7 +9,7 @@ use axum::{
     body::Body,
     extract::{Multipart, State},
     http::{HeaderMap, HeaderValue, StatusCode, header},
-    response::Response,
+    response::{IntoResponse, Response},
 };
 use sha2::{Digest, Sha256};
 use std::{
@@ -129,7 +129,7 @@ pub(super) async fn upload(
         while let Some(field) = multipart
             .next_field()
             .await
-            .map_err(|_| ApiError::invalid_file("multipart body is malformed"))?
+            .map_err(|error| multipart_error(error, "multipart body is malformed"))?
         {
             let name = field.name().unwrap_or_default().to_owned();
             if name == "context_id" {
@@ -142,7 +142,7 @@ pub(super) async fn upload(
                 while let Some(chunk) = field
                     .chunk()
                     .await
-                    .map_err(|_| ApiError::invalid_file("context_id is invalid"))?
+                    .map_err(|error| multipart_error(error, "context_id is invalid"))?
                 {
                     if bytes.len().saturating_add(chunk.len()) > MAX_CONTEXT_ID_BYTES {
                         return Err(ApiError::invalid_file("context_id is invalid"));
@@ -264,7 +264,7 @@ pub(super) async fn upload(
             Ok(result) => {
                 metrics::counter!("catalog_file_uploads_total", "outcome" => "success")
                     .increment(1);
-                invalidate_data_health(&state).await;
+                invalidate_data_health(&state, &repository);
                 Ok((StatusCode::CREATED, Json(result)))
             }
             Err(error) => {
@@ -302,7 +302,7 @@ pub(super) async fn upload_conversation(
     while let Some(field) = multipart
         .next_field()
         .await
-        .map_err(|_| ApiError::invalid_file("multipart body is malformed"))?
+        .map_err(|error| multipart_error(error, "multipart body is malformed"))?
     {
         let name = field.name().unwrap_or_default().to_owned();
         if name != "file" && name != "files" {
@@ -388,7 +388,7 @@ pub(super) async fn upload_conversation(
     match result {
         Ok(files) => {
             metrics::counter!("catalog_file_uploads_total", "outcome" => "success").increment(1);
-            invalidate_data_health(&state).await;
+            invalidate_data_health(&state, &repository);
             Ok((
                 StatusCode::CREATED,
                 Json(serde_json::json!({ "files": files })),
@@ -525,18 +525,26 @@ async fn download(
         }
         // Metadata is database-owned: never trust storage-supplied content types.
         let total = file.byte_size as usize;
-        let range = parse_range(
+        let range = match parse_range(
             headers
                 .get(header::RANGE)
                 .and_then(|value| value.to_str().ok()),
             total,
-        )?;
-        let (status, start, end) = match range {
-            Some((start, end)) => (StatusCode::PARTIAL_CONTENT, start, end),
-            None => (StatusCode::OK, 0, total - 1),
+        ) {
+            Ok(range) => range,
+            Err(error) => {
+                let mut response = error.into_response();
+                response
+                    .headers_mut()
+                    .insert(header::CONTENT_RANGE, unsatisfied_range(total));
+                return Ok(response);
+            }
         };
-        let provider_range =
-            (status == StatusCode::PARTIAL_CONTENT).then(|| format!("bytes={start}-{end}"));
+        let (status, content_length) = match range {
+            Some((start, end)) => (StatusCode::PARTIAL_CONTENT, end - start + 1),
+            None => (StatusCode::OK, total),
+        };
+        let provider_range = range.map(|(start, end)| format!("bytes={start}-{end}"));
         let object = state
             .object_store
             .get_range_stream(&file.object_key, provider_range.as_deref())
@@ -550,7 +558,7 @@ async fn download(
             HeaderValue::from_str(&file.mime_type)
                 .unwrap_or(HeaderValue::from_static("application/octet-stream")),
         );
-        response_headers.insert(header::CONTENT_LENGTH, HeaderValue::from(end - start + 1));
+        response_headers.insert(header::CONTENT_LENGTH, HeaderValue::from(content_length));
         response_headers.insert(header::ACCEPT_RANGES, HeaderValue::from_static("bytes"));
         response_headers.insert(
             header::CACHE_CONTROL,
@@ -564,7 +572,7 @@ async fn download(
             ))
             .expect("sanitized filename is valid"),
         );
-        if status == StatusCode::PARTIAL_CONTENT {
+        if let Some((start, end)) = range {
             response_headers.insert(
                 header::CONTENT_RANGE,
                 HeaderValue::from_str(&format!("bytes {start}-{end}/{total}"))
@@ -578,32 +586,57 @@ async fn download(
     .await
 }
 
+/// Parses a single RFC 9110 byte range. `Ok(None)` means the full
+/// representation is served: no header, a non-`bytes` unit, a multi-range
+/// request (unsupported, so ignored as the RFC permits), or an empty object.
 fn parse_range(value: Option<&str>, total: usize) -> Result<Option<(usize, usize)>, ApiError> {
-    let Some(value) = value else {
+    let Some(range) = value.and_then(|value| value.strip_prefix("bytes=")) else {
         return Ok(None);
     };
-    let Some(range) = value.strip_prefix("bytes=") else {
-        return Err(ApiError::invalid_range());
-    };
-    if range.contains(',') {
-        return Err(ApiError::invalid_range());
+    if range.contains(',') || total == 0 {
+        return Ok(None);
     }
-    let Some((start, end)) = range.split_once('-') else {
+    let Some((start, end)) = range.trim().split_once('-') else {
         return Err(ApiError::invalid_range());
     };
-    let (start, end) = match (start.parse::<usize>(), end) {
-        (Ok(start), "") if start < total => (start, total - 1),
-        (Ok(start), end) if start < total => match end.parse::<usize>() {
-            Ok(end) if end >= start => (start, end.min(total - 1)),
-            _ => return Err(ApiError::invalid_range()),
-        },
-        (Err(_), end) => match end.parse::<usize>() {
+    let range = match (start, end) {
+        ("", suffix) => match suffix.parse::<usize>() {
             Ok(length) if length > 0 => (total.saturating_sub(length), total - 1),
             _ => return Err(ApiError::invalid_range()),
         },
-        _ => return Err(ApiError::invalid_range()),
+        (start, end) => {
+            let start = start
+                .parse::<usize>()
+                .ok()
+                .filter(|start| *start < total)
+                .ok_or_else(ApiError::invalid_range)?;
+            if end.is_empty() {
+                (start, total - 1)
+            } else {
+                match end.parse::<usize>() {
+                    Ok(end) if end >= start => (start, end.min(total - 1)),
+                    _ => return Err(ApiError::invalid_range()),
+                }
+            }
+        }
     };
-    Ok(Some((start, end)))
+    Ok(Some(range))
+}
+
+/// Body-limit breaches surface as multipart stream errors; report them as 413.
+fn multipart_error(
+    error: axum::extract::multipart::MultipartError,
+    message: &'static str,
+) -> ApiError {
+    if error.status() == StatusCode::PAYLOAD_TOO_LARGE {
+        ApiError::payload_too_large()
+    } else {
+        ApiError::invalid_file(message)
+    }
+}
+
+fn unsatisfied_range(total: usize) -> HeaderValue {
+    HeaderValue::from_str(&format!("bytes */{total}")).expect("range is valid")
 }
 
 fn safe_download_name(filename: &str) -> String {
@@ -642,7 +675,7 @@ async fn stage_field(
     while let Some(chunk) = field
         .chunk()
         .await
-        .map_err(|_| ApiError::invalid_file("multipart file stream is malformed"))?
+        .map_err(|error| multipart_error(error, "multipart file stream is malformed"))?
     {
         size = size.saturating_add(chunk.len() as u64);
         if size > max_bytes {
@@ -783,6 +816,35 @@ fn storage_error(error: ObjectStoreError) -> ApiError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn byte_ranges_follow_rfc_9110() {
+        let range = |value| parse_range(Some(value), 10).map_err(|error| error.status());
+        assert_eq!(parse_range(None, 10).unwrap(), None);
+        assert_eq!(range("bytes=2-4"), Ok(Some((2, 4))));
+        assert_eq!(range("bytes=2-"), Ok(Some((2, 9))));
+        assert_eq!(range("bytes=5-99"), Ok(Some((5, 9))));
+        assert_eq!(range("bytes=-3"), Ok(Some((7, 9))));
+        assert_eq!(range("bytes=-99"), Ok(Some((0, 9))));
+        // Unsupported forms are ignored and the full representation served.
+        assert_eq!(range("items=0-1"), Ok(None));
+        assert_eq!(range("bytes=0-1,4-5"), Ok(None));
+        for unsatisfiable in [
+            "bytes=10-",
+            "bytes=4-2",
+            "bytes=-0",
+            "bytes=abc-5",
+            "bytes=5",
+        ] {
+            assert_eq!(
+                range(unsatisfiable),
+                Err(StatusCode::RANGE_NOT_SATISFIABLE),
+                "{unsatisfiable}"
+            );
+        }
+        assert_eq!(parse_range(Some("bytes=0-"), 0).unwrap(), None);
+    }
+
     fn policy() -> FilePolicy {
         FilePolicy {
             cardinality: "many".to_owned(),

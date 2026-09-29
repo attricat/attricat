@@ -40,6 +40,9 @@ fn map_search_error(error: RepositoryError) -> ApiError {
         RepositoryError::RelationshipSearchTimedOut => {
             ApiError::global_relationship_search_timed_out()
         }
+        // Infrastructure failures are server errors; their text (SQL, pool
+        // state) must never be echoed to the client as a query problem.
+        error @ (RepositoryError::Database(_) | RepositoryError::Task(_)) => error.into(),
         error => ApiError::invalid_search_query(error.to_string()),
     }
 }

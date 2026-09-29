@@ -14,6 +14,10 @@ pub(super) struct ApiError {
     message: String,
 }
 impl ApiError {
+    #[cfg(test)]
+    pub(super) fn status(&self) -> StatusCode {
+        self.status
+    }
     pub(super) fn unauthenticated() -> Self {
         Self {
             status: StatusCode::UNAUTHORIZED,

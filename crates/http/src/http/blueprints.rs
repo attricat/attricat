@@ -30,7 +30,7 @@ pub(super) async fn create_blueprint(
     let blueprint = CatalogMutationService::new(&repository)
         .create_blueprint(input)
         .await?;
-    invalidate_data_health(&state).await;
+    invalidate_data_health(&state, &repository);
     Ok((StatusCode::CREATED, Json(blueprint)))
 }
 pub(super) async fn list_entity_blueprints(
@@ -59,7 +59,7 @@ pub(super) async fn create_blueprint_revision(
     let blueprint = CatalogMutationService::new(&repository)
         .create_blueprint_revision(blueprint_id, input)
         .await?;
-    invalidate_data_health(&state).await;
+    invalidate_data_health(&state, &repository);
     Ok((StatusCode::CREATED, Json(blueprint)))
 }
 pub(super) async fn list_blueprint_revisions(
@@ -132,7 +132,7 @@ pub(super) async fn start_safe_blueprint_migration_batch(
                 .and_then(|Json(input)| input.removal_disposition.as_deref()),
         )
         .await?;
-    invalidate_data_health(&state).await;
+    invalidate_data_health(&state, &repository);
     Ok((StatusCode::ACCEPTED, Json(batch)))
 }
 
@@ -144,7 +144,7 @@ pub(super) async fn publish_blueprint_revision(
     let blueprint = CatalogMutationService::new(&repository)
         .publish_blueprint_revision(blueprint_id, version)
         .await?;
-    invalidate_data_health(&state).await;
+    invalidate_data_health(&state, &repository);
     Ok(Json(blueprint))
 }
 pub(super) async fn publish_blueprint_entities(
@@ -156,7 +156,7 @@ pub(super) async fn publish_blueprint_entities(
     let summary = CatalogMutationService::new(&repository)
         .publish_blueprint_entities(blueprint_id, version, Some(input.context_id))
         .await?;
-    invalidate_data_health(&state).await;
+    invalidate_data_health(&state, &repository);
     Ok(Json(summary))
 }
 
@@ -168,7 +168,7 @@ pub(super) async fn publish_blueprint_entities_all_channels(
     let summary = CatalogMutationService::new(&repository)
         .publish_blueprint_entities(blueprint_id, version, None)
         .await?;
-    invalidate_data_health(&state).await;
+    invalidate_data_health(&state, &repository);
     Ok(Json(summary))
 }
 

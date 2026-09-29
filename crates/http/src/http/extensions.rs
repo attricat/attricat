@@ -20,7 +20,7 @@ use super::{
 };
 use crate::{
     constants::DEFAULT_LIST_PAGE_SIZE,
-    extension_installer::ExtensionInstaller,
+    extension_installer::{ExtensionInstallError, ExtensionInstaller},
     extension_registry::{DiscoveredRelease, GitHubRepository},
     extensions::{
         ExtensionPackage, MAX_EXTENSION_IDENTIFIER_BYTES, UiContributionKind, UiOutlet,
@@ -346,6 +346,22 @@ pub(super) enum StorageResponse {
     Page(StoragePageResponse),
 }
 
+/// Only package validation failures are the client's fault; storage and
+/// repository failures keep their own status and never expose internals.
+fn install_error(error: ExtensionInstallError) -> ApiError {
+    match error {
+        ExtensionInstallError::Package(_) => ApiError::invalid_input(error.to_string()),
+        ExtensionInstallError::Storage(
+            ObjectStoreError::Unavailable | ObjectStoreError::TimedOut(_),
+        ) => ApiError::service_unavailable("extension artifact storage is unavailable"),
+        ExtensionInstallError::Storage(error) => {
+            tracing::error!(%error, "extension artifact staging failed");
+            ApiError::internal("extension artifact staging failed")
+        }
+        ExtensionInstallError::Repository(error) => error.into(),
+    }
+}
+
 fn storage_error(error: ExtensionStorageError) -> ApiError {
     match error {
         ExtensionStorageError::Denied => ApiError::forbidden(),
@@ -505,7 +521,7 @@ pub(super) async fn sideload(
     let installation = ExtensionInstaller::new(repository, state.object_store.clone())
         .install("sideload", &archive)
         .await
-        .map_err(|error| ApiError::invalid_input(error.to_string()))?;
+        .map_err(install_error)?;
     Ok((StatusCode::CREATED, Json(installation.into())))
 }
 
@@ -524,7 +540,7 @@ pub(super) async fn install(
     let installation = ExtensionInstaller::new(repository, state.object_store.clone())
         .install(&source, &archive)
         .await
-        .map_err(|error| ApiError::invalid_input(error.to_string()))?;
+        .map_err(install_error)?;
     Ok((StatusCode::CREATED, Json(installation.into())))
 }
 pub(super) async fn upgrade(
@@ -553,7 +569,7 @@ pub(super) async fn upgrade(
     let installation = ExtensionInstaller::new(repository, state.object_store.clone())
         .upgrade(&source, &archive)
         .await
-        .map_err(|error| ApiError::invalid_input(error.to_string()))?;
+        .map_err(install_error)?;
     Ok(Json(installation.into()))
 }
 pub(super) async fn configure(
@@ -1086,6 +1102,16 @@ pub(super) async fn download_operation_artifact(
     headers.insert(
         header::X_CONTENT_TYPE_OPTIONS,
         HeaderValue::from_static("nosniff"),
+    );
+    // The media type is extension-controlled. Never let a browser render an
+    // artifact (e.g. `text/html` or SVG) as active content on the API origin.
+    headers.insert(
+        header::CONTENT_DISPOSITION,
+        HeaderValue::from_static("attachment"),
+    );
+    headers.insert(
+        header::CONTENT_SECURITY_POLICY,
+        HeaderValue::from_static("sandbox; default-src 'none'"),
     );
     Ok(response)
 }

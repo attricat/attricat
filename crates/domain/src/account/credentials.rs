@@ -9,6 +9,9 @@ use secrecy::{ExposeSecret, SecretString};
 use thiserror::Error;
 
 pub const MINIMUM_PASSWORD_LENGTH: usize = 5;
+/// Bounds the input to the deliberately expensive hash. Measured in bytes so
+/// the limit tracks the work actually performed.
+pub const MAXIMUM_PASSWORD_BYTES: usize = 1024;
 
 /// A plaintext password that cannot be formatted or serialized accidentally.
 pub struct Password(SecretString);
@@ -53,6 +56,9 @@ pub fn validate_password(value: &str) -> Result<(), PasswordPolicyError> {
     if value.chars().count() < MINIMUM_PASSWORD_LENGTH {
         return Err(PasswordPolicyError::TooShort);
     }
+    if value.len() > MAXIMUM_PASSWORD_BYTES {
+        return Err(PasswordPolicyError::TooLong);
+    }
     if !value.chars().any(char::is_alphabetic) {
         return Err(PasswordPolicyError::MissingLetter);
     }
@@ -72,6 +78,8 @@ pub fn validate_password(value: &str) -> Result<(), PasswordPolicyError> {
 pub enum PasswordPolicyError {
     #[error("password must be at least {MINIMUM_PASSWORD_LENGTH} characters")]
     TooShort,
+    #[error("password must be at most {MAXIMUM_PASSWORD_BYTES} bytes")]
+    TooLong,
     #[error("password must include at least one letter")]
     MissingLetter,
     #[error("password must include at least one number")]
@@ -116,6 +124,10 @@ mod tests {
     #[test]
     fn password_policy_requires_length_and_character_classes() {
         assert_eq!(validate_password("a1!"), Err(PasswordPolicyError::TooShort));
+        assert_eq!(
+            validate_password(&format!("a1!{}", "x".repeat(MAXIMUM_PASSWORD_BYTES))),
+            Err(PasswordPolicyError::TooLong)
+        );
         assert_eq!(
             validate_password("1234!"),
             Err(PasswordPolicyError::MissingLetter)
