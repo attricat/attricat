@@ -83,6 +83,47 @@ const renderOutlet = () => {
 beforeEach(() => vi.clearAllMocks());
 
 describe('ExtensionOutlet', () => {
+  it('mounts only read-only blueprint panels with a strict revision context', async () => {
+    vi.mocked(getExtensionRuntime).mockResolvedValue([
+      {
+        ...contribution,
+        id: 'blueprint-panel',
+        kind: 'panel',
+        outlet: 'blueprint_panel',
+      },
+      {
+        ...contribution,
+        id: 'wrong-kind',
+        kind: 'action',
+        outlet: 'blueprint_panel',
+      },
+    ]);
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const context = {
+      context_version: 1,
+      blueprint_id: '22222222-2222-4222-8222-222222222222',
+      blueprint_version: 1,
+    };
+    const { rerender } = render(
+      <QueryClientProvider client={queryClient}>
+        <ExtensionOutlet outlet="blueprint_panel" context={context} />
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText('blueprint-panel')).toBeTruthy();
+    expect(screen.queryByText('wrong-kind')).toBeNull();
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <ExtensionOutlet
+          outlet="blueprint_panel"
+          context={{ ...context, unrelated: 'private' }}
+        />
+      </QueryClientProvider>,
+    );
+    expect(screen.queryByText('blueprint-panel')).toBeNull();
+  });
+
   it('mounts only action contributions with a valid entity header context', async () => {
     vi.mocked(getExtensionRuntime).mockResolvedValue([
       { ...contribution, id: 'header-action', outlet: 'entity_header_action' },

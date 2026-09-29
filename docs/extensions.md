@@ -645,9 +645,15 @@ contextual actions—not an application-wide navigation tree.
   `context_version: 1`, making it suitable for blueprint-level status,
   validation results, or documentation.
 
+- **`blueprint_panel`** (`panel`, requiring `client.blueprint_panel`) is a
+  read-only panel in the blueprint page summary, outside the revision metadata
+  tab. Its strict v1 context contains `context_version: 1`, `blueprint_id`,
+  and `blueprint_version`. Unlike `blueprint_detail_panel`, it stays visible
+  when switching between detail tabs.
+
 The manifest also recognizes `explorer_action`, `explorer_bulk_action`,
-`entity_attribute_panel`, `blueprint_panel`, `blueprint_publish_check`,
-`file_panel`, `audit_event_panel`, and `data_health_card`. These eight
+`entity_attribute_panel`, `blueprint_publish_check`, `file_panel`,
+`audit_event_panel`, and `data_health_card`. These seven
 placements are **not mounted by the current web client**; do not depend on
 runtime display until host-owned contexts and placements are implemented.
 

@@ -37,7 +37,8 @@ type Outlet =
   | 'entity_action'
   | 'entity_header_action'
   | 'explorer_row_action'
-  | 'blueprint_detail_panel';
+  | 'blueprint_detail_panel'
+  | 'blueprint_panel';
 
 const contributionKey = (contribution: ExtensionContribution) =>
   `${contribution.extension_id}:${contribution.id}:${contribution.release_id}`;
@@ -61,6 +62,7 @@ const outletPolicies = {
   },
   explorer_row_action: { kind: 'popover' },
   blueprint_detail_panel: { kind: 'panel', visibleCapacity: 3 },
+  blueprint_panel: { kind: 'panel', visibleCapacity: 3 },
 } as const;
 
 const supportsOutlet = (contribution: ExtensionContribution, outlet: Outlet) =>
@@ -71,7 +73,8 @@ const supportsOutlet = (contribution: ExtensionContribution, outlet: Outlet) =>
       contribution.kind === 'navigation' &&
       contribution.route !== null) ||
     (outlet === 'explorer_row_action' && contribution.kind === 'action') ||
-    (outlet === 'blueprint_detail_panel' && contribution.kind === 'panel'));
+    ((outlet === 'blueprint_detail_panel' || outlet === 'blueprint_panel') &&
+      contribution.kind === 'panel'));
 
 const ExtensionNavigationItem = ({
   contribution,
@@ -137,6 +140,13 @@ const outletContextSchemas = {
       blueprint_version: z.number().int().positive(),
       context_version: z.literal(1),
       entity_id: z.uuid(),
+    })
+    .strict(),
+  blueprint_panel: z
+    .object({
+      blueprint_id: z.uuid(),
+      blueprint_version: z.number().int().positive(),
+      context_version: z.literal(1),
     })
     .strict(),
   blueprint_detail_panel: z

@@ -314,6 +314,16 @@ export const BlueprintDetailPage = ({
               {t('blueprints.automaticMigrationUnavailable')}
             </Alert>
           )}
+          <Box component="aside" sx={{ mt: 3 }}>
+            <ExtensionOutlet
+              context={{
+                context_version: 1,
+                blueprint_id: blueprint.id,
+                blueprint_version: blueprint.version,
+              }}
+              outlet="blueprint_panel"
+            />
+          </Box>
           <Tabs
             allowScrollButtonsMobile
             onChange={(_, value: number) => setPageTab(value)}
