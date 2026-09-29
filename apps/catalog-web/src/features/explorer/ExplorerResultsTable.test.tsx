@@ -38,8 +38,13 @@ vi.mock('../extensions/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../extensions/api')>()),
   getExtensionRuntime: vi.fn().mockResolvedValue({ contributions: [] }),
 }));
+const { outletMount } = vi.hoisted(() => ({ outletMount: vi.fn() }));
 vi.mock('../extensions/ExtensionOutlet', () => ({
   ExtensionPopoverOutlet: () => null,
+  ExtensionOutlet: (props: unknown) => {
+    outletMount(props);
+    return null;
+  },
 }));
 vi.mock('../agents/api', () => ({
   createConversation: vi.fn(),
@@ -86,6 +91,7 @@ const renderTable = (
   onSortChange = vi.fn(),
   sort?: { field: string; direction: 'asc' | 'desc' },
   publicationSortAvailable = true,
+  showExplorerActions = true,
 ) => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
@@ -110,6 +116,7 @@ const renderTable = (
           publicationContextCode="default"
           publicationContextId={undefined}
           publicationSortAvailable={publicationSortAvailable}
+          showExplorerActions={showExplorerActions}
           totalCount={items.length}
           totalCountCapped={false}
         />
@@ -119,10 +126,31 @@ const renderTable = (
 };
 
 describe('ExplorerResultsTable', () => {
+  it('offers revision-scoped Explorer actions only for single-version results', () => {
+    outletMount.mockClear();
+    renderTable([item], false, vi.fn(), undefined, true, false);
+    expect(outletMount).not.toHaveBeenCalled();
+    renderTable([item]);
+    expect(outletMount).toHaveBeenCalledWith({
+      outlet: 'explorer_action',
+      context: {
+        context_version: 1,
+        blueprint_id: blueprint.blueprint.id,
+        blueprint_version: blueprint.blueprint.version,
+      },
+      runtimeScope: {
+        blueprintId: blueprint.blueprint.id,
+        blueprintVersion: blueprint.blueprint.version,
+      },
+    });
+  });
+
   it('sorts publication status for the selected channel', async () => {
     const onSortChange = vi.fn();
     renderTable([item], false, onSortChange);
-    await userEvent.setup().click(screen.getByRole('button', { name: /Publication/ }));
+    await userEvent
+      .setup()
+      .click(screen.getByRole('button', { name: /Publication/ }));
     expect(onSortChange).toHaveBeenCalledWith('publication_status');
   });
 
@@ -133,7 +161,10 @@ describe('ExplorerResultsTable', () => {
 
   it('offers a sortable schema header even without configured table columns', async () => {
     const onSortChange = vi.fn();
-    renderTable([item], false, onSortChange, { field: 'blueprint_version', direction: 'asc' });
+    renderTable([item], false, onSortChange, {
+      field: 'blueprint_version',
+      direction: 'asc',
+    });
     const header = screen.getByRole('button', { name: /Schema/ });
     expect(header.getAttribute('aria-sort')).toBeNull();
     await userEvent.setup().click(header);

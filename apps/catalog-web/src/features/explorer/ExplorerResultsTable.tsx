@@ -35,6 +35,7 @@ import { DeleteEntityDialog } from '../entities/components/DeleteEntityDialog';
 import { getExtensionRuntime } from '../extensions/api';
 import { extensionQueryKeys } from '../extensions/queryKeys';
 import { extensionRuntimeRefetchInterval } from '../extensions/constants';
+import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
 import { EntityActionsMenu } from './EntityActionsMenu';
 import { ExplorerColumnPreferencesDialog } from './ExplorerColumnPreferencesDialog';
 import { ExplorerResultsToolbar } from './ExplorerResultsToolbar';
@@ -69,6 +70,7 @@ export const ExplorerResultsTable = ({
   canPublish,
   canDelete,
   relationshipSortAvailable = true,
+  showExplorerActions = false,
   sort,
   totalCount,
   totalCountCapped,
@@ -86,6 +88,7 @@ export const ExplorerResultsTable = ({
   canPublish: boolean;
   canDelete: boolean;
   relationshipSortAvailable?: boolean;
+  showExplorerActions?: boolean;
   sort?: { field: string; direction: 'asc' | 'desc' };
   totalCount: number | null;
   totalCountCapped: boolean;
@@ -317,6 +320,20 @@ export const ExplorerResultsTable = ({
         onToggleSelection={selection.toggleSelectionMode}
         onOpenColumnPreferences={() => setColumnPreferencesOpen(true)}
       />
+      {showExplorerActions && (
+        <ExtensionOutlet
+          context={{
+            context_version: 1,
+            blueprint_id: blueprint.blueprint.id,
+            blueprint_version: blueprint.blueprint.version,
+          }}
+          outlet="explorer_action"
+          runtimeScope={{
+            blueprintId: blueprint.blueprint.id,
+            blueprintVersion: blueprint.blueprint.version,
+          }}
+        />
+      )}
       <VirtualizedExplorerTable
         table={table}
         columnsLength={columns.length}

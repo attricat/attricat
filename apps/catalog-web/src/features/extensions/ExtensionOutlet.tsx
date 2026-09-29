@@ -39,7 +39,8 @@ type Outlet =
   | 'explorer_row_action'
   | 'blueprint_detail_panel'
   | 'blueprint_panel'
-  | 'audit_event_panel';
+  | 'audit_event_panel'
+  | 'explorer_action';
 
 const contributionKey = (contribution: ExtensionContribution) =>
   `${contribution.extension_id}:${contribution.id}:${contribution.release_id}`;
@@ -65,12 +66,18 @@ const outletPolicies = {
   blueprint_detail_panel: { kind: 'panel', visibleCapacity: 3 },
   blueprint_panel: { kind: 'panel', visibleCapacity: 3 },
   audit_event_panel: { kind: 'panel', visibleCapacity: 3 },
+  explorer_action: {
+    kind: 'actionBar',
+    primaryCapacity: 1,
+    secondaryCapacity: 3,
+  },
 } as const;
 
 const supportsOutlet = (contribution: ExtensionContribution, outlet: Outlet) =>
   contribution.outlet === outlet &&
   (contribution.kind === 'embedded' ||
-    (outlet === 'entity_header_action' && contribution.kind === 'action') ||
+    ((outlet === 'entity_header_action' || outlet === 'explorer_action') &&
+      contribution.kind === 'action') ||
     (outlet === 'navigation' &&
       contribution.kind === 'navigation' &&
       contribution.route !== null) ||
@@ -130,6 +137,13 @@ const OutletContribution = ({
 // New outlet contexts are deliberately small, strict, and versioned. They are
 // the only page data an extension frame receives for these surfaces.
 const outletContextSchemas = {
+  explorer_action: z
+    .object({
+      context_version: z.literal(1),
+      blueprint_id: z.uuid(),
+      blueprint_version: z.number().int().positive(),
+    })
+    .strict(),
   audit_event_panel: z
     .object({
       context_version: z.literal(1),

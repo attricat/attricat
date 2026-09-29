@@ -657,9 +657,17 @@ contextual actions—not an application-wide navigation tree.
   details, and target values are never passed to the frame. The panel is
   read-only and cannot invoke extension commands.
 
-The manifest also recognizes `explorer_action`, `explorer_bulk_action`,
+- **`explorer_action`** (`action`, requiring `client.explorer_action`)
+  appears between the Explorer result toolbar and table when results are scoped
+  to one blueprint revision. Its strict v1 context contains only
+  `context_version: 1`, `blueprint_id`, and `blueprint_version`; it does not
+  expose search filters, selections, or entity rows. The host shows one
+  primary and three secondary actions before overflow. Mutations still need
+  separately declared `client.commands`.
+
+The manifest also recognizes `explorer_bulk_action`,
 `entity_attribute_panel`, `blueprint_publish_check`, `file_panel`,
-and `data_health_card`. These six
+and `data_health_card`. These five
 placements are **not mounted by the current web client**; do not depend on
 runtime display until host-owned contexts and placements are implemented.
 

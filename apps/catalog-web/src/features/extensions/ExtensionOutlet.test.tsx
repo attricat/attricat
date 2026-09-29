@@ -83,6 +83,47 @@ const renderOutlet = () => {
 beforeEach(() => vi.clearAllMocks());
 
 describe('ExtensionOutlet', () => {
+  it('mounts only Explorer actions for a strict blueprint revision context', async () => {
+    vi.mocked(getExtensionRuntime).mockResolvedValue([
+      {
+        ...contribution,
+        id: 'explorer-action',
+        kind: 'action',
+        outlet: 'explorer_action',
+      },
+      {
+        ...contribution,
+        id: 'wrong-kind',
+        kind: 'panel',
+        outlet: 'explorer_action',
+      },
+    ]);
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const context = {
+      context_version: 1,
+      blueprint_id: '22222222-2222-4222-8222-222222222222',
+      blueprint_version: 1,
+    };
+    const { rerender } = render(
+      <QueryClientProvider client={queryClient}>
+        <ExtensionOutlet outlet="explorer_action" context={context} />
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText('explorer-action')).toBeTruthy();
+    expect(screen.queryByText('wrong-kind')).toBeNull();
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <ExtensionOutlet
+          outlet="explorer_action"
+          context={{ ...context, query: 'private' }}
+        />
+      </QueryClientProvider>,
+    );
+    expect(screen.queryByText('explorer-action')).toBeNull();
+  });
+
   it('mounts only audit panels with an event ID and no event payload', async () => {
     vi.mocked(getExtensionRuntime).mockResolvedValue([
       {

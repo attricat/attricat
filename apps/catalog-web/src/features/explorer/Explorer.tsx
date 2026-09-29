@@ -158,12 +158,14 @@ export const Explorer = ({
     queryKey: exportQueryKeys.channels(),
     queryFn: listPublicationChannels,
   });
-  const publicationSortAvailable = channels.data?.some(
-    (channel) => channel.context_code === facetContextCode && channel.enabled,
-  ) ?? false;
-  const requestSort = search.sort?.field === 'publication_status'
-    ? { ...search.sort, context_code: facetContextCode }
-    : search.sort;
+  const publicationSortAvailable =
+    channels.data?.some(
+      (channel) => channel.context_code === facetContextCode && channel.enabled,
+    ) ?? false;
+  const requestSort =
+    search.sort?.field === 'publication_status'
+      ? { ...search.sort, context_code: facetContextCode }
+      : search.sort;
   const relationshipPathFields = [
     ...relationshipFields,
     ...(search.relationshipFacets ?? []).flatMap(
@@ -601,6 +603,11 @@ export const Explorer = ({
                   relationshipSortAvailable={
                     !search.allVersions ||
                     resultPages[0]?.result_version_scope.kind === 'single'
+                  }
+                  showExplorerActions={
+                    resultPages[0]?.result_version_scope.kind === 'single' &&
+                    resultPages[0].result_version_scope.version ===
+                      resultBlueprint.blueprint.version
                   }
                   onSortChange={(field) => {
                     const direction =
