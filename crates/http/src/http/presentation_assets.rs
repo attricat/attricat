@@ -1,7 +1,7 @@
 use axum::{
     Json,
     body::Body,
-    extract::{Query, State},
+    extract::State,
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::Response,
 };
@@ -9,7 +9,12 @@ use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
-use super::{AppState, auth::ScopedRepository, error::ApiError, extractors::ApiPath};
+use super::{
+    AppState,
+    auth::ScopedRepository,
+    error::ApiError,
+    extractors::{ApiPath, ApiQuery},
+};
 use crate::{
     repository::{MAX_PRESENTATION_ASSET_PAGE_SIZE, PresentationAsset},
     storage::{ObjectStoreError, get_object_for_integrity},
@@ -39,7 +44,7 @@ fn private_cache_headers() -> HeaderMap {
 
 pub(super) async fn list(
     ScopedRepository(repository): ScopedRepository,
-    Query(query): Query<ListQuery>,
+    ApiQuery(query): ApiQuery<ListQuery>,
 ) -> Result<(HeaderMap, Json<Vec<PresentationAsset>>), ApiError> {
     if !(1..=MAX_PRESENTATION_ASSET_PAGE_SIZE).contains(&query.limit)
         || !(0..=10_000).contains(&query.offset)
@@ -100,15 +105,14 @@ pub(super) async fn content(
     let headers = response.headers_mut();
     headers.insert(
         header::CONTENT_TYPE,
-        HeaderValue::from_str(&asset.media_type).expect("stored media type"),
+        HeaderValue::from_str(&asset.media_type)
+            .map_err(|_| ApiError::internal("stored presentation asset media type is invalid"))?,
     );
-    headers.insert(
-        header::CONTENT_LENGTH,
-        HeaderValue::from_str(&asset.byte_size.to_string()).expect("stored size"),
-    );
+    headers.insert(header::CONTENT_LENGTH, HeaderValue::from(asset.byte_size));
     headers.insert(
         header::ETAG,
-        HeaderValue::from_str(&format!("\"{}\"", asset.sha256)).expect("stored digest"),
+        HeaderValue::from_str(&format!("\"{}\"", asset.sha256))
+            .map_err(|_| ApiError::internal("stored presentation asset digest is invalid"))?,
     );
     headers.insert(
         header::CONTENT_DISPOSITION,

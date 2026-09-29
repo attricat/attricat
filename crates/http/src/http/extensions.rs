@@ -3,7 +3,7 @@ use std::str::FromStr;
 use axum::{
     Json,
     body::Body,
-    extract::{Path, Query, State},
+    extract::State,
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::Response,
 };
@@ -12,7 +12,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use super::{AppState, auth::ScopedRepository, error::ApiError, extractors::ApiJson};
+use super::{
+    AppState,
+    auth::ScopedRepository,
+    error::ApiError,
+    extractors::{ApiJson, ApiPath, ApiQuery},
+};
 use crate::{
     constants::DEFAULT_LIST_PAGE_SIZE,
     extension_installer::ExtensionInstaller,
@@ -25,7 +30,7 @@ use crate::{
         BlueprintConnectorJob, CreateExtensionOperationSchedule, ExtensionGrant,
         ExtensionHttpDelivery, ExtensionInstallation, ExtensionLifecycleRecord,
         ExtensionOperationArtifact, ExtensionOperationRun, ExtensionOperationSchedule,
-        ExtensionStorageError, InstalledExtension, StartExtensionOperation,
+        ExtensionStorageEntry, ExtensionStorageError, InstalledExtension, StartExtensionOperation,
     },
     storage::ObjectStoreError,
 };
@@ -312,15 +317,33 @@ pub(super) enum StorageRequest {
 }
 
 #[derive(Serialize)]
-struct StorageEntryResponse {
+pub(super) struct StorageEntryResponse {
     key: String,
     value: Value,
     revision: i64,
 }
+impl From<ExtensionStorageEntry> for StorageEntryResponse {
+    fn from(entry: ExtensionStorageEntry) -> Self {
+        Self {
+            key: entry.key,
+            value: entry.value,
+            revision: entry.revision,
+        }
+    }
+}
 #[derive(Serialize)]
-struct StoragePageResponse {
+pub(super) struct StoragePageResponse {
     entries: Vec<StorageEntryResponse>,
     cursor: Option<String>,
+}
+/// One response shape per storage operation; `Deleted` serializes as `null`.
+#[derive(Serialize)]
+#[serde(untagged)]
+pub(super) enum StorageResponse {
+    Entry(Option<StorageEntryResponse>),
+    Revision { revision: i64 },
+    Deleted(()),
+    Page(StoragePageResponse),
 }
 
 fn storage_error(error: ExtensionStorageError) -> ApiError {
@@ -371,7 +394,7 @@ pub(super) async fn list_workspace_secrets(
 }
 pub(super) async fn put_workspace_secret(
     ScopedRepository(repository): ScopedRepository,
-    Path(name): Path<String>,
+    ApiPath(name): ApiPath<String>,
     ApiJson(input): ApiJson<WorkspaceSecretRequest>,
 ) -> Result<StatusCode, ApiError> {
     repository
@@ -381,7 +404,7 @@ pub(super) async fn put_workspace_secret(
 }
 pub(super) async fn delete_workspace_secret(
     ScopedRepository(repository): ScopedRepository,
-    Path(name): Path<String>,
+    ApiPath(name): ApiPath<String>,
 ) -> Result<StatusCode, ApiError> {
     if repository.delete_workspace_extension_secret(&name).await? {
         Ok(StatusCode::NO_CONTENT)
@@ -404,7 +427,7 @@ pub(super) async fn list(
 }
 pub(super) async fn detail(
     ScopedRepository(repository): ScopedRepository,
-    Path(extension_id): Path<String>,
+    ApiPath(extension_id): ApiPath<String>,
 ) -> Result<Json<ExtensionDetailResponse>, ApiError> {
     let installation = repository.installed_extension(&extension_id).await?;
     let grants = repository.extension_grants(&extension_id).await?;
@@ -507,7 +530,7 @@ pub(super) async fn install(
 pub(super) async fn upgrade(
     State(state): State<AppState>,
     ScopedRepository(repository): ScopedRepository,
-    Path(extension_id): Path<String>,
+    ApiPath(extension_id): ApiPath<String>,
     ApiJson(input): ApiJson<ReleaseRequest>,
 ) -> Result<Json<InstallationResponse>, ApiError> {
     let release = selected_release(&state, &repository, &input).await?;
@@ -535,7 +558,7 @@ pub(super) async fn upgrade(
 }
 pub(super) async fn configure(
     ScopedRepository(repository): ScopedRepository,
-    Path(extension_id): Path<String>,
+    ApiPath(extension_id): ApiPath<String>,
     ApiJson(input): ApiJson<ConfigurationRequest>,
 ) -> Result<Json<InstallationResponse>, ApiError> {
     Ok(Json(
@@ -547,7 +570,7 @@ pub(super) async fn configure(
 }
 pub(super) async fn grant(
     ScopedRepository(repository): ScopedRepository,
-    Path(extension_id): Path<String>,
+    ApiPath(extension_id): ApiPath<String>,
     ApiJson(input): ApiJson<GrantRequest>,
 ) -> Result<StatusCode, ApiError> {
     repository
@@ -557,7 +580,7 @@ pub(super) async fn grant(
 }
 pub(super) async fn revoke(
     ScopedRepository(repository): ScopedRepository,
-    Path((extension_id, grant_kind, grant_id)): Path<(String, String, String)>,
+    ApiPath((extension_id, grant_kind, grant_id)): ApiPath<(String, String, String)>,
 ) -> Result<StatusCode, ApiError> {
     repository
         .revoke_extension_grant(&extension_id, &grant_kind, &grant_id)
@@ -566,7 +589,7 @@ pub(super) async fn revoke(
 }
 pub(super) async fn enable(
     ScopedRepository(repository): ScopedRepository,
-    Path(extension_id): Path<String>,
+    ApiPath(extension_id): ApiPath<String>,
 ) -> Result<Json<InstallationResponse>, ApiError> {
     Ok(Json(
         repository.enable_extension(&extension_id).await?.into(),
@@ -574,7 +597,7 @@ pub(super) async fn enable(
 }
 pub(super) async fn disable(
     ScopedRepository(repository): ScopedRepository,
-    Path(extension_id): Path<String>,
+    ApiPath(extension_id): ApiPath<String>,
 ) -> Result<Json<InstallationResponse>, ApiError> {
     Ok(Json(
         repository.disable_extension(&extension_id).await?.into(),
@@ -582,7 +605,7 @@ pub(super) async fn disable(
 }
 pub(super) async fn quarantine(
     ScopedRepository(repository): ScopedRepository,
-    Path(extension_id): Path<String>,
+    ApiPath(extension_id): ApiPath<String>,
     ApiJson(input): ApiJson<QuarantineRequest>,
 ) -> Result<Json<InstallationResponse>, ApiError> {
     Ok(Json(
@@ -594,7 +617,7 @@ pub(super) async fn quarantine(
 }
 pub(super) async fn remove(
     ScopedRepository(repository): ScopedRepository,
-    Path(extension_id): Path<String>,
+    ApiPath(extension_id): ApiPath<String>,
 ) -> Result<StatusCode, ApiError> {
     repository.remove_extension(&extension_id).await?;
     Ok(StatusCode::NO_CONTENT)
@@ -604,7 +627,7 @@ pub(super) async fn remove(
 /// endpoint; operator projections intentionally never return that input.
 pub(super) async fn start_operation(
     ScopedRepository(repository): ScopedRepository,
-    Path(extension_id): Path<String>,
+    ApiPath(extension_id): ApiPath<String>,
     ApiJson(input): ApiJson<StartOperationRequest>,
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
     if input.operation_id.len() > MAX_EXTENSION_IDENTIFIER_BYTES {
@@ -653,7 +676,7 @@ pub(super) async fn start_operation(
 
 pub(super) async fn create_operation_schedule(
     ScopedRepository(repository): ScopedRepository,
-    Path(extension_id): Path<String>,
+    ApiPath(extension_id): ApiPath<String>,
     ApiJson(input): ApiJson<CreateScheduleRequest>,
 ) -> Result<(StatusCode, Json<ExtensionOperationSchedule>), ApiError> {
     let release = repository
@@ -682,7 +705,7 @@ pub(super) struct RunConnectorJobRequest {
 
 pub(super) async fn list_blueprint_connector_jobs(
     ScopedRepository(repository): ScopedRepository,
-    Path(blueprint_id): Path<Uuid>,
+    ApiPath(blueprint_id): ApiPath<Uuid>,
 ) -> Result<Json<Vec<BlueprintConnectorJob>>, ApiError> {
     Ok(Json(
         repository
@@ -693,7 +716,7 @@ pub(super) async fn list_blueprint_connector_jobs(
 
 pub(super) async fn run_blueprint_connector_job(
     ScopedRepository(repository): ScopedRepository,
-    Path(id): Path<Uuid>,
+    ApiPath(id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<RunConnectorJobRequest>,
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
     let runs = repository
@@ -710,7 +733,7 @@ pub(super) async fn list_operation_schedules(
 
 pub(super) async fn update_operation_schedule(
     ScopedRepository(repository): ScopedRepository,
-    Path(id): Path<Uuid>,
+    ApiPath(id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<UpdateScheduleRequest>,
 ) -> Result<Json<ExtensionOperationSchedule>, ApiError> {
     repository
@@ -735,7 +758,7 @@ pub(super) async fn list_operation_runs(
 
 pub(super) async fn get_operation_run(
     ScopedRepository(repository): ScopedRepository,
-    Path(id): Path<Uuid>,
+    ApiPath(id): ApiPath<Uuid>,
 ) -> Result<Json<OperationRunResponse>, ApiError> {
     repository
         .extension_operation_run(id)
@@ -746,7 +769,7 @@ pub(super) async fn get_operation_run(
 
 pub(super) async fn cancel_operation(
     ScopedRepository(repository): ScopedRepository,
-    Path(id): Path<Uuid>,
+    ApiPath(id): ApiPath<Uuid>,
 ) -> Result<StatusCode, ApiError> {
     if repository.cancel_extension_operation(id).await? {
         Ok(StatusCode::NO_CONTENT)
@@ -757,7 +780,7 @@ pub(super) async fn cancel_operation(
 
 pub(super) async fn replay_operation(
     ScopedRepository(repository): ScopedRepository,
-    Path(id): Path<Uuid>,
+    ApiPath(id): ApiPath<Uuid>,
 ) -> Result<StatusCode, ApiError> {
     if repository.replay_extension_operation(id).await? {
         Ok(StatusCode::ACCEPTED)
@@ -782,7 +805,7 @@ pub(super) async fn update_workspace_extension_layout(
 }
 
 pub(super) async fn runtime(
-    Query(query): Query<RuntimeQuery>,
+    ApiQuery(query): ApiQuery<RuntimeQuery>,
     ScopedRepository(repository): ScopedRepository,
 ) -> Result<Json<Vec<RuntimeContribution>>, ApiError> {
     let blueprint = match (query.blueprint_id, query.blueprint_version) {
@@ -830,7 +853,7 @@ pub(super) async fn runtime(
 pub(super) async fn command(
     State(state): State<AppState>,
     ScopedRepository(repository): ScopedRepository,
-    Path((extension_id, contribution_id)): Path<(String, String)>,
+    ApiPath((extension_id, contribution_id)): ApiPath<(String, String)>,
     ApiJson(input): ApiJson<CommandRequest>,
 ) -> Result<Json<Value>, ApiError> {
     if input.command_id.len() > MAX_EXTENSION_IDENTIFIER_BYTES {
@@ -897,9 +920,9 @@ pub(super) async fn command(
 
 pub(super) async fn storage(
     ScopedRepository(repository): ScopedRepository,
-    Path((extension_id, contribution_id, release_id)): Path<(String, String, Uuid)>,
+    ApiPath((extension_id, contribution_id, release_id)): ApiPath<(String, String, Uuid)>,
     ApiJson(input): ApiJson<StorageRequest>,
-) -> Result<Json<Value>, ApiError> {
+) -> Result<Json<StorageResponse>, ApiError> {
     let contribution = repository
         .client_extension_contribution(&extension_id, &contribution_id)
         .await?;
@@ -912,12 +935,57 @@ pub(super) async fn storage(
         return Err(ApiError::forbidden());
     }
     let response = match input {
-        StorageRequest::Get { key } => serde_json::to_value(repository.extension_storage_get(&extension_id, release_id, &key).await.map_err(storage_error)?.map(|entry| StorageEntryResponse { key: entry.key, value: entry.value, revision: entry.revision })).expect("storage response serializes"),
-        StorageRequest::Set { key, value, expected_revision } => serde_json::to_value(json!({"revision": repository.extension_storage_set(&extension_id, release_id, &key, value, expected_revision).await.map_err(storage_error)?})).expect("storage response serializes"),
-        StorageRequest::Delete { key, expected_revision } => { repository.extension_storage_delete(&extension_id, release_id, &key, expected_revision).await.map_err(storage_error)?; json!(null) },
-        StorageRequest::List { prefix, cursor, limit } => {
-            let page = repository.extension_storage_list(&extension_id, release_id, prefix.as_deref(), cursor.as_deref(), limit.unwrap_or(DEFAULT_LIST_PAGE_SIZE)).await.map_err(storage_error)?;
-            serde_json::to_value(StoragePageResponse { entries: page.entries.into_iter().map(|entry| StorageEntryResponse { key: entry.key, value: entry.value, revision: entry.revision }).collect(), cursor: page.cursor }).expect("storage response serializes")
+        StorageRequest::Get { key } => StorageResponse::Entry(
+            repository
+                .extension_storage_get(&extension_id, release_id, &key)
+                .await
+                .map_err(storage_error)?
+                .map(StorageEntryResponse::from),
+        ),
+        StorageRequest::Set {
+            key,
+            value,
+            expected_revision,
+        } => {
+            let revision = repository
+                .extension_storage_set(&extension_id, release_id, &key, value, expected_revision)
+                .await
+                .map_err(storage_error)?;
+            StorageResponse::Revision { revision }
+        }
+        StorageRequest::Delete {
+            key,
+            expected_revision,
+        } => {
+            repository
+                .extension_storage_delete(&extension_id, release_id, &key, expected_revision)
+                .await
+                .map_err(storage_error)?;
+            StorageResponse::Deleted(())
+        }
+        StorageRequest::List {
+            prefix,
+            cursor,
+            limit,
+        } => {
+            let page = repository
+                .extension_storage_list(
+                    &extension_id,
+                    release_id,
+                    prefix.as_deref(),
+                    cursor.as_deref(),
+                    limit.unwrap_or(DEFAULT_LIST_PAGE_SIZE),
+                )
+                .await
+                .map_err(storage_error)?;
+            StorageResponse::Page(StoragePageResponse {
+                entries: page
+                    .entries
+                    .into_iter()
+                    .map(StorageEntryResponse::from)
+                    .collect(),
+                cursor: page.cursor,
+            })
         }
     };
     Ok(Json(response))
@@ -946,7 +1014,7 @@ impl From<ExtensionOperationArtifact> for OperationArtifactResponse {
 
 pub(super) async fn list_operation_deliveries(
     ScopedRepository(repository): ScopedRepository,
-    Path(run_id): Path<Uuid>,
+    ApiPath(run_id): ApiPath<Uuid>,
 ) -> Result<Json<Vec<ExtensionHttpDelivery>>, ApiError> {
     Ok(Json(
         repository.list_extension_http_deliveries(run_id).await?,
@@ -955,7 +1023,7 @@ pub(super) async fn list_operation_deliveries(
 
 pub(super) async fn list_operation_artifacts(
     ScopedRepository(repository): ScopedRepository,
-    Path(run_id): Path<Uuid>,
+    ApiPath(run_id): ApiPath<Uuid>,
 ) -> Result<Json<Vec<OperationArtifactResponse>>, ApiError> {
     Ok(Json(
         repository
@@ -973,7 +1041,7 @@ pub(super) async fn list_operation_artifacts(
 pub(super) async fn download_operation_artifact(
     State(state): State<AppState>,
     ScopedRepository(repository): ScopedRepository,
-    Path((run_id, artifact_id)): Path<(Uuid, Uuid)>,
+    ApiPath((run_id, artifact_id)): ApiPath<(Uuid, Uuid)>,
 ) -> Result<Response, ApiError> {
     let artifact = repository
         .completed_extension_operation_artifact(run_id, artifact_id)
@@ -1002,17 +1070,15 @@ pub(super) async fn download_operation_artifact(
     );
     headers.insert(
         header::CONTENT_LENGTH,
-        HeaderValue::from_str(&artifact.content_length.to_string())
-            .expect("non-negative artifact length"),
+        HeaderValue::from(artifact.content_length),
     );
-    headers.insert(
-        header::ETAG,
-        HeaderValue::from_str(&format!(
-            "\"{}\"",
-            artifact.checksum_sha256.unwrap_or_default()
-        ))
-        .expect("checksum is a valid header"),
-    );
+    if let Some(checksum) = artifact.checksum_sha256 {
+        headers.insert(
+            header::ETAG,
+            HeaderValue::from_str(&format!("\"{checksum}\""))
+                .map_err(|_| ApiError::internal("stored operation artifact checksum is invalid"))?,
+        );
+    }
     headers.insert(
         header::CACHE_CONTROL,
         HeaderValue::from_static("private, immutable"),
@@ -1027,7 +1093,7 @@ pub(super) async fn download_operation_artifact(
 pub(super) async fn artifact(
     State(state): State<AppState>,
     ScopedRepository(repository): ScopedRepository,
-    Path((extension_id, contribution_id)): Path<(String, String)>,
+    ApiPath((extension_id, contribution_id)): ApiPath<(String, String)>,
 ) -> Result<Response, ApiError> {
     let contribution = repository
         .client_extension_contribution(&extension_id, &contribution_id)

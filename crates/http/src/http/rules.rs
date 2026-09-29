@@ -1,9 +1,9 @@
 use super::{
     error::ApiError,
-    extractors::{ApiJson, ApiPath},
+    extractors::{ApiJson, ApiPath, ApiQuery},
 };
 use crate::model::{CreateManualRuleRun, CreateRule, Rule, RuleFinding, RuleRun};
-use axum::{Json, extract::Query, http::StatusCode};
+use axum::{Json, http::StatusCode};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -26,7 +26,7 @@ pub(super) async fn validate(
 }
 pub(super) async fn list(
     super::auth::ScopedRepository(repo): super::auth::ScopedRepository,
-    Query(query): Query<RuleQuery>,
+    ApiQuery(query): ApiQuery<RuleQuery>,
 ) -> Result<Json<Vec<Rule>>, ApiError> {
     Ok(Json(repo.list_rules(query.blueprint_id).await?))
 }
@@ -98,7 +98,7 @@ pub(super) async fn disable(
 }
 pub(super) async fn findings(
     super::auth::ScopedRepository(repo): super::auth::ScopedRepository,
-    Query(query): Query<RuleQuery>,
+    ApiQuery(query): ApiQuery<RuleQuery>,
 ) -> Result<Json<Vec<RuleFinding>>, ApiError> {
     Ok(Json(repo.list_rule_findings(query.entity_id).await?))
 }

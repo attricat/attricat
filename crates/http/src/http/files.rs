@@ -550,10 +550,7 @@ async fn download(
             HeaderValue::from_str(&file.mime_type)
                 .unwrap_or(HeaderValue::from_static("application/octet-stream")),
         );
-        response_headers.insert(
-            header::CONTENT_LENGTH,
-            HeaderValue::from_str(&(end - start + 1).to_string()).expect("length is valid"),
-        );
+        response_headers.insert(header::CONTENT_LENGTH, HeaderValue::from(end - start + 1));
         response_headers.insert(header::ACCEPT_RANGES, HeaderValue::from_static("bytes"));
         response_headers.insert(
             header::CACHE_CONTROL,

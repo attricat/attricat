@@ -1,4 +1,4 @@
-use axum::{Json, extract::Path, http::StatusCode};
+use axum::{Json, http::StatusCode};
 use serde::Deserialize;
 use serde_json::Value;
 use uuid::Uuid;
@@ -6,7 +6,7 @@ use uuid::Uuid;
 use super::{
     auth::{AuthenticatedPrincipal, ScopedRepository},
     error::ApiError,
-    extractors::ApiJson,
+    extractors::{ApiJson, ApiPath},
 };
 use crate::repository::SavedView;
 
@@ -214,7 +214,7 @@ pub(super) async fn list(
 pub(super) async fn get(
     ScopedRepository(repository): ScopedRepository,
     AuthenticatedPrincipal(actor, _): AuthenticatedPrincipal,
-    Path(id): Path<Uuid>,
+    ApiPath(id): ApiPath<Uuid>,
 ) -> Result<Json<SavedView>, ApiError> {
     Ok(Json(
         repository
@@ -226,7 +226,7 @@ pub(super) async fn get(
 pub(super) async fn get_link(
     ScopedRepository(repository): ScopedRepository,
     AuthenticatedPrincipal(actor, _): AuthenticatedPrincipal,
-    Path(id): Path<Uuid>,
+    ApiPath(id): ApiPath<Uuid>,
 ) -> Result<Json<SavedView>, ApiError> {
     Ok(Json(
         repository
@@ -274,7 +274,7 @@ pub(super) async fn create_link(
 pub(super) async fn update(
     ScopedRepository(repository): ScopedRepository,
     AuthenticatedPrincipal(actor, _): AuthenticatedPrincipal,
-    Path(id): Path<Uuid>,
+    ApiPath(id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<ViewInput>,
 ) -> Result<Json<SavedView>, ApiError> {
     let (name, description) = validate_named(&input)?;
@@ -295,7 +295,7 @@ pub(super) async fn update(
 pub(super) async fn delete(
     ScopedRepository(repository): ScopedRepository,
     AuthenticatedPrincipal(actor, _): AuthenticatedPrincipal,
-    Path(id): Path<Uuid>,
+    ApiPath(id): ApiPath<Uuid>,
 ) -> Result<StatusCode, ApiError> {
     if !repository.delete_saved_view(actor, id).await? {
         return Err(ApiError::not_found("saved view"));

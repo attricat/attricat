@@ -1,6 +1,6 @@
-use super::{auth::ScopedRepository, error::ApiError};
+use super::{auth::ScopedRepository, error::ApiError, extractors::ApiPath};
 use crate::repository::FailedEventDelivery;
-use axum::{Json, extract::Path};
+use axum::Json;
 use uuid::Uuid;
 
 pub(super) async fn list(
@@ -10,7 +10,7 @@ pub(super) async fn list(
 }
 pub(super) async fn replay(
     ScopedRepository(repository): ScopedRepository,
-    Path((consumer_id, event_id)): Path<(Uuid, Uuid)>,
+    ApiPath((consumer_id, event_id)): ApiPath<(Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     if !repository
         .replay_event_delivery(consumer_id, event_id)

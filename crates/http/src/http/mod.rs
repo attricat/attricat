@@ -200,7 +200,7 @@ async fn request_limits(
     };
     match tokio::time::timeout(state.request_timeout, next.run(request)).await {
         Ok(response) => response,
-        Err(_) => (axum::http::StatusCode::REQUEST_TIMEOUT, "request timed out").into_response(),
+        Err(_) => ApiError::request_timeout().into_response(),
     }
 }
 
