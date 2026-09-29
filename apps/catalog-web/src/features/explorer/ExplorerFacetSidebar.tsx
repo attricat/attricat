@@ -89,7 +89,8 @@ export const ExplorerFacetSidebar = ({
         height: fullHeight ? '100dvh' : undefined,
         maxHeight: fullHeight ? undefined : { md: facetSidebarMaxHeight },
         overflowY: fullHeight ? 'auto' : { md: 'auto' },
-        p: 2,
+        px: 4,
+        py: fullHeight ? 8 : 4,
         position: fullHeight ? 'sticky' : { md: 'sticky' },
         top: fullHeight ? 0 : { md: facetSidebarStickyTop },
       }}
@@ -126,7 +127,7 @@ export const ExplorerFacetSidebar = ({
       >
         {t('explorer.filters')}
       </Typography>
-      <Stack spacing={1.5} sx={{ mt: 1 }}>
+      <Stack spacing={1.5} sx={{ mt: 2 }}>
         <TextField
           fullWidth
           label={t('explorer.context')}

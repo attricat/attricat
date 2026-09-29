@@ -5,7 +5,13 @@ import {
   useRouterState,
 } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Box, CircularProgress, useMediaQuery, useTheme } from '@mui/material';
+import {
+  Box,
+  CircularProgress,
+  Toolbar,
+  useMediaQuery,
+  useTheme,
+} from '@mui/material';
 import { useEffect, useLayoutEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { pageTitle } from '../app/pageTitle';
@@ -135,14 +141,9 @@ export const AppLayout = () => {
         ) : (
           <MobileNavigation onSignOut={signOut} pathname={pathname} />
         )}
-        <Box
-          component="main"
-          sx={{
-            flexGrow: 1,
-            minWidth: 0,
-            pt: { xs: 7, md: 0 },
-          }}
-        >
+        <Box component="main" sx={{ flexGrow: 1, minWidth: 0 }}>
+          {/* Offsets content below the fixed mobile app bar at every toolbar height. */}
+          {!isDesktop && <Toolbar aria-hidden />}
           <Outlet />
         </Box>
       </Box>
