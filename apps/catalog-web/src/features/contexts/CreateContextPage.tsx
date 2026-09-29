@@ -9,19 +9,19 @@ import {
   MenuItem,
   TextField,
 } from '@mui/material';
-import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { QueryErrorNotice } from '../../components/QueryErrorNotice';
 import { createContext, listContexts } from './api';
+import { contextMetadataMinRows, emptyContextMetadata } from './constants';
+import { parseContextMetadata } from './contextMetadata';
 import { contextQueryKeys } from './queryKeys';
 
 export const CreateContextPage = () => {
   const { t } = useTranslation();
   const navigate = useNavigate({ from: '/manage/contexts/new' });
   const queryClient = useQueryClient();
-  const [validationError, setValidationError] = useState<string>();
   const contexts = useQuery({
     queryKey: contextQueryKeys.all(),
     queryFn: ({ signal }) => listContexts(signal),
@@ -44,24 +44,14 @@ export const CreateContextPage = () => {
     },
   });
   const form = useForm({
-    defaultValues: { code: '', data: '{}', parentId: '' },
+    defaultValues: { code: '', data: emptyContextMetadata, parentId: '' },
     onSubmit: ({ value }) => {
       if (create.isPending) return;
-      setValidationError(undefined);
-      let data: unknown;
-      try {
-        data = JSON.parse(value.data);
-      } catch {
-        setValidationError(t('contexts.invalidMetadataJson'));
-        return;
-      }
-      if (typeof data !== 'object' || data === null || Array.isArray(data)) {
-        setValidationError(t('contexts.metadataMustBeObject'));
-        return;
-      }
+      const metadata = parseContextMetadata(value.data);
+      if (!metadata.data) return;
       create.mutate({
         code: value.code.trim(),
-        data: data as Record<string, unknown>,
+        data: metadata.data,
         parentId: value.parentId,
       });
     },
@@ -121,23 +111,32 @@ export const CreateContextPage = () => {
               </TextField>
             )}
           </form.Field>
-          <form.Field name="data">
+          <form.Field
+            name="data"
+            validators={{
+              onSubmit: ({ value }) => parseContextMetadata(value).errorKey,
+            }}
+          >
             {(field) => (
               <TextField
                 disabled={create.isPending}
+                error={field.state.meta.errors.length > 0}
+                helperText={
+                  field.state.meta.errors[0]
+                    ? t(field.state.meta.errors[0])
+                    : undefined
+                }
                 label={t('contexts.metadata')}
                 multiline
-                minRows={5}
+                minRows={contextMetadataMinRows}
                 onChange={(event) => field.handleChange(event.target.value)}
                 required
                 value={field.state.value}
               />
             )}
           </form.Field>
-          {(create.error || validationError) && (
-            <Alert severity="error">
-              {create.error?.message ?? validationError}
-            </Alert>
+          {create.error && (
+            <Alert severity="error">{create.error.message}</Alert>
           )}
           <Button
             disabled={

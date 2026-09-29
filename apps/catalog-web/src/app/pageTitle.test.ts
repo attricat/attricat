@@ -6,7 +6,9 @@ describe('pageTitle', () => {
   it('distinguishes routes and resources across browser tabs', () => {
     expect(pageTitle('/', i18n.t)).toBe('Entity explorer · Attricat');
     expect(pageTitle('/manage/workflows', i18n.t)).toBe('Workflows · Attricat');
-    expect(pageTitle('/manage/workflows/new', i18n.t)).toBe('New workflow · Attricat');
+    expect(pageTitle('/manage/workflows/new', i18n.t)).toBe(
+      'New workflow · Attricat',
+    );
     expect(pageTitle('/entities/abcdef12-1234/edit', i18n.t)).toBe(
       'Edit entity · Entity abcdef12 · Attricat',
     );
@@ -21,7 +23,9 @@ describe('pageTitle', () => {
   it('translates route labels when the language changes', async () => {
     await i18n.changeLanguage('pl');
     expect(pageTitle('/manage/workflows', i18n.t)).toContain('Attricat');
-    expect(pageTitle('/manage/workflows', i18n.t)).not.toBe('Workflows · Attricat');
+    expect(pageTitle('/manage/workflows', i18n.t)).not.toBe(
+      'Workflows · Attricat',
+    );
     await i18n.changeLanguage('en');
   });
 });

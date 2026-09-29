@@ -1,6 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import type { ExtensionContribution } from './api';
+import { extensionCapabilities, extensionProtocolErrors } from './constants';
 import { entityQueryKeys } from '../entities/queryKeys';
 import { ruleQueryKeys } from '../rules/queryKeys';
 
@@ -21,11 +22,11 @@ export const refreshCurrentEntity = async (
   payload: unknown,
 ) => {
   if (
-    !contribution.capabilities.includes('client.refresh') ||
+    !contribution.capabilities.includes(extensionCapabilities.refresh) ||
     contribution.outlet === null ||
     !entityRefreshOutlets.has(contribution.outlet)
   )
-    throw new Error('Refresh denied');
+    throw new Error(extensionProtocolErrors.refreshDenied);
   refreshSchema.parse(payload);
   const entityId = z.uuid().parse(context.entity_id);
   await refreshEntity(client, entityId);

@@ -3,8 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { fileDownloadUrl } from '../files/api';
 import { ThumbnailPreview } from '../files/FileThumbnail';
 import { fileMetadataSchema } from '../files/schemas';
-
-const imageCellSize = 48;
+import { imageCellSize } from './constants';
 
 export const ImageTableCell = ({ value }: { value: unknown }) => {
   const { t } = useTranslation();

@@ -6,6 +6,8 @@ import pl from './locales/pl.json';
 
 export const supportedLanguages = ['en', 'pl'] as const;
 export type SupportedLanguage = (typeof supportedLanguages)[number];
+export const defaultLanguage: SupportedLanguage = 'en';
+const languageStorageKey = 'catalog.language';
 
 void i18n
   .use(LanguageDetector)
@@ -15,12 +17,12 @@ void i18n
       en: { translation: en },
       pl: { translation: pl },
     },
-    fallbackLng: 'en',
+    fallbackLng: defaultLanguage,
     supportedLngs: supportedLanguages,
     interpolation: { escapeValue: false },
     detection: {
       caches: ['localStorage'],
-      lookupLocalStorage: 'catalog.language',
+      lookupLocalStorage: languageStorageKey,
       order: ['localStorage', 'navigator'],
     },
   });

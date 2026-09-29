@@ -3,14 +3,7 @@ import {
   Alert,
   Button,
   LinearProgress,
-  Paper,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   Typography,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
@@ -19,9 +12,10 @@ import { PageHeader } from '../../components/PageHeader';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
 import { getBackgroundProcessingStatus } from './api';
+import { BackgroundProcessingTable } from './BackgroundProcessingTable';
 import {
   backgroundProcessingRefreshInterval,
-  taskKindTranslationKeys,
+  backgroundProcessingRefreshSeconds,
 } from './constants';
 import { backgroundProcessingQueryKeys } from './queryKeys';
 
@@ -41,9 +35,6 @@ export const BackgroundProcessingPage = () => {
   const rows = canRead ? status.data : undefined;
   const hasFailures = rows?.some((row) => row.failed > 0);
   const hasExpiredLeases = rows?.some((row) => row.expired_leases > 0);
-  const number = new Intl.NumberFormat(i18n.language, {
-    maximumFractionDigits: 0,
-  });
 
   return (
     <PageContainer>
@@ -106,6 +97,7 @@ export const BackgroundProcessingPage = () => {
                   time: new Date(status.dataUpdatedAt).toLocaleTimeString(
                     i18n.language,
                   ),
+                  seconds: backgroundProcessingRefreshSeconds,
                 })}
               </Typography>
             )}
@@ -122,59 +114,7 @@ export const BackgroundProcessingPage = () => {
             {rows?.length === 0 && (
               <Alert severity="info">{t('backgroundProcessing.empty')}</Alert>
             )}
-            {!!rows?.length && (
-              <TableContainer component={Paper}>
-                <Table aria-label={t('backgroundProcessing.title')}>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>{t('backgroundProcessing.kind')}</TableCell>
-                      {[
-                        'queued',
-                        'running',
-                        'failed',
-                        'expired',
-                        'oldestDue',
-                      ].map((column) => (
-                        <TableCell key={column} align="right">
-                          {t(`backgroundProcessing.${column}`)}
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {rows.map((row) => (
-                      <TableRow key={row.kind}>
-                        <TableCell component="th" scope="row">
-                          {t(
-                            taskKindTranslationKeys[row.kind] ??
-                              'backgroundProcessing.kinds.other',
-                          )}
-                        </TableCell>
-                        <TableCell align="right">
-                          {number.format(row.queued)}
-                        </TableCell>
-                        <TableCell align="right">
-                          {number.format(row.running)}
-                        </TableCell>
-                        <TableCell align="right">
-                          {number.format(row.failed)}
-                        </TableCell>
-                        <TableCell align="right">
-                          {number.format(row.expired_leases)}
-                        </TableCell>
-                        <TableCell align="right">
-                          {row.oldest_due_seconds === null
-                            ? '—'
-                            : t('backgroundProcessing.seconds', {
-                                value: number.format(row.oldest_due_seconds),
-                              })}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            )}
+            {!!rows?.length && <BackgroundProcessingTable rows={rows} />}
             <Typography variant="body2" color="text.secondary">
               {t('backgroundProcessing.explanation')}
             </Typography>

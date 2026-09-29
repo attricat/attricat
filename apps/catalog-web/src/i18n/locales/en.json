@@ -13,6 +13,13 @@
     "runs": "Runs"
   },
   "errors": {
+    "requestFailed": "Request failed ({{status}})",
+    "uploadFailed": "Upload failed",
+    "invalidApiResponse": "Invalid API response: {{details}}",
+    "permissionsUnique": "Permissions must be unique",
+    "tokenExpiryFuture": "Token expiry must be in the future.",
+    "workspaceScopeMismatch": "Workspace scope must target the active workspace.",
+    "scopeTargetRequired": "Choose a target from the selected scope before submitting.",
     "unexpectedTitle": "Something went wrong",
     "unexpectedDescription": "We couldn't display this page. Try again or return to the catalog home page.",
     "notFoundTitle": "Page not found",
@@ -140,7 +147,8 @@
     "selectParent": "Select a parent",
     "metadata": "Metadata",
     "invalidMetadataJson": "Metadata must be valid JSON.",
-    "metadataMustBeObject": "Metadata must be a JSON object."
+    "metadataMustBeObject": "Metadata must be a JSON object.",
+    "invalidCode": "Use only letters, numbers, hyphens, and underscores"
   },
   "dataHealth": {
     "title": "Data health",
@@ -284,6 +292,25 @@
     "defaultContextUnavailable": "The default context is not available",
     "loadMigrationFirst": "Load the migration preview first",
     "currentValue": "Current value: {{value}}.",
+    "dataQualityFindings_one": "{{count}} data quality finding",
+    "dataQualityFindings_other": "{{count}} data quality findings",
+    "previewContextUnavailable": "Preview context is unavailable",
+    "entityPreviewUnavailable": "Entity preview is unavailable",
+    "invalidTimeZone": "Expected an IANA time zone",
+    "invalidJson": "Expected JSON",
+    "blueprintLabel": "Blueprint: {{name}}",
+    "blueprintOption": "{{name}} ({{code}})",
+    "versionedCode": "{{code}} v{{version}}",
+    "reusableAttributeOption": "{{qualifiedCode}} · {{name}} v{{version}}",
+    "entityConversationTitle": "Ask about this entity · {{entityId}}",
+    "changeKind": {
+      "set": "set",
+      "replace": "replace",
+      "remove": "remove",
+      "relationship_add": "relationship add",
+      "relationship_remove": "relationship remove",
+      "restore": "restore"
+    },
     "fileCount_one": "{{count}} file",
     "fileCount_other": "{{count}} files",
     "publish": "Publish",
@@ -354,6 +381,7 @@
       "queued": "Queued",
       "running": "Running",
       "completed": "Completed",
+      "failed": "Failed",
       "superseded": "Superseded"
     },
     "automaticMigrationUnavailable": "Automatic migration is unavailable for this revision. Existing entities can still be migrated individually for review.",
@@ -432,9 +460,17 @@
     "revisionHistory": "Revision history",
     "version": "Version",
     "created": "Created",
-    "definitionHash": "Definition hash"
+    "definitionHash": "Definition hash",
+    "revisionStatuses": {
+      "draft": "Draft",
+      "published": "Published"
+    },
+    "versionNumber": "v{{version}}",
+    "versionOption": "v{{version}} ({{status}})",
+    "diffTitle": "{{original}} → {{modified}}"
   },
   "explorer": {
+    "loadingSavedSearch": "Loading saved search",
     "saveSearch": "Save search",
     "saveChanges": "Save changes",
     "discardSearchChanges": "Discard changes",
@@ -547,7 +583,7 @@
     "noMatchingEntities": "No entities matched this search.",
     "selectEntities": "Select entities",
     "exitSelection": "Exit selection",
-    "selectLoadedEntities": "Select loaded entities (up to 50)",
+    "selectLoadedEntities": "Select loaded entities (up to {{limit}})",
     "selectEntity": "Select {{entity}}",
     "selectedCount_one": "{{count}} selected",
     "selectedCount_other": "{{count}} selected",
@@ -559,7 +595,25 @@
     "agentConversationTitle": "Review {{count}} {{blueprint}} entities",
     "matchViaRelationship_one": "{{term}} via {{count}} relationship",
     "matchViaRelationship_other": "{{term}} via {{count}} relationships",
-    "matchInAttribute": "{{term}} in {{attribute}}"
+    "matchInAttribute": "{{term}} in {{attribute}}",
+    "searchDetailsSeparator": "; ",
+    "retry": "Retry",
+    "cancel": "Cancel",
+    "blueprintOption": "{{name}} ({{code}})",
+    "relationshipFacetLabel": "{{attribute}} ({{blueprint}})",
+    "attributeFilterPill": "{{field}} {{operator}} {{value}}",
+    "schemaVersionStatus": "v{{version}} · {{status}}",
+    "unsortableColumnLabel": "{{column}}. {{reason}}",
+    "publicationContextUnavailable": "Publication context is unavailable",
+    "selectedCountForBlueprint_one": "{{count}} selected · {{blueprint}}",
+    "selectedCountForBlueprint_other": "{{count}} selected · {{blueprint}}",
+    "agentEntityListItem": "{{label}} · {{entityId}}",
+    "agentMessage": {
+      "blueprint": "Blueprint: {{blueprint}}",
+      "selectedEntities": "Selected entities (IDs are authoritative; labels are for reference):",
+      "entityReference": "- {{label}} — entity_id: {{entityId}}",
+      "getEntityInstruction": "Use get_entity for each entity_id before making recommendations or changes."
+    }
   },
   "audit": {
     "title": "Activity / Audit log",
@@ -592,6 +646,7 @@
     "safeMetadata": "Safe metadata",
     "requestId": "Request ID",
     "correlationId": "Correlation ID",
+    "approvalDecisionBy": "{{decision}} by {{approver}}",
     "agentApproval": "Agent approval",
     "agentToolCall": "Agent tool call",
     "system": "System",
@@ -599,6 +654,9 @@
     "actionCategoryPlaceholder": "catalog"
   },
   "workflows": {
+    "runNow": "Run now",
+    "entityId": "Entity ID",
+    "manualRunEntityId": "Manual run entity ID",
     "title": "Workflows",
     "description": "Create, inspect, and operate versioned workspace workflows.",
     "workflow": "Workflow",
@@ -726,7 +784,16 @@
     "uploadCount_other": "Upload {{count}} files",
     "retryFile": "Retry {{filename}}",
     "ready": "Ready",
-    "downloadFile": "Download {{filename}}"
+    "downloadFile": "Download {{filename}}",
+    "uploadProgress": "{{progress}}%",
+    "status": {
+      "uploading": "Uploading",
+      "queued": "Queued",
+      "processing": "Processing",
+      "ready": "Ready",
+      "failed": "Failed",
+      "deleted": "Deleted"
+    }
   },
   "extensions": {
     "appsDescription": "Apps can be contributed by extensions. Select an app from the navigation to get started.",
@@ -791,9 +858,44 @@
     "startTimedOut": "The extension timed out while starting.",
     "startFailed": "The extension could not be started.",
     "loadingPage": "Loading extension page",
-    "pageUnavailable": "This extension page is unavailable."
+    "pageUnavailable": "This extension page is unavailable.",
+    "versionSource": "v{{version}} · {{source}}",
+    "grantedPermission": "{{kind}}: {{id}}",
+    "noState": "—",
+    "lifecycleTransition": "{{operation}}: {{prior}} → {{next}}",
+    "lifecycleDiagnostics": "· {{diagnostics}}",
+    "installationStates": {
+      "disabled": "Disabled",
+      "enabled": "Enabled",
+      "quarantined": "Quarantined"
+    },
+    "grantKinds": {
+      "capability": "Capability",
+      "host_permission": "Host permission",
+      "event_publish": "Event publishing",
+      "event_subscribe": "Event subscription"
+    },
+    "lifecycleOperations": {
+      "install": "Install",
+      "configure": "Configure",
+      "grant": "Grant",
+      "revoke": "Revoke",
+      "enable": "Enable",
+      "disable": "Disable",
+      "upgrade": "Upgrade",
+      "quarantine": "Quarantine",
+      "remove": "Remove"
+    }
   },
   "workspace": {
+    "memberSummary": "{{email}} · {{state}}",
+    "memberSummaryWithRoles": "{{email}} · {{state}} · {{roles}}",
+    "memberStates": {
+      "active": "Active",
+      "invited": "Invited",
+      "suspended": "Suspended",
+      "disabled": "Disabled"
+    },
     "members": "Members",
     "roles": "Roles",
     "invitations": "Invitations",
@@ -875,6 +977,7 @@
     "acceptInvitation": "Accept invitation"
   },
   "views": {
+    "availableOnPreviews": "{{label}} is available on entity previews.",
     "notSet": "Not set",
     "yes": "Yes",
     "no": "No",
@@ -897,6 +1000,7 @@
   },
   "common": {
     "actionCompleted": "Action completed.",
+    "cancel": "Cancel",
     "copyFailed": "Couldn't copy to clipboard.",
     "copied": "Copied to clipboard.",
     "loadMore": "Load more",
@@ -918,7 +1022,11 @@
     "checking": "Checking",
     "ready": "Ready",
     "waitingForHealthCheck": "Waiting for the API health check to succeed.",
-    "healthCheckInterval": "Health checks run every 5 seconds.",
+    "healthCheckInterval": "Health checks run every {{seconds}} seconds.",
+    "sqlPhase": "SQL",
+    "sqlPhaseNamed": "SQL {{name}}",
+    "phaseDuration": "{{name}}: {{duration}} ms",
+    "sqlPhaseDuration": "{{name}} ({{queries}}): {{duration}} ms",
     "session": "Session",
     "checkingSession": "Checking session…",
     "signedInAs": "Signed in as {{email}}",
@@ -940,7 +1048,7 @@
     "forbidden": "You are not authorized to view background processing in this workspace.",
     "loadError": "Could not load background processing status. Try refreshing.",
     "refreshError": "Refresh failed. The displayed status may be outdated.",
-    "updated": "Last updated at {{time}} · Refreshes every 30 seconds",
+    "updated": "Last updated at {{time}} · Refreshes every {{seconds}} seconds",
     "failures": "Some tasks failed and will not retry automatically. Check the corresponding run history or contact an administrator.",
     "expiredWarning": "Some running tasks have expired leases. They may have been interrupted and are awaiting worker recovery.",
     "empty": "No queued, running, or failed API tasks in this workspace.",
@@ -960,6 +1068,108 @@
       "migration": "Blueprint migration batches",
       "extension": "Extension operations",
       "other": "Other tasks"
+    }
+  },
+  "rules": {
+    "title": "Data quality rules",
+    "description": "Inspect catalog-owned rule definitions, findings, and durable evaluation runs.",
+    "inspectionTabs": "Rule inspection",
+    "loading": "Loading rules…",
+    "notAuthorized": "You are not authorized to view data quality rules.",
+    "sections": {
+      "rules": "Rules",
+      "findings": "Findings",
+      "runs": "Run history"
+    },
+    "errors": {
+      "definitions": "Unable to load rule definitions.",
+      "findings": "Unable to load rule findings.",
+      "runs": "Unable to load rule run history."
+    },
+    "columns": {
+      "rule": "Rule",
+      "revision": "Revision",
+      "lifecycle": "Lifecycle",
+      "actions": "Actions",
+      "severity": "Severity",
+      "finding": "Finding",
+      "state": "State",
+      "source": "Source",
+      "status": "Status",
+      "evaluated": "Evaluated",
+      "findings": "Findings"
+    },
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "dryRun": "Dry run",
+    "runNow": "Run now",
+    "acknowledge": "Acknowledge",
+    "activeFindings": "Active findings",
+    "runHistory": "Run history",
+    "dryRunSuffix": "{{source}} (dry run)",
+    "severities": {
+      "info": "Info",
+      "warning": "Warning",
+      "error": "Error",
+      "critical": "Critical"
+    },
+    "findingStates": {
+      "open": "Open",
+      "acknowledged": "Acknowledged",
+      "resolved": "Resolved"
+    },
+    "runStatuses": {
+      "pending": "Pending",
+      "running": "Running",
+      "completed": "Completed",
+      "failed": "Failed"
+    }
+  },
+  "reusableAttributes": {
+    "editor": {
+      "loading": "Loading reusable attribute…",
+      "notFound": "Reusable attribute not found.",
+      "description": "Namespace is derived from the active workspace and cannot be set in the definition.",
+      "newTitle": "New reusable attribute",
+      "editTitle": "Edit {{name}}",
+      "cancel": "Cancel",
+      "saveRevision": "Save revision",
+      "createAttribute": "Create attribute",
+      "preview": "Preview",
+      "untitled": "Untitled attribute"
+    },
+    "title": "Reusable attributes",
+    "description": "Create immutable attribute revisions, publish them, and assemble published revisions into groups.",
+    "newGroup": "New group",
+    "newAttribute": "New attribute",
+    "loading": "Loading reusable attributes…",
+    "loadingGroups": "Loading groups…",
+    "empty": "No reusable attributes yet.",
+    "groupsEmpty": "No reusable attribute groups yet.",
+    "groupsHeading": "Groups",
+    "edit": "Edit",
+    "publish": "Publish",
+    "columns": {
+      "attribute": "Attribute",
+      "version": "Version",
+      "type": "Type",
+      "status": "Status",
+      "actions": "Actions",
+      "group": "Group",
+      "position": "Position",
+      "publishedRevisions": "Published revisions"
+    },
+    "groupDialog": {
+      "title": "New reusable attribute group",
+      "code": "Code",
+      "name": "Name",
+      "position": "Position",
+      "revisions": "Published revisions",
+      "revisionsHelp": "Only published revisions can be grouped.",
+      "cancel": "Cancel",
+      "create": "Create group",
+      "requiredFields": "Code, name, and at least one published revision are required.",
+      "invalidPosition": "Position must be a non-negative whole number."
     }
   }
 }

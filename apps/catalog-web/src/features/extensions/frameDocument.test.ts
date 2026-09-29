@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { frameDocument } from './ExtensionFrame';
+import { frameDocument } from './frameDocument';
 
 describe('extension frame bootstrap', () => {
   it('permits only its nonce-authorized bootstrap and blob extension module', () => {

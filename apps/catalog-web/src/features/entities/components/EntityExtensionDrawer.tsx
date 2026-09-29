@@ -2,6 +2,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import { Box, Drawer, IconButton, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { ExtensionOutlet } from '../../extensions/ExtensionOutlet';
+import { ENTITY_DRAWER_WIDTH, ENTITY_EXTENSION_DRAWER_ID } from '../constants';
 
 export const EntityExtensionDrawer = ({
   blueprintId,
@@ -24,8 +25,8 @@ export const EntityExtensionDrawer = ({
   return (
     <Drawer anchor="right" onClose={onClose} open={open} variant="persistent">
       <Box
-        id="entity-extension-contributions"
-        sx={{ p: 3, width: { xs: '100vw', sm: 480 } }}
+        id={ENTITY_EXTENSION_DRAWER_ID}
+        sx={{ p: 3, width: { xs: '100vw', sm: ENTITY_DRAWER_WIDTH } }}
       >
         <Box sx={{ alignItems: 'center', display: 'flex' }}>
           <Typography sx={{ flexGrow: 1 }} variant="h6">

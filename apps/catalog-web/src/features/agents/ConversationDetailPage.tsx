@@ -7,6 +7,7 @@ import { useResourcePageTitle } from '../../app/useResourcePageTitle';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { getConversation } from './api';
+import { conversationMinHeight, titlePollIntervalMs } from './constants';
 import { agentQueryKeys } from './queryKeys';
 import { ConversationPanel } from './ConversationPanel';
 import { isTitlePending } from './titlePolling';
@@ -23,7 +24,9 @@ export const ConversationDetailPage = ({
     queryKey: agentQueryKeys.conversation(conversationId),
     queryFn: () => getConversation(conversationId),
     refetchInterval: (query) =>
-      query.state.data && isTitlePending(query.state.data) ? 3_000 : false,
+      query.state.data && isTitlePending(query.state.data)
+        ? titlePollIntervalMs
+        : false,
   });
   useResourcePageTitle(conversation.data?.title, t('agents.agentConversation'));
   return (
@@ -32,7 +35,7 @@ export const ConversationDetailPage = ({
         sx={{
           display: 'flex',
           flexDirection: 'column',
-          minHeight: { md: 'calc(100dvh - 48px)' },
+          minHeight: conversationMinHeight,
           mx: 'auto',
           width: '100%',
         }}

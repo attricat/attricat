@@ -1,5 +1,6 @@
 import { Paper, Stack, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import { summaryCardMinWidth } from './constants';
 import type { DataHealthSummary } from './schemas';
 
 export const DataHealthSummaryCards = ({
@@ -30,7 +31,7 @@ export const DataHealthSummaryCards = ({
       sx={{ flexWrap: 'wrap', mt: 4 }}
     >
       {cards.map(([label, value]) => (
-        <Paper key={String(label)} sx={{ minWidth: 190, p: 2 }}>
+        <Paper key={String(label)} sx={{ minWidth: summaryCardMinWidth, p: 2 }}>
           <Typography color="text.secondary" variant="body2">
             {label}
           </Typography>

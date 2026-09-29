@@ -1,34 +1,23 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import {
-  Alert,
-  Box,
-  Button,
-  Card,
-  CardActionArea,
-  CardContent,
-  Chip,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-  Stack,
-  Typography,
-} from '@mui/material';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Alert, Button, Chip, Stack, Typography } from '@mui/material';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
+import { TomlEditor } from '../../components/TomlEditor';
 import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
 import {
   createBlueprint,
   createBlueprintRevision,
   getBlueprintRevision,
 } from './api';
-import { blueprintQueryKeys } from './queryKeys';
 import { blueprintTemplates } from './blueprintEditorUtils';
-import { TomlEditor } from '../../components/TomlEditor';
+import { BlueprintTemplateDialog } from './BlueprintTemplateDialog';
+import { blueprintEditorHeight } from './constants';
+import { blueprintQueryKeys } from './queryKeys';
+import { UnsavedBlueprintChangesDialog } from './UnsavedBlueprintChangesDialog';
+import { useBeforeUnloadWarning } from './useBeforeUnloadWarning';
 
 type PendingUnsavedAction =
   { templateIndex: number; type: 'replace' } | { type: 'discard' };
@@ -55,28 +44,14 @@ export const BlueprintEditorPage = ({
   const [templateDialogOpen, setTemplateDialogOpen] = useState(!blueprintId);
   const [pendingUnsavedAction, setPendingUnsavedAction] =
     useState<PendingUnsavedAction>();
+  const sourceRevision = source.data;
   const initialDefinition =
-    source.data?.blueprint.definition ??
+    sourceRevision?.blueprint.definition ??
     blueprintTemplates[templateIndex].definition;
   const [editedDefinition, setEditedDefinition] = useState<string | null>(null);
   const definition = editedDefinition ?? initialDefinition;
   const isDirty = definition !== initialDefinition;
-  const definitionRef = useRef(definition);
-  const isDirtyRef = useRef(isDirty);
-  const savePendingRef = useRef(false);
-  useLayoutEffect(() => {
-    definitionRef.current = definition;
-    isDirtyRef.current = isDirty;
-  }, [definition, isDirty]);
-  useEffect(() => {
-    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (!isDirty) return;
-      event.preventDefault();
-      event.returnValue = '';
-    };
-    window.addEventListener('beforeunload', warnBeforeUnload);
-    return () => window.removeEventListener('beforeunload', warnBeforeUnload);
-  }, [isDirty]);
+  useBeforeUnloadWarning(isDirty);
 
   const save = useMutation({
     mutationFn: ({ definition }: { definition: string }) =>
@@ -98,10 +73,18 @@ export const BlueprintEditorPage = ({
       });
     },
   });
+  const canSave = !save.isPending && (!blueprintId || isDirty);
 
+  // Monaco keeps the handlers registered on mount, so they read the latest
+  // render's values through refs instead of capturing stale ones.
+  const savePendingRef = useRef(save.isPending);
+  const saveShortcutRef = useRef<() => void>(() => undefined);
   useLayoutEffect(() => {
     savePendingRef.current = save.isPending;
-  }, [save.isPending]);
+    saveShortcutRef.current = () => {
+      if (canSave) save.mutate({ definition });
+    };
+  });
 
   const applyTemplate = (index: number) => {
     setTemplateIndex(index);
@@ -187,11 +170,7 @@ export const BlueprintEditorPage = ({
             {t('blueprints.cancel')}
           </Button>
           <Button
-            disabled={
-              save.isPending ||
-              source.isError ||
-              Boolean(blueprintId && !isDirty)
-            }
+            disabled={!canSave || source.isError}
             onClick={() => save.mutate({ definition })}
             variant="contained"
           >
@@ -201,12 +180,12 @@ export const BlueprintEditorPage = ({
           </Button>
         </Stack>
       </Stack>
-      {source.data?.attributes.map((attribute) => (
+      {sourceRevision?.attributes.map((attribute) => (
         <ExtensionOutlet
           context={{
             attribute_id: attribute.id,
-            blueprint_id: source.data!.blueprint.id,
-            blueprint_version: source.data!.blueprint.version,
+            blueprint_id: sourceRevision.blueprint.id,
+            blueprint_version: sourceRevision.blueprint.version,
           }}
           key={attribute.id}
           outlet="blueprint_attribute_configuration"
@@ -225,102 +204,28 @@ export const BlueprintEditorPage = ({
         </Alert>
       )}
       {!blueprintId && (
-        <Dialog
-          fullWidth
-          maxWidth="md"
+        <BlueprintTemplateDialog
           onClose={() => setTemplateDialogOpen(false)}
+          onSelect={selectTemplate}
           open={templateDialogOpen}
-        >
-          <DialogTitle>{t('blueprints.startFromExample')}</DialogTitle>
-          <DialogContent>
-            <Typography color="text.secondary">
-              {t('blueprints.templateDescription')}
-            </Typography>
-            <Box
-              sx={{
-                display: 'grid',
-                gap: 2,
-                gridTemplateColumns: {
-                  sm: 'repeat(3, minmax(0, 1fr))',
-                  xs: '1fr',
-                },
-                mt: 2,
-              }}
-            >
-              {blueprintTemplates.map((template, index) => (
-                <Card
-                  key={template.labelKey}
-                  sx={{
-                    border: templateIndex === index ? 2 : 1,
-                    borderColor:
-                      templateIndex === index ? 'primary.main' : 'divider',
-                  }}
-                  variant="outlined"
-                >
-                  <CardActionArea onClick={() => selectTemplate(index)}>
-                    <CardContent>
-                      <Typography component="h3" variant="h6">
-                        {t(template.labelKey)}
-                      </Typography>
-                      <Typography color="text.secondary" sx={{ mt: 1 }}>
-                        {t(template.descriptionKey)}
-                      </Typography>
-                    </CardContent>
-                  </CardActionArea>
-                </Card>
-              ))}
-            </Box>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setTemplateDialogOpen(false)}>
-              {t('blueprints.dismiss')}
-            </Button>
-          </DialogActions>
-        </Dialog>
+          selectedIndex={templateIndex}
+        />
       )}
-      <Dialog
-        aria-describedby="unsaved-changes-dialog-description"
-        onClose={() => setPendingUnsavedAction(undefined)}
-        open={Boolean(pendingUnsavedAction)}
-      >
-        <DialogTitle>{t('blueprints.unsavedChangesTitle')}</DialogTitle>
-        <DialogContent>
-          <DialogContentText id="unsaved-changes-dialog-description">
-            {pendingUnsavedAction?.type === 'replace'
-              ? t('blueprints.replaceUnsavedChanges')
-              : t('blueprints.discardUnsavedChanges')}
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setPendingUnsavedAction(undefined)}>
-            {t('blueprints.keepEditing')}
-          </Button>
-          <Button
-            color="error"
-            onClick={confirmUnsavedAction}
-            variant="contained"
-          >
-            {pendingUnsavedAction?.type === 'replace'
-              ? t('blueprints.replace')
-              : t('blueprints.discard')}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <UnsavedBlueprintChangesDialog
+        action={pendingUnsavedAction?.type}
+        onCancel={() => setPendingUnsavedAction(undefined)}
+        onConfirm={confirmUnsavedAction}
+      />
       <TomlEditor
-        height="calc(100vh - 260px)"
+        height={blueprintEditorHeight}
         marginTop={3}
         onChange={(value) => {
           if (!savePendingRef.current) setEditedDefinition(value ?? '');
         }}
         onMount={(editor, monaco) => {
-          editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
-            if (
-              !savePendingRef.current &&
-              (!blueprintId || isDirtyRef.current)
-            ) {
-              save.mutate({ definition: definitionRef.current });
-            }
-          });
+          editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () =>
+            saveShortcutRef.current(),
+          );
         }}
         readOnly={save.isPending}
         value={definition}

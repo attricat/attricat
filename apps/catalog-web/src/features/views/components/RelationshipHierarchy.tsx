@@ -5,6 +5,12 @@ import { useTranslation } from 'react-i18next';
 import { getEntityHierarchy } from '../../entities/api';
 import { entityQueryKeys } from '../../entities/queryKeys';
 import type { ViewComponentDefinition } from './componentTypes';
+import {
+  HIERARCHY_FONT_SIZE,
+  HIERARCHY_PARENT_FIELD_PROP,
+  VIEW_COMPONENT_IDS,
+  VIEW_COMPONENT_VERSION,
+} from '../constants';
 
 export const RelationshipHierarchy = ({
   attribute,
@@ -20,7 +26,7 @@ export const RelationshipHierarchy = ({
   value: unknown;
 }) => {
   const { t } = useTranslation();
-  const parentField = component?.props.parent_field;
+  const parentField = component?.props[HIERARCHY_PARENT_FIELD_PROP];
   const targetIds =
     typeof parentField === 'string'
       ? [
@@ -71,7 +77,7 @@ export const RelationshipHierarchy = ({
         <Breadcrumbs
           aria-label={t('views.hierarchy')}
           key={items.map((item) => item.id).join(':')}
-          sx={{ fontSize: '0.875rem' }}
+          sx={{ fontSize: HIERARCHY_FONT_SIZE }}
         >
           {items.map((item) => (
             <Link
@@ -89,11 +95,11 @@ export const RelationshipHierarchy = ({
 };
 
 export const relationshipHierarchyComponent = {
-  id: 'catalog.relationship_hierarchy',
-  version: 1,
+  id: VIEW_COMPONENT_IDS.relationshipHierarchy,
+  version: VIEW_COMPONENT_VERSION,
   capabilities: ['display'],
   placements: ['relationship_list'],
   value_types: ['relationship'],
-  allowed_props: ['parent_field'],
+  allowed_props: [HIERARCHY_PARENT_FIELD_PROP],
   valueRenderer: RelationshipHierarchy,
 } satisfies ViewComponentDefinition;

@@ -1,25 +1,33 @@
-import i18n from '../../../../i18n';
+import i18n from 'i18next';
+import { attributeValueTypes } from '../../../entities/valueTypes';
 import type { Attribute } from '../../../entities/api';
 
 export const formatAttributeValue = (attribute: Attribute, value: unknown) => {
   if (value === null || value === undefined) return i18n.t('views.notSet');
-  if (attribute.value_type === 'boolean')
+  if (attribute.value_type === attributeValueTypes.boolean)
     return value ? i18n.t('views.yes') : i18n.t('views.no');
-  if (attribute.value_type === 'json') return JSON.stringify(value);
-  if (attribute.value_type === 'date' && typeof value === 'string') {
+  if (attribute.value_type === attributeValueTypes.json)
+    return JSON.stringify(value);
+  if (
+    attribute.value_type === attributeValueTypes.date &&
+    typeof value === 'string'
+  ) {
     return new Intl.DateTimeFormat(undefined, {
       dateStyle: 'medium',
       timeZone: 'UTC',
     }).format(new Date(`${value}T00:00:00Z`));
   }
-  if (attribute.value_type === 'datetime' && typeof value === 'string') {
+  if (
+    attribute.value_type === attributeValueTypes.datetime &&
+    typeof value === 'string'
+  ) {
     return new Intl.DateTimeFormat(undefined, {
       dateStyle: 'medium',
       timeStyle: 'short',
     }).format(new Date(value));
   }
   if (
-    attribute.value_type === 'time' &&
+    attribute.value_type === attributeValueTypes.time &&
     typeof value === 'object' &&
     value !== null
   ) {

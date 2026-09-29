@@ -1,36 +1,33 @@
 import { z } from 'zod';
+import {
+  contributionKinds,
+  contributionKeyPattern,
+  extensionOutletNames,
+  grantKinds,
+  installationStates,
+  layoutValidationMessages,
+  maximumContributionKeyLength,
+  maximumExtensionCommandIdLength,
+  maximumExtensionStorageListLimit,
+  minimumContributionKeyLength,
+  navigationGroups,
+  navigationOutlet,
+  supportedWorkspaceLayoutVersion,
+} from './constants';
 
-export const extensionOutletSchema = z.enum([
-  'navigation',
-  'entity_preview_panel',
-  'blueprint_attribute_configuration',
-  'entity_attribute_decoration',
-  'entity_action',
-  'explorer_row_action',
-  'explorer_table_cell',
-  'blueprint_detail_panel',
-  'explorer_action',
-  'explorer_bulk_action',
-  'entity_header_action',
-  'entity_attribute_panel',
-  'blueprint_panel',
-  'blueprint_publish_check',
-  'file_panel',
-  'audit_event_panel',
-  'data_health_card',
-]);
+export const extensionOutletSchema = z.enum(extensionOutletNames);
 
 const contributionKeySchema = z
   .string()
-  .min(3)
-  .max(256)
-  .regex(/^[A-Za-z0-9._-]+:[A-Za-z0-9._-]+$/);
+  .min(minimumContributionKeyLength)
+  .max(maximumContributionKeyLength)
+  .regex(contributionKeyPattern);
 
 const contributionSchema = z
   .object({
     contribution_key: contributionKeySchema,
     display_order: z.number().int().nonnegative(),
-    navigation_group: z.enum(['promoted', 'grouped']).nullable(),
+    navigation_group: z.enum(navigationGroups).nullable(),
     extension_id: z.string().min(1),
     extension_name: z.string().min(1),
     release_id: z.uuid(),
@@ -38,7 +35,7 @@ const contributionSchema = z
     capabilities: z.array(z.string()),
     id: z.string().min(1),
     version: z.number().int().positive(),
-    kind: z.enum(['route', 'navigation', 'embedded', 'action', 'panel']),
+    kind: z.enum(contributionKinds),
     outlet: extensionOutletSchema.nullable(),
     route: z.string().nullable().default(null),
     title: z.string().nullable(),
@@ -63,12 +60,12 @@ const baseOutletLayoutSchema = z
     )
       context.addIssue({
         code: 'custom',
-        message: 'Contribution keys must be unique',
+        message: layoutValidationMessages.duplicateKeys,
       });
     if (layout.hidden.some((key) => order.has(key)))
       context.addIssue({
         code: 'custom',
-        message: 'A contribution cannot be ordered and hidden',
+        message: layoutValidationMessages.hiddenAndOrdered,
       });
   });
 
@@ -84,23 +81,23 @@ const navigationLayoutSchema = z
       if (new Set(keys).size !== keys.length)
         context.addIssue({
           code: 'custom',
-          message: 'Contribution keys must be unique',
+          message: layoutValidationMessages.duplicateKeys,
         });
     if (layout.hidden.some((key) => layout.order.includes(key)))
       context.addIssue({
         code: 'custom',
-        message: 'A contribution cannot be ordered and hidden',
+        message: layoutValidationMessages.hiddenAndOrdered,
       });
     if (layout.hidden.some((key) => layout.promoted.includes(key)))
       context.addIssue({
         code: 'custom',
-        message: 'A contribution cannot be hidden and promoted',
+        message: layoutValidationMessages.hiddenAndPromoted,
       });
   });
 
 export const workspaceExtensionLayoutSchema = z
   .object({
-    version: z.literal(1),
+    version: z.literal(supportedWorkspaceLayoutVersion),
     outlets: z
       .partialRecord(extensionOutletSchema, z.unknown())
       .transform((outlets, context) => {
@@ -111,14 +108,15 @@ export const workspaceExtensionLayoutSchema = z
         > = {};
         for (const [outlet, value] of Object.entries(outlets)) {
           const result =
-            outlet === 'navigation'
+            outlet === navigationOutlet
               ? navigationLayoutSchema.safeParse(value)
               : baseOutletLayoutSchema.safeParse(value);
           if (!result.success) {
             context.addIssue({
               code: 'custom',
               message:
-                result.error.issues[0]?.message ?? 'Invalid outlet layout',
+                result.error.issues[0]?.message ??
+                layoutValidationMessages.invalidOutlet,
               path: [outlet],
             });
             return z.NEVER;
@@ -136,7 +134,7 @@ export const workspaceExtensionLayoutSchema = z
         if (assigned.has(key)) {
           context.addIssue({
             code: 'custom',
-            message: 'A contribution can be configured in only one outlet',
+            message: layoutValidationMessages.multipleOutlets,
             path: ['outlets', outlet],
           });
         }
@@ -151,7 +149,7 @@ export type WorkspaceExtensionLayout = z.infer<
 export const extensionCommandRequestSchema = z
   .object({
     release_id: z.uuid(),
-    command_id: z.string().min(1).max(128),
+    command_id: z.string().min(1).max(maximumExtensionCommandIdLength),
     payload: z.unknown(),
   })
   .strict();
@@ -178,7 +176,12 @@ export const extensionStorageRequestSchema = z.discriminatedUnion('operation', [
       operation: z.literal('list'),
       prefix: z.string().optional(),
       cursor: z.string().optional(),
-      limit: z.number().int().min(1).max(100).optional(),
+      limit: z
+        .number()
+        .int()
+        .min(1)
+        .max(maximumExtensionStorageListLimit)
+        .optional(),
     })
     .strict(),
 ]);
@@ -197,12 +200,7 @@ const jsonValue: z.ZodType<unknown> = z.lazy(() =>
   ]),
 );
 const grantSchema = z.object({
-  grant_kind: z.enum([
-    'capability',
-    'host_permission',
-    'event_publish',
-    'event_subscribe',
-  ]),
+  grant_kind: z.enum(grantKinds),
   grant_id: z.string(),
   granted_at: z.string(),
 });
@@ -222,7 +220,7 @@ export const installationSchema = z.object({
   id: z.uuid(),
   extension_id: z.string(),
   installed_release_id: z.uuid(),
-  state: z.enum(['disabled', 'enabled', 'quarantined']),
+  state: z.enum(installationStates),
   configuration: jsonValue,
   configuration_version: z.number().int().nullable(),
   created_at: z.string(),

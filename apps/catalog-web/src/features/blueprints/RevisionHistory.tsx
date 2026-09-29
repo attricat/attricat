@@ -13,6 +13,7 @@ import {
   Typography,
 } from '@mui/material';
 import type { Blueprint } from './api';
+import { blueprintStatusChipColor } from './constants';
 import { formatBlueprintDateTime } from './dateTime';
 
 export const RevisionHistory = ({
@@ -43,13 +44,15 @@ export const RevisionHistory = ({
           <TableBody>
             {revisions.map((revision) => (
               <TableRow key={revision.version}>
-                <TableCell>v{revision.version}</TableCell>
+                <TableCell>
+                  {t('blueprints.versionNumber', {
+                    version: revision.version,
+                  })}
+                </TableCell>
                 <TableCell>
                   <Chip
-                    color={
-                      revision.status === 'published' ? 'success' : 'warning'
-                    }
-                    label={revision.status}
+                    color={blueprintStatusChipColor(revision.status)}
+                    label={t(`blueprints.revisionStatuses.${revision.status}`)}
                     size="small"
                   />
                 </TableCell>

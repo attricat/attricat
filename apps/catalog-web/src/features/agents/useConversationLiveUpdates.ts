@@ -2,18 +2,9 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import { agentRunEventsUrl } from './api';
+import { activeRunStatuses, runUpdateEvents } from './constants';
 import { agentQueryKeys } from './queryKeys';
 import type { AgentRun } from './schemas';
-
-const activeRunStatuses = ['queued', 'running', 'awaiting_approval'];
-const updateEvents = [
-  'status',
-  'message',
-  'tool_call',
-  'approval_required',
-  'error',
-  'terminal',
-];
 
 export const useConversationLiveUpdates = (runs: AgentRun[] | undefined) => {
   const { t } = useTranslation();
@@ -38,7 +29,9 @@ export const useConversationLiveUpdates = (runs: AgentRun[] | undefined) => {
             });
           };
 
-          updateEvents.forEach((type) => source.addEventListener(type, update));
+          runUpdateEvents.forEach((type) =>
+            source.addEventListener(type, update),
+          );
           source.onerror = () =>
             setStreamError(t('agents.liveUpdatesDisconnected'));
           return source;

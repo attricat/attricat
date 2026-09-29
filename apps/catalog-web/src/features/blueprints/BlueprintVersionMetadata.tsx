@@ -15,6 +15,11 @@ import { useTabAccessibility } from '../../components/useTabAccessibility';
 import { useTranslation } from 'react-i18next';
 import type { BlueprintWithAttributes } from './api';
 import { BlueprintViewsPreview } from './BlueprintViewsPreview';
+import {
+  blueprintVersionMetadataTabs as tabs,
+  emptyValuePlaceholder,
+  type BlueprintVersionMetadataTab,
+} from './constants';
 import { JsonMetadata } from './BlueprintMetadata';
 import { isHiddenByDefault } from '../entities/attributeVisibility';
 
@@ -25,7 +30,7 @@ export const BlueprintVersionMetadata = ({
 }) => {
   const { t } = useTranslation();
   const tabId = useTabAccessibility();
-  const [tab, setTab] = useState(0);
+  const [tab, setTab] = useState<BlueprintVersionMetadataTab>(tabs.attributes);
   const metadataAttributes = blueprint.attributes.filter(
     (attribute) => !isHiddenByDefault(attribute, 'metadata'),
   );
@@ -39,32 +44,41 @@ export const BlueprintVersionMetadata = ({
       </Typography>
       <Tabs
         allowScrollButtonsMobile
-        onChange={(_, value: number) => setTab(value)}
+        onChange={(_, value: BlueprintVersionMetadataTab) => setTab(value)}
         scrollButtons="auto"
         sx={{ mt: 1 }}
         value={tab}
         variant="scrollable"
       >
         <Tab
-          {...tabId.tab(0)}
+          {...tabId.tab(tabs.attributes)}
           label={t('blueprints.attributes', {
             count: metadataAttributes.length,
           })}
         />
-        <Tab {...tabId.tab(1)} label={t('blueprints.views')} />
-        <Tab {...tabId.tab(2)} label={t('blueprints.viewDefinition')} />
-        <Tab {...tabId.tab(3)} label={t('blueprints.entitySchema')} />
-        <Tab {...tabId.tab(4)} label={t('blueprints.includes')} />
-        <Tab {...tabId.tab(5)} label={t('blueprints.publicationPolicy')} />
+        <Tab {...tabId.tab(tabs.views)} label={t('blueprints.views')} />
+        <Tab
+          {...tabId.tab(tabs.viewDefinition)}
+          label={t('blueprints.viewDefinition')}
+        />
+        <Tab
+          {...tabId.tab(tabs.entitySchema)}
+          label={t('blueprints.entitySchema')}
+        />
+        <Tab {...tabId.tab(tabs.includes)} label={t('blueprints.includes')} />
+        <Tab
+          {...tabId.tab(tabs.publicationPolicy)}
+          label={t('blueprints.publicationPolicy')}
+        />
       </Tabs>
       <Box {...tabId.panel(tab)} sx={{ mt: 2 }}>
-        {tab === 4 && (
+        {tab === tabs.includes && (
           <JsonMetadata
             label={t('blueprints.includes')}
             value={blueprint.blueprint.includes}
           />
         )}
-        {tab === 5 && (
+        {tab === tabs.publicationPolicy && (
           <JsonMetadata
             label={t('blueprints.publicationPolicy')}
             value={{
@@ -74,25 +88,25 @@ export const BlueprintVersionMetadata = ({
             }}
           />
         )}
-        {tab === 1 && (
+        {tab === tabs.views && (
           <BlueprintViewsPreview
             attributes={blueprint.attributes}
             views={blueprint.blueprint.views}
           />
         )}
-        {tab === 2 && (
+        {tab === tabs.viewDefinition && (
           <JsonMetadata
             label={t('blueprints.views')}
             value={blueprint.blueprint.views}
           />
         )}
-        {tab === 3 && (
+        {tab === tabs.entitySchema && (
           <JsonMetadata
             label={t('blueprints.entitySchema')}
             value={blueprint.blueprint.entity_schema}
           />
         )}
-        {tab === 0 && (
+        {tab === tabs.attributes && (
           <Box sx={{ overflowX: 'auto' }}>
             <Table size="small">
               <TableHead>
@@ -107,11 +121,11 @@ export const BlueprintVersionMetadata = ({
               </TableHead>
               <TableBody>
                 {metadataAttributes.map((attribute) => (
-                  <TableRow key={String(attribute.id)}>
+                  <TableRow key={attribute.id}>
                     <TableCell>{attribute.code}</TableCell>
                     <TableCell>{attribute.value_type}</TableCell>
                     <TableCell>
-                      {attribute.target_blueprint_code ?? '—'}
+                      {attribute.target_blueprint_code ?? emptyValuePlaceholder}
                     </TableCell>
                     <TableCell>{JSON.stringify(attribute.tags)}</TableCell>
                     <TableCell>

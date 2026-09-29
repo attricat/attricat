@@ -23,6 +23,7 @@ describe('development timing buffer', () => {
           { name: 'sql', duration: 8, queryCount: 3 },
           { name: 'related', duration: 3 },
         ],
+        id: expect.any(Number),
         recordedAt: expect.any(Number),
       },
     ]);

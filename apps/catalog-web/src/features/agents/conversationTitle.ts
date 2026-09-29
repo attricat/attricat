@@ -1,4 +1,4 @@
-const maximumTitleLength = 72;
+import { maximumTitleLength } from './constants';
 
 export const conversationTitleFromFirstMessage = (content: string) => {
   const normalized = content.replace(/\s+/g, ' ').trim();

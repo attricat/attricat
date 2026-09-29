@@ -1,26 +1,25 @@
 import { z } from 'zod';
+import {
+  catalogEventNames,
+  defaultNotificationSeverity,
+  entityChangeHints,
+  maximumNotificationMessageLength,
+  notificationSeverities,
+} from './constants';
 
-export const catalogEventNames = {
-  entityUpdated: 'catalog:entity-updated.v1',
-  contextChanged: 'catalog:context-changed.v1',
-  refreshEntity: 'catalog:refresh-entity.v1',
-  navigate: 'catalog:navigate.v1',
-  notify: 'catalog:notify.v1',
-} as const;
+export { catalogEventNames } from './constants';
 
 const correlationIdSchema = z.uuid().optional();
-const changeHintSchema = z.enum([
-  'entity',
-  'attribute_values',
-  'relationships',
-  'blueprint',
-]);
+const changeHintSchema = z.enum(entityChangeHints);
+const changeHintsSchema = z
+  .array(changeHintSchema)
+  .max(entityChangeHints.length);
 
 /** Host-to-component details. They deliberately exclude outbox envelopes and payloads. */
 export const entityUpdatedDetailSchema = z
   .object({
     entity_id: z.uuid(),
-    change_hints: z.array(changeHintSchema).max(4),
+    change_hints: changeHintsSchema,
     correlation_id: correlationIdSchema,
   })
   .strict();
@@ -37,7 +36,7 @@ export const contextChangedDetailSchema = z
 export const refreshEntityDetailSchema = z
   .object({
     entity_id: z.uuid(),
-    change_hints: z.array(changeHintSchema).max(4).optional(),
+    change_hints: changeHintsSchema.optional(),
     correlation_id: correlationIdSchema,
   })
   .strict();
@@ -53,8 +52,10 @@ export const navigateDetailSchema = z
 /** Component-to-host request for a bounded, user-facing notification. */
 export const notifyDetailSchema = z
   .object({
-    message: z.string().trim().min(1).max(512),
-    severity: z.enum(['success', 'info', 'warning', 'error']).default('info'),
+    message: z.string().trim().min(1).max(maximumNotificationMessageLength),
+    severity: z
+      .enum(notificationSeverities)
+      .default(defaultNotificationSeverity),
     correlation_id: correlationIdSchema,
   })
   .strict();

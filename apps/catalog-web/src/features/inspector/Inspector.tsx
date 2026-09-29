@@ -1,84 +1,56 @@
-import { InspectorIcon } from '../../components/systemIcons';
 import CloseIcon from '@mui/icons-material/Close';
-import {
-  Box,
-  Fab,
-  IconButton,
-  Link,
-  Paper,
-  Tab,
-  Tabs,
-  Typography,
-} from '@mui/material';
+import { Box, IconButton, Paper, Tab, Tabs, Typography } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
-import { useId, useState, type ReactNode } from 'react';
+import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
-import { currentSession } from '../auth/api';
-import { authQueryKeys } from '../auth/queryKeys';
 import { getApiHealth } from './api';
+import {
+  apiHealthColor,
+  apiHealthSummaryKeys,
+  type ApiHealthState,
+} from './apiHealth';
+import {
+  API_HEALTH_POLL_INTERVAL_MS,
+  API_RETRY_INTERVAL_MS,
+  headerStatusDotSize,
+  inspectorHeaderMinHeight,
+  inspectorPaneIds,
+  inspectorPaneOrder,
+  inspectorPanelHeight,
+  inspectorTabMinHeight,
+  type InspectorPaneId,
+} from './constants';
+import { InspectorLauncher } from './InspectorLauncher';
+import { InspectorPerformancePane } from './InspectorPerformancePane';
+import { InspectorServerPane } from './InspectorServerPane';
+import { InspectorSessionPane } from './InspectorSessionPane';
 import { inspectorQueryKeys } from './queryKeys';
-import { useTimingStore } from './timing';
+import { useInspectorState } from './useInspectorState';
 
-type InspectorPane = {
-  id: string;
-  label: string;
-  content: ReactNode;
-};
+const paneLabelKeys = {
+  performance: 'inspector.performance',
+  server: 'inspector.server',
+  session: 'inspector.session',
+} as const satisfies Record<InspectorPaneId, string>;
 
-const API_HEALTH_POLL_INTERVAL_MS = 5_000;
-const API_RETRY_INTERVAL_MS = 1_000;
-const INSPECTOR_STATE_STORAGE_KEY = 'catalog.inspector-expanded';
-
-type InspectorState = {
-  activePane: string;
-  expanded: boolean;
-};
-
-const defaultInspectorState: InspectorState = {
-  activePane: 'server',
-  expanded: false,
-};
-
-const readInspectorState = (): InspectorState => {
-  try {
-    const value = localStorage.getItem(INSPECTOR_STATE_STORAGE_KEY);
-    if (value === 'true') return { ...defaultInspectorState, expanded: true };
-    if (!value) return defaultInspectorState;
-    const state = JSON.parse(value) as Partial<InspectorState>;
-    return {
-      activePane:
-        typeof state.activePane === 'string'
-          ? state.activePane
-          : defaultInspectorState.activePane,
-      expanded:
-        typeof state.expanded === 'boolean'
-          ? state.expanded
-          : defaultInspectorState.expanded,
-    };
-  } catch {
-    return defaultInspectorState;
-  }
+const InspectorPaneContent = ({
+  apiHealth,
+  pane,
+}: {
+  apiHealth: ApiHealthState;
+  pane: InspectorPaneId;
+}) => {
+  if (pane === inspectorPaneIds.performance)
+    return <InspectorPerformancePane />;
+  if (pane === inspectorPaneIds.session) return <InspectorSessionPane />;
+  return <InspectorServerPane apiHealth={apiHealth} />;
 };
 
 export const Inspector = () => {
   const { t } = useTranslation();
   const tabId = useId();
-  const [inspectorState, setInspectorState] = useState(readInspectorState);
-  const timings = useTimingStore((state) => state.entries);
-  const { activePane, expanded } = inspectorState;
-  const updateInspectorState = (updates: Partial<InspectorState>) => {
-    const nextState = { ...inspectorState, ...updates };
-    setInspectorState(nextState);
-    try {
-      localStorage.setItem(
-        INSPECTOR_STATE_STORAGE_KEY,
-        JSON.stringify(nextState),
-      );
-    } catch {
-      // The Inspector remains usable when storage is unavailable.
-    }
-  };
-  const apiHealth = useQuery({
+  const [{ activePane, expanded }, updateInspectorState] = useInspectorState();
+  const apiHealthQuery = useQuery({
     queryKey: inspectorQueryKeys.apiHealth(),
     queryFn: getApiHealth,
     retry: false,
@@ -87,250 +59,117 @@ export const Inspector = () => {
         ? API_RETRY_INTERVAL_MS
         : API_HEALTH_POLL_INTERVAL_MS,
   });
-  const session = useQuery({
-    queryKey: authQueryKeys.session(),
-    queryFn: currentSession,
-    retry: false,
+  const apiHealth: ApiHealthState = apiHealthQuery.isError
+    ? 'restarting'
+    : apiHealthQuery.isPending
+      ? 'checking'
+      : 'ready';
+  const apiStatus = t(apiHealthSummaryKeys[apiHealth]);
+  const tabIds = (pane: InspectorPaneId) => ({
+    panel: `${tabId}-${pane}-panel`,
+    tab: `${tabId}-${pane}-tab`,
   });
-  const apiRestarting = apiHealth.isError;
-  const apiChecking = apiHealth.isPending;
-  const apiStatus = apiRestarting
-    ? t('inspector.apiRestarting')
-    : apiChecking
-      ? t('inspector.checkingApi')
-      : t('inspector.apiReady');
-  const panes: InspectorPane[] = [
-    {
-      id: 'server',
-      label: t('inspector.server'),
-      content: (
-        <Box sx={{ display: 'grid', gap: 0.5 }}>
-          <Typography variant="body2">
-            {t('inspector.apiStatus', {
-              status: apiRestarting
-                ? t('inspector.restarting')
-                : apiChecking
-                  ? t('inspector.checking')
-                  : t('inspector.ready'),
-            })}
-          </Typography>
-          <Typography color="text.secondary" variant="caption">
-            {apiRestarting
-              ? t('inspector.waitingForHealthCheck')
-              : t('inspector.healthCheckInterval')}
-          </Typography>
-        </Box>
-      ),
-    },
-    {
-      id: 'performance',
-      label: t('inspector.performance'),
-      content: (
-        <Box sx={{ display: 'grid', gap: 0.5 }}>
-          {timings.length === 0 ? (
-            <Typography color="text.secondary" variant="body2">
-              {t('inspector.noTimings')}
-            </Typography>
-          ) : (
-            timings.map((entry) => (
-              <Typography
-                key={`${entry.recordedAt}-${entry.phases[0]?.name}`}
-                variant="body2"
-              >
-                {entry.phases
-                  .map((phase) =>
-                    phase.name.startsWith('sql')
-                      ? `${phase.name === 'sql' ? 'SQL' : `SQL ${phase.name.slice(4).replaceAll('-', ' ')}`} (${t('inspector.queryCount', { count: phase.queryCount ?? '?' })}): ${phase.duration.toFixed(2)} ms`
-                      : `${phase.name}: ${phase.duration.toFixed(2)} ms`,
-                  )
-                  .join(' · ')}
-              </Typography>
-            ))
-          )}
-          <Typography color="text.secondary" variant="caption">
-            {t('inspector.timingPrivacy')}
-          </Typography>
-        </Box>
-      ),
-    },
-    {
-      id: 'session',
-      label: t('inspector.session'),
-      content: (
-        <Box sx={{ display: 'grid', gap: 0.5 }}>
-          {session.isPending ? (
-            <Typography variant="body2">
-              {t('inspector.checkingSession')}
-            </Typography>
-          ) : session.data ? (
-            <>
-              <Typography variant="body2">
-                {t('inspector.signedInAs', { email: session.data.email })}
-              </Typography>
-              <Typography color="text.secondary" variant="caption">
-                {t('inspector.workspace', {
-                  workspace: session.data.login_identifier,
-                })}
-              </Typography>
-              <Typography color="text.secondary" variant="caption">
-                {t('inspector.tokenHelp')}
-              </Typography>
-              <Link href="/profile#personal-api-tokens">
-                {t('inspector.manageTokens')}
-              </Link>
-            </>
-          ) : (
-            <Typography variant="body2">
-              {t('inspector.notSignedIn')}
-            </Typography>
-          )}
-        </Box>
-      ),
-    },
-  ];
-  const pane = panes.find(({ id }) => id === activePane) ?? panes[0];
-  const statusColor =
-    apiRestarting || apiChecking ? 'warning.main' : 'success.main';
+
+  if (!expanded)
+    return (
+      <InspectorLauncher
+        apiHealth={apiHealth}
+        onOpen={() => updateInspectorState({ expanded: true })}
+      />
+    );
 
   return (
-    <>
-      {!expanded && (
-        <Fab
-          aria-label={t('inspector.open')}
-          color="default"
-          onClick={() => updateInspectorState({ expanded: true })}
+    <Paper
+      component="aside"
+      elevation={8}
+      sx={{
+        bottom: 0,
+        left: 0,
+        position: 'fixed',
+        right: 0,
+        zIndex: (theme) => theme.zIndex.modal + 1,
+      }}
+    >
+      <Box
+        sx={{
+          alignItems: 'center',
+          display: 'flex',
+          gap: 1,
+          minHeight: inspectorHeaderMinHeight,
+          px: 1.5,
+        }}
+      >
+        <Box
+          aria-label={apiStatus}
+          role="status"
+          sx={{
+            backgroundColor: apiHealthColor(apiHealth),
+            borderRadius: '50%',
+            height: headerStatusDotSize,
+            width: headerStatusDotSize,
+          }}
+        />
+        <Typography aria-live="polite" sx={{ flexGrow: 1 }} variant="caption">
+          {t('inspector.status', { status: apiStatus })}
+        </Typography>
+        <IconButton
+          aria-expanded
+          aria-label={t('inspector.collapse')}
+          onClick={() => updateInspectorState({ expanded: false })}
           size="small"
-          sx={{
-            backgroundColor: 'background.paper',
-            bottom: 16,
-            color: 'text.secondary',
-            left: '50%',
-            position: 'fixed',
-            transform: 'translateX(-50%)',
-            zIndex: (theme) => theme.zIndex.modal + 1,
-            '&:hover': {
-              backgroundColor: 'action.hover',
-              boxShadow: 4,
-              color: 'primary.main',
-            },
-          }}
         >
-          <InspectorIcon fontSize="small" />
-          <Box
-            aria-label={apiStatus}
-            role="status"
-            sx={{
-              backgroundColor: statusColor,
-              border: 2,
-              borderColor: 'background.paper',
-              borderRadius: '50%',
-              bottom: 3,
-              height: 10,
-              position: 'absolute',
-              right: 3,
-              width: 10,
-            }}
-          />
-        </Fab>
-      )}
-      {expanded && (
-        <Paper
-          component="aside"
-          elevation={8}
+          <CloseIcon fontSize="small" />
+        </IconButton>
+      </Box>
+      <Box
+        sx={{
+          borderTop: 1,
+          borderColor: 'divider',
+          boxSizing: 'border-box',
+          height: inspectorPanelHeight,
+          overflow: 'auto',
+          px: 1.5,
+          py: 1,
+        }}
+      >
+        <Tabs
+          aria-label={t('inspector.tools')}
+          onChange={(_, value: InspectorPaneId) =>
+            updateInspectorState({ activePane: value })
+          }
           sx={{
-            bottom: 0,
-            left: 0,
-            position: 'fixed',
-            right: 0,
-            zIndex: (theme) => theme.zIndex.modal + 1,
+            borderBottom: 1,
+            borderColor: 'divider',
+            minHeight: inspectorTabMinHeight,
+            '& .MuiTabs-indicator': { height: 2 },
           }}
+          value={activePane}
         >
-          <Box
-            sx={{
-              alignItems: 'center',
-              display: 'flex',
-              gap: 1,
-              minHeight: 36,
-              px: 1.5,
-            }}
-          >
-            <Box
-              aria-label={apiStatus}
-              role="status"
+          {inspectorPaneOrder.map((pane) => (
+            <Tab
+              aria-controls={tabIds(pane).panel}
+              id={tabIds(pane).tab}
+              key={pane}
+              label={t(paneLabelKeys[pane])}
               sx={{
-                backgroundColor: statusColor,
-                borderRadius: '50%',
-                height: 8,
-                width: 8,
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                minHeight: inspectorTabMinHeight,
+                py: 0,
               }}
+              value={pane}
             />
-            <Typography
-              aria-live="polite"
-              sx={{ flexGrow: 1 }}
-              variant="caption"
-            >
-              {t('inspector.status', { status: apiStatus })}
-            </Typography>
-            <IconButton
-              aria-expanded
-              aria-label={t('inspector.collapse')}
-              onClick={() => updateInspectorState({ expanded: false })}
-              size="small"
-            >
-              <CloseIcon fontSize="small" />
-            </IconButton>
-          </Box>
-          <Box
-            sx={{
-              borderTop: 1,
-              borderColor: 'divider',
-              boxSizing: 'border-box',
-              height: '20vh',
-              overflow: 'auto',
-              px: 1.5,
-              py: 1,
-            }}
-          >
-            <Tabs
-              aria-label={t('inspector.tools')}
-              onChange={(_, value: string) =>
-                updateInspectorState({ activePane: value })
-              }
-              sx={{
-                borderBottom: 1,
-                borderColor: 'divider',
-                minHeight: 28,
-                '& .MuiTabs-indicator': { height: 2 },
-              }}
-              value={pane.id}
-            >
-              {panes.map(({ id, label }) => (
-                <Tab
-                  aria-controls={`${tabId}-${id}-panel`}
-                  id={`${tabId}-${id}-tab`}
-                  key={id}
-                  label={label}
-                  sx={{
-                    fontSize: '0.75rem',
-                    fontWeight: 600,
-                    minHeight: 28,
-                    py: 0,
-                  }}
-                  value={id}
-                />
-              ))}
-            </Tabs>
-            <Box
-              aria-labelledby={`${tabId}-${pane.id}-tab`}
-              id={`${tabId}-${pane.id}-panel`}
-              role="tabpanel"
-              sx={{ pt: 1 }}
-            >
-              {pane.content}
-            </Box>
-          </Box>
-        </Paper>
-      )}
-    </>
+          ))}
+        </Tabs>
+        <Box
+          aria-labelledby={tabIds(activePane).tab}
+          id={tabIds(activePane).panel}
+          role="tabpanel"
+          sx={{ pt: 1 }}
+        >
+          <InspectorPaneContent apiHealth={apiHealth} pane={activePane} />
+        </Box>
+      </Box>
+    </Paper>
   );
 };

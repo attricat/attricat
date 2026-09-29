@@ -5,6 +5,9 @@ import {
   extensionOutletSchema,
   workspaceExtensionLayoutSchema,
 } from './schemas';
+import { auditEventPanelOutlet } from '../audit/constants';
+import { dataHealthExtensionOutlet } from '../data-health/constants';
+import { explorerExtensionOutlets } from '../explorer/constants';
 
 const validLayout = {
   version: 1 as const,
@@ -56,13 +59,17 @@ describe('extension outlet coverage', () => {
       }
     };
     visit(sourceRoot);
-    const mounted = new Set(
-      sources.flatMap((source) =>
+    // Some surfaces mount through named feature constants rather than literals.
+    const mounted = new Set<string>([
+      ...sources.flatMap((source) =>
         [...source.matchAll(/\boutlet(?:=|\s*===\s*)['"]([a-z_]+)['"]/g)].map(
           ([, outlet]) => outlet,
         ),
       ),
-    );
+      ...Object.values(explorerExtensionOutlets),
+      auditEventPanelOutlet,
+      dataHealthExtensionOutlet,
+    ]);
     expect(
       [...extensionOutletSchema.options].filter(
         (outlet) => !mounted.has(outlet),

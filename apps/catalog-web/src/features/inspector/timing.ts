@@ -7,17 +7,23 @@ export type TimingPhase = {
 };
 
 export type TimingEntry = {
+  /** Unique per session, so entries recorded in the same millisecond differ. */
+  id: number;
   phases: TimingPhase[];
   recordedAt: number;
 };
 
 const maximumEntries = 50;
+/** Aggregate phase covering every SQL query in a request. */
+export const sqlPhaseName = 'sql';
+/** Prefix of phases that time a named group of SQL queries. */
+export const sqlPhasePrefix = 'sql-';
 const serverPhases = new Set([
   'candidate',
   'page',
   'related',
   'serialize',
-  'sql',
+  sqlPhaseName,
   'sql-blueprint-load',
   'sql-table-sort-resolve',
   'sql-search-resolve',
@@ -25,7 +31,11 @@ const serverPhases = new Set([
   'sql-entities-page',
   'sql-related-hydrate',
 ]);
-const framePhases = new Set(['frame-load', 'frame-fallback']);
+const framePhaseNames = ['frame-load', 'frame-fallback'] as const;
+type FramePhaseName = (typeof framePhaseNames)[number];
+const framePhases = new Set<string>(framePhaseNames);
+let nextEntryId = 0;
+
 type TimingStore = {
   entries: TimingEntry[];
   add: (phases: TimingPhase[]) => void;
@@ -36,10 +46,10 @@ export const useTimingStore = create<TimingStore>((set) => ({
   entries: [],
   add: (phases) =>
     set((state) => ({
-      entries: [{ phases, recordedAt: Date.now() }, ...state.entries].slice(
-        0,
-        maximumEntries,
-      ),
+      entries: [
+        { id: (nextEntryId += 1), phases, recordedAt: Date.now() },
+        ...state.entries,
+      ].slice(0, maximumEntries),
     })),
   clear: () => set({ entries: [] }),
 }));
@@ -60,7 +70,9 @@ export const recordServerTiming = (header: string | null) => {
     if (!match || !serverPhases.has(match[1])) return [];
     const duration = Number(match[2]);
     const queryCount =
-      match[1].startsWith('sql') && match[3] ? Number(match[3]) : undefined;
+      match[1].startsWith(sqlPhaseName) && match[3]
+        ? Number(match[3])
+        : undefined;
     if (
       !Number.isFinite(duration) ||
       duration < 0 ||
@@ -79,10 +91,7 @@ export const recordServerTiming = (header: string | null) => {
 };
 
 /** Frame timings intentionally carry no contribution, entity, or artifact data. */
-export const recordFrameTiming = (
-  name: 'frame-load' | 'frame-fallback',
-  duration: number,
-) => {
+export const recordFrameTiming = (name: FramePhaseName, duration: number) => {
   if (!framePhases.has(name) || !Number.isFinite(duration) || duration < 0)
     return;
   addEntry([{ name, duration }]);

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import i18n from 'i18next';
 import { request, requestNoContent } from '../../api/request';
 
 const uuid = z.uuid();
@@ -64,10 +65,9 @@ const exploreNavigationItemSchema = exploreNavigationEntrySchema
 
 const permissionCodesSchema = z
   .array(z.string())
-  .refine(
-    (permissions) => new Set(permissions).size === permissions.length,
-    'Permissions must be unique',
-  );
+  .refine((permissions) => new Set(permissions).size === permissions.length, {
+    error: () => i18n.t('errors.permissionsUnique'),
+  });
 const grantInputSchema = z.object({
   role_id: uuid,
   scope_type: scopeTypeSchema,
@@ -107,14 +107,12 @@ export const ensureActiveScopeTarget = (
   const parsed = grantInputSchema.parse(input);
   if (parsed.scope_type === 'workspace') {
     if (!workspaceId || parsed.scope_target_id !== uuid.parse(workspaceId)) {
-      throw new Error('Workspace scope must target the active workspace.');
+      throw new Error(i18n.t('errors.workspaceScopeMismatch'));
     }
     return parsed;
   }
   if (!targets?.some((target) => target.id === parsed.scope_target_id)) {
-    throw new Error(
-      'Choose a target from the selected scope before submitting.',
-    );
+    throw new Error(i18n.t('errors.scopeTargetRequired'));
   }
   return parsed;
 };

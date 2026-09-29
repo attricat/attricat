@@ -3,6 +3,17 @@ import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { fileDownloadUrl, getFileMetadata } from './api';
+import {
+  fileStatuses,
+  MAX_LOADED_THUMBNAIL_SOURCES,
+  MAX_THUMBNAIL_RETRIES,
+  THUMBNAIL_FADE_IN_TRANSITION,
+  THUMBNAIL_POLL_INTERVAL,
+  THUMBNAIL_POLLING_STATUSES,
+  THUMBNAIL_RETRY_QUERY_PARAMETER,
+  THUMBNAIL_SPINNER_SIZE,
+  THUMBNAIL_VARIANT_KIND,
+} from './constants';
 import { fileQueryKeys } from './queryKeys';
 import type { FileMetadata } from './schemas';
 
@@ -15,20 +26,15 @@ type ThumbnailPreviewProps = {
   unavailable: boolean;
 };
 
-const pollingStatuses = new Set(['uploading', 'queued', 'processing']);
-const thumbnailPollInterval = 1_000;
-const maxThumbnailRetries = 3;
-
 // Explorer virtualizes rows, mounting and unmounting thumbnails as its virtual
 // range changes. Remember completed sources so a remounted thumbnail does not
 // show its loading treatment again.
 const loadedThumbnailSources = new Set<string>();
-const maxLoadedThumbnailSources = 256;
 
 const rememberLoadedThumbnail = (source: string) => {
   loadedThumbnailSources.delete(source);
   loadedThumbnailSources.add(source);
-  if (loadedThumbnailSources.size > maxLoadedThumbnailSources) {
+  if (loadedThumbnailSources.size > MAX_LOADED_THUMBNAIL_SOURCES) {
     const oldest = loadedThumbnailSources.values().next().value;
     if (oldest) loadedThumbnailSources.delete(oldest);
   }
@@ -62,7 +68,7 @@ const ThumbnailPreviewContent = ({
   const retry = () => {
     if (retryTimer.current !== undefined || retryExhausted) return;
 
-    if (attempt >= maxThumbnailRetries) {
+    if (attempt >= MAX_THUMBNAIL_RETRIES) {
       setRetryExhausted(true);
       return;
     }
@@ -70,7 +76,7 @@ const ThumbnailPreviewContent = ({
     retryTimer.current = window.setTimeout(() => {
       retryTimer.current = undefined;
       setAttempt((value) => value + 1);
-    }, thumbnailPollInterval);
+    }, THUMBNAIL_POLL_INTERVAL);
   };
 
   return (
@@ -96,12 +102,16 @@ const ThumbnailPreviewContent = ({
             rememberLoadedThumbnail(source);
             setLoaded(true);
           }}
-          src={`${source}${attempt ? `?retry=${attempt}` : ''}`}
+          src={
+            attempt
+              ? `${source}?${THUMBNAIL_RETRY_QUERY_PARAMETER}=${attempt}`
+              : source
+          }
           sx={{
             height: '100%',
             objectFit: 'cover',
             opacity: loaded ? 1 : 0,
-            transition: 'opacity 200ms ease-in',
+            transition: THUMBNAIL_FADE_IN_TRANSITION,
             width: '100%',
           }}
         />
@@ -126,7 +136,7 @@ const ThumbnailPreviewContent = ({
             <CircularProgress
               aria-label={t('files.thumbnailProcessing')}
               enableTrackSlot
-              size={20}
+              size={THUMBNAIL_SPINNER_SIZE}
             />
           )}
         </Box>
@@ -150,23 +160,23 @@ export const FileThumbnail = ({
     queryKey: fileQueryKeys.metadata(file.id),
     queryFn: () => getFileMetadata(file.id),
     refetchInterval: (query) =>
-      pollingStatuses.has(query.state.data?.status ?? '')
-        ? thumbnailPollInterval
+      THUMBNAIL_POLLING_STATUSES.has(query.state.data?.status ?? '')
+        ? THUMBNAIL_POLL_INTERVAL
         : false,
     refetchIntervalInBackground: true,
   });
   const currentFile = metadata.data;
   const thumbnail = currentFile?.variants.find(
-    (variant) => variant.kind === 'thumbnail',
+    (variant) => variant.kind === THUMBNAIL_VARIANT_KIND,
   );
   const source =
-    currentFile?.status === 'ready' && thumbnail
+    currentFile?.status === fileStatuses.ready && thumbnail
       ? fileDownloadUrl(currentFile.id, thumbnail.kind)
       : undefined;
   const unavailable =
-    (currentFile?.status === 'ready' && !thumbnail) ||
-    currentFile?.status === 'failed' ||
-    currentFile?.status === 'deleted';
+    (currentFile?.status === fileStatuses.ready && !thumbnail) ||
+    currentFile?.status === fileStatuses.failed ||
+    currentFile?.status === fileStatuses.deleted;
 
   return (
     <ThumbnailPreview

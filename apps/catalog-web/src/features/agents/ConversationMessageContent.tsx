@@ -11,12 +11,13 @@ import {
 import ReactMarkdown from 'react-markdown';
 import { useTranslation } from 'react-i18next';
 import '../../i18n';
+import { jsonIndent, messageRoles, uuidPattern } from './constants';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
 const formatJson = (value: unknown) =>
-  JSON.stringify(value, null, 2) ?? String(value);
+  JSON.stringify(value, null, jsonIndent) ?? String(value);
 
 const JsonDetails = ({
   children,
@@ -58,10 +59,8 @@ const ToolCall = ({ call }: { call: unknown }) => {
   );
 };
 
-const entityPreviewPath =
-  /^\/entities\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const savedSearchPath =
-  /^\/\?savedView=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const entityPreviewPath = new RegExp(`^/entities/${uuidPattern}$`, 'i');
+const savedSearchPath = new RegExp(`^/\\?savedView=${uuidPattern}$`, 'i');
 const isCatalogLink = (url: string) =>
   entityPreviewPath.test(url) || savedSearchPath.test(url);
 
@@ -133,14 +132,14 @@ export const ConversationMessageContent = ({
   }
 
   if (
-    messageRole === 'tool' &&
+    messageRole === messageRoles.tool &&
     isRecord(content) &&
     'tool_call_id' in content
   ) {
     return <ToolResult content={content} />;
   }
 
-  if (typeof content === 'string' && messageRole === 'assistant') {
+  if (typeof content === 'string' && messageRole === messageRoles.assistant) {
     return (
       <Box sx={markdownStyles}>
         <ReactMarkdown

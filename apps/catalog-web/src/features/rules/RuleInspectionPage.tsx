@@ -1,21 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createLink } from '@tanstack/react-router';
-import {
-  Alert,
-  Box,
-  Button,
-  Chip,
-  Paper,
-  Stack,
-  Tab,
-  Tabs,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  Typography,
-} from '@mui/material';
+import { Alert, Box, Tab, Tabs, Typography } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { currentSession } from '../auth/api';
@@ -27,23 +13,30 @@ import {
   listRules,
   runRuleNow,
 } from './api';
+import {
+  RULE_SECTION_FINDINGS,
+  RULE_SECTION_RULES,
+  RULE_SECTION_RUNS,
+  RULE_SECTIONS,
+  RULE_TAB_ID_PREFIX,
+  RULE_TABPANEL_ID_PREFIX,
+  type RuleInspectionSection,
+} from './constants';
+import { FindingsSection } from './FindingsSection';
 import { ruleQueryKeys } from './queryKeys';
+import { RulesSection } from './RulesSection';
+import { RunsSection } from './RunsSection';
 
 const RouterTab = createLink(Tab);
 
-const sections = [
-  { label: 'Rules', to: '/manage/rules' },
-  { label: 'Findings', to: '/manage/rules/findings' },
-  { label: 'Run history', to: '/manage/rules/runs' },
-] as const;
-
-export type RuleInspectionSection = 'rules' | 'findings' | 'runs';
+export type { RuleInspectionSection } from './constants';
 
 export const RuleInspectionPage = ({
   section,
 }: {
   section: RuleInspectionSection;
 }) => {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const session = useQuery({
     queryKey: authQueryKeys.session(),
@@ -54,17 +47,17 @@ export const RuleInspectionPage = ({
   const rules = useQuery({
     queryKey: ruleQueryKeys.definitions(),
     queryFn: listRules,
-    enabled: canRead && section === 'rules',
+    enabled: canRead && section === RULE_SECTION_RULES,
   });
   const findings = useQuery({
     queryKey: ruleQueryKeys.findings(),
     queryFn: () => listFindings(),
-    enabled: canRead && section === 'findings',
+    enabled: canRead && section === RULE_SECTION_FINDINGS,
   });
   const runs = useQuery({
     queryKey: ruleQueryKeys.runs(),
     queryFn: listRuleRuns,
-    enabled: canRead && section === 'runs',
+    enabled: canRead && section === RULE_SECTION_RUNS,
   });
   const refresh = () =>
     queryClient.invalidateQueries({ queryKey: ruleQueryKeys.all });
@@ -81,7 +74,7 @@ export const RuleInspectionPage = ({
   if (session.isPending) {
     return (
       <PageContainer>
-        <Typography>Loading rules…</Typography>
+        <Typography>{t('rules.loading')}</Typography>
       </PageContainer>
     );
   }
@@ -89,47 +82,43 @@ export const RuleInspectionPage = ({
   if (!canRead) {
     return (
       <PageContainer>
-        <Alert severity="error">
-          You are not authorized to view data quality rules.
-        </Alert>
+        <Alert severity="error">{t('rules.notAuthorized')}</Alert>
       </PageContainer>
     );
   }
 
-  const activeSectionIndex = {
-    rules: 0,
-    findings: 1,
-    runs: 2,
-  }[section];
+  const activeSectionIndex = RULE_SECTIONS.findIndex(
+    (item) => item.key === section,
+  );
 
   return (
     <PageContainer>
       <PageHeader
-        title="Data quality rules"
-        description="Inspect catalog-owned rule definitions, findings, and durable evaluation runs."
+        title={t('rules.title')}
+        description={t('rules.description')}
       />
       <Tabs
-        aria-label="Rule inspection"
+        aria-label={t('rules.inspectionTabs')}
         sx={{ mt: 3 }}
         value={activeSectionIndex}
       >
-        {sections.map((item, index) => (
+        {RULE_SECTIONS.map((item, index) => (
           <RouterTab
-            aria-controls={`rule-inspection-tabpanel-${index}`}
-            id={`rule-inspection-tab-${index}`}
+            aria-controls={`${RULE_TABPANEL_ID_PREFIX}-${index}`}
+            id={`${RULE_TAB_ID_PREFIX}-${index}`}
             key={item.to}
-            label={item.label}
+            label={t(`rules.sections.${item.key}`)}
             to={item.to}
             value={index}
           />
         ))}
       </Tabs>
       <Box
-        aria-labelledby={`rule-inspection-tab-${activeSectionIndex}`}
-        id={`rule-inspection-tabpanel-${activeSectionIndex}`}
+        aria-labelledby={`${RULE_TAB_ID_PREFIX}-${activeSectionIndex}`}
+        id={`${RULE_TABPANEL_ID_PREFIX}-${activeSectionIndex}`}
         role="tabpanel"
       >
-        {section === 'rules' && (
+        {section === RULE_SECTION_RULES && (
           <RulesSection
             canManage={canManage}
             error={rules.isError}
@@ -138,7 +127,7 @@ export const RuleInspectionPage = ({
             rules={rules.data}
           />
         )}
-        {section === 'findings' && (
+        {section === RULE_SECTION_FINDINGS && (
           <FindingsSection
             onAcknowledge={(id) => acknowledge.mutate(id)}
             acknowledging={acknowledge.isPending}
@@ -147,202 +136,10 @@ export const RuleInspectionPage = ({
             findings={findings.data}
           />
         )}
-        {section === 'runs' && (
+        {section === RULE_SECTION_RUNS && (
           <RunsSection error={runs.isError} runs={runs.data} />
         )}
       </Box>
     </PageContainer>
   );
 };
-
-const RulesSection = ({
-  canManage,
-  error,
-  onRun,
-  running,
-  rules,
-}: {
-  canManage: boolean;
-  error: boolean;
-  onRun: (id: string, dryRun: boolean) => void;
-  running: boolean;
-  rules: Awaited<ReturnType<typeof listRules>> | undefined;
-}) => (
-  <>
-    {error && (
-      <Alert severity="error" sx={{ mt: 3 }}>
-        Unable to load rule definitions.
-      </Alert>
-    )}
-    <Paper component="section" sx={{ mt: 3 }}>
-      <Box sx={{ overflowX: 'auto' }}>
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>Rule</TableCell>
-              <TableCell>Revision</TableCell>
-              <TableCell>Lifecycle</TableCell>
-              <TableCell>Actions</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {(rules ?? []).map((rule) => (
-              <TableRow key={`${rule.id}-${rule.version}`}>
-                <TableCell>
-                  <Stack spacing={0.25}>
-                    <Typography>{rule.name}</Typography>
-                    <Typography color="text.secondary" variant="caption">
-                      {rule.code}
-                    </Typography>
-                  </Stack>
-                </TableCell>
-                <TableCell>v{rule.version}</TableCell>
-                <TableCell>
-                  <Chip
-                    color={rule.enabled_version ? 'success' : 'default'}
-                    label={rule.enabled_version ? 'Enabled' : 'Disabled'}
-                    size="small"
-                  />
-                </TableCell>
-                <TableCell>
-                  {canManage && (
-                    <>
-                      <Button
-                        disabled={running}
-                        size="small"
-                        onClick={() => onRun(rule.id, true)}
-                      >
-                        Dry run
-                      </Button>
-                      <Button
-                        disabled={running}
-                        size="small"
-                        onClick={() => onRun(rule.id, false)}
-                      >
-                        Run now
-                      </Button>
-                    </>
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </Box>
-    </Paper>
-  </>
-);
-
-const FindingsSection = ({
-  acknowledging,
-  canManage,
-  error,
-  findings,
-  onAcknowledge,
-}: {
-  acknowledging: boolean;
-  canManage: boolean;
-  error: boolean;
-  findings: Awaited<ReturnType<typeof listFindings>> | undefined;
-  onAcknowledge: (id: string) => void;
-}) => (
-  <>
-    {error && (
-      <Alert severity="error" sx={{ mt: 3 }}>
-        Unable to load rule findings.
-      </Alert>
-    )}
-    <Paper component="section" sx={{ mt: 3 }}>
-      <Box sx={{ p: 2 }}>
-        <Typography variant="h6">Active findings</Typography>
-      </Box>
-      <Table size="small">
-        <TableHead>
-          <TableRow>
-            <TableCell>Severity</TableCell>
-            <TableCell>Finding</TableCell>
-            <TableCell>State</TableCell>
-            <TableCell />
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {(findings ?? [])
-            .filter((item) => item.state !== 'resolved')
-            .map((finding) => (
-              <TableRow key={finding.id}>
-                <TableCell>
-                  <Chip
-                    color={
-                      finding.severity === 'error' ||
-                      finding.severity === 'critical'
-                        ? 'error'
-                        : 'warning'
-                    }
-                    label={finding.severity}
-                    size="small"
-                  />
-                </TableCell>
-                <TableCell>{finding.message}</TableCell>
-                <TableCell>{finding.state}</TableCell>
-                <TableCell>
-                  {canManage && finding.state === 'open' && (
-                    <Button
-                      disabled={acknowledging}
-                      size="small"
-                      onClick={() => onAcknowledge(finding.id)}
-                    >
-                      Acknowledge
-                    </Button>
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
-        </TableBody>
-      </Table>
-    </Paper>
-  </>
-);
-
-const RunsSection = ({
-  error,
-  runs,
-}: {
-  error: boolean;
-  runs: Awaited<ReturnType<typeof listRuleRuns>> | undefined;
-}) => (
-  <>
-    {error && (
-      <Alert severity="error" sx={{ mt: 3 }}>
-        Unable to load rule run history.
-      </Alert>
-    )}
-    <Paper component="section" sx={{ mt: 3 }}>
-      <Box sx={{ p: 2 }}>
-        <Typography variant="h6">Run history</Typography>
-      </Box>
-      <Table size="small">
-        <TableHead>
-          <TableRow>
-            <TableCell>Source</TableCell>
-            <TableCell>Status</TableCell>
-            <TableCell>Evaluated</TableCell>
-            <TableCell>Findings</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {(runs ?? []).map((item) => (
-            <TableRow key={item.id}>
-              <TableCell>
-                {item.source}
-                {item.dry_run ? ' (dry run)' : ''}
-              </TableCell>
-              <TableCell>{item.status}</TableCell>
-              <TableCell>{item.candidates_evaluated}</TableCell>
-              <TableCell>{item.findings_created}</TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </Paper>
-  </>
-);

@@ -3,28 +3,29 @@ import { Link } from '@tanstack/react-router';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import { useTranslation } from 'react-i18next';
-import {
-  Alert,
-  Box,
-  IconButton,
-  Paper,
-  Tooltip,
-  Typography,
-} from '@mui/material';
+import { Alert, Box, IconButton, Tooltip, Typography } from '@mui/material';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { LoadMoreButton } from '../../components/LoadMoreButton';
 import { EntitySchemaSubheader } from './components/EntitySchemaSubheader';
+import { EntityChangeEvent } from './components/EntityChangeEvent';
 import { EntityToolbar } from './components/EntityToolbar';
 import { getEntityChanges, getEntityForm } from './api';
 import type { EntityAuditChange } from './api';
 import { entityQueryKeys } from './queryKeys';
 
-const groupChangesByEvent = (changes: EntityAuditChange[]) =>
-  changes.reduce<Record<string, EntityAuditChange[]>>((groups, change) => {
-    (groups[change.audit_event_id] ??= []).push(change);
-    return groups;
-  }, {});
+type EventChanges = [EntityAuditChange, ...EntityAuditChange[]];
+
+const groupChangesByEvent = (changes: EntityAuditChange[]) => [
+  ...changes
+    .reduce((groups, change) => {
+      const group = groups.get(change.audit_event_id);
+      if (group) group.push(change);
+      else groups.set(change.audit_event_id, [change]);
+      return groups;
+    }, new Map<string, EventChanges>())
+    .entries(),
+];
 
 export const EntityChangesPage = ({ entityId }: { entityId: string }) => {
   const { t } = useTranslation();
@@ -72,60 +73,9 @@ export const EntityChangesPage = ({ entityId }: { entityId: string }) => {
       )}
       {changes.data && (
         <Box sx={{ mt: 3 }}>
-          {Object.entries(groupChangesByEvent(changeItems)).map(
-            ([eventId, eventChanges]) => {
-              const event = eventChanges[0];
-              const actor =
-                event.actor_display_name ??
-                event.actor_email ??
-                (event.executor_type === 'agent'
-                  ? t('entities.agent')
-                  : t('entities.unknownActor'));
-              return (
-                <Paper component="section" key={eventId} sx={{ mb: 2, p: 2 }}>
-                  <Typography sx={{ fontWeight: 'bold' }}>
-                    {actor} · {new Date(event.occurred_at).toLocaleString()}
-                  </Typography>
-                  <Typography color="text.secondary" variant="body2">
-                    {event.approval_decision
-                      ? event.approved_by_display_name
-                        ? t('entities.approvalBy', {
-                            decision: event.approval_decision,
-                            actor: event.approved_by_display_name,
-                          })
-                        : t('entities.approval', {
-                            decision: event.approval_decision,
-                          })
-                      : t('entities.noApproval')}
-                  </Typography>
-                  {eventChanges.map((change) => (
-                    <Box
-                      key={`${change.attribute_id}-${change.context_id}-${change.change_kind}`}
-                      sx={{ mt: 1 }}
-                    >
-                      <Typography variant="body2">
-                        <strong>{change.attribute_code}</strong>
-                        {change.context_code ? ` (${change.context_code})` : ''}
-                        : {change.change_kind.replaceAll('_', ' ')}
-                      </Typography>
-                      <Typography
-                        component="pre"
-                        sx={{
-                          fontFamily: 'monospace',
-                          m: 0,
-                          whiteSpace: 'pre-wrap',
-                        }}
-                        variant="body2"
-                      >
-                        {JSON.stringify(change.before_value)} →{' '}
-                        {JSON.stringify(change.after_value)}
-                      </Typography>
-                    </Box>
-                  ))}
-                </Paper>
-              );
-            },
-          )}
+          {groupChangesByEvent(changeItems).map(([eventId, eventChanges]) => (
+            <EntityChangeEvent changes={eventChanges} key={eventId} />
+          ))}
           {changeItems.length === 0 && (
             <Typography>{t('entities.noRecordedChanges')}</Typography>
           )}

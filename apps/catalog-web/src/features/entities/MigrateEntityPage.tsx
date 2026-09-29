@@ -1,23 +1,22 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import {
-  Alert,
-  Box,
-  Checkbox,
-  FormControlLabel,
-  FormGroup,
-  Typography,
-} from '@mui/material';
+import { Alert, Box, Typography } from '@mui/material';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { listContexts } from '../contexts/api';
 import { contextQueryKeys } from '../contexts/queryKeys';
 import { defaultContextCode } from '../contexts/constants';
 import { migrateEntity, previewEntityMigration } from './api';
-import { valueForField } from './attributeValues';
 import { EntityForm } from './components/EntityForm';
 import { EntityPage } from './components/EntityPage';
+import { MigrationIssueList } from './components/MigrationIssueList';
 import { valuesForForm } from './entityForm';
+import {
+  describeMigrationValues,
+  migrationFormValues,
+  partitionMigrationIssues,
+  requiredMigrationAttributes,
+} from './migrationReview';
 import { entityQueryKeys } from './queryKeys';
 
 export const MigrateEntityPage = ({ entityId }: { entityId: string }) => {
@@ -35,45 +34,31 @@ export const MigrateEntityPage = ({ entityId }: { entityId: string }) => {
   const defaultContextId =
     contexts.data?.find((context) => context.code === defaultContextCode)?.id ??
     null;
-  const targetAttributeCodes = new Set(
-    preview.data?.target.attributes.map((attribute) => attribute.code) ?? [],
+  const { inlineIssues, standaloneIssues } = partitionMigrationIssues(
+    preview.data,
   );
-  const inlineIssues = (preview.data?.issues ?? []).filter(
-    (issue) =>
-      issue.attribute_code !== null &&
-      targetAttributeCodes.has(issue.attribute_code),
-  );
-  const standaloneIssues = (preview.data?.issues ?? []).filter(
-    (issue) => !inlineIssues.includes(issue),
-  );
-  const migrationValues = (preview.data?.values ?? []).filter(
-    (value) =>
-      !inlineIssues.some(
-        (issue) =>
-          issue.kind === 'relationship_target_changed' &&
-          issue.attribute_code === value.attribute_code,
-      ),
-  );
+  const migrationValues = migrationFormValues(preview.data, inlineIssues);
   const migrationReviewMessages = Object.fromEntries(
     inlineIssues.map((issue) => {
-      const currentValue = preview
-        .data!.values.filter(
-          (value) => value.attribute_code === issue.attribute_code,
-        )
-        .map((value) =>
-          value.kind === 'scalar'
-            ? valueForField(value.value)
-            : value.kind === 'relationship'
-              ? value.target_entity_id
-              : t('entities.fileCount', { count: value.files.length }),
-        )
-        .join(', ');
+      const currentValue = describeMigrationValues(
+        preview.data?.values ?? [],
+        issue.attribute_code!,
+        (count) => t('entities.fileCount', { count }),
+      );
       return [
         issue.attribute_code!,
-        `${issue.message}${currentValue ? ` ${t('entities.currentValue', { value: currentValue })}` : ''}`,
+        currentValue
+          ? `${issue.message} ${t('entities.currentValue', { value: currentValue })}`
+          : issue.message,
       ];
     }),
   );
+  const setDiscarded = (attributeCode: string, discard: boolean) =>
+    setDiscardAttributes((attributes) =>
+      discard
+        ? [...attributes, attributeCode]
+        : attributes.filter((attribute) => attribute !== attributeCode),
+    );
   const migrate = useMutation({
     mutationFn: ({
       values,
@@ -125,47 +110,12 @@ export const MigrateEntityPage = ({ entityId }: { entityId: string }) => {
               target: preview.data.target.blueprint.version,
             })}
           </Typography>
-          {standaloneIssues.map((issue) => (
-            <Alert
-              key={`${issue.attribute_code}:${issue.message}`}
-              severity="warning"
-              sx={{ mt: 2 }}
-            >
-              {issue.attribute_code ? `${issue.attribute_code}: ` : ''}
-              {issue.message}
-            </Alert>
-          ))}
-          <FormGroup sx={{ mt: 2 }}>
-            {standaloneIssues
-              .filter(
-                (issue): issue is typeof issue & { attribute_code: string } =>
-                  issue.attribute_code !== null && issue.kind === 'removed',
-              )
-              .map((issue) => (
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={discardAttributes.includes(issue.attribute_code)}
-                      disabled={migrate.isPending}
-                      onChange={(event) =>
-                        setDiscardAttributes((attributes) =>
-                          event.target.checked
-                            ? [...attributes, issue.attribute_code]
-                            : attributes.filter(
-                                (attribute) =>
-                                  attribute !== issue.attribute_code,
-                              ),
-                        )
-                      }
-                    />
-                  }
-                  key={issue.attribute_code}
-                  label={t('entities.confirmRemoval', {
-                    attribute: issue.attribute_code,
-                  })}
-                />
-              ))}
-          </FormGroup>
+          <MigrationIssueList
+            disabled={migrate.isPending}
+            discardAttributes={discardAttributes}
+            issues={standaloneIssues}
+            onDiscardChange={setDiscarded}
+          />
           <EntityForm
             blueprint={preview.data.target}
             contextId={defaultContextId}
@@ -174,12 +124,9 @@ export const MigrateEntityPage = ({ entityId }: { entityId: string }) => {
             existingValues={migrationValues}
             highlightedAttributes={Object.keys(migrationReviewMessages)}
             migrationReviewMessages={migrationReviewMessages}
-            requiredAttributes={preview.data.issues
-              .filter((issue) => issue.kind === 'missing_required')
-              .map((issue) => issue.attribute_code)
-              .filter((attributeCode): attributeCode is string =>
-                Boolean(attributeCode),
-              )}
+            requiredAttributes={requiredMigrationAttributes(
+              preview.data.issues,
+            )}
             initialValues={valuesForForm(
               preview.data.target.attributes,
               migrationValues,

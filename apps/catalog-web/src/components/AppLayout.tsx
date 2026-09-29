@@ -1,4 +1,3 @@
-import MenuIcon from '@mui/icons-material/Menu';
 import {
   Navigate,
   Outlet,
@@ -6,88 +5,32 @@ import {
   useRouterState,
 } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  Alert,
-  AppBar,
-  Box,
-  Button,
-  Drawer,
-  IconButton,
-  Toolbar,
-  CircularProgress,
-  useMediaQuery,
-  useTheme,
-} from '@mui/material';
-import { useLayoutEffect, useState } from 'react';
+import { Box, CircularProgress, useMediaQuery, useTheme } from '@mui/material';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { pageTitle } from '../app/pageTitle';
+import { returnToStorageKey } from '../app/storageKeys';
 import { currentSession, logout } from '../features/auth/api';
 import { authQueryKeys } from '../features/auth/queryKeys';
+import { DesktopNavigation } from './DesktopNavigation';
+import { MobileNavigation } from './MobileNavigation';
 import { MobileNavigationPanelProvider } from './MobileNavigationPanel';
-import { BrandIcon } from './BrandIcon';
-import { navigationRoutes } from './navigation';
-import {
-  compactNavigationWidth,
-  expandedNavigationWidth,
-  managementSidebarWidth,
-  SideNavigation,
-} from './SideNavigation';
+import { navigationRoutes, publicRoutes } from './navigation';
+import { SessionErrorState, SignOutErrorState } from './SessionErrorStates';
+import { isWithinRoute } from './sideNavigationLayout';
 
-export const SessionErrorState = ({
-  onRetry,
-  onSignOut,
-}: {
-  onRetry: () => void;
-  onSignOut: () => void;
-}) => {
-  const { t } = useTranslation();
+const signOutErrorMaxWidth = 480;
 
-  return (
-    <Box
-      sx={{
-        alignItems: 'center',
-        display: 'flex',
-        height: '100dvh',
-        justifyContent: 'center',
-        p: 3,
-      }}
-    >
-      <Alert
-        action={
-          <Box sx={{ display: 'flex', gap: 1 }}>
-            <Button color="inherit" onClick={onRetry} size="small">
-              {t('auth.retrySession')}
-            </Button>
-            <Button color="inherit" onClick={onSignOut} size="small">
-              {t('navigation.signOut')}
-            </Button>
-          </Box>
-        }
-        role="alert"
-        severity="error"
-      >
-        {t('auth.sessionCheckFailed')}
-      </Alert>
-    </Box>
-  );
-};
-
-export const SignOutErrorState = ({ onRetry }: { onRetry: () => void }) => {
-  const { t } = useTranslation();
-
-  return (
-    <Alert
-      action={
-        <Button color="inherit" onClick={onRetry} size="small">
-          {t('auth.retrySignOut')}
-        </Button>
-      }
-      role="alert"
-      severity="error"
-    >
-      {t('auth.signOutFailed')}
-    </Alert>
-  );
+// Rendered before the login redirect so its effect records the original
+// location before navigation replaces it.
+const RememberReturnLocation = () => {
+  useEffect(() => {
+    sessionStorage.setItem(
+      returnToStorageKey,
+      `${window.location.pathname}${window.location.search}${window.location.hash}`,
+    );
+  }, []);
+  return null;
 };
 
 export const AppLayout = () => {
@@ -107,24 +50,11 @@ export const AppLayout = () => {
   });
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [desktopManageOpen, setDesktopManageOpen] = useState(
-    pathname === navigationRoutes.manage ||
-      pathname.startsWith(`${navigationRoutes.manage}/`),
-  );
-  const [desktopExploreOpen, setDesktopExploreOpen] = useState(
-    pathname === navigationRoutes.explore,
-  );
-  const [desktopExtensionsOpen, setDesktopExtensionsOpen] = useState(
-    pathname === navigationRoutes.extensionContributions ||
-      pathname.startsWith(`${navigationRoutes.extensionContributions}/`),
-  );
   const [signOutError, setSignOutError] = useState(false);
-  const closeMobileNavigation = () => setMobileOpen(false);
   const completeSignOut = async () => {
     queryClient.clear();
     queryClient.setQueryData(authQueryKeys.session(), null);
-    await navigate({ to: '/login' });
+    await navigate({ to: publicRoutes.login });
   };
   const signOut = async () => {
     try {
@@ -143,11 +73,10 @@ export const AppLayout = () => {
     }
     await completeSignOut();
   };
-  const isLoginRoute = pathname === '/login' || pathname.startsWith('/login/');
+  const isLoginRoute = isWithinRoute(pathname, publicRoutes.login);
   if (
-    pathname === '/password-reset' ||
-    pathname.startsWith('/password-reset/') ||
-    pathname === '/onboarding'
+    isWithinRoute(pathname, publicRoutes.passwordReset) ||
+    pathname === publicRoutes.onboarding
   )
     return <Outlet />;
   if (session.isPending)
@@ -177,13 +106,13 @@ export const AppLayout = () => {
         onSignOut={() => void signOutAfterSessionFailure()}
       />
     );
-  if (!session.data) {
-    sessionStorage.setItem(
-      'catalog.return-to',
-      `${window.location.pathname}${window.location.search}${window.location.hash}`,
+  if (!session.data)
+    return (
+      <>
+        <RememberReturnLocation />
+        <Navigate to={publicRoutes.login} />
+      </>
     );
-    return <Navigate to="/login" />;
-  }
 
   return (
     <MobileNavigationPanelProvider>
@@ -191,10 +120,10 @@ export const AppLayout = () => {
         {signOutError && (
           <Box
             sx={{
-              left: 24,
-              maxWidth: 480,
+              left: (theme) => theme.spacing(6),
+              maxWidth: signOutErrorMaxWidth,
               position: 'fixed',
-              top: 24,
+              top: (theme) => theme.spacing(6),
               zIndex: (theme) => theme.zIndex.snackbar,
             }}
           >
@@ -202,75 +131,9 @@ export const AppLayout = () => {
           </Box>
         )}
         {isDesktop ? (
-          <Drawer
-            open
-            sx={{
-              flexShrink: 0,
-              width:
-                compactNavigationWidth +
-                (desktopManageOpen ||
-                desktopExploreOpen ||
-                desktopExtensionsOpen
-                  ? managementSidebarWidth
-                  : 0),
-            }}
-            slotProps={{
-              paper: {
-                sx: {
-                  overflow: 'hidden',
-                  width:
-                    compactNavigationWidth +
-                    (desktopManageOpen ||
-                    desktopExploreOpen ||
-                    desktopExtensionsOpen
-                      ? managementSidebarWidth
-                      : 0),
-                },
-              },
-            }}
-            variant="permanent"
-          >
-            <SideNavigation
-              compact
-              compactExploreOpen={desktopExploreOpen}
-              compactExtensionsOpen={desktopExtensionsOpen}
-              compactManageOpen={desktopManageOpen}
-              onCompactExploreOpenChange={setDesktopExploreOpen}
-              onCompactExtensionsOpenChange={setDesktopExtensionsOpen}
-              onCompactManageOpenChange={setDesktopManageOpen}
-              onSignOut={signOut}
-            />
-          </Drawer>
+          <DesktopNavigation onSignOut={signOut} pathname={pathname} />
         ) : (
-          <>
-            <AppBar position="fixed">
-              <Toolbar>
-                <IconButton
-                  aria-label={t('navigation.open')}
-                  color="inherit"
-                  edge="start"
-                  onClick={() => setMobileOpen(true)}
-                >
-                  <MenuIcon />
-                </IconButton>
-                <Box aria-label={t('app.attricat')} sx={{ flexGrow: 1, ml: 1 }}>
-                  <BrandIcon variant="wordmark" />
-                </Box>
-              </Toolbar>
-            </AppBar>
-            <Drawer
-              onClose={closeMobileNavigation}
-              open={mobileOpen}
-              slotProps={{ paper: { sx: { width: expandedNavigationWidth } } }}
-              variant="temporary"
-            >
-              <SideNavigation
-                key={`${pathname}:${mobileOpen ? 'open' : 'closed'}`}
-                onNavigate={closeMobileNavigation}
-                onSignOut={signOut}
-              />
-            </Drawer>
-          </>
+          <MobileNavigation onSignOut={signOut} pathname={pathname} />
         )}
         <Box
           component="main"

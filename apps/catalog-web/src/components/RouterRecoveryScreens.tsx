@@ -2,6 +2,8 @@ import { Alert, Box, Button, Stack, Typography } from '@mui/material';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
+const recoveryScreenMaxWidth = 560;
+
 const RecoveryScreen = ({
   actions,
   description,
@@ -21,7 +23,7 @@ const RecoveryScreen = ({
       p: 3,
     }}
   >
-    <Stack spacing={3} sx={{ maxWidth: 560, width: '100%' }}>
+    <Stack spacing={3} sx={{ maxWidth: recoveryScreenMaxWidth, width: '100%' }}>
       <Typography component="h1" variant="h4">
         {title}
       </Typography>

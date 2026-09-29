@@ -6,6 +6,7 @@ import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
 import { SettingsPage } from '../../components/CenteredPage';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
+import { personalTokensHash } from './constants';
 import { PersonalTokens } from './PersonalTokens';
 
 export const ProfilePage = () => {
@@ -51,7 +52,7 @@ export const ProfilePage = () => {
             <LanguageSwitcher />
           </Stack>
         </Paper>
-        <Box id="personal-api-tokens">
+        <Box id={personalTokensHash}>
           <Stack
             direction="row"
             sx={{

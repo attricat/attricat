@@ -1,24 +1,29 @@
 import { z } from 'zod';
+import i18n from '../../i18n';
 import type { Attribute, NewAttributeValue } from './api';
 import { validatesJsonSchema } from './jsonSchema';
 import { attributeValueKinds, attributeValueTypes } from './valueTypes';
+import { booleanFieldValues } from './constants';
 
-const timeZoneSchema = z.string().refine((value) => {
-  try {
-    Intl.DateTimeFormat(undefined, { timeZone: value });
-    return true;
-  } catch {
-    return false;
-  }
-}, 'Expected an IANA time zone');
+const timeZoneSchema = z.string().refine(
+  (value) => {
+    try {
+      Intl.DateTimeFormat(undefined, { timeZone: value });
+      return true;
+    } catch {
+      return false;
+    }
+  },
+  { error: () => i18n.t('entities.invalidTimeZone') },
+);
 
 const scalarValueSchemas = {
   [attributeValueTypes.string]: z.string(),
   [attributeValueTypes.number]: z.coerce.number().finite(),
   [attributeValueTypes.integer]: z.coerce.number().int().safe(),
   [attributeValueTypes.boolean]: z
-    .enum(['true', 'false'])
-    .transform((value) => value === 'true'),
+    .enum([booleanFieldValues.true, booleanFieldValues.false])
+    .transform((value) => value === booleanFieldValues.true),
   [attributeValueTypes.date]: z.iso.date(),
   [attributeValueTypes.datetime]: z.iso.datetime({ offset: true }),
   [attributeValueTypes.time]: z
@@ -31,8 +36,8 @@ const scalarValueSchemas = {
       return JSON.parse(value);
     } catch {
       context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Expected JSON',
+        code: 'custom',
+        message: i18n.t('entities.invalidJson'),
       });
       return z.NEVER;
     }

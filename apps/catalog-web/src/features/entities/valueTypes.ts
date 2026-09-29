@@ -14,4 +14,5 @@ export const attributeValueTypes = {
 export const attributeValueKinds = {
   scalar: 'scalar',
   relationship: 'relationship',
+  file: 'file',
 } as const;

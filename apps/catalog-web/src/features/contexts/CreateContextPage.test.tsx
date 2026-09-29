@@ -95,4 +95,26 @@ describe('CreateContextPage', () => {
 
     await waitFor(() => expect(listContexts).toHaveBeenCalledTimes(2));
   });
+
+  it('reports invalid metadata without creating the context', async () => {
+    vi.mocked(createContext).mockClear();
+    vi.mocked(listContexts).mockResolvedValue([
+      { id: 'parent-id', code: 'default', data: {}, parent_id: null },
+    ]);
+    renderPage();
+    const user = userEvent.setup();
+    await user.type(screen.getByRole('textbox', { name: 'Code' }), 'example');
+    await user.click(
+      await screen.findByRole('combobox', { name: 'Parent context' }),
+    );
+    await user.click(screen.getByRole('option', { name: 'default' }));
+    const metadata = screen.getByRole('textbox', { name: 'Metadata' });
+    await user.clear(metadata);
+    await user.type(metadata, '[[]');
+    await user.click(screen.getByRole('button', { name: 'Create context' }));
+    expect(
+      await screen.findByText('Metadata must be a JSON object.'),
+    ).toBeTruthy();
+    expect(createContext).not.toHaveBeenCalled();
+  });
 });

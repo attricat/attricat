@@ -10,3 +10,13 @@ export const isRelationshipFilterAttribute = (
 ): attribute is RelationshipFilterAttribute =>
   attribute.value_type === 'relationship' &&
   typeof attribute.target_blueprint_code === 'string';
+
+export type ExplorerRelationshipFacet = {
+  selectedIds: string[];
+  sourceRelationship: RelationshipFilterAttribute;
+};
+
+export type RelationshipFacetUpdate = {
+  selectedIds?: string[];
+  targetBlueprint?: string;
+};

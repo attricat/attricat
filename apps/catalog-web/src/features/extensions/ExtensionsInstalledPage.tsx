@@ -5,6 +5,10 @@ import { useTranslation } from 'react-i18next';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
 import { ErrorNotice } from './ExtensionErrorNotice';
+import {
+  installationStateColor,
+  installationStateLabelKey,
+} from './extensionPageUtils';
 import { installedExtensions } from './managementApi';
 import { extensionManagementQueryKeys } from './managementQueryKeys';
 
@@ -36,19 +40,16 @@ export const ExtensionsInstalledPage = () => {
                 <Typography variant="h6">
                   {extension.extension_id}{' '}
                   <Chip
-                    label={extension.state}
+                    color={installationStateColor(extension.state)}
+                    label={t(installationStateLabelKey(extension.state))}
                     size="small"
-                    color={
-                      extension.state === 'enabled'
-                        ? 'success'
-                        : extension.state === 'quarantined'
-                          ? 'error'
-                          : 'default'
-                    }
                   />
                 </Typography>
                 <Typography color="text.secondary">
-                  v{extension.version} · {extension.source}
+                  {t('extensions.versionSource', {
+                    version: extension.version,
+                    source: extension.source,
+                  })}
                 </Typography>
               </Box>
               <Link

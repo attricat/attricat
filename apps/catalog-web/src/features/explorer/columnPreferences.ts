@@ -1,10 +1,12 @@
+import { columnPreferencesStorageKeyPrefix } from './constants';
+
 export type ExplorerColumnPreferences = {
   hidden: string[];
   order: string[];
 };
 
 const storageKey = (blueprintId: string) =>
-  `catalog.explorer.column-preferences.${blueprintId}`;
+  `${columnPreferencesStorageKeyPrefix}${blueprintId}`;
 
 const defaultPreferences = (
   columnIds: string[],

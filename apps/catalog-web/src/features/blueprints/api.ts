@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { request } from '../../api/request';
+import type { RemovalDisposition } from './constants';
 import {
   blueprintEntityPublicationSummarySchema,
   blueprintMigrationBatchSchema,
@@ -73,7 +74,7 @@ export const getSafeBlueprintMigrationImpact = (id: string, version: number) =>
 export const startSafeBlueprintMigrationBatch = (
   id: string,
   version: number,
-  removalDisposition?: 'archive',
+  removalDisposition?: RemovalDisposition,
 ) =>
   request(
     `/api/blueprints/${encodeURIComponent(z.uuid().parse(id))}/versions/${z.number().int().positive().parse(version)}/safe-migration-batches`,

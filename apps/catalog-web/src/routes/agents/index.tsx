@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { z } from 'zod';
 import { ConversationsPage } from '../../features/agents/ConversationsPage';
+import { maximumSearchLength } from '../../features/agents/constants';
 
 const ConversationListRoute = () => {
   const search = Route.useSearch();
@@ -8,6 +9,8 @@ const ConversationListRoute = () => {
 };
 
 export const Route = createFileRoute('/agents/')({
-  validateSearch: z.object({ q: z.string().max(120).optional() }),
+  validateSearch: z.object({
+    q: z.string().max(maximumSearchLength).optional(),
+  }),
   component: ConversationListRoute,
 });

@@ -1,4 +1,4 @@
-const lastBlueprintStorageKey = 'catalog.explorer.last-blueprint';
+import { lastBlueprintStorageKey } from './constants';
 
 export const getLastBlueprint = () => {
   try {

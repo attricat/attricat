@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { Alert, Box, Button, Paper, Stack, Typography } from '@mui/material';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import {
@@ -11,24 +12,30 @@ import {
 } from './api';
 import { TomlEditor } from '../../components/TomlEditor';
 import { reusableAttributeQueryKeys } from './queryKeys';
+import {
+  DEFAULT_VALUE_TYPE,
+  EDITOR_HEIGHT,
+  EMPTY_VALUE_PLACEHOLDER,
+  NEW_ATTRIBUTE_DEFINITION,
+  PREVIEW_COLUMN_WIDTH,
+} from './constants';
 import { latestReusableAttributeRevisions } from './latestRevisions';
-
-const newAttributeDefinition = `code = "new_attribute"
-name = "New attribute"
-value_type = "string"
-`;
 
 const definitionValue = (definition: string, key: string) =>
   definition.match(new RegExp(`^${key}\\s*=\\s*"([^"]*)"`, 'm'))?.[1];
 
 const DefinitionPreview = ({ definition }: { definition: string }) => {
-  const code = definitionValue(definition, 'code') ?? '—';
-  const name = definitionValue(definition, 'name') ?? 'Untitled attribute';
-  const valueType = definitionValue(definition, 'value_type') ?? 'string';
+  const { t } = useTranslation();
+  const code = definitionValue(definition, 'code') ?? EMPTY_VALUE_PLACEHOLDER;
+  const name =
+    definitionValue(definition, 'name') ??
+    t('reusableAttributes.editor.untitled');
+  const valueType =
+    definitionValue(definition, 'value_type') ?? DEFAULT_VALUE_TYPE;
   return (
     <Paper sx={{ p: 2 }} variant="outlined">
       <Typography gutterBottom variant="subtitle2">
-        Preview
+        {t('reusableAttributes.editor.preview')}
       </Typography>
       <Typography color="text.secondary" variant="caption">
         {valueType} · {code}
@@ -57,6 +64,7 @@ export const ReusableAttributeEditorPage = ({
 }: {
   definitionId?: string;
 }) => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const attributes = useQuery({
@@ -68,7 +76,7 @@ export const ReusableAttributeEditorPage = ({
   ).find((item) => item.definition_id === definitionId);
   const [editedDefinition, setEditedDefinition] = useState<string>();
   const definition =
-    editedDefinition ?? attribute?.definition ?? newAttributeDefinition;
+    editedDefinition ?? attribute?.definition ?? NEW_ATTRIBUTE_DEFINITION;
   const save = useMutation({
     mutationFn: (submittedDefinition: string) =>
       attribute
@@ -87,7 +95,7 @@ export const ReusableAttributeEditorPage = ({
   if (definitionId && attributes.isPending) {
     return (
       <PageContainer>
-        <Typography>Loading reusable attribute…</Typography>
+        <Typography>{t('reusableAttributes.editor.loading')}</Typography>
       </PageContainer>
     );
   }
@@ -95,7 +103,9 @@ export const ReusableAttributeEditorPage = ({
   if (definitionId && !attribute) {
     return (
       <PageContainer>
-        <Alert severity="error">Reusable attribute not found.</Alert>
+        <Alert severity="error">
+          {t('reusableAttributes.editor.notFound')}
+        </Alert>
       </PageContainer>
     );
   }
@@ -104,9 +114,13 @@ export const ReusableAttributeEditorPage = ({
     <PageContainer>
       <Stack spacing={3}>
         <PageHeader
-          description="Namespace is derived from the active workspace and cannot be set in the definition."
+          description={t('reusableAttributes.editor.description')}
           title={
-            attribute ? `Edit ${attribute.name}` : 'New reusable attribute'
+            attribute
+              ? t('reusableAttributes.editor.editTitle', {
+                  name: attribute.name,
+                })
+              : t('reusableAttributes.editor.newTitle')
           }
           actions={
             <Stack direction="row" spacing={1}>
@@ -114,14 +128,16 @@ export const ReusableAttributeEditorPage = ({
                 disabled={save.isPending}
                 onClick={() => navigate({ to: '/manage/reusable-attributes' })}
               >
-                Cancel
+                {t('reusableAttributes.editor.cancel')}
               </Button>
               <Button
                 disabled={save.isPending}
                 onClick={() => save.mutate(definition)}
                 variant="contained"
               >
-                {attribute ? 'Save revision' : 'Create attribute'}
+                {attribute
+                  ? t('reusableAttributes.editor.saveRevision')
+                  : t('reusableAttributes.editor.createAttribute')}
               </Button>
             </Stack>
           }
@@ -131,11 +147,13 @@ export const ReusableAttributeEditorPage = ({
           sx={{
             display: 'grid',
             gap: 2,
-            gridTemplateColumns: { lg: 'minmax(0, 1fr) 300px' },
+            gridTemplateColumns: {
+              lg: `minmax(0, 1fr) ${PREVIEW_COLUMN_WIDTH}`,
+            },
           }}
         >
           <TomlEditor
-            height="calc(100vh - 280px)"
+            height={EDITOR_HEIGHT}
             onChange={(value) => {
               if (!save.isPending) setEditedDefinition(value ?? '');
             }}

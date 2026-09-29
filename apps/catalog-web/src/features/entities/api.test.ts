@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import '../../i18n';
 import {
   createEntity,
   deleteEntity,
@@ -19,6 +20,7 @@ import {
   unpublishEntity,
   updateEntity,
 } from './api';
+import '../../i18n';
 
 const entityId = '123e4567-e89b-12d3-a456-426614174000';
 const blueprintId = '223e4567-e89b-12d3-a456-426614174000';
@@ -188,29 +190,37 @@ describe('entity API client', () => {
   });
 
   it('loads entity changes from the timeline route', async () => {
-    respond({ items: [
-      {
-        audit_event_id: entityId,
-        occurred_at: '2026-09-09T12:00:00Z',
-        actor_user_id: null,
-        actor_display_name: null,
-        actor_email: null,
-        executor_type: 'human',
-        agent_run_id: null,
-        approval_decision: null,
-        approved_by_user_id: null,
-        approved_by_display_name: null,
-        attribute_id: entityId,
-        attribute_code: 'title',
-        context_id: null,
-        context_code: null,
-        change_kind: 'replace',
-        before_value: 'Old title',
-        after_value: 'New title',
-      },
-    ], next_offset: 25 });
-    await expect(getEntityChanges(entityId, 0)).resolves.toMatchObject({ items: [expect.any(Object)], next_offset: 25 });
-    expect(fetchMock).toHaveBeenCalledWith(`/api/entities/${entityId}/changes?limit=25&offset=0`);
+    respond({
+      items: [
+        {
+          audit_event_id: entityId,
+          occurred_at: '2026-09-09T12:00:00Z',
+          actor_user_id: null,
+          actor_display_name: null,
+          actor_email: null,
+          executor_type: 'human',
+          agent_run_id: null,
+          approval_decision: null,
+          approved_by_user_id: null,
+          approved_by_display_name: null,
+          attribute_id: entityId,
+          attribute_code: 'title',
+          context_id: null,
+          context_code: null,
+          change_kind: 'replace',
+          before_value: 'Old title',
+          after_value: 'New title',
+        },
+      ],
+      next_offset: 25,
+    });
+    await expect(getEntityChanges(entityId, 0)).resolves.toMatchObject({
+      items: [expect.any(Object)],
+      next_offset: 25,
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/entities/${entityId}/changes?limit=25&offset=0`,
+    );
   });
 
   it('accepts file values in a migration preview', async () => {
@@ -477,14 +487,24 @@ describe('entity API client', () => {
   });
 
   it('posts the selected publication channel for status sorting', async () => {
-    respond({ blueprint: blueprintWithAttributes, items: [], next_cursor: null });
+    respond({
+      blueprint: blueprintWithAttributes,
+      items: [],
+      next_cursor: null,
+    });
     await searchEntities({
       blueprint: 'product',
-      sort: { field: 'publication_status', direction: 'asc', context_code: 'web' },
+      sort: {
+        field: 'publication_status',
+        direction: 'asc',
+        context_code: 'web',
+      },
     });
     const request = fetchMock.mock.lastCall?.[1] as RequestInit;
     expect(JSON.parse(request.body as string).sort).toEqual({
-      field: 'publication_status', direction: 'asc', context_code: 'web',
+      field: 'publication_status',
+      direction: 'asc',
+      context_code: 'web',
     });
   });
 

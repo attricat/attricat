@@ -11,9 +11,13 @@ import {
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  customThresholdInputWidth,
+  customThresholdValue,
   maximumStaleAfterDays,
   minimumStaleAfterDays,
   staleAfterDayOptions,
+  staleAfterLabelId,
+  staleAfterSelectMinWidth,
 } from './constants';
 
 type Props = {
@@ -49,16 +53,16 @@ const DataHealthControlsForm = ({
         spacing={2}
         sx={{ alignItems: { sm: 'center' } }}
       >
-        <FormControl size="small" sx={{ minWidth: 160 }}>
-          <InputLabel id="stale-after-label">
+        <FormControl size="small" sx={{ minWidth: staleAfterSelectMinWidth }}>
+          <InputLabel id={staleAfterLabelId}>
             {t('dataHealth.staleAfter')}
           </InputLabel>
           <Select
             label={t('dataHealth.staleAfter')}
-            labelId="stale-after-label"
-            value={customThreshold ? 'custom' : staleAfterDays}
+            labelId={staleAfterLabelId}
+            value={customThreshold ? customThresholdValue : staleAfterDays}
             onChange={(event) => {
-              if (event.target.value === 'custom') {
+              if (event.target.value === customThresholdValue) {
                 setCustomThreshold(true);
                 return;
               }
@@ -71,7 +75,9 @@ const DataHealthControlsForm = ({
                 {t('dataHealth.daysCount', { count: days })}
               </MenuItem>
             ))}
-            <MenuItem value="custom">{t('dataHealth.custom')}</MenuItem>
+            <MenuItem value={customThresholdValue}>
+              {t('dataHealth.custom')}
+            </MenuItem>
           </Select>
         </FormControl>
         {customThreshold && (
@@ -95,7 +101,7 @@ const DataHealthControlsForm = ({
               },
             }}
             type="number"
-            sx={{ width: 110 }}
+            sx={{ width: customThresholdInputWidth }}
           />
         )}
         <Button disabled={isRefreshing} onClick={onRefresh} variant="outlined">

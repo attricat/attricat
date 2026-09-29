@@ -6,6 +6,7 @@ import {
   requestNoContent,
   requestText,
 } from './request';
+import '../i18n';
 
 const fetchMock = vi.fn();
 vi.stubGlobal('fetch', fetchMock);

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Box } from '@mui/material';
 import { decideApproval, listApprovals, listMessages, listRuns } from './api';
 import { smartFillEntityForm } from '../entities/api';
+import { conversationPollIntervalMs, thinkingRunStatuses } from './constants';
 import { ConversationComposer } from './ConversationComposer';
 import { ConversationTranscript } from './ConversationTranscript';
 import { agentQueryKeys } from './queryKeys';
@@ -28,17 +29,17 @@ export const ConversationPanel = ({
   const messages = useQuery({
     queryKey: agentQueryKeys.messages(conversationId),
     queryFn: () => listMessages(conversationId),
-    refetchInterval: 10_000,
+    refetchInterval: conversationPollIntervalMs,
   });
   const runs = useQuery({
     queryKey: agentQueryKeys.runs(conversationId),
     queryFn: () => listRuns(conversationId),
-    refetchInterval: 10_000,
+    refetchInterval: conversationPollIntervalMs,
   });
   const approvals = useQuery({
     queryKey: agentQueryKeys.approvals(conversationId),
     queryFn: () => listApprovals(conversationId),
-    refetchInterval: 10_000,
+    refetchInterval: conversationPollIntervalMs,
   });
   const invalidate = () =>
     void client.invalidateQueries({ queryKey: agentQueryKeys.all() });
@@ -70,7 +71,7 @@ export const ConversationPanel = ({
           isLoadingMessages={messages.isPending}
           isThinking={
             isSending ||
-            runs.data?.some((run) => ['queued', 'running'].includes(run.status))
+            runs.data?.some((run) => thinkingRunStatuses.includes(run.status))
           }
           latestRun={runs.data?.[0]}
           messages={messages.data}

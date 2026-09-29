@@ -5,4 +5,9 @@ export const blueprintQueryKeys = {
     ['blueprint-migration-batches', id] as const,
   revision: (id: string, version: number) =>
     ['blueprint-revision', id, version] as const,
+  safeMigrationImpact: (id: string, version: number) =>
+    [
+      ...blueprintQueryKeys.revision(id, version),
+      'safe-migration-impact',
+    ] as const,
 } as const;

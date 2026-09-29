@@ -1,6 +1,12 @@
 import { z } from 'zod';
 import { request, requestNoContent } from '../../api/request';
 import { inlineExplorerSearch, type ExplorerSearch } from '../explorer/search';
+import {
+  EXPLORER_SEARCH_KIND,
+  SAVED_VIEWS_PATH,
+  VIEW_STATE_LINKS_PATH,
+  type SavedViewVisibility,
+} from './constants';
 import { savedViewSchema } from './schemas';
 
 const json = (body: unknown, method: string): RequestInit => ({
@@ -9,26 +15,26 @@ const json = (body: unknown, method: string): RequestInit => ({
   body: JSON.stringify(body),
 });
 const statePayload = (state: ExplorerSearch) => ({
-  kind: 'explorer_search',
+  kind: EXPLORER_SEARCH_KIND,
   state: inlineExplorerSearch(state),
 });
 
 export const listSavedViews = (signal?: AbortSignal) =>
-  request('/api/saved-views', z.array(savedViewSchema), { signal });
+  request(SAVED_VIEWS_PATH, z.array(savedViewSchema), { signal });
 export const getSavedView = (id: string, link: boolean, signal?: AbortSignal) =>
   request(
-    `/api/${link ? 'view-state-links' : 'saved-views'}/${encodeURIComponent(id)}`,
+    `${link ? VIEW_STATE_LINKS_PATH : SAVED_VIEWS_PATH}/${encodeURIComponent(id)}`,
     savedViewSchema,
     { signal },
   );
 export const createSavedView = (
   name: string,
   description: string,
-  visibility: 'private' | 'workspace',
+  visibility: SavedViewVisibility,
   state: ExplorerSearch,
 ) =>
   request(
-    '/api/saved-views',
+    SAVED_VIEWS_PATH,
     savedViewSchema,
     json({ ...statePayload(state), name, description, visibility }, 'POST'),
   );
@@ -36,21 +42,21 @@ export const updateSavedView = (
   id: string,
   name: string,
   description: string,
-  visibility: 'private' | 'workspace',
+  visibility: SavedViewVisibility,
   state: ExplorerSearch,
 ) =>
   request(
-    `/api/saved-views/${encodeURIComponent(id)}`,
+    `${SAVED_VIEWS_PATH}/${encodeURIComponent(id)}`,
     savedViewSchema,
     json({ ...statePayload(state), name, description, visibility }, 'PUT'),
   );
 export const deleteSavedView = (id: string) =>
-  requestNoContent(`/api/saved-views/${encodeURIComponent(id)}`, {
+  requestNoContent(`${SAVED_VIEWS_PATH}/${encodeURIComponent(id)}`, {
     method: 'DELETE',
   });
 export const createViewStateLink = (state: ExplorerSearch) =>
   request(
-    '/api/view-state-links',
+    VIEW_STATE_LINKS_PATH,
     savedViewSchema,
     json(statePayload(state), 'POST'),
   );

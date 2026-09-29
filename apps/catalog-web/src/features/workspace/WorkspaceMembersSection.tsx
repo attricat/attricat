@@ -23,8 +23,8 @@ import {
   revokeMemberRole,
   selectedScopeTarget,
   transferOwnership,
-  type ScopeType,
 } from './api';
+import { activeMemberState, ownerRoleCode, workspaceScope } from './constants';
 import { workspaceQueryKeys } from './queryKeys';
 import { ScopeFields } from './ScopeFields';
 
@@ -39,7 +39,11 @@ export const WorkspaceMembersSection = ({
   currentUserId?: string;
   workspaceId?: string;
 }) => {
-  const { t } = useTranslation();
+  const { i18n, t } = useTranslation();
+  const roleFormatter = new Intl.ListFormat(i18n.language, {
+    style: 'narrow',
+    type: 'unit',
+  });
   const client = useQueryClient();
   const [error, setError] = useState<string>();
   const submitting = useRef(false);
@@ -62,7 +66,7 @@ export const WorkspaceMembersSection = ({
     defaultValues: {
       member_id: '',
       role_id: '',
-      scope_type: 'workspace' as ScopeType,
+      scope_type: workspaceScope,
       scope_target_id: workspaceId ?? '',
     },
     onSubmit: async ({ value }) => {
@@ -106,8 +110,8 @@ export const WorkspaceMembersSection = ({
       member.user_id === currentUserId &&
       member.grants.some(
         (grant) =>
-          grant.role_code === 'owner' &&
-          grant.scope_type === 'workspace' &&
+          grant.role_code === ownerRoleCode &&
+          grant.scope_type === workspaceScope &&
           grant.scope_target_id === workspaceId,
       ),
   );
@@ -129,7 +133,20 @@ export const WorkspaceMembersSection = ({
             <ListItem divider key={member.id}>
               <ListItemText
                 primary={member.display_name ?? member.email}
-                secondary={`${member.email} · ${member.state}${member.grants.length ? ` · ${member.grants.map((grant) => grant.role_code).join(', ')}` : ''}`}
+                secondary={t(
+                  member.grants.length
+                    ? 'workspace.memberSummaryWithRoles'
+                    : 'workspace.memberSummary',
+                  {
+                    email: member.email,
+                    state: t(`workspace.memberStates.${member.state}`, {
+                      defaultValue: member.state,
+                    }),
+                    roles: roleFormatter.format(
+                      member.grants.map((grant) => grant.role_code),
+                    ),
+                  },
+                )}
               />
               {canGrantRoles &&
                 member.grants.map((grant) => (
@@ -181,7 +198,7 @@ export const WorkspaceMembersSection = ({
                   value={field.state.value}
                 >
                   {members.data
-                    ?.filter((member) => member.state === 'active')
+                    ?.filter((member) => member.state === activeMemberState)
                     .map((member) => (
                       <MenuItem key={member.id} value={member.id}>
                         {member.email}

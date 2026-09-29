@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query';
 import { Link, type ToOptions } from '@tanstack/react-router';
 import { Alert, Box, Button, Tab, Tabs } from '@mui/material';
 import type { ReactNode } from 'react';
@@ -6,7 +7,7 @@ import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
-import { useQuery } from '@tanstack/react-query';
+import { extensionManagementTabIds } from './constants';
 
 const extensionTabs = [
   { label: 'extensions.marketplace', to: '/manage/extensions/marketplace' },
@@ -28,8 +29,6 @@ export const ExtensionManagementPage = ({
     queryKey: authQueryKeys.session(),
     queryFn: currentSession,
   });
-  const tabId = `extension-management-tab-${tab}`;
-  const panelId = `extension-management-tabpanel-${tab}`;
 
   if (session.data && !session.data.capabilities?.extensions_read) {
     return (
@@ -55,9 +54,9 @@ export const ExtensionManagementPage = ({
       <Tabs aria-label={t('extensions.title')} sx={{ mb: 3 }} value={tab}>
         {extensionTabs.map((item, index) => (
           <Tab
-            aria-controls={`extension-management-tabpanel-${index}`}
+            aria-controls={extensionManagementTabIds.panel(index)}
             component={Link}
-            id={`extension-management-tab-${index}`}
+            id={extensionManagementTabIds.tab(index)}
             key={item.to}
             label={t(item.label)}
             to={item.to}
@@ -65,7 +64,11 @@ export const ExtensionManagementPage = ({
           />
         ))}
       </Tabs>
-      <Box aria-labelledby={tabId} id={panelId} role="tabpanel">
+      <Box
+        aria-labelledby={extensionManagementTabIds.tab(tab)}
+        id={extensionManagementTabIds.panel(tab)}
+        role="tabpanel"
+      >
         {children}
       </Box>
     </PageContainer>

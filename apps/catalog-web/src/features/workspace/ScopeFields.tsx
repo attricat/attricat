@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Alert, MenuItem, TextField } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { listGrantTargets, selectedScopeTarget, type ScopeType } from './api';
+import { workspaceScope } from './constants';
 import { workspaceQueryKeys } from './queryKeys';
 
 type ScopeFieldsProps = {
@@ -33,7 +34,9 @@ export const ScopeFields = ({
         select
         value={scope}
       >
-        <MenuItem value="workspace">{t('workspace.entireWorkspace')}</MenuItem>
+        <MenuItem value={workspaceScope}>
+          {t('workspace.entireWorkspace')}
+        </MenuItem>
         <MenuItem value="blueprint_family">
           {t('workspace.blueprintFamily')}
         </MenuItem>
@@ -61,11 +64,11 @@ const ScopeTargetField = ({
 >) => {
   const { t } = useTranslation();
   const targets = useQuery({
-    enabled: scope !== 'workspace',
+    enabled: scope !== workspaceScope,
     queryKey: workspaceQueryKeys.grantTargets(scope),
     queryFn: () => listGrantTargets(scope),
   });
-  if (scope === 'workspace') return null;
+  if (scope === workspaceScope) return null;
   const label =
     scope === 'blueprint_family'
       ? t('workspace.blueprintFamily')

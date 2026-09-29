@@ -1,6 +1,7 @@
 import type { Attribute } from './api';
 import type { AttributeContext } from '../contexts/api';
 import { defaultContextCode } from '../contexts/constants';
+import { attributeContextFallbacks } from './constants';
 
 export const resolvePreviewContext = (
   context: Record<string, Record<string, unknown>>,
@@ -23,7 +24,7 @@ export const resolvePreviewContext = (
       for (const [index, contextCode] of path.entries()) {
         if (
           (!selectedExists || index > 0) &&
-          attribute.context_fallback === 'none'
+          attribute.context_fallback === attributeContextFallbacks.none
         )
           break;
         const value = context[contextCode]?.[attribute.code];

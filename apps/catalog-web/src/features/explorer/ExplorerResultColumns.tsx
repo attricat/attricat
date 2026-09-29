@@ -1,18 +1,7 @@
-import { Link } from '@tanstack/react-router';
 import {
   legacyCreateColumnHelper,
   type LegacyColumnDef,
 } from '@tanstack/react-table/legacy';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
-import {
-  Box,
-  ButtonBase,
-  Chip,
-  IconButton,
-  TableSortLabel,
-  Tooltip,
-  Typography,
-} from '@mui/material';
 import type { TFunction } from 'i18next';
 import type {
   BlueprintWithAttributes,
@@ -20,24 +9,37 @@ import type {
   EntityPublicationStatus,
 } from '../entities/api';
 import { EntityIdPopover } from '../entities/components/EntityIdPopover';
-import { displayLabel } from '../entities/entityDisplay';
-import { AttributeValue } from '../views/components/values/AttributeValue';
 import type { getExtensionRuntime } from '../extensions/api';
-import { ExtensionTableCell } from './ExtensionTableCell';
-import { ImageTableCell } from './ImageTableCell';
-import { explorerTableCellContextSchema } from './schemas';
+import { ConfiguredColumnCell } from './ConfiguredColumnCell';
+import {
+  catalogRendererPrefix,
+  embeddedExtensionKind,
+  explorerColumnIds,
+  explorerExtensionOutlets,
+  explorerSortFields,
+  explorerTableCellCapability,
+  relationshipPathSeparator,
+} from './constants';
+import {
+  ConfiguredColumnHeader,
+  SortableColumnHeader,
+} from './ExplorerColumnHeaders';
+import {
+  EntityActionsCell,
+  EntityDisplayCell,
+  PublicationStatusCell,
+  SchemaVersionCell,
+  type ActionMenuPosition,
+} from './ExplorerTableCells';
+import {
+  usesExtensionRenderer,
+  type ExplorerTableColumn,
+} from './explorerTableColumns';
+import type { ExplorerColumnPreferences } from './columnPreferences';
+import type { ExplorerSort } from './search';
 
-export type ExplorerTableColumn = {
-  field: string;
-  label?: string | null;
-  renderer?: {
-    id: string;
-    version: number;
-    props: Record<string, unknown>;
-  } | null;
-  relationshipSortBlocked: boolean;
-  sortable: boolean;
-};
+type ExtensionRuntime = Awaited<ReturnType<typeof getExtensionRuntime>>;
+type ExplorerColumnDef = LegacyColumnDef<EntityItem, unknown>;
 
 type ColumnOptions = {
   blueprint: BlueprintWithAttributes;
@@ -45,17 +47,32 @@ type ColumnOptions = {
   publicationContextCode: string;
   publicationSortAvailable: boolean;
   publicationsByEntityId: Map<string, EntityPublicationStatus | undefined>;
-  runtime: Awaited<ReturnType<typeof getExtensionRuntime>> | undefined;
-  sort?: { field: string; direction: 'asc' | 'desc' };
+  runtime: ExtensionRuntime | undefined;
+  sort?: ExplorerSort;
   onSortChange: (field: string) => void;
-  onOpenActions: (
-    entityId: string,
-    position: { left: number; top: number },
-  ) => void;
+  onOpenActions: (entityId: string, position: ActionMenuPosition) => void;
   takeCellFrame: () => boolean;
   t: TFunction;
 };
 
+const findTableCellExtension = (
+  runtime: ExtensionRuntime | undefined,
+  renderer: ExplorerTableColumn['renderer'],
+) =>
+  !renderer || renderer.id.startsWith(catalogRendererPrefix)
+    ? undefined
+    : runtime?.find(
+        (item) =>
+          item.outlet === explorerExtensionOutlets.tableCell &&
+          item.kind === embeddedExtensionKind &&
+          item.id === renderer.id &&
+          item.version === renderer.version &&
+          item.capabilities.includes(explorerTableCellCapability),
+      );
+
+// TanStack's column definitions are intentionally invariant in their value
+// type. The table only consumes the shared row shape, so heterogeneous column
+// values are normalized to `ExplorerColumnDef` at this boundary.
 export const buildExplorerColumnDefinitions = ({
   blueprint,
   tableColumns,
@@ -68,240 +85,123 @@ export const buildExplorerColumnDefinitions = ({
   onOpenActions,
   takeCellFrame,
   t,
-}: ColumnOptions): LegacyColumnDef<EntityItem, unknown>[] => {
+}: ColumnOptions): ExplorerColumnDef[] => {
   const columnHelper = legacyCreateColumnHelper<EntityItem>();
   const attributes = new Map(
     blueprint.attributes.map((attribute) => [attribute.code, attribute]),
   );
+  const configuredColumns = tableColumns.flatMap((column) => {
+    const [relationship] = column.field.split(relationshipPathSeparator);
+    const attribute = attributes.get(relationship);
+    if (!attribute) return [];
+    const extension = findTableCellExtension(runtime, column.renderer);
+    return [
+      columnHelper.display({
+        id: column.field,
+        header: () => (
+          <ConfiguredColumnHeader
+            column={column}
+            onSortChange={onSortChange}
+            sort={sort}
+          />
+        ),
+        // Frames are allocated while rendering visible cells only.
+        cell: (info) => (
+          <ConfiguredColumnCell
+            attribute={attribute}
+            column={column}
+            entity={info.row.original}
+            extension={extension}
+            frameAllowed={usesExtensionRenderer(column) && takeCellFrame()}
+          />
+        ),
+      }) as ExplorerColumnDef,
+    ];
+  });
   return [
-    // TanStack's column definitions are intentionally invariant in their
-    // value type. The table only consumes the shared row shape, so normalize
-    // heterogeneous column values at this boundary.
     columnHelper.accessor('id', {
-      id: 'id',
+      id: explorerColumnIds.id,
       header: t('explorer.id'),
       cell: (info) => <EntityIdPopover entityId={info.getValue()} />,
-    }) as LegacyColumnDef<EntityItem, unknown>,
+    }) as ExplorerColumnDef,
     columnHelper.display({
-      id: 'display',
+      id: explorerColumnIds.display,
       header: t('explorer.display'),
-      cell: (info) => (
-        <Box sx={{ alignItems: 'center', display: 'flex', gap: 1 }}>
-          <Link
-            params={{ entityId: info.row.original.id }}
-            to="/entities/$entityId"
-          >
-            {displayLabel(info.row.original.display, info.row.original.id)}
-          </Link>
-          {info.row.original.is_sample && (
-            <Chip color="info" label={t('entities.sample')} size="small" />
-          )}
-        </Box>
-      ),
-    }) as LegacyColumnDef<EntityItem, unknown>,
+      cell: (info) => <EntityDisplayCell entity={info.row.original} />,
+    }) as ExplorerColumnDef,
     columnHelper.display({
-      id: 'publication',
+      id: explorerColumnIds.publication,
       header: () => {
-        const label = t('explorer.publicationForContext', { context: publicationContextCode });
+        const label = t('explorer.publicationForContext', {
+          context: publicationContextCode,
+        });
         if (!publicationSortAvailable) return label;
         return (
-          <TableSortLabel
-            active={sort?.field === 'publication_status'}
-            direction={sort?.field === 'publication_status' ? sort.direction : 'asc'}
-            onClick={() => onSortChange('publication_status')}
-          >
-            {label}
-          </TableSortLabel>
-        );
-      },
-      cell: (info) => {
-        const publication = publicationsByEntityId.get(info.row.original.id);
-        if (!publication) return '—';
-        return (
-          <Chip
-            color={publication.status === 'published' ? 'success' : 'default'}
-            label={t(`entities.publication.${publication.status}`)}
-            size="small"
+          <SortableColumnHeader
+            field={explorerSortFields.publicationStatus}
+            label={label}
+            onSortChange={onSortChange}
+            sort={sort}
           />
         );
       },
-    }) as LegacyColumnDef<EntityItem, unknown>,
-    columnHelper.display({
-      id: 'schema',
-      header: () => (
-        <TableSortLabel
-          active={sort?.field === 'blueprint_version'}
-          direction={sort?.field === 'blueprint_version' ? sort.direction : 'asc'}
-          onClick={() => onSortChange('blueprint_version')}
-        >
-          {t('explorer.schema')}
-        </TableSortLabel>
+      cell: (info) => (
+        <PublicationStatusCell
+          publication={publicationsByEntityId.get(info.row.original.id)}
+        />
       ),
-      cell: (info) => {
-        const entity = info.row.original;
-        return (
-          <Chip
-            color={entity.schema_outdated ? 'warning' : 'success'}
-            label={`v${entity.blueprint_version} · ${
-              entity.schema_outdated
-                ? t('explorer.outdated')
-                : t('explorer.current')
-            }`}
-            size="small"
-          />
-        );
-      },
-    }) as LegacyColumnDef<EntityItem, unknown>,
-    ...tableColumns.flatMap((column) => {
-      const [relationship] = column.field.split('.');
-      const relatedPath = column.field.includes('.');
-      const attribute = attributes.get(relationship);
-      if (!attribute) return [];
-      const renderer = column.renderer;
-      const extension = renderer?.id.startsWith('catalog.')
-        ? undefined
-        : runtime?.find(
-            (item) =>
-              item.outlet === 'explorer_table_cell' &&
-              item.kind === 'embedded' &&
-              item.id === renderer?.id &&
-              item.version === renderer.version &&
-              item.capabilities.includes('client.explorer_table_cell'),
-          );
-      return [
-        columnHelper.display({
-          id: column.field,
-          header: () => {
-            const label = column.label ?? column.field.replaceAll('_', ' ');
-            if (column.relationshipSortBlocked)
-              return (
-                <Tooltip
-                  title={t('explorer.relationshipSortNeedsSingleVersion')}
-                >
-                  <ButtonBase
-                    aria-disabled="true"
-                    aria-label={`${label}. ${t('explorer.relationshipSortNeedsSingleVersion')}`}
-                    disableRipple
-                    sx={{ cursor: 'help', font: 'inherit' }}
-                  >
-                    {label}
-                  </ButtonBase>
-                </Tooltip>
-              );
-            if (!column.sortable) return label;
-            const active = sort?.field === column.field;
-            return (
-              <TableSortLabel
-                active={active}
-                direction={active ? sort.direction : 'asc'}
-                onClick={() => onSortChange(column.field)}
-              >
-                {label}
-              </TableSortLabel>
-            );
-          },
-          cell: (info) => {
-            const entity = info.row.original;
-            const related = relatedPath
-              ? entity.related?.[relationship]?.[0]
-              : undefined;
-            const pathValues = entity.table_values[column.field] ?? [];
-            const primaryValue =
-              pathValues.length > 1 ? pathValues : pathValues[0];
-            // Search projections contain the related target's scalar but not
-            // its attribute definition. Keep that rendering deliberately
-            // defensive: an absent relation or incompatible value is not an
-            // excuse to fetch a row (or to break virtualized rendering).
-            const fallback = relatedPath ? (
-              <Typography
-                color={
-                  primaryValue === null || primaryValue === undefined
-                    ? 'text.secondary'
-                    : undefined
-                }
-                variant="body2"
-              >
-                {primaryValue === null || primaryValue === undefined
-                  ? t('views.notSet')
-                  : Array.isArray(primaryValue)
-                    ? primaryValue
-                        .map((value) =>
-                          typeof value === 'object'
-                            ? JSON.stringify(value)
-                            : String(value),
-                        )
-                        .join(', ')
-                    : typeof primaryValue === 'object'
-                      ? JSON.stringify(primaryValue)
-                      : String(primaryValue)}
-              </Typography>
-            ) : (
-              <AttributeValue
-                attribute={attribute}
-                compact
-                value={primaryValue}
-              />
-            );
-            if (renderer?.id === 'catalog.table_image')
-              return <ImageTableCell value={primaryValue} />;
-            if (!renderer || renderer.id.startsWith('catalog.'))
-              return fallback;
-            const context = explorerTableCellContextSchema.parse({
-              context_version: 1,
-              column: {
-                field: column.field,
-                label: column.label ?? null,
-                renderer,
-              },
-              primary_value: primaryValue ?? null,
-              related_entity: related
-                ? {
-                    id: related.id,
-                    blueprint_id: related.blueprint_id,
-                    blueprint_version: related.blueprint_version,
-                    relationship_context_id: related.relationship_context_id,
-                    relationship_context_code:
-                      related.relationship_context_code,
-                  }
-                : null,
-              related_preview: related?.preview ?? null,
-              source_row: {
-                entity_id: entity.id,
-                blueprint_version: entity.blueprint_version,
-                preview: entity.preview,
-              },
-            });
-            return (
-              <ExtensionTableCell
-                context={context}
-                contribution={extension}
-                key={extension?.release_id}
-                fallback={fallback}
-                frameAllowed={takeCellFrame()}
-              />
-            );
-          },
-        }) as LegacyColumnDef<EntityItem, unknown>,
-      ];
-    }),
+    }) as ExplorerColumnDef,
     columnHelper.display({
-      id: 'actions',
+      id: explorerColumnIds.schema,
+      header: () => (
+        <SortableColumnHeader
+          field={explorerSortFields.blueprintVersion}
+          label={t('explorer.schema')}
+          onSortChange={onSortChange}
+          sort={sort}
+        />
+      ),
+      cell: (info) => <SchemaVersionCell entity={info.row.original} />,
+    }) as ExplorerColumnDef,
+    ...configuredColumns,
+    columnHelper.display({
+      id: explorerColumnIds.actions,
       header: '',
-      cell: (info) => {
-        const entity = info.row.original;
-        return (
-          <IconButton
-            aria-label={t('explorer.entityActionsFor', { entityId: entity.id })}
-            onClick={(event) => {
-              const { left, top } = event.currentTarget.getBoundingClientRect();
-              onOpenActions(entity.id, { left, top });
-            }}
-            size="small"
-          >
-            <MoreVertIcon fontSize="inherit" />
-          </IconButton>
-        );
-      },
-    }) as LegacyColumnDef<EntityItem, unknown>,
+      cell: (info) => (
+        <EntityActionsCell
+          entityId={info.row.original.id}
+          onOpenActions={onOpenActions}
+        />
+      ),
+    }) as ExplorerColumnDef,
+  ];
+};
+
+/**
+ * Orders and filters configurable columns by the viewer's preferences, keeping
+ * the selection column first and the actions column last. Selection is
+ * rendered outside the legacy table's memoized column definitions so checkbox
+ * state follows selection changes even when result rows do not.
+ */
+export const arrangeExplorerColumns = (
+  definitions: ExplorerColumnDef[],
+  { hidden, order }: ExplorerColumnPreferences,
+  selectionMode: boolean,
+): ExplorerColumnDef[] => {
+  const actionColumn = definitions.find(
+    (definition) => definition.id === explorerColumnIds.actions,
+  );
+  const selectionColumn = legacyCreateColumnHelper<EntityItem>().display({
+    id: explorerColumnIds.select,
+    header: '',
+    cell: () => null,
+  }) as ExplorerColumnDef;
+  return [
+    ...(selectionMode ? [selectionColumn] : []),
+    ...order.flatMap((id) => {
+      const column = definitions.find((definition) => definition.id === id);
+      return column && !hidden.includes(id) ? [column] : [];
+    }),
+    ...(actionColumn ? [actionColumn] : []),
   ];
 };

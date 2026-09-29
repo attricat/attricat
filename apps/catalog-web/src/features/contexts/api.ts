@@ -1,12 +1,12 @@
 import { z } from 'zod';
 import { request, requestNoContent } from '../../api/request';
+import i18n from '../../i18n';
+import { contextCodePattern } from './constants';
 
-const contextCodeSchema = z
-  .string()
-  .regex(
-    /^[A-Za-z0-9_-]+$/,
-    'Use only letters, numbers, hyphens, and underscores',
-  );
+const contextCodeSchema = z.string().regex(contextCodePattern, {
+  // Resolve lazily so the message follows the language active at validation.
+  error: () => i18n.t('contexts.invalidCode'),
+});
 export const attributeContextSchema = z.object({
   id: z.uuid(),
   code: contextCodeSchema,

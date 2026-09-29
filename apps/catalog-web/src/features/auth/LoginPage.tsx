@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { type ReactNode, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { returnToStorageKey } from '../../app/storageKeys';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import { AuthFormShell, authFormWidth } from './AuthFormShell';
 import { discoverWorkspace, login } from './api';
@@ -101,8 +102,8 @@ export const PasswordLoginPage = ({ identifier }: { identifier: string }) => {
           await queryClient.invalidateQueries({
             queryKey: authQueryKeys.session(),
           });
-          const returnTo = sessionStorage.getItem('catalog.return-to');
-          sessionStorage.removeItem('catalog.return-to');
+          const returnTo = sessionStorage.getItem(returnToStorageKey);
+          sessionStorage.removeItem(returnToStorageKey);
           await navigate({
             to:
               returnTo?.startsWith('/') && !returnTo.startsWith('//')
@@ -151,7 +152,7 @@ export const PasswordLoginPage = ({ identifier }: { identifier: string }) => {
         {t('auth.forgotPassword')}
       </Button>
       <Button disabled={submitting} type="submit" variant="contained">
-        Sign in
+        {t('auth.signIn')}
       </Button>
     </LoginShell>
   );

@@ -1,4 +1,5 @@
 import Ajv, { type ErrorObject } from 'ajv';
+import i18n from '../../i18n';
 import type { JsonSchema } from './schemas';
 
 const ajv = new Ajv({ strict: false });
@@ -29,6 +30,6 @@ export const jsonSchemaValidationMessage = (
   schema: JsonSchema | null | undefined,
 ): string | undefined => {
   const errors = jsonSchemaValidationErrors(value, schema);
-  if (errors === undefined) return 'Does not meet the schema requirements.';
+  if (errors === undefined) return i18n.t('entities.schemaValidationFailed');
   return errors[0]?.message;
 };

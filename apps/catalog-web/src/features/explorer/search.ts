@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import { entitySearchFilterSchema } from '../entities/schemas';
-
-export const maximumAttributeFilters = 20;
+import { maximumAttributeFilters, sortDirections } from './constants';
 
 const attributeFilterSearchSchema = entitySearchFilterSchema.extend({
   field: z.string().trim().min(1),
@@ -26,7 +25,7 @@ export const explorerSearchSchema = z.object({
   sort: z
     .object({
       field: z.string().trim().min(1),
-      direction: z.enum(['asc', 'desc']),
+      direction: z.enum([sortDirections.ascending, sortDirections.descending]),
     })
     .optional()
     .catch(undefined),
@@ -70,3 +69,5 @@ export const inlineExplorerSearchParams = (search: ExplorerSearch) => {
 export const parseExplorerSearch = (
   input: Record<string, unknown>,
 ): ExplorerSearch => explorerSearchSchema.parse(input);
+
+export type ExplorerSort = NonNullable<ExplorerSearch['sort']>;

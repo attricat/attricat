@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import i18n from '../../i18n';
 import type {
   Attribute,
   JsonSchema,
@@ -9,6 +10,7 @@ import type {
 import { scalarValueForField, valueForField } from './attributeValues';
 import { jsonSchemaValidationErrors } from './jsonSchema';
 import { attributeValueKinds, attributeValueTypes } from './valueTypes';
+import { RELATIONSHIP_ID_JOINER, RELATIONSHIP_ID_SEPARATOR } from './constants';
 
 export type EntityFormValidation = {
   fieldErrors: Record<string, string>;
@@ -40,7 +42,7 @@ export const valuesForForm = (
               > => value.kind === attributeValueKinds.relationship,
             )
             .map((value) => value.target_entity_id)
-            .join(', '),
+            .join(RELATIONSHIP_ID_JOINER),
         ];
       }
       const scalar = matching.find(
@@ -91,19 +93,21 @@ export type EntityFormValidationMessages = {
   schema: string;
 };
 
-const defaultValidationMessages: EntityFormValidationMessages = {
-  invalidRelationship: 'Enter comma-separated entity UUIDs.',
-  invalidValue: "Enter a value that meets this field's requirements.",
-  required: 'A value is required for the target schema.',
-  schema: 'Does not meet the schema requirements.',
-};
+/** Resolves validation messages in the active language at validation time. */
+export const entityFormValidationMessages =
+  (): EntityFormValidationMessages => ({
+    invalidRelationship: i18n.t('entities.invalidRelationshipValue'),
+    invalidValue: i18n.t('entities.invalidAttributeValue'),
+    required: i18n.t('entities.requiredAttributeValue'),
+    schema: i18n.t('entities.schemaValidationFailed'),
+  });
 
 export const validateEntityForm = (
   attributes: readonly Attribute[],
   fields: Record<string, string>,
   requiredAttributes: readonly string[] = [],
   entitySchema?: JsonSchema | null,
-  messages: EntityFormValidationMessages = defaultValidationMessages,
+  messages: EntityFormValidationMessages = entityFormValidationMessages(),
 ): EntityFormValidation => {
   const fieldErrors: Record<string, string> = {};
   const document: Record<string, unknown> = {};
@@ -173,9 +177,9 @@ const attributeCodeForSchemaError = (error: {
   return segment?.replaceAll('~1', '/').replaceAll('~0', '~');
 };
 
-const relationshipIdsForField = (value: string): string[] =>
+export const relationshipIdsForField = (value: string): string[] =>
   value
-    .split(',')
+    .split(RELATIONSHIP_ID_SEPARATOR)
     .map((targetEntityId) => targetEntityId.trim())
     .filter(Boolean);
 

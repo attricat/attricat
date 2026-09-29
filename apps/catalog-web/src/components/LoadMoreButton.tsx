@@ -1,5 +1,7 @@
 import { Button, CircularProgress } from '@mui/material';
-import i18n from '../i18n';
+import { useTranslation } from 'react-i18next';
+
+const loadingIndicatorSize = 20;
 
 export const LoadMoreButton = ({
   disabled = false,
@@ -9,20 +11,23 @@ export const LoadMoreButton = ({
   disabled?: boolean;
   isLoading?: boolean;
   onLoadMore: () => void;
-}) => (
-  <Button
-    aria-busy={isLoading || undefined}
-    aria-label={isLoading ? i18n.t('common.loading') : undefined}
-    disabled={disabled || isLoading}
-    fullWidth
-    onClick={onLoadMore}
-    size="medium"
-    variant="contained"
-  >
-    {isLoading ? (
-      <CircularProgress enableTrackSlot size={20} />
-    ) : (
-      i18n.t('common.loadMore')
-    )}
-  </Button>
-);
+}) => {
+  const { t } = useTranslation();
+  return (
+    <Button
+      aria-busy={isLoading || undefined}
+      aria-label={isLoading ? t('common.loading') : undefined}
+      disabled={disabled || isLoading}
+      fullWidth
+      onClick={onLoadMore}
+      size="medium"
+      variant="contained"
+    >
+      {isLoading ? (
+        <CircularProgress enableTrackSlot size={loadingIndicatorSize} />
+      ) : (
+        t('common.loadMore')
+      )}
+    </Button>
+  );
+};

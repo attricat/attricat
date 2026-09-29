@@ -16,8 +16,7 @@ import {
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import type { ExplorerColumnPreferences } from './columnPreferences';
-
-const columnPreferencesListMaxHeight = 480;
+import { columnPreferencesListMaxHeight } from './constants';
 
 type Props = {
   columns: { id: string; label: string }[];

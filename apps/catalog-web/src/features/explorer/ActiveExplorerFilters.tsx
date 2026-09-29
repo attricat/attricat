@@ -1,6 +1,7 @@
 import CancelIcon from '@mui/icons-material/Cancel';
 import { Box, Chip } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import { attributeFilterKey, attributeFilterLabel } from './attributeFilters';
 import type { AttributeFilter } from './search';
 
 export type ActiveExplorerFilter =
@@ -42,20 +43,12 @@ export const ActiveExplorerFilters = ({
     >
       {filters.map((filter) => {
         const relationship = filter.kind === 'relationship';
-        const value =
-          !relationship && typeof filter.filter.value === 'boolean'
-            ? t(filter.filter.value ? 'explorer.true' : 'explorer.false')
-            : !relationship
-              ? String(filter.filter.value)
-              : undefined;
         const label = relationship
           ? t('explorer.relationshipFilterPill', {
               field: filter.field,
               count: filter.selectedCount,
             })
-          : `${filter.filter.field} ${t(
-              `explorer.filterOperatorSymbols.${filter.filter.operator}`,
-            )} ${JSON.stringify(value)}`;
+          : attributeFilterLabel(t, filter.filter);
         return (
           <Chip
             deleteIcon={
@@ -71,7 +64,7 @@ export const ActiveExplorerFilters = ({
             key={
               relationship
                 ? filter.field
-                : `${filter.filter.field}-${filter.filter.operator}-${String(filter.filter.value)}-${filter.index}`
+                : attributeFilterKey(filter.filter, filter.index)
             }
             label={label}
             onDelete={() =>

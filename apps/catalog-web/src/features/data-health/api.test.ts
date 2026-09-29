@@ -4,6 +4,7 @@ import {
   getDataHealthSummary,
   refreshDataHealth,
 } from './api';
+import '../../i18n';
 
 const fetchMock = vi.fn();
 vi.stubGlobal('fetch', fetchMock);

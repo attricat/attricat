@@ -4,6 +4,9 @@ import markDark from '../../design/assets/logos/mark-dark.svg?url';
 import wordmarkLight from '../../design/assets/logos/wordmark-light.svg?url';
 import wordmarkDark from '../../design/assets/logos/wordmark-dark.svg?url';
 
+const brandIconHeight = 32;
+const brandIconWidths = { mark: 32, wordmark: 161 } as const;
+
 export const BrandIcon = ({
   variant = 'mark',
 }: {
@@ -25,8 +28,8 @@ export const BrandIcon = ({
       src={source}
       sx={{
         display: 'block',
-        height: 32,
-        width: variant === 'mark' ? 32 : 161,
+        height: brandIconHeight,
+        width: brandIconWidths[variant],
       }}
     />
   );

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { FILE_STATUS_VALUES } from './constants';
 
 export const fileVariantSchema = z.object({
   kind: z.string(),
@@ -15,14 +16,7 @@ export const fileMetadataSchema = z.object({
   mime_type: z.string(),
   byte_size: z.number().int().nonnegative(),
   sha256: z.string(),
-  status: z.enum([
-    'uploading',
-    'queued',
-    'processing',
-    'ready',
-    'failed',
-    'deleted',
-  ]),
+  status: z.enum(FILE_STATUS_VALUES),
   variants: z.array(fileVariantSchema),
 });
 
