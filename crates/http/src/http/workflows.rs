@@ -1,23 +1,20 @@
 use super::{
     error::ApiError,
-    extractors::{ApiJson, ApiPath},
+    extractors::{ApiJson, ApiPath, ApiQuery},
+    pagination::{ArrayPage, array_response},
 };
-use crate::{
-    model::{CreateManualWorkflowRun, CreateWorkflow, Workflow},
-    repository::WorkflowRun,
-};
-use axum::{Json, http::StatusCode};
+use crate::model::{CreateManualWorkflowRun, CreateWorkflow, Workflow};
+use axum::{Json, http::StatusCode, response::Response};
 use uuid::Uuid;
 
 pub(super) async fn validate(
     ApiJson(input): ApiJson<CreateWorkflow>,
-) -> Result<Json<serde_json::Value>, ApiError> {
-    let compiled = catalog_workflow::compile(&input.definition).map_err(|e| {
-        ApiError::from(crate::repository::RepositoryError::InvalidWorkflowDefinition(e.to_string()))
-    })?;
-    Ok(Json(
-        serde_json::to_value(compiled).expect("compiled workflow serializes"),
-    ))
+) -> Result<Json<catalog_workflow::CompiledWorkflow>, ApiError> {
+    catalog_workflow::compile(&input.definition)
+        .map(Json)
+        .map_err(|e| {
+            crate::repository::RepositoryError::InvalidWorkflowDefinition(e.to_string()).into()
+        })
 }
 pub(super) async fn list(
     super::auth::ScopedRepository(repo): super::auth::ScopedRepository,
@@ -103,8 +100,11 @@ pub(super) async fn disable(
 /// internal domain-event payload snapshot.
 pub(super) async fn list_runs(
     super::auth::ScopedRepository(repo): super::auth::ScopedRepository,
-) -> Result<Json<Vec<WorkflowRun>>, ApiError> {
-    Ok(Json(repo.list_workflow_runs().await?))
+    ApiQuery(page): ApiQuery<ArrayPage>,
+) -> Result<Response, ApiError> {
+    let (limit, offset) = page.bounds()?;
+    let page_items = repo.workflow_runs_page(limit, offset).await?;
+    Ok(array_response(page_items, (limit, offset)))
 }
 pub(super) async fn replay_run(
     super::auth::ScopedRepository(repo): super::auth::ScopedRepository,

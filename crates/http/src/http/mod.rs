@@ -14,6 +14,7 @@ mod extensions;
 mod extractors;
 mod files;
 mod members;
+mod pagination;
 mod presentation_assets;
 mod reusable_attributes;
 mod roles;
@@ -53,9 +54,11 @@ use axum::{
     routing::{get, post, put},
 };
 use metrics_exporter_prometheus::PrometheusHandle;
-use serde_json::Value;
-use tokio::sync::{Mutex, Semaphore};
-use tower_http::services::{ServeDir, ServeFile};
+use tokio::sync::Semaphore;
+use tower_http::{
+    catch_panic::CatchPanicLayer,
+    services::{ServeDir, ServeFile},
+};
 use tracing::{Instrument, field::Empty};
 use uuid::Uuid;
 
@@ -98,7 +101,7 @@ pub struct AppState {
     pub devtools_enabled: bool,
 }
 
-pub type DataHealthCache = Arc<Mutex<HashMap<String, (Instant, Value)>>>;
+pub use self::data_health::DataHealthCache;
 
 const TIMING_PHASES: [&str; 4] = ["candidate", "page", "related", "serialize"];
 /// Only Explorer requests publish development SQL and phase breakdowns.
@@ -190,6 +193,18 @@ impl RequestTiming {
     }
 }
 
+/// Runs CPU-bound work (archive decompression, validation, hashing) on the
+/// blocking pool so it cannot stall the async workers serving other requests.
+/// A panic in `work` is re-raised here, exactly as if it had run inline.
+pub(crate) async fn run_blocking<T: Send + 'static>(
+    work: impl FnOnce() -> T + Send + 'static,
+) -> T {
+    match tokio::task::spawn_blocking(work).await {
+        Ok(value) => value,
+        Err(error) => std::panic::resume_unwind(error.into_panic()),
+    }
+}
+
 async fn request_limits(
     State(state): State<AppState>,
     request: axum::extract::Request,
@@ -200,7 +215,7 @@ async fn request_limits(
     };
     match tokio::time::timeout(state.request_timeout, next.run(request)).await {
         Ok(response) => response,
-        Err(_) => (axum::http::StatusCode::REQUEST_TIMEOUT, "request timed out").into_response(),
+        Err(_) => ApiError::request_timeout().into_response(),
     }
 }
 
@@ -315,7 +330,9 @@ pub fn router(state: AppState) -> Router {
         )
         .route(
             "/agent/conversations/{conversation_id}/uploads",
-            post(files::upload_conversation),
+            // The handler streams each file to disk and enforces
+            // `max_upload_file_bytes` and `max_upload_files` itself.
+            post(files::upload_conversation).layer(axum::extract::DefaultBodyLimit::disable()),
         )
         .route(
             "/agent/conversations/{conversation_id}/runs",
@@ -900,6 +917,7 @@ pub fn router(state: AppState) -> Router {
         .layer(axum::extract::DefaultBodyLimit::max(
             state.default_body_limit,
         ))
+        .layer(CatchPanicLayer::custom(panic_response))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             request_limits,
@@ -921,6 +939,18 @@ pub fn router(state: AppState) -> Router {
         .nest("/api", api.clone())
         .merge(api)
         .fallback_service(ServeDir::new(web_dist).not_found_service(ServeFile::new(index)))
+}
+
+/// A handler panic becomes a logged JSON 500 instead of an aborted connection,
+/// so clients get a response and request metrics record the failure.
+fn panic_response(panic: Box<dyn std::any::Any + Send + 'static>) -> Response {
+    let message = panic
+        .downcast_ref::<&str>()
+        .copied()
+        .or_else(|| panic.downcast_ref::<String>().map(String::as_str))
+        .unwrap_or("non-string panic payload");
+    tracing::error!(panic = message, "request handler panicked");
+    ApiError::internal("internal server error").into_response()
 }
 
 async fn metrics(State(state): State<AppState>) -> Response {
@@ -946,6 +976,22 @@ mod timing_tests {
             "/blueprints/{blueprint_id}"
         );
         assert_eq!(canonical_route("/apiary"), "/apiary");
+    }
+
+    #[test]
+    fn handler_panics_become_json_internal_errors() {
+        for payload in [
+            Box::new("static") as Box<dyn std::any::Any + Send>,
+            Box::new(String::from("owned")),
+            Box::new(7_u8),
+        ] {
+            let response = panic_response(payload);
+            assert_eq!(
+                response.status(),
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR
+            );
+            assert_eq!(response.headers()["content-type"], "application/json");
+        }
     }
 
     #[test]

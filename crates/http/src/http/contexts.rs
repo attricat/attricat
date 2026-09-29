@@ -22,7 +22,7 @@ pub(super) async fn create_context(
     let context = CatalogMutationService::new(&repository)
         .create_context(input)
         .await?;
-    invalidate_data_health(&state).await;
+    invalidate_data_health(&state, &repository);
     Ok((StatusCode::CREATED, Json(context)))
 }
 pub(super) async fn list_contexts(
@@ -75,7 +75,7 @@ pub(super) async fn update_context(
     let context = CatalogMutationService::new(&repository)
         .update_context(id, input)
         .await?;
-    invalidate_data_health(&state).await;
+    invalidate_data_health(&state, &repository);
     Ok(Json(context))
 }
 pub(super) async fn delete_context(
@@ -86,6 +86,6 @@ pub(super) async fn delete_context(
     CatalogMutationService::new(&repository)
         .delete_context(id)
         .await?;
-    invalidate_data_health(&state).await;
+    invalidate_data_health(&state, &repository);
     Ok(StatusCode::NO_CONTENT)
 }

@@ -11,8 +11,8 @@ use super::{
     extractors::{ApiJson, ApiPath},
 };
 use crate::{
-    extension_registry::{DEFAULT_OFFICIAL_REGISTRY, GitHubRepository},
-    repository::ExtensionRegistrySource,
+    extension_registry::{DiscoveredExtension, GitHubRepository},
+    repository::{CatalogRepository, ExtensionRegistrySource},
 };
 
 #[derive(Deserialize)]
@@ -85,19 +85,8 @@ pub(super) async fn discover(
     State(state): State<AppState>,
     ScopedRepository(repository): ScopedRepository,
 ) -> Result<Json<Vec<crate::extension_registry::DiscoveredExtension>>, ApiError> {
-    let mut sources = vec![state.official_registry.clone()];
-    sources.extend(
-        repository
-            .extension_registry_sources()
-            .await?
-            .into_iter()
-            .map(|source| GitHubRepository {
-                owner: source.owner,
-                repository: source.repository,
-            }),
-    );
     let mut extensions = Vec::new();
-    for source in sources {
+    for source in registry_sources(&state, &repository).await? {
         match state.registry.discover(&source).await {
             Ok(found) => extensions.extend(found),
             Err(error) => {
@@ -117,6 +106,20 @@ pub(super) async fn extension_details(
     let target = GitHubRepository::from_str(&format!("{owner}/{repository_name}"))
         .map_err(|error| ApiError::invalid_input(error.to_string()))?
         .identity();
+    let entry = find_trusted_extension(&state, &repository, &target).await?;
+    Ok(Json(
+        state.registry.extension_details(entry).await.map_err(|_| {
+            ApiError::service_unavailable("extension repository could not be resolved")
+        })?,
+    ))
+}
+
+/// Registry sources in trust order: the official registry, then the
+/// workspace's configured registries.
+async fn registry_sources(
+    state: &AppState,
+    repository: &CatalogRepository,
+) -> Result<Vec<GitHubRepository>, ApiError> {
     let mut sources = vec![state.official_registry.clone()];
     sources.extend(
         repository
@@ -128,24 +131,46 @@ pub(super) async fn extension_details(
                 repository: source.repository,
             }),
     );
-    for source in sources {
-        let entries =
-            state.registry.discover(&source).await.map_err(|_| {
-                ApiError::service_unavailable("extension registry discovery failed")
-            })?;
-        if let Some(entry) = entries.into_iter().find(|entry| entry.repository == target) {
-            return Ok(Json(
-                state.registry.extension_details(entry).await.map_err(|_| {
-                    ApiError::service_unavailable("extension repository could not be resolved")
-                })?,
-            ));
-        }
-    }
-    Err(ApiError::not_found("trusted extension repository"))
+    Ok(sources)
 }
 
-#[allow(dead_code)]
-fn _official_default_is_valid() {
-    let _ = GitHubRepository::from_str(DEFAULT_OFFICIAL_REGISTRY)
-        .expect("official registry must be valid");
+/// Finds `target` in the first trusted registry that lists it. A failing
+/// source is skipped so one broken registry cannot block lookups served by the
+/// others; the lookup is unavailable only if the target was not found and a
+/// source could not be checked.
+pub(super) async fn find_trusted_extension(
+    state: &AppState,
+    repository: &CatalogRepository,
+    target: &str,
+) -> Result<DiscoveredExtension, ApiError> {
+    let mut unavailable = false;
+    for source in registry_sources(state, repository).await? {
+        match state.registry.discover(&source).await {
+            Ok(entries) => {
+                if let Some(entry) = entries.into_iter().find(|entry| entry.repository == target) {
+                    return Ok(entry);
+                }
+            }
+            Err(error) => {
+                tracing::warn!(source = %source.identity(), %error, "extension registry discovery failed");
+                unavailable = true;
+            }
+        }
+    }
+    Err(if unavailable {
+        ApiError::service_unavailable("extension registry discovery failed")
+    } else {
+        ApiError::not_found("trusted extension repository")
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::extension_registry::DEFAULT_OFFICIAL_REGISTRY;
+
+    #[test]
+    fn official_default_registry_is_valid() {
+        GitHubRepository::from_str(DEFAULT_OFFICIAL_REGISTRY).unwrap();
+    }
 }

@@ -76,7 +76,7 @@ pub(super) async fn create_conversation(
 ) -> Result<(StatusCode, Json<ConversationResponse>), ApiError> {
     if input.title.len() > MAX_CONVERSATION_TITLE_BYTES {
         return Err(ApiError::invalid_input(
-            "title must be at most 512 characters".into(),
+            "title must be at most 512 bytes".into(),
         ));
     }
     if input.context_id.is_some() && input.entity_id.is_none() {
@@ -247,7 +247,7 @@ pub(super) async fn update_conversation(
 ) -> Result<Json<crate::repository::Conversation>, ApiError> {
     if input.title.len() > MAX_CONVERSATION_TITLE_BYTES {
         return Err(ApiError::invalid_input(
-            "title must be at most 512 characters".into(),
+            "title must be at most 512 bytes".into(),
         ));
     }
     readable_conversation(&repository, user, workspace, conversation_id).await?;
@@ -433,6 +433,25 @@ async fn decide_and_enqueue(
     ))
 }
 
+#[derive(Serialize)]
+struct RunEventData<'a> {
+    id: Uuid,
+    run_id: Uuid,
+    sequence: i64,
+    #[serde(rename = "type")]
+    event_type: &'a str,
+    payload: &'a Value,
+    created_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// Tells the client the stream ended abnormally rather than because the run
+/// finished; `EventSource` surfaces this through its `error` handler.
+fn stream_failed() -> Event {
+    Event::default()
+        .event("error")
+        .data("agent run event stream failed")
+}
+
 /// Streams durable events in sequence order. Event ids are database UUIDs, so a
 /// reconnecting client can use Last-Event-ID without relying on process memory.
 pub(super) async fn stream_events(
@@ -467,15 +486,40 @@ pub(super) async fn stream_events(
             match repository.agent_run_events_after(run_id, sequence).await {
                 Ok(events) => for event in events {
                     sequence = event.sequence;
-                    let data = json!({"id": event.id, "run_id": event.run_id, "sequence": event.sequence, "type": event.event_type, "payload": event.payload, "created_at": event.created_at});
-                    yield Ok(Event::default().id(event.id.to_string()).event(event.event_type).data(data.to_string()));
+                    let frame = Event::default()
+                        .id(event.id.to_string())
+                        .event(&event.event_type)
+                        .json_data(RunEventData {
+                            id: event.id,
+                            run_id: event.run_id,
+                            sequence: event.sequence,
+                            event_type: &event.event_type,
+                            payload: &event.payload,
+                            created_at: event.created_at,
+                        });
+                    match frame {
+                        Ok(frame) => yield Ok(frame),
+                        Err(error) => {
+                            tracing::error!(%error, %run_id, "agent run event could not be encoded");
+                            yield Ok(stream_failed());
+                            return;
+                        }
+                    }
                 },
-                Err(_) => break,
+                Err(error) => {
+                    tracing::error!(%error, %run_id, "agent run event stream failed");
+                    yield Ok(stream_failed());
+                    break;
+                }
             }
             match repository.get_agent_run(run_id).await {
                 Ok(run) if matches!(run.status.as_str(), "completed" | "failed" | "cancelled" | "skipped") => break,
                 Ok(_) => tokio::time::sleep(std::time::Duration::from_millis(250)).await,
-                Err(_) => break,
+                Err(error) => {
+                    tracing::error!(%error, %run_id, "agent run event stream failed");
+                    yield Ok(stream_failed());
+                    break;
+                }
             }
         }
     };

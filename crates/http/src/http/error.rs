@@ -4,7 +4,6 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use serde::Serialize;
-use serde_json::json;
 
 use crate::repository::RepositoryError;
 
@@ -15,6 +14,10 @@ pub(super) struct ApiError {
     message: String,
 }
 impl ApiError {
+    #[cfg(test)]
+    pub(super) fn status(&self) -> StatusCode {
+        self.status
+    }
     pub(super) fn unauthenticated() -> Self {
         Self {
             status: StatusCode::UNAUTHORIZED,
@@ -61,6 +64,25 @@ impl ApiError {
         Self {
             status: StatusCode::SERVICE_UNAVAILABLE,
             code: "service_unavailable",
+            message: message.to_owned(),
+        }
+    }
+    /// A handler exceeded the server-side request deadline. This is not a 408:
+    /// the client sent its request in time, and some clients automatically
+    /// replay 408 responses, which is unsafe for partially applied mutations.
+    pub(super) fn request_timeout() -> Self {
+        Self {
+            status: StatusCode::SERVICE_UNAVAILABLE,
+            code: "request_timeout",
+            message: "request exceeded the server time limit".to_owned(),
+        }
+    }
+    /// An upstream dependency (e.g. the LLM provider) returned an unusable
+    /// response to a valid request.
+    pub(super) fn bad_gateway(message: &'static str) -> Self {
+        Self {
+            status: StatusCode::BAD_GATEWAY,
+            code: "bad_gateway",
             message: message.to_owned(),
         }
     }
@@ -192,9 +214,12 @@ impl ApiError {
             JsonRejection::JsonDataError(_) => Self::invalid_input(
                 "request body does not match the expected JSON shape".to_owned(),
             ),
-            JsonRejection::JsonSyntaxError(_)
-            | JsonRejection::MissingJsonContentType(_)
-            | JsonRejection::BytesRejection(_) => Self::bad_request("request body is malformed"),
+            JsonRejection::MissingJsonContentType(_) => Self {
+                status: StatusCode::UNSUPPORTED_MEDIA_TYPE,
+                code: "unsupported_media_type",
+                message: "request body must be `application/json`".to_owned(),
+            },
+            JsonRejection::BytesRejection(rejection) => Self::from_bytes_rejection(rejection),
             _ => Self::bad_request("request body is malformed"),
         }
     }
@@ -233,7 +258,7 @@ impl From<RepositoryError> for ApiError {
             },
             RepositoryError::InvalidFilePolicy => Self {
                 status: StatusCode::UNPROCESSABLE_ENTITY,
-                code: "attribute_not_applicable",
+                code: "invalid_file_policy",
                 message: error.to_string(),
             },
             RepositoryError::InvalidSystemMetadata => Self {
@@ -387,8 +412,12 @@ impl From<RepositoryError> for ApiError {
                 code: "invalid_rule_definition",
                 message: error.to_string(),
             },
-            RepositoryError::ExtensionAlreadyInstalled
-            | RepositoryError::ApprovalAlreadyDecided => Self {
+            RepositoryError::ExtensionAlreadyInstalled => Self {
+                status: StatusCode::CONFLICT,
+                code: "extension_already_installed",
+                message: error.to_string(),
+            },
+            RepositoryError::ApprovalAlreadyDecided => Self {
                 status: StatusCode::CONFLICT,
                 code: "approval_already_decided",
                 message: error.to_string(),
@@ -426,18 +455,6 @@ impl From<RepositoryError> for ApiError {
                     message: "a record with the same unique value already exists".to_owned(),
                 }
             }
-            RepositoryError::Database(sqlx::Error::Database(database_error))
-                if database_error.code().as_deref() == Some("P0001")
-                    && database_error.message().starts_with("actor may not") =>
-            {
-                Self::forbidden()
-            }
-            RepositoryError::Database(sqlx::Error::Database(database_error))
-                if database_error.code().as_deref() == Some("P0001")
-                    && is_workspace_validation_error(database_error.message()) =>
-            {
-                Self::invalid_input(database_error.message().to_owned())
-            }
             RepositoryError::BootstrapWorkspaceNotActive
             | RepositoryError::InvalidBootstrapPassword(_) => {
                 Self::internal("bootstrap configuration is invalid")
@@ -466,39 +483,6 @@ struct ErrorDetail<'a> {
     code: &'a str,
     message: &'a str,
 }
-fn is_workspace_validation_error(message: &str) -> bool {
-    [
-        "role does not belong",
-        "role does not exist",
-        "workspace-local role does not exist",
-        "source role does not exist",
-        "replacement role does not exist",
-        "scope must target",
-        "grants must target",
-        "blueprint family does not belong",
-        "entity does not belong",
-        "context does not belong",
-        "invalid invitation scope",
-        "invalid grant scope",
-        "owner invitations must be workspace scoped",
-        "owner grants must be workspace scoped",
-        "only an active owner",
-        "only a workspace owner",
-        "workspace must retain at least one active owner",
-        "target membership is not active",
-        "ownership target must be",
-        "role permissions exceed",
-        "role contains an unknown permission",
-        "role code must",
-        "only workspace-local roles may be retired",
-        "role has active grants",
-        "token expiry must be in the future",
-        "token permissions",
-        "invitation digest or expiry is invalid",
-    ]
-    .iter()
-    .any(|expected| message.contains(expected))
-}
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
@@ -507,12 +491,12 @@ impl IntoResponse for ApiError {
         }
         (
             self.status,
-            Json(json!(ErrorBody {
+            Json(ErrorBody {
                 error: ErrorDetail {
                     code: self.code,
-                    message: &self.message
-                }
-            })),
+                    message: &self.message,
+                },
+            }),
         )
             .into_response()
     }

@@ -138,6 +138,16 @@ struct CheckInspectionSummary {
     predicate_type: String,
 }
 
+/// Decompresses and validates a solution-pack archive off the async executor.
+async fn unpack_solution_pack(
+    archive: impl Into<Bytes>,
+) -> Result<ValidatedSolutionPack, ApiError> {
+    let archive = archive.into();
+    super::run_blocking(move || ValidatedSolutionPack::from_tar_zst(&archive))
+        .await
+        .map_err(|error| ApiError::invalid_input(error.to_string()))
+}
+
 /// Validates and summarizes an uploaded solution-pack archive without storing
 /// the archive or applying any resources to the workspace.
 pub(super) async fn inspect(
@@ -148,8 +158,7 @@ pub(super) async fn inspect(
     require_zstd(&headers)?;
 
     let archive = archive.map_err(ApiError::from_bytes_rejection)?;
-    let pack = ValidatedSolutionPack::from_tar_zst(&archive)
-        .map_err(|error| ApiError::invalid_input(error.to_string()))?;
+    let pack = unpack_solution_pack(archive).await?;
     let manifest = pack.manifest();
     let blueprints = manifest
         .resources
@@ -297,8 +306,7 @@ pub(super) async fn create_plan(
             "from_application and explicit mappings are mutually exclusive".into(),
         ));
     }
-    let pack = ValidatedSolutionPack::from_tar_zst(&archive)
-        .map_err(|error| ApiError::invalid_input(error.to_string()))?;
+    let pack = unpack_solution_pack(archive).await?;
     let plan = repository
         .create_solution_pack_plan(
             &pack,
@@ -618,19 +626,25 @@ fn require_zstd(headers: &HeaderMap) -> Result<(), ApiError> {
     Ok(())
 }
 
+/// The inspection summary is derived from the uploaded archive, so an
+/// oversized one is the client's input problem.
 fn ensure_response_size(response: &InspectionResponse) -> Result<(), ApiError> {
     ensure_encoded_response_size(
         response,
         MAX_SOLUTION_PACK_INSPECTION_RESPONSE_BYTES,
-        "solution-pack inspection summary exceeds the size limit",
+        ApiError::invalid_input(
+            "solution-pack inspection summary exceeds the size limit".to_owned(),
+        ),
     )
 }
 
+// The remaining guards cover server-stored state (possibly after a committed
+// mutation), so exceeding them is a server fault rather than a client error.
 fn ensure_application_response_size(response: &impl Serialize) -> Result<(), ApiError> {
     ensure_encoded_response_size(
         response,
         MAX_SOLUTION_PACK_PLAN_RESPONSE_BYTES,
-        "solution-pack application summary exceeds the size limit",
+        ApiError::internal("solution-pack application summary exceeds the size limit"),
     )
 }
 
@@ -638,7 +652,7 @@ fn ensure_check_response_size(response: &impl Serialize) -> Result<(), ApiError>
     ensure_encoded_response_size(
         response,
         MAX_SOLUTION_PACK_CHECK_RUN_RESPONSE_BYTES,
-        "solution-pack check response exceeds the size limit",
+        ApiError::internal("solution-pack check response exceeds the size limit"),
     )
 }
 
@@ -646,19 +660,19 @@ fn ensure_plan_response_size(response: &SolutionPackPlan) -> Result<(), ApiError
     ensure_encoded_response_size(
         response,
         MAX_SOLUTION_PACK_PLAN_RESPONSE_BYTES,
-        "solution-pack plan summary exceeds the size limit",
+        ApiError::internal("solution-pack plan summary exceeds the size limit"),
     )
 }
 
 fn ensure_encoded_response_size(
     response: &impl Serialize,
     limit: usize,
-    message: &'static str,
+    exceeded: ApiError,
 ) -> Result<(), ApiError> {
     let response_bytes = serde_json::to_vec(response)
         .map_err(|_| ApiError::internal("solution-pack response could not be encoded"))?;
     if response_bytes.len() > limit {
-        return Err(ApiError::invalid_input(message.to_owned()));
+        return Err(exceeded);
     }
     Ok(())
 }

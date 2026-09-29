@@ -334,14 +334,14 @@ pub(super) async fn smart_fill_entity_form(
         .next()
         .and_then(|choice| choice.message.tool_calls.into_iter().next())
         .filter(|call| call.function.name == "propose_entity_form_values")
-        .ok_or_else(|| ApiError::invalid_input("agent did not return form values".to_owned()))?;
+        .ok_or_else(|| ApiError::bad_gateway("agent did not return form values"))?;
     if call.function.arguments.len() > MAX_TOOL_CALL_ARGUMENT_BYTES {
-        return Err(ApiError::invalid_input(
-            "agent returned oversized form values".to_owned(),
+        return Err(ApiError::bad_gateway(
+            "agent returned oversized form values",
         ));
     }
     let arguments = serde_json::from_str::<Value>(&call.function.arguments)
-        .map_err(|_| ApiError::invalid_input("agent returned invalid form values".to_owned()))?;
+        .map_err(|_| ApiError::bad_gateway("agent returned invalid form values"))?;
     let explanation = arguments
         .get("explanation")
         .and_then(Value::as_str)
@@ -354,7 +354,7 @@ pub(super) async fn smart_fill_entity_form(
         .and_then(|value| {
             serde_json::from_value::<std::collections::BTreeMap<String, String>>(value).ok()
         })
-        .ok_or_else(|| ApiError::invalid_input("agent returned invalid form values".to_owned()))?;
+        .ok_or_else(|| ApiError::bad_gateway("agent returned invalid form values"))?;
     let fields = fields
         .into_iter()
         .filter(|(code, value)| {
@@ -453,7 +453,7 @@ pub(super) async fn delete_entity(
     CatalogMutationService::new(&repository)
         .delete_entity(entity_id)
         .await?;
-    invalidate_data_health(&state).await;
+    invalidate_data_health(&state, &repository);
     Ok(StatusCode::NO_CONTENT)
 }
 pub(super) async fn create_entity_form(
@@ -464,7 +464,7 @@ pub(super) async fn create_entity_form(
     let entity = CatalogMutationService::new(&repository)
         .create_entity(input)
         .await?;
-    invalidate_data_health(&state).await;
+    invalidate_data_health(&state, &repository);
     Ok((StatusCode::CREATED, Json(entity)))
 }
 pub(super) async fn duplicate_entity(
@@ -475,7 +475,7 @@ pub(super) async fn duplicate_entity(
     let entity = CatalogMutationService::new(&repository)
         .duplicate_entity(entity_id)
         .await?;
-    invalidate_data_health(&state).await;
+    invalidate_data_health(&state, &repository);
     Ok((StatusCode::CREATED, Json(entity)))
 }
 
@@ -517,7 +517,7 @@ pub(super) async fn update_entity_form(
     let entity = CatalogMutationService::new(&repository)
         .update_entity(entity_id, input)
         .await?;
-    invalidate_data_health(&state).await;
+    invalidate_data_health(&state, &repository);
     Ok(Json(entity))
 }
 pub(super) async fn list_incoming_relationships(
@@ -567,7 +567,7 @@ pub(super) async fn publish_entity(
     let status = CatalogMutationService::new(&repository)
         .publish_entity(entity_id, input.context_id)
         .await?;
-    invalidate_data_health(&state).await;
+    invalidate_data_health(&state, &repository);
     Ok(Json(status))
 }
 pub(super) async fn publish_entity_all_channels(
@@ -578,7 +578,7 @@ pub(super) async fn publish_entity_all_channels(
     let status = CatalogMutationService::new(&repository)
         .publish_entity_all_channels(entity_id)
         .await?;
-    invalidate_data_health(&state).await;
+    invalidate_data_health(&state, &repository);
     Ok(Json(status))
 }
 pub(super) async fn unpublish_entity(
@@ -590,7 +590,7 @@ pub(super) async fn unpublish_entity(
     CatalogMutationService::new(&repository)
         .unpublish_entity(entity_id, input.context_id)
         .await?;
-    invalidate_data_health(&state).await;
+    invalidate_data_health(&state, &repository);
     Ok(StatusCode::NO_CONTENT)
 }
 pub(super) async fn preview_entity_migration(
@@ -609,7 +609,7 @@ pub(super) async fn migrate_entity_to_latest(
     let entity = CatalogMutationService::new(&repository)
         .migrate_entity(entity_id, input)
         .await?;
-    invalidate_data_health(&state).await;
+    invalidate_data_health(&state, &repository);
     Ok(Json(entity))
 }
 pub(super) async fn append_values(
@@ -621,7 +621,7 @@ pub(super) async fn append_values(
     let values = CatalogMutationService::new(&repository)
         .append_values(entity_id, input)
         .await?;
-    invalidate_data_health(&state).await;
+    invalidate_data_health(&state, &repository);
     Ok((StatusCode::CREATED, Json(values)))
 }
 pub(super) async fn get_current_values(
@@ -708,7 +708,7 @@ pub(super) async fn restore_value(
     let value = CatalogMutationService::new(&repository)
         .restore_value(entity_id, history_id)
         .await?;
-    invalidate_data_health(&state).await;
+    invalidate_data_health(&state, &repository);
     Ok((StatusCode::CREATED, Json(value)))
 }
 pub(super) async fn replace_relationships(
@@ -720,7 +720,7 @@ pub(super) async fn replace_relationships(
     let values = CatalogMutationService::new(&repository)
         .replace_relationships(entity_id, input)
         .await?;
-    invalidate_data_health(&state).await;
+    invalidate_data_health(&state, &repository);
     Ok((StatusCode::CREATED, Json(values)))
 }
 pub(super) async fn remove_relationships(
@@ -732,7 +732,7 @@ pub(super) async fn remove_relationships(
     let values = CatalogMutationService::new(&repository)
         .remove_relationships(entity_id, input)
         .await?;
-    invalidate_data_health(&state).await;
+    invalidate_data_health(&state, &repository);
     Ok((StatusCode::CREATED, Json(values)))
 }
 

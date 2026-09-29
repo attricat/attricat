@@ -106,7 +106,10 @@ pub(super) async fn authorize(
         .headers()
         .get(AUTHORIZATION_HEADER)
         .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.strip_prefix("Bearer "));
+        .and_then(|value| value.split_once(' '))
+        // The authentication scheme is case-insensitive (RFC 9110 §11.1).
+        .filter(|(scheme, _)| scheme.eq_ignore_ascii_case("bearer"))
+        .map(|(_, credentials)| credentials);
     let (principal, workspace, token_id, session_digest) = if let Some(secret) = bearer {
         let digest = sha2::Sha256::digest(secret.as_bytes());
         state

@@ -1,32 +1,29 @@
 use super::{
     error::ApiError,
-    extractors::{ApiJson, ApiPath},
+    extractors::{ApiJson, ApiPath, ApiQuery},
+    pagination::{ArrayPage, array_response},
 };
-use crate::model::{CreateManualRuleRun, CreateRule, Rule, RuleFinding, RuleRun};
-use axum::{Json, extract::Query, http::StatusCode};
+use crate::model::{CreateManualRuleRun, CreateRule, Rule, RuleFinding};
+use axum::{Json, http::StatusCode, response::Response};
 use serde::Deserialize;
 use uuid::Uuid;
 
 #[derive(Deserialize)]
 pub struct RuleQuery {
     pub blueprint_id: Option<Uuid>,
-    pub entity_id: Option<Uuid>,
 }
 pub(super) async fn validate(
     ApiJson(input): ApiJson<CreateRule>,
-) -> Result<Json<serde_json::Value>, ApiError> {
-    Ok(Json(
-        serde_json::to_value(catalog_rules::compile(&input.definition).map_err(|e| {
-            ApiError::from(crate::repository::RepositoryError::InvalidRuleDefinition(
-                e.to_string(),
-            ))
-        })?)
-        .expect("rule serializes"),
-    ))
+) -> Result<Json<catalog_rules::CompiledRule>, ApiError> {
+    catalog_rules::compile(&input.definition)
+        .map(Json)
+        .map_err(|e| {
+            crate::repository::RepositoryError::InvalidRuleDefinition(e.to_string()).into()
+        })
 }
 pub(super) async fn list(
     super::auth::ScopedRepository(repo): super::auth::ScopedRepository,
-    Query(query): Query<RuleQuery>,
+    ApiQuery(query): ApiQuery<RuleQuery>,
 ) -> Result<Json<Vec<Rule>>, ApiError> {
     Ok(Json(repo.list_rules(query.blueprint_id).await?))
 }
@@ -77,8 +74,11 @@ pub(super) async fn run_now(
 }
 pub(super) async fn list_runs(
     super::auth::ScopedRepository(repo): super::auth::ScopedRepository,
-) -> Result<Json<Vec<RuleRun>>, ApiError> {
-    Ok(Json(repo.list_rule_runs().await?))
+    ApiQuery(page): ApiQuery<ArrayPage>,
+) -> Result<Response, ApiError> {
+    let (limit, offset) = page.bounds()?;
+    let page_items = repo.rule_runs_page(None, limit, offset).await?;
+    Ok(array_response(page_items, (limit, offset)))
 }
 pub(super) async fn replay_run(
     super::auth::ScopedRepository(repo): super::auth::ScopedRepository,
@@ -96,11 +96,21 @@ pub(super) async fn disable(
 ) -> Result<Json<Rule>, ApiError> {
     Ok(Json(repo.disable_rule(id).await?))
 }
+#[derive(Deserialize)]
+pub struct FindingsQuery {
+    entity_id: Option<Uuid>,
+    limit: Option<i64>,
+    offset: Option<i64>,
+}
 pub(super) async fn findings(
     super::auth::ScopedRepository(repo): super::auth::ScopedRepository,
-    Query(query): Query<RuleQuery>,
-) -> Result<Json<Vec<RuleFinding>>, ApiError> {
-    Ok(Json(repo.list_rule_findings(query.entity_id).await?))
+    ApiQuery(query): ApiQuery<FindingsQuery>,
+) -> Result<Response, ApiError> {
+    let (limit, offset) = ArrayPage::new(query.limit, query.offset).bounds()?;
+    let page_items = repo
+        .rule_findings_page(query.entity_id, limit, offset)
+        .await?;
+    Ok(array_response(page_items, (limit, offset)))
 }
 pub(super) async fn acknowledge(
     super::auth::ScopedRepository(repo): super::auth::ScopedRepository,

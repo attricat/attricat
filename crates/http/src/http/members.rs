@@ -14,7 +14,7 @@ use super::{
     extractors::{ApiJson, ApiPath},
 };
 use crate::{
-    account::{Password, hash_password, validate_password},
+    account::validate_password,
     repository::{WorkspaceInvitation, WorkspaceMember},
 };
 
@@ -91,7 +91,7 @@ pub(super) async fn create_workspace_user(
     ActiveWorkspace(workspace): ActiveWorkspace,
     ApiJson(input): ApiJson<CreateWorkspaceUserRequest>,
 ) -> Result<(StatusCode, Json<CreatedWorkspaceUser>), ApiError> {
-    let email = input.email.trim().to_lowercase();
+    let email = deliverable_email(&input.email)?;
     let invite_fields = (
         input.role_id,
         input.scope_type,
@@ -147,12 +147,12 @@ pub(super) async fn create_workspace_user(
             Some(Sha256::digest(onboarding_secret.as_bytes()).to_vec()),
         )
         .await?;
+    let invitation_id = user
+        .invitation_id
+        .ok_or_else(|| ApiError::internal("workspace user invitation was not created"))?;
     let invitation = repository
-        .list_workspace_invitations(actor, workspace)
-        .await?
-        .into_iter()
-        .find(|item| Some(item.id) == user.invitation_id)
-        .expect("atomically created invitation is visible");
+        .workspace_invitation(actor, workspace, invitation_id)
+        .await?;
     let delivery_url = if user.needs_password_setup {
         action_url(
             &state.workspace_onboarding_url,
@@ -197,8 +197,7 @@ pub(super) async fn complete_onboarding(
 ) -> Result<Response, ApiError> {
     validate_password(&input.password)
         .map_err(|error| ApiError::invalid_input(error.to_string()))?;
-    let password_hash = hash_password(&Password::new(input.password))
-        .map_err(|_| ApiError::internal("could not set password"))?;
+    let password_hash = super::sessions::hash_password(input.password).await?;
     let onboarding = state
         .repository
         .complete_workspace_onboarding(
@@ -238,7 +237,17 @@ pub(super) async fn complete_onboarding(
     .await
 }
 
-fn action_url(base: &str, parameters: &[(&str, &str)]) -> Result<String, ApiError> {
+/// Normalizes an invitee address and rejects any the mail transport could not
+/// deliver to, before an invitation is committed that could never be sent.
+fn deliverable_email(raw: &str) -> Result<String, ApiError> {
+    let email = raw.trim().to_lowercase();
+    email
+        .parse::<lettre::Address>()
+        .map_err(|_| ApiError::invalid_input("email must be a valid address".to_owned()))?;
+    Ok(email)
+}
+
+pub(super) fn action_url(base: &str, parameters: &[(&str, &str)]) -> Result<String, ApiError> {
     let mut url =
         Url::parse(base).map_err(|_| ApiError::internal("workspace action URL is invalid"))?;
     url.query_pairs_mut()
@@ -307,10 +316,10 @@ pub(super) async fn revoke_role(
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     AuthenticatedPrincipal(actor, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace): ActiveWorkspace,
-    ApiPath((_, grant_id)): ApiPath<(Uuid, Uuid)>,
+    ApiPath((member_id, grant_id)): ApiPath<(Uuid, Uuid)>,
 ) -> Result<StatusCode, ApiError> {
     repository
-        .revoke_workspace_member_role(actor, workspace, grant_id)
+        .revoke_workspace_member_role(actor, workspace, member_id, grant_id)
         .await?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -335,7 +344,7 @@ pub(super) async fn create_invitation(
     ActiveWorkspace(workspace): ActiveWorkspace,
     ApiJson(input): ApiJson<CreateInvitationRequest>,
 ) -> Result<(StatusCode, Json<CreatedInvitation>), ApiError> {
-    let email = input.email.trim().to_lowercase();
+    let email = deliverable_email(&input.email)?;
     let mut bytes = [0u8; 32];
     rand::rngs::OsRng.fill_bytes(&mut bytes);
     let secret = format!("cat_inv_{}", URL_SAFE_NO_PAD.encode(bytes));
@@ -354,13 +363,9 @@ pub(super) async fn create_invitation(
         )
         .await?;
     // The digest is the only durable representation of this one-time secret.
-    let invitations = repository
-        .list_workspace_invitations(actor, workspace)
+    let invitation = repository
+        .workspace_invitation(actor, workspace, id)
         .await?;
-    let invitation = invitations
-        .into_iter()
-        .find(|item| item.id == id)
-        .expect("new invitation is visible");
     let delivery_url = action_url(&state.workspace_invitation_url, &[("secret", &secret)])?;
     state
         .mail_delivery

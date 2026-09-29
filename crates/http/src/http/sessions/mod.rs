@@ -8,16 +8,20 @@ use super::{
     AppState,
     auth::{ActiveWorkspace, AuthenticatedPrincipal, AuthenticatedSession},
     error::ApiError,
+    extractors::ApiJson,
 };
 use crate::{
     account::{
-        ActionTokenSecret, IssuedLifecycleAction, LifecycleActionPurpose, Password, SessionDigest,
-        SessionSecret, hash_password, validate_password,
+        ActionTokenSecret, IssuedLifecycleAction, LifecycleActionPurpose, SessionDigest,
+        SessionSecret, validate_password,
     },
     constants::SESSION_LIFETIME_HOURS,
+    repository::RepositoryError,
 };
 
+mod password;
 mod responses;
+pub(super) use password::hash_password;
 pub(super) use responses::onboarding_session_response;
 use responses::{
     SessionResponse, clear_session_response, session_response, session_response_payload,
@@ -56,7 +60,7 @@ pub(super) struct DiscoveryResponse {
 
 pub(super) async fn discover(
     State(state): State<AppState>,
-    Json(request): Json<DiscoveryRequest>,
+    ApiJson(request): ApiJson<DiscoveryRequest>,
 ) -> Result<Json<DiscoveryResponse>, ApiError> {
     let identifier = request.login_identifier.trim().to_lowercase();
     let rate_key = digest_login_key(&identifier);
@@ -83,7 +87,7 @@ pub(super) async fn discover(
 /// resettable local credential. Opaque token values only cross the mail boundary.
 pub(super) async fn request_password_reset(
     State(state): State<AppState>,
-    Json(request): Json<PasswordResetRequest>,
+    ApiJson(request): ApiJson<PasswordResetRequest>,
 ) -> Result<axum::http::StatusCode, ApiError> {
     let email = request.email.trim().to_lowercase();
     let rate_key = digest_login_key(&email);
@@ -118,46 +122,48 @@ pub(super) async fn request_password_reset(
             issued.action.expires_at(),
         )
         .await?;
-    let reset_url = format!(
-        "{}?token={}",
-        state.password_reset_url,
-        issued.secret.expose_for_delivery()
-    );
-    state
+    let reset_url = super::members::action_url(
+        &state.password_reset_url,
+        &[("token", issued.secret.expose_for_delivery())],
+    )?;
+    // Delivery failure must not change the response: a 500 only for real,
+    // verified accounts would disclose which addresses exist.
+    if let Err(error) = state
         .mail_delivery
         .deliver_password_reset(&email, &reset_url)
         .await
-        .map_err(|error| {
-            tracing::error!(%error, "password reset email delivery failed");
-            ApiError::internal("password reset email could not be delivered")
-        })?;
+    {
+        tracing::error!(%error, "password reset email delivery failed");
+    }
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
 pub(super) async fn confirm_password_reset(
     State(state): State<AppState>,
-    Json(request): Json<PasswordResetConfirmation>,
+    ApiJson(request): ApiJson<PasswordResetConfirmation>,
 ) -> Result<axum::http::StatusCode, ApiError> {
     let secret = ActionTokenSecret::from_delivery_value(request.token).map_err(|_| {
         ApiError::invalid_input("password reset link is invalid or expired".to_owned())
     })?;
     validate_password(&request.password)
         .map_err(|error| ApiError::invalid_input(error.to_string()))?;
-    let password_hash = hash_password(&Password::new(request.password))
-        .map_err(|_| ApiError::invalid_input("password could not be set".to_owned()))?;
+    let password_hash = hash_password(request.password).await?;
     state
         .repository
         .consume_password_reset(&secret.digest(), &password_hash)
         .await
-        .map_err(|_| {
-            ApiError::invalid_input("password reset link is invalid or expired".to_owned())
+        .map_err(|error| match error {
+            RepositoryError::NotFound(_) => {
+                ApiError::invalid_input("password reset link is invalid or expired".to_owned())
+            }
+            error => error.into(),
         })?;
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
 pub(super) async fn login(
     State(state): State<AppState>,
-    Json(request): Json<LoginRequest>,
+    ApiJson(request): ApiJson<LoginRequest>,
 ) -> Result<Response, ApiError> {
     let identifier = request.login_identifier.trim().to_lowercase();
     let workspace = state
@@ -170,18 +176,20 @@ pub(super) async fn login(
     if !state.repository.reserve_login_attempt(&rate_key).await? {
         return Err(ApiError::rate_limited());
     }
-    let credential = state.repository.local_login_credential(&email).await?;
-    let valid = credential.as_ref().is_some_and(|credential| {
-        credential.active
-            && credential
-                .password_hash
-                .verify(&Password::new(request.password))
-                .unwrap_or(false)
-    });
-    if !valid {
+    let credential = state
+        .repository
+        .local_login_credential(&email)
+        .await?
+        .filter(|credential| credential.active);
+    let hash = credential
+        .as_ref()
+        .map(|credential| credential.password_hash.clone());
+    let (true, Some(credential)) = (
+        password::verify_password(hash, request.password).await?,
+        credential,
+    ) else {
         return Err(ApiError::invalid_credentials());
-    }
-    let credential = credential.expect("valid credential exists");
+    };
     state.repository.clear_login_failures(&rate_key).await?;
     let (session, csrf, expires_at) = issue_session();
     state

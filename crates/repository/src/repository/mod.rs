@@ -1078,6 +1078,26 @@ impl CatalogRepository {
 
     /// Checks the durable membership/grant graph in one database operation so
     /// callers cannot learn whether an out-of-scope target exists.
+    /// Returns which of `permissions` the user holds workspace-wide, in one
+    /// query. Equivalent to calling [`Self::is_authorized`] with no target for
+    /// each permission: only active, workspace-scoped grants count.
+    pub async fn workspace_permissions(
+        &self,
+        user_id: Uuid,
+        workspace_id: Uuid,
+        permissions: &[&str],
+    ) -> Result<HashSet<String>, RepositoryError> {
+        let rows: Vec<String> = sqlx::query_scalar(
+            "SELECT DISTINCT rp.permission_code FROM workspace_memberships m JOIN users u ON u.id = m.user_id JOIN workspaces w ON w.id = m.workspace_id JOIN role_grants g ON g.membership_id = m.id AND g.workspace_id = m.workspace_id JOIN role_permissions rp ON rp.role_id = g.role_id WHERE m.user_id = $1 AND m.workspace_id = $2 AND m.state = 'active' AND u.state = 'active' AND w.deleted_at IS NULL AND g.scope_type = 'workspace' AND g.scope_target_id = $2 AND rp.permission_code = ANY($3)",
+        )
+        .bind(user_id)
+        .bind(workspace_id)
+        .bind(permissions)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows.into_iter().collect())
+    }
+
     pub async fn is_authorized(
         &self,
         user_id: Uuid,
