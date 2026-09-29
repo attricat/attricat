@@ -804,6 +804,17 @@ impl CatalogRepository {
             .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).bind(conversation_id).fetch_all(&self.pool).await?)
     }
 
+    /// Maps each run to the entity of its live (unarchived) conversation.
+    /// Runs whose conversation is missing or archived are absent.
+    pub async fn run_conversation_entities(
+        &self,
+        run_ids: &[Uuid],
+    ) -> Result<std::collections::HashMap<Uuid, Option<Uuid>>, RepositoryError> {
+        let rows: Vec<(Uuid, Option<Uuid>)> = sqlx::query_as("SELECT run.id, conversation.entity_id FROM agent_runs run JOIN conversations conversation ON conversation.id = run.conversation_id AND conversation.workspace_id = run.workspace_id WHERE run.id = ANY($1) AND run.workspace_id = $2 AND conversation.archived_at IS NULL")
+            .bind(run_ids).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).fetch_all(&self.pool).await?;
+        Ok(rows.into_iter().collect())
+    }
+
     pub async fn agent_run_events_after(
         &self,
         run_id: Uuid,

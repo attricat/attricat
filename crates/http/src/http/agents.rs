@@ -21,7 +21,7 @@ use crate::{
     agents::{
         MAX_CONVERSATION_ATTACHMENTS, MAX_CONVERSATION_MESSAGE_BYTES, MAX_CONVERSATION_TITLE_BYTES,
     },
-    repository::{ApprovalDecision, RepositoryError},
+    repository::ApprovalDecision,
 };
 
 #[derive(Deserialize)]
@@ -135,23 +135,36 @@ pub(super) async fn readable_conversation(
     Ok(conversation)
 }
 
+/// Keeps items that are either not entity-bound or bound to an entity the
+/// user may read, authorizing every entity in one query.
+async fn retain_readable<T>(
+    repository: &crate::repository::CatalogRepository,
+    user: Uuid,
+    workspace: Uuid,
+    items: Vec<T>,
+    entity_of: impl Fn(&T) -> Option<Uuid>,
+) -> Result<Vec<T>, ApiError> {
+    let mut entity_ids = items.iter().filter_map(&entity_of).collect::<Vec<_>>();
+    entity_ids.sort_unstable();
+    entity_ids.dedup();
+    let readable = repository
+        .authorized_entity_ids(user, workspace, "entities.read", &entity_ids)
+        .await?;
+    Ok(items
+        .into_iter()
+        .filter(|item| entity_of(item).is_none_or(|entity_id| readable.contains(&entity_id)))
+        .collect())
+}
+
 pub(super) async fn list_conversations(
     AuthenticatedPrincipal(user, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace): ActiveWorkspace,
     ScopedRepository(repository): ScopedRepository,
 ) -> Result<Json<Vec<crate::repository::Conversation>>, ApiError> {
-    let mut visible = Vec::new();
-    for conversation in repository.list_conversations().await? {
-        if let Some(entity_id) = conversation.entity_id
-            && !repository
-                .is_authorized(user, workspace, "entities.read", Some(entity_id), None)
-                .await?
-        {
-            continue;
-        }
-        visible.push(conversation);
-    }
-    Ok(Json(visible))
+    let conversations = repository.list_conversations().await?;
+    Ok(Json(
+        retain_readable(&repository, user, workspace, conversations, |c| c.entity_id).await?,
+    ))
 }
 
 #[derive(Deserialize, Default)]
@@ -213,17 +226,7 @@ pub(super) async fn search_conversations(
     } else {
         None
     };
-    let mut items = Vec::new();
-    for conversation in rows {
-        if let Some(entity_id) = conversation.entity_id
-            && !repository
-                .is_authorized(user, workspace, "entities.read", Some(entity_id), None)
-                .await?
-        {
-            continue;
-        }
-        items.push(conversation);
-    }
+    let items = retain_readable(&repository, user, workspace, rows, |c| c.entity_id).await?;
     Ok(Json(ConversationSearchPage { items, next_cursor }))
 }
 
@@ -359,24 +362,21 @@ pub(super) async fn list_pending_approvals(
     let calls = repository
         .pending_agent_tool_calls(query.conversation_id)
         .await?;
-    let mut visible = Vec::new();
-    for call in calls {
-        let run = repository.get_agent_run(call.run_id).await?;
-        let conversation = match repository.get_conversation(run.conversation_id).await {
-            Ok(conversation) => conversation,
-            Err(RepositoryError::NotFound(_)) => continue,
-            Err(error) => return Err(error.into()),
-        };
-        if let Some(entity_id) = conversation.entity_id
-            && !repository
-                .is_authorized(user, workspace, "entities.read", Some(entity_id), None)
-                .await?
-        {
-            continue;
-        }
-        visible.push(call);
-    }
-    Ok(Json(visible))
+    let mut run_ids = calls.iter().map(|call| call.run_id).collect::<Vec<_>>();
+    run_ids.sort_unstable();
+    run_ids.dedup();
+    let run_entities = repository.run_conversation_entities(&run_ids).await?;
+    // Calls whose conversation is gone or archived are not shown.
+    let calls = calls
+        .into_iter()
+        .filter(|call| run_entities.contains_key(&call.run_id))
+        .collect();
+    Ok(Json(
+        retain_readable(&repository, user, workspace, calls, |call| {
+            run_entities.get(&call.run_id).copied().flatten()
+        })
+        .await?,
+    ))
 }
 
 pub(super) async fn approve(

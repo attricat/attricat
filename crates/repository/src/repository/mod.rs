@@ -1098,6 +1098,33 @@ impl CatalogRepository {
         Ok(rows.into_iter().collect())
     }
 
+    /// Returns the subset of `entity_ids` the user may access with
+    /// `permission`, in one query. Equivalent to calling
+    /// [`Self::is_authorized`] with each ID as the target: a workspace grant
+    /// authorizes every ID, while entity and blueprint-family grants require
+    /// the entity to exist in this workspace.
+    pub async fn authorized_entity_ids(
+        &self,
+        user_id: Uuid,
+        workspace_id: Uuid,
+        permission: &str,
+        entity_ids: &[Uuid],
+    ) -> Result<HashSet<Uuid>, RepositoryError> {
+        if entity_ids.is_empty() {
+            return Ok(HashSet::new());
+        }
+        let rows: Vec<Uuid> = sqlx::query_scalar(
+            "WITH grants AS (SELECT g.scope_type, g.scope_target_id FROM workspace_memberships m JOIN users u ON u.id = m.user_id JOIN workspaces w ON w.id = m.workspace_id JOIN role_grants g ON g.membership_id = m.id AND g.workspace_id = m.workspace_id JOIN role_permissions rp ON rp.role_id = g.role_id WHERE m.user_id = $1 AND m.workspace_id = $2 AND m.state = 'active' AND u.state = 'active' AND w.deleted_at IS NULL AND rp.permission_code = $3) SELECT requested.id FROM unnest($4::uuid[]) AS requested(id) LEFT JOIN entities e ON e.id = requested.id AND e.workspace_id = $2 WHERE EXISTS (SELECT 1 FROM grants g WHERE (g.scope_type = 'workspace' AND g.scope_target_id = $2) OR (e.id IS NOT NULL AND ((g.scope_type = 'entity' AND g.scope_target_id = e.id) OR (g.scope_type = 'blueprint_family' AND g.scope_target_id = e.blueprint_id))))",
+        )
+        .bind(user_id)
+        .bind(workspace_id)
+        .bind(permission)
+        .bind(entity_ids)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows.into_iter().collect())
+    }
+
     pub async fn is_authorized(
         &self,
         user_id: Uuid,
