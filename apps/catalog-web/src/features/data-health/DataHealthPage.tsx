@@ -38,6 +38,7 @@ import type { DataHealthSearch } from './schemas';
 import { formatDataHealthDate } from './dateFormat';
 import { SectionError } from './SectionError';
 import { formatBytes } from './dataHealthFormat';
+import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
 
 export const DataHealthPage = ({ search }: { search: DataHealthSearch }) => {
   const { i18n, t } = useTranslation();
@@ -110,10 +111,18 @@ export const DataHealthPage = ({ search }: { search: DataHealthSearch }) => {
       />
       <SectionError error={summary.error} />
       {summary.data && (
-        <DataHealthSummaryCards
-          staleAfterDays={staleAfterDays}
-          summary={summary.data}
-        />
+        <>
+          <DataHealthSummaryCards
+            staleAfterDays={staleAfterDays}
+            summary={summary.data}
+          />
+          <Box component="section" sx={{ mt: 2 }}>
+            <ExtensionOutlet
+              context={{ context_version: 1 }}
+              outlet="data_health_card"
+            />
+          </Box>
+        </>
       )}
       <Paper sx={{ mt: 4, p: 2 }}>
         <Typography variant="h5">{t('dataHealth.storage')}</Typography>

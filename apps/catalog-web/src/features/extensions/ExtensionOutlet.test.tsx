@@ -83,6 +83,48 @@ const renderOutlet = () => {
 beforeEach(() => vi.clearAllMocks());
 
 describe('ExtensionOutlet', () => {
+  it('renders only declared data-health panels in host-owned cards', async () => {
+    vi.mocked(getExtensionRuntime).mockResolvedValue([
+      {
+        ...contribution,
+        id: 'health-card',
+        kind: 'panel',
+        outlet: 'data_health_card',
+      },
+      {
+        ...contribution,
+        id: 'wrong-kind',
+        kind: 'embedded',
+        outlet: 'data_health_card',
+      },
+    ]);
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const { rerender } = render(
+      <QueryClientProvider client={queryClient}>
+        <ExtensionOutlet
+          outlet="data_health_card"
+          context={{ context_version: 1 }}
+        />
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText('health-card')).toBeTruthy();
+    expect(
+      screen.getByText('health-card').closest('.MuiPaper-root'),
+    ).toBeTruthy();
+    expect(screen.queryByText('wrong-kind')).toBeNull();
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <ExtensionOutlet
+          outlet="data_health_card"
+          context={{ context_version: 1, summary: { secret: 'private' } }}
+        />
+      </QueryClientProvider>,
+    );
+    expect(screen.queryByText('health-card')).toBeNull();
+  });
+
   it('mounts bulk actions only with bounded, unique selected IDs', async () => {
     vi.mocked(getExtensionRuntime).mockResolvedValue([
       {

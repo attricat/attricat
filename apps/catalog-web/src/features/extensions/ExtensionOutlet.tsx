@@ -9,6 +9,7 @@ import {
   IconButton,
   ListItemIcon,
   ListItemText,
+  Paper,
   Popover,
   Stack,
   Tooltip,
@@ -42,7 +43,8 @@ type Outlet =
   | 'blueprint_panel'
   | 'audit_event_panel'
   | 'explorer_action'
-  | 'explorer_bulk_action';
+  | 'explorer_bulk_action'
+  | 'data_health_card';
 
 const contributionKey = (contribution: ExtensionContribution) =>
   `${contribution.extension_id}:${contribution.id}:${contribution.release_id}`;
@@ -78,6 +80,7 @@ const outletPolicies = {
     primaryCapacity: 1,
     secondaryCapacity: 3,
   },
+  data_health_card: { kind: 'card', visibleCapacity: 3 },
 } as const;
 
 const embeddedOutlets = new Set<Outlet>([
@@ -97,6 +100,7 @@ const panelOutlets = new Set<Outlet>([
   'blueprint_detail_panel',
   'blueprint_panel',
   'audit_event_panel',
+  'data_health_card',
 ]);
 const supportsOutlet = (contribution: ExtensionContribution, outlet: Outlet) =>
   contribution.outlet === outlet &&
@@ -157,6 +161,7 @@ const OutletContribution = ({
 // New outlet contexts are deliberately small, strict, and versioned. They are
 // the only page data an extension frame receives for these surfaces.
 const outletContextSchemas = {
+  data_health_card: z.object({ context_version: z.literal(1) }).strict(),
   explorer_bulk_action: z
     .object({
       context_version: z.literal(1),
@@ -283,6 +288,30 @@ export const ExtensionOutlet = ({
         supportsOutlet(item, outlet) && hasValidContext(outlet, context),
     ) ?? [];
   const policy = outletPolicies[outlet];
+  if (policy.kind === 'card') {
+    const visible = contributions.slice(0, policy.visibleCapacity);
+    const overflow = contributions.slice(policy.visibleCapacity);
+    return (
+      <Stack
+        direction={{ xs: 'column', sm: 'row' }}
+        spacing={2}
+        sx={{ flexWrap: 'wrap' }}
+      >
+        {visible.map((item) => (
+          <Paper key={contributionKey(item)} sx={{ minWidth: 190, p: 2 }}>
+            <ExtensionFrame contribution={item} context={context} />
+          </Paper>
+        ))}
+        {overflow.length > 0 && (
+          <ExtensionActionOverflow
+            context={context}
+            contributions={overflow}
+            label={t('extensions.moreContent')}
+          />
+        )}
+      </Stack>
+    );
+  }
   if (policy.kind === 'actionBar') {
     const visibleCapacity = policy.primaryCapacity + policy.secondaryCapacity;
     const primary = contributions.slice(0, policy.primaryCapacity);

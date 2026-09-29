@@ -674,8 +674,14 @@ contextual actions—not an application-wide navigation tree.
   unmounts the frame. Selection is a UI hint, not an authorization grant:
   commands still require `client.commands` and server-side permission checks.
 
+- **`data_health_card`** (`panel`, requiring `client.data_health_card`)
+  appears as a host-owned card below the Data Health summary cards, only when
+  the summary loads. Its strict v1 context is `{ "context_version": 1 }`:
+  private health metrics and filter values are not passed to the frame. At most
+  three cards are visible before overflow. The panel is read-only.
+
 The manifest also recognizes `entity_attribute_panel`,
-`blueprint_publish_check`, `file_panel`, and `data_health_card`. These four
+`blueprint_publish_check`, and `file_panel`. These three
 placements are **not mounted by the current web client**; do not depend on
 runtime display until host-owned contexts and placements are implemented.
 
