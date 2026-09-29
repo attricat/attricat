@@ -705,7 +705,13 @@ contextual actions—not an application-wide navigation tree.
   not render in custom file-value renderers that do not forward the optional
   file-panel callback. No separate file-detail page is implied.
 
-All of the mounted frames use the same mediated `catalog` API and capability checks
+Every manifest-declared outlet now has a host-owned client mount path;
+`explorer_table_cell` uses the Explorer table renderer rather than
+`ExtensionOutlet`. The browser schema tests compare the declared Rust outlets
+with the client enum and check each outlet's mount path. A placement is still
+shown only when its page, scope, contribution kind, and required grants match.
+
+All mounted frames use the same mediated `catalog` API and capability checks
 as route contributions. The host re-authorizes every broker call and unmounts
 contributions when their runtime access is removed.
 

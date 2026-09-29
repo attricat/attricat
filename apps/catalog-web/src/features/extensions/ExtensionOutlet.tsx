@@ -30,24 +30,13 @@ import {
 import { extensionQueryKeys } from './queryKeys';
 import { extensionRuntimeRefetchInterval } from './constants';
 import { maximumAgentSelection } from '../explorer/agentSelection';
+import { extensionOutletSchema } from './schemas';
 
-type Outlet =
-  | 'navigation'
-  | 'entity_preview_panel'
-  | 'blueprint_attribute_configuration'
-  | 'entity_attribute_decoration'
-  | 'entity_action'
-  | 'entity_header_action'
-  | 'explorer_row_action'
-  | 'blueprint_detail_panel'
-  | 'blueprint_panel'
-  | 'audit_event_panel'
-  | 'explorer_action'
-  | 'explorer_bulk_action'
-  | 'data_health_card'
-  | 'blueprint_publish_check'
-  | 'entity_attribute_panel'
-  | 'file_panel';
+// The Explorer table-cell renderer has its own host-controlled mount path.
+type Outlet = Exclude<
+  z.infer<typeof extensionOutletSchema>,
+  'explorer_table_cell'
+>;
 
 const contributionKey = (contribution: ExtensionContribution) =>
   `${contribution.extension_id}:${contribution.id}:${contribution.release_id}`;
@@ -87,7 +76,7 @@ const outletPolicies = {
   blueprint_publish_check: { kind: 'panel', visibleCapacity: 3 },
   entity_attribute_panel: { kind: 'panel', visibleCapacity: 3 },
   file_panel: { kind: 'panel', visibleCapacity: 3 },
-} as const;
+} as const satisfies Record<Outlet, { kind: string }>;
 
 const embeddedOutlets = new Set<Outlet>([
   'navigation',
