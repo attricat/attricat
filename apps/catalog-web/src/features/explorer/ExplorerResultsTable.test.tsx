@@ -228,6 +228,7 @@ describe('ExplorerResultsTable', () => {
   });
 
   it('selects individual and loaded rows, clears and exits selection mode', async () => {
+    outletMount.mockClear();
     const user = userEvent.setup();
     renderTable();
     await user.click(screen.getByRole('button', { name: 'Select entities' }));
@@ -241,13 +242,29 @@ describe('ExplorerResultsTable', () => {
     expect((first as HTMLInputElement).checked).toBe(true);
     expect(selectAll.getAttribute('data-indeterminate')).toBe('true');
     expect(screen.getByText('1 selected')).toBeTruthy();
+    expect(outletMount).toHaveBeenCalledWith({
+      outlet: 'explorer_bulk_action',
+      context: {
+        context_version: 1,
+        blueprint_id: blueprint.blueprint.id,
+        blueprint_version: blueprint.blueprint.version,
+        entity_ids: [item.id],
+      },
+      runtimeScope: {
+        blueprintId: blueprint.blueprint.id,
+        blueprintVersion: blueprint.blueprint.version,
+      },
+    });
     await user.click(selectAll);
     expect(selectAll.checked).toBe(true);
     expect(screen.getByText('2 selected')).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Clear' }));
     expect(selectAll.checked).toBe(false);
-    await user.click(first);
+    outletMount.mockClear();
     await user.click(screen.getByRole('button', { name: 'Exit selection' }));
+    expect(outletMount).not.toHaveBeenCalledWith(
+      expect.objectContaining({ outlet: 'explorer_bulk_action' }),
+    );
     expect(screen.queryByRole('checkbox')).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Select entities' }));
     expect(screen.queryByText('1 selected')).toBeNull();

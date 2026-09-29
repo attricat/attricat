@@ -28,6 +28,7 @@ import {
 } from './api';
 import { extensionQueryKeys } from './queryKeys';
 import { extensionRuntimeRefetchInterval } from './constants';
+import { maximumAgentSelection } from '../explorer/agentSelection';
 
 type Outlet =
   | 'navigation'
@@ -40,7 +41,8 @@ type Outlet =
   | 'blueprint_detail_panel'
   | 'blueprint_panel'
   | 'audit_event_panel'
-  | 'explorer_action';
+  | 'explorer_action'
+  | 'explorer_bulk_action';
 
 const contributionKey = (contribution: ExtensionContribution) =>
   `${contribution.extension_id}:${contribution.id}:${contribution.release_id}`;
@@ -71,21 +73,39 @@ const outletPolicies = {
     primaryCapacity: 1,
     secondaryCapacity: 3,
   },
+  explorer_bulk_action: {
+    kind: 'actionBar',
+    primaryCapacity: 1,
+    secondaryCapacity: 3,
+  },
 } as const;
 
+const embeddedOutlets = new Set<Outlet>([
+  'navigation',
+  'entity_preview_panel',
+  'blueprint_attribute_configuration',
+  'entity_attribute_decoration',
+  'entity_action',
+]);
+const actionOutlets = new Set<Outlet>([
+  'entity_header_action',
+  'explorer_row_action',
+  'explorer_action',
+  'explorer_bulk_action',
+]);
+const panelOutlets = new Set<Outlet>([
+  'blueprint_detail_panel',
+  'blueprint_panel',
+  'audit_event_panel',
+]);
 const supportsOutlet = (contribution: ExtensionContribution, outlet: Outlet) =>
   contribution.outlet === outlet &&
-  (contribution.kind === 'embedded' ||
-    ((outlet === 'entity_header_action' || outlet === 'explorer_action') &&
-      contribution.kind === 'action') ||
+  ((contribution.kind === 'embedded' && embeddedOutlets.has(outlet)) ||
+    (contribution.kind === 'action' && actionOutlets.has(outlet)) ||
+    (contribution.kind === 'panel' && panelOutlets.has(outlet)) ||
     (outlet === 'navigation' &&
       contribution.kind === 'navigation' &&
-      contribution.route !== null) ||
-    (outlet === 'explorer_row_action' && contribution.kind === 'action') ||
-    ((outlet === 'blueprint_detail_panel' ||
-      outlet === 'blueprint_panel' ||
-      outlet === 'audit_event_panel') &&
-      contribution.kind === 'panel'));
+      contribution.route !== null));
 
 const ExtensionNavigationItem = ({
   contribution,
@@ -137,6 +157,18 @@ const OutletContribution = ({
 // New outlet contexts are deliberately small, strict, and versioned. They are
 // the only page data an extension frame receives for these surfaces.
 const outletContextSchemas = {
+  explorer_bulk_action: z
+    .object({
+      context_version: z.literal(1),
+      blueprint_id: z.uuid(),
+      blueprint_version: z.number().int().positive(),
+      entity_ids: z
+        .array(z.uuid())
+        .min(1)
+        .max(maximumAgentSelection)
+        .refine((ids) => new Set(ids).size === ids.length),
+    })
+    .strict(),
   explorer_action: z
     .object({
       context_version: z.literal(1),

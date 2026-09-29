@@ -83,6 +83,58 @@ const renderOutlet = () => {
 beforeEach(() => vi.clearAllMocks());
 
 describe('ExtensionOutlet', () => {
+  it('mounts bulk actions only with bounded, unique selected IDs', async () => {
+    vi.mocked(getExtensionRuntime).mockResolvedValue([
+      {
+        ...contribution,
+        id: 'bulk-action',
+        kind: 'action',
+        outlet: 'explorer_bulk_action',
+      },
+      {
+        ...contribution,
+        id: 'wrong-kind',
+        kind: 'embedded',
+        outlet: 'explorer_bulk_action',
+      },
+    ]);
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const context = {
+      context_version: 1,
+      blueprint_id: '22222222-2222-4222-8222-222222222222',
+      blueprint_version: 1,
+      entity_ids: ['33333333-3333-4333-8333-333333333333'],
+    };
+    const { rerender } = render(
+      <QueryClientProvider client={queryClient}>
+        <ExtensionOutlet outlet="explorer_bulk_action" context={context} />
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText('bulk-action')).toBeTruthy();
+    expect(screen.queryByText('wrong-kind')).toBeNull();
+    for (const entity_ids of [
+      [],
+      [context.entity_ids[0], context.entity_ids[0]],
+      Array.from(
+        { length: 51 },
+        (_, index) =>
+          `33333333-3333-4333-8333-${String(index).padStart(12, '0')}`,
+      ),
+    ]) {
+      rerender(
+        <QueryClientProvider client={queryClient}>
+          <ExtensionOutlet
+            outlet="explorer_bulk_action"
+            context={{ ...context, entity_ids }}
+          />
+        </QueryClientProvider>,
+      );
+      expect(screen.queryByText('bulk-action')).toBeNull();
+    }
+  });
+
   it('mounts only Explorer actions for a strict blueprint revision context', async () => {
     vi.mocked(getExtensionRuntime).mockResolvedValue([
       {

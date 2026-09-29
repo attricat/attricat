@@ -334,6 +334,26 @@ export const ExplorerResultsTable = ({
           }}
         />
       )}
+      {showExplorerActions &&
+        selection.selectionMode &&
+        selection.selectedItems.length > 0 &&
+        selection.selectedItems.every(
+          (item) => item.blueprint_version === blueprint.blueprint.version,
+        ) && (
+          <ExtensionOutlet
+            context={{
+              context_version: 1,
+              blueprint_id: blueprint.blueprint.id,
+              blueprint_version: blueprint.blueprint.version,
+              entity_ids: selection.selectedItems.map((item) => item.id),
+            }}
+            outlet="explorer_bulk_action"
+            runtimeScope={{
+              blueprintId: blueprint.blueprint.id,
+              blueprintVersion: blueprint.blueprint.version,
+            }}
+          />
+        )}
       <VirtualizedExplorerTable
         table={table}
         columnsLength={columns.length}

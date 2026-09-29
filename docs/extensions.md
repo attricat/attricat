@@ -665,9 +665,17 @@ contextual actions—not an application-wide navigation tree.
   primary and three secondary actions before overflow. Mutations still need
   separately declared `client.commands`.
 
-The manifest also recognizes `explorer_bulk_action`,
-`entity_attribute_panel`, `blueprint_publish_check`, `file_panel`,
-and `data_health_card`. These five
+- **`explorer_bulk_action`** (`action`, requiring
+  `client.explorer_bulk_action`) appears below the Explorer toolbar only while
+  1–50 loaded entities are selected and all belong to the displayed blueprint
+  revision. Its strict v1 context contains `context_version: 1`,
+  `blueprint_id`, `blueprint_version`, and the selected `entity_ids` in display
+  order; it contains no row values or search filters. Closing selection mode
+  unmounts the frame. Selection is a UI hint, not an authorization grant:
+  commands still require `client.commands` and server-side permission checks.
+
+The manifest also recognizes `entity_attribute_panel`,
+`blueprint_publish_check`, `file_panel`, and `data_health_card`. These four
 placements are **not mounted by the current web client**; do not depend on
 runtime display until host-owned contexts and placements are implemented.
 
