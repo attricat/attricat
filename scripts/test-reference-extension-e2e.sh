@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Runs against the worktree-local stack through its public CLI/HTTP boundary.
-# The sibling example is the maintained host-integration extension.
+# Exercises the maintained sibling example against the worktree-local public API.
 set -euo pipefail
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -10,58 +9,82 @@ if [[ -z "${CATALOG_API_URL:-}" && -n "${API_PORT:-}" ]]; then
   CATALOG_API_URL="http://127.0.0.1:$API_PORT"
 fi
 : "${CATALOG_API_URL:?Run 'just setup' and source .worktree first.}"
+export CATALOG_API_URL
 command -v jq >/dev/null || { echo 'jq is required' >&2; exit 1; }
 
 cli=(cargo run --quiet -p cli -- --token "$CATALOG_TOKEN")
-api() { curl --fail-with-body --silent --show-error -H "Authorization: Bearer $CATALOG_TOKEN" -H 'Content-Type: application/json' "$@"; }
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
 
 (cd "$example_extension" && just check && just pack)
-manifest="$example_extension/importer/manifest.json"
-archive="$example_extension/dist/reference-customer-importer.tar.zst"
-extension_id=$(jq -r '.catalog.id' "$manifest")
+manifest="$example_extension/manifest.json"
+extension_id=$(jq -er '.catalog.id' "$manifest")
+version=$(jq -er '.version' "$manifest")
+archive="$example_extension/dist/$extension_id-$version.tar.zst"
 test -s "$archive" || { echo "missing packaged example archive: $archive" >&2; exit 1; }
 
-# Package, side-load, grant every declared capability, and enable the maintained
-# reference importer. A prior interrupted verification may have left an
-# installation in any terminal or disabled state.
+# An upgrade clears grants. Reinstall and explicitly authorize the exact release.
 "${cli[@]}" extension remove "$extension_id" >/dev/null 2>&1 || true
 "${cli[@]}" extension sideload --file "$archive" >/dev/null
+"${cli[@]}" extension configure "$extension_id" --configuration '{}' >/dev/null
 while IFS= read -r permission; do
   "${cli[@]}" extension grant "$extension_id" --grant-kind capability --grant-id "$permission" >/dev/null
 done < <(jq -r '.permissions[]' "$manifest")
 "${cli[@]}" extension enable "$extension_id" >/dev/null
+"${cli[@]}" extension detail "$extension_id" | jq -e '.installation.state == "enabled"' >/dev/null
+"${cli[@]}" extension artifact "$extension_id" formula-workbench --output "$work/workbench.js" >/dev/null
+test -s "$work/workbench.js"
 
-detail=$("${cli[@]}" extension detail "$extension_id")
-echo "$detail" | jq -e '.installation.state == "enabled"' >/dev/null
-release_id=$(echo "$detail" | jq -r '.installation.installed_release_id')
-[[ "$release_id" != "null" && -n "$release_id" ]] || { echo 'enabled extension did not expose a release ID' >&2; exit 1; }
+# Trigger the real v1.1 event handler with a fresh blueprint and entity, not an
+# existing development fixture. The extension must write the computed value in
+# the same default context after an ordinary Catalog mutation.
+code="reference_formula_$(date +%s)_$$"
+cat > "$work/blueprint.toml" <<TOML
+format_version = 1
+code = "$code"
+name = "Reference formula E2E"
+kind = "entity"
 
-# Exercise the real v1.3 component and host-managed artifact path. The importer
-# completes one durable operation by writing the packaged customer fixture to a
-# host artifact; completion therefore proves task dispatch, Wasmtime execution,
-# permission mediation, artifact storage, and checkpointing together.
-operation_id=$(jq -r '.server.operations[0].id' "$manifest")
-idempotency_key="reference-e2e-$(date +%s)-$$"
-run=$(api -X POST "$CATALOG_API_URL/extensions/$extension_id/operations" -d "$(jq -nc --arg operation_id "$operation_id" --arg idempotency_key "$idempotency_key" '{operation_id:$operation_id,input:{fixture:"customers.ndjson"},idempotency_key:$idempotency_key}')")
-run_id=$(echo "$run" | jq -er '.id')
-for _ in $(seq 1 120); do
-  runs=$(api "$CATALOG_API_URL/extension-operation-runs")
-  status=$(echo "$runs" | jq -r --arg run_id "$run_id" '.[] | select(.id == $run_id) | .status')
-  if [[ "$status" == "completed" ]]; then
-    echo "$runs" | jq -e --arg run_id "$run_id" '.[] | select(.id == $run_id and .progress.customers == 2 and .progress.bytes > 0)' >/dev/null
-    break
-  fi
-  if [[ "$status" == "failed" || "$status" == "dead_letter" || "$status" == "cancelled" ]]; then
-    echo "reference operation ended in $status" >&2
-    exit 1
+[[attributes]]
+code = "price_net"
+value_type = "number"
+
+[[attributes]]
+code = "price_gross"
+value_type = "number"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["price_net"]
+
+[extensions.$extension_id.formulas]
+price_gross = "price_net * 2"
+TOML
+blueprint_id=$("${cli[@]}" blueprint create --file "$work/blueprint.toml" | jq -er '.blueprint.id')
+"${cli[@]}" blueprint publish "$blueprint_id" 1 >/dev/null
+cat > "$work/values.toml" <<'TOML'
+[[values]]
+kind = "scalar"
+attribute_code = "price_net"
+value = 10.0
+TOML
+context_id=00000000-0000-4000-8000-000000000001
+entity_id=$("${cli[@]}" entity create --blueprint "$code" --values "$work/values.toml" --context-id "$context_id" | jq -er '.id')
+cat > "$work/updated.toml" <<'TOML'
+[[values]]
+kind = "scalar"
+attribute_code = "price_net"
+value = 17.0
+TOML
+"${cli[@]}" entity update "$entity_id" --values "$work/updated.toml" --context-id "$context_id" >/dev/null
+for _ in $(seq 1 60); do
+  preview=$("${cli[@]}" entity resolved-preview "$entity_id" --context-id "$context_id")
+  if echo "$preview" | jq -e --arg context "$context_id" '.values.price_gross.value == 34 and .values.price_gross.source_context.id == $context' >/dev/null; then
+    "${cli[@]}" audit list --limit 100 | jq -e '.events | map(.target.type) | any(. == "extension")' >/dev/null
+    printf 'reference extension E2E passed: extension=%s blueprint=%s entity=%s\n' "$extension_id" "$blueprint_id" "$entity_id"
+    exit 0
   fi
   sleep 1
 done
-[[ "$status" == "completed" ]] || { echo 'reference operation did not complete in time' >&2; exit 1; }
-
-# Quarantine is a public lifecycle action; the audit API is the public evidence
-# surface for package, grants, enablement, operation execution, and quarantine.
-"${cli[@]}" extension quarantine "$extension_id" --diagnostic-code reference-e2e >/dev/null
-"${cli[@]}" extension detail "$extension_id" | jq -e '.installation.state == "quarantined"' >/dev/null
-"${cli[@]}" audit list --limit 100 | jq -e '.events | map(.target.type) | any(. == "extension")' >/dev/null
-printf 'reference extension E2E passed: extension=%s release=%s operation=%s run=%s\n' "$extension_id" "$release_id" "$operation_id" "$run_id"
+echo 'reference extension did not compute price_gross = 34 in the default context' >&2
+exit 1

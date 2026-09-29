@@ -890,7 +890,7 @@ search state, arbitrary entity values, and browser page state. Commands from an
 action still require `client.commands` and use the existing validated,
 authorized command broker.
 
-## Reference importer/exporter compatibility suite
+## Reference extension and connector compatibility suites
 
 When the sibling `../../attricat-connector-csv` checkout is available, the
 packaged CSV connector can be exercised against this host from the repository
@@ -922,12 +922,10 @@ the most recent 200; `GET /extension-operation-runs/{id}` retrieves an older
 run by ID. Run history includes `schedule_id` and `outputs_expired`
 without exposing input or secrets.
 
-When available, the sibling checkout at `../../attricat-extension-example` contains
-packaged `attricat.reference-customer-importer` and
-`attricat.reference-customer-exporter` components plus the two-customer NDJSON
-fixture. They use only the released `catalog:host@1.3.0` artifact-operation ABI;
-the fixture is written as a host-managed output artifact, with no ambient I/O or
-host test hooks.
+When available, the sibling checkout at `../../attricat-extension-example`
+contains the packaged `attricat-extension-example` formula component using the
+released `catalog:host@1.1.0` ABI and sandboxed client contributions. It
+responds to `entity.updated.v1` by writing a calculated numeric attribute.
 
 Run the real-host compatibility suite only against a worktree-local stack after
 creating an owner personal API token:
@@ -942,6 +940,8 @@ just test-reference-extension-e2e
 
 The suite builds and packages the maintained sibling example archive, side-loads
 it through the public CLI, grants every manifest-declared capability, enables
-it, downloads a declared client contribution through the mediated artifact API,
-and verifies quarantine and audit lifecycle evidence. It does not use
-repository/runtime mocks.
+it, and downloads a declared client contribution. It creates a fresh formula
+blueprint and entity, updates a dependency in the default context, and waits
+for the real event handler's calculated write in that same context. It uses no
+repository/runtime mocks. The caller's token needs extension management,
+blueprint write/publish, entity write/read, and audit-read permissions.
