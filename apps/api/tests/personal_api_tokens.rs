@@ -89,6 +89,16 @@ async fn personal_api_tokens_are_one_time_secrets_and_enforce_permission_subsets
         .unwrap();
     assert_eq!(session["capabilities"]["tokens_manage"], false);
     assert_eq!(session["capabilities"]["roles_grant"], false);
+    assert_eq!(session["capabilities"]["blueprints_write"], false);
+    let owner_session = owner
+        .get(format!("{base_url}/auth/session"))
+        .send()
+        .await
+        .unwrap()
+        .json::<Value>()
+        .await
+        .unwrap();
+    assert_eq!(owner_session["capabilities"]["blueprints_write"], true);
     assert_eq!(
         token
             .get(format!("{base_url}/blueprints"))

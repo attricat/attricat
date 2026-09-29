@@ -60,7 +60,8 @@
     "darkMode": "Dark mode",
     "lightMode": "Light mode",
     "reusableAttributes": "Reusable attributes",
-    "backgroundProcessing": "Background processing"
+    "backgroundProcessing": "Background processing",
+    "documentation": "Documentation"
   },
   "auth": {
     "signIn": "Sign in",
@@ -1191,6 +1192,41 @@
       "create": "Create group",
       "requiredFields": "Code, name, and at least one published revision are required.",
       "invalidPosition": "Position must be a non-negative whole number."
+    }
+  },
+  "onboarding": {
+    "eyebrow": "Getting started",
+    "title": "Welcome to Attricat",
+    "description": "Your workspace is ready. Define what your catalog describes, then bring your team in. This page gives way to the entity explorer once your first blueprint is saved.",
+    "emptyTitle": "No blueprints yet",
+    "emptyDescription": "This workspace does not have any blueprints to explore. Ask a workspace administrator to create one, or read the documentation to learn how Attricat organizes catalog data.",
+    "readDocumentation": "Read the documentation",
+    "readGuide": "Read the guide",
+    "readGuideAbout": "Read the guide: {{topic}}",
+    "loading": "Loading workspace",
+    "stepsLabel": "Getting started steps",
+    "stepNumber": "Step {{number}}",
+    "steps": {
+      "blueprint": {
+        "title": "Create your first blueprint",
+        "description": "Blueprints define the attributes, validation, and views of the entities in your catalog. Start from an example and adapt it.",
+        "action": "Create blueprint"
+      },
+      "contexts": {
+        "title": "Set up contexts",
+        "description": "Contexts let values vary by market, channel, or location. Add them now if your catalog needs localized or scoped data.",
+        "action": "Manage contexts"
+      },
+      "invite": {
+        "title": "Invite your team",
+        "description": "Invite teammates and give each person a role with the access they need.",
+        "action": "Invite people"
+      },
+      "extensions": {
+        "title": "Explore extensions",
+        "description": "Extensions connect Attricat to other systems and add tools to your workspace.",
+        "action": "Browse extensions"
+      }
     }
   }
 }
