@@ -1,4 +1,3 @@
-import RefreshIcon from '@mui/icons-material/Refresh';
 import type { UseQueryResult } from '@tanstack/react-query';
 import {
   Alert,
@@ -15,6 +14,7 @@ import {
   TableRow,
   Typography,
 } from '@mui/material';
+import { RefreshCwIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import {
   completePercentage,
@@ -79,7 +79,7 @@ export const MigrationBatchStatus = ({
         <Button
           disabled={batches.isFetching}
           onClick={() => batches.refetch()}
-          startIcon={<RefreshIcon />}
+          startIcon={<RefreshCwIcon />}
           variant="outlined"
         >
           {batches.isFetching

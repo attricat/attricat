@@ -1,5 +1,5 @@
-import MenuIcon from '@mui/icons-material/Menu';
 import { AppBar, Box, Drawer, IconButton, Toolbar } from '@mui/material';
+import { MenuIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BrandIcon } from './BrandIcon';

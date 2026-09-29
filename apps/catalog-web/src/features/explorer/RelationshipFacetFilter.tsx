@@ -14,6 +14,7 @@ import type {
   RelationshipFacetUpdate,
 } from './relationshipFilterTypes';
 import { RelationshipTargetPicker } from './RelationshipTargetPicker';
+import { smallIconSize } from '../../components/iconSizes';
 
 type Props = {
   facet: ExplorerRelationshipFacet;
@@ -48,7 +49,7 @@ export const RelationshipFacetFilter = ({
             spacing={0.5}
             sx={{ alignItems: 'center', color: 'primary.main' }}
           >
-            <RelationshipIcon sx={{ fontSize: facetHeadingIconSize }} />
+            <RelationshipIcon size={facetHeadingIconSize} />
             <Typography
               color="inherit"
               component="h3"
@@ -65,7 +66,7 @@ export const RelationshipFacetFilter = ({
                 color="primary"
                 onClick={onOpen}
                 size="small"
-                startIcon={<RelationshipPickerIcon fontSize="small" />}
+                startIcon={<RelationshipPickerIcon size={smallIconSize} />}
                 sx={compactOutlinedActionButtonSx}
                 variant="outlined"
               >

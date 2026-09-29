@@ -1,6 +1,5 @@
-import ViewListOutlinedIcon from '@mui/icons-material/ViewListOutlined';
-import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import { Button, Tooltip } from '@mui/material';
+import { EyeIcon, ListIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { RouterIconButton } from '../../../components/RouterLink';
 import { EDIT_ENTITY_FORM_ID } from '../constants';
@@ -30,7 +29,7 @@ export const EditEntityToolbar = ({
           params={{ entityId }}
           to="/entities/$entityId"
         >
-          <VisibilityOutlinedIcon />
+          <EyeIcon />
         </RouterIconButton>
       </Tooltip>
       {blueprint && (
@@ -40,7 +39,7 @@ export const EditEntityToolbar = ({
             search={{ blueprint: blueprint.code, version: blueprint.version }}
             to="/"
           >
-            <ViewListOutlinedIcon />
+            <ListIcon />
           </RouterIconButton>
         </Tooltip>
       )}

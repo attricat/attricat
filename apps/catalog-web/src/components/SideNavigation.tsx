@@ -1,7 +1,6 @@
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { useQuery } from '@tanstack/react-query';
 import { useRouterState } from '@tanstack/react-router';
+import { ArrowLeftIcon, ChevronRightIcon } from 'lucide-react';
 import { createElement } from 'react';
 import { useTranslation } from 'react-i18next';
 import { currentSession } from '../features/auth/api';
@@ -139,7 +138,7 @@ export const SideNavigation = ({
               aria-label={t('navigation.back')}
               onClick={() => setMobileSection('primary')}
             >
-              <ArrowBackIcon />
+              <ArrowLeftIcon />
             </IconButton>
             <Typography sx={{ ml: 1 }} variant="h6">
               {t(mobileSectionTitleKeys[mobileSection])}

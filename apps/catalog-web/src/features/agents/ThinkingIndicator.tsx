@@ -7,6 +7,7 @@ import {
   thinkingAnimationName,
   thinkingDotDelaysSeconds,
 } from './constants';
+import { smallIconSize } from '../../components/iconSizes';
 
 const dotStyles = Object.fromEntries(
   thinkingDotDelaysSeconds.map((delay, index) => [
@@ -28,7 +29,7 @@ export const ThinkingIndicator = () => {
       <Avatar
         sx={{ bgcolor: 'primary.main', height: avatarSize, width: avatarSize }}
       >
-        <AgentIcon fontSize="small" />
+        <AgentIcon size={smallIconSize} />
       </Avatar>
       <Typography color="text.secondary" variant="body2">
         {t('agents.thinking')}

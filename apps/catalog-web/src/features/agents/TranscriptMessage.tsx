@@ -12,6 +12,7 @@ import { ConversationMessageContent } from './ConversationMessageContent';
 import { DraftProposal } from './DraftProposal';
 import { parseDraftProposal } from './parseDraftProposal';
 import type { ConversationMessage } from './schemas';
+import { smallIconSize } from '../../components/iconSizes';
 
 export const TranscriptMessage = ({
   getDraftValues,
@@ -49,7 +50,11 @@ export const TranscriptMessage = ({
           width: avatarSize,
         }}
       >
-        {isUser ? t('agents.you').slice(0, 1) : <AgentIcon fontSize="small" />}
+        {isUser ? (
+          t('agents.you').slice(0, 1)
+        ) : (
+          <AgentIcon size={smallIconSize} />
+        )}
       </Avatar>
       <Box
         sx={{

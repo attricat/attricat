@@ -8,7 +8,7 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import { ChevronDownIcon } from 'lucide-react';
 import { createElement, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -141,7 +141,7 @@ export const EntityView = ({
         <Box key={key}>
           {node.sections.map((section) => (
             <Accordion key={section.label}>
-              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <AccordionSummary expandIcon={<ChevronDownIcon />}>
                 <Typography>{section.label}</Typography>
               </AccordionSummary>
               <AccordionDetails>

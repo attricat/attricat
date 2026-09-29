@@ -1,5 +1,5 @@
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import { MenuItem, TextField, Tooltip } from '@mui/material';
+import { MenuItem, TextField, Tooltip, useTheme } from '@mui/material';
+import { InfoIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { Attribute } from '../api';
 import type { FileMetadata } from '../../files/schemas';
@@ -13,6 +13,7 @@ import {
 } from '../constants';
 import { FileAttributeEditor } from '../../files/FileAttributeEditor';
 import { RelationshipField } from './RelationshipField';
+import { smallIconSize } from '../../../components/iconSizes';
 
 export const EntityAttributeEditor = ({
   attribute,
@@ -144,9 +145,10 @@ export const EntityAttributeEditor = ({
 
 const MigrationBadge = ({ message }: { message?: string }) => {
   const { t } = useTranslation();
+  const { palette } = useTheme();
   return (
     <Tooltip title={message ?? t('entities.migrationReview')}>
-      <InfoOutlinedIcon color="info" fontSize="small" />
+      <InfoIcon color={palette.info.main} size={smallIconSize} />
     </Tooltip>
   );
 };

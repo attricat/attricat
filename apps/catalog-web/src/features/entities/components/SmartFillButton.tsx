@@ -1,5 +1,5 @@
-import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
 import { Button, Tooltip } from '@mui/material';
+import { SparklesIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { SMART_FILL_BUTTON_OFFSET } from '../constants';
 
@@ -18,7 +18,7 @@ export const SmartFillButton = ({ disabled, onClick }: Props) => {
           aria-label={t('entities.smartFill')}
           disabled={disabled}
           onClick={onClick}
-          startIcon={<AutoAwesomeOutlinedIcon />}
+          startIcon={<SparklesIcon />}
           sx={{
             bottom: SMART_FILL_BUTTON_OFFSET,
             position: 'fixed',

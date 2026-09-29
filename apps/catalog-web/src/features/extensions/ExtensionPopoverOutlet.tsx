@@ -11,6 +11,7 @@ import {
   type OutletName,
 } from './outletContributions';
 import { useExtensionRuntime } from './useExtensionRuntime';
+import { compactIconSize } from '../../components/iconSizes';
 
 type ExtensionPopoverOutletProps = {
   context?: OutletContext;
@@ -48,7 +49,7 @@ export const ExtensionPopoverOutlet = ({
             onClick={(event) => setAnchor(event.currentTarget)}
             size="small"
           >
-            <ExtensionIcon fontSize="inherit" />
+            <ExtensionIcon size={compactIconSize} />
           </IconButton>
         </Tooltip>
       )}

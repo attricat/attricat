@@ -1,5 +1,5 @@
-import DownloadOutlinedIcon from '@mui/icons-material/DownloadOutlined';
 import { Chip, IconButton, Stack, Typography } from '@mui/material';
+import { DownloadIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { fileDownloadUrl } from './api';
 import { UPLOADED_FILE_THUMBNAIL_SIZE } from './constants';
@@ -26,7 +26,7 @@ export const UploadedFileRow = ({ file, showThumbnail }: Props) => {
         component="a"
         href={fileDownloadUrl(file.id)}
       >
-        <DownloadOutlinedIcon />
+        <DownloadIcon />
       </IconButton>
     </Stack>
   );

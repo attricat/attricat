@@ -25,6 +25,7 @@ import {
   scrollRelationshipPickerToTop,
   useRecentlyPreviewedEntities,
 } from './useRecentlyPreviewedEntities';
+import { smallIconSize } from '../../../components/iconSizes';
 
 export const RelationshipField = ({
   attribute,
@@ -123,7 +124,7 @@ export const RelationshipField = ({
                 disabled={disabled}
                 onClick={openSelector}
                 size="small"
-                startIcon={<RelationshipPickerIcon fontSize="small" />}
+                startIcon={<RelationshipPickerIcon size={smallIconSize} />}
                 sx={compactOutlinedActionButtonSx}
                 variant="outlined"
               >

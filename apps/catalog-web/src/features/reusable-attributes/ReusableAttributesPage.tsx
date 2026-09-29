@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import AddIcon from '@mui/icons-material/Add';
 import { Alert, Button, Stack, Typography } from '@mui/material';
+import { PlusIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
@@ -55,7 +55,7 @@ export const ReusableAttributesPage = () => {
               onClick={() =>
                 navigate({ to: '/manage/reusable-attributes/new' })
               }
-              startIcon={<AddIcon />}
+              startIcon={<PlusIcon />}
               variant="contained"
             >
               {t('reusableAttributes.newAttribute')}

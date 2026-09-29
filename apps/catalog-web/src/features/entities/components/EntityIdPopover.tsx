@@ -1,11 +1,11 @@
-import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
-import TagOutlinedIcon from '@mui/icons-material/TagOutlined';
 import { IconButton, Popover, Stack, Tooltip, Typography } from '@mui/material';
+import { CopyIcon, HashIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { monoFontFamily } from '../../../app/theme';
 import { copyToClipboard } from '../../../components/clipboard';
 import { useToast } from '../../../components/useToast';
+import { compactIconSize } from '../../../components/iconSizes';
 
 export const EntityIdPopover = ({
   alignWithText = false,
@@ -35,7 +35,7 @@ export const EntityIdPopover = ({
           size="small"
           sx={alignWithText ? { transform: 'translateY(-2px)' } : undefined}
         >
-          <TagOutlinedIcon fontSize="inherit" />
+          <HashIcon size={compactIconSize} />
         </IconButton>
       </Tooltip>
       <Popover
@@ -54,7 +54,7 @@ export const EntityIdPopover = ({
               onClick={() => void copyEntityId()}
               size="small"
             >
-              <ContentCopyOutlinedIcon fontSize="inherit" />
+              <CopyIcon size={compactIconSize} />
             </IconButton>
           </Tooltip>
         </Stack>

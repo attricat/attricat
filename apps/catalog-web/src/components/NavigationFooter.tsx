@@ -1,7 +1,5 @@
-import DarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined';
-import LightModeOutlinedIcon from '@mui/icons-material/LightModeOutlined';
-import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
 import { Divider, List, useTheme } from '@mui/material';
+import { LogOutIcon, MoonIcon, SunIcon } from 'lucide-react';
 import { createElement } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useColorMode } from '../app/colorMode';
@@ -49,13 +47,13 @@ export const NavigationFooter = ({
         />
         <NavigationItem
           compact={compact}
-          icon={darkMode ? <LightModeOutlinedIcon /> : <DarkModeOutlinedIcon />}
+          icon={darkMode ? <SunIcon /> : <MoonIcon />}
           label={colorModeLabel}
           onClick={() => setColorMode(darkMode ? 'light' : 'dark')}
         />
         <NavigationItem
           compact={compact}
-          icon={<LogoutOutlinedIcon />}
+          icon={<LogOutIcon />}
           label={t('navigation.signOut')}
           onClick={onSignOut}
         />

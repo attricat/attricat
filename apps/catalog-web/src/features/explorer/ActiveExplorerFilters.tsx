@@ -1,5 +1,5 @@
-import CancelIcon from '@mui/icons-material/Cancel';
 import { Box, Chip } from '@mui/material';
+import { CircleXIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { attributeFilterKey, attributeFilterLabel } from './attributeFilters';
 import type { AttributeFilter } from './search';
@@ -52,7 +52,7 @@ export const ActiveExplorerFilters = ({
         return (
           <Chip
             deleteIcon={
-              <CancelIcon
+              <CircleXIcon
                 aria-label={t(
                   relationship
                     ? 'explorer.removeRelationshipFilter'

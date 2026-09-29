@@ -1,9 +1,10 @@
-import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
 import { IconButton, Popover, Stack, Tooltip } from '@mui/material';
+import { EllipsisIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { ExtensionContribution } from './api';
 import { OutletContribution } from './OutletContribution';
 import { contributionKey, type OutletContext } from './outletContributions';
+import { compactIconSize } from '../../components/iconSizes';
 
 type ExtensionActionOverflowProps = {
   context?: OutletContext;
@@ -27,7 +28,7 @@ export const ExtensionActionOverflow = ({
           onClick={(event) => setAnchor(event.currentTarget)}
           size="small"
         >
-          <MoreHorizIcon fontSize="inherit" />
+          <EllipsisIcon size={compactIconSize} />
         </IconButton>
       </Tooltip>
       <Popover

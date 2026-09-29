@@ -1,5 +1,3 @@
-import CloseIcon from '@mui/icons-material/Close';
-import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
@@ -10,6 +8,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
+import { PencilIcon, XIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useState } from 'react';
 import { createConversation, listConversations } from '../../agents/api';
@@ -114,12 +113,12 @@ export const EntityAgentDrawer = ({
                 aria-label={t('agents.renameConversation')}
                 onClick={() => setRenameOpen(true)}
               >
-                <EditOutlinedIcon />
+                <PencilIcon />
               </IconButton>
             </Tooltip>
           )}
           <IconButton aria-label={t('common.close')} onClick={closePanel}>
-            <CloseIcon />
+            <XIcon />
           </IconButton>
         </Box>
         <Typography

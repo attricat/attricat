@@ -1,6 +1,6 @@
-import CloseIcon from '@mui/icons-material/Close';
 import { Box, IconButton, Paper, Tab, Tabs, Typography } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
+import { XIcon } from 'lucide-react';
 import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getApiHealth } from './api';
@@ -26,6 +26,7 @@ import { InspectorServerPane } from './InspectorServerPane';
 import { InspectorSessionPane } from './InspectorSessionPane';
 import { inspectorQueryKeys } from './queryKeys';
 import { useInspectorState } from './useInspectorState';
+import { smallIconSize } from '../../components/iconSizes';
 
 const paneLabelKeys = {
   performance: 'inspector.performance',
@@ -118,7 +119,7 @@ export const Inspector = () => {
           onClick={() => updateInspectorState({ expanded: false })}
           size="small"
         >
-          <CloseIcon fontSize="small" />
+          <XIcon size={smallIconSize} />
         </IconButton>
       </Box>
       <Box

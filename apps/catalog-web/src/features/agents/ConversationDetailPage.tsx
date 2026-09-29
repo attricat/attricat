@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import { Alert, Box, Button } from '@mui/material';
+import { PencilIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useResourcePageTitle } from '../../app/useResourcePageTitle';
@@ -45,7 +45,7 @@ export const ConversationDetailPage = ({
             conversation.data && (
               <Button
                 onClick={() => setRenameOpen(true)}
-                startIcon={<EditOutlinedIcon />}
+                startIcon={<PencilIcon />}
                 variant="outlined"
               >
                 {t('agents.renameConversation')}

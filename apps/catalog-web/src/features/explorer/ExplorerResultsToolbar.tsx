@@ -1,5 +1,5 @@
-import SettingsIcon from '@mui/icons-material/Settings';
 import { Box, Button, IconButton, Tooltip, Typography } from '@mui/material';
+import { Columns3CogIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { maximumAgentSelection } from './agentSelection';
 
@@ -86,7 +86,7 @@ export const ExplorerResultsToolbar = ({
             aria-label={t('explorer.columnPreferences')}
             onClick={onOpenColumnPreferences}
           >
-            <SettingsIcon />
+            <Columns3CogIcon />
           </IconButton>
         </Tooltip>
       </Box>

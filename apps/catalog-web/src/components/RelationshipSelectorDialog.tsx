@@ -1,4 +1,3 @@
-import CloseIcon from '@mui/icons-material/Close';
 import {
   Box,
   Button,
@@ -12,6 +11,7 @@ import {
   useMediaQuery,
   useTheme,
 } from '@mui/material';
+import { XIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 type DialogActionsConfig = {
@@ -94,7 +94,7 @@ export const RelationshipSelectorDialog = ({
             </Button>
           )}
           <IconButton aria-label={closeLabel} onClick={onClose}>
-            <CloseIcon />
+            <XIcon />
           </IconButton>
         </Stack>
       </DialogTitle>

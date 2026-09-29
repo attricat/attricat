@@ -7,6 +7,7 @@ import {
   type ApiHealthState,
 } from './apiHealth';
 import { launcherStatusDotOffset, launcherStatusDotSize } from './constants';
+import { smallIconSize } from '../../components/iconSizes';
 
 /** Collapsed Inspector button with a small API health indicator. */
 export const InspectorLauncher = ({
@@ -38,7 +39,7 @@ export const InspectorLauncher = ({
         },
       }}
     >
-      <InspectorIcon fontSize="small" />
+      <InspectorIcon size={smallIconSize} />
       <Box
         aria-label={t(apiHealthSummaryKeys[apiHealth])}
         role="status"

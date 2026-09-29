@@ -1,4 +1,3 @@
-import PublishIcon from '@mui/icons-material/Publish';
 import {
   Box,
   Button,
@@ -12,6 +11,7 @@ import {
   Typography,
 } from '@mui/material';
 import { Link } from '@tanstack/react-router';
+import { UploadIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { RouterButton } from '../../components/RouterLink';
 import type { ReusableAttribute } from './api';
@@ -86,7 +86,7 @@ export const ReusableAttributesTable = ({
                       disabled={publishing}
                       onClick={() => onPublish(attribute.id)}
                       size="small"
-                      startIcon={<PublishIcon />}
+                      startIcon={<UploadIcon />}
                     >
                       {t('reusableAttributes.publish')}
                     </Button>

@@ -1,4 +1,3 @@
-import ReplayOutlinedIcon from '@mui/icons-material/ReplayOutlined';
 import {
   Box,
   Chip,
@@ -7,6 +6,7 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
+import { RotateCcwIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { PendingFile } from './usePendingFileUploads';
 
@@ -31,7 +31,7 @@ export const PendingFileRow = ({ disabled, item, onRetry }: Props) => {
               disabled={disabled}
               onClick={onRetry}
             >
-              <ReplayOutlinedIcon />
+              <RotateCcwIcon />
             </IconButton>
           </>
         ) : (

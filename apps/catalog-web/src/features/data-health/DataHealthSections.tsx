@@ -1,3 +1,4 @@
+import { ChevronDownIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -14,7 +15,6 @@ import {
   TableRow,
   Typography,
 } from '@mui/material';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { BlueprintLabel } from './BlueprintLabel';
 import { formatBytes } from './dataHealthFormat';
@@ -143,7 +143,7 @@ const LazyAccordion = ({
   title: string;
 }) => (
   <Accordion onChange={(_, expanded) => onExpandedChange(expanded)} sx={sx}>
-    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+    <AccordionSummary expandIcon={<ChevronDownIcon />}>
       <Typography variant="h5">{title}</Typography>
     </AccordionSummary>
     <AccordionDetails>{children}</AccordionDetails>

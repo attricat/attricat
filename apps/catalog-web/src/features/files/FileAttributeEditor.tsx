@@ -1,5 +1,5 @@
-import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined';
 import { Alert, Box, Button, Stack, Typography } from '@mui/material';
+import { CloudUploadIcon } from 'lucide-react';
 import { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Attribute } from '../entities/api';
@@ -62,7 +62,7 @@ const FileAttributeEditorContent = (props: FileAttributeEditorProps) => {
         <Button
           disabled={queueDisabled}
           onClick={() => input.current?.click()}
-          startIcon={<CloudUploadOutlinedIcon />}
+          startIcon={<CloudUploadIcon />}
         >
           {t('files.chooseOrDropFiles')}
         </Button>

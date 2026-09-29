@@ -48,6 +48,9 @@ light and dark modes.
 
 ## Icons
 
+- Use `lucide-react` icons; `@mui/icons-material` is not a dependency. Import the `…Icon` export names (for example `PencilIcon`) so they do not collide with MUI components such as `Menu` or `List`.
+- `AppProviders` sizes icons at `1em` of a `1.5rem` baseline, so they follow MUI component sizing (button icons, chips) like `SvgIcon`. For explicit sizes in dense controls use `compactIconSize` (18px) or `smallIconSize` (20px) from `src/components/iconSizes.ts`, and pass theme palette values to `color` rather than MUI color names.
+- `src/app/theme.ts` routes MUI’s built-in component icons (Select and NativeSelect arrows, Alert severity icons, the default Chip delete icon, TableSortLabel) to Lucide, and gives `ListItemIcon` a 36px minimum width so a 24px icon keeps a 12px gap before its label. Checkbox and Radio keep their MUI glyphs.
 - Import icons assigned to Attricat concepts from `src/components/systemIcons.ts` so the same concept is represented consistently across navigation, headings, menus, and other surfaces.
 - Keep generic action and status icons, such as add, edit, delete, close, expand, and warnings, local to the component using them.
 - Add a semantic export to the registry before introducing an icon for another system concept.

@@ -1,5 +1,3 @@
-import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
-import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import {
   Box,
   Button,
@@ -14,6 +12,7 @@ import {
   ListItemText,
   Tooltip,
 } from '@mui/material';
+import { ArrowDownIcon, ArrowUpIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { ExplorerColumnPreferences } from './columnPreferences';
 import { columnPreferencesListMaxHeight } from './constants';
@@ -67,7 +66,7 @@ export const ExplorerColumnPreferencesDialog = ({
                           onClick={() => move(id, -1)}
                           size="small"
                         >
-                          <ArrowUpwardIcon />
+                          <ArrowUpIcon />
                         </IconButton>
                       </span>
                     </Tooltip>
@@ -79,7 +78,7 @@ export const ExplorerColumnPreferencesDialog = ({
                           onClick={() => move(id, 1)}
                           size="small"
                         >
-                          <ArrowDownwardIcon />
+                          <ArrowDownIcon />
                         </IconButton>
                       </span>
                     </Tooltip>

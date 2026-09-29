@@ -1,5 +1,3 @@
-import AttachFileOutlinedIcon from '@mui/icons-material/AttachFileOutlined';
-import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import {
   Chip,
   CircularProgress,
@@ -9,6 +7,7 @@ import {
   TextField,
   Tooltip,
 } from '@mui/material';
+import { ArrowUpIcon, PaperclipIcon } from 'lucide-react';
 import { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -113,7 +112,7 @@ export const MessageInputBox = ({
             disabled={isPending}
             onClick={() => attachmentInput.current?.click()}
           >
-            <AttachFileOutlinedIcon />
+            <PaperclipIcon />
           </IconButton>
         </Tooltip>
         <Tooltip title={t('agents.send')}>
@@ -127,7 +126,7 @@ export const MessageInputBox = ({
               {isPending ? (
                 <CircularProgress enableTrackSlot size={progressSize} />
               ) : (
-                <ArrowUpwardIcon />
+                <ArrowUpIcon />
               )}
             </IconButton>
           </span>

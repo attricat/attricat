@@ -1,5 +1,5 @@
-import AddIcon from '@mui/icons-material/Add';
 import { Button, Chip, Stack, Typography } from '@mui/material';
+import { PlusIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { compactOutlinedActionButtonSx } from '../../components/CompactOutlinedActionButton';
@@ -21,6 +21,7 @@ import { explorerVisibilityScope, maximumAttributeFilters } from './constants';
 import type { RelationshipFilterAttribute } from './relationshipFilterTypes';
 import type { AttributeFilter } from './search';
 import { useRelationshipFilterPaths } from './useRelationshipFilterPaths';
+import { smallIconSize } from '../../components/iconSizes';
 
 type Props = {
   filters: AttributeFilter[];
@@ -147,7 +148,7 @@ export const ExplorerFilterPicker = ({
           color="primary"
           onClick={() => openEditor(null, emptyAttributeFilterDraft)}
           size="small"
-          startIcon={<AddIcon fontSize="small" />}
+          startIcon={<PlusIcon size={smallIconSize} />}
           sx={compactOutlinedActionButtonSx}
           variant="outlined"
         >

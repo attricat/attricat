@@ -1,4 +1,16 @@
 import { createTheme, type Shadows } from '@mui/material/styles';
+import {
+  ArrowDownIcon,
+  ChevronDownIcon,
+  CircleAlertIcon,
+  CircleCheckIcon,
+  CircleXIcon,
+  InfoIcon,
+  TriangleAlertIcon,
+  type LucideIcon,
+} from 'lucide-react';
+import { createElement } from 'react';
+import { smallIconSize } from '../components/iconSizes';
 import colors from '../../design/tokens/colors.json';
 import typography from '../../design/tokens/typography.json';
 import radius from '../../design/tokens/radius.json';
@@ -8,6 +20,10 @@ import elevation from '../../design/tokens/elevation.json';
 // These overrides adapt its MUI patterns to the version used by catalog-web.
 export type DesignMode = 'light' | 'dark';
 export const monoFontFamily = typography.families.mono;
+
+// Icons rendered inside a component that sizes them with its own font size.
+const inheritSizeIcon = (icon: LucideIcon) =>
+  createElement(icon, { style: { fontSize: 'inherit' } });
 
 export const makeTheme = (mode: DesignMode) => {
   const c = colors[mode];
@@ -87,6 +103,9 @@ export const makeTheme = (mode: DesignMode) => {
             scrollbarColor: `${c.border.strong} ${c.background.default}`,
           },
           '::selection': { backgroundColor: c.action.selected },
+          // LucideProvider sizes icons at 1em; match MUI's standalone icon size
+          // while letting component styles such as button icons override it.
+          ':where(.lucide)': { flexShrink: 0, fontSize: '1.5rem' },
           'a:not(.MuiButtonBase-root), a:not(.MuiButtonBase-root):visited': {
             color: c.brand.primary,
           },
@@ -125,7 +144,14 @@ export const makeTheme = (mode: DesignMode) => {
       },
       MuiTextField: { defaultProps: { size: 'small', variant: 'outlined' } },
       MuiFormControl: { defaultProps: { size: 'small' } },
-      MuiSelect: { defaultProps: { size: 'small' } },
+      MuiSelect: {
+        defaultProps: { IconComponent: ChevronDownIcon, size: 'small' },
+        styleOverrides: { icon: { fontSize: smallIconSize } },
+      },
+      MuiNativeSelect: {
+        defaultProps: { IconComponent: ChevronDownIcon },
+        styleOverrides: { icon: { fontSize: smallIconSize } },
+      },
       MuiOutlinedInput: {
         styleOverrides: {
           root: {
@@ -148,7 +174,7 @@ export const makeTheme = (mode: DesignMode) => {
       },
       MuiSwitch: { defaultProps: { size: 'small' } },
       MuiChip: {
-        defaultProps: { size: 'small' },
+        defaultProps: { deleteIcon: createElement(CircleXIcon), size: 'small' },
         styleOverrides: {
           root: { borderRadius: radius.small, fontSize: 12, fontWeight: 600 },
           outlined: { borderColor: c.border.default },
@@ -163,6 +189,14 @@ export const makeTheme = (mode: DesignMode) => {
         },
       },
       MuiAlert: {
+        defaultProps: {
+          iconMapping: {
+            error: inheritSizeIcon(CircleAlertIcon),
+            info: inheritSizeIcon(InfoIcon),
+            success: inheritSizeIcon(CircleCheckIcon),
+            warning: inheritSizeIcon(TriangleAlertIcon),
+          },
+        },
         styleOverrides: {
           root: {
             alignItems: 'center',
@@ -251,6 +285,7 @@ export const makeTheme = (mode: DesignMode) => {
         },
       },
       MuiTable: { defaultProps: { size: 'small' } },
+      MuiTableSortLabel: { defaultProps: { IconComponent: ArrowDownIcon } },
       MuiTableCell: {
         styleOverrides: {
           root: {
@@ -270,6 +305,10 @@ export const makeTheme = (mode: DesignMode) => {
         styleOverrides: {
           root: { '&:hover': { backgroundColor: c.action.hover } },
         },
+      },
+      MuiListItemIcon: {
+        // A 24px icon plus the 12px icon–label gap from the design system.
+        styleOverrides: { root: { minWidth: 36 } },
       },
       MuiMenu: {
         styleOverrides: {

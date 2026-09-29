@@ -1,5 +1,5 @@
-import CloseIcon from '@mui/icons-material/Close';
 import { Box, Drawer, IconButton, Typography } from '@mui/material';
+import { XIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ExtensionOutlet } from '../../extensions/ExtensionOutlet';
 import { ENTITY_DRAWER_WIDTH, ENTITY_EXTENSION_DRAWER_ID } from '../constants';
@@ -36,7 +36,7 @@ export const EntityExtensionDrawer = ({
             aria-label={t('entities.closeExtensionContributions')}
             onClick={onClose}
           >
-            <CloseIcon />
+            <XIcon />
           </IconButton>
         </Box>
         {showContent && (

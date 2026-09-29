@@ -1,4 +1,3 @@
-import HelpOutlinedIcon from '@mui/icons-material/HelpOutlined';
 import { useForm } from '@tanstack/react-form';
 import {
   Button,
@@ -12,6 +11,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
+import { CircleQuestionMarkIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Blueprint } from '../entities/api';
@@ -23,6 +23,7 @@ import {
   versionScopes,
 } from './constants';
 import type { ExplorerSearch } from './search';
+import { smallIconSize } from '../../components/iconSizes';
 
 type SearchFormValues = {
   blueprint: string;
@@ -200,7 +201,7 @@ export const ExplorerSearchForm = ({
                           size="small"
                           type="button"
                         >
-                          <HelpOutlinedIcon fontSize="small" />
+                          <CircleQuestionMarkIcon size={smallIconSize} />
                         </IconButton>
                       </Tooltip>
                     </InputAdornment>

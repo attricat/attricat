@@ -1,9 +1,16 @@
-import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
-import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
-import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined';
-import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
-import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
-import ViewSidebarOutlinedIcon from '@mui/icons-material/ViewSidebarOutlined';
+import {
+  ChevronDownIcon,
+  CopyIcon,
+  GlobeIcon,
+  InfoIcon,
+  PanelRightIcon,
+  PencilIcon,
+  RefreshCwIcon,
+  RotateCcwClockIcon,
+  TrashIcon,
+  Undo2Icon,
+  UploadIcon,
+} from 'lucide-react';
 import { AgentIcon } from '../../../components/systemIcons';
 import {
   Box,
@@ -16,7 +23,6 @@ import {
   MenuItem,
   Tooltip,
 } from '@mui/material';
-import { Globe, Info, RefreshCw, Undo2, Upload } from 'lucide-react';
 import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RouterIconButton } from '../../../components/RouterLink';
@@ -24,8 +30,7 @@ import { EntityToolbar } from './EntityToolbar';
 import { EntitySchemaStatus } from './EntitySchemaStatus';
 import type { EntityPublicationStatus } from '../schemas';
 import { ENTITY_EXTENSION_DRAWER_ID, publicationStatuses } from '../constants';
-
-const menuIconSize = 18;
+import { compactIconSize } from '../../../components/iconSizes';
 
 type Props = {
   entityId: string;
@@ -79,7 +84,7 @@ export const EntityPreviewToolbar = ({
           params={{ entityId }}
           to="/entities/$entityId/edit"
         >
-          <EditOutlinedIcon />
+          <PencilIcon />
         </RouterIconButton>
       </Tooltip>
       <Tooltip title={t('entities.changes')}>
@@ -88,7 +93,7 @@ export const EntityPreviewToolbar = ({
           params={{ entityId }}
           to="/entities/$entityId/changes"
         >
-          <HistoryOutlinedIcon />
+          <RotateCcwClockIcon />
         </RouterIconButton>
       </Tooltip>
       <Tooltip title={t('entities.duplicateEntity')}>
@@ -98,7 +103,7 @@ export const EntityPreviewToolbar = ({
             disabled={duplicatePending}
             onClick={onDuplicate}
           >
-            <ContentCopyOutlinedIcon />
+            <CopyIcon />
           </IconButton>
         </span>
       </Tooltip>
@@ -115,7 +120,7 @@ export const EntityPreviewToolbar = ({
             color="error"
             onClick={onDelete}
           >
-            <DeleteOutlinedIcon />
+            <TrashIcon />
           </IconButton>
         </Tooltip>
       )}
@@ -162,7 +167,7 @@ export const EntityPreviewToolbar = ({
               aria-label={t('entities.publication.actionsHelp')}
               size="small"
             >
-              <Info size={menuIconSize} />
+              <InfoIcon size={compactIconSize} />
             </IconButton>
           </Tooltip>
           <Button
@@ -171,7 +176,7 @@ export const EntityPreviewToolbar = ({
             aria-haspopup="menu"
             color="inherit"
             disabled={publicationPending}
-            endIcon={<ArrowDropDownIcon />}
+            endIcon={<ChevronDownIcon />}
             onClick={(event) => setPublishMenuAnchor(event.currentTarget)}
             size="small"
           >
@@ -194,9 +199,9 @@ export const EntityPreviewToolbar = ({
               >
                 <ListItemIcon>
                   {publication.status === publicationStatuses.notPublished ? (
-                    <Upload size={menuIconSize} />
+                    <UploadIcon size={compactIconSize} />
                   ) : (
-                    <RefreshCw size={menuIconSize} />
+                    <RefreshCwIcon size={compactIconSize} />
                   )}
                 </ListItemIcon>
                 <ListItemText>
@@ -213,7 +218,7 @@ export const EntityPreviewToolbar = ({
               }}
             >
               <ListItemIcon>
-                <Globe size={menuIconSize} />
+                <GlobeIcon size={compactIconSize} />
               </ListItemIcon>
               <ListItemText>{t('entities.publishAllChannels')}</ListItemText>
             </MenuItem>
@@ -226,7 +231,7 @@ export const EntityPreviewToolbar = ({
                 sx={{ color: 'warning.main' }}
               >
                 <ListItemIcon sx={{ color: 'inherit' }}>
-                  <Undo2 size={menuIconSize} />
+                  <Undo2Icon size={compactIconSize} />
                 </ListItemIcon>
                 <ListItemText>{t('entities.unpublish')}</ListItemText>
               </MenuItem>
@@ -253,7 +258,7 @@ export const EntityPreviewToolbar = ({
             aria-label={t('entities.extensionContributions')}
             onClick={onOpenExtensions}
           >
-            <ViewSidebarOutlinedIcon />
+            <PanelRightIcon />
           </IconButton>
         </Tooltip>
       )}

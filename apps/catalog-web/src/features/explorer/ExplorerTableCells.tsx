@@ -1,10 +1,11 @@
-import MoreVertIcon from '@mui/icons-material/MoreVert';
 import { Box, Chip, IconButton } from '@mui/material';
 import { Link } from '@tanstack/react-router';
+import { EllipsisVerticalIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { EntityItem, EntityPublicationStatus } from '../entities/api';
 import { displayLabel } from '../entities/entityDisplay';
 import { emptyValuePlaceholder, publicationStatuses } from './constants';
+import { compactIconSize } from '../../components/iconSizes';
 
 export type ActionMenuPosition = { left: number; top: number };
 
@@ -75,7 +76,7 @@ export const EntityActionsCell = ({
       }}
       size="small"
     >
-      <MoreVertIcon fontSize="inherit" />
+      <EllipsisVerticalIcon size={compactIconSize} />
     </IconButton>
   );
 };
