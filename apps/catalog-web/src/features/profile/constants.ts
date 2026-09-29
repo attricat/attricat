@@ -27,3 +27,6 @@ export const tokenPermissionPresets = [
 
 export const secretDialogMinWidth = 360;
 export const personalTokensHash = 'personal-api-tokens';
+export const timeZonePickerMaxWidth = 480;
+/** How often the time zone preview clock advances. */
+export const previewRefreshMilliseconds = 30_000;

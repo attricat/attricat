@@ -2,6 +2,7 @@ import { Box, Paper, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import type { EntityAuditChange } from '../api';
 import { AGENT_EXECUTOR_TYPE } from '../constants';
+import { Timestamp } from '../../../time/Timestamp';
 
 type Props = {
   /** Changes recorded by one audit event; the first describes the event. */
@@ -29,7 +30,8 @@ export const EntityChangeEvent = ({ changes }: Props) => {
   return (
     <Paper component="section" sx={{ mb: 2, p: 2 }}>
       <Typography sx={{ fontWeight: 'bold' }}>
-        {actor} · {new Date(event.occurred_at).toLocaleString()}
+        {actor} ·{' '}
+        <Timestamp style="dateTimeSeconds" value={event.occurred_at} />
       </Typography>
       <Typography color="text.secondary" variant="body2">
         {approval}

@@ -2,20 +2,13 @@ import { z } from 'zod';
 import i18n from '../../i18n';
 import type { Attribute, NewAttributeValue } from './api';
 import { validatesJsonSchema } from './jsonSchema';
+import { isValidTimeZone } from '../../time/instantFormat';
 import { attributeValueKinds, attributeValueTypes } from './valueTypes';
 import { booleanFieldValues } from './constants';
 
-const timeZoneSchema = z.string().refine(
-  (value) => {
-    try {
-      Intl.DateTimeFormat(undefined, { timeZone: value });
-      return true;
-    } catch {
-      return false;
-    }
-  },
-  { error: () => i18n.t('entities.invalidTimeZone') },
-);
+const timeZoneSchema = z.string().refine(isValidTimeZone, {
+  error: () => i18n.t('entities.invalidTimeZone'),
+});
 
 const scalarValueSchemas = {
   [attributeValueTypes.string]: z.string(),

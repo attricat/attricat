@@ -5,6 +5,8 @@ const sessionSchema = z.object({
   user_id: z.uuid(),
   display_name: z.string().nullable(),
   email: z.string().email(),
+  /** IANA zone for rendering instants; `null` follows the browser zone. */
+  time_zone: z.string().nullable().default(null),
   workspace_id: z.uuid(),
   login_identifier: z.string(),
   capabilities: z
@@ -27,6 +29,10 @@ const sessionSchema = z.object({
     })
     .optional(),
 });
+
+export type Session = z.infer<typeof sessionSchema>;
+
+export type UserPreferences = Pick<Session, 'time_zone'>;
 
 const discoverySchema = z.object({
   login_identifier: z.string(),
@@ -81,6 +87,13 @@ export const currentSession = async () => {
     throw error;
   }
 };
+
+export const updatePreferences = (preferences: UserPreferences) =>
+  request('/api/auth/preferences', sessionSchema, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(preferences),
+  });
 
 export const logout = () =>
   requestNoContent('/api/auth/logout', { method: 'POST' });

@@ -36,6 +36,7 @@ import { useEntityPublicationActions } from './useEntityPublicationActions';
 import { useExplorerColumnPreferences } from './useExplorerColumnPreferences';
 import { useExplorerSelection } from './useExplorerSelection';
 import { VirtualizedExplorerTable } from './VirtualizedExplorerTable';
+import { useTimeZone } from '../../time/useInstantFormat';
 
 type Props = {
   blueprint: BlueprintWithAttributes;
@@ -103,6 +104,7 @@ export const ExplorerResultsTable = ({
     blueprint.blueprint.id,
     columnIds,
   );
+  const timeZone = useTimeZone();
   const runtime = useQuery({
     queryKey: extensionQueryKeys.runtime(),
     queryFn: () => getExtensionRuntime(),
@@ -127,6 +129,7 @@ export const ExplorerResultsTable = ({
       setActionMenu({ entityId, position }),
     takeCellFrame,
     t,
+    timeZone,
   });
   const columns = arrangeExplorerColumns(
     columnDefinitions,

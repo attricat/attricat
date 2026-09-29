@@ -17,8 +17,7 @@ import { auditPageSize } from './constants';
 import { auditQueryKeys } from './queryKeys';
 
 export const AuditLogPage = () => {
-  const { i18n, t } = useTranslation();
-  const locale = i18n.resolvedLanguage ?? i18n.language;
+  const { t } = useTranslation();
   const systemLabel = t('audit.system');
   const workspaceLabel = t('audit.workspace');
   const [filters, setFilters] = useState<AuditEventFilters>({
@@ -56,7 +55,6 @@ export const AuditLogPage = () => {
       <AuditEventsTable
         events={events.data?.events}
         isLoading={events.isLoading}
-        locale={locale}
         onSelect={setSelected}
         systemLabel={systemLabel}
         workspaceLabel={workspaceLabel}
@@ -84,7 +82,6 @@ export const AuditLogPage = () => {
       )}
       <AuditEventDrawer
         event={selected}
-        locale={locale}
         onClose={() => setSelected(undefined)}
         systemLabel={systemLabel}
       />

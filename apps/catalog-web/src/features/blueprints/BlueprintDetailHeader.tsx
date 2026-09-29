@@ -3,7 +3,7 @@ import { Box, Button, Chip, Stack, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { PageHeader } from '../../components/PageHeader';
 import { blueprintStatusChipColor, blueprintStatuses } from './constants';
-import { formatBlueprintDateTime } from './dateTime';
+import { Timestamp } from '../../time/Timestamp';
 import type { Blueprint } from './schemas';
 
 export const BlueprintDetailHeader = ({
@@ -84,10 +84,10 @@ export const BlueprintDetailHeader = ({
         </Box>
         {' · '}
         {t('blueprints.updated')}:{' '}
-        {formatBlueprintDateTime(
-          blueprint.updated_at,
-          t('blueprints.notPublished'),
-        )}
+        <Timestamp
+          fallback={t('blueprints.notPublished')}
+          value={blueprint.updated_at}
+        />
       </Typography>
     </>
   );

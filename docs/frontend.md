@@ -47,6 +47,15 @@ light and dark modes.
   Ajv helper for immediate form feedback, but treat server-side `422` schema
   validation as authoritative.
 
+## Timestamps
+
+- The API stores and returns instants in UTC. Render every instant through `src/time`: `<Timestamp value={iso} />` in JSX, or `useInstantFormat()` where only a string fits (for example a tooltip title or accessible label). Do not call `toLocaleString`, `toLocaleDateString`, `toLocaleTimeString`, or `Intl.DateTimeFormat` elsewhere; ESLint rejects them outside `src/time`.
+- Instants are shown in the user's preferred zone (`time_zone` on the session, set on the Profile page) and fall back to the browser zone when it is unset. A short zone name is appended only when the preferred zone differs from the browser zone. `<Timestamp>` renders a semantic `<time>` element with the exact UTC value in a tooltip on hover and keyboard focus; pass `focusable={false}` inside links and buttons.
+- To place a timestamp inside a translated sentence, use a `<timestamp/>` tag in the message and `<Trans components={{ timestamp: <Timestamp … /> }} />`.
+- Pick a named style from `instantStyles` (`dateTime`, `dateTimeSeconds`, `date`, `time`). If you need another presentation, add a style there instead of passing ad-hoc options.
+- Calendar dates (`date` attribute values) are not instants: format them with `formatCalendarDate`, which never shifts them into another zone. Zoned `time` values carry their own zone and are shown as stored.
+- Interpret `datetime-local` input as wall-clock time in the effective zone with `zonedDateTimeToIso(value, useTimeZone())`, and fill such inputs with `isoToZonedDateTime`. Exports and API payloads keep UTC ISO timestamps.
+
 ## Icons
 
 - Use `lucide-react` icons; `@mui/icons-material` is not a dependency. Import the `…Icon` export names (for example `PencilIcon`) so they do not collide with MUI components such as `Menu` or `List`.

@@ -1,10 +1,11 @@
 import type { Attribute } from '../entities/api';
 import type { AttributeFilterOperator } from './attributeFilters';
+import { defaultAttributeFilterOperator } from './constants';
 import {
-  datetimeLocalInputLength,
-  defaultAttributeFilterOperator,
-  millisecondsPerMinute,
-} from './constants';
+  isoToZonedDateTime,
+  utcTimeZone,
+  zonedDateTimeToIso,
+} from '../../time/instantFormat';
 import type { AttributeFilter } from './search';
 
 type ValueType = Attribute['value_type'] | undefined;
@@ -38,14 +39,19 @@ export const booleanFilterValues = {
   true: 'true',
 } as const;
 
+/**
+ * Converts an edited string into a filter value. Datetime input is wall-clock
+ * time in `timeZone`, the user's effective zone.
+ */
 export const parseAttributeFilterValue = (
   valueType: ValueType,
   value: string,
+  timeZone: string,
 ): AttributeFilter['value'] => {
   if (valueType === 'number') return Number(value);
   if (valueType === 'integer') return Number.parseInt(value, 10);
   if (valueType === 'boolean') return value === booleanFilterValues.true;
-  if (valueType === 'datetime') return new Date(value).toISOString();
+  if (valueType === 'datetime') return zonedDateTimeToIso(value, timeZone);
   return value;
 };
 
@@ -59,7 +65,7 @@ export const isAttributeFilterValueValid = (
     (valueType !== 'number' || Number.isFinite(numericValue)) &&
     (valueType !== 'integer' ||
       (integerPattern.test(value) && Number.isSafeInteger(numericValue))) &&
-    (valueType !== 'datetime' || !Number.isNaN(new Date(value).getTime()))
+    (valueType !== 'datetime' || zonedDateTimeToIso(value, utcTimeZone) !== '')
   );
 };
 
@@ -74,17 +80,17 @@ export const attributeFilterInputType = (valueType: ValueType) =>
           ? 'time'
           : 'text';
 
-/** Converts a stored filter value into the string an input control edits. */
+/**
+ * Converts a stored filter value into the string an input control edits;
+ * datetime values become wall-clock time in `timeZone`.
+ */
 export const attributeFilterInputValue = (
   filter: AttributeFilter,
   valueType: ValueType,
+  timeZone: string,
 ) => {
   const inputValue = String(filter.value);
-  if (valueType !== 'datetime') return inputValue;
-  const date = new Date(inputValue);
-  return new Date(
-    date.getTime() - date.getTimezoneOffset() * millisecondsPerMinute,
-  )
-    .toISOString()
-    .slice(0, datetimeLocalInputLength);
+  return valueType === 'datetime'
+    ? isoToZonedDateTime(inputValue, timeZone)
+    : inputValue;
 };

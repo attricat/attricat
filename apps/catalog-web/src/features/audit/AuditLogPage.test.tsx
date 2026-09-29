@@ -4,6 +4,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../../i18n';
+import { browserTimeZone, formatInstant } from '../../time/instantFormat';
 import type { AuditEvent } from './api';
 import { listAuditEvents } from './api';
 import { AuditLogPage } from './AuditLogPage';
@@ -143,10 +144,12 @@ describe('AuditLogPage', () => {
 
     renderPage();
 
-    const expectedDate = new Intl.DateTimeFormat('pl', {
-      dateStyle: 'medium',
-      timeStyle: 'medium',
-    }).format(new Date(event.occurred_at));
+    // Without a stored preference, instants follow the browser zone.
+    const expectedDate = formatInstant(event.occurred_at, {
+      locale: 'pl',
+      timeZone: browserTimeZone(),
+      style: 'dateTimeSeconds',
+    });
     expect(await screen.findByText(expectedDate)).toBeTruthy();
     expect(screen.getByText('Obszar roboczy')).toBeTruthy();
     expect(screen.getByText('System')).toBeTruthy();

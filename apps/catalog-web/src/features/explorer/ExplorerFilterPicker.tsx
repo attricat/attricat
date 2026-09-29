@@ -23,6 +23,7 @@ import type { RelationshipFilterAttribute } from './relationshipFilterTypes';
 import type { AttributeFilter } from './search';
 import { useRelationshipFilterPaths } from './useRelationshipFilterPaths';
 import { smallIconSize } from '../../components/iconSizes';
+import { useTimeZone } from '../../time/useInstantFormat';
 
 type Props = {
   filters: AttributeFilter[];
@@ -57,6 +58,7 @@ export const ExplorerFilterPicker = ({
   onUpdate,
 }: Props) => {
   const { t } = useTranslation();
+  const timeZone = useTimeZone();
   const [open, setOpen] = useState(false);
   const [editor, setEditor] = useState<EditorState>({
     session: 0,
@@ -125,6 +127,7 @@ export const ExplorerFilterPicker = ({
       value: attributeFilterInputValue(
         filter,
         findAttribute(filter.field)?.value_type,
+        timeZone,
       ),
     });
   const close = () => setOpen(false);

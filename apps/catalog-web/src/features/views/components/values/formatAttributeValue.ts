@@ -1,6 +1,12 @@
 import i18n from 'i18next';
 import { attributeValueTypes } from '../../../entities/valueTypes';
 import type { Attribute } from '../../../entities/api';
+import { formatCalendarDate } from '../../../../time/instantFormat';
+
+/**
+ * Plain-text attribute values. Datetime values are instants rendered in the
+ * user's zone, so render them with `AttributeValueText` or `<Timestamp>`.
+ */
 
 export const formatAttributeValue = (attribute: Attribute, value: unknown) => {
   if (value === null || value === undefined) return i18n.t('views.notSet');
@@ -12,19 +18,7 @@ export const formatAttributeValue = (attribute: Attribute, value: unknown) => {
     attribute.value_type === attributeValueTypes.date &&
     typeof value === 'string'
   ) {
-    return new Intl.DateTimeFormat(undefined, {
-      dateStyle: 'medium',
-      timeZone: 'UTC',
-    }).format(new Date(`${value}T00:00:00Z`));
-  }
-  if (
-    attribute.value_type === attributeValueTypes.datetime &&
-    typeof value === 'string'
-  ) {
-    return new Intl.DateTimeFormat(undefined, {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-    }).format(new Date(value));
+    return formatCalendarDate(value, i18n.resolvedLanguage ?? i18n.language);
   }
   if (
     attribute.value_type === attributeValueTypes.time &&

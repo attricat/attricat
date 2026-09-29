@@ -1,7 +1,8 @@
 import { Box, Button, MenuItem, TextField } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import type { AuditEventFilters } from './api';
-import { localDateTimeToIso } from './auditFormat';
+import { zonedDateTimeToIso } from '../../time/instantFormat';
+import { useTimeZone } from '../../time/useInstantFormat';
 import { executorTypes } from './constants';
 
 export const AuditFilters = ({
@@ -14,12 +15,17 @@ export const AuditFilters = ({
   onChange: (key: keyof AuditEventFilters, value: string) => void;
 }) => {
   const { t } = useTranslation();
+  // `datetime-local` values are wall-clock times in the user's zone.
+  const timeZone = useTimeZone();
   return (
     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 3 }}>
       <TextField
         label={t('audit.from')}
         onChange={(event) =>
-          onChange('occurred_after', localDateTimeToIso(event.target.value))
+          onChange(
+            'occurred_after',
+            zonedDateTimeToIso(event.target.value, timeZone),
+          )
         }
         size="small"
         slotProps={{ inputLabel: { shrink: true } }}
@@ -28,7 +34,10 @@ export const AuditFilters = ({
       <TextField
         label={t('audit.to')}
         onChange={(event) =>
-          onChange('occurred_before', localDateTimeToIso(event.target.value))
+          onChange(
+            'occurred_before',
+            zonedDateTimeToIso(event.target.value, timeZone),
+          )
         }
         size="small"
         slotProps={{ inputLabel: { shrink: true } }}

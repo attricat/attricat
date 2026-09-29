@@ -1,9 +1,10 @@
 import { Box, Drawer, Typography } from '@mui/material';
-import { useTranslation } from 'react-i18next';
+import { Trans, useTranslation } from 'react-i18next';
 import { RouterButton } from '../../components/RouterLink';
 import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
 import type { AuditEvent } from './api';
-import { auditActor, formatAuditDate } from './auditFormat';
+import { Timestamp } from '../../time/Timestamp';
+import { auditActor } from './auditFormat';
 import {
   auditDrawerWidth,
   auditEventPanelOutlet,
@@ -28,12 +29,10 @@ const Detail = ({ label, value }: { label: string; value: unknown }) => (
 
 export const AuditEventDrawer = ({
   event,
-  locale,
   onClose,
   systemLabel,
 }: {
   event?: AuditEvent;
-  locale: string;
   onClose: () => void;
   systemLabel: string;
 }) => {
@@ -53,11 +52,22 @@ export const AuditEventDrawer = ({
         {event && (
           <Box sx={{ display: 'grid', gap: 2, mt: 2 }}>
             <Typography>
-              {t('audit.eventBy', {
-                action: event.action,
-                actor: auditActor(event, systemLabel),
-                date: formatAuditDate(event.occurred_at, locale),
-              })}
+              <Trans
+                components={{
+                  timestamp: (
+                    <Timestamp
+                      style="dateTimeSeconds"
+                      value={event.occurred_at}
+                    />
+                  ),
+                }}
+                i18nKey="audit.eventBy"
+                t={t}
+                values={{
+                  action: event.action,
+                  actor: auditActor(event, systemLabel),
+                }}
+              />
             </Typography>
             {event.agent_conversation_id && (
               <RouterButton

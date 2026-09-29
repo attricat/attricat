@@ -14,7 +14,7 @@ import {
 } from '@mui/material';
 import type { Blueprint } from './api';
 import { blueprintStatusChipColor } from './constants';
-import { formatBlueprintDateTime } from './dateTime';
+import { Timestamp } from '../../time/Timestamp';
 
 export const RevisionHistory = ({
   blueprintId,
@@ -57,16 +57,16 @@ export const RevisionHistory = ({
                   />
                 </TableCell>
                 <TableCell>
-                  {formatBlueprintDateTime(
-                    revision.created_at,
-                    t('blueprints.notPublished'),
-                  )}
+                  <Timestamp
+                    fallback={t('blueprints.notPublished')}
+                    value={revision.created_at}
+                  />
                 </TableCell>
                 <TableCell>
-                  {formatBlueprintDateTime(
-                    revision.published_at,
-                    t('blueprints.notPublished'),
-                  )}
+                  <Timestamp
+                    fallback={t('blueprints.notPublished')}
+                    value={revision.published_at}
+                  />
                 </TableCell>
                 <TableCell sx={{ fontFamily: 'monospace' }}>
                   {revision.definition_hash}

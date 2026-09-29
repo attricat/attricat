@@ -22,7 +22,7 @@ import { RouterButton } from '../../components/RouterLink';
 import { PageHeader } from '../../components/PageHeader';
 import { listBlueprints } from './api';
 import { blueprintFilterWidth, blueprintStatusChipColor } from './constants';
-import { formatBlueprintDateTime } from './dateTime';
+import { Timestamp } from '../../time/Timestamp';
 import { blueprintQueryKeys } from './queryKeys';
 
 export const BlueprintsPage = () => {
@@ -134,16 +134,16 @@ export const BlueprintsPage = () => {
                       />
                     </TableCell>
                     <TableCell>
-                      {formatBlueprintDateTime(
-                        blueprint.published_at,
-                        t('blueprints.notPublished'),
-                      )}
+                      <Timestamp
+                        fallback={t('blueprints.notPublished')}
+                        value={blueprint.published_at}
+                      />
                     </TableCell>
                     <TableCell>
-                      {formatBlueprintDateTime(
-                        blueprint.updated_at,
-                        t('blueprints.notPublished'),
-                      )}
+                      <Timestamp
+                        fallback={t('blueprints.notPublished')}
+                        value={blueprint.updated_at}
+                      />
                     </TableCell>
                     <TableCell align="right">
                       <RouterButton

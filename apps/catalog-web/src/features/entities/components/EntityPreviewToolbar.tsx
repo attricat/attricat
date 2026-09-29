@@ -31,6 +31,7 @@ import { EntitySchemaStatus } from './EntitySchemaStatus';
 import type { EntityPublicationStatus } from '../schemas';
 import { ENTITY_EXTENSION_DRAWER_ID, publicationStatuses } from '../constants';
 import { compactIconSize } from '../../../components/iconSizes';
+import { useInstantFormat } from '../../../time/useInstantFormat';
 
 type Props = {
   entityId: string;
@@ -72,6 +73,8 @@ export const EntityPreviewToolbar = ({
   publicationPending,
 }: Props) => {
   const { t } = useTranslation();
+  // A tooltip cannot host another tooltip, so the UTC value is inline.
+  const { formatWithUtc } = useInstantFormat();
   const publishMenuId = useId();
   const [publishMenuAnchor, setPublishMenuAnchor] =
     useState<HTMLElement | null>(null);
@@ -138,9 +141,7 @@ export const EntityPreviewToolbar = ({
             publication.status === publicationStatuses.published &&
             publication.published_at
               ? t('entities.publication.publishedDetails', {
-                  publishedAt: new Date(
-                    publication.published_at,
-                  ).toLocaleString(),
+                  publishedAt: formatWithUtc(publication.published_at),
                   publishedBy: publication.published_by_user_id ?? '—',
                 })
               : ''

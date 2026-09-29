@@ -6,9 +6,10 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
-import { useTranslation } from 'react-i18next';
+import { Trans, useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
+import { Timestamp } from '../../time/Timestamp';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
 import { getBackgroundProcessingStatus } from './api';
@@ -20,7 +21,7 @@ import {
 import { backgroundProcessingQueryKeys } from './queryKeys';
 
 export const BackgroundProcessingPage = () => {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const session = useQuery({
     queryKey: authQueryKeys.session(),
     queryFn: currentSession,
@@ -93,12 +94,16 @@ export const BackgroundProcessingPage = () => {
             )}
             {rows && (
               <Typography variant="body2" color="text.secondary">
-                {t('backgroundProcessing.updated', {
-                  time: new Date(status.dataUpdatedAt).toLocaleTimeString(
-                    i18n.language,
-                  ),
-                  seconds: backgroundProcessingRefreshSeconds,
-                })}
+                <Trans
+                  components={{
+                    timestamp: (
+                      <Timestamp style="time" value={status.dataUpdatedAt} />
+                    ),
+                  }}
+                  i18nKey="backgroundProcessing.updated"
+                  t={t}
+                  values={{ seconds: backgroundProcessingRefreshSeconds }}
+                />
               </Typography>
             )}
             {hasFailures && (

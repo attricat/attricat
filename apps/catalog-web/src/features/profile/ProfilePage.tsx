@@ -8,6 +8,7 @@ import { SettingsPage } from '../../components/CenteredPage';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import { personalTokensHash } from './constants';
 import { PersonalTokens } from './PersonalTokens';
+import { TimeZonePreference } from './TimeZonePreference';
 
 export const ProfilePage = () => {
   const { t } = useTranslation();
@@ -51,6 +52,9 @@ export const ProfilePage = () => {
             <Typography variant="h6">{t('language.label')}</Typography>
             <LanguageSwitcher />
           </Stack>
+        </Paper>
+        <Paper sx={{ p: 2 }}>
+          <TimeZonePreference disabled={!account} />
         </Paper>
         <Box id={personalTokensHash}>
           <Stack

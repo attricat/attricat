@@ -4,6 +4,14 @@
     "english": "Angielski",
     "polish": "Polski"
   },
+  "timeZone": {
+    "label": "Strefa czasowa",
+    "description": "Znaczniki czasu są wyświetlane w tej strefie czasowej. Najedź na znacznik czasu lub ustaw na nim fokus, aby zobaczyć dokładny czas UTC.",
+    "automatic": "Automatycznie (przeglądarka: {{zone}})",
+    "preview": "Bieżący czas: <timestamp/>",
+    "noOptions": "Brak pasujących stref czasowych",
+    "saveFailed": "Nie udało się zapisać strefy czasowej: {{message}}"
+  },
   "app": {
     "attricat": "Attricat",
     "catalog": "Katalog",
@@ -31,7 +39,7 @@
   },
   "drafts": {
     "restoreTitle": "Przywrócić niezapisany szkic?",
-    "restoreDescription": "Ta karta zawiera niezapisany szkic z {{savedAt}}. Przywróć go, aby zastąpić wczytany formularz, lub odrzuć, aby zachować formularz w obecnej postaci.",
+    "restoreDescription": "Ta karta zawiera niezapisany szkic z <timestamp/>. Przywróć go, aby zastąpić wczytany formularz, lub odrzuć, aby zachować formularz w obecnej postaci.",
     "sourceChanged": "Źródło zmieniło się od zapisania szkicu. Przywrócenie szkicu zastąpi najnowsze wczytane wartości.",
     "restore": "Przywróć szkic",
     "discard": "Odrzuć szkic"
@@ -110,7 +118,7 @@
     "conversationTitlePlaceholder": "np. Usuń nieaktywnych dostawców",
     "createConversation": "Utwórz rozmowę",
     "untitledConversation": "Rozmowa bez tytułu",
-    "updatedAt": "Zaktualizowano {{date}}",
+    "updatedAt": "Zaktualizowano <timestamp/>",
     "loadingConversations": "Wczytywanie rozmów...",
     "noConversations": "Nie ma jeszcze rozmów.",
     "noConversationsDescription": "Rozpocznij wątek, aby pracować z agentem.",
@@ -477,7 +485,6 @@
     "noMatchingBlueprints": "Żadne schematy nie pasują do filtra.",
     "revisionHistory": "Historia wersji",
     "version": "Wersja",
-    "created": "Utworzono",
     "definitionHash": "Skrót definicji",
     "revisionStatuses": {
       "draft": "Szkic",
@@ -678,7 +685,7 @@
     "showing": "Wyświetlono {{from}}-{{to}} z {{total}}",
     "event": "Zdarzenie audytu",
     "viewEvent": "Wyświetl szczegóły {{action}} przez {{actor}}",
-    "eventBy": "{{action}} przez {{actor}} o {{date}}",
+    "eventBy": "{{action}} przez {{actor}} o <timestamp/>",
     "openConversation": "Otwórz rozmowę z agentem",
     "authorizationScope": "Zakres uprawnień",
     "safeMetadata": "Bezpieczne metadane",
@@ -802,7 +809,7 @@
     "loading": "Ładowanie...",
     "tokenExpiry": "Data wygaśnięcia tokenu musi przypadać w przyszłości.",
     "createFailed": "Nie udało się utworzyć tokenu",
-    "tokenDetails": "Uprawnienia: {{permissions}} · Utworzono: {{created}} · Ostatnio użyto: {{lastUsed}} · Wygasa: {{expires}} · Cofnięto: {{revoked}}",
+    "tokenDetails": "Uprawnienia: {{permissions}} · Utworzono: <created/> · Ostatnio użyto: <lastused/> · Wygasa: <expires/> · Cofnięto: <revoked/>",
     "no": "Nie",
     "catalogGenerator": "Generator katalogu",
     "catalogGeneratorDescription": "Utwórz schematy, konteksty, produkty i relacje.",
@@ -995,7 +1002,7 @@
     "createInvitationFailed": "Nie udało się utworzyć zaproszenia",
     "createUserFailed": "Nie udało się utworzyć użytkownika",
     "notAuthorizedInvitations": "Nie masz uprawnień do zarządzania zaproszeniami.",
-    "expires": "wygasa {{date}}",
+    "expires": "wygasa <timestamp/>",
     "createUserInvite": "Utwórz użytkownika i zaproś",
     "inviteEmailInfo": "Catalog wysyła jednorazowy link konfiguracji do tego adresu e-mail. Link nie jest tu wyświetlany ani zwracany przez API.",
     "email": "E-mail",
@@ -1095,7 +1102,7 @@
     "forbidden": "Nie masz uprawnień do wyświetlania przetwarzania w tle w tym obszarze roboczym.",
     "loadError": "Nie udało się wczytać stanu przetwarzania w tle. Spróbuj odświeżyć.",
     "refreshError": "Odświeżenie nie powiodło się. Wyświetlany stan może być nieaktualny.",
-    "updated": "Ostatnia aktualizacja: {{time}} · Odświeżanie co {{seconds}} s",
+    "updated": "Ostatnia aktualizacja: <timestamp/> · Odświeżanie co {{seconds}} s",
     "failures": "Niektóre zadania nie powiodły się i nie zostaną automatycznie ponowione. Sprawdź odpowiednią historię uruchomień lub skontaktuj się z administratorem.",
     "expiredWarning": "Niektóre uruchomione zadania mają wygasłe dzierżawy. Mogły zostać przerwane i oczekują na odzyskanie przez proces roboczy.",
     "empty": "Brak oczekujących, uruchomionych lub nieudanych zadań API w tym obszarze roboczym.",

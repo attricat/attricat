@@ -28,7 +28,7 @@ import {
   workflowRunStatus,
   workflowStatus,
 } from './constants';
-import { formatWorkflowDateTime } from './dateTime';
+import { Timestamp } from '../../time/Timestamp';
 
 const WorkflowDetailLink = Link as unknown as ComponentType<{
   params: { workflowId: string };
@@ -36,7 +36,7 @@ const WorkflowDetailLink = Link as unknown as ComponentType<{
 }>;
 
 export const WorkflowsPage = () => {
-  const { i18n, t } = useTranslation();
+  const { t } = useTranslation();
   const session = useQuery({
     queryKey: authQueryKeys.session(),
     queryFn: currentSession,
@@ -55,7 +55,6 @@ export const WorkflowsPage = () => {
     queryFn: listWorkflowRuns,
     enabled: canRead,
   });
-  const locale = i18n.resolvedLanguage ?? i18n.language;
   const families = Object.values(
     (workflows.data ?? []).reduce<Record<string, Workflow>>(
       (result, workflow) => {
@@ -211,11 +210,10 @@ export const WorkflowsPage = () => {
                               color="text.secondary"
                               variant="caption"
                             >
-                              {formatWorkflowDateTime(
-                                summary.latest.created_at,
-                                locale,
-                                t('workflows.notAvailable'),
-                              )}
+                              <Timestamp
+                                fallback={t('workflows.notAvailable')}
+                                value={summary.latest.created_at}
+                              />
                             </Typography>
                           </Stack>
                         ) : (

@@ -9,7 +9,8 @@ import {
   Stack,
 } from '@mui/material';
 import { useId } from 'react';
-import { useTranslation } from 'react-i18next';
+import { Trans, useTranslation } from 'react-i18next';
+import { Timestamp } from '../../time/Timestamp';
 import type { PendingDraft } from './useEditorDraft';
 
 /**
@@ -25,7 +26,7 @@ export const DraftRestoreDialog = ({
   onDiscard: () => void;
   onRestore: () => void;
 }) => {
-  const { i18n, t } = useTranslation();
+  const { t } = useTranslation();
   const titleId = useId();
   const descriptionId = useId();
   return (
@@ -38,11 +39,11 @@ export const DraftRestoreDialog = ({
       <DialogContent>
         <Stack spacing={2}>
           <DialogContentText id={descriptionId}>
-            {t('drafts.restoreDescription', {
-              savedAt: draft
-                ? new Date(draft.savedAt).toLocaleString(i18n.language)
-                : '',
-            })}
+            <Trans
+              components={{ timestamp: <Timestamp value={draft?.savedAt} /> }}
+              i18nKey="drafts.restoreDescription"
+              t={t}
+            />
           </DialogContentText>
           {draft?.sourceChanged && (
             <Alert severity="warning">{t('drafts.sourceChanged')}</Alert>

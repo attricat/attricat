@@ -17,7 +17,8 @@ import { PageHeader } from '../../components/PageHeader';
 import { LoadMoreButton } from '../../components/LoadMoreButton';
 import { RouterListItemButton } from '../../components/RouterLink';
 import { searchConversations } from './api';
-import { useTranslation } from 'react-i18next';
+import { Trans, useTranslation } from 'react-i18next';
+import { Timestamp } from '../../time/Timestamp';
 import {
   agentRoutes,
   maximumSearchLength,
@@ -27,7 +28,7 @@ import { agentQueryKeys } from './queryKeys';
 import { isTitlePending } from './titlePolling';
 
 export const ConversationsPage = ({ search }: { search: { q?: string } }) => {
-  const { i18n, t } = useTranslation();
+  const { t } = useTranslation();
   const navigate = useNavigate({ from: '/agents/' });
   const [draftQuery, setDraftQuery] = useState(search.q ?? '');
   const submitSearch = () =>
@@ -95,12 +96,20 @@ export const ConversationsPage = ({ search }: { search: { q?: string } }) => {
                   primary={
                     conversation.title || t('agents.untitledConversation')
                   }
-                  secondary={t('agents.updatedAt', {
-                    date: new Intl.DateTimeFormat(i18n.language, {
-                      dateStyle: 'medium',
-                      timeStyle: 'short',
-                    }).format(new Date(conversation.updated_at)),
-                  })}
+                  secondary={
+                    <Trans
+                      components={{
+                        timestamp: (
+                          <Timestamp
+                            focusable={false}
+                            value={conversation.updated_at}
+                          />
+                        ),
+                      }}
+                      i18nKey="agents.updatedAt"
+                      t={t}
+                    />
+                  }
                 />
               </RouterListItemButton>
             </ListItem>

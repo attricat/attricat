@@ -102,10 +102,6 @@ export const columnPreferencesListMaxHeight = 480;
 export const agentEntityListMaxHeight = 140;
 export const agentInstructionsRows = 3;
 export const imageCellSize = 48;
-
-// `datetime-local` inputs accept `YYYY-MM-DDTHH:mm`.
-export const datetimeLocalInputLength = 16;
-export const millisecondsPerMinute = 60_000;
 export const pendingVersionPlaceholder = '…';
 export const emptyValuePlaceholder = '—';
 export const loadMoreRowKey = 'load-more';

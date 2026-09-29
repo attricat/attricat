@@ -18,7 +18,7 @@ import {
 import type { UseQueryResult } from '@tanstack/react-query';
 import { BlueprintLabel } from './BlueprintLabel';
 import { formatBytes } from './dataHealthFormat';
-import { formatDataHealthDate } from './dateFormat';
+import { Timestamp } from '../../time/Timestamp';
 import { SectionError } from './SectionError';
 import type {
   BlueprintHealth,
@@ -61,7 +61,7 @@ export const StorageSection = ({ query }: SectionProps<StorageHealth>) => {
 export const BlueprintHealthSection = ({
   query,
 }: SectionProps<BlueprintHealth>) => {
-  const { i18n, t } = useTranslation();
+  const { t } = useTranslation();
 
   return (
     <Paper sx={{ mt: 4, overflowX: 'auto' }}>
@@ -94,11 +94,11 @@ export const BlueprintHealthSection = ({
               <TableCell>{blueprint.outdated_entities}</TableCell>
               <TableCell>{blueprint.stale_entities}</TableCell>
               <TableCell>
-                {formatDataHealthDate(
-                  blueprint.oldest_updated_at,
-                  i18n.resolvedLanguage ?? i18n.language,
-                  t('dataHealth.never'),
-                )}
+                <Timestamp
+                  fallback={t('dataHealth.never')}
+                  style="date"
+                  value={blueprint.oldest_updated_at}
+                />
               </TableCell>
             </TableRow>
           ))}
