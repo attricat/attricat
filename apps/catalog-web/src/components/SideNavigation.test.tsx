@@ -179,6 +179,27 @@ describe('SideNavigation', () => {
     expect(screen.queryByRole('link', { name: 'Blueprints' })).toBeNull();
   });
 
+  it('always links to the documentation in a new tab', () => {
+    renderNavigation(vi.fn(), { compact: true });
+
+    const compactLink = screen.getByRole('link', { name: 'Documentation' });
+    expect(compactLink.getAttribute('href')).toBe('https://docs.attricat.com/');
+    expect(compactLink.getAttribute('target')).toBe('_blank');
+    expect(compactLink.getAttribute('rel')).toBe('noopener noreferrer');
+  });
+
+  it('shows the documentation link in the mobile primary navigation', () => {
+    const onNavigate = renderNavigation();
+
+    expect(screen.queryByRole('link', { name: 'Documentation' })).toBeNull();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Back to main navigation' }),
+    );
+    fireEvent.click(screen.getByRole('link', { name: 'Documentation' }));
+
+    expect(onNavigate).toHaveBeenCalledOnce();
+  });
+
   it('keeps compact Explore and Manage panels mutually exclusive', async () => {
     const onCompactManageOpenChange = vi.fn();
     renderNavigation(vi.fn(), {

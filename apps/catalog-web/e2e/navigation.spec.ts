@@ -1,4 +1,15 @@
 import { expect, test } from '@playwright/test';
+import { createEntityBlueprint, suffix } from './helpers.ts';
+
+// The home page shows workspace onboarding until a blueprint exists.
+test.beforeAll(async () => {
+  const id = suffix();
+  await createEntityBlueprint(
+    `navigation_${id}`,
+    `Navigation ${id}`,
+    '[[attributes]]\ncode = "title"\nvalue_type = "string"',
+  );
+});
 
 test('navigates from the desktop rail and management panel', async ({
   page,

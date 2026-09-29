@@ -18,6 +18,8 @@ type NavigationItemProps = {
   ariaControls?: string;
   ariaExpanded?: boolean;
   compact: boolean;
+  // External destination opened in a new tab; takes precedence over `to`.
+  href?: string;
   icon: ReactNode;
   label: string;
   onClick?: () => void;
@@ -31,6 +33,7 @@ export const NavigationItem = ({
   ariaControls,
   ariaExpanded,
   compact,
+  href,
   icon,
   label,
   onClick,
@@ -65,7 +68,17 @@ export const NavigationItem = ({
 
   return (
     <Tooltip placement="right" title={compact ? label : ''}>
-      {to ? (
+      {href ? (
+        <ListItemButton
+          {...buttonProps}
+          component="a"
+          href={href}
+          rel="noopener noreferrer"
+          target="_blank"
+        >
+          {content}
+        </ListItemButton>
+      ) : to ? (
         <ListItemButton {...buttonProps} component={Link} to={to}>
           {content}
         </ListItemButton>

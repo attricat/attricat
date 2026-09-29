@@ -60,7 +60,8 @@
     "darkMode": "Tryb ciemny",
     "lightMode": "Tryb jasny",
     "reusableAttributes": "Atrybuty wielokrotnego użytku",
-    "backgroundProcessing": "Przetwarzanie w tle"
+    "backgroundProcessing": "Przetwarzanie w tle",
+    "documentation": "Dokumentacja"
   },
   "auth": {
     "signIn": "Zaloguj się",
@@ -1216,6 +1217,41 @@
       "create": "Utwórz grupę",
       "requiredFields": "Kod, nazwa i co najmniej jedna opublikowana rewizja są wymagane.",
       "invalidPosition": "Pozycja musi być nieujemną liczbą całkowitą."
+    }
+  },
+  "onboarding": {
+    "eyebrow": "Pierwsze kroki",
+    "title": "Witaj w Attricat",
+    "description": "Twój obszar roboczy jest gotowy. Określ, co opisuje katalog, a następnie zaproś zespół. Po zapisaniu pierwszego schematu ta strona ustąpi miejsca przeglądarce encji.",
+    "emptyTitle": "Brak schematów",
+    "emptyDescription": "Ten obszar roboczy nie ma jeszcze schematów do przeglądania. Poproś administratora obszaru roboczego o utworzenie schematu lub przeczytaj dokumentację, aby dowiedzieć się, jak Attricat porządkuje dane katalogu.",
+    "readDocumentation": "Przeczytaj dokumentację",
+    "readGuide": "Przeczytaj przewodnik",
+    "readGuideAbout": "Przeczytaj przewodnik: {{topic}}",
+    "loading": "Wczytywanie obszaru roboczego",
+    "stepsLabel": "Pierwsze kroki",
+    "stepNumber": "Krok {{number}}",
+    "steps": {
+      "blueprint": {
+        "title": "Utwórz pierwszy schemat",
+        "description": "Schematy określają atrybuty, walidację i widoki encji w katalogu. Zacznij od przykładu i dostosuj go.",
+        "action": "Utwórz schemat"
+      },
+      "contexts": {
+        "title": "Skonfiguruj konteksty",
+        "description": "Konteksty pozwalają, aby wartości różniły się w zależności od rynku, kanału lub lokalizacji. Dodaj je teraz, jeśli katalog wymaga danych lokalizowanych lub zawężonych.",
+        "action": "Zarządzaj kontekstami"
+      },
+      "invite": {
+        "title": "Zaproś zespół",
+        "description": "Zaproś współpracowników i przypisz każdej osobie rolę z potrzebnym dostępem.",
+        "action": "Zaproś osoby"
+      },
+      "extensions": {
+        "title": "Poznaj rozszerzenia",
+        "description": "Rozszerzenia łączą Attricat z innymi systemami i dodają narzędzia do obszaru roboczego.",
+        "action": "Przeglądaj rozszerzenia"
+      }
     }
   }
 }

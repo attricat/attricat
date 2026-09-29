@@ -3,6 +3,7 @@ import { useRouterState } from '@tanstack/react-router';
 import { ArrowLeftIcon, ChevronRightIcon } from 'lucide-react';
 import { createElement } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useDocumentationUrl } from '../app/documentation';
 import { currentSession } from '../features/auth/api';
 import { authQueryKeys } from '../features/auth/queryKeys';
 import { ExtensionOutlet } from '../features/extensions/ExtensionOutlet';
@@ -30,6 +31,7 @@ import {
 import {
   AppsIcon,
   BrandIcon,
+  DocumentationIcon,
   ExplorerIcon,
   ManagementIcon,
 } from './systemIcons';
@@ -65,6 +67,7 @@ export const SideNavigation = ({
 }: SideNavigationProps) => {
   const { t } = useTranslation();
   const setMobileExplorePanelTarget = useSetMobileExplorePanelTarget();
+  const documentationUrl = useDocumentationUrl();
   const { pathname, search } = useRouterState({
     select: (state) => state.location,
   });
@@ -275,6 +278,16 @@ export const SideNavigation = ({
             onClick={() => setMobileSection('manage')}
             sx={{ mt: 1 }}
             trailing={<ChevronRightIcon />}
+          />
+        )}
+        {(compact || mobilePrimary) && (
+          <NavigationItem
+            compact={compact}
+            href={documentationUrl('home')}
+            icon={<DocumentationIcon />}
+            label={t('navigation.documentation')}
+            onClick={compact ? undefined : onNavigate}
+            sx={{ mt: 1 }}
           />
         )}
         {!compact && mobileSection === 'manage' && (

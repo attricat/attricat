@@ -22,3 +22,4 @@ export { BlocksIcon as ReusableAttributeIcon } from 'lucide-react';
 export { WorkflowIcon as WorkflowIcon } from 'lucide-react';
 export { UserCogIcon as WorkspaceIcon } from 'lucide-react';
 export { BookMarkedIcon as SavedSearchIcon } from 'lucide-react';
+export { BookOpenIcon as DocumentationIcon } from 'lucide-react';
