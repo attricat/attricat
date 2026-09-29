@@ -1,3 +1,4 @@
+import { useTheme } from '@mui/material';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
@@ -53,6 +54,13 @@ export const useExtensionFrame = ({
   useEffect(() => {
     contextRef.current = contextKey;
   }, [contextKey]);
+  // The color mode is delivered through the port, so switching it never
+  // restarts a frame. Every contribution receives it.
+  const colorMode = useTheme().palette.mode;
+  const colorModeRef = useRef(colorMode);
+  useEffect(() => {
+    colorModeRef.current = colorMode;
+  }, [colorMode]);
   const [errorKey, setErrorKey] = useState<FrameErrorKey>();
   const [ready, setReady] = useState(false);
   const [height, setHeight] = useState(defaultExtensionFrameHeight);
@@ -141,6 +149,7 @@ export const useExtensionFrame = ({
             configuration: contribution.configuration,
             capabilities: contribution.capabilities,
             context: frameContext,
+            theme: { color_mode: colorModeRef.current },
           },
           '*',
           [channel.port2],
@@ -168,6 +177,14 @@ export const useExtensionFrame = ({
       context: JSON.parse(contextKey) as FrameContext,
     });
   }, [contextKey, ready]);
+
+  useEffect(() => {
+    if (!ready) return;
+    portRef.current?.postMessage({
+      type: extensionMessageTypes.themeUpdate,
+      theme: { color_mode: colorMode },
+    });
+  }, [colorMode, ready]);
 
   const handleFrameLoad = () => {
     setErrorKey(undefined);

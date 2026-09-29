@@ -34,6 +34,18 @@ describe('extension frame bootstrap', () => {
     );
   });
 
+  it('applies and announces the color mode for every contribution', () => {
+    expect(frameDocument).toContain('; applyTheme(event.data.theme); try {');
+    expect(frameDocument).toContain("colorModes = ['light', 'dark']");
+    expect(frameDocument).toContain(
+      'document.documentElement.style.colorScheme = theme.color_mode',
+    );
+    expect(frameDocument).toContain(
+      "message?.type === 'catalog:theme-update.v1'",
+    );
+    expect(frameDocument).toContain('catalog:theme-changed.v1');
+  });
+
   it('exposes storage only through the MessageChannel broker', () => {
     expect(frameDocument).toContain(
       "storage: { get: detail => call('storage.get'",

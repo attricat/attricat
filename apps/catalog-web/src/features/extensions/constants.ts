@@ -101,6 +101,8 @@ export const extensionMessageTypes = {
   resize: 'catalog:resize.v1',
   response: 'catalog:response.v1',
   shutdown: 'catalog:shutdown.v1',
+  themeChanged: 'catalog:theme-changed.v1',
+  themeUpdate: 'catalog:theme-update.v1',
 } as const;
 
 /** Broker methods an extension frame can call through its MessagePort. */

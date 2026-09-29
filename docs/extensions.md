@@ -782,6 +782,21 @@ passes that same object to `mount`. It may use only granted operations:
   versioned private `MessageChannel`; no browser event, route state, or host
   object is exposed. A frame remains mounted across context updates, so
   extensions must discard work scoped to the prior context.
+- `catalog.theme` is always supplied, without any capability, and contains `{ color_mode: 'light' | 'dark' }`, the mode Catalog is currently
+  rendering (the user's explicit choice, otherwise the system preference). The
+  frame document's `color-scheme` is set to match before `mount` runs, so
+  native controls and system colors such as `Canvas` and `CanvasText` follow
+  it. A `catalog:theme-changed.v1` event with the same detail is dispatched on
+  `root` after `mount` and whenever the user switches modes; the frame stays
+  mounted, so extensions should restyle rather than reload. For example:
+
+  ```js
+  export const mount = (root, catalog) => {
+    const apply = () => (root.dataset.mode = catalog.theme?.color_mode ?? 'light');
+    root.addEventListener('catalog:theme-changed.v1', apply);
+    apply();
+  };
+  ```
 
 ### Mediated interaction contracts
 
@@ -800,8 +815,10 @@ opens only allowlisted HTTPS URLs in a new tab. `client.files.read` and
 `client.files.upload` are restricted to file-detail context; upload selection
 and progress are host UI. `client.search` is a bounded authorized Catalog
 search, `client.live_updates` is limited to typed current-context events, and
-`client.clipboard` writes bounded user-initiated text. Theme and locale reads
-return only safe tokens, color mode, and locale.
+`client.clipboard` writes bounded user-initiated text. The color mode is
+available to every contribution as `catalog.theme`; `client.theme.read` is
+still accepted in manifests for compatibility but is no longer required. Locale
+reads return only the locale.
 
 Placement capabilities authorize only their matching fixed outlet; they do not
 imply `client.commands`. Disabling, quarantining, removing, upgrading, or
