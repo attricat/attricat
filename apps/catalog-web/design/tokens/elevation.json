@@ -1,1 +1,1 @@
-{"light":{"none":"none","raised":"0 1px 3px rgba(16,28,26,.08), 0 1px 2px rgba(16,28,26,.04)","overlay":"0 12px 32px rgba(16,28,26,.14)"},"dark":{"none":"none","raised":"0 1px 4px rgba(0,0,0,.22)","overlay":"0 16px 40px rgba(0,0,0,.42)"}}
+{"light":{"none":"none","raised":"0 1px 2px rgba(10,37,64,.06), 0 1px 3px rgba(50,50,93,.08)","overlay":"0 12px 28px -6px rgba(50,50,93,.18), 0 8px 16px -8px rgba(10,37,64,.14)"},"dark":{"none":"none","raised":"0 1px 3px rgba(0,0,0,.28)","overlay":"0 16px 40px -8px rgba(0,0,0,.55)"}}
