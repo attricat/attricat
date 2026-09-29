@@ -10,7 +10,8 @@ import {
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import type { AuditEvent } from './api';
-import { auditActor, auditTarget, formatAuditDate } from './auditFormat';
+import { Timestamp } from '../../time/Timestamp';
+import { auditActor, auditTarget } from './auditFormat';
 import {
   auditOutcomeSuccess,
   auditTableColumnCount,
@@ -20,14 +21,12 @@ import {
 export const AuditEventsTable = ({
   events,
   isLoading,
-  locale,
   onSelect,
   systemLabel,
   workspaceLabel,
 }: {
   events?: AuditEvent[];
   isLoading: boolean;
-  locale: string;
   onSelect: (event: AuditEvent) => void;
   systemLabel: string;
   workspaceLabel: string;
@@ -59,7 +58,11 @@ export const AuditEventsTable = ({
                   size="small"
                   variant="text"
                 >
-                  {formatAuditDate(event.occurred_at, locale)}
+                  <Timestamp
+                    focusable={false}
+                    style="dateTimeSeconds"
+                    value={event.occurred_at}
+                  />
                 </Button>
               </TableCell>
               <TableCell>{auditActor(event, systemLabel)}</TableCell>

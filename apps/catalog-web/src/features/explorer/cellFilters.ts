@@ -53,8 +53,9 @@ export const cellValueFilter = (
 export const cellFilterDraft = (
   filter: AttributeFilter,
   valueType: ValueType,
+  timeZone: string,
 ): AttributeFilterDraft => ({
   field: filter.field,
   operator: filter.operator,
-  value: attributeFilterInputValue(filter, valueType),
+  value: attributeFilterInputValue(filter, valueType, timeZone),
 });

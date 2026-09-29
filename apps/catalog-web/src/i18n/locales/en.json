@@ -4,6 +4,14 @@
     "english": "English",
     "polish": "Polish"
   },
+  "timeZone": {
+    "label": "Time zone",
+    "description": "Timestamps are shown in this time zone. Hover over or focus a timestamp to see the exact UTC time.",
+    "automatic": "Automatic (browser: {{zone}})",
+    "preview": "Current time: <timestamp/>",
+    "noOptions": "No matching time zones",
+    "saveFailed": "Could not save your time zone: {{message}}"
+  },
   "app": {
     "attricat": "Attricat",
     "catalog": "Catalog",
@@ -31,7 +39,7 @@
   },
   "drafts": {
     "restoreTitle": "Restore unsaved draft?",
-    "restoreDescription": "This tab has an unsaved draft from {{savedAt}}. Restore it to replace the loaded form, or discard it to keep the form as loaded.",
+    "restoreDescription": "This tab has an unsaved draft from <timestamp/>. Restore it to replace the loaded form, or discard it to keep the form as loaded.",
     "sourceChanged": "The source has changed since this draft was saved. Restoring the draft replaces the latest loaded values.",
     "restore": "Restore draft",
     "discard": "Discard draft"
@@ -111,7 +119,7 @@
     "conversationTitlePlaceholder": "e.g. Clean up inactive suppliers",
     "createConversation": "Create conversation",
     "untitledConversation": "Untitled conversation",
-    "updatedAt": "Updated {{date}}",
+    "updatedAt": "Updated <timestamp/>",
     "loadingConversations": "Loading conversations...",
     "noConversations": "No conversations yet.",
     "noConversationsDescription": "Start a thread to work with the agent.",
@@ -470,7 +478,6 @@
     "noMatchingBlueprints": "No blueprints matched this filter.",
     "revisionHistory": "Revision history",
     "version": "Version",
-    "created": "Created",
     "definitionHash": "Definition hash",
     "revisionStatuses": {
       "draft": "Draft",
@@ -661,7 +668,7 @@
     "showing": "Showing {{from}}-{{to}} of {{total}}",
     "event": "Audit event",
     "viewEvent": "View details for {{action}} by {{actor}}",
-    "eventBy": "{{action}} by {{actor}} at {{date}}",
+    "eventBy": "{{action}} by {{actor}} at <timestamp/>",
     "openConversation": "Open agent conversation",
     "authorizationScope": "Authorization scope",
     "safeMetadata": "Safe metadata",
@@ -783,7 +790,7 @@
     "loading": "Loading…",
     "tokenExpiry": "Token expiry must be in the future.",
     "createFailed": "Could not create token",
-    "tokenDetails": "Permissions: {{permissions}} · Created: {{created}} · Last used: {{lastUsed}} · Expires: {{expires}} · Revoked: {{revoked}}",
+    "tokenDetails": "Permissions: {{permissions}} · Created: <created/> · Last used: <lastused/> · Expires: <expires/> · Revoked: <revoked/>",
     "no": "No",
     "catalogGenerator": "Catalog generator",
     "catalogGeneratorDescription": "Seed blueprints, contexts, products, and relationships.",
@@ -974,7 +981,7 @@
     "createInvitationFailed": "Could not create invitation",
     "createUserFailed": "Could not create user",
     "notAuthorizedInvitations": "You are not authorized to manage invitations.",
-    "expires": "expires {{date}}",
+    "expires": "expires <timestamp/>",
     "createUserInvite": "Create user and invite",
     "inviteEmailInfo": "Catalog sends a one-time onboarding link to this email address. The link is not displayed here or returned by the API.",
     "email": "Email",
@@ -1070,7 +1077,7 @@
     "forbidden": "You are not authorized to view background processing in this workspace.",
     "loadError": "Could not load background processing status. Try refreshing.",
     "refreshError": "Refresh failed. The displayed status may be outdated.",
-    "updated": "Last updated at {{time}} · Refreshes every {{seconds}} seconds",
+    "updated": "Last updated at <timestamp/> · Refreshes every {{seconds}} seconds",
     "failures": "Some tasks failed and will not retry automatically. Check the corresponding run history or contact an administrator.",
     "expiredWarning": "Some running tasks have expired leases. They may have been interrupted and are awaiting worker recovery.",
     "empty": "No queued, running, or failed API tasks in this workspace.",

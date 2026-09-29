@@ -62,6 +62,8 @@ type ColumnOptions = {
   onOpenActions: (entityId: string, position: ActionMenuPosition) => void;
   takeCellFrame: () => boolean;
   t: TFunction;
+  /** The user's effective zone, used to edit datetime cell filters. */
+  timeZone: string;
 };
 
 const findTableCellExtension = (
@@ -95,6 +97,7 @@ export const buildExplorerColumnDefinitions = ({
   onOpenActions,
   takeCellFrame,
   t,
+  timeZone,
 }: ColumnOptions): ExplorerColumnDef[] => {
   const columnHelper = legacyCreateColumnHelper<EntityItem>();
   const attributes = new Map(
@@ -122,7 +125,7 @@ export const buildExplorerColumnDefinitions = ({
         : undefined;
     const openFilter = (filter: AttributeFilter) =>
       filterValueType &&
-      onFilterCell?.(cellFilterDraft(filter, filterValueType));
+      onFilterCell?.(cellFilterDraft(filter, filterValueType, timeZone));
     return [
       columnHelper.display({
         id: column.field,

@@ -336,3 +336,100 @@ async fn login_rate_limit_rejects_attempts_after_the_fixed_window_threshold(pool
     assert_eq!(limited.status(), StatusCode::TOO_MANY_REQUESTS);
     server.abort();
 }
+
+#[sqlx::test]
+async fn time_zone_preference_persists_on_the_account_and_rejects_unknown_zones(pool: PgPool) {
+    let (base_url, server) = start_session_server(pool.clone()).await;
+    let password = Password::new("correct horse battery staple");
+    let hash = hash_password(&password).unwrap();
+    let owner_id = OWNER_ID.parse::<Uuid>().unwrap();
+    sqlx::query("INSERT INTO local_password_credentials (user_id, password_hash) VALUES ($1, $2)")
+        .bind(owner_id)
+        .bind(hash.as_phc())
+        .execute(&pool)
+        .await
+        .unwrap();
+    let client = Client::new();
+    let login = client.post(format!("{base_url}/auth/login"))
+        .json(&json!({ "login_identifier": "default.local", "email": "api-test-owner@example.test", "password": "correct horse battery staple" }))
+        .send().await.unwrap();
+    let (session, csrf) = cookie_pair(&login);
+    let login: Value = login.json().await.unwrap();
+    assert_eq!(login["time_zone"], Value::Null);
+    let cookie = format!("{session}; {csrf}");
+    let csrf_value = csrf.split_once('=').unwrap().1;
+    let patch = |body: Value, csrf: Option<&str>| {
+        let mut request = client
+            .patch(format!("{base_url}/auth/preferences"))
+            .header("cookie", &cookie)
+            .json(&body);
+        if let Some(csrf) = csrf {
+            request = request.header("x-catalog-csrf", csrf);
+        }
+        request.send()
+    };
+
+    assert_eq!(
+        patch(json!({ "time_zone": "Europe/Warsaw" }), None)
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::FORBIDDEN
+    );
+    let updated = patch(json!({ "time_zone": "Europe/Warsaw" }), Some(csrf_value))
+        .await
+        .unwrap();
+    assert_eq!(updated.status(), StatusCode::OK);
+    let updated: Value = updated.json().await.unwrap();
+    assert_eq!(updated["time_zone"], "Europe/Warsaw");
+    assert_eq!(updated["user_id"], OWNER_ID);
+
+    // The preference belongs to the account, so a separate login sees it.
+    let second_login: Value = client.post(format!("{base_url}/auth/login"))
+        .json(&json!({ "login_identifier": "default.local", "email": "api-test-owner@example.test", "password": "correct horse battery staple" }))
+        .send().await.unwrap().json().await.unwrap();
+    assert_eq!(second_login["time_zone"], "Europe/Warsaw");
+
+    for invalid in [json!("Mars/Olympus"), json!(""), json!("+02:00")] {
+        let rejected = patch(json!({ "time_zone": invalid }), Some(csrf_value))
+            .await
+            .unwrap();
+        assert_eq!(rejected.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    }
+    let stored: Option<String> = sqlx::query_scalar("SELECT time_zone FROM users WHERE id = $1")
+        .bind(owner_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(stored.as_deref(), Some("Europe/Warsaw"));
+
+    let utc: Value = patch(json!({ "time_zone": "UTC" }), Some(csrf_value))
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(utc["time_zone"], "UTC");
+    let cleared: Value = patch(json!({ "time_zone": null }), Some(csrf_value))
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(cleared["time_zone"], Value::Null);
+    let current: Value = client
+        .get(format!("{base_url}/auth/session"))
+        .header("cookie", &cookie)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(current["time_zone"], Value::Null);
+    server.abort();
+}

@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use super::{
     AppState,
-    auth::{ActiveWorkspace, AuthenticatedPrincipal, AuthenticatedSession},
+    auth::{ActiveWorkspace, AuthenticatedPrincipal, AuthenticatedSession, ScopedRepository},
     error::ApiError,
     extractors::ApiJson,
 };
@@ -50,6 +50,14 @@ pub(super) struct PasswordResetRequest {
 pub(super) struct PasswordResetConfirmation {
     token: String,
     password: String,
+}
+
+/// Per-user display preferences. Every field is required so a request states
+/// the full preference set; later preferences are added here.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct PreferencesRequest {
+    time_zone: Option<String>,
 }
 
 #[derive(serde::Serialize)]
@@ -232,6 +240,36 @@ pub(super) async fn current_session(
     Ok(Json(session))
 }
 
+pub(super) async fn update_preferences(
+    State(state): State<AppState>,
+    AuthenticatedPrincipal(user_id, token_id): AuthenticatedPrincipal,
+    ActiveWorkspace(workspace_id): ActiveWorkspace,
+    ScopedRepository(repository): ScopedRepository,
+    ApiJson(request): ApiJson<PreferencesRequest>,
+) -> Result<Json<SessionResponse>, ApiError> {
+    let time_zone = request
+        .time_zone
+        .map(|zone| validate_time_zone(&zone))
+        .transpose()?;
+    repository
+        .update_user_preferences(user_id, time_zone.as_deref())
+        .await?;
+    current_session(
+        State(state),
+        AuthenticatedPrincipal(user_id, token_id),
+        ActiveWorkspace(workspace_id),
+    )
+    .await
+}
+
+/// Accepts canonical IANA names (including `UTC`) and returns the
+/// database's canonical spelling so equivalent inputs store identically.
+fn validate_time_zone(zone: &str) -> Result<String, ApiError> {
+    zone.parse::<chrono_tz::Tz>()
+        .map(|zone| zone.name().to_owned())
+        .map_err(|_| ApiError::invalid_input(format!("unknown IANA time zone: {zone}")))
+}
+
 pub(super) async fn logout(
     State(state): State<AppState>,
     AuthenticatedSession(session): AuthenticatedSession,
@@ -288,4 +326,21 @@ pub(super) fn issue_session() -> (SessionSecret, SessionSecret, chrono::DateTime
 
 fn digest_login_key(value: &str) -> SessionDigest {
     SessionDigest::from_slice(&Sha256::digest(value.as_bytes())).expect("sha256 is 32 bytes")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_time_zone;
+
+    #[test]
+    fn time_zone_validation_accepts_iana_names_and_rejects_others() {
+        assert_eq!(
+            validate_time_zone("Europe/Warsaw").unwrap(),
+            "Europe/Warsaw"
+        );
+        assert_eq!(validate_time_zone("UTC").unwrap(), "UTC");
+        for invalid in ["", "Mars/Olympus", "+02:00", "europe warsaw"] {
+            assert!(validate_time_zone(invalid).is_err(), "{invalid}");
+        }
+    }
 }

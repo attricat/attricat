@@ -1,5 +1,6 @@
 import { Button, List, ListItem, ListItemText, Paper } from '@mui/material';
-import { useTranslation } from 'react-i18next';
+import { Trans, useTranslation } from 'react-i18next';
+import { Timestamp } from '../../time/Timestamp';
 import { revokeInvitation } from './api';
 
 type Invitation = {
@@ -46,7 +47,18 @@ export const InvitationList = ({
           >
             <ListItemText
               primary={item.invitee_email}
-              secondary={`${item.role_code} · ${t('workspace.expires', { date: new Date(item.expires_at).toLocaleString() })}`}
+              secondary={
+                <>
+                  {item.role_code} ·{' '}
+                  <Trans
+                    components={{
+                      timestamp: <Timestamp value={item.expires_at} />,
+                    }}
+                    i18nKey="workspace.expires"
+                    t={t}
+                  />
+                </>
+              }
             />
           </ListItem>
         ))}

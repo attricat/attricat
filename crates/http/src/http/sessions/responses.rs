@@ -14,6 +14,9 @@ pub(in crate::http) struct SessionResponse {
     pub(super) user_id: Uuid,
     pub(super) display_name: Option<String>,
     pub(super) email: String,
+    /// Preferred IANA time zone for rendering instants; `None` follows the
+    /// client's zone. Stored instants remain UTC.
+    pub(super) time_zone: Option<String>,
     /// The workspace resolved by the server and bound to this session.
     pub(super) workspace_id: Uuid,
     /// The human-facing identifier for the session-bound workspace.
@@ -136,6 +139,7 @@ async fn session_response_payload_with_identifier(
         user_id,
         display_name: account.display_name,
         email: account.email,
+        time_zone: account.time_zone,
         workspace_id,
         login_identifier,
         capabilities: session_capabilities(state, user_id, workspace_id).await?,

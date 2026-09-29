@@ -22,7 +22,7 @@ import {
   migrationBatchStatuses,
   migrationProgressMinWidth,
 } from './constants';
-import { formatBlueprintDateTime } from './dateTime';
+import { Timestamp } from '../../time/Timestamp';
 import type { BlueprintMigrationBatchStatus as MigrationBatch } from './schemas';
 
 const statusColor = (status: MigrationBatch['status']) => {
@@ -156,13 +156,16 @@ export const MigrationBatchStatus = ({
                   </TableCell>
                   <TableCell>{batch.failed_entities}</TableCell>
                   <TableCell>
-                    {formatBlueprintDateTime(batch.created_at, emptyDate)}
+                    <Timestamp fallback={emptyDate} value={batch.created_at} />
                   </TableCell>
                   <TableCell>
-                    {formatBlueprintDateTime(batch.started_at, emptyDate)}
+                    <Timestamp fallback={emptyDate} value={batch.started_at} />
                   </TableCell>
                   <TableCell>
-                    {formatBlueprintDateTime(batch.completed_at, emptyDate)}
+                    <Timestamp
+                      fallback={emptyDate}
+                      value={batch.completed_at}
+                    />
                   </TableCell>
                   <TableCell sx={{ fontFamily: 'monospace' }}>
                     {batch.id}

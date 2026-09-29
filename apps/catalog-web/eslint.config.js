@@ -66,6 +66,21 @@ export default tseslint.config(
           ],
         },
       ],
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            'CallExpression[callee.property.name=/^toLocale(Date|Time)?String$/]',
+          message:
+            'Render instants with <Timestamp> or useInstantFormat from src/time; format numbers with Intl.NumberFormat.',
+        },
+        {
+          selector:
+            ':matches(NewExpression, CallExpression)[callee.object.name="Intl"][callee.property.name="DateTimeFormat"]',
+          message:
+            'Render instants with <Timestamp> or useInstantFormat from src/time.',
+        },
+      ],
       'react-refresh/only-export-components': [
         'warn',
         {
@@ -82,6 +97,11 @@ export default tseslint.config(
   {
     files: ['src/components/systemIcons.ts'],
     rules: { 'no-restricted-imports': 'off' },
+  },
+  {
+    // The shared time module is the only place allowed to format instants.
+    files: ['src/time/**/*.{ts,tsx}'],
+    rules: { 'no-restricted-syntax': 'off' },
   },
   {
     files: ['src/routes/**/*.tsx'],

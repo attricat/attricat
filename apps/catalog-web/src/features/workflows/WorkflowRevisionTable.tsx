@@ -10,7 +10,7 @@ import {
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { monospaceFontFamily, workflowStatus } from './constants';
-import { formatWorkflowDateTime } from './dateTime';
+import { Timestamp } from '../../time/Timestamp';
 import type { Workflow } from './schemas';
 
 export const WorkflowRevisionTable = ({
@@ -18,8 +18,7 @@ export const WorkflowRevisionTable = ({
 }: {
   revisions: Workflow[];
 }) => {
-  const { i18n, t } = useTranslation();
-  const locale = i18n.resolvedLanguage ?? i18n.language;
+  const { t } = useTranslation();
   return (
     <Paper component="section" sx={{ mt: 3 }}>
       <Box sx={{ overflowX: 'auto' }}>
@@ -49,18 +48,16 @@ export const WorkflowRevisionTable = ({
                   />
                 </TableCell>
                 <TableCell>
-                  {formatWorkflowDateTime(
-                    revision.created_at,
-                    locale,
-                    t('workflows.notAvailable'),
-                  )}
+                  <Timestamp
+                    fallback={t('workflows.notAvailable')}
+                    value={revision.created_at}
+                  />
                 </TableCell>
                 <TableCell>
-                  {formatWorkflowDateTime(
-                    revision.published_at,
-                    locale,
-                    t('workflows.notAvailable'),
-                  )}
+                  <Timestamp
+                    fallback={t('workflows.notAvailable')}
+                    value={revision.published_at}
+                  />
                 </TableCell>
                 <TableCell sx={{ fontFamily: monospaceFontFamily }}>
                   {revision.definition_hash}

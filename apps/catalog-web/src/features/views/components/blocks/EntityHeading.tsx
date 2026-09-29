@@ -6,7 +6,7 @@ import {
   type ViewDefinition,
 } from '../../../entities/api';
 import { FieldErrorBoundary } from '../boundaries/FieldErrorBoundary';
-import { formatAttributeValue } from '../values/formatAttributeValue';
+import { AttributeValueText } from '../values/AttributeValueText';
 import { findEntityHeading } from './EntityHeadingDefinition';
 
 type ResolvedValue = { value: unknown };
@@ -45,7 +45,7 @@ export const EntityHeading = ({
         logLabel="entity heading"
       >
         <Typography component="h1" variant="h3">
-          {formatAttributeValue(titleAttribute, titleValue)}
+          <AttributeValueText attribute={titleAttribute} value={titleValue} />
         </Typography>
       </FieldErrorBoundary>
       {heading?.type === 'stack' &&
@@ -63,7 +63,7 @@ export const EntityHeading = ({
             const value = attribute ? values[attribute.code]?.value : undefined;
             return attribute && value !== undefined ? (
               <Typography color="text.secondary" key={index}>
-                {formatAttributeValue(attribute, value)}
+                <AttributeValueText attribute={attribute} value={value} />
               </Typography>
             ) : null;
           }

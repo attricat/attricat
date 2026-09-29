@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import type { Attribute } from '../../../entities/api';
 import { fileDownloadUrl } from '../../../files/api';
 import { FileThumbnail } from '../../../files/FileThumbnail';
+import { AttributeValueText } from './AttributeValueText';
 import { formatAttributeValue } from './formatAttributeValue';
 import { attributeValueTypes } from '../../../entities/valueTypes';
 import { FILE_THUMBNAIL_SIZE } from '../../constants';
@@ -139,7 +140,7 @@ export const AttributeValue = ({
       }
       variant="body2"
     >
-      {formatAttributeValue(attribute, value)}
+      <AttributeValueText attribute={attribute} value={value} />
     </Typography>
   );
 };

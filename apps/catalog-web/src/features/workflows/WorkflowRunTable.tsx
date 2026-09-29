@@ -14,7 +14,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { replayWorkflowRun } from './api';
 import { runTableEmptyColSpan, workflowRunStatus } from './constants';
-import { formatWorkflowDateTime } from './dateTime';
+import { Timestamp } from '../../time/Timestamp';
 import { workflowQueryKeys } from './queryKeys';
 import type { WorkflowRun } from './schemas';
 
@@ -26,11 +26,9 @@ const runStatusColor = (status: WorkflowRun['status']) => {
 
 export const WorkflowRunTable = ({
   canManage,
-  locale,
   runs,
 }: {
   canManage: boolean;
-  locale: string;
   runs: WorkflowRun[];
 }) => {
   const { t } = useTranslation();
@@ -67,11 +65,10 @@ export const WorkflowRunTable = ({
                 <TableCell>{run.source}</TableCell>
                 <TableCell>{run.attempts}</TableCell>
                 <TableCell>
-                  {formatWorkflowDateTime(
-                    run.completed_at ?? run.failed_at ?? run.created_at,
-                    locale,
-                    t('workflows.notAvailable'),
-                  )}
+                  <Timestamp
+                    fallback={t('workflows.notAvailable')}
+                    value={run.completed_at ?? run.failed_at ?? run.created_at}
+                  />
                 </TableCell>
                 <TableCell>
                   {run.last_error ??

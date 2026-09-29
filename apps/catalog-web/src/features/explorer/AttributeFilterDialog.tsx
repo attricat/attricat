@@ -19,6 +19,7 @@ import {
   type RelationshipFilterAttribute,
 } from './relationshipFilterTypes';
 import type { AttributeFilter } from './search';
+import { useTimeZone } from '../../time/useInstantFormat';
 
 const describeDraft = (
   draft: AttributeFilterDraft,
@@ -68,6 +69,7 @@ export const AttributeFilterDialog = ({
   relationshipPathsLoading,
 }: Props) => {
   const { t } = useTranslation();
+  const timeZone = useTimeZone();
   const addBlocked = maximumReached && !editing;
   const form = useForm({
     defaultValues: initialDraft,
@@ -85,6 +87,7 @@ export const AttributeFilterDialog = ({
         value: parseAttributeFilterValue(
           draft.attribute.value_type,
           value.value,
+          timeZone,
         ),
       });
     },

@@ -114,6 +114,18 @@ development and test servers. Every cookie-authenticated unsafe request must sen
 `X-Catalog-Csrf` equal to the current CSRF cookie. Login attempts are durably limited
 to five failures per normalized workspace/email pair in fifteen minutes.
 
+## User preferences
+
+`PATCH /auth/preferences` replaces the authenticated user's display
+preferences. The request body currently has one required field, `time_zone`: an
+IANA zone name validated by the API (for example `Europe/Warsaw` or `UTC`), or
+`null` to follow each client's own zone. Unknown names return `422`. The
+preference is stored on the user account, so it applies across workspaces,
+devices, and sessions, and it is returned as `time_zone` in every session
+payload. It only affects rendering: the API stores and returns instants in UTC,
+and exports keep UTC ISO timestamps. Cookie-authenticated requests need the
+CSRF header like any other unsafe request.
+
 ## Personal API tokens
 
 `POST /personal-access-tokens` issues an opaque `cat_pat_...` bearer secret for

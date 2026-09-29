@@ -30,7 +30,7 @@ import { WorkflowRunTable } from './WorkflowRunTable';
 import { WorkflowSourcePanel } from './WorkflowSourcePanel';
 
 export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
-  const { i18n, t } = useTranslation();
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<WorkflowDetailTab>(
     workflowDetailTab.revisions,
@@ -95,7 +95,6 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
   );
   const mutationError =
     publish.error ?? enable.error ?? runNow.error ?? disable.error;
-  const locale = i18n.resolvedLanguage ?? i18n.language;
 
   if (session.isPending || revisions.isPending)
     return (
@@ -228,11 +227,7 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
       )}
       {tab === workflowDetailTab.runDiagnostics && (
         <Box {...tabId.panel(workflowDetailTab.runDiagnostics)}>
-          <WorkflowRunTable
-            canManage={canManage}
-            locale={locale}
-            runs={workflowRuns}
-          />
+          <WorkflowRunTable canManage={canManage} runs={workflowRuns} />
         </Box>
       )}
     </PageContainer>

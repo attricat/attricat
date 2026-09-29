@@ -42,15 +42,18 @@ describe('cell filters', () => {
     expect(cellValueFilter('price', 'number', ['12'])).toBeUndefined();
   });
 
-  it('converts datetime values into local input drafts', () => {
+  it('converts datetime values into drafts in the preferred zone', () => {
     const filter = cellValueFilter('seen_at', 'datetime', [
       '2026-01-02T03:04:00.000Z',
     ]);
-    expect(filter && cellFilterDraft(filter, 'datetime')).toMatchObject({
+    expect(
+      filter && cellFilterDraft(filter, 'datetime', 'Europe/Warsaw'),
+    ).toEqual({
       field: 'seen_at',
       operator: 'eq',
+      value: '2026-01-02T04:04',
     });
-    expect(filter && cellFilterDraft(filter, 'string').value).toBe(
+    expect(filter && cellFilterDraft(filter, 'string', 'UTC').value).toBe(
       '2026-01-02T03:04:00.000Z',
     );
   });

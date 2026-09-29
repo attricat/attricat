@@ -8,18 +8,10 @@ import {
   Paper,
 } from '@mui/material';
 import { useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import i18n from '../../i18n';
+import { Trans, useTranslation } from 'react-i18next';
+import { Timestamp } from '../../time/Timestamp';
 import { listTokens, revokeToken } from './api';
 import { profileQueryKeys } from './queryKeys';
-
-const formatTime = (value: string | null) =>
-  value
-    ? new Intl.DateTimeFormat(i18n.language, {
-        dateStyle: 'medium',
-        timeStyle: 'medium',
-      }).format(new Date(value))
-    : i18n.t('profile.never');
 
 export const PersonalTokens = ({ canManage }: { canManage: boolean }) => {
   const { t } = useTranslation();
@@ -64,15 +56,42 @@ export const PersonalTokens = ({ canManage }: { canManage: boolean }) => {
             >
               <ListItemText
                 primary={token.label}
-                secondary={t('profile.tokenDetails', {
-                  permissions: token.permissions.join(', '),
-                  created: formatTime(token.created_at),
-                  lastUsed: formatTime(token.last_used_at),
-                  expires: formatTime(token.expires_at),
-                  revoked: token.revoked_at
-                    ? formatTime(token.revoked_at)
-                    : t('profile.no'),
-                })}
+                secondary={
+                  <Trans
+                    components={{
+                      created: (
+                        <Timestamp
+                          style="dateTimeSeconds"
+                          value={token.created_at}
+                        />
+                      ),
+                      lastused: (
+                        <Timestamp
+                          fallback={t('profile.never')}
+                          style="dateTimeSeconds"
+                          value={token.last_used_at}
+                        />
+                      ),
+                      expires: (
+                        <Timestamp
+                          fallback={t('profile.never')}
+                          style="dateTimeSeconds"
+                          value={token.expires_at}
+                        />
+                      ),
+                      revoked: (
+                        <Timestamp
+                          fallback={t('profile.no')}
+                          style="dateTimeSeconds"
+                          value={token.revoked_at}
+                        />
+                      ),
+                    }}
+                    i18nKey="profile.tokenDetails"
+                    t={t}
+                    values={{ permissions: token.permissions.join(', ') }}
+                  />
+                }
               />
             </ListItem>
           ))}
