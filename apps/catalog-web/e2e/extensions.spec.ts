@@ -47,7 +47,7 @@ test('side-loads the example extension and recalculates a blueprint formula', as
     await expect.poll(() => grants.count()).toBe(count - 1);
   }
   await page.getByRole('button', { name: 'Enable' }).click();
-  await expect(page.getByText('enabled', { exact: true })).toBeVisible();
+  await expect(page.getByText('Enabled', { exact: true })).toBeVisible();
   await expect
     .poll(
       () =>
