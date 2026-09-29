@@ -1,4 +1,4 @@
-import { useForm } from '@tanstack/react-form';
+import { useForm, useStore } from '@tanstack/react-form';
 import { Alert, Button, Paper, Stack, Typography } from '@mui/material';
 import type {
   Attribute,
@@ -19,23 +19,52 @@ import {
   type ResolvedFormValues,
 } from '../entityFormAttributes';
 import { EntityView } from '../../views/components/EntityView';
+import { draftEditors, type DraftEditor } from '../../drafts/constants';
+import { DraftRestoreDialog } from '../../drafts/DraftRestoreDialog';
+import { formFieldsDraftSchema } from '../../drafts/schemas';
+import { useEditorDraft } from '../../drafts/useEditorDraft';
 import {
   forwardRef,
   useImperativeHandle,
+  useMemo,
   useState,
   type ReactNode,
 } from 'react';
 import { useTranslation } from 'react-i18next';
+import { attributeValueTypes } from '../valueTypes';
 import { EntityBlueprintSelect } from './EntityBlueprintSelect';
 import { EntityFormAttributeEditor } from './EntityFormAttributeEditor';
 
 export type EntityFormHandle = {
   applySmartFillValues: (values: Record<string, string>) => void;
+  /** Removes the persisted draft after a confirmed save. */
+  clearDraft: () => void;
   getDraftValues: () => Record<string, string>;
 };
 
+/** Identifies where unsaved field values are kept across refreshes. */
+export type EntityFormDraft = {
+  editor: DraftEditor;
+  resource: readonly (string | number)[];
+  /** Marker for the loaded source beyond the initial field values. */
+  source: string;
+};
+
+const draftFieldSeparator = '\n';
+
+const pickDraftFields = (
+  fields: Record<string, string>,
+  codes: readonly string[],
+) =>
+  Object.fromEntries(
+    codes.flatMap((code) =>
+      fields[code] === undefined ? [] : [[code, fields[code]]],
+    ),
+  );
+
 type EntityFormProps = {
   blueprint?: BlueprintWithAttributes;
+  draft?: EntityFormDraft;
   initialValues?: ReturnType<typeof valuesForForm>;
   contextId?: string | null;
   contextPicker?: ReactNode;
@@ -68,6 +97,7 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
   (
     {
       blueprint,
+      draft: draftOptions,
       initialValues = {},
       contextId = null,
       contextPicker,
@@ -158,7 +188,42 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
       },
     });
 
+    // Files upload separately and are never kept in a draft.
+    const draftCodes = editableAttributes
+      .filter((attribute) => attribute.value_type !== attributeValueTypes.file)
+      .map((attribute) => attribute.code)
+      .join(draftFieldSeparator);
+    const fields = useStore(form.store, (state) => state.values.fields);
+    const draftFields = useMemo(
+      () => pickDraftFields(fields, draftCodes.split(draftFieldSeparator)),
+      [draftCodes, fields],
+    );
+    const initialDraftFields = JSON.stringify(
+      pickDraftFields(initialValues, draftCodes.split(draftFieldSeparator)),
+    );
+    const draft = useEditorDraft({
+      dirty: JSON.stringify(draftFields) !== initialDraftFields,
+      editor: draftOptions?.editor ?? draftEditors.entityEdit,
+      ready: Boolean(draftOptions && blueprint),
+      resource: draftOptions?.resource ?? [],
+      schema: formFieldsDraftSchema,
+      source: JSON.stringify([draftOptions?.source, initialDraftFields]),
+      value: draftFields,
+    });
+
+    const restoreDraft = () => {
+      const restored = draft.restore();
+      if (!restored) return;
+      const nextFields = {
+        ...form.state.values.fields,
+        ...pickDraftFields(restored, draftCodes.split(draftFieldSeparator)),
+      };
+      validateFields(nextFields);
+      form.setFieldValue('fields', nextFields);
+    };
+
     useImperativeHandle(ref, () => ({
+      clearDraft: draft.clear,
       getDraftValues: () => ({ ...form.state.values.fields }),
       applySmartFillValues: (values) => {
         const fields = smartFillFormFields(editableAttributes, values);
@@ -190,6 +255,11 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
         }}
         sx={{ mt: 4, p: 3 }}
       >
+        <DraftRestoreDialog
+          draft={draft.pending}
+          onDiscard={draft.discard}
+          onRestore={restoreDraft}
+        />
         <Stack spacing={2}>
           {contextPicker}
           {!blueprint && !lockedBlueprint && (

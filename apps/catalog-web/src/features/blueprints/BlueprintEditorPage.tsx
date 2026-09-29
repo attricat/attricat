@@ -6,6 +6,10 @@ import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { TomlEditor } from '../../components/TomlEditor';
+import { draftEditors } from '../drafts/constants';
+import { DraftRestoreDialog } from '../drafts/DraftRestoreDialog';
+import { definitionDraftSchema } from '../drafts/schemas';
+import { useEditorDraft } from '../drafts/useEditorDraft';
 import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
 import {
   createBlueprint,
@@ -17,7 +21,6 @@ import { BlueprintTemplateDialog } from './BlueprintTemplateDialog';
 import { blueprintEditorHeight } from './constants';
 import { blueprintQueryKeys } from './queryKeys';
 import { UnsavedBlueprintChangesDialog } from './UnsavedBlueprintChangesDialog';
-import { useBeforeUnloadWarning } from './useBeforeUnloadWarning';
 
 type PendingUnsavedAction =
   { templateIndex: number; type: 'replace' } | { type: 'discard' };
@@ -51,7 +54,17 @@ export const BlueprintEditorPage = ({
   const [editedDefinition, setEditedDefinition] = useState<string | null>(null);
   const definition = editedDefinition ?? initialDefinition;
   const isDirty = definition !== initialDefinition;
-  useBeforeUnloadWarning(isDirty);
+  const draft = useEditorDraft({
+    dirty: isDirty,
+    editor: blueprintId
+      ? draftEditors.blueprintRevision
+      : draftEditors.blueprintCreate,
+    ready: !blueprintId || Boolean(sourceRevision),
+    resource: blueprintId ? [blueprintId, sourceVersion ?? 0] : [],
+    schema: definitionDraftSchema,
+    source: sourceRevision?.blueprint.definition ?? null,
+    value: definition,
+  });
 
   const save = useMutation({
     mutationFn: ({ definition }: { definition: string }) =>
@@ -59,6 +72,7 @@ export const BlueprintEditorPage = ({
         ? createBlueprintRevision(blueprintId, definition)
         : createBlueprint(definition),
     onSuccess: async ({ blueprint }) => {
+      draft.clear();
       await Promise.all([
         queryClient.invalidateQueries({
           queryKey: blueprintQueryKeys.catalogue(),
@@ -85,6 +99,13 @@ export const BlueprintEditorPage = ({
       if (canSave) save.mutate({ definition });
     };
   });
+
+  const restoreDraft = () => {
+    const restored = draft.restore();
+    if (restored === undefined) return;
+    setEditedDefinition(restored);
+    setTemplateDialogOpen(false);
+  };
 
   const applyTemplate = (index: number) => {
     setTemplateIndex(index);
@@ -207,10 +228,15 @@ export const BlueprintEditorPage = ({
         <BlueprintTemplateDialog
           onClose={() => setTemplateDialogOpen(false)}
           onSelect={selectTemplate}
-          open={templateDialogOpen}
+          open={templateDialogOpen && !draft.pending}
           selectedIndex={templateIndex}
         />
       )}
+      <DraftRestoreDialog
+        draft={draft.pending}
+        onDiscard={draft.discard}
+        onRestore={restoreDraft}
+      />
       <UnsavedBlueprintChangesDialog
         action={pendingUnsavedAction?.type}
         onCancel={() => setPendingUnsavedAction(undefined)}

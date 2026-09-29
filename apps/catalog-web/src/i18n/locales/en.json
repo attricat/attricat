@@ -29,6 +29,13 @@
     "retry": "Try again",
     "goHome": "Go to catalog home"
   },
+  "drafts": {
+    "restoreTitle": "Restore unsaved draft?",
+    "restoreDescription": "This tab has an unsaved draft from {{savedAt}}. Restore it to replace the loaded form, or discard it to keep the form as loaded.",
+    "sourceChanged": "The source has changed since this draft was saved. Restoring the draft replaces the latest loaded values.",
+    "restore": "Restore draft",
+    "discard": "Discard draft"
+  },
   "navigation": {
     "open": "Open navigation",
     "back": "Back to main navigation",

@@ -28,6 +28,7 @@ light and dark modes.
 - Use Zustand for client-only state shared across independent components or updated outside React (for example, toast notifications and Inspector timings). Keep stores feature-local unless the state is truly app-wide, and subscribe to the smallest slice needed.
 - Keep server state in TanStack Query, navigable search/filter state in the router URL, submitted fields in TanStack Form, and component-scoped UI state in React. Do not move these into a global store just to avoid passing a prop or using a small context.
 - Bound and sanitize data before writing it to a shared store; do not store sensitive API responses in diagnostic state.
+- Keep unsaved editor values across refreshes with `src/features/drafts/useEditorDraft` and its `DraftRestoreDialog`. Drafts live in tab-scoped session storage keyed by workspace, user, editor, and resource/version/context; they are only applied when the user chooses **Restore draft**, and are cleared after a confirmed save or discard. Never pass passwords, tokens, secrets, or file inputs to a draft.
 
 ## Components
 
