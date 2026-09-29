@@ -11,6 +11,10 @@ import {
   listReusableAttributes,
 } from './api';
 import { TomlEditor } from '../../components/TomlEditor';
+import { draftEditors } from '../drafts/constants';
+import { DraftRestoreDialog } from '../drafts/DraftRestoreDialog';
+import { definitionDraftSchema } from '../drafts/schemas';
+import { useEditorDraft } from '../drafts/useEditorDraft';
 import { reusableAttributeQueryKeys } from './queryKeys';
 import {
   DEFAULT_VALUE_TYPE,
@@ -75,8 +79,19 @@ export const ReusableAttributeEditorPage = ({
     attributes.data ?? [],
   ).find((item) => item.definition_id === definitionId);
   const [editedDefinition, setEditedDefinition] = useState<string>();
-  const definition =
-    editedDefinition ?? attribute?.definition ?? NEW_ATTRIBUTE_DEFINITION;
+  const initialDefinition = attribute?.definition ?? NEW_ATTRIBUTE_DEFINITION;
+  const definition = editedDefinition ?? initialDefinition;
+  const draft = useEditorDraft({
+    dirty: definition !== initialDefinition,
+    editor: definitionId
+      ? draftEditors.reusableAttributeRevision
+      : draftEditors.reusableAttributeCreate,
+    ready: !definitionId || Boolean(attribute),
+    resource: definitionId ? [definitionId] : [],
+    schema: definitionDraftSchema,
+    source: attribute?.definition ?? null,
+    value: definition,
+  });
   const save = useMutation({
     mutationFn: (submittedDefinition: string) =>
       attribute
@@ -85,6 +100,7 @@ export const ReusableAttributeEditorPage = ({
           })
         : createReusableAttribute({ definition: submittedDefinition }),
     onSuccess: async () => {
+      draft.clear();
       await queryClient.invalidateQueries({
         queryKey: reusableAttributeQueryKeys.root(),
       });
@@ -141,6 +157,14 @@ export const ReusableAttributeEditorPage = ({
               </Button>
             </Stack>
           }
+        />
+        <DraftRestoreDialog
+          draft={draft.pending}
+          onDiscard={draft.discard}
+          onRestore={() => {
+            const restored = draft.restore();
+            if (restored !== undefined) setEditedDefinition(restored);
+          }}
         />
         {save.error && <Alert severity="error">{save.error.message}</Alert>}
         <Box

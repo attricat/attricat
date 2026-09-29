@@ -170,7 +170,7 @@ test('rejects a browser create that violates a blueprint schema', async ({
     page.getByText('Does not meet the schema requirements.'),
   ).toBeVisible();
   await page.getByRole('button', { name: 'Create entity' }).click();
-  await expect(page).toHaveURL(/\/entities\/new$/);
+  await expect(page).toHaveURL(/\/entities\/new(\?|$)/);
   expect(createRequests).toBe(0);
 
   await page.getByLabel('title').fill('Valid title');

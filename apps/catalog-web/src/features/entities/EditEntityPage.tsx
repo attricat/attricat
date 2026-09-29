@@ -5,6 +5,7 @@ import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getEntityForm, getCurrentBlueprint, updateEntity } from './api';
 import { EDIT_ENTITY_FORM_ID } from './constants';
+import { draftEditors } from '../drafts/constants';
 import { EditEntityToolbar } from './components/EditEntityToolbar';
 import { EntityBlueprintHeaderActions } from './components/EntityBlueprintHeaderActions';
 import { EntityContextPicker } from './components/EntityContextPicker';
@@ -45,6 +46,7 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
     mutationFn: (input: Parameters<typeof updateEntity>[1]) =>
       updateEntity(entityId, input),
     onSuccess: (entity) => {
+      entityFormRef.current?.clearDraft();
       void navigate({
         to: '/entities/$entityId',
         params: { entityId: entity.id },
@@ -144,6 +146,15 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
             key={`${entityForm.data.entity.id}:${contextId ?? ''}`}
             blueprint={entityForm.data.blueprint}
             contextId={contextId}
+            draft={
+              contextId
+                ? {
+                    editor: draftEditors.entityEdit,
+                    resource: [entityId, contextId],
+                    source: String(entityForm.data.entity.blueprint_version),
+                  }
+                : undefined
+            }
             contextPicker={
               <EntityContextPicker
                 contexts={contexts.data ?? []}

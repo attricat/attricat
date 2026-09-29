@@ -1,12 +1,13 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useRef } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { listContexts } from '../contexts/api';
 import { contextQueryKeys } from '../contexts/queryKeys';
 import { defaultContextCode } from '../contexts/constants';
+import { draftEditors } from '../drafts/constants';
 import { createEntity, getBlueprintByCode } from './api';
-import { EntityForm } from './components/EntityForm';
+import { EntityForm, type EntityFormHandle } from './components/EntityForm';
 import { EntityPage } from './components/EntityPage';
 import { entityQueryKeys } from './queryKeys';
 import { attributeValueKinds } from './valueTypes';
@@ -18,26 +19,15 @@ export const CreateEntityPage = ({
 }) => {
   const { t } = useTranslation();
   const navigate = useNavigate({ from: '/entities/new' });
-  const [selectedBlueprint, setSelectedBlueprint] = useState<{
-    code: string;
-    version?: number;
-  }>();
-  const blueprintSelection =
-    search.locked && search.blueprint
-      ? { code: search.blueprint }
-      : selectedBlueprint;
+  const entityFormRef = useRef<EntityFormHandle>(null);
+  // The chosen blueprint lives in the URL so a refresh reloads the same form
+  // and can offer its saved draft.
+  const blueprintCode = search.blueprint;
   const blueprint = useQuery({
-    queryKey: entityQueryKeys.blueprintByCode(
-      blueprintSelection?.code,
-      blueprintSelection?.version,
-    ),
+    queryKey: entityQueryKeys.blueprintByCode(blueprintCode, undefined),
     queryFn: ({ signal }) =>
-      getBlueprintByCode(
-        blueprintSelection!.code,
-        blueprintSelection!.version,
-        signal,
-      ),
-    enabled: Boolean(blueprintSelection),
+      getBlueprintByCode(blueprintCode!, undefined, signal),
+    enabled: Boolean(blueprintCode),
   });
   const contexts = useQuery({
     queryKey: contextQueryKeys.all(),
@@ -80,6 +70,7 @@ export const CreateEntityPage = ({
       });
     },
     onSuccess: (entity) => {
+      entityFormRef.current?.clearDraft();
       void navigate({
         to: '/entities/$entityId',
         params: { entityId: entity.id },
@@ -91,16 +82,27 @@ export const CreateEntityPage = ({
       <EntityForm
         blueprint={blueprint.data}
         contextId={defaultContextId}
+        draft={
+          blueprint.data && {
+            editor: draftEditors.entityCreate,
+            resource: [blueprint.data.blueprint.id],
+            source: String(blueprint.data.blueprint.version),
+          }
+        }
         defaultContextId={defaultContextId}
         error={blueprint.error ?? create.error}
         isLoadingBlueprint={blueprint.isFetching || create.isPending}
         lockedBlueprint={search.locked}
-        onLoadBlueprint={(code, version) =>
-          setSelectedBlueprint({ code, version })
+        onLoadBlueprint={(code) =>
+          void navigate({
+            replace: true,
+            search: { ...search, blueprint: code },
+          })
         }
         onSubmit={({ values, relationships }) =>
           create.mutate({ values, relationships })
         }
+        ref={entityFormRef}
         submitLabel={
           blueprint.data
             ? t('entities.createEntity')

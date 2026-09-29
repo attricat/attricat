@@ -29,6 +29,13 @@
     "retry": "Spróbuj ponownie",
     "goHome": "Przejdź do strony głównej katalogu"
   },
+  "drafts": {
+    "restoreTitle": "Przywrócić niezapisany szkic?",
+    "restoreDescription": "Ta karta zawiera niezapisany szkic z {{savedAt}}. Przywróć go, aby zastąpić wczytany formularz, lub odrzuć, aby zachować formularz w obecnej postaci.",
+    "sourceChanged": "Źródło zmieniło się od zapisania szkicu. Przywrócenie szkicu zastąpi najnowsze wczytane wartości.",
+    "restore": "Przywróć szkic",
+    "discard": "Odrzuć szkic"
+  },
   "navigation": {
     "open": "Otwórz nawigację",
     "back": "Wróć do głównej nawigacji",
