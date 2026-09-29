@@ -1,16 +1,31 @@
+import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
 import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import ViewSidebarOutlinedIcon from '@mui/icons-material/ViewSidebarOutlined';
 import { AgentIcon } from '../../../components/systemIcons';
-import { Box, Button, IconButton, Tooltip } from '@mui/material';
+import {
+  Box,
+  Button,
+  Chip,
+  IconButton,
+  ListItemIcon,
+  ListItemText,
+  Menu,
+  MenuItem,
+  Tooltip,
+} from '@mui/material';
+import { Globe, Info, RefreshCw, Undo2, Upload } from 'lucide-react';
+import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RouterIconButton } from '../../../components/RouterLink';
 import { EntityToolbar } from './EntityToolbar';
 import { EntitySchemaStatus } from './EntitySchemaStatus';
 import type { EntityPublicationStatus } from '../schemas';
 import { ENTITY_EXTENSION_DRAWER_ID, publicationStatuses } from '../constants';
+
+const menuIconSize = 18;
 
 type Props = {
   entityId: string;
@@ -52,6 +67,10 @@ export const EntityPreviewToolbar = ({
   publicationPending,
 }: Props) => {
   const { t } = useTranslation();
+  const publishMenuId = useId();
+  const [publishMenuAnchor, setPublishMenuAnchor] =
+    useState<HTMLElement | null>(null);
+  const closePublishMenu = () => setPublishMenuAnchor(null);
   return (
     <EntityToolbar label={t('entities.entityPreview')}>
       <Tooltip title={t('entities.editEntity')}>
@@ -108,34 +127,112 @@ export const EntityPreviewToolbar = ({
           </Button>
         </Tooltip>
       )}
-      {canPublish &&
-        publication &&
-        (publication.status === publicationStatuses.notPublished ? (
-          <Button
-            disabled={publicationPending}
-            onClick={onPublish}
-            size="small"
-          >
-            {t('entities.publish')}
-          </Button>
-        ) : (
-          <Button
-            color="warning"
-            disabled={publicationPending}
-            onClick={onUnpublish}
-            size="small"
-          >
-            {t('entities.unpublish')}
-          </Button>
-        ))}
-      {canPublish && (
-        <Button
-          disabled={publicationPending}
-          onClick={onPublishAll}
-          size="small"
+      {publication && (
+        <Tooltip
+          title={
+            publication.status === publicationStatuses.published &&
+            publication.published_at
+              ? t('entities.publication.publishedDetails', {
+                  publishedAt: new Date(
+                    publication.published_at,
+                  ).toLocaleString(),
+                  publishedBy: publication.published_by_user_id ?? '—',
+                })
+              : ''
+          }
         >
-          {t('entities.publishAllChannels')}
-        </Button>
+          <Chip
+            color={
+              publication.status === publicationStatuses.published
+                ? 'success'
+                : 'default'
+            }
+            label={t(`entities.publication.${publication.status}`)}
+            size="small"
+          />
+        </Tooltip>
+      )}
+      {canPublish && (
+        <>
+          <Tooltip
+            enterTouchDelay={0}
+            title={t('entities.publication.actionsDescription')}
+          >
+            <IconButton
+              aria-label={t('entities.publication.actionsHelp')}
+              size="small"
+            >
+              <Info size={menuIconSize} />
+            </IconButton>
+          </Tooltip>
+          <Button
+            aria-controls={publishMenuAnchor ? publishMenuId : undefined}
+            aria-expanded={Boolean(publishMenuAnchor)}
+            aria-haspopup="menu"
+            color="inherit"
+            disabled={publicationPending}
+            endIcon={<ArrowDropDownIcon />}
+            onClick={(event) => setPublishMenuAnchor(event.currentTarget)}
+            size="small"
+          >
+            {t('entities.publication.actions')}
+          </Button>
+          <Menu
+            anchorEl={publishMenuAnchor}
+            anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+            id={publishMenuId}
+            onClose={closePublishMenu}
+            open={Boolean(publishMenuAnchor)}
+            transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+          >
+            {publication && (
+              <MenuItem
+                onClick={() => {
+                  closePublishMenu();
+                  onPublish();
+                }}
+              >
+                <ListItemIcon>
+                  {publication.status === publicationStatuses.notPublished ? (
+                    <Upload size={menuIconSize} />
+                  ) : (
+                    <RefreshCw size={menuIconSize} />
+                  )}
+                </ListItemIcon>
+                <ListItemText>
+                  {publication.status === publicationStatuses.notPublished
+                    ? t('entities.publish')
+                    : t('entities.republish')}
+                </ListItemText>
+              </MenuItem>
+            )}
+            <MenuItem
+              onClick={() => {
+                closePublishMenu();
+                onPublishAll();
+              }}
+            >
+              <ListItemIcon>
+                <Globe size={menuIconSize} />
+              </ListItemIcon>
+              <ListItemText>{t('entities.publishAllChannels')}</ListItemText>
+            </MenuItem>
+            {publication?.status === publicationStatuses.published && (
+              <MenuItem
+                onClick={() => {
+                  closePublishMenu();
+                  onUnpublish();
+                }}
+                sx={{ color: 'warning.main' }}
+              >
+                <ListItemIcon sx={{ color: 'inherit' }}>
+                  <Undo2 size={menuIconSize} />
+                </ListItemIcon>
+                <ListItemText>{t('entities.unpublish')}</ListItemText>
+              </MenuItem>
+            )}
+          </Menu>
+        </>
       )}
       {showExtensions && (
         <Tooltip title={t('entities.askAboutEntity')}>

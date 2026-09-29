@@ -318,8 +318,12 @@
     "unpublish": "Unpublish",
     "publishAllChannels": "Publish to all channels",
     "publication": {
+      "actionsHelp": "About publication",
+      "actionsDescription": "Publication approves this entity for export in the channel. Editing the entity withdraws that approval until you publish it again.",
+      "actions": "Publication",
       "not_published": "Not published",
       "published": "Published",
+      "publishedDetails": "Published {{publishedAt}} by {{publishedBy}}",
       "channelDisabled": "Not an export channel",
       "channelDisabledDescription": "Enable this context as an export channel in Manage > Exports before publishing."
     }
