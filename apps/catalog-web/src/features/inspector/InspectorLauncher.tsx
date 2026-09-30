@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { Box, Button, ClickAwayListener } from '@mui/material';
-import { alpha } from '@mui/material/styles';
 import { useTranslation } from 'react-i18next';
 import { InspectorIcon } from '../../components/systemIcons';
 import {
@@ -10,7 +9,11 @@ import {
 } from './apiHealth';
 import {
   LAUNCHER_TOUCH_REVEAL_MS,
-  launcherGlowHeight,
+  launcherHandleHeight,
+  launcherHandleOffset,
+  launcherHandleWidth,
+  launcherLoadingAnimationDuration,
+  launcherLoadingAnimationName,
   launcherRevealZoneHeight,
   launcherRevealZoneTouchHeight,
   launcherRevealZoneWidth,
@@ -18,12 +21,13 @@ import {
   launcherStatusDotSize,
 } from './constants';
 import { smallIconSize } from '../../components/iconSizes';
+import radius from '../../../design/tokens/radius.json';
 
 const revealedLauncher = { transform: 'translate(-50%, 0)' };
 
 /**
- * Inspector button tucked below the viewport behind a thin glow at the bottom
- * edge. Hovering the glow reveals it; touch devices reveal it with a tap and
+ * Inspector button tucked below the viewport behind a small handle at the
+ * bottom edge. Hovering the handle reveals it; touch devices reveal it with a tap and
  * hide it again after a short delay or a tap elsewhere. Keyboard focus reveals
  * it as well, so the button stays reachable with Tab.
  */
@@ -65,6 +69,10 @@ export const InspectorLauncher = ({
           // Touch browsers emulate a sticky :hover, so only real hover reveals.
           '@media (hover: hover)': {
             '&:hover > button': revealedLauncher,
+            '&:hover > [aria-hidden]': {
+              backgroundColor:
+                apiHealth === 'ready' ? 'success.dark' : 'warning.dark',
+            },
           },
           '&:focus-within > button, &[data-revealed] > button':
             revealedLauncher,
@@ -73,13 +81,35 @@ export const InspectorLauncher = ({
         <Box
           aria-hidden
           sx={(theme) => ({
-            background: `linear-gradient(90deg, transparent, ${theme.palette.secondary.main}, transparent)`,
-            bottom: 0,
-            boxShadow: `0 0 12px 2px ${alpha(theme.palette.secondary.main, 0.5)}`,
-            height: launcherGlowHeight,
-            left: 0,
+            backgroundColor: apiHealthColor(apiHealth),
+            borderRadius: radius.pill,
+            bottom: launcherHandleOffset,
+            height: launcherHandleHeight,
+            left: '50%',
             position: 'absolute',
-            right: 0,
+            transform: 'translateX(-50%)',
+            transition: theme.transitions.create('background-color', {
+              duration: theme.transitions.duration.shorter,
+            }),
+            width: launcherHandleWidth,
+            ...(apiHealth !== 'ready' && {
+              overflow: 'hidden',
+              [`@keyframes ${launcherLoadingAnimationName}`]: {
+                from: { transform: 'translateX(-100%)' },
+                to: { transform: `translateX(${launcherHandleWidth}px)` },
+              },
+              '&::after': {
+                animation: `${launcherLoadingAnimationName} ${launcherLoadingAnimationDuration} infinite ease-in-out`,
+                background: `linear-gradient(90deg, transparent, ${theme.palette.warning.light}, transparent)`,
+                content: '""',
+                inset: 0,
+                position: 'absolute',
+                width: '50%',
+              },
+              '@media (prefers-reduced-motion: reduce)': {
+                '&::after': { animation: 'none', display: 'none' },
+              },
+            }),
           })}
         />
         <Button
