@@ -36,6 +36,12 @@ export const launcherRevealZoneWidth = 200;
 /** Hover target height for precise pointers; touch gets a larger tap target. */
 export const launcherRevealZoneHeight = 10;
 export const launcherRevealZoneTouchHeight = 24;
-export const launcherGlowHeight = 3;
+/** Neutral grabber pill hinting at the hidden launcher. */
+export const launcherHandleWidth = 64;
+export const launcherHandleHeight = 4;
+export const launcherHandleOffset = 3;
+/** Shimmer across the handle while the API is checking or restarting. */
+export const launcherLoadingAnimationName = 'inspector-launcher-loading';
+export const launcherLoadingAnimationDuration = '1.2s';
 /** A touch-revealed launcher hides again when left untouched. */
 export const LAUNCHER_TOUCH_REVEAL_MS = 4_000;
