@@ -1,5 +1,5 @@
 import { createElement } from 'react';
-import { Box, Paper, Stack, Typography } from '@mui/material';
+import { Box, Paper, Stack, Typography, useTheme } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
@@ -11,6 +11,7 @@ import { authQueryKeys } from '../auth/queryKeys';
 
 export const ManagementDashboardPage = () => {
   const { t } = useTranslation();
+  const theme = useTheme();
   const session = useQuery({
     queryKey: authQueryKeys.session(),
     queryFn: currentSession,
@@ -48,7 +49,9 @@ export const ManagementDashboardPage = () => {
               }}
             >
               <Stack spacing={1.5}>
-                {createElement(item.icon, { color: 'primary' })}
+                {createElement(item.icon, {
+                  color: theme.palette.primary.main,
+                })}
                 <Typography variant="h6">{t(item.labelKey)}</Typography>
                 <Typography color="text.secondary">
                   {t(item.descriptionKey)}
