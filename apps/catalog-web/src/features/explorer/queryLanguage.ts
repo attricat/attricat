@@ -7,6 +7,13 @@ export const querySelectorSeparator = ':';
 export const queryWildcard = '*';
 /** A selector may name at most three relationships and a scalar leaf. */
 export const maximumQueryRelationshipHops = 3;
+/** Path leaf matching entities by ID: `@id:id-1,id-2` or `rel.@id:id-1`. */
+export const queryIdSelector = '@id';
+export const queryIdSeparator = ',';
+/** Mirrors `MAX_SEARCH_IDS` in the API's entity search repository. */
+export const maximumQueryIds = 100;
+const entityIdPattern =
+  /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i;
 
 export type QueryToken = { text: string; start: number; end: number };
 
@@ -24,6 +31,8 @@ export type QuerySegment = {
 export type QueryError =
   | { code: 'malformedTerm'; term: string }
   | { code: 'misplacedWildcard'; term: string }
+  | { code: 'invalidId'; id: string }
+  | { code: 'tooManyIds'; count: number }
   | { code: 'tooManyHops' }
   | { code: 'unknownField'; field: string }
   | { code: 'unknownRelationship'; field: string }
@@ -65,6 +74,12 @@ export const findAttribute = (
 export const isBlueprintAlias = (schema: QuerySchema, name: string) =>
   sameCode(name, schema.blueprint.code) ||
   sameCode(name, schema.blueprint.name);
+
+export const isIdSelector = (selector: string) =>
+  sameCode(
+    selector.split(relationshipPathSeparator).at(-1) ?? '',
+    queryIdSelector,
+  );
 
 export const tokenizeQuery = (query: string): QueryToken[] =>
   [...query.matchAll(/\S+/g)].map((match) => ({
@@ -127,6 +142,20 @@ export const resolveSelector = (
     };
   }
   const [first] = parts;
+  if (sameCode(parts[parts.length - 1], queryIdSelector)) {
+    const path = parts.slice(0, -1);
+    if (path.length === 1 && isBlueprintAlias(schema, first)) {
+      return { status: 'ok' };
+    }
+    const resolved = resolveRelationshipPath(schema, path);
+    return resolved.status === 'error'
+      ? {
+          status: 'error',
+          error: { code: 'unknownRelationship', field: parts[resolved.part] },
+          part: resolved.part,
+        }
+      : { status: resolved.status };
+  }
   if (parts.length === 1 && isBlueprintAlias(schema, first)) {
     return { status: 'ok' };
   }
@@ -203,6 +232,20 @@ const valueSegments = (
   ];
 };
 
+/** `@id` values are comma-separated entity IDs without wildcards. */
+const idValueSegments = (value: string, start: number): QuerySegment[] => {
+  const ids = value.split(queryIdSeparator);
+  const invalid = ids.find((id) => !entityIdPattern.test(id));
+  const distinct = new Set(ids.map((id) => id.toLowerCase())).size;
+  const error: QueryError | undefined =
+    invalid !== undefined
+      ? { code: 'invalidId', id: invalid }
+      : distinct > maximumQueryIds
+        ? { code: 'tooManyIds', count: maximumQueryIds }
+        : undefined;
+  return value ? [{ kind: 'value', text: value, start, error }] : [];
+};
+
 const selectorSegments = (
   schema: QuerySchema | undefined,
   selector: string,
@@ -262,7 +305,9 @@ const termSegments = (
   return [
     ...selectorSegments(schema, selector, token.start),
     incomplete ? { ...colon, error: incomplete } : colon,
-    ...valueSegments(value, token.start + separator + 1, token.text),
+    ...(selector && isIdSelector(selector)
+      ? idValueSegments(value, token.start + separator + 1)
+      : valueSegments(value, token.start + separator + 1, token.text)),
   ];
 };
 

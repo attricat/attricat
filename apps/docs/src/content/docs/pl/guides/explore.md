@@ -29,6 +29,8 @@ Aby wyszukiwać szerzej, dodaj kwalifikator do terminu:
 | `colors.name:red` | To samo, ale tylko w `name` powiązanej encji. |
 | `family.product_type.name:laptop` | Przechodzi przez dwie relacje, a następnie dopasowuje `name`. |
 | `*:red` | Encje, które mają „red” w swoich wartościach lub w czymkolwiek powiązanym w odległości do trzech kroków. |
+| `@id:ID-1,ID-2` | Dokładnie wskazane encje. |
+| `colors.@id:ID-1,ID-2` | Encje powiązane przez `colors` z jedną ze wskazanych encji. |
 
 Kilka terminów oddzielonych spacjami musi pasować jednocześnie. Pełną gramatykę opisuje [Składnia wyszukiwania](/pl/guides/search-syntax/).
 

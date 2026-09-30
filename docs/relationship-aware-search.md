@@ -59,6 +59,8 @@ without rerunning the search; it is explanatory metadata, not ranking input.
 | `Produkt:czerwony` | Free text limited to the selected blueprint, identified by its user-specified name (its code, `product:czerwony`, also works). |
 | `sku:123*` | Match selected-blueprint attribute `sku`. |
 | `product.sku:123*` | Explicit selected-blueprint form of the preceding query; `product` may be its code or user-specified name. |
+| `@id:ID-1,ID-2` | Selected-blueprint entities whose ID is one of the comma-separated UUIDs (`product.@id:…` is equivalent). |
+| `color.@id:ID-1,ID-2` | Selected-blueprint entities linked through `color` to one of the listed entities. |
 
 Selectors are validated against the selected blueprint revision before the
 query executes:
@@ -76,6 +78,12 @@ query executes:
   exists there. Blueprint-name matching is case-insensitive; if multiple active
   blueprints share that name, the selector is rejected as ambiguous and the
   caller must use the blueprint code.
+
+- `@id` as the final part (case-insensitive) matches entity IDs instead of a
+  scalar leaf. The preceding parts, if any, must be the selected-blueprint alias
+  or up to three relationships. The value is a comma-separated list of at most
+  100 UUIDs; wildcards are rejected. Listed IDs seed the same incoming-edge
+  traversal as scalar matches, and witnesses have no matching attribute code.
 
 Unknown, ambiguous, or incompatible names and malformed terms return a clear
 `400` input validation error. `*` is a query-language wildcard only in a trailing position

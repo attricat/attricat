@@ -1855,6 +1855,26 @@ impl CatalogRepository {
                     .into(),
             ));
         }
+        if let Some((leaf, path)) = parts.split_last()
+            && leaf.eq_ignore_ascii_case(ID_SELECTOR)
+        {
+            let ids = parse_search_ids(term)?;
+            let path = match path {
+                [name] if alias(name) => {
+                    self.ensure_unambiguous_name(name, selected).await?;
+                    &[][..]
+                }
+                path => path,
+            };
+            let (fields, source_blueprint_ids, target) =
+                self.search_relationship_path(selected, path).await?;
+            return Ok(TermPlan::Ids {
+                fields,
+                source_blueprint_ids,
+                target_blueprint_id: target.blueprint.id,
+                ids,
+            });
+        }
         if parts.len() == 1 && alias(parts[0]) {
             self.ensure_unambiguous_name(parts[0], selected).await?;
             return Ok(TermPlan::SelectedAttribute(None));
@@ -1908,10 +1928,44 @@ impl CatalogRepository {
                 attribute: None,
             });
         }
+        let (fields, source_blueprint_ids, current) = self
+            .search_relationship_path(selected, &parts[..parts.len() - 1])
+            .await?;
+        let leaf = parts[parts.len() - 1];
+        let attribute = current
+            .attributes
+            .iter()
+            .find(|a| {
+                a.code.eq_ignore_ascii_case(leaf)
+                    && !matches!(a.value_type.as_str(), "relationship" | "file" | "json")
+            })
+            .map(|attribute| attribute.code.clone())
+            .ok_or_else(|| {
+                RepositoryError::InvalidBlueprintDefinition(format!(
+                    "unknown scalar search-path leaf '{}'",
+                    leaf
+                ))
+            })?;
+        Ok(TermPlan::Relationship {
+            fields,
+            source_blueprint_ids,
+            target: Box::new(current),
+            attribute: Some(attribute),
+        })
+    }
+
+    /// Walks named relationships from the selected blueprint, returning the
+    /// relationship codes, the blueprint each hop starts from, and the blueprint
+    /// the path ends on.
+    async fn search_relationship_path(
+        &self,
+        selected: &BlueprintWithAttributes,
+        path: &[&str],
+    ) -> Result<(Vec<String>, Vec<Uuid>, BlueprintWithAttributes), RepositoryError> {
         let mut current = selected.clone();
         let mut fields = Vec::new();
         let mut source_blueprint_ids = Vec::new();
-        for relationship_name in &parts[..parts.len() - 1] {
+        for relationship_name in path {
             let relationship = current
                 .attributes
                 .iter()
@@ -1937,27 +1991,7 @@ impl CatalogRepository {
                 .await?
                 .ok_or(RepositoryError::NotFound("target blueprint"))?;
         }
-        let leaf = parts[parts.len() - 1];
-        let attribute = current
-            .attributes
-            .iter()
-            .find(|a| {
-                a.code.eq_ignore_ascii_case(leaf)
-                    && !matches!(a.value_type.as_str(), "relationship" | "file" | "json")
-            })
-            .map(|attribute| attribute.code.clone())
-            .ok_or_else(|| {
-                RepositoryError::InvalidBlueprintDefinition(format!(
-                    "unknown scalar search-path leaf '{}'",
-                    leaf
-                ))
-            })?;
-        Ok(TermPlan::Relationship {
-            fields,
-            source_blueprint_ids,
-            target: Box::new(current),
-            attribute: Some(attribute),
-        })
+        Ok((fields, source_blueprint_ids, current))
     }
 
     async fn ensure_unambiguous_name(
@@ -2013,52 +2047,28 @@ impl CatalogRepository {
                 attribute.clone(),
                 fields.first().cloned(),
             ),
+            TermPlan::Ids {
+                target_blueprint_id,
+                ..
+            } => (Some(*target_blueprint_id), None, None),
         };
-        let pattern = if term.prefix {
-            format!("{}%", term.value)
-        } else {
-            format!("%{}%", term.value)
-        };
-        // Alphabetic terms other than booleans cannot match the canonical native
-        // renderings of non-text values. Start these searches from the trigram-indexed
-        // text values and materialize them so PostgreSQL does not repeat that scan for
-        // every attribute.
-        let sql = if text_only_search(&term.value) {
-            r#"WITH matching_values AS MATERIALIZED (
-                    SELECT entity_id, attribute_id
-                    FROM attribute_values
-                    WHERE workspace_id = $4 AND active
-                      AND relationship_target_entity_id IS NULL
-                      AND value_text ILIKE $3
-                )
-                SELECT DISTINCT e.id, a.code
-                FROM matching_values av
-                JOIN attributes a ON a.id = av.attribute_id AND a.deleted_at IS NULL
-                JOIN entities e ON e.id = av.entity_id
-                WHERE e.deleted_at IS NULL AND e.workspace_id = $4
-                  AND a.workspace_id = $4
-                  AND ($1::uuid IS NULL OR e.blueprint_id = $1)
-                  AND ($2::text IS NULL OR a.code = $2)
-                ORDER BY e.id, a.code"#
-        } else {
-            r#"SELECT DISTINCT e.id, a.code
-                FROM entities e JOIN attribute_values av ON av.entity_id = e.id
-                JOIN attributes a ON a.id = av.attribute_id AND a.deleted_at IS NULL
-                WHERE e.deleted_at IS NULL AND e.workspace_id = $4
-                  AND av.workspace_id = $4 AND a.workspace_id = $4
-                  AND av.relationship_target_entity_id IS NULL
-                  AND ($1::uuid IS NULL OR e.blueprint_id = $1)
-                  AND ($2::text IS NULL OR a.code = $2)
-                  AND COALESCE(av.value_text, av.value_number::text, av.value_integer::text, av.value_boolean::text, av.value_date::text, av.value_datetime::text, av.value_time::text) ILIKE $3
-                ORDER BY e.id, a.code"#
-        };
-        let rows = sqlx::query_as::<_, (Uuid, String)>(sql)
+        let rows = match &plan {
+            TermPlan::Ids { ids, .. } => sqlx::query_scalar::<_, Uuid>(
+                "SELECT id FROM entities WHERE id = ANY($1) AND blueprint_id = $2 AND workspace_id = $3 AND deleted_at IS NULL ORDER BY id",
+            )
+            .bind(ids)
             .bind(match_blueprint)
-            .bind(attribute)
-            .bind(pattern)
             .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
             .fetch_all(&self.pool)
-            .await?;
+            .await?
+            .into_iter()
+            .map(|id| (id, None))
+            .collect(),
+            _ => {
+                self.scalar_search_matches(&term, match_blueprint, attribute)
+                    .await?
+            }
+        };
         let mut witnesses: HashMap<Uuid, MatchExplanation> = HashMap::new();
         let mut frontier = VecDeque::new();
         for (id, attribute) in rows {
@@ -2066,7 +2076,7 @@ impl CatalogRepository {
                 e.insert(MatchExplanation {
                     term: term.original.clone(),
                     matching_entity_id: id,
-                    matching_attribute_code: Some(attribute),
+                    matching_attribute_code: attribute,
                     traversal_depth: 0,
                     relationship_path: vec![],
                 });
@@ -2076,6 +2086,11 @@ impl CatalogRepository {
         let mut visited: HashSet<_> = witnesses.keys().copied().collect();
         let (path_fields, path_source_blueprints) = match &plan {
             TermPlan::Relationship {
+                fields,
+                source_blueprint_ids,
+                ..
+            }
+            | TermPlan::Ids {
                 fields,
                 source_blueprint_ids,
                 ..
@@ -2160,6 +2175,65 @@ impl CatalogRepository {
         Ok(selected_ids
             .into_iter()
             .filter_map(|id| ids.get(&id).cloned().map(|w| (id, w)))
+            .collect())
+    }
+
+    /// Entities of `match_blueprint` whose scalar values match a term, with the
+    /// matching attribute code.
+    async fn scalar_search_matches(
+        &self,
+        term: &SearchTerm,
+        match_blueprint: Option<Uuid>,
+        attribute: Option<String>,
+    ) -> Result<Vec<(Uuid, Option<String>)>, RepositoryError> {
+        let pattern = if term.prefix {
+            format!("{}%", term.value)
+        } else {
+            format!("%{}%", term.value)
+        };
+        // Alphabetic terms other than booleans cannot match the canonical native
+        // renderings of non-text values. Start these searches from the trigram-indexed
+        // text values and materialize them so PostgreSQL does not repeat that scan for
+        // every attribute.
+        let sql = if text_only_search(&term.value) {
+            r#"WITH matching_values AS MATERIALIZED (
+                    SELECT entity_id, attribute_id
+                    FROM attribute_values
+                    WHERE workspace_id = $4 AND active
+                      AND relationship_target_entity_id IS NULL
+                      AND value_text ILIKE $3
+                )
+                SELECT DISTINCT e.id, a.code
+                FROM matching_values av
+                JOIN attributes a ON a.id = av.attribute_id AND a.deleted_at IS NULL
+                JOIN entities e ON e.id = av.entity_id
+                WHERE e.deleted_at IS NULL AND e.workspace_id = $4
+                  AND a.workspace_id = $4
+                  AND ($1::uuid IS NULL OR e.blueprint_id = $1)
+                  AND ($2::text IS NULL OR a.code = $2)
+                ORDER BY e.id, a.code"#
+        } else {
+            r#"SELECT DISTINCT e.id, a.code
+                FROM entities e JOIN attribute_values av ON av.entity_id = e.id
+                JOIN attributes a ON a.id = av.attribute_id AND a.deleted_at IS NULL
+                WHERE e.deleted_at IS NULL AND e.workspace_id = $4
+                  AND av.workspace_id = $4 AND a.workspace_id = $4
+                  AND av.relationship_target_entity_id IS NULL
+                  AND ($1::uuid IS NULL OR e.blueprint_id = $1)
+                  AND ($2::text IS NULL OR a.code = $2)
+                  AND COALESCE(av.value_text, av.value_number::text, av.value_integer::text, av.value_boolean::text, av.value_date::text, av.value_datetime::text, av.value_time::text) ILIKE $3
+                ORDER BY e.id, a.code"#
+        };
+        let rows = sqlx::query_as::<_, (Uuid, String)>(sql)
+            .bind(match_blueprint)
+            .bind(attribute)
+            .bind(pattern)
+            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .fetch_all(&self.pool)
+            .await?;
+        Ok(rows
+            .into_iter()
+            .map(|(id, code)| (id, Some(code)))
             .collect())
     }
 
@@ -2409,6 +2483,46 @@ enum TermPlan {
         target: Box<BlueprintWithAttributes>,
         attribute: Option<String>,
     },
+    /// `@id:a,b` or `relationship.@id:a,b`: entities with one of the listed IDs,
+    /// on the selected blueprint or reached through the relationship path.
+    Ids {
+        fields: Vec<String>,
+        source_blueprint_ids: Vec<Uuid>,
+        target_blueprint_id: Uuid,
+        ids: Vec<Uuid>,
+    },
+}
+/// Path leaf that matches entities by ID instead of by attribute value.
+const ID_SELECTOR: &str = "@id";
+/// Bounds one `@id` term; saved-view queries are length-limited as well.
+const MAX_SEARCH_IDS: usize = 100;
+fn parse_search_ids(term: &SearchTerm) -> Result<Vec<Uuid>, RepositoryError> {
+    if term.prefix {
+        return Err(RepositoryError::InvalidBlueprintDefinition(format!(
+            "wildcards are not allowed in an ID search term: '{}'",
+            term.original
+        )));
+    }
+    let mut ids = term
+        .value
+        .split(',')
+        .map(|id| {
+            Uuid::parse_str(id).map_err(|_| {
+                RepositoryError::InvalidBlueprintDefinition(format!(
+                    "'{id}' is not an entity ID in search term '{}'",
+                    term.original
+                ))
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    ids.sort_unstable();
+    ids.dedup();
+    if ids.len() > MAX_SEARCH_IDS {
+        return Err(RepositoryError::InvalidBlueprintDefinition(format!(
+            "an ID search term may list at most {MAX_SEARCH_IDS} entities"
+        )));
+    }
+    Ok(ids)
 }
 fn parse_search_terms(query: &str) -> Result<Vec<SearchTerm>, RepositoryError> {
     query

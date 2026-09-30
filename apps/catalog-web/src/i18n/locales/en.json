@@ -582,6 +582,7 @@
       "allFields": "Match any field of the linked {{target}}",
       "allFieldsTitle": "{{field}} (all fields)",
       "global": "Search every blueprint, then follow links back up to 3 hops",
+      "ids": "Match records by ID; separate several IDs with commas",
       "valueHint": "Type a value to find in {{field}}. End it with * to match the beginning.",
       "keyboardHint": "↑↓ to choose · Tab or Enter to insert · Esc to close · Ctrl+Space to reopen"
     },
@@ -599,6 +600,8 @@
     "queryErrors": {
       "malformedTerm": "“{{term}}” is incomplete. Use field:value.",
       "misplacedWildcard": "* can only end a term: “{{term}}”.",
+      "invalidId": "“{{id}}” is not a record ID. List IDs separated by commas.",
+      "tooManyIds": "A search term can list at most {{count}} IDs.",
       "tooManyHops": "A search path can follow at most 3 relationships.",
       "unknownField": "“{{field}}” is not a searchable field.",
       "unknownRelationship": "“{{field}}” is not a relationship.",

@@ -41,7 +41,7 @@ import {
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { compactIconSize, smallIconSize } from '../../components/iconSizes';
-import { RelationshipIcon } from '../../components/systemIcons';
+import { EntityIcon, RelationshipIcon } from '../../components/systemIcons';
 import type { Blueprint, BlueprintWithAttributes } from '../entities/api';
 import { attributeLabel } from '../entities/entityDisplay';
 import { attributeValueTypes } from '../entities/valueTypes';
@@ -81,6 +81,8 @@ const suggestionIcon = (suggestion: QuerySuggestion): LucideIcon => {
       return ListIcon;
     case 'global':
       return AsteriskIcon;
+    case 'ids':
+      return EntityIcon;
     case 'value':
       return CornerDownRightIcon;
   }
@@ -343,6 +345,8 @@ export const ExplorerQueryInput = ({
         });
       case 'global':
         return t('explorer.querySuggestions.global');
+      case 'ids':
+        return t('explorer.querySuggestions.ids');
       case 'value':
         return undefined;
     }

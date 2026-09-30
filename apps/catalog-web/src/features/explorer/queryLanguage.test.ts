@@ -117,6 +117,47 @@ describe('highlightQuery', () => {
     });
   });
 
+  it('accepts ID lists on the blueprint and through relationships', () => {
+    const id = '0190a6f2-7c1e-7b3a-9c4d-2e5f6a7b8c9d';
+    const other = '0190a6f2-7c1e-7b3a-9c4d-2e5f6a7b8c9e';
+    expect(
+      firstQueryError(
+        highlightQuery(
+          `@id:${id},${other} Product.@ID:${id} category.parent.@id:${id}`,
+          schema,
+        ),
+        '',
+      ),
+    ).toBeUndefined();
+    expect(kinds(`colors.@id:${id}`)).toEqual([
+      ['field', 'colors', undefined],
+      ['punctuation', '.', undefined],
+      ['field', '@id', undefined],
+      ['punctuation', ':', undefined],
+      ['value', id, undefined],
+    ]);
+  });
+
+  it('flags malformed ID lists and non-relationship ID paths', () => {
+    const id = '0190a6f2-7c1e-7b3a-9c4d-2e5f6a7b8c9d';
+    expect(kinds(`@id:${id},red`)[2][2]).toBe('invalidId');
+    expect(kinds(`@id:${id},`)[2][2]).toBe('invalidId');
+    expect(kinds(`@id:${id}*`)[2][2]).toBe('invalidId');
+    expect(kinds(`sku.@id:${id}`)[0]).toEqual([
+      'field',
+      'sku',
+      'unknownRelationship',
+    ]);
+    const tooMany = Array.from(
+      { length: 101 },
+      (_, index) =>
+        `00000000-0000-0000-0000-${String(index).padStart(12, '0')}`,
+    ).join(',');
+    expect(
+      firstQueryError(highlightQuery(`@id:${tooMany}`, schema), ''),
+    ).toEqual({ code: 'tooManyIds', count: 100 });
+  });
+
   it('treats relationship hops as valid while targets load', () => {
     const loading = { ...schema, targets: new Map() };
     expect(
@@ -160,6 +201,7 @@ describe('querySuggestions', () => {
       'active',
       'colors',
       'category',
+      '@id',
     ]);
   });
 
@@ -168,14 +210,16 @@ describe('querySuggestions', () => {
   });
 
   it('suggests related fields and all fields after a relationship', () => {
-    expect(codes('colors.')).toEqual(['colors', 'colors.name']);
+    expect(codes('colors.')).toEqual(['colors', 'colors.name', 'colors.@id']);
     expect(codes('category.pa')).toEqual(['category.parent']);
     expect(codes('category.parent.')).toEqual([
       'category.parent.name',
       'category.parent.parent',
+      'category.parent.@id',
     ]);
     expect(codes('category.parent.parent.')).toEqual([
       'category.parent.parent.name',
+      'category.parent.parent.@id',
     ]);
   });
 
