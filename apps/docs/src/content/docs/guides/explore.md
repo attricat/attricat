@@ -94,6 +94,7 @@ A link never grants access. The person opening it needs to be a member of the wo
 **Select entities** turns on selection mode. Select up to 50 loaded entities to:
 
 - send them to an [agent conversation](/guides/agents/) with instructions;
+- save them as a new saved search that matches exactly these entities (**Create saved search**);
 - run bulk actions provided by installed extensions.
 
 ## Open an entity

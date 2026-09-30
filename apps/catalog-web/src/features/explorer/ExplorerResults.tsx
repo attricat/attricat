@@ -1,4 +1,7 @@
 import { Alert, Box } from '@mui/material';
+import { useState } from 'react';
+import type { EntityItem } from '../entities/api';
+import { SaveSelectionAsSearchDialog } from '../saved-views/SaveSelectionAsSearchDialog';
 import { ExplorerResultsTable } from './ExplorerResultsTable';
 import { HiddenOutdatedNotice } from './HiddenOutdatedNotice';
 import type { AttributeFilterDraft } from './attributeFilterValues';
@@ -43,6 +46,9 @@ export const ExplorerResults = ({
   const items = resultPages.flatMap((page) => page.items);
   // The table remounts for every search; selection outlives it.
   const selection = useExplorerSelection(search.blueprint, items);
+  const [savedSearchSelection, setSavedSearchSelection] = useState<
+    EntityItem[] | null
+  >(null);
 
   return (
     <>
@@ -96,11 +102,23 @@ export const ExplorerResults = ({
                 resultBlueprint.blueprint.version
               }
               onFilterCell={onFilterCell}
+              onSaveSelectionAsSearch={setSavedSearchSelection}
               onSortChange={onSortChange}
               sort={search.sort}
             />
           )}
         </Box>
+      )}
+      {savedSearchSelection && (
+        <SaveSelectionAsSearchDialog
+          entities={savedSearchSelection}
+          onClose={() => setSavedSearchSelection(null)}
+          onSuccess={() => {
+            setSavedSearchSelection(null);
+            selection.exitSelectionMode();
+          }}
+          search={search}
+        />
       )}
     </>
   );

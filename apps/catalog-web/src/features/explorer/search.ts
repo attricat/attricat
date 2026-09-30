@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { entitySearchFilterSchema } from '../entities/schemas';
 import { maximumAttributeFilters, sortDirections } from './constants';
+import { entityIdsQuery } from './queryLanguage';
 
 const attributeFilterSearchSchema = entitySearchFilterSchema.extend({
   field: z.string().trim().min(1),
@@ -71,3 +72,20 @@ export const parseExplorerSearch = (
 ): ExplorerSearch => explorerSearchSchema.parse(input);
 
 export type ExplorerSort = NonNullable<ExplorerSearch['sort']>;
+
+/**
+ * A fresh search of the same blueprint and version scope that matches only
+ * the given entities; filters and facets are dropped so none can hide them.
+ */
+export const entitySelectionSearch = (
+  search: ExplorerSearch,
+  entityIds: string[],
+): ExplorerSearch => ({
+  blueprint: search.blueprint,
+  version: search.version,
+  allVersions: search.allVersions,
+  context: search.context,
+  locked: search.locked,
+  sort: search.sort,
+  query: entityIdsQuery(entityIds),
+});

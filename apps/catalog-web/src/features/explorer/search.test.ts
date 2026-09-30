@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { inlineExplorerSearchParams, parseExplorerSearch } from './search';
+import {
+  entitySelectionSearch,
+  inlineExplorerSearchParams,
+  parseExplorerSearch,
+} from './search';
 
 describe('parseExplorerSearch', () => {
   it('serializes inline links without saved-view references', () => {
@@ -113,6 +117,36 @@ describe('parseExplorerSearch', () => {
       blueprint: 'product',
       context: 'storefront',
       query: 'shirt',
+    });
+  });
+});
+
+describe('entitySelectionSearch', () => {
+  it('matches only the selected entities within the same scope', () => {
+    expect(
+      entitySelectionSearch(
+        {
+          blueprint: 'product',
+          allVersions: true,
+          context: 'web',
+          query: 'shoe',
+          sourceView: 'b67f5d16-d2be-4669-9870-b5a73282a26e',
+          sort: { field: 'name', direction: 'asc' },
+          attributeFilters: [{ field: 'price', operator: 'gte', value: 100 }],
+          relationshipFacets: [{ field: 'brand', selectedIds: [] }],
+        },
+        [
+          '123e4567-e89b-12d3-a456-426614174001',
+          '123e4567-e89b-12d3-a456-426614174002',
+        ],
+      ),
+    ).toEqual({
+      blueprint: 'product',
+      allVersions: true,
+      context: 'web',
+      query:
+        '@id:123e4567-e89b-12d3-a456-426614174001,123e4567-e89b-12d3-a456-426614174002',
+      sort: { field: 'name', direction: 'asc' },
     });
   });
 });

@@ -420,3 +420,7 @@ export const queryCursorContext = (
         : cursor + selectorRest + (afterCursor[selectorRest] === ':' ? 1 : 0),
   };
 };
+
+/** Query matching exactly the given entities, e.g. `@id:id-1,id-2`. */
+export const entityIdsQuery = (ids: string[]) =>
+  `${queryIdSelector}${querySelectorSeparator}${ids.join(queryIdSeparator)}`;
