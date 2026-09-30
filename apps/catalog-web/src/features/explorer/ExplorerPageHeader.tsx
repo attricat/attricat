@@ -9,6 +9,13 @@ type Props = {
   locked: boolean;
 };
 
+const createSearch = (blueprint: string | undefined, locked: boolean) => {
+  if (!blueprint) return {};
+  // A locked Explorer keeps the create form on its blueprint; otherwise the
+  // selected blueprint only preselects the form.
+  return locked ? { blueprint, locked: true } : { blueprint };
+};
+
 export const ExplorerPageHeader = ({
   blueprint,
   locked,
@@ -20,7 +27,7 @@ export const ExplorerPageHeader = ({
     <PageHeader
       actions={
         <RouterButton
-          search={locked && blueprint ? { blueprint, locked: true } : {}}
+          search={createSearch(blueprint, locked)}
           to="/entities/new"
           variant="contained"
         >
