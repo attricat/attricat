@@ -34,7 +34,7 @@ import { SearchInfoDialog } from './SearchInfoDialog';
 import { SendSelectedToAgentDialog } from './SendSelectedToAgentDialog';
 import { useEntityPublicationActions } from './useEntityPublicationActions';
 import { useExplorerColumnPreferences } from './useExplorerColumnPreferences';
-import { useExplorerSelection } from './useExplorerSelection';
+import type { ExplorerSelection } from './useExplorerSelection';
 import { VirtualizedExplorerTable } from './VirtualizedExplorerTable';
 import { useTimeZone } from '../../time/useInstantFormat';
 
@@ -53,6 +53,7 @@ type Props = {
   canPublish: boolean;
   canDelete: boolean;
   relationshipSortAvailable?: boolean;
+  selection: ExplorerSelection;
   showExplorerActions?: boolean;
   sort?: ExplorerSort;
   totalCount: number | null;
@@ -74,13 +75,13 @@ export const ExplorerResultsTable = ({
   canPublish,
   canDelete,
   relationshipSortAvailable = true,
+  selection,
   showExplorerActions = false,
   sort,
   totalCount,
   totalCountCapped,
 }: Props) => {
   const { t } = useTranslation();
-  const selection = useExplorerSelection(items);
   const [deleteEntityId, setDeleteEntityId] = useState<string | null>(null);
   const [agentSelection, setAgentSelection] = useState<EntityItem[] | null>(
     null,
@@ -177,8 +178,9 @@ export const ExplorerResultsTable = ({
         totalCount={totalCount}
         totalCountCapped={totalCountCapped}
         selectionMode={selection.selectionMode}
-        selectedCount={selection.selectedItems.length}
+        selectedItems={selection.selectedItems}
         onClearSelection={selection.clearSelection}
+        onRemoveSelected={selection.removeEntity}
         onSendSelection={() => setAgentSelection([...selection.selectedItems])}
         onToggleSelection={selection.toggleSelectionMode}
         onOpenColumnPreferences={() => setColumnPreferencesOpen(true)}
