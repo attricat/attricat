@@ -19,6 +19,18 @@ describe('getVisibleManagementNavigationItems', () => {
       ),
     ).toContain(navigationRoutes.backgroundProcessing);
   });
+  it('shows system health only with data-health read access', () => {
+    expect(
+      getVisibleManagementNavigationItems({ data_health_read: false }).map(
+        (item) => item.to,
+      ),
+    ).not.toContain(navigationRoutes.systemHealth);
+    expect(
+      getVisibleManagementNavigationItems({ data_health_read: true }).map(
+        (item) => item.to,
+      ),
+    ).toContain(navigationRoutes.systemHealth);
+  });
   it('shows workflows only to users with workflow read access', () => {
     expect(
       getVisibleManagementNavigationItems({ workflows_read: false }).map(

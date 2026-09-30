@@ -22,6 +22,7 @@ mod rules;
 mod saved_views;
 mod sessions;
 mod solution_packs;
+mod system;
 mod tokens;
 mod workflows;
 mod workspace_navigation;
@@ -99,9 +100,11 @@ pub struct AppState {
     pub default_body_limit: usize,
     /// Enables sanitized development-only timing phases for the Explorer.
     pub devtools_enabled: bool,
+    pub build_info: BuildInfo,
 }
 
 pub use self::data_health::DataHealthCache;
+pub use self::system::BuildInfo;
 
 const TIMING_PHASES: [&str; 4] = ["candidate", "page", "related", "serialize"];
 /// Only Explorer requests publish development SQL and phase breakdowns.
@@ -354,6 +357,7 @@ pub fn router(state: AppState) -> Router {
         .route("/health", get(data_health::liveness))
         .route("/health/live", get(data_health::liveness))
         .route("/health/ready", get(data_health::readiness))
+        .route("/system/health", get(system::health))
         .route(
             "/extension-registries",
             get(extension_registries::list).post(extension_registries::create),

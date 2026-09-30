@@ -21,6 +21,7 @@ export { ShieldCheckIcon as RuleIcon } from 'lucide-react';
 export { NetworkIcon as RelationshipIcon } from 'lucide-react';
 export { ListChecksIcon as RelationshipPickerIcon } from 'lucide-react';
 export { BlocksIcon as ReusableAttributeIcon } from 'lucide-react';
+export { ActivityIcon as SystemHealthIcon } from 'lucide-react';
 export { WorkflowIcon as WorkflowIcon } from 'lucide-react';
 export { UserCogIcon as WorkspaceIcon } from 'lucide-react';
 export { BookMarkedIcon as SavedSearchIcon } from 'lucide-react';

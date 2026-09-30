@@ -11,6 +11,7 @@ import {
   ProfileIcon,
   ReusableAttributeIcon,
   RuleIcon,
+  SystemHealthIcon,
   WorkflowIcon,
   WorkspaceIcon,
 } from './systemIcons';
@@ -40,6 +41,7 @@ export const navigationRoutes = {
   manage: '/manage',
   profile: '/profile',
   rules: '/manage/rules',
+  systemHealth: '/manage/system-health',
   reusableAttributes: '/manage/reusable-attributes',
   workflows: '/manage/workflows',
   workspace: '/manage/workspace/members',
@@ -132,6 +134,12 @@ export const managementNavigationItems = [
     labelKey: 'navigation.workflows',
     to: navigationRoutes.workflows,
   },
+  {
+    descriptionKey: 'management.systemHealthDescription',
+    icon: SystemHealthIcon,
+    labelKey: 'navigation.systemHealth',
+    to: navigationRoutes.systemHealth,
+  },
 ] as const;
 
 export const profileNavigationItem = {
@@ -151,7 +159,10 @@ export const getVisibleManagementNavigationItems = (
         capabilities?.tokens_manage,
       );
     }
-    if (item.to === navigationRoutes.backgroundProcessing)
+    if (
+      item.to === navigationRoutes.backgroundProcessing ||
+      item.to === navigationRoutes.systemHealth
+    )
       return capabilities?.data_health_read;
     if (item.to === navigationRoutes.auditLog) return capabilities?.audit_read;
     if (item.to === navigationRoutes.extensions)

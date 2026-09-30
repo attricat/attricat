@@ -69,7 +69,8 @@
     "lightMode": "Tryb jasny",
     "reusableAttributes": "Atrybuty wielokrotnego użytku",
     "backgroundProcessing": "Przetwarzanie w tle",
-    "documentation": "Dokumentacja"
+    "documentation": "Dokumentacja",
+    "systemHealth": "Stan systemu"
   },
   "auth": {
     "signIn": "Zaloguj się",
@@ -811,7 +812,8 @@
     "workflowsDescription": "Twórz i bezpiecznie obsługuj wersjonowane definicje przepływów pracy.",
     "rulesDescription": "Twórz i obsługuj katalogowe reguły jakości danych.",
     "reusableAttributesDescription": "Twórz definicje, wersje i grupy atrybutów wielokrotnego użytku.",
-    "backgroundProcessingDescription": "Monitoruj oczekujące, uruchomione i nieudane zadania API w tle."
+    "backgroundProcessingDescription": "Monitoruj oczekujące, uruchomione i nieudane zadania API w tle.",
+    "systemHealthDescription": "Sprawdź, która kompilacja Attricat jest uruchomiona."
   },
   "profile": {
     "never": "Nigdy",
@@ -1146,6 +1148,8 @@
     "queryCount": "zapytania: {{count}}",
     "timingPrivacy": "Tylko zagregowane czasy; dane żądania nigdy nie są rejestrowane.",
     "apiStatus": "Stan API: {{status}}",
+    "build": "Kompilacja: {{branch}} @ {{commit}} · API {{version}}",
+    "buildUnavailable": "Szczegóły kompilacji są niedostępne (wymaga dostępu do stanu danych).",
     "restarting": "Ponowne uruchamianie",
     "checking": "Sprawdzanie",
     "ready": "Gotowe",
@@ -1334,5 +1338,16 @@
         "action": "Przeglądaj rozszerzenia"
       }
     }
+  },
+  "systemHealth": {
+    "title": "Stan systemu",
+    "description": "Stan wdrożenia Attricat obsługującego ten obszar roboczy.",
+    "loading": "Wczytywanie stanu systemu",
+    "forbidden": "Nie masz uprawnień do wyświetlania stanu systemu w tym obszarze roboczym.",
+    "buildTitle": "Uruchomiona kompilacja",
+    "buildDescription": "Wersja API i źródło, z którego została zbudowana.",
+    "version": "Wersja API",
+    "branch": "Gałąź",
+    "commit": "Commit"
   }
 }

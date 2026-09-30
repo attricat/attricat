@@ -253,7 +253,7 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
             target: TargetKind::None,
         });
     }
-    if path == "/metrics" || path.starts_with("/data-health/") {
+    if path == "/metrics" || path == "/system/health" || path.starts_with("/data-health/") {
         return Some(Policy {
             permission: "data_health.read",
             target: TargetKind::None,

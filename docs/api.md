@@ -42,6 +42,7 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | --- | --- | --- |
 | `GET` | `/health`, `/health/live` | Process liveness only; dependencies are deliberately not probed. |
 | `GET` | `/health/ready` | Sanitized traffic-readiness check for PostgreSQL and required object storage. |
+| `GET` | `/system/health` | Report the running API version and the source branch and commit it was built from (`data_health.read`). |
 | `POST` | `/solution-packs/inspect` | Inspect an uploaded archive without applying it (`solution_packs.manage`); see [inspection](#solution-pack-plan-upload). |
 | `GET` | `/presentation-assets` | List immutable private asset metadata (`solution_packs.manage`; `limit` 1–100, `offset` 0–10000). Use IDs for explicit `--map-asset` reuse; direct creation is unavailable. |
 | `GET` | `/presentation-assets/{asset-id}` | Return same-workspace metadata only (`solution_packs.manage`); cross-workspace IDs return `404`. Use `acli presentation-asset show <uuid>`. |

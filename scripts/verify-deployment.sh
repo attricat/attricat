@@ -18,7 +18,7 @@ cleanup() {
 trap cleanup EXIT
 
 if [[ "${SKIP_IMAGE_BUILD:-false}" != "true" ]]; then
-  docker build --build-arg VCS_REF="$(git rev-parse HEAD)" --build-arg VERSION="$(git describe --always --dirty)" -t "$image" .
+  docker build --build-arg VCS_REF="$(git rev-parse HEAD)" --build-arg VCS_BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME:-$(git rev-parse --abbrev-ref HEAD)}}" --build-arg VERSION="$(git describe --always --dirty)" -t "$image" .
 fi
 export ATTRICAT_IMAGE="$image"
 

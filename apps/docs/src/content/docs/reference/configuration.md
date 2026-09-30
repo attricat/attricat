@@ -52,7 +52,7 @@ The file worker needs the same `DATABASE_URL` and `S3_*` values plus `FILE_WORKE
 | `WEB_DIST_DIR` | Unset | Directory containing the compiled web app. When set, the API serves the app at `/` and also exposes API routes below `/api`. The container image sets `/srv/attricat/web`. |
 | `RUST_LOG` | `info` | Log filter, for example `api=debug`. |
 | `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | Unset | OTLP/gRPC endpoint for trace export from the API and file worker. Leave unset to disable tracing export. |
-| `CATALOG_DEVTOOLS` | `true` in local development | Enables the web Inspector and the Explorer's SQL timing entries in the `Server-Timing` header. Set `false` in production. The Inspector is never included in production web builds, and SQL text and bind values are never exposed. |
+| `CATALOG_DEVTOOLS` | `true` in local development | Enables the web Inspector and the Explorer's SQL timing entries in the `Server-Timing` header. Set `false` in production. In other builds, including production, a browser can load the Inspector on demand by setting local storage `catalog.inspector-enabled` to `true` and reloading; SQL timings still require this setting on the API. SQL text and bind values are never exposed. |
 
 ## Bootstrap workspace and owner
 

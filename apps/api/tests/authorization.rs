@@ -398,3 +398,27 @@ async fn batched_entity_authorization_matches_per_target_checks(pool: PgPool) {
     assert!(accepted[3].is_empty() && accepted[4].is_empty());
     server.abort();
 }
+
+#[sqlx::test]
+async fn system_health_reports_the_running_build_to_signed_in_users(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+
+    let anonymous = Client::new()
+        .get(format!("{base_url}/system/health"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(anonymous.status(), StatusCode::UNAUTHORIZED);
+
+    let response = authenticated_client()
+        .get(format!("{base_url}/system/health"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response.json::<Value>().await.unwrap();
+    assert_eq!(body["build"]["version"], env!("CARGO_PKG_VERSION"));
+    assert_eq!(body["build"]["branch"], env!("ATTRICAT_BUILD_BRANCH"));
+    assert_eq!(body["build"]["commit"], env!("ATTRICAT_BUILD_COMMIT"));
+    server.abort();
+}

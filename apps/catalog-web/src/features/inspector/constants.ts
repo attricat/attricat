@@ -5,6 +5,8 @@ export const API_HEALTH_POLL_INTERVAL_SECONDS =
   API_HEALTH_POLL_INTERVAL_MS / millisecondsPerSecond;
 export const API_RETRY_INTERVAL_MS = 1_000;
 export const INSPECTOR_STATE_STORAGE_KEY = 'catalog.inspector-expanded';
+/** Set to `true` to load the Inspector in builds without devtools. */
+export const INSPECTOR_ENABLED_STORAGE_KEY = 'catalog.inspector-enabled';
 
 export const inspectorPaneIds = {
   server: 'server',
@@ -24,6 +26,8 @@ export const personalApiTokensHref = '/profile/personal-access-tokens';
 /** Shown in place of a query count the API did not report. */
 export const unknownQueryCount = '?';
 export const timingDurationFractionDigits = 2;
+/** Git's conventional abbreviated commit length. */
+export const shortCommitLength = 7;
 
 export const inspectorHeaderMinHeight = 36;
 export const inspectorTabMinHeight = 28;
