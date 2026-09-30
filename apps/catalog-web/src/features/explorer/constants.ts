@@ -108,3 +108,6 @@ export const loadMoreRowKey = 'load-more';
 // Sticky header cells must stay above sticky body cells while scrolling.
 export const stickyHeaderLayer = 3;
 export const stickyBodyLayer = 1;
+
+// Query autocomplete shows about eight suggestions before scrolling.
+export const querySuggestionListMaxHeight = 360;
