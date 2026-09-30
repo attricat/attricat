@@ -38,6 +38,7 @@ rand = "0.8"
 regex = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 rust_decimal = { version = "1", features = ["serde"] }
+schemars = "1"
 secrecy = "0.10"
 semver = "1"
 serde = { version = "1", features = ["derive"] }

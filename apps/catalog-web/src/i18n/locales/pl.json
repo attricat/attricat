@@ -496,6 +496,43 @@
     "versionOption": "v{{version}} ({{status}})",
     "diffTitle": "{{original}} → {{modified}}"
   },
+  "definitionEditor": {
+    "details": {
+      "block": "Blok",
+      "blueprintKind": "Blueprint {{kind}}, wersja {{version}}",
+      "component": "Komponent v{{version}}",
+      "context": "Kontekst",
+      "include": "Dołączenie {{code}} v{{version}}",
+      "latestVersion": "Najnowsza wersja",
+      "relationshipTo": "Relacja z {{target}}",
+      "requiredType": "{{type}} · wymagane",
+      "role": "Rola w przestrzeni roboczej",
+      "section": "Sekcja",
+      "selectedAttribute": "Z {{from}}"
+    },
+    "diagnostics": {
+      "expectedOneOf": "Oczekiwano jednej z wartości: {{values}}.",
+      "expectedType": "Oczekiwano typu {{type}}.",
+      "expectedValue": "Oczekiwano {{value}}.",
+      "invalidCode": "Używaj tylko liter ASCII, cyfr, łączników i podkreśleń.",
+      "missingKey": "Brak wymaganego klucza „{{key}}”.",
+      "notEmpty": "Wartość nie może być pusta.",
+      "syntax": "Nieprawidłowy TOML: {{message}}",
+      "tooLarge": "Wartość może wynosić najwyżej {{limit}}.",
+      "tooLong": "Dozwolone jest najwyżej {{limit}} elementów lub znaków.",
+      "tooShort": "Wymagane jest co najmniej {{limit}} elementów lub znaków.",
+      "tooSmall": "Wartość musi wynosić co najmniej {{limit}}.",
+      "unknownKey": "Nieznany klucz „{{key}}”.",
+      "unknownKeySuggestion": "Nieznany klucz „{{key}}”. Czy chodziło o „{{suggestion}}”?"
+    },
+    "hover": {
+      "allowedValues": "Dozwolone wartości: {{values}}",
+      "default": "Domyślnie: {{value}}"
+    },
+    "placeholders": {
+      "name": "nazwa"
+    }
+  },
   "explorer": {
     "loadingSavedSearch": "Wczytywanie zapisanego wyszukiwania",
     "saveSearch": "Zapisz wyszukiwanie",

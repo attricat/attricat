@@ -64,6 +64,9 @@ importers:
       react-markdown:
         specifier: ^10.1.0
         version: 10.1.0(@types/react@19.2.18)(react@19.2.8)
+      smol-toml:
+        specifier: ^1.9.0
+        version: 1.9.0
       zod:
         specifier: ^4.4.3
         version: 4.5.4
@@ -4083,6 +4086,10 @@ packages:
 
   smol-toml@1.8.0:
     resolution: {integrity: sha512-kCZr2V3ch9i00x8zXRhjUNVcjG9ijES5dDudkXvUVCT5QlJNQWElSJdZqyPemffHoLNUYwOcou0Fy+ojN0uHSQ==}
+    engines: {node: '>= 18'}
+
+  smol-toml@1.9.0:
+    resolution: {integrity: sha512-hpd+HLON7HdZXqYchMM/+LaTTbdK0AU3NngIJ4KVyWbY9bfQqdL9cD+4yf6dUoU2Ap4VsU0JkQi6FxAI1B2mXQ==}
     engines: {node: '>= 18'}
 
   source-map-js@1.2.1:
@@ -9022,6 +9029,8 @@ snapshots:
       sax: 1.6.1
 
   smol-toml@1.8.0: {}
+
+  smol-toml@1.9.0: {}
 
   source-map-js@1.2.1: {}
 

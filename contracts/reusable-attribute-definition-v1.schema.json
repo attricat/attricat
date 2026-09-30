@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "A workspace attribute that entity blueprints can attach by reference.",
+  "properties": {
+    "cardinality": {
+      "default": null,
+      "description": "How many targets one source may link to.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-attricat-suggestions": [
+        "one",
+        "many"
+      ],
+      "x-attricat-value-types": [
+        "relationship",
+        "file"
+      ]
+    },
+    "code": {
+      "description": "Attribute identifier, using ASCII letters, numbers, hyphens, and underscores.",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "type": "string"
+    },
+    "context_editable": {
+      "default": "all",
+      "description": "Contexts that accept writes: `all`, or only the `default` context.",
+      "enum": [
+        "all",
+        "default"
+      ],
+      "type": "string"
+    },
+    "context_fallback": {
+      "default": "default",
+      "description": "Missing values in a non-default context: `default` inherits from the\nnearest ancestor context; `none` leaves the attribute absent.",
+      "enum": [
+        "default",
+        "none"
+      ],
+      "type": "string"
+    },
+    "default_value": {
+      "default": null,
+      "description": "Value stored in the default context when an entity is created.\nNot supported for relationships and files."
+    },
+    "facetable": {
+      "default": false,
+      "description": "Offer the attribute as an Explorer facet.",
+      "type": "boolean"
+    },
+    "file_policy": {
+      "default": null,
+      "description": "File upload policy table.",
+      "x-attricat-value-types": [
+        "file"
+      ]
+    },
+    "name": {
+      "description": "Human-readable attribute name.",
+      "minLength": 1,
+      "type": "string"
+    },
+    "readonly": {
+      "default": false,
+      "description": "Preview-only in the Catalog web app. API writes remain allowed.",
+      "type": "boolean"
+    },
+    "searchable": {
+      "default": false,
+      "description": "Include values in search.",
+      "type": "boolean"
+    },
+    "tags": {
+      "default": [],
+      "description": "Free-form metadata. `hidden`, `hidden:form`, `hidden:detail`,\n`hidden:explorer`, and `hidden:metadata` hide the attribute from default UI.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array",
+      "x-attricat-suggestions": [
+        "hidden",
+        "hidden:form",
+        "hidden:detail",
+        "hidden:explorer",
+        "hidden:metadata"
+      ]
+    },
+    "target_blueprint_code": {
+      "default": null,
+      "description": "Blueprint that relationship targets must use.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-attricat-reference": "blueprint",
+      "x-attricat-value-types": [
+        "relationship"
+      ]
+    },
+    "target_cardinality": {
+      "default": null,
+      "description": "How many sources may link to one target.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-attricat-suggestions": [
+        "one",
+        "many"
+      ],
+      "x-attricat-value-types": [
+        "relationship"
+      ]
+    },
+    "value_schema": {
+      "default": null,
+      "description": "JSON Schema (Draft 2020-12) for scalar values, written as a TOML table."
+    },
+    "value_type": {
+      "description": "Stored value type.",
+      "enum": [
+        "string",
+        "number",
+        "integer",
+        "boolean",
+        "date",
+        "datetime",
+        "time",
+        "relationship",
+        "file"
+      ],
+      "type": "string"
+    }
+  },
+  "required": [
+    "code",
+    "name",
+    "value_type"
+  ],
+  "title": "Attricat reusable attribute definition",
+  "type": "object"
+}

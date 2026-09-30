@@ -1,6 +1,7 @@
 //! Strict, inert rule definition parsing. Candidate selection and evaluation are host-owned.
 use catalog_validation::is_valid_code;
 use cron::Schedule;
+use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{collections::HashSet, str::FromStr};
@@ -29,7 +30,8 @@ pub struct RuleDefinition {
     pub predicate: Predicate,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+/// How prominently findings from this rule are reported.
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum Severity {
     Info,
@@ -77,38 +79,75 @@ pub struct CompiledRule {
     pub raw_definition_hash: String,
 }
 
-#[derive(Deserialize)]
+/// A data-health rule that reports findings for entities matching its predicate.
+#[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct Raw {
+    /// Definition format version. Only `1` is supported.
     format_version: u32,
+    /// Stable rule identifier, unique within its owner.
+    #[schemars(regex(pattern = catalog_validation::CODE_PATTERN))]
     code: String,
+    /// Human-readable rule name.
     name: String,
     severity: Severity,
+    /// One to eight events that evaluate the rule.
+    #[schemars(length(min = 1, max = 8))]
     triggers: Vec<RawTrigger>,
     predicate: RawPredicate,
 }
-#[derive(Deserialize)]
+/// When the rule is evaluated.
+#[derive(Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 enum RawTrigger {
+    /// Evaluated only when run on demand.
     Manual,
-    Schedule { cron: String, timezone: String },
-    Event { event_type: String },
+    /// Evaluated on a UTC cron schedule.
+    Schedule {
+        /// Six-field cron expression, including seconds: `sec min hour day month weekday`.
+        cron: String,
+        /// Schedule time zone. Only `UTC` is supported.
+        #[schemars(extend("enum" = ["UTC"]))]
+        timezone: String,
+    },
+    /// Evaluated when an entity event occurs.
+    Event {
+        /// Entity event that evaluates the rule.
+        #[schemars(extend("enum" = ENTITY_EVENTS))]
+        event_type: String,
+    },
+    /// Evaluated after an import finishes.
     PostImport,
 }
-#[derive(Deserialize)]
+/// The condition that produces a finding.
+#[derive(Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 enum RawPredicate {
+    /// Reports entities without a value for the attribute.
     Required {
+        /// Attribute that must have a value.
+        #[schemars(regex(pattern = catalog_validation::CODE_PATTERN), extend("x-attricat-reference" = "attribute"))]
         attribute_code: String,
     },
+    /// Reports entities whose attribute value has not changed within the age limit.
     Stale {
+        /// Attribute whose last change is checked.
+        #[schemars(regex(pattern = catalog_validation::CODE_PATTERN), extend("x-attricat-reference" = "attribute"))]
         attribute_code: String,
+        /// Maximum value age in seconds, from 1 to 31536000 (one year).
+        #[schemars(range(min = 1, max = 31_536_000))]
         max_age_seconds: u64,
     },
+    /// Reports entities with the tag.
     HasTag {
+        /// Tag of at most 128 bytes.
+        #[schemars(length(min = 1, max = 128))]
         tag: String,
     },
+    /// Reports entities without the tag.
     MissingTag {
+        /// Tag of at most 128 bytes.
+        #[schemars(length(min = 1, max = 128))]
         tag: String,
     },
 }
@@ -207,6 +246,24 @@ pub fn compile_embedded(value: toml::Value) -> Result<CompiledRule, RuleError> {
         &toml::to_string(&toml::Value::Table(table))
             .map_err(|error| RuleError::Invalid(error.to_string()))?,
     )
+}
+/// Schema for a blueprint's `rules` array: standalone rules without
+/// `format_version`, which the owning blueprint supplies.
+pub fn embedded_rules_schema(generator: &mut SchemaGenerator) -> Schema {
+    let mut rule = Raw::json_schema(generator);
+    if let Some(properties) = rule
+        .get_mut("properties")
+        .and_then(|properties| properties.as_object_mut())
+    {
+        properties.remove("format_version");
+    }
+    if let Some(required) = rule
+        .get_mut("required")
+        .and_then(|required| required.as_array_mut())
+    {
+        required.retain(|field| field != "format_version");
+    }
+    json_schema!({ "type": "array", "items": rule })
 }
 pub fn compile(source: &str) -> Result<CompiledRule, RuleError> {
     let rule = parse(source)?;

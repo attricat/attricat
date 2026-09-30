@@ -1,3 +1,7 @@
+/// The JSON Schema `pattern` equivalent of [`is_valid_code`], published in
+/// definition contracts so editors can flag invalid codes before saving.
+pub const CODE_PATTERN: &str = "^[A-Za-z0-9_-]+$";
+
 /// Returns whether a user-facing catalog identifier is safe for use as a reference.
 pub fn is_valid_code(value: &str) -> bool {
     !value.is_empty()
@@ -39,19 +43,33 @@ pub fn validate_json_schema(
 
 #[cfg(test)]
 mod tests {
-    use super::is_valid_code;
+    use super::{CODE_PATTERN, is_valid_code, validate_json_schema};
+
+    const VALID_CODES: [&str; 4] = ["product", "en_GB", "en-GB", "v2_item"];
+    const INVALID_CODES: [&str; 5] = ["", "product name", "product.name", "produit-été", "café"];
 
     #[test]
     fn accepts_ascii_reference_codes() {
-        for value in ["product", "en_GB", "en-GB", "v2_item"] {
+        for value in VALID_CODES {
             assert!(is_valid_code(value));
         }
     }
 
     #[test]
     fn rejects_unsafe_reference_codes() {
-        for value in ["", "product name", "product.name", "produit-été", "café"] {
+        for value in INVALID_CODES {
             assert!(!is_valid_code(value));
+        }
+    }
+
+    #[test]
+    fn code_pattern_matches_runtime_code_validation() {
+        let schema = serde_json::json!({ "type": "string", "pattern": CODE_PATTERN });
+        for value in VALID_CODES.into_iter().chain(INVALID_CODES) {
+            let pattern_accepts = validate_json_schema(&schema, &serde_json::json!(value))
+                .unwrap()
+                .is_empty();
+            assert_eq!(pattern_accepts, is_valid_code(value), "{value:?}");
         }
     }
 }

@@ -361,3 +361,24 @@ migrated remain recorded in `entity_blueprint_migrations` for separate review.
 
 Unknown keys, invalid selectors or policy values, missing mixins, and malformed
 definitions return `422 invalid_blueprint_definition`.
+
+## Definition schema and editor assistance
+
+The blueprint and reusable attribute editors complete keys, table headers, view
+blocks, and values; show each key's documentation on hover; and flag TOML
+syntax errors, unknown keys, and invalid values while you type. Value
+suggestions include workspace blueprints and mixins, attributes declared in the
+definition, relationship hops in table column paths, included mixin attributes
+for `from`, roles, contexts, and view components that fit the block.
+
+The editors read JSON Schemas generated from the Rust parser types:
+`contracts/blueprint-definition-v1.schema.json` and
+`contracts/reusable-attribute-definition-v1.schema.json`. Field doc comments
+become descriptions, and `x-attricat-*` extensions carry editor hints such as
+the kind of value a field references. The schema describes structure and
+allowed values only; cross-field rules, such as file policy keys requiring
+`value_type = "file"`, remain enforced by the API. A test checks that the schema
+accepts every definition in the repository that the parser accepts.
+
+After changing a definition type, regenerate both contracts with
+`just contracts`. `cargo test` fails while a committed contract is stale.
