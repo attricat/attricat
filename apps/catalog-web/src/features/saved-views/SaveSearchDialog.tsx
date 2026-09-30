@@ -33,12 +33,14 @@ export const SaveSearchDialog = ({
   onClose,
   onSave,
   open,
+  title,
 }: {
   error: string;
   isPending: boolean;
   onClose: () => void;
   onSave: (values: SaveSearchValues) => void;
   open: boolean;
+  title?: string;
 }) => {
   const { t } = useTranslation();
   const form = useForm({
@@ -54,7 +56,7 @@ export const SaveSearchDialog = ({
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth>
-      <DialogTitle>{t('explorer.saveSearch')}</DialogTitle>
+      <DialogTitle>{title ?? t('explorer.saveSearch')}</DialogTitle>
       <DialogContent>
         <Box
           component="form"

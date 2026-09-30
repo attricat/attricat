@@ -14,6 +14,7 @@ type Props = {
   selectedItems: EntityItem[];
   onClearSelection: () => void;
   onRemoveSelected: (entityId: string) => void;
+  onSaveSelectionAsSearch: () => void;
   onSendSelection: () => void;
   onToggleSelection: () => void;
   onOpenColumnPreferences: () => void;
@@ -27,6 +28,7 @@ export const ExplorerResultsToolbar = ({
   selectedItems,
   onClearSelection,
   onRemoveSelected,
+  onSaveSelectionAsSearch,
   onSendSelection,
   onToggleSelection,
   onOpenColumnPreferences,
@@ -76,6 +78,7 @@ export const ExplorerResultsToolbar = ({
         {selectionMode && (
           <ExplorerSelectionActionsMenu
             disabled={selectedItems.length === 0}
+            onSaveAsSearch={onSaveSelectionAsSearch}
             onSendToAgent={onSendSelection}
           />
         )}

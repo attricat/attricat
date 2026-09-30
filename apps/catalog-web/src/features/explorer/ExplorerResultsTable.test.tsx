@@ -111,6 +111,7 @@ const renderTable = (
   publicationSortAvailable = true,
   showExplorerActions = true,
   tableKey = 'initial',
+  onSaveSelectionAsSearch = vi.fn(),
 ) => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
@@ -131,6 +132,7 @@ const renderTable = (
           isFetchingNextPage={false}
           items={tableItems}
           onLoadMore={vi.fn()}
+          onSaveSelectionAsSearch={onSaveSelectionAsSearch}
           onSortChange={onSortChange}
           sort={sort}
           publicationContextCode="default"
@@ -402,6 +404,30 @@ describe('ExplorerResultsTable', () => {
         params: { conversationId: '123e4567-e89b-12d3-a456-426614174003' },
       }),
     );
+  });
+
+  it('creates a saved search from the selected entities', async () => {
+    const user = userEvent.setup();
+    const onSaveSelectionAsSearch = vi.fn();
+    renderTable(
+      undefined,
+      false,
+      undefined,
+      undefined,
+      true,
+      true,
+      'initial',
+      onSaveSelectionAsSearch,
+    );
+    await user.click(screen.getByRole('button', { name: 'Select entities' }));
+    await user.click(
+      screen.getByRole('checkbox', { name: 'Select Second product' }),
+    );
+    await user.click(screen.getByRole('button', { name: 'Actions' }));
+    await user.click(
+      screen.getByRole('menuitem', { name: 'Create saved search' }),
+    );
+    expect(onSaveSelectionAsSearch).toHaveBeenCalledWith([secondItem]);
   });
 
   it('retries a failed message without creating another conversation', async () => {

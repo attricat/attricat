@@ -94,6 +94,7 @@ Link nigdy nie nadaje dostępu. Osoba, która go otwiera, musi być członkiem o
 **Wybierz encje** włącza tryb zaznaczania. Zaznacz do 50 wczytanych encji, aby:
 
 - wysłać je do [rozmowy z agentem](/pl/guides/agents/) wraz z instrukcjami;
+- zapisać je jako nowe zapisane wyszukiwanie obejmujące dokładnie te encje (**Utwórz zapisane wyszukiwanie**);
 - uruchomić działania zbiorcze udostępniane przez zainstalowane rozszerzenia.
 
 ## Otwieranie encji

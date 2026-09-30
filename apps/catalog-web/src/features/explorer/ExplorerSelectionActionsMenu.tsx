@@ -9,15 +9,17 @@ import { ChevronDownIcon } from 'lucide-react';
 import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { compactIconSize } from '../../components/iconSizes';
-import { AgentIcon } from '../../components/systemIcons';
+import { AgentIcon, SavedSearchIcon } from '../../components/systemIcons';
 
 type Props = {
   disabled: boolean;
+  onSaveAsSearch: () => void;
   onSendToAgent: () => void;
 };
 
 export const ExplorerSelectionActionsMenu = ({
   disabled,
+  onSaveAsSearch,
   onSendToAgent,
 }: Props) => {
   const { t } = useTranslation();
@@ -57,6 +59,17 @@ export const ExplorerSelectionActionsMenu = ({
             <AgentIcon size={compactIconSize} />
           </ListItemIcon>
           <ListItemText>{t('explorer.sendToAgentConversation')}</ListItemText>
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            close();
+            onSaveAsSearch();
+          }}
+        >
+          <ListItemIcon>
+            <SavedSearchIcon size={compactIconSize} />
+          </ListItemIcon>
+          <ListItemText>{t('explorer.saveSelectionAsSearch')}</ListItemText>
         </MenuItem>
       </Menu>
     </>

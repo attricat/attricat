@@ -692,6 +692,7 @@
     "selectionLimit": "Limit reached: up to {{count}} loaded entities can be selected",
     "selectionActions": "Actions",
     "sendToAgentConversation": "Send to agent conversation",
+    "saveSelectionAsSearch": "Create saved search",
     "agentInstructions": "Instructions for the agent",
     "agentDefaultInstructions": "Please review these selected catalog entities.",
     "agentConversationTitle": "Review {{count}} {{blueprint}} entities",

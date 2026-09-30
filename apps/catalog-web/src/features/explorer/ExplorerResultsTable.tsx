@@ -47,6 +47,7 @@ type Props = {
   onLoadMore: () => void;
   onSortChange: (field: string) => void;
   onFilterCell?: (draft: AttributeFilterDraft) => void;
+  onSaveSelectionAsSearch: (entities: EntityItem[]) => void;
   publicationContextCode: string;
   publicationContextId: string | undefined;
   publicationSortAvailable: boolean;
@@ -69,6 +70,7 @@ export const ExplorerResultsTable = ({
   onLoadMore,
   onSortChange,
   onFilterCell,
+  onSaveSelectionAsSearch,
   publicationContextCode,
   publicationContextId,
   publicationSortAvailable,
@@ -181,6 +183,9 @@ export const ExplorerResultsTable = ({
         selectedItems={selection.selectedItems}
         onClearSelection={selection.clearSelection}
         onRemoveSelected={selection.removeEntity}
+        onSaveSelectionAsSearch={() =>
+          onSaveSelectionAsSearch([...selection.selectedItems])
+        }
         onSendSelection={() => setAgentSelection([...selection.selectedItems])}
         onToggleSelection={selection.toggleSelectionMode}
         onOpenColumnPreferences={() => setColumnPreferencesOpen(true)}
