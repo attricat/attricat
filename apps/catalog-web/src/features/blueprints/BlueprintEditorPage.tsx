@@ -5,7 +5,8 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
-import { TomlEditor } from '../../components/TomlEditor';
+import { definitionKinds } from '../definition-editor/constants';
+import { DefinitionEditor } from '../definition-editor/DefinitionEditor';
 import { draftEditors } from '../drafts/constants';
 import { DraftRestoreDialog } from '../drafts/DraftRestoreDialog';
 import { definitionDraftSchema } from '../drafts/schemas';
@@ -242,7 +243,8 @@ export const BlueprintEditorPage = ({
         onCancel={() => setPendingUnsavedAction(undefined)}
         onConfirm={confirmUnsavedAction}
       />
-      <TomlEditor
+      <DefinitionEditor
+        kind={definitionKinds.blueprint}
         height={blueprintEditorHeight}
         marginTop={3}
         onChange={(value) => {

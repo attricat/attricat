@@ -487,6 +487,43 @@
     "versionOption": "v{{version}} ({{status}})",
     "diffTitle": "{{original}} → {{modified}}"
   },
+  "definitionEditor": {
+    "details": {
+      "block": "Block",
+      "blueprintKind": "{{kind}} blueprint, version {{version}}",
+      "component": "Component v{{version}}",
+      "context": "Context",
+      "include": "Include {{code}} v{{version}}",
+      "latestVersion": "Latest version",
+      "relationshipTo": "Relationship to {{target}}",
+      "requiredType": "{{type}} · required",
+      "role": "Workspace role",
+      "section": "Section",
+      "selectedAttribute": "From {{from}}"
+    },
+    "diagnostics": {
+      "expectedOneOf": "Expected one of: {{values}}.",
+      "expectedType": "Expected a {{type}}.",
+      "expectedValue": "Expected {{value}}.",
+      "invalidCode": "Use only ASCII letters, numbers, hyphens, and underscores.",
+      "missingKey": "Missing required key “{{key}}”.",
+      "notEmpty": "Must not be empty.",
+      "syntax": "Invalid TOML: {{message}}",
+      "tooLarge": "Must be at most {{limit}}.",
+      "tooLong": "Must have at most {{limit}} items or characters.",
+      "tooShort": "Must have at least {{limit}} items or characters.",
+      "tooSmall": "Must be at least {{limit}}.",
+      "unknownKey": "Unknown key “{{key}}”.",
+      "unknownKeySuggestion": "Unknown key “{{key}}”. Did you mean “{{suggestion}}”?"
+    },
+    "hover": {
+      "allowedValues": "Allowed values: {{values}}",
+      "default": "Default: {{value}}"
+    },
+    "placeholders": {
+      "name": "name"
+    }
+  },
   "explorer": {
     "loadingSavedSearch": "Loading saved search",
     "saveSearch": "Save search",

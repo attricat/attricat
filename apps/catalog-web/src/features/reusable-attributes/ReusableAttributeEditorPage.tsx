@@ -10,7 +10,8 @@ import {
   createReusableAttributeRevision,
   listReusableAttributes,
 } from './api';
-import { TomlEditor } from '../../components/TomlEditor';
+import { definitionKinds } from '../definition-editor/constants';
+import { DefinitionEditor } from '../definition-editor/DefinitionEditor';
 import { draftEditors } from '../drafts/constants';
 import { DraftRestoreDialog } from '../drafts/DraftRestoreDialog';
 import { definitionDraftSchema } from '../drafts/schemas';
@@ -176,7 +177,8 @@ export const ReusableAttributeEditorPage = ({
             },
           }}
         >
-          <TomlEditor
+          <DefinitionEditor
+            kind={definitionKinds.reusableAttribute}
             height={EDITOR_HEIGHT}
             onChange={(value) => {
               if (!save.isPending) setEditedDefinition(value ?? '');

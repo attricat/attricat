@@ -1,6 +1,8 @@
 use super::*;
 use crate::persistence_rows::{Db, IntoDomain};
-use catalog_validation::is_valid_code;
+use catalog_blueprint::{CONTEXT_EDITABLE_SCOPES, CONTEXT_FALLBACKS, DIRECTIONAL_CARDINALITIES};
+use catalog_validation::{CODE_PATTERN, is_valid_code};
+use schemars::JsonSchema;
 use serde::Deserialize;
 use sqlx::{Postgres, Transaction};
 use std::collections::HashSet;
@@ -20,34 +22,96 @@ fn default_context_editable() -> String {
     "all".to_owned()
 }
 
-#[derive(Deserialize)]
+const REUSABLE_ATTRIBUTE_VALUE_TYPES: &[&str] = &[
+    "string",
+    "number",
+    "integer",
+    "boolean",
+    "date",
+    "datetime",
+    "time",
+    "relationship",
+    "file",
+];
+
+/// A workspace attribute that entity blueprints can attach by reference.
+#[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+#[schemars(title = "Attricat reusable attribute definition")]
 struct ReusableAttributeDefinition {
+    /// Attribute identifier, using ASCII letters, numbers, hyphens, and underscores.
+    #[schemars(regex(pattern = CODE_PATTERN))]
     code: String,
+    /// Human-readable attribute name.
+    #[schemars(length(min = 1))]
     name: String,
+    /// Stored value type.
+    #[schemars(extend("enum" = REUSABLE_ATTRIBUTE_VALUE_TYPES))]
     value_type: String,
+    /// JSON Schema (Draft 2020-12) for scalar values, written as a TOML table.
     #[serde(default)]
+    #[schemars(with = "Option<serde_json::Value>")]
     value_schema: Option<toml::Value>,
+    /// Value stored in the default context when an entity is created.
+    /// Not supported for relationships and files.
     #[serde(default)]
+    #[schemars(with = "Option<serde_json::Value>")]
     default_value: Option<toml::Value>,
+    /// File upload policy table.
     #[serde(default)]
+    #[schemars(
+        with = "Option<serde_json::Value>",
+        extend("x-attricat-value-types" = ["file"])
+    )]
     file_policy: Option<toml::Value>,
+    /// Blueprint that relationship targets must use.
     #[serde(default)]
+    #[schemars(extend(
+        "x-attricat-reference" = "blueprint",
+        "x-attricat-value-types" = ["relationship"]
+    ))]
     target_blueprint_code: Option<String>,
+    /// How many targets one source may link to.
     #[serde(default)]
+    #[schemars(extend(
+        "x-attricat-suggestions" = DIRECTIONAL_CARDINALITIES,
+        "x-attricat-value-types" = ["relationship", "file"]
+    ))]
     cardinality: Option<String>,
+    /// How many sources may link to one target.
     #[serde(default)]
+    #[schemars(extend(
+        "x-attricat-suggestions" = DIRECTIONAL_CARDINALITIES,
+        "x-attricat-value-types" = ["relationship"]
+    ))]
     target_cardinality: Option<String>,
+    /// Free-form metadata. `hidden`, `hidden:form`, `hidden:detail`,
+    /// `hidden:explorer`, and `hidden:metadata` hide the attribute from default UI.
     #[serde(default)]
+    #[schemars(extend("x-attricat-suggestions" = [
+        "hidden",
+        "hidden:form",
+        "hidden:detail",
+        "hidden:explorer",
+        "hidden:metadata"
+    ]))]
     tags: Vec<String>,
+    /// Missing values in a non-default context: `default` inherits from the
+    /// nearest ancestor context; `none` leaves the attribute absent.
     #[serde(default = "default_context_fallback")]
+    #[schemars(extend("enum" = CONTEXT_FALLBACKS))]
     context_fallback: String,
+    /// Contexts that accept writes: `all`, or only the `default` context.
     #[serde(default = "default_context_editable")]
+    #[schemars(extend("enum" = CONTEXT_EDITABLE_SCOPES))]
     context_editable: String,
+    /// Preview-only in the Catalog web app. API writes remain allowed.
     #[serde(default)]
     readonly: bool,
+    /// Include values in search.
     #[serde(default)]
     searchable: bool,
+    /// Offer the attribute as an Explorer facet.
     #[serde(default)]
     facetable: bool,
 }
@@ -73,22 +137,11 @@ fn parse_definition(
         return Err(RepositoryError::InvalidReusableAttributeCode);
     }
     if definition.name.trim().is_empty()
-        || !matches!(
-            definition.value_type.as_str(),
-            "string"
-                | "number"
-                | "integer"
-                | "boolean"
-                | "date"
-                | "datetime"
-                | "time"
-                | "relationship"
-                | "file"
-        )
+        || !REUSABLE_ATTRIBUTE_VALUE_TYPES.contains(&definition.value_type.as_str())
         || definition.default_value.is_some()
             && matches!(definition.value_type.as_str(), "relationship" | "file")
-        || !matches!(definition.context_fallback.as_str(), "default" | "none")
-        || !matches!(definition.context_editable.as_str(), "all" | "default")
+        || !CONTEXT_FALLBACKS.contains(&definition.context_fallback.as_str())
+        || !CONTEXT_EDITABLE_SCOPES.contains(&definition.context_editable.as_str())
     {
         return Err(RepositoryError::InvalidReusableAttributeDefinition(
             "invalid context policy or blank name".to_owned(),
@@ -464,5 +517,93 @@ impl CatalogRepository {
         Ok(sqlx::query_as::<_, Db<ReusableAttribute>>(r#"SELECT r.id, r.definition_id, d.namespace, d.code, d.name, r.version, r.value_type, r.value_schema, r.default_value, r.file_policy, r.target_blueprint_code, r.cardinality, r.target_cardinality, r.tags, r.context_fallback, r.context_editable, r.readonly, r.searchable, r.facetable, r.status, r.published_at, r.definition FROM reusable_attribute_revisions r JOIN reusable_attribute_definitions d ON d.id = r.definition_id WHERE r.id = $1 AND r.workspace_id = $2 FOR UPDATE"#)
             .bind(revision_id).bind(workspace(self)).fetch_optional(&mut **transaction).await?
         .into_domain())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{fs, path::Path};
+
+    use schemars::generate::SchemaSettings;
+
+    use super::{CreateReusableAttribute, ReusableAttributeDefinition, parse_definition};
+
+    /// The JSON Schema for reusable attribute definition TOML, published as
+    /// `contracts/reusable-attribute-definition-v1.schema.json`.
+    fn definition_json_schema() -> serde_json::Value {
+        SchemaSettings::draft2020_12()
+            .into_generator()
+            .into_root_schema_for::<ReusableAttributeDefinition>()
+            .to_value()
+    }
+
+    const CONTRACT: &str = "contracts/reusable-attribute-definition-v1.schema.json";
+    const UPDATE_CONTRACTS: &str = "UPDATE_CONTRACTS";
+
+    #[test]
+    fn definition_schema_contract_is_current() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .ancestors()
+            .nth(2)
+            .unwrap()
+            .join(CONTRACT);
+        let mut rendered = serde_json::to_string_pretty(&definition_json_schema()).unwrap();
+        rendered.push('\n');
+        if std::env::var_os(UPDATE_CONTRACTS).is_some() {
+            fs::write(&path, rendered).unwrap();
+            return;
+        }
+        assert!(
+            fs::read_to_string(&path).unwrap_or_default() == rendered,
+            "{CONTRACT} is stale; run `just contracts`"
+        );
+    }
+
+    #[test]
+    fn schema_matches_parser_for_representative_definitions() {
+        let schema = definition_json_schema();
+        for (definition, accepted) in [
+            (
+                "code = \"sku\"\nname = \"SKU\"\nvalue_type = \"string\"\n",
+                true,
+            ),
+            (
+                "code = \"brand\"\nname = \"Brand\"\nvalue_type = \"relationship\"\ntarget_blueprint_code = \"brand\"\ncardinality = \"one\"\nsearchable = true\n",
+                true,
+            ),
+            (
+                "code = \"images\"\nname = \"Images\"\nvalue_type = \"file\"\nfile_policy = { cardinality = \"many\" }\ntags = [\"hidden:form\"]\n",
+                true,
+            ),
+            (
+                "code = \"price\"\nname = \"Price\"\nvalue_type = \"number\"\nvalue_schema = { minimum = 0 }\ndefault_value = 0\ncontext_editable = \"default\"\n",
+                true,
+            ),
+            (
+                "code = \"sku\"\nname = \"SKU\"\nvalue_type = \"json\"\n",
+                false,
+            ),
+            (
+                "code = \"sku\"\nname = \"SKU\"\nvalue_type = \"string\"\nlabel = \"SKU\"\n",
+                false,
+            ),
+            (
+                "code = \"sku\"\nname = \"SKU\"\nvalue_type = \"string\"\ncontext_fallback = \"parent\"\n",
+                false,
+            ),
+        ] {
+            let parsed = parse_definition(&CreateReusableAttribute {
+                definition: definition.to_owned(),
+            });
+            assert_eq!(parsed.is_ok(), accepted, "{definition}");
+            let instance =
+                serde_json::to_value(toml::from_str::<toml::Value>(definition).unwrap()).unwrap();
+            let violations = catalog_validation::validate_json_schema(&schema, &instance).unwrap();
+            assert_eq!(
+                violations.is_empty(),
+                accepted,
+                "{definition}: {violations:?}"
+            );
+        }
     }
 }

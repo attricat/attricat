@@ -1,71 +1,180 @@
 use std::collections::{HashMap, HashSet};
 
-use catalog_validation::{is_valid_code, validate_json_schema_definition};
+use catalog_validation::{CODE_PATTERN, is_valid_code, validate_json_schema_definition};
+use schemars::{JsonSchema, generate::SchemaSettings};
 use serde::Deserialize;
 
 use crate::{
     AttributeDeclaration, BlueprintDefinition, BlueprintError, BlueprintKind,
-    ConnectorJobDefinition, FilePolicy, IncludeRef, LocalAttributeDeclaration, PublicationPolicy,
-    ViewDefinition,
+    CONNECTOR_JOB_DIRECTIONS, ConnectorJobDefinition, FilePolicy, IncludeRef, KNOWN_VIEW_NAMES,
+    LocalAttributeDeclaration, PublicationPolicy, ViewDefinition,
 };
 
-#[derive(Deserialize)]
+pub const ATTRIBUTE_VALUE_TYPES: &[&str] = &[
+    "string",
+    "number",
+    "integer",
+    "boolean",
+    "date",
+    "datetime",
+    "time",
+    "json",
+    "relationship",
+    "file",
+];
+/// `one_to_one` is relationship shorthand for both directions set to `one`.
+pub const ATTRIBUTE_CARDINALITIES: &[&str] = &["one", "many", "one_to_one"];
+/// Per-direction relationship cardinalities, also the file cardinalities.
+pub const DIRECTIONAL_CARDINALITIES: &[&str] = &["one", "many"];
+pub const CONTEXT_FALLBACKS: &[&str] = &["default", "none"];
+pub const CONTEXT_EDITABLE_SCOPES: &[&str] = &["all", "default"];
+
+/// An Attricat blueprint: a versioned entity type or an includable mixin.
+#[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+#[schemars(title = "Attricat blueprint definition v1")]
 struct RawBlueprintDefinition {
+    /// Definition format version. Only `1` is supported.
+    #[schemars(extend("const" = 1))]
     format_version: u32,
+    /// Stable blueprint identifier, using ASCII letters, numbers, hyphens, and underscores.
+    #[schemars(regex(pattern = CODE_PATTERN))]
     code: String,
+    /// Human-readable blueprint name.
+    #[schemars(length(min = 1))]
     name: String,
     kind: BlueprintKind,
+    /// Exact, version-pinned mixins whose attributes can be selected with `from`.
     #[serde(default)]
     includes: Vec<IncludeRef>,
+    /// Named views: `dropdown_option`, `table`, `detail`, `edit`, and `extension_layout`.
     #[serde(default)]
+    #[schemars(extend("x-attricat-key-suggestions" = KNOWN_VIEW_NAMES))]
     views: HashMap<String, ViewDefinition>,
+    /// JSON Schema (Draft 2020-12) source for cross-field entity validation.
+    /// Entity blueprints only.
     entity_schema: Option<String>,
+    /// Channel publication behavior when entities are edited.
     #[serde(default)]
     publication: PublicationPolicy,
+    /// Scheduled extension imports and exports. Entity blueprints only.
     #[serde(default)]
     connector_jobs: Vec<ConnectorJobDefinition>,
     /// Namespaced extension metadata is preserved in the immutable source
     /// definition and intentionally ignored by the core blueprint compiler.
     #[serde(default)]
+    #[schemars(with = "HashMap<String, serde_json::Value>")]
     extensions: HashMap<String, toml::Value>,
+    /// Data-health rules evaluated for this blueprint's entities.
     #[serde(default)]
+    #[schemars(schema_with = "catalog_rules::embedded_rules_schema")]
     rules: Vec<toml::Value>,
+    /// Attributes in display order. Each declares exactly one of `value_type`,
+    /// `extension_type`, or `from`.
+    #[schemars(length(min = 1))]
     attributes: Vec<RawAttributeDeclaration>,
 }
 
-#[derive(Deserialize)]
+/// An attribute declared by the blueprint or selected from an include.
+#[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct RawAttributeDeclaration {
+    /// Attribute identifier, unique within the blueprint.
+    #[schemars(regex(pattern = CODE_PATTERN))]
     code: String,
+    /// Stored value type.
+    #[schemars(extend("enum" = ATTRIBUTE_VALUE_TYPES))]
     value_type: Option<String>,
     /// A `provider:type@semver-range` reference resolved by the host using an
     /// enabled workspace installation.
     extension_type: Option<String>,
+    /// JSON Schema (Draft 2020-12) source for scalar values.
     value_schema: Option<String>,
+    /// JSON configuration passed to the extension type.
     extension_configuration: Option<String>,
+    /// Value stored in the default context when an entity is created.
+    /// Not supported for relationships and files.
     default_value: Option<serde_json::Value>,
+    /// Relationships: `one`, `many` (default), or `one_to_one`.
+    /// Files: `one` (default) or `many`.
+    #[schemars(extend(
+        "enum" = ATTRIBUTE_CARDINALITIES,
+        "x-attricat-value-types" = ["relationship", "file"]
+    ))]
     cardinality: Option<String>,
+    /// How many sources may link to one target. Defaults to `many`.
+    #[schemars(extend(
+        "enum" = DIRECTIONAL_CARDINALITIES,
+        "x-attricat-value-types" = ["relationship"]
+    ))]
     target_cardinality: Option<String>,
+    /// Whether multiple files keep their order. Defaults to `true` for `many`.
+    #[schemars(extend("x-attricat-value-types" = ["file"]))]
     ordered: Option<bool>,
+    /// Accepted MIME groups, such as `image`.
     #[serde(default)]
+    #[schemars(extend("x-attricat-value-types" = ["file"]))]
     allowed_mime_groups: Vec<String>,
+    /// Accepted file extensions without the leading dot.
     #[serde(default)]
+    #[schemars(extend("x-attricat-value-types" = ["file"]))]
     allowed_extensions: Vec<String>,
+    /// Maximum upload size in bytes.
+    #[schemars(range(min = 1), extend("x-attricat-value-types" = ["file"]))]
     max_bytes: Option<u64>,
+    /// File purpose codes, such as `product_image`.
     #[serde(default)]
+    #[schemars(extend("x-attricat-value-types" = ["file"]))]
     purposes: Vec<String>,
+    /// Accept only images and generate thumbnails.
+    #[schemars(extend("x-attricat-value-types" = ["file"]))]
     image_only: Option<bool>,
+    /// Blueprint that relationship targets must use.
+    #[schemars(
+        regex(pattern = CODE_PATTERN),
+        extend(
+            "x-attricat-reference" = "blueprint",
+            "x-attricat-value-types" = ["relationship"]
+        )
+    )]
     target_blueprint: Option<String>,
+    /// Free-form metadata. `hidden`, `hidden:form`, `hidden:detail`,
+    /// `hidden:explorer`, and `hidden:metadata` hide the attribute from default UI.
     #[serde(default)]
+    #[schemars(extend("x-attricat-suggestions" = [
+        "hidden",
+        "hidden:form",
+        "hidden:detail",
+        "hidden:explorer",
+        "hidden:metadata"
+    ]))]
     tags: Vec<String>,
+    /// Missing values in a non-default context: `default` inherits from the
+    /// nearest ancestor context; `none` leaves the attribute absent.
     #[serde(default = "default_context_fallback")]
+    #[schemars(extend("enum" = CONTEXT_FALLBACKS))]
     context_fallback: String,
+    /// Contexts that accept writes: `all`, or only the `default` context.
     #[serde(default = "default_context_editable")]
+    #[schemars(extend("enum" = CONTEXT_EDITABLE_SCOPES))]
     context_editable: String,
+    /// Preview-only in the Catalog web app. API writes remain allowed.
     #[serde(default)]
     readonly: bool,
+    /// Selects `<include alias>.<attribute code>` from an include. The
+    /// attribute code must match `code`.
+    #[schemars(extend("x-attricat-reference" = "include_attribute"))]
     from: Option<String>,
+}
+
+/// The JSON Schema for blueprint definition TOML, published as
+/// `contracts/blueprint-definition-v1.schema.json`. It describes structure
+/// and allowed values; cross-field rules remain enforced by [`parse`].
+pub fn definition_json_schema() -> serde_json::Value {
+    SchemaSettings::draft2020_12()
+        .into_generator()
+        .into_root_schema_for::<RawBlueprintDefinition>()
+        .to_value()
 }
 
 fn default_context_fallback() -> String {
@@ -130,7 +239,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                 job.code
             )));
         }
-        if !matches!(job.direction.as_str(), "import" | "export")
+        if !CONNECTOR_JOB_DIRECTIONS.contains(&job.direction.as_str())
             || (job.direction == "import") != job.context.is_some()
             || (job.direction == "export" && job.input_file_id.is_some())
             || job
@@ -164,19 +273,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
             ) {
                 (Some(value_type), None, None) => {
                     validate_non_empty(&value_type, "attribute value_type")?;
-                    if !matches!(
-                        value_type.as_str(),
-                        "string"
-                            | "number"
-                            | "integer"
-                            | "boolean"
-                            | "date"
-                            | "datetime"
-                            | "time"
-                            | "json"
-                            | "relationship"
-                            | "file"
-                    ) {
+                    if !ATTRIBUTE_VALUE_TYPES.contains(&value_type.as_str()) {
                         return Err(BlueprintError::UnsupportedValueType {
                             code: attribute.code,
                             value_type,
@@ -229,8 +326,8 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                                     .unwrap_or_else(|| "many".to_owned()),
                             )
                         };
-                        if !matches!(cardinality.as_str(), "one" | "many")
-                            || !matches!(target_cardinality.as_str(), "one" | "many")
+                        if !DIRECTIONAL_CARDINALITIES.contains(&cardinality.as_str())
+                            || !DIRECTIONAL_CARDINALITIES.contains(&target_cardinality.as_str())
                         {
                             return Err(BlueprintError::InvalidRelationshipCardinality(
                                 attribute.code,
@@ -263,13 +360,13 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                     if let Some(target_blueprint) = &attribute.target_blueprint {
                         validate_code(target_blueprint, "attribute target_blueprint")?;
                     }
-                    if !matches!(attribute.context_fallback.as_str(), "default" | "none") {
+                    if !CONTEXT_FALLBACKS.contains(&attribute.context_fallback.as_str()) {
                         return Err(BlueprintError::InvalidContextFallback {
                             code: attribute.code,
                             context_fallback: attribute.context_fallback,
                         });
                     }
-                    if !matches!(attribute.context_editable.as_str(), "all" | "default") {
+                    if !CONTEXT_EDITABLE_SCOPES.contains(&attribute.context_editable.as_str()) {
                         return Err(BlueprintError::InvalidContextEditable {
                             code: attribute.code,
                             context_editable: attribute.context_editable,
@@ -322,13 +419,13 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                     {
                         return Err(BlueprintError::InvalidAttributeDeclaration(attribute.code));
                     }
-                    if !matches!(attribute.context_fallback.as_str(), "default" | "none") {
+                    if !CONTEXT_FALLBACKS.contains(&attribute.context_fallback.as_str()) {
                         return Err(BlueprintError::InvalidContextFallback {
                             code: attribute.code,
                             context_fallback: attribute.context_fallback,
                         });
                     }
-                    if !matches!(attribute.context_editable.as_str(), "all" | "default") {
+                    if !CONTEXT_EDITABLE_SCOPES.contains(&attribute.context_editable.as_str()) {
                         return Err(BlueprintError::InvalidContextEditable {
                             code: attribute.code,
                             context_editable: attribute.context_editable,
@@ -414,7 +511,7 @@ fn parse_file_policy(
         .cardinality
         .clone()
         .unwrap_or_else(|| "one".to_owned());
-    if !matches!(cardinality.as_str(), "one" | "many") {
+    if !DIRECTIONAL_CARDINALITIES.contains(&cardinality.as_str()) {
         return Err(BlueprintError::InvalidFilePolicy(code.to_owned()));
     }
     let ordered = attribute.ordered.unwrap_or(cardinality == "many");

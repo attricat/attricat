@@ -8,23 +8,28 @@ import {
 
 type EditorProps = ComponentProps<typeof Editor>;
 
+export type TomlEditorProps = {
+  ariaLabel?: string;
+  height: string;
+  onChange: EditorProps['onChange'];
+  onMount?: EditorProps['onMount'];
+  /** Additional Monaco options, such as suggestion behavior. */
+  options?: EditorProps['options'];
+  readOnly: boolean;
+  marginTop?: number;
+  value: string;
+};
+
 export const TomlEditor = ({
   ariaLabel,
   height,
   onChange,
   onMount,
+  options,
   readOnly,
   marginTop,
   value,
-}: {
-  ariaLabel?: string;
-  height: string;
-  onChange: EditorProps['onChange'];
-  onMount?: EditorProps['onMount'];
-  readOnly: boolean;
-  marginTop?: number;
-  value: string;
-}) => (
+}: TomlEditorProps) => (
   <Box
     sx={{
       border: 1,
@@ -42,13 +47,14 @@ export const TomlEditor = ({
       onChange={onChange}
       onMount={onMount}
       options={{
-        ariaLabel,
         automaticLayout: true,
         minimap: { enabled: false },
-        readOnly,
         scrollBeyondLastLine: false,
         tabSize: 2,
         wordWrap: 'on',
+        ...options,
+        ariaLabel,
+        readOnly,
       }}
       value={value}
     />

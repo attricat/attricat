@@ -33,6 +33,11 @@ clippy:
 test-rust:
     cargo test --locked --workspace
 
+# Regenerate the definition JSON Schemas derived from the Rust parser types.
+contracts:
+    UPDATE_CONTRACTS=1 cargo test --locked -p catalog-blueprint --test definition_schema definition_schema_contract_is_current
+    UPDATE_CONTRACTS=1 cargo test --locked -p catalog-repository --lib definition_schema_contract_is_current
+
 deny:
     cargo deny check
 
