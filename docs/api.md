@@ -79,6 +79,7 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `POST` | `/auth/password-reset` | Request a password-reset message for a local account. |
 | `POST` | `/auth/password-reset/confirm` | Consume a password-reset secret and set a new password. |
 | `PATCH` | `/auth/preferences` | Replace the authenticated user's display preferences, `{ "time_zone": "Europe/Warsaw" \| null }`, and return the updated session payload. Unknown IANA zone names return `422`. Use `acli auth preferences`. |
+| `PUT` | `/auth/display-name` | Change the authenticated user's display name, `{ "display_name": "Ada Lovelace" }`, and return the updated session payload. Names are 2–64 letters, digits, and spaces with no leading or trailing space; others return `422`. Use `acli auth display-name`. |
 | `POST` | `/onboarding/complete` | Complete the public onboarding flow with its verified invitation or lifecycle secret. |
 | `GET` | `/metrics` | Scrape Prometheus service metrics (`data_health.read`). |
 | `GET` | `/audit-events` | List workspace audit evidence (`audit.read`). |

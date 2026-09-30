@@ -96,5 +96,12 @@ export const updatePreferences = (preferences: UserPreferences) =>
     body: JSON.stringify(preferences),
   });
 
+export const updateDisplayName = (displayName: string) =>
+  request('/api/auth/display-name', sessionSchema, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ display_name: displayName }),
+  });
+
 export const logout = () =>
   requestNoContent('/api/auth/logout', { method: 'POST' });

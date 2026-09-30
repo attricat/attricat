@@ -60,6 +60,15 @@ pub(super) struct PreferencesRequest {
     time_zone: Option<String>,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct DisplayNameRequest {
+    display_name: String,
+}
+
+const DISPLAY_NAME_MIN_CHARS: usize = 2;
+const DISPLAY_NAME_MAX_CHARS: usize = 64;
+
 #[derive(serde::Serialize)]
 pub(super) struct DiscoveryResponse {
     login_identifier: String,
@@ -262,6 +271,48 @@ pub(super) async fn update_preferences(
     .await
 }
 
+pub(super) async fn update_display_name(
+    State(state): State<AppState>,
+    AuthenticatedPrincipal(user_id, token_id): AuthenticatedPrincipal,
+    ActiveWorkspace(workspace_id): ActiveWorkspace,
+    ScopedRepository(repository): ScopedRepository,
+    ApiJson(request): ApiJson<DisplayNameRequest>,
+) -> Result<Json<SessionResponse>, ApiError> {
+    validate_display_name(&request.display_name)?;
+    repository
+        .update_user_display_name(user_id, &request.display_name)
+        .await?;
+    current_session(
+        State(state),
+        AuthenticatedPrincipal(user_id, token_id),
+        ActiveWorkspace(workspace_id),
+    )
+    .await
+}
+
+/// Display names are letters and digits in words separated by spaces, with no
+/// leading or trailing space. Input is never trimmed, so the stored value is
+/// exactly what the user submitted.
+fn validate_display_name(name: &str) -> Result<(), ApiError> {
+    let length = name.chars().count();
+    if !(DISPLAY_NAME_MIN_CHARS..=DISPLAY_NAME_MAX_CHARS).contains(&length) {
+        return Err(ApiError::invalid_input(format!(
+            "display name must be {DISPLAY_NAME_MIN_CHARS} to {DISPLAY_NAME_MAX_CHARS} characters"
+        )));
+    }
+    if !name.chars().all(|c| c.is_alphanumeric() || c == ' ') {
+        return Err(ApiError::invalid_input(
+            "display name may contain only letters, digits, and spaces".to_owned(),
+        ));
+    }
+    if name.starts_with(' ') || name.ends_with(' ') {
+        return Err(ApiError::invalid_input(
+            "display name cannot start or end with a space".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
 /// Accepts canonical IANA names (including `UTC`) and returns the
 /// database's canonical spelling so equivalent inputs store identically.
 fn validate_time_zone(zone: &str) -> Result<String, ApiError> {
@@ -330,7 +381,36 @@ fn digest_login_key(value: &str) -> SessionDigest {
 
 #[cfg(test)]
 mod tests {
-    use super::validate_time_zone;
+    use super::{validate_display_name, validate_time_zone};
+
+    #[test]
+    fn display_name_validation_accepts_letters_digits_and_inner_spaces() {
+        for valid in [
+            "Al",
+            "Ada Lovelace",
+            "R2 D2",
+            "Łukasz Żółć",
+            "x  y",
+            &"a".repeat(64),
+        ] {
+            assert!(validate_display_name(valid).is_ok(), "{valid:?}");
+        }
+        for invalid in [
+            "",
+            "A",
+            " Ada",
+            "Ada ",
+            "  ",
+            "Ada\tLovelace",
+            "Ada\nLovelace",
+            "Ada-Lovelace",
+            "ada@example.test",
+            "Ada_",
+            &"a".repeat(65),
+        ] {
+            assert!(validate_display_name(invalid).is_err(), "{invalid:?}");
+        }
+    }
 
     #[test]
     fn time_zone_validation_accepts_iana_names_and_rejects_others() {

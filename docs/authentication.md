@@ -126,6 +126,16 @@ payload. It only affects rendering: the API stores and returns instants in UTC,
 and exports keep UTC ISO timestamps. Cookie-authenticated requests need the
 CSRF header like any other unsafe request.
 
+## Display name
+
+`PUT /auth/display-name` changes the authenticated user's display name. The
+request body has one required field, `display_name`: 2 to 64 Unicode letters,
+digits, and spaces, where spaces may only appear between other characters (no
+leading or trailing space). The API does not trim the value; invalid names
+return `422`. The name is stored on the user account, so it applies across
+workspaces, and the response is the updated session payload. Cookie-authenticated
+requests need the CSRF header like any other unsafe request.
+
 ## Personal API tokens
 
 `POST /personal-access-tokens` issues an opaque `cat_pat_...` bearer secret for

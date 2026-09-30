@@ -433,3 +433,74 @@ async fn time_zone_preference_persists_on_the_account_and_rejects_unknown_zones(
     assert_eq!(current["time_zone"], Value::Null);
     server.abort();
 }
+
+#[sqlx::test]
+async fn display_name_updates_the_account_and_rejects_invalid_names(pool: PgPool) {
+    let (base_url, server) = start_session_server(pool.clone()).await;
+    let password = Password::new("correct horse battery staple");
+    let hash = hash_password(&password).unwrap();
+    let owner_id = OWNER_ID.parse::<Uuid>().unwrap();
+    sqlx::query("INSERT INTO local_password_credentials (user_id, password_hash) VALUES ($1, $2)")
+        .bind(owner_id)
+        .bind(hash.as_phc())
+        .execute(&pool)
+        .await
+        .unwrap();
+    let client = Client::new();
+    let login = client.post(format!("{base_url}/auth/login"))
+        .json(&json!({ "login_identifier": "default.local", "email": "api-test-owner@example.test", "password": "correct horse battery staple" }))
+        .send().await.unwrap();
+    let (session, csrf) = cookie_pair(&login);
+    let cookie = format!("{session}; {csrf}");
+    let csrf_value = csrf.split_once('=').unwrap().1;
+    let put = |body: Value, csrf: Option<&str>| {
+        let mut request = client
+            .put(format!("{base_url}/auth/display-name"))
+            .header("cookie", &cookie)
+            .json(&body);
+        if let Some(csrf) = csrf {
+            request = request.header("x-catalog-csrf", csrf);
+        }
+        request.send()
+    };
+
+    assert_eq!(
+        put(json!({ "display_name": "Ada Lovelace" }), None)
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::FORBIDDEN
+    );
+    let updated = put(json!({ "display_name": "Ada Lovelace" }), Some(csrf_value))
+        .await
+        .unwrap();
+    assert_eq!(updated.status(), StatusCode::OK);
+    let updated: Value = updated.json().await.unwrap();
+    assert_eq!(updated["display_name"], "Ada Lovelace");
+    assert_eq!(updated["user_id"], OWNER_ID);
+
+    for invalid in [
+        json!("A"),
+        json!(" Ada"),
+        json!("Ada "),
+        json!("Ada-Lovelace"),
+        json!("a".repeat(65)),
+        Value::Null,
+    ] {
+        let rejected = put(json!({ "display_name": invalid }), Some(csrf_value))
+            .await
+            .unwrap();
+        assert_eq!(
+            rejected.status(),
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "{invalid}"
+        );
+    }
+    let stored: Option<String> = sqlx::query_scalar("SELECT display_name FROM users WHERE id = $1")
+        .bind(owner_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(stored.as_deref(), Some("Ada Lovelace"));
+    server.abort();
+}

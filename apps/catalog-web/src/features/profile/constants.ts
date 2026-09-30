@@ -46,3 +46,8 @@ export const tokenSkeletonHeight = 176;
 export const tokensPath = '/profile/personal-access-tokens';
 /** Forms keep a readable column inside the wider settings page. */
 export const tokenFormMaxWidth = 720;
+/** Mirrors the API's display name rules; the API remains authoritative. */
+export const displayNameMinLength = 2;
+export const displayNameMaxLength = 64;
+/** Letters and digits in words separated by spaces. */
+export const displayNameCharacters = /^[\p{Alphabetic}\p{N} ]*$/u;

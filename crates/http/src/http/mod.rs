@@ -550,6 +550,10 @@ pub fn router(state: AppState) -> Router {
             "/auth/preferences",
             axum::routing::patch(sessions::update_preferences),
         )
+        .route(
+            "/auth/display-name",
+            axum::routing::put(sessions::update_display_name),
+        )
         .route("/auth/logout", post(sessions::logout))
         .route("/auth/renew", post(sessions::renew))
         .route(

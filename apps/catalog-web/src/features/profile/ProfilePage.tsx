@@ -3,19 +3,21 @@ import {
   Alert,
   Avatar,
   Box,
+  Button,
   Divider,
   Skeleton,
   Stack,
   Typography,
 } from '@mui/material';
-import { GlobeIcon, LanguagesIcon } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { GlobeIcon, LanguagesIcon, PencilIcon } from 'lucide-react';
+import { type ReactNode, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { monoFontFamily } from '../../app/theme';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import { ProfileIcon } from '../../components/systemIcons';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
+import { ChangeDisplayNameDialog } from './ChangeDisplayNameDialog';
 import { ProfileSection } from './ProfileSection';
 import { TimeZonePreference } from './TimeZonePreference';
 import {
@@ -61,6 +63,7 @@ export const ProfilePage = () => {
   });
   const account = session.data;
   const name = account?.display_name ?? account?.email;
+  const [editingName, setEditingName] = useState(false);
   return (
     <Stack spacing={6}>
       {session.isError && (
@@ -71,31 +74,55 @@ export const ProfilePage = () => {
         icon={ProfileIcon}
         title={t('profile.accountDetails')}
       >
-        <Stack direction="row" spacing={4} sx={{ alignItems: 'center' }}>
-          <Avatar
-            sx={{
-              bgcolor: 'action.selected',
-              color: 'primary.main',
-              fontWeight: 600,
-              height: profileAvatarSize,
-              width: profileAvatarSize,
-            }}
+        <Stack
+          direction={{ xs: 'column', sm: 'row' }}
+          spacing={4}
+          sx={{ alignItems: { xs: 'flex-start', sm: 'center' } }}
+        >
+          <Stack
+            direction="row"
+            spacing={4}
+            sx={{ alignItems: 'center', flex: 1, minWidth: 0, width: '100%' }}
           >
-            {name ? initials(name) : undefined}
-          </Avatar>
-          <Box sx={{ minWidth: 0 }}>
-            <Typography component="p" noWrap variant="h4">
-              {name ?? <Skeleton width={profileSkeletonWidth} />}
-            </Typography>
-            <Typography color="text.secondary" noWrap variant="body2">
-              {account
-                ? account.display_name
-                  ? account.email
-                  : t('profile.displayNameNotSet')
-                : null}
-            </Typography>
-          </Box>
+            <Avatar
+              sx={{
+                bgcolor: 'action.selected',
+                color: 'primary.main',
+                fontWeight: 600,
+                height: profileAvatarSize,
+                width: profileAvatarSize,
+              }}
+            >
+              {name ? initials(name) : undefined}
+            </Avatar>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography component="p" noWrap variant="h4">
+                {name ?? <Skeleton width={profileSkeletonWidth} />}
+              </Typography>
+              <Typography color="text.secondary" noWrap variant="body2">
+                {account
+                  ? account.display_name
+                    ? account.email
+                    : t('profile.displayNameNotSet')
+                  : null}
+              </Typography>
+            </Box>
+          </Stack>
+          <Button
+            disabled={!account}
+            onClick={() => setEditingName(true)}
+            startIcon={<PencilIcon />}
+            variant="outlined"
+          >
+            {t('profile.changeDisplayName')}
+          </Button>
         </Stack>
+        {editingName && account && (
+          <ChangeDisplayNameDialog
+            initialName={account.display_name ?? ''}
+            onClose={() => setEditingName(false)}
+          />
+        )}
         <Divider sx={{ my: 5 }} />
         <Box
           component="dl"
