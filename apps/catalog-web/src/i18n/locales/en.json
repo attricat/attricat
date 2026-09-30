@@ -781,6 +781,7 @@
     "create": "Create token",
     "tokenCreated": "Personal token created.",
     "title": "Profile",
+    "account": "Account",
     "accountDetails": "Account details",
     "displayName": "Display name: {{value}}",
     "email": "Email: {{value}}",

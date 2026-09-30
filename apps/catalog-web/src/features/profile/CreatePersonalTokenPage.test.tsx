@@ -8,7 +8,7 @@ import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
 import { createToken, listTokenPermissions } from './api';
 import { profileQueryKeys } from './queryKeys';
-import { PersonalTokensPage } from './PersonalTokensPage';
+import { CreatePersonalTokenPage } from './CreatePersonalTokenPage';
 
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => vi.fn() }));
 vi.mock('../auth/api', () => ({ currentSession: vi.fn() }));
@@ -17,7 +17,7 @@ vi.mock('./api', () => ({
   listTokenPermissions: vi.fn(),
 }));
 
-describe('PersonalTokensPage', () => {
+describe('CreatePersonalTokenPage', () => {
   it('submits only once while token creation is pending', async () => {
     const client = new QueryClient();
     const session = { capabilities: { tokens_manage: true } };
@@ -32,7 +32,7 @@ describe('PersonalTokensPage', () => {
     const view = render(
       <QueryClientProvider client={client}>
         <ToastProvider>
-          <PersonalTokensPage />
+          <CreatePersonalTokenPage />
         </ToastProvider>
       </QueryClientProvider>,
     );

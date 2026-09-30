@@ -18,12 +18,12 @@ import { SettingsPage } from '../../components/CenteredPage';
 import { useToast } from '../../components/useToast';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
-import { personalTokensHash, tokenPermissionPresets } from './constants';
+import { tokenPermissionPresets } from './constants';
 import { SecretDialog } from './SecretDialog';
 import { createToken, listTokenPermissions } from './api';
 import { profileQueryKeys } from './queryKeys';
 
-export const PersonalTokensPage = () => {
+export const CreatePersonalTokenPage = () => {
   const { t } = useTranslation();
   const { show } = useToast();
   const navigate = useNavigate();
@@ -93,9 +93,7 @@ export const PersonalTokensPage = () => {
     <SettingsPage>
       <Typography variant="h4">{t('profile.createToken')}</Typography>
       <SecretDialog
-        onClose={() =>
-          void navigate({ to: '/profile', hash: personalTokensHash })
-        }
+        onClose={() => void navigate({ to: '/profile/personal-access-tokens' })}
         secret={secret}
       />
       <Paper

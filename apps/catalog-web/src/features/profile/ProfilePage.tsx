@@ -1,13 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Box, Button, Paper, Stack, Typography } from '@mui/material';
-import { Link } from '@tanstack/react-router';
+import { Alert, Paper, Stack, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
-import { SettingsPage } from '../../components/CenteredPage';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
-import { personalTokensHash } from './constants';
-import { PersonalTokens } from './PersonalTokens';
 import { TimeZonePreference } from './TimeZonePreference';
 
 export const ProfilePage = () => {
@@ -18,69 +14,42 @@ export const ProfilePage = () => {
   });
   const account = session.data;
   return (
-    <SettingsPage>
-      <Typography variant="h4">{t('profile.title')}</Typography>
+    <Stack spacing={3}>
       {session.isError && (
         <Alert severity="error">{session.error.message}</Alert>
       )}
-      <Stack spacing={3} sx={{ mt: 3 }}>
-        <Paper sx={{ p: 2 }}>
-          <Typography variant="h6">{t('profile.accountDetails')}</Typography>
-          <Typography>
-            {t('profile.displayName', {
-              value: account?.display_name ?? t('profile.notSet'),
-            })}
-          </Typography>
-          <Typography>
-            {t('profile.email', {
-              value: account?.email ?? t('profile.loading'),
-            })}
-          </Typography>
-          <Typography>
-            {t('profile.userId', {
-              value: account?.user_id ?? t('profile.loading'),
-            })}
-          </Typography>
-          <Typography>
-            {t('profile.activeWorkspace', {
-              value: account?.workspace_id ?? t('profile.loading'),
-            })}
-          </Typography>
-        </Paper>
-        <Paper sx={{ p: 2 }}>
-          <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
-            <Typography variant="h6">{t('language.label')}</Typography>
-            <LanguageSwitcher />
-          </Stack>
-        </Paper>
-        <Paper sx={{ p: 2 }}>
-          <TimeZonePreference disabled={!account} />
-        </Paper>
-        <Box id={personalTokensHash}>
-          <Stack
-            direction="row"
-            sx={{
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              mb: 1,
-            }}
-          >
-            <Typography variant="h5">{t('profile.tokenList')}</Typography>
-            {account?.capabilities?.tokens_manage === true && (
-              <Button
-                component={Link}
-                to="/profile/personal-access-tokens"
-                variant="contained"
-              >
-                {t('profile.createToken')}
-              </Button>
-            )}
-          </Stack>
-          <PersonalTokens
-            canManage={account?.capabilities?.tokens_manage === true}
-          />
-        </Box>
-      </Stack>
-    </SettingsPage>
+      <Paper sx={{ p: 2 }}>
+        <Typography variant="h6">{t('profile.accountDetails')}</Typography>
+        <Typography>
+          {t('profile.displayName', {
+            value: account?.display_name ?? t('profile.notSet'),
+          })}
+        </Typography>
+        <Typography>
+          {t('profile.email', {
+            value: account?.email ?? t('profile.loading'),
+          })}
+        </Typography>
+        <Typography>
+          {t('profile.userId', {
+            value: account?.user_id ?? t('profile.loading'),
+          })}
+        </Typography>
+        <Typography>
+          {t('profile.activeWorkspace', {
+            value: account?.workspace_id ?? t('profile.loading'),
+          })}
+        </Typography>
+      </Paper>
+      <Paper sx={{ p: 2 }}>
+        <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
+          <Typography variant="h6">{t('language.label')}</Typography>
+          <LanguageSwitcher />
+        </Stack>
+      </Paper>
+      <Paper sx={{ p: 2 }}>
+        <TimeZonePreference disabled={!account} />
+      </Paper>
+    </Stack>
   );
 };

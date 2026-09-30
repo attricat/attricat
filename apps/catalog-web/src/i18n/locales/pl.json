@@ -801,6 +801,7 @@
     "create": "Utwórz token",
     "tokenCreated": "Utworzono osobisty token.",
     "title": "Profil",
+    "account": "Konto",
     "accountDetails": "Dane konta",
     "displayName": "Nazwa wyświetlana: {{value}}",
     "email": "E-mail: {{value}}",

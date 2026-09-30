@@ -30,7 +30,6 @@ import { Route as ManageExportsRouteImport } from './routes/manage/exports'
 import { Route as PasswordResetIndexRouteImport } from './routes/password-reset/index'
 import { Route as PasswordResetConfirmRouteImport } from './routes/password-reset/confirm'
 import { Route as ProfileIndexRouteImport } from './routes/profile/index'
-import { Route as ProfilePersonalAccessTokensRouteImport } from './routes/profile/personal-access-tokens'
 import { Route as EntitiesEntityIdIndexRouteImport } from './routes/entities/$entityId/index'
 import { Route as EntitiesEntityIdChangesRouteImport } from './routes/entities/$entityId/changes'
 import { Route as EntitiesEntityIdEditRouteImport } from './routes/entities/$entityId/edit'
@@ -61,6 +60,8 @@ import { Route as ManageWorkspaceInvitationsRouteImport } from './routes/manage/
 import { Route as ManageWorkspaceMembersRouteImport } from './routes/manage/workspace/members'
 import { Route as ManageWorkspaceNavigationRouteImport } from './routes/manage/workspace/navigation'
 import { Route as ManageWorkspaceRolesRouteImport } from './routes/manage/workspace/roles'
+import { Route as ProfilePersonalAccessTokensIndexRouteImport } from './routes/profile/personal-access-tokens/index'
+import { Route as ProfilePersonalAccessTokensNewRouteImport } from './routes/profile/personal-access-tokens/new'
 import { Route as ManageBlueprintsBlueprintIdIndexRouteImport } from './routes/manage/blueprints/$blueprintId/index'
 import { Route as ManageExtensionsOwnerRepositoryRouteImport } from './routes/manage/extensions/$owner/$repository'
 import { Route as ManageWorkflowsWorkflowIdIndexRouteImport } from './routes/manage/workflows/$workflowId/index'
@@ -173,12 +174,6 @@ const ProfileIndexRoute = ProfileIndexRouteImport.update({
   path: '/',
   getParentRoute: () => ProfileRoute,
 } as any)
-const ProfilePersonalAccessTokensRoute =
-  ProfilePersonalAccessTokensRouteImport.update({
-    id: '/personal-access-tokens',
-    path: '/personal-access-tokens',
-    getParentRoute: () => ProfileRoute,
-  } as any)
 const EntitiesEntityIdIndexRoute = EntitiesEntityIdIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -341,6 +336,18 @@ const ManageWorkspaceRolesRoute = ManageWorkspaceRolesRouteImport.update({
   path: '/manage/workspace/roles',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProfilePersonalAccessTokensIndexRoute =
+  ProfilePersonalAccessTokensIndexRouteImport.update({
+    id: '/personal-access-tokens/',
+    path: '/personal-access-tokens/',
+    getParentRoute: () => ProfileRoute,
+  } as any)
+const ProfilePersonalAccessTokensNewRoute =
+  ProfilePersonalAccessTokensNewRouteImport.update({
+    id: '/personal-access-tokens/new',
+    path: '/personal-access-tokens/new',
+    getParentRoute: () => ProfileRoute,
+  } as any)
 const ManageBlueprintsBlueprintIdIndexRoute =
   ManageBlueprintsBlueprintIdIndexRouteImport.update({
     id: '/',
@@ -388,7 +395,6 @@ export interface FileRoutesByFullPath {
   '/manage/data-health': typeof ManageDataHealthRoute
   '/manage/exports': typeof ManageExportsRoute
   '/password-reset/confirm': typeof PasswordResetConfirmRoute
-  '/profile/personal-access-tokens': typeof ProfilePersonalAccessTokensRoute
   '/agents/': typeof AgentsIndexRoute
   '/extensions/': typeof ExtensionsIndexRoute
   '/login/': typeof LoginIndexRoute
@@ -417,6 +423,7 @@ export interface FileRoutesByFullPath {
   '/manage/workspace/members': typeof ManageWorkspaceMembersRoute
   '/manage/workspace/navigation': typeof ManageWorkspaceNavigationRoute
   '/manage/workspace/roles': typeof ManageWorkspaceRolesRoute
+  '/profile/personal-access-tokens/new': typeof ProfilePersonalAccessTokensNewRoute
   '/entities/$entityId/': typeof EntitiesEntityIdIndexRoute
   '/manage/blueprints/': typeof ManageBlueprintsIndexRoute
   '/manage/contexts/': typeof ManageContextsIndexRoute
@@ -425,6 +432,7 @@ export interface FileRoutesByFullPath {
   '/manage/rules/': typeof ManageRulesIndexRoute
   '/manage/workflows/': typeof ManageWorkflowsIndexRoute
   '/manage/workspace/': typeof ManageWorkspaceIndexRoute
+  '/profile/personal-access-tokens/': typeof ProfilePersonalAccessTokensIndexRoute
   '/manage/extensions/$owner/$repository': typeof ManageExtensionsOwnerRepositoryRoute
   '/manage/blueprints/$blueprintId/': typeof ManageBlueprintsBlueprintIdIndexRoute
   '/manage/workflows/$workflowId/': typeof ManageWorkflowsWorkflowIdIndexRoute
@@ -444,7 +452,6 @@ export interface FileRoutesByTo {
   '/manage/data-health': typeof ManageDataHealthRoute
   '/manage/exports': typeof ManageExportsRoute
   '/password-reset/confirm': typeof PasswordResetConfirmRoute
-  '/profile/personal-access-tokens': typeof ProfilePersonalAccessTokensRoute
   '/agents': typeof AgentsIndexRoute
   '/extensions': typeof ExtensionsIndexRoute
   '/login': typeof LoginIndexRoute
@@ -471,6 +478,7 @@ export interface FileRoutesByTo {
   '/manage/workspace/members': typeof ManageWorkspaceMembersRoute
   '/manage/workspace/navigation': typeof ManageWorkspaceNavigationRoute
   '/manage/workspace/roles': typeof ManageWorkspaceRolesRoute
+  '/profile/personal-access-tokens/new': typeof ProfilePersonalAccessTokensNewRoute
   '/entities/$entityId': typeof EntitiesEntityIdIndexRoute
   '/manage/blueprints': typeof ManageBlueprintsIndexRoute
   '/manage/contexts': typeof ManageContextsIndexRoute
@@ -479,6 +487,7 @@ export interface FileRoutesByTo {
   '/manage/rules': typeof ManageRulesIndexRoute
   '/manage/workflows': typeof ManageWorkflowsIndexRoute
   '/manage/workspace': typeof ManageWorkspaceIndexRoute
+  '/profile/personal-access-tokens': typeof ProfilePersonalAccessTokensIndexRoute
   '/manage/extensions/$owner/$repository': typeof ManageExtensionsOwnerRepositoryRoute
   '/manage/blueprints/$blueprintId': typeof ManageBlueprintsBlueprintIdIndexRoute
   '/manage/workflows/$workflowId': typeof ManageWorkflowsWorkflowIdIndexRoute
@@ -502,7 +511,6 @@ export interface FileRoutesById {
   '/manage/data-health': typeof ManageDataHealthRoute
   '/manage/exports': typeof ManageExportsRoute
   '/password-reset/confirm': typeof PasswordResetConfirmRoute
-  '/profile/personal-access-tokens': typeof ProfilePersonalAccessTokensRoute
   '/agents/': typeof AgentsIndexRoute
   '/extensions/': typeof ExtensionsIndexRoute
   '/login/': typeof LoginIndexRoute
@@ -531,6 +539,7 @@ export interface FileRoutesById {
   '/manage/workspace/members': typeof ManageWorkspaceMembersRoute
   '/manage/workspace/navigation': typeof ManageWorkspaceNavigationRoute
   '/manage/workspace/roles': typeof ManageWorkspaceRolesRoute
+  '/profile/personal-access-tokens/new': typeof ProfilePersonalAccessTokensNewRoute
   '/entities/$entityId/': typeof EntitiesEntityIdIndexRoute
   '/manage/blueprints/': typeof ManageBlueprintsIndexRoute
   '/manage/contexts/': typeof ManageContextsIndexRoute
@@ -539,6 +548,7 @@ export interface FileRoutesById {
   '/manage/rules/': typeof ManageRulesIndexRoute
   '/manage/workflows/': typeof ManageWorkflowsIndexRoute
   '/manage/workspace/': typeof ManageWorkspaceIndexRoute
+  '/profile/personal-access-tokens/': typeof ProfilePersonalAccessTokensIndexRoute
   '/manage/extensions/$owner/$repository': typeof ManageExtensionsOwnerRepositoryRoute
   '/manage/blueprints/$blueprintId/': typeof ManageBlueprintsBlueprintIdIndexRoute
   '/manage/workflows/$workflowId/': typeof ManageWorkflowsWorkflowIdIndexRoute
@@ -563,7 +573,6 @@ export interface FileRouteTypes {
     | '/manage/data-health'
     | '/manage/exports'
     | '/password-reset/confirm'
-    | '/profile/personal-access-tokens'
     | '/agents/'
     | '/extensions/'
     | '/login/'
@@ -592,6 +601,7 @@ export interface FileRouteTypes {
     | '/manage/workspace/members'
     | '/manage/workspace/navigation'
     | '/manage/workspace/roles'
+    | '/profile/personal-access-tokens/new'
     | '/entities/$entityId/'
     | '/manage/blueprints/'
     | '/manage/contexts/'
@@ -600,6 +610,7 @@ export interface FileRouteTypes {
     | '/manage/rules/'
     | '/manage/workflows/'
     | '/manage/workspace/'
+    | '/profile/personal-access-tokens/'
     | '/manage/extensions/$owner/$repository'
     | '/manage/blueprints/$blueprintId/'
     | '/manage/workflows/$workflowId/'
@@ -619,7 +630,6 @@ export interface FileRouteTypes {
     | '/manage/data-health'
     | '/manage/exports'
     | '/password-reset/confirm'
-    | '/profile/personal-access-tokens'
     | '/agents'
     | '/extensions'
     | '/login'
@@ -646,6 +656,7 @@ export interface FileRouteTypes {
     | '/manage/workspace/members'
     | '/manage/workspace/navigation'
     | '/manage/workspace/roles'
+    | '/profile/personal-access-tokens/new'
     | '/entities/$entityId'
     | '/manage/blueprints'
     | '/manage/contexts'
@@ -654,6 +665,7 @@ export interface FileRouteTypes {
     | '/manage/rules'
     | '/manage/workflows'
     | '/manage/workspace'
+    | '/profile/personal-access-tokens'
     | '/manage/extensions/$owner/$repository'
     | '/manage/blueprints/$blueprintId'
     | '/manage/workflows/$workflowId'
@@ -676,7 +688,6 @@ export interface FileRouteTypes {
     | '/manage/data-health'
     | '/manage/exports'
     | '/password-reset/confirm'
-    | '/profile/personal-access-tokens'
     | '/agents/'
     | '/extensions/'
     | '/login/'
@@ -705,6 +716,7 @@ export interface FileRouteTypes {
     | '/manage/workspace/members'
     | '/manage/workspace/navigation'
     | '/manage/workspace/roles'
+    | '/profile/personal-access-tokens/new'
     | '/entities/$entityId/'
     | '/manage/blueprints/'
     | '/manage/contexts/'
@@ -713,6 +725,7 @@ export interface FileRouteTypes {
     | '/manage/rules/'
     | '/manage/workflows/'
     | '/manage/workspace/'
+    | '/profile/personal-access-tokens/'
     | '/manage/extensions/$owner/$repository'
     | '/manage/blueprints/$blueprintId/'
     | '/manage/workflows/$workflowId/'
@@ -915,13 +928,6 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/profile/'
       preLoaderRoute: typeof ProfileIndexRouteImport
-      parentRoute: typeof ProfileRoute
-    }
-    '/profile/personal-access-tokens': {
-      id: '/profile/personal-access-tokens'
-      path: '/personal-access-tokens'
-      fullPath: '/profile/personal-access-tokens'
-      preLoaderRoute: typeof ProfilePersonalAccessTokensRouteImport
       parentRoute: typeof ProfileRoute
     }
     '/entities/$entityId/': {
@@ -1134,6 +1140,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ManageWorkspaceRolesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/profile/personal-access-tokens/': {
+      id: '/profile/personal-access-tokens/'
+      path: '/personal-access-tokens'
+      fullPath: '/profile/personal-access-tokens/'
+      preLoaderRoute: typeof ProfilePersonalAccessTokensIndexRouteImport
+      parentRoute: typeof ProfileRoute
+    }
+    '/profile/personal-access-tokens/new': {
+      id: '/profile/personal-access-tokens/new'
+      path: '/personal-access-tokens/new'
+      fullPath: '/profile/personal-access-tokens/new'
+      preLoaderRoute: typeof ProfilePersonalAccessTokensNewRouteImport
+      parentRoute: typeof ProfileRoute
+    }
     '/manage/blueprints/$blueprintId/': {
       id: '/manage/blueprints/$blueprintId/'
       path: '/'
@@ -1185,13 +1205,15 @@ const LoginRouteChildren: LoginRouteChildren = {
 const LoginRouteWithChildren = LoginRoute._addFileChildren(LoginRouteChildren)
 
 interface ProfileRouteChildren {
-  ProfilePersonalAccessTokensRoute: typeof ProfilePersonalAccessTokensRoute
   ProfileIndexRoute: typeof ProfileIndexRoute
+  ProfilePersonalAccessTokensNewRoute: typeof ProfilePersonalAccessTokensNewRoute
+  ProfilePersonalAccessTokensIndexRoute: typeof ProfilePersonalAccessTokensIndexRoute
 }
 
 const ProfileRouteChildren: ProfileRouteChildren = {
-  ProfilePersonalAccessTokensRoute: ProfilePersonalAccessTokensRoute,
   ProfileIndexRoute: ProfileIndexRoute,
+  ProfilePersonalAccessTokensNewRoute: ProfilePersonalAccessTokensNewRoute,
+  ProfilePersonalAccessTokensIndexRoute: ProfilePersonalAccessTokensIndexRoute,
 }
 
 const ProfileRouteWithChildren =

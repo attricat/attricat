@@ -119,9 +119,10 @@ const sectionTitle = (t: TFunction, [section, ...rest]: Segments) => {
     case 'invitations':
       return t('workspace.invitations');
     case 'profile':
-      return group === 'personal-access-tokens'
-        ? t('profile.tokenList')
-        : t('navigation.profile');
+      if (group !== 'personal-access-tokens') return t('navigation.profile');
+      return rest[1] === 'new'
+        ? t('profile.createToken')
+        : t('profile.tokenList');
     case 'agents':
       return agentsTitle(t, rest);
     case 'entities':

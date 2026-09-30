@@ -8,14 +8,17 @@ test('opens Profile and manages a personal API token', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Profile' })).toBeVisible();
   await expect(page.getByText('Email: owner@example.test')).toBeVisible();
 
-  await page.getByRole('link', { name: 'Create personal token' }).click();
+  await page.getByRole('tab', { name: 'Personal API tokens' }).click();
   await expect(page).toHaveURL(/\/profile\/personal-access-tokens$/);
+  await page.getByRole('link', { name: 'Create personal token' }).click();
+  await expect(page).toHaveURL(/\/profile\/personal-access-tokens\/new$/);
   await page.getByLabel('Label').fill('playwright token');
   await page.getByLabel('blueprints.read').check();
   await page.getByRole('button', { name: 'Create token' }).click();
   await expect(page.getByText('Copy this secret now')).toBeVisible();
   await expect(page.locator('input[value^="cat_pat_"]')).toBeVisible();
   await page.keyboard.press('Escape');
+  await expect(page).toHaveURL(/\/profile\/personal-access-tokens$/);
 
   const token = page
     .getByRole('listitem')

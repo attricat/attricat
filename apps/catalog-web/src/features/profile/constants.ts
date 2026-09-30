@@ -26,7 +26,14 @@ export const tokenPermissionPresets = [
 ];
 
 export const secretDialogMinWidth = 360;
-export const personalTokensHash = 'personal-api-tokens';
+export const profileTabIds = {
+  tab: (index: number) => `profile-tab-${index}`,
+  panel: (index: number) => `profile-tabpanel-${index}`,
+};
+export const profileTabIndex = {
+  account: 0,
+  personalTokens: 1,
+} as const;
 export const timeZonePickerMaxWidth = 480;
 /** How often the time zone preview clock advances. */
 export const previewRefreshMilliseconds = 30_000;
