@@ -12,6 +12,7 @@ import { agentQueryKeys } from './queryKeys';
 import { ConversationPanel } from './ConversationPanel';
 import { isTitlePending } from './titlePolling';
 import { RenameConversationDialog } from './RenameConversationDialog';
+import { AgentIcon } from '../../components/systemIcons';
 
 export type ConversationDetailPageProps = { conversationId: string };
 
@@ -53,6 +54,7 @@ export const ConversationDetailPage = ({
             )
           }
           eyebrow={t('agents.agentConversation')}
+          icon={AgentIcon}
           title={conversation.data?.title ?? t('agents.conversation')}
           titleVariant="h3"
         />

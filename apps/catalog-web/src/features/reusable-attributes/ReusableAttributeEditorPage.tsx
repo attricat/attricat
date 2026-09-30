@@ -24,6 +24,7 @@ import {
   PREVIEW_COLUMN_WIDTH,
 } from './constants';
 import { latestReusableAttributeRevisions } from './latestRevisions';
+import { ReusableAttributeIcon } from '../../components/systemIcons';
 
 const definitionValue = (definition: string, key: string) =>
   definition.match(new RegExp(`^${key}\\s*=\\s*"([^"]*)"`, 'm'))?.[1];
@@ -131,6 +132,7 @@ export const ReusableAttributeEditorPage = ({
       <Stack spacing={3}>
         <PageHeader
           description={t('reusableAttributes.editor.description')}
+          icon={ReusableAttributeIcon}
           title={
             attribute
               ? t('reusableAttributes.editor.editTitle', {

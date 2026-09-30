@@ -16,6 +16,7 @@ import { reusableAttributeQueryKeys } from './queryKeys';
 import { ReusableAttributeGroupDialog } from './ReusableAttributeGroupDialog';
 import { ReusableAttributeGroupsTable } from './ReusableAttributeGroupsTable';
 import { ReusableAttributesTable } from './ReusableAttributesTable';
+import { ReusableAttributeIcon } from '../../components/systemIcons';
 
 export const ReusableAttributesPage = () => {
   const { t } = useTranslation();
@@ -45,6 +46,7 @@ export const ReusableAttributesPage = () => {
     <PageContainer>
       <PageHeader
         description={t('reusableAttributes.description')}
+        icon={ReusableAttributeIcon}
         title={t('reusableAttributes.title')}
         actions={
           <Stack direction="row" spacing={1}>

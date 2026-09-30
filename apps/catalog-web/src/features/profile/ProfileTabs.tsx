@@ -33,6 +33,7 @@ export const ProfileTabs = ({ children, tab }: ProfileTabsProps) => {
     <SettingsPage>
       <PageHeader
         description={t('profile.description')}
+        icon={ProfileIcon}
         title={t('profile.title')}
       />
       <Tabs aria-label={t('profile.title')} sx={{ mb: 6, mt: 5 }} value={tab}>

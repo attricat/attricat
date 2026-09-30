@@ -22,6 +22,7 @@ import { ExtensionInstallationStatusSection } from './ExtensionInstallationStatu
 import { ExtensionLifecycleSection } from './ExtensionLifecycleSection';
 import { ExtensionPermissionsSection } from './ExtensionPermissionsSection';
 import { ExtensionUpgradeSection } from './ExtensionUpgradeSection';
+import { ExtensionIcon } from '../../components/systemIcons';
 
 type InstallationAction =
   | { action: ExtensionLifecycleAction }
@@ -65,6 +66,7 @@ export const InstalledExtensionPage = ({
   return (
     <PageContainer>
       <PageHeader
+        icon={ExtensionIcon}
         title={installation?.extension_id ?? t('extensions.extensionFallback')}
         description={
           installation

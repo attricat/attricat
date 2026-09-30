@@ -8,6 +8,7 @@ import { PageHeader } from '../../components/PageHeader';
 import { getVisibleManagementNavigationItems } from '../../components/navigation';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
+import { ManagementIcon } from '../../components/systemIcons';
 
 export const ManagementDashboardPage = () => {
   const { t } = useTranslation();
@@ -24,6 +25,7 @@ export const ManagementDashboardPage = () => {
     <PageContainer>
       <PageHeader
         description={t('management.dashboardDescription')}
+        icon={ManagementIcon}
         title={t('management.dashboardTitle')}
       />
       <Box

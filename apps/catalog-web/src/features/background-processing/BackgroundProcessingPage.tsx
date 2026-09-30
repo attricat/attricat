@@ -19,6 +19,7 @@ import {
   backgroundProcessingRefreshSeconds,
 } from './constants';
 import { backgroundProcessingQueryKeys } from './queryKeys';
+import { BackgroundProcessingIcon } from '../../components/systemIcons';
 
 export const BackgroundProcessingPage = () => {
   const { t } = useTranslation();
@@ -41,6 +42,7 @@ export const BackgroundProcessingPage = () => {
     <PageContainer>
       <Stack spacing={2}>
         <PageHeader
+          icon={BackgroundProcessingIcon}
           title={t('backgroundProcessing.title')}
           description={t('backgroundProcessing.description')}
           actions={

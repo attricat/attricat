@@ -28,6 +28,7 @@ import { WorkflowComparePanel } from './WorkflowComparePanel';
 import { WorkflowRevisionTable } from './WorkflowRevisionTable';
 import { WorkflowRunTable } from './WorkflowRunTable';
 import { WorkflowSourcePanel } from './WorkflowSourcePanel';
+import { WorkflowIcon } from '../../components/systemIcons';
 
 export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
   const { t } = useTranslation();
@@ -137,6 +138,7 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
           ) : undefined
         }
         eyebrow={t('workflows.workflow')}
+        icon={WorkflowIcon}
         title={current.name}
       />
       <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', mt: 1 }}>

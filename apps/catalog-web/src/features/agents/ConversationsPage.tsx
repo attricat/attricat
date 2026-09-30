@@ -26,6 +26,7 @@ import {
 } from './constants';
 import { agentQueryKeys } from './queryKeys';
 import { isTitlePending } from './titlePolling';
+import { AgentIcon } from '../../components/systemIcons';
 
 export const ConversationsPage = ({ search }: { search: { q?: string } }) => {
   const { t } = useTranslation();
@@ -57,6 +58,7 @@ export const ConversationsPage = ({ search }: { search: { q?: string } }) => {
           </Button>
         }
         description={t('agents.conversationDescription')}
+        icon={AgentIcon}
         title={t('agents.agentConversations')}
       />
       <Box

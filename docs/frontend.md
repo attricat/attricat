@@ -47,6 +47,32 @@ light and dark modes.
   Ajv helper for immediate form feedback, but treat server-side `422` schema
   validation as authoritative.
 
+## Adding Pages
+
+- Add the route file under `src/routes` and keep it thin: it renders one page
+  component from `src/features/<feature>`.
+- Wrap the page in `PageContainer` (or `SettingsPage` for narrow settings
+  layouts) and open it with `PageHeader` from `src/components/PageHeader.tsx`.
+  Do not hand-roll a page title with `Typography`.
+- Every page title is prefixed with the icon of the system concept it presents.
+  Pass that icon to `PageHeader` as `icon`, imported from
+  `src/components/systemIcons.ts`. TypeScript rejects a `title` without an
+  `icon`. Use the same icon the navigation uses for that section, and keep
+  child pages on their section's icon (for example, the blueprint list,
+  detail, and editor pages all use `BlueprintIcon`). Pages that present a
+  different concept use that concept's icon (for example, creating a personal
+  API token uses `PersonalTokenIcon` inside Profile).
+- If the page presents a concept with no registry export yet, add a semantic
+  export to `systemIcons.ts` first (see [Icons](#icons)) rather than importing
+  a Lucide icon directly.
+- A heading rendered outside `PageHeader`, such as an entity heading built from
+  a view definition, uses `PageTitle` from `src/components/PageTitle.tsx` so
+  its icon, colour, and sizing match every other page.
+- A header that shows only an `eyebrow` and no title does not take an icon.
+- Add a management section to `src/components/navigation.ts` with the same
+  registry icon so the side navigation and management dashboard card match
+  the page header.
+
 ## Timestamps
 
 - The API stores and returns instants in UTC. Render every instant through `src/time`: `<Timestamp value={iso} />` in JSX, or `useInstantFormat()` where only a string fits (for example a tooltip title or accessible label). Do not call `toLocaleString`, `toLocaleDateString`, `toLocaleTimeString`, or `Intl.DateTimeFormat` elsewhere; ESLint rejects them outside `src/time`.

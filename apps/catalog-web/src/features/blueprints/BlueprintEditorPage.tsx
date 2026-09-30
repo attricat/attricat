@@ -21,6 +21,7 @@ import { BlueprintTemplateDialog } from './BlueprintTemplateDialog';
 import { blueprintEditorHeight } from './constants';
 import { blueprintQueryKeys } from './queryKeys';
 import { UnsavedBlueprintChangesDialog } from './UnsavedBlueprintChangesDialog';
+import { BlueprintIcon } from '../../components/systemIcons';
 
 type PendingUnsavedAction =
   { templateIndex: number; type: 'replace' } | { type: 'discard' };
@@ -169,6 +170,7 @@ export const BlueprintEditorPage = ({
                 })
               : t('blueprints.newBlueprintDescription')
           }
+          icon={BlueprintIcon}
           title={
             blueprintId
               ? t('blueprints.newBlueprintRevision')

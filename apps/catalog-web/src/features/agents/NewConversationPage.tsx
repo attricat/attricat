@@ -17,6 +17,7 @@ import { conversationTitleFromFirstMessage } from './conversationTitle';
 import { MessageInputBox } from './MessageInputBox';
 import { agentQueryKeys } from './queryKeys';
 import { useMessageAttachments } from './useMessageAttachments';
+import { AgentIcon } from '../../components/systemIcons';
 
 export const NewConversationPage = () => {
   const { t } = useTranslation();
@@ -80,6 +81,7 @@ export const NewConversationPage = () => {
       <Box sx={{ maxWidth: newConversationMaxWidth, mx: 'auto' }}>
         <PageHeader
           description={t('agents.newConversationDescription')}
+          icon={AgentIcon}
           title={t('agents.newAgentConversation')}
           titleVariant="h3"
         />

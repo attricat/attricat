@@ -8,6 +8,7 @@ import { PageHeader } from '../../components/PageHeader';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
 import { extensionManagementTabIds } from './constants';
+import { ExtensionIcon } from '../../components/systemIcons';
 
 const extensionTabs = [
   { label: 'extensions.marketplace', to: '/manage/extensions/marketplace' },
@@ -41,6 +42,7 @@ export const ExtensionManagementPage = ({
   return (
     <PageContainer>
       <PageHeader
+        icon={ExtensionIcon}
         title={t('extensions.title')}
         description={t('extensions.description')}
         actions={

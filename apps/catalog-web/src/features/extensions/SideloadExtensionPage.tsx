@@ -11,6 +11,7 @@ import { sideloadExtension } from './managementApi';
 import { ErrorNotice } from './ExtensionErrorNotice';
 import { invalidateExtensions } from './extensionPageUtils';
 import { extensionArchiveAccept } from './constants';
+import { ExtensionIcon } from '../../components/systemIcons';
 
 export const SideloadExtensionPage = () => {
   const { t } = useTranslation();
@@ -39,6 +40,7 @@ export const SideloadExtensionPage = () => {
   return (
     <PageContainer>
       <PageHeader
+        icon={ExtensionIcon}
         title={t('extensions.uploadTitle')}
         description={t('extensions.uploadDescription')}
         actions={<Link to="/manage/extensions">{t('extensions.back')}</Link>}

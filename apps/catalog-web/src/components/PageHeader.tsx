@@ -1,18 +1,25 @@
 import { Box, Stack, Typography } from '@mui/material';
+import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { PageTitle, type PageTitleVariant } from './PageTitle';
+
+// A titled header must name the icon of the system concept it presents; take
+// it from `systemIcons` so pages match navigation.
+type PageHeaderTitleProps =
+  { icon: LucideIcon; title: ReactNode } | { icon?: never; title?: never };
 
 export const PageHeader = ({
   actions,
   description,
   eyebrow,
+  icon,
   title,
   titleVariant = 'h3',
-}: {
+}: PageHeaderTitleProps & {
   actions?: ReactNode;
   description?: ReactNode;
   eyebrow?: ReactNode;
-  title?: ReactNode;
-  titleVariant?: 'h2' | 'h3';
+  titleVariant?: PageTitleVariant;
 }) => (
   <Stack
     direction={{ xs: 'column', sm: actions ? 'row' : 'column' }}
@@ -25,10 +32,10 @@ export const PageHeader = ({
           {eyebrow}
         </Typography>
       )}
-      {title && (
-        <Typography component="h1" variant={titleVariant}>
+      {icon && (
+        <PageTitle icon={icon} variant={titleVariant}>
           {title}
-        </Typography>
+        </PageTitle>
       )}
       {description && (
         <Typography color="text.secondary">{description}</Typography>

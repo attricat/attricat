@@ -14,7 +14,10 @@ import { useDocumentationUrl } from '../../app/documentation';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { RouterButton } from '../../components/RouterLink';
-import { DocumentationIcon } from '../../components/systemIcons';
+import {
+  DocumentationIcon,
+  OnboardingIcon,
+} from '../../components/systemIcons';
 import {
   getVisibleOnboardingSteps,
   type OnboardingCapabilities,
@@ -53,6 +56,7 @@ export const WorkspaceOnboardingPage = ({
         <PageHeader
           actions={documentationButton}
           description={t('onboarding.emptyDescription')}
+          icon={OnboardingIcon}
           title={t('onboarding.emptyTitle')}
         />
       </PageContainer>
@@ -64,6 +68,7 @@ export const WorkspaceOnboardingPage = ({
         actions={documentationButton}
         description={t('onboarding.description')}
         eyebrow={t('onboarding.eyebrow')}
+        icon={OnboardingIcon}
         title={t('onboarding.title')}
       />
       <Box
