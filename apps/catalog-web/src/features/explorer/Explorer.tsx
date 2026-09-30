@@ -130,7 +130,7 @@ export const Explorer = ({ search: urlSearch, savedView }: Props) => {
       <Box sx={{ flexGrow: 1, minWidth: 0 }}>
         <PageContainer>
           <ExplorerPageHeader
-            blueprint={search.blueprint}
+            blueprint={blueprintMissing ? undefined : search.blueprint}
             locked={Boolean(search.locked)}
             lockedBlueprintName={lockedBlueprintName}
           />
