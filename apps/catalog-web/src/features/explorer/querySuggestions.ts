@@ -6,6 +6,7 @@ import {
   isSearchableLeaf,
   maximumQueryRelationshipHops,
   queryCursorContext,
+  queryIdSelector,
   querySelectorSeparator,
   queryWildcard,
   resolveRelationshipPath,
@@ -41,6 +42,8 @@ export type QuerySuggestion =
       target: string;
     }
   | { kind: 'global'; code: string; insert: string }
+  /** Matches listed entity IDs: `@id:id-1,id-2`. */
+  | { kind: 'ids'; code: string; insert: string }
   | { kind: 'value'; code: string; insert: string };
 
 export type QuerySuggestionResult = {
@@ -126,6 +129,11 @@ const fieldSuggestions = (
       });
     }
   }
+  suggestions.push({
+    kind: 'ids',
+    code: queryIdSelector,
+    insert: queryIdSelector + querySelectorSeparator,
+  });
   // The "all fields" row keeps its place: it matches the path, not `partial`.
   const [first, ...rest] = suggestions;
   const ranked =

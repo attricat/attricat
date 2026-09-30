@@ -590,6 +590,7 @@
       "allFields": "Szukaj we wszystkich polach powiązanego rekordu {{target}}",
       "allFieldsTitle": "{{field}} (wszystkie pola)",
       "global": "Szukaj we wszystkich schematach i wróć po powiązaniach (do 3 relacji)",
+      "ids": "Dopasuj rekordy po ID; kilka ID oddziel przecinkami",
       "valueHint": "Wpisz wartość do znalezienia w {{field}}. Zakończ ją znakiem *, aby dopasować początek.",
       "keyboardHint": "↑↓ wybór · Tab lub Enter wstawia · Esc zamyka · Ctrl+Spacja otwiera ponownie"
     },
@@ -607,6 +608,8 @@
     "queryErrors": {
       "malformedTerm": "„{{term}}” jest niepełne. Użyj pole:wartość.",
       "misplacedWildcard": "* może występować tylko na końcu: „{{term}}”.",
+      "invalidId": "„{{id}}” nie jest ID rekordu. Podaj ID rozdzielone przecinkami.",
+      "tooManyIds": "Fraza wyszukiwania może zawierać najwyżej {{count}} ID.",
       "tooManyHops": "Ścieżka wyszukiwania może przejść przez najwyżej 3 relacje.",
       "unknownField": "„{{field}}” nie jest polem, które można przeszukać.",
       "unknownRelationship": "„{{field}}” nie jest relacją.",

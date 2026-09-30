@@ -29,6 +29,8 @@ To search further, qualify the term:
 | `colors.name:red` | Same, but only the linked entity's `name`. |
 | `family.product_type.name:laptop` | Follows two relationships, then matches `name`. |
 | `*:red` | Entities with "red" on themselves or on anything linked within three steps. |
+| `@id:ID-1,ID-2` | Exactly the listed entities. |
+| `colors.@id:ID-1,ID-2` | Entities linked through `colors` to one of the listed entities. |
 
 Several terms separated by spaces must all match. The full grammar is in [Search syntax](/guides/search-syntax/).
 

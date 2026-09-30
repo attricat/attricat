@@ -52,6 +52,27 @@ Nazwy wyświetlane schematów są dopasowywane bez rozróżniania wielkości lit
 
 Gdy jednoczłonowy selektor może oznaczać zarówno nazwę schematu, jak i jedną z jego relacji, pierwszeństwo ma schemat.
 
+## Identyfikatory encji
+
+`@id:` dopasowuje encje po ID zamiast po wartości. Kilka ID oddziel przecinkami, bez spacji. Encja pasuje, gdy jej ID jest jednym z podanych:
+
+```text
+@id:0190a6f2-7c1e-7b3a-9c4d-2e5f6a7b8c9d,0190a6f2-7c1e-7b3a-9c4d-2e5f6a7b8c9e
+```
+
+Umieść `@id` na końcu ścieżki relacji, aby dopasować encje powiązane z jednym z podanych ID:
+
+| Postać | Przykład | Dopasowuje |
+| --- | --- | --- |
+| `@id:ids` | `@id:…9c9d,…9c9e` | Encje wybranego schematu o jednym z tych ID. |
+| `blueprint.@id:ids` | `product.@id:…9c9d` | To samo co `@id:…`, zapisane jawnie. |
+| `relationship.@id:ids` | `colors.@id:…4a1b,…4a1c` | Encje powiązane przez `colors` z jedną z tych encji. |
+| `rel.rel.@id:ids` | `category.parent.@id:…77e0` | Przechodzi przez maksymalnie trzy relacje, a następnie dopasowuje ID powiązanej encji. |
+
+Termin może zawierać najwyżej 100 ID i nie obsługuje symboli wieloznacznych. ID, które nie istnieją lub należą do innego schematu, niczego nie dopasowują. Pozostałe terminy nadal obowiązują, więc `@id:… linen` zostawia tylko te z podanych encji, które zawierają też „linen”.
+
+Lista jest częścią zapytania, więc zapisanie wyszukiwania jako [zapisanego wyszukiwania](/pl/guides/explore/#zapisywanie-i-udostępnianie-wyszukiwań) zachowuje stały wybór encji.
+
 ## Wyszukiwanie globalne
 
 `*:term` przeszukuje wszystkie schematy, a następnie cofa się wzdłuż relacji, maksymalnie o trzy kroki, aby znaleźć encje wybranego schematu powiązane z dopasowaniem.

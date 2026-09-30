@@ -52,6 +52,27 @@ Blueprint display names are matched without regard to case. If two blueprints sh
 
 When a one-part selector could be either the blueprint's name or one of its relationships, the blueprint wins.
 
+## Entity IDs
+
+`@id:` matches entities by ID instead of by value. List several IDs separated by commas, without spaces. An entity matches when its ID is any one of them:
+
+```text
+@id:0190a6f2-7c1e-7b3a-9c4d-2e5f6a7b8c9d,0190a6f2-7c1e-7b3a-9c4d-2e5f6a7b8c9e
+```
+
+Put `@id` at the end of a relationship path to match entities linked to one of the listed IDs:
+
+| Form | Example | Matches |
+| --- | --- | --- |
+| `@id:ids` | `@id:…9c9d,…9c9e` | The chosen blueprint's entities with one of these IDs. |
+| `blueprint.@id:ids` | `product.@id:…9c9d` | Same as `@id:…`, written explicitly. |
+| `relationship.@id:ids` | `colors.@id:…4a1b,…4a1c` | Entities linked through `colors` to one of these entities. |
+| `rel.rel.@id:ids` | `category.parent.@id:…77e0` | Follows up to three relationships, then matches the linked entity's ID. |
+
+A term lists at most 100 IDs, and wildcards are not allowed. IDs that do not exist, or that belong to another blueprint, match nothing. Other terms still apply, so `@id:… linen` keeps only the listed entities that also contain "linen".
+
+Because the list is part of the query, saving the search as a [saved search](/guides/explore/#save-and-share-searches) keeps a fixed selection of entities.
+
 ## Global search
 
 `*:term` searches every blueprint, then walks back along relationships, up to three steps, to find entities of the chosen blueprint connected to a match.
