@@ -15,6 +15,9 @@ export default defineConfig({
         replacesTitle: true,
       },
       customCss: ['./src/styles/brand.css'],
+      components: {
+        SocialIcons: './src/components/SocialIcons.astro',
+      },
       description: 'Documentation for building, using, extending, and operating an Attricat catalog.',
       defaultLocale: 'root',
       locales: {
