@@ -6,7 +6,8 @@ import net from "node:net";
  *
  * Each worktree receives stable, otherwise-unused PostgreSQL, API, web,
  * documentation ports, Mailpit SMTP, Mailpit UI, Jaeger OTLP,
- * Jaeger UI, RustFS S3, and RustFS Console ports in `.worktree`. The assignments are reused on later runs so
+ * Jaeger UI, RustFS S3, RustFS Console, and file worker operations ports in
+ * `.worktree`. The assignments are reused on later runs so
  * `just dev` can be stopped and restarted without changing its URLs. The
  * script creates `.env` from `.env.example` when necessary, while preserving
  * existing non-port configuration in an existing `.env` file.
@@ -25,6 +26,7 @@ const portNames = [
   "JAEGER_UI_PORT",
   "RUSTFS_PORT",
   "RUSTFS_CONSOLE_PORT",
+  "FILE_WORKER_OPERATIONS_PORT",
 ];
 
 /** Parse simple KEY=VALUE entries from .env-style files. */
@@ -113,6 +115,11 @@ env = setEnvValue(
 );
 env = setEnvValue(env, "RUSTFS_PORT", ports.RUSTFS_PORT);
 env = setEnvValue(env, "RUSTFS_CONSOLE_PORT", ports.RUSTFS_CONSOLE_PORT);
+env = setEnvValue(
+  env,
+  "FILE_WORKER_OPERATIONS_BIND_ADDR",
+  `127.0.0.1:${ports.FILE_WORKER_OPERATIONS_PORT}`,
+);
 env = setEnvValue(env, "S3_ENDPOINT", `http://127.0.0.1:${ports.RUSTFS_PORT}`);
 env = setEnvValue(env, "S3_REGION", "us-east-1");
 env = setEnvValue(env, "S3_BUCKET", "catalog-files");
