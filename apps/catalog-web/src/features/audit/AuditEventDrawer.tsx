@@ -4,7 +4,8 @@ import { RouterButton } from '../../components/RouterLink';
 import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
 import type { AuditEvent } from './api';
 import { Timestamp } from '../../time/Timestamp';
-import { auditActor } from './auditFormat';
+import { UserLabel } from '../../components/UserLabel';
+import { AuditActor } from './AuditActor';
 import {
   auditDrawerWidth,
   auditEventPanelOutlet,
@@ -54,6 +55,7 @@ export const AuditEventDrawer = ({
             <Typography>
               <Trans
                 components={{
+                  actor: <AuditActor event={event} systemLabel={systemLabel} />,
                   timestamp: (
                     <Timestamp
                       style="dateTimeSeconds"
@@ -63,10 +65,7 @@ export const AuditEventDrawer = ({
                 }}
                 i18nKey="audit.eventBy"
                 t={t}
-                values={{
-                  action: event.action,
-                  actor: auditActor(event, systemLabel),
-                }}
+                values={{ action: event.action }}
               />
             </Typography>
             {event.agent_conversation_id && (
@@ -89,16 +88,32 @@ export const AuditEventDrawer = ({
               value={event.correlation_id}
             />
             {event.approval_decision && (
-              <Detail
-                label={t('audit.agentApproval')}
-                value={t('audit.approvalDecisionBy', {
-                  decision: event.approval_decision,
-                  approver:
-                    event.approved_by_display_name ??
-                    event.approved_by_email ??
-                    event.approved_by_user_id,
-                })}
-              />
+              <Box>
+                <Typography color="text.secondary" variant="caption">
+                  {t('audit.agentApproval')}
+                </Typography>
+                <Typography variant="body2">
+                  <Trans
+                    components={{
+                      approver: event.approved_by_user_id ? (
+                        <UserLabel
+                          avatarFileId={event.approved_by_avatar_file_id}
+                          name={
+                            event.approved_by_display_name ??
+                            event.approved_by_email ??
+                            event.approved_by_user_id
+                          }
+                        />
+                      ) : (
+                        <span />
+                      ),
+                    }}
+                    i18nKey="audit.approvalDecisionBy"
+                    t={t}
+                    values={{ decision: event.approval_decision }}
+                  />
+                </Typography>
+              </Box>
             )}
             {event.agent_tool_call_id && (
               <Detail

@@ -69,6 +69,15 @@ Invitation and onboarding emails need [SMTP configured](/reference/configuration
 
 Changing navigation needs `workspace_navigation.manage`.
 
+## Your profile
+
+**Profile → Account** shows how other people see you in the workspace.
+
+- **Change display name** sets the name shown on member lists, the audit log, and entity history. It must be 2–64 characters of letters, digits, and spaces, and cannot start or end with a space. Your display name is shared across all your workspaces.
+- **Upload photo** sets your avatar from a PNG or JPEG image of up to 10 MB. The image is cropped to a centered square, resized, and placed on a white background, so it takes a moment to appear. **Change photo** replaces it and **Remove photo** goes back to your initials.
+
+Your photo belongs to the current workspace: set one in each workspace you use. Every member of the workspace can see it, but only the resized version is shared. The original file you uploaded is never shown to anyone.
+
 ## Personal API tokens
 
 Scripts, the CLI, and integrations authenticate with personal API tokens. Create one under **Profile → Personal access tokens**, or with `acli token create`.

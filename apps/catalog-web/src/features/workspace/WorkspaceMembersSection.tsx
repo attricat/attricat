@@ -5,6 +5,7 @@ import {
   Button,
   List,
   ListItem,
+  ListItemAvatar,
   ListItemText,
   MenuItem,
   Paper,
@@ -13,6 +14,8 @@ import {
   Typography,
 } from '@mui/material';
 import { useRef, useState } from 'react';
+import { UserAvatar } from '../../components/UserAvatar';
+import { userAvatarSizes } from '../../components/userAvatars';
 import { authQueryKeys } from '../auth/queryKeys';
 import { useTranslation } from 'react-i18next';
 import {
@@ -131,6 +134,13 @@ export const WorkspaceMembersSection = ({
         <List>
           {members.data?.map((member) => (
             <ListItem divider key={member.id}>
+              <ListItemAvatar>
+                <UserAvatar
+                  avatarFileId={member.avatar_file_id}
+                  name={member.display_name ?? member.email}
+                  size={userAvatarSizes.list}
+                />
+              </ListItemAvatar>
               <ListItemText
                 primary={member.display_name ?? member.email}
                 secondary={t(

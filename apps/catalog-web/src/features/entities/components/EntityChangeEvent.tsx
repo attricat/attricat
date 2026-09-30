@@ -1,5 +1,6 @@
 import { Box, Paper, Typography } from '@mui/material';
-import { useTranslation } from 'react-i18next';
+import { Trans, useTranslation } from 'react-i18next';
+import { UserLabel } from '../../../components/UserLabel';
 import type { EntityAuditChange } from '../api';
 import { AGENT_EXECUTOR_TYPE } from '../constants';
 import { Timestamp } from '../../../time/Timestamp';
@@ -13,20 +14,35 @@ type Props = {
 export const EntityChangeEvent = ({ changes }: Props) => {
   const { t } = useTranslation();
   const [event] = changes;
-  const actor =
-    event.actor_display_name ??
-    event.actor_email ??
-    (event.executor_type === AGENT_EXECUTOR_TYPE
-      ? t('entities.agent')
-      : t('entities.unknownActor'));
-  const approval = event.approval_decision
-    ? event.approved_by_display_name
-      ? t('entities.approvalBy', {
-          decision: event.approval_decision,
-          actor: event.approved_by_display_name,
-        })
-      : t('entities.approval', { decision: event.approval_decision })
-    : t('entities.noApproval');
+  const actorName = event.actor_display_name ?? event.actor_email;
+  const actor = actorName ? (
+    <UserLabel avatarFileId={event.actor_avatar_file_id} name={actorName} />
+  ) : event.executor_type === AGENT_EXECUTOR_TYPE ? (
+    t('entities.agent')
+  ) : (
+    t('entities.unknownActor')
+  );
+  const approval = event.approval_decision ? (
+    event.approved_by_display_name ? (
+      <Trans
+        components={{
+          actor: (
+            <UserLabel
+              avatarFileId={event.approved_by_avatar_file_id}
+              name={event.approved_by_display_name}
+            />
+          ),
+        }}
+        i18nKey="entities.approvalBy"
+        t={t}
+        values={{ decision: event.approval_decision }}
+      />
+    ) : (
+      t('entities.approval', { decision: event.approval_decision })
+    )
+  ) : (
+    t('entities.noApproval')
+  );
   return (
     <Paper component="section" sx={{ mb: 2, p: 2 }}>
       <Typography sx={{ fontWeight: 'bold' }}>

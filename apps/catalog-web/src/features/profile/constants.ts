@@ -51,3 +51,9 @@ export const displayNameMinLength = 2;
 export const displayNameMaxLength = 64;
 /** Letters and digits in words separated by spaces. */
 export const displayNameCharacters = /^[\p{Alphabetic}\p{N} ]*$/u;
+/** Mirrors the API's avatar upload rules; the API remains authoritative. */
+export const avatarMimeTypes = ['image/png', 'image/jpeg'];
+export const avatarMaxBytes = 10 * 1024 * 1024;
+export const avatarMaxMegabytes = avatarMaxBytes / (1024 * 1024);
+/** How often the session refreshes while an uploaded avatar is processed. */
+export const avatarPollMilliseconds = 1_000;

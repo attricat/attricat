@@ -1,7 +1,7 @@
 use super::{AppState, data_health::invalidate_data_health, error::ApiError, extractors::ApiPath};
 use crate::{
     file_access::{FileAccessDecision, FileAccessOperation, authorize_file_read},
-    repository::{CatalogRepository, FileObject, FilePolicy, NewUploadedFile},
+    repository::{AVATAR_VARIANT_KIND, CatalogRepository, FileObject, FilePolicy, NewUploadedFile},
     storage::ObjectStoreError,
 };
 use axum::{
@@ -39,6 +39,12 @@ const SUPPORTED_UPLOAD_MIME_TYPES: &[&str] = &[
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 ];
+
+/// Avatars accept only these formats; the file worker re-encodes them.
+const AVATAR_MIME_TYPES: &[&str] = &["image/png", "image/jpeg"];
+/// Avatars are small once processed, so originals are capped well below the
+/// general upload limit.
+const AVATAR_MAX_BYTES: u64 = 10 * 1024 * 1024;
 
 /// Owns the staged path even if a multipart stream fails or the request is
 /// cancelled before the handlers reach their explicit cleanup path.
@@ -401,6 +407,92 @@ pub(super) async fn upload_conversation(
     }
 }
 
+/// Replaces the caller's avatar in the active workspace. The upload shares the
+/// streaming, signature validation, object-store and processing pipeline used
+/// by other uploads; the file worker produces the square `avatar` variant.
+pub(super) async fn upload_avatar(
+    State(state): State<AppState>,
+    super::auth::AuthenticatedPrincipal(user_id, _): super::auth::AuthenticatedPrincipal,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    mut multipart: Multipart,
+) -> Result<(StatusCode, Json<crate::repository::OwnAvatar>), ApiError> {
+    authorize(&state, FileAccessOperation::AvatarUpload { user_id }).await?;
+    let mut staged: Option<StagedFile> = None;
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|error| multipart_error(error, "multipart body is malformed"))?
+    {
+        if field.name() != Some("file") {
+            return Err(ApiError::invalid_file("multipart field must be file"));
+        }
+        if staged.is_some() {
+            return Err(ApiError::invalid_file("an avatar is exactly one file"));
+        }
+        let original_filename = field
+            .file_name()
+            .ok_or_else(|| ApiError::invalid_file("file name is required"))?
+            .to_owned();
+        let display_filename = sanitize_filename(&original_filename)
+            .ok_or_else(|| ApiError::invalid_file("file name is invalid"))?;
+        let declared_mime = field.content_type().map(ToString::to_string);
+        staged = Some(
+            stage_field(
+                field,
+                original_filename,
+                display_filename,
+                declared_mime,
+                state.max_upload_file_bytes.min(AVATAR_MAX_BYTES),
+            )
+            .await?,
+        );
+    }
+    // Dropping `staged` removes its temporary file on every return path.
+    let file = staged.ok_or_else(|| ApiError::invalid_file("a file is required"))?;
+    let mime = detected_mime(&file.signature, &file.display_filename, file.valid_text)
+        .filter(|mime| AVATAR_MIME_TYPES.contains(mime))
+        .filter(|mime| declared_mime_matches(file.declared_mime.as_deref(), mime))
+        .ok_or_else(ApiError::unsupported_media_type)?;
+    let key = format!("files/{}", Uuid::new_v4());
+    state
+        .object_store
+        .put_file(&key, &file.path, Some(mime))
+        .await
+        .map_err(storage_error)?;
+    let result = repository
+        .persist_avatar_upload(
+            user_id,
+            NewUploadedFile {
+                original_filename: file.original_filename.clone(),
+                display_filename: file.display_filename.clone(),
+                mime_type: mime.to_owned(),
+                byte_size: file.byte_size,
+                sha256: file.sha256.clone(),
+                object_key: key.clone(),
+            },
+        )
+        .await;
+    match result {
+        Ok(avatar) => {
+            metrics::counter!("catalog_file_uploads_total", "outcome" => "success").increment(1);
+            invalidate_data_health(&state, &repository);
+            Ok((StatusCode::CREATED, Json(avatar)))
+        }
+        Err(error) => {
+            delete_objects(&state, &[key]).await;
+            Err(error.into())
+        }
+    }
+}
+
+pub(super) async fn delete_avatar(
+    super::auth::AuthenticatedPrincipal(user_id, _): super::auth::AuthenticatedPrincipal,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+) -> Result<StatusCode, ApiError> {
+    repository.clear_avatar(user_id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 pub(super) async fn metadata(
     State(state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
@@ -461,6 +553,17 @@ pub(super) async fn download_variant(
     ApiPath((file_id, kind)): ApiPath<(Uuid, String)>,
     headers: HeaderMap,
 ) -> Result<Response, ApiError> {
+    // Members may see each other's processed avatars. The original upload is
+    // never served this way: it may carry EXIF metadata such as location.
+    if kind == AVATAR_VARIANT_KIND && repository.is_member_avatar(file_id).await? {
+        authorize(&state, FileAccessOperation::AvatarRead { file_id }).await?;
+        return download(
+            &state,
+            repository.file_object(file_id, Some(&kind)).await?,
+            &headers,
+        )
+        .await;
+    }
     authorize_read(
         &state,
         &repository,

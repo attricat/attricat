@@ -1,9 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import {
   Alert,
-  Avatar,
   Box,
   Button,
+  CircularProgress,
   Divider,
   Skeleton,
   Stack,
@@ -15,24 +15,20 @@ import { useTranslation } from 'react-i18next';
 import { monoFontFamily } from '../../app/theme';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import { ProfileIcon } from '../../components/systemIcons';
+import { UserAvatar } from '../../components/UserAvatar';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
+import { fileStatuses, THUMBNAIL_POLLING_STATUSES } from '../files/constants';
+import { AvatarControls } from './AvatarControls';
 import { ChangeDisplayNameDialog } from './ChangeDisplayNameDialog';
 import { ProfileSection } from './ProfileSection';
 import { TimeZonePreference } from './TimeZonePreference';
 import {
+  avatarPollMilliseconds,
   profileAvatarSize,
   profileSkeletonWidth,
   profileValueSkeletonWidth,
 } from './constants';
-
-const initials = (name: string) =>
-  name
-    .split(/[\s@._-]+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join('');
 
 const AccountDetail = ({
   label,
@@ -60,10 +56,20 @@ export const ProfilePage = () => {
   const session = useQuery({
     queryKey: authQueryKeys.session(),
     queryFn: currentSession,
+    // Follow an uploaded avatar until the file worker has processed it.
+    refetchInterval: (query) =>
+      THUMBNAIL_POLLING_STATUSES.has(query.state.data?.avatar?.status ?? '')
+        ? avatarPollMilliseconds
+        : false,
   });
   const account = session.data;
   const name = account?.display_name ?? account?.email;
   const [editingName, setEditingName] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const avatar = account?.avatar;
+  const avatarProcessing =
+    uploadProgress !== null ||
+    THUMBNAIL_POLLING_STATUSES.has(avatar?.status ?? '');
   return (
     <Stack spacing={6}>
       {session.isError && (
@@ -84,17 +90,27 @@ export const ProfilePage = () => {
             spacing={4}
             sx={{ alignItems: 'center', flex: 1, minWidth: 0, width: '100%' }}
           >
-            <Avatar
-              sx={{
-                bgcolor: 'action.selected',
-                color: 'primary.main',
-                fontWeight: 600,
-                height: profileAvatarSize,
-                width: profileAvatarSize,
-              }}
-            >
-              {name ? initials(name) : undefined}
-            </Avatar>
+            <Box sx={{ flexShrink: 0, position: 'relative' }}>
+              <UserAvatar
+                avatarFileId={
+                  avatar?.status === fileStatuses.ready ? avatar.file_id : null
+                }
+                name={name}
+                size={profileAvatarSize}
+              />
+              {avatarProcessing && (
+                <CircularProgress
+                  aria-label={t('profile.avatarProcessing')}
+                  size={profileAvatarSize}
+                  sx={{ left: 0, position: 'absolute', top: 0 }}
+                  thickness={2}
+                  value={uploadProgress ?? undefined}
+                  variant={
+                    uploadProgress === null ? 'indeterminate' : 'determinate'
+                  }
+                />
+              )}
+            </Box>
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography component="p" noWrap variant="h4">
                 {name ?? <Skeleton width={profileSkeletonWidth} />}
@@ -117,6 +133,18 @@ export const ProfilePage = () => {
             {t('profile.changeDisplayName')}
           </Button>
         </Stack>
+        {avatar?.status === fileStatuses.failed && (
+          <Alert severity="error" sx={{ mt: 4 }}>
+            {t('profile.avatarFailed')}
+          </Alert>
+        )}
+        <Box sx={{ mt: 4 }}>
+          <AvatarControls
+            disabled={!account || avatarProcessing}
+            hasAvatar={Boolean(avatar)}
+            onProgress={setUploadProgress}
+          />
+        </Box>
         {editingName && account && (
           <ChangeDisplayNameDialog
             initialName={account.display_name ?? ''}

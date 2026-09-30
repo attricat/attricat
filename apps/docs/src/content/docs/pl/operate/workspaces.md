@@ -69,6 +69,15 @@ Karta **Nawigacja** określa skróty do schematów na pasku bocznym przeglądark
 
 Zmiana nawigacji wymaga uprawnienia `workspace_navigation.manage`.
 
+## Twój profil
+
+**Profil → Konto** pokazuje, jak widzą Cię inne osoby w obszarze roboczym.
+
+- **Zmień nazwę wyświetlaną** ustawia nazwę widoczną na liście członków, w dzienniku audytu i w historii encji. Musi mieć od 2 do 64 znaków, zawierać tylko litery, cyfry i spacje oraz nie może zaczynać się ani kończyć spacją. Nazwa wyświetlana jest wspólna dla wszystkich Twoich obszarów roboczych.
+- **Prześlij zdjęcie** ustawia awatar z obrazu PNG lub JPEG o rozmiarze do 10 MB. Obraz jest przycinany do wyśrodkowanego kwadratu, zmniejszany i umieszczany na białym tle, więc pojawia się po chwili. **Zmień zdjęcie** zastępuje go, a **Usuń zdjęcie** przywraca inicjały.
+
+Zdjęcie należy do bieżącego obszaru roboczego: ustaw je w każdym obszarze, z którego korzystasz. Widzą je wszyscy członkowie obszaru, ale udostępniana jest tylko zmniejszona wersja. Przesłany oryginalny plik nigdy nie jest nikomu pokazywany.
+
 ## Osobiste tokeny API
 
 Skrypty, CLI i integracje uwierzytelniają się osobistymi tokenami API. Utwórz token w **Profil → Osobiste tokeny API** albo poleceniem `acli token create`.

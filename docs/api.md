@@ -80,6 +80,7 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `POST` | `/auth/password-reset/confirm` | Consume a password-reset secret and set a new password. |
 | `PATCH` | `/auth/preferences` | Replace the authenticated user's display preferences, `{ "time_zone": "Europe/Warsaw" \| null }`, and return the updated session payload. Unknown IANA zone names return `422`. Use `acli auth preferences`. |
 | `PUT` | `/auth/display-name` | Change the authenticated user's display name, `{ "display_name": "Ada Lovelace" }`, and return the updated session payload. Names are 2–64 letters, digits, and spaces with no leading or trailing space; others return `422`. Use `acli auth display-name`. |
+| `PUT`, `DELETE` | `/auth/avatar` | Upload (multipart `file`, PNG or JPEG) or remove the caller's avatar in the active workspace. Upload returns `201` with `{ "file_id", "status" }`; the file worker produces the square `avatar` variant. See [Avatars](authentication.md#avatars). |
 | `POST` | `/onboarding/complete` | Complete the public onboarding flow with its verified invitation or lifecycle secret. |
 | `GET` | `/metrics` | Scrape Prometheus service metrics (`data_health.read`). |
 | `GET` | `/audit-events` | List workspace audit evidence (`audit.read`). |
@@ -354,7 +355,8 @@ A successful response is `201` with the attribute, context, and safe file
 metadata; originals and storage keys are never returned.
 
 A newly accepted file has `status: "queued"`. Image files are processed into
-`thumbnail` and `display` WebP variants; non-image files become `ready` without
+`thumbnail` and `display` WebP variants (avatar files get a single square
+`avatar` variant instead); non-image files become `ready` without
 variants. `GET /files/{file_id}` returns `200` with safe metadata and its
 current status while a file is queued, processing, ready, or failed. The
 original and variant download endpoints return `409 file_processing` until the

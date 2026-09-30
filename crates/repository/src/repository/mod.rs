@@ -30,6 +30,7 @@ use crate::{
 
 mod agents;
 mod audit_events;
+mod avatars;
 mod blueprint_connector_jobs;
 mod blueprint_migration_batches;
 mod blueprints;
@@ -74,6 +75,7 @@ pub use agents::{
     AgentRun, AgentRunEvent, AgentToolCall, ApprovalDecision, Conversation, ConversationMessage,
 };
 pub use audit_events::{AuditEventFilter, AuditEventPage};
+pub use avatars::{AVATAR_VARIANT_KIND, OwnAvatar};
 pub use blueprint_connector_jobs::BlueprintConnectorJob;
 pub use catalog_domain::model::{FileMetadata, FileVariantMetadata};
 pub use domain_events::{EventConsumer, EventDelivery, EventPublisher, FailedEventDelivery};

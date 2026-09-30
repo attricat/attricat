@@ -1,5 +1,6 @@
 import { Avatar, Box, Chip, Stack, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import { CurrentUserAvatar } from '../../components/CurrentUserAvatar';
 import { AgentIcon } from '../../components/systemIcons';
 import { fileDownloadUrl } from '../files/api';
 import {
@@ -41,21 +42,34 @@ export const TranscriptMessage = ({
         maxWidth: isUser ? userMessageMaxWidth : '100%',
       }}
     >
-      <Avatar
-        aria-label={roleLabel}
-        sx={{
-          bgcolor: isUser ? 'text.primary' : 'primary.main',
-          height: avatarSize,
-          mt: 0.25,
-          width: avatarSize,
-        }}
-      >
+      <Box aria-label={roleLabel} role="img" sx={{ flexShrink: 0, mt: 0.25 }}>
         {isUser ? (
-          t('agents.you').slice(0, 1)
+          <CurrentUserAvatar
+            fallback={
+              <Avatar
+                sx={{
+                  bgcolor: 'text.primary',
+                  height: avatarSize,
+                  width: avatarSize,
+                }}
+              >
+                {t('agents.you').slice(0, 1)}
+              </Avatar>
+            }
+            size={avatarSize}
+          />
         ) : (
-          <AgentIcon size={smallIconSize} />
+          <Avatar
+            sx={{
+              bgcolor: 'primary.main',
+              height: avatarSize,
+              width: avatarSize,
+            }}
+          >
+            <AgentIcon size={smallIconSize} />
+          </Avatar>
         )}
-      </Avatar>
+      </Box>
       <Box
         sx={{
           bgcolor: isUser ? 'action.hover' : 'transparent',

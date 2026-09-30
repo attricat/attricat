@@ -136,6 +136,33 @@ return `422`. The name is stored on the user account, so it applies across
 workspaces, and the response is the updated session payload. Cookie-authenticated
 requests need the CSRF header like any other unsafe request.
 
+## Avatars
+
+Each workspace membership can have an avatar, so a member who belongs to
+several workspaces sets one per workspace. `PUT /auth/avatar` accepts a
+`multipart/form-data` body with exactly one `file` part: a PNG or JPEG image of
+at most 10 MiB (or `FILE_UPLOAD_MAX_BYTES` when that is lower), identified by
+its content signature. Other formats return `415`. The avatar is an ordinary
+workspace file with `purpose = 'avatar'`: the upload is queued for the file
+worker, which applies EXIF orientation, center-crops the image to a square,
+flattens any transparency onto white, and stores a 256×256 `avatar` WebP
+variant (smaller images are cropped but not upscaled). The response is `201` with
+`{ "file_id", "status" }`. `DELETE /auth/avatar` removes the avatar and returns
+`204`. A replaced or removed avatar is no longer referenced, so file
+reconciliation reclaims it.
+
+The session payload's `avatar` field is the caller's own avatar in the session
+workspace, including one that is still `queued` or `processing`. Member lists,
+audit events, and entity change history expose `avatar_file_id`,
+`actor_avatar_file_id`, or `approved_by_avatar_file_id` only once the avatar is
+`ready` and the member is active. Any authenticated member of the workspace
+can download a current avatar with
+`GET /files/{file_id}/variants/avatar/download`. The original upload, its
+metadata, and other variants are never served for avatar files, because the
+original may carry EXIF data such as location. Avatar files cannot be linked to
+entity file attributes. Deployments can restrict avatar operations through the
+`AvatarUpload` and `AvatarRead` file access policy operations.
+
 ## Personal API tokens
 
 `POST /personal-access-tokens` issues an opaque `cat_pat_...` bearer secret for

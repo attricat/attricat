@@ -1,5 +1,16 @@
 import { z } from 'zod';
-import { ApiRequestError, request, requestNoContent } from '../../api/request';
+import {
+  ApiRequestError,
+  request,
+  requestNoContent,
+  requestUpload,
+} from '../../api/request';
+import { FILE_STATUS_VALUES } from '../files/constants';
+
+const ownAvatarSchema = z.object({
+  file_id: z.uuid(),
+  status: z.enum(FILE_STATUS_VALUES),
+});
 
 const sessionSchema = z.object({
   user_id: z.uuid(),
@@ -7,6 +18,8 @@ const sessionSchema = z.object({
   email: z.string().email(),
   /** IANA zone for rendering instants; `null` follows the browser zone. */
   time_zone: z.string().nullable().default(null),
+  /** The caller's avatar in this workspace, including one still processing. */
+  avatar: ownAvatarSchema.nullable().default(null),
   workspace_id: z.uuid(),
   login_identifier: z.string(),
   capabilities: z
@@ -102,6 +115,24 @@ export const updateDisplayName = (displayName: string) =>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ display_name: displayName }),
   });
+
+export const uploadAvatar = (
+  file: File,
+  onProgress?: (progress: number) => void,
+) => {
+  const data = new FormData();
+  data.append('file', file);
+  return requestUpload(
+    '/api/auth/avatar',
+    data,
+    ownAvatarSchema,
+    onProgress,
+    'PUT',
+  );
+};
+
+export const removeAvatar = () =>
+  requestNoContent('/api/auth/avatar', { method: 'DELETE' });
 
 export const logout = () =>
   requestNoContent('/api/auth/logout', { method: 'POST' });

@@ -235,7 +235,7 @@ impl CatalogRepository {
         self.validate_context_editable(&mut transaction, Some(context_id), &context_editable)
             .await?;
         let exists = sqlx::query_scalar::<_, Uuid>(
-            "SELECT id FROM files WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL",
+            "SELECT id FROM files WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL AND purpose = 'attachment'",
         )
         .bind(file_id)
         .bind(workspace_id)
