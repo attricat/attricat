@@ -241,7 +241,7 @@ describe('ExplorerResultsTable', () => {
     await user.click(first);
     expect((first as HTMLInputElement).checked).toBe(true);
     expect(selectAll.getAttribute('data-indeterminate')).toBe('true');
-    expect(screen.getByText('1 selected')).toBeTruthy();
+    expect(screen.getByText('1 of 2 selected')).toBeTruthy();
     expect(outletMount).toHaveBeenCalledWith({
       outlet: 'explorer_bulk_action',
       context: {
@@ -257,8 +257,12 @@ describe('ExplorerResultsTable', () => {
     });
     await user.click(selectAll);
     expect(selectAll.checked).toBe(true);
-    expect(screen.getByText('2 selected')).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: 'Clear' }));
+    expect(screen.getByText('2 of 2 selected')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Clear selection' }));
+    expect(screen.getByText('0 of 2 selected')).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: 'Actions' }).hasAttribute('disabled'),
+    ).toBe(true);
     expect(selectAll.checked).toBe(false);
     outletMount.mockClear();
     await user.click(screen.getByRole('button', { name: 'Exit selection' }));
@@ -267,7 +271,7 @@ describe('ExplorerResultsTable', () => {
     );
     expect(screen.queryByRole('checkbox')).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Select entities' }));
-    expect(screen.queryByText('1 selected')).toBeNull();
+    expect(screen.getByText('0 of 2 selected')).toBeTruthy();
   });
 
   it('limits bulk selection to 50 loaded entities', async () => {
@@ -284,7 +288,12 @@ describe('ExplorerResultsTable', () => {
         name: 'Select loaded entities (up to 50)',
       }),
     );
-    expect(screen.getByText('50 selected')).toBeTruthy();
+    expect(screen.getByText('50 of 51 selected')).toBeTruthy();
+    expect(
+      screen.getByText(
+        'Limit reached: up to 50 loaded entities can be selected',
+      ),
+    ).toBeTruthy();
     expect(
       screen
         .getByRole('checkbox', { name: 'Select Product 50' })
@@ -304,8 +313,9 @@ describe('ExplorerResultsTable', () => {
     await user.click(
       screen.getByRole('checkbox', { name: 'Select Sample product' }),
     );
+    await user.click(screen.getByRole('button', { name: 'Actions' }));
     await user.click(
-      screen.getByRole('button', { name: 'Send to agent conversation' }),
+      screen.getByRole('menuitem', { name: 'Send to agent conversation' }),
     );
     const dialog = screen.getByRole('dialog');
     await user.type(
@@ -352,8 +362,9 @@ describe('ExplorerResultsTable', () => {
     await user.click(
       screen.getByRole('checkbox', { name: 'Select Sample product' }),
     );
+    await user.click(screen.getByRole('button', { name: 'Actions' }));
     await user.click(
-      screen.getByRole('button', { name: 'Send to agent conversation' }),
+      screen.getByRole('menuitem', { name: 'Send to agent conversation' }),
     );
     const send = within(screen.getByRole('dialog')).getByRole('button', {
       name: 'Send to agent conversation',
