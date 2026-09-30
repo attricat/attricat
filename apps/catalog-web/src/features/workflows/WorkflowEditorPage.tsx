@@ -9,6 +9,7 @@ import { getWorkflowRevision } from './api';
 import { workflowCapabilities } from './constants';
 import { workflowQueryKeys } from './queryKeys';
 import { WorkflowDefinitionForm } from './WorkflowDefinitionForm';
+import { WorkflowIcon } from '../../components/systemIcons';
 
 export const WorkflowEditorPage = ({
   workflowId,
@@ -51,6 +52,7 @@ export const WorkflowEditorPage = ({
             ? t('workflows.newRevisionDescription', { version: sourceVersion })
             : t('workflows.newDescription')
         }
+        icon={WorkflowIcon}
         title={
           workflowId ? t('workflows.newRevision') : t('workflows.newWorkflow')
         }

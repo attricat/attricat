@@ -1,5 +1,7 @@
 import { Box, Typography } from '@mui/material';
 import i18n from '../../../../i18n';
+import { PageTitle } from '../../../../components/PageTitle';
+import { EntityIcon } from '../../../../components/systemIcons';
 import {
   viewBlockTypes,
   type Attribute,
@@ -31,11 +33,7 @@ export const EntityHeading = ({
   const titleValue = titleAttribute
     ? values[titleAttribute.code]?.value
     : undefined;
-  const fallback = (
-    <Typography component="h1" variant="h3">
-      {entityId}
-    </Typography>
-  );
+  const fallback = <PageTitle icon={EntityIcon}>{entityId}</PageTitle>;
   if (!titleAttribute || titleValue === null || titleValue === undefined)
     return fallback;
   return (
@@ -44,9 +42,9 @@ export const EntityHeading = ({
         fallbackMessage={i18n.t('views.unableToRenderEntityHeading')}
         logLabel="entity heading"
       >
-        <Typography component="h1" variant="h3">
+        <PageTitle icon={EntityIcon}>
           <AttributeValueText attribute={titleAttribute} value={titleValue} />
-        </Typography>
+        </PageTitle>
       </FieldErrorBoundary>
       {heading?.type === 'stack' &&
         heading.children.slice(1).map((child, index) => {

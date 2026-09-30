@@ -127,7 +127,10 @@ export const CreatePersonalTokenPage = () => {
       <SettingsPage>
         <Stack spacing={4} sx={{ maxWidth: tokenFormMaxWidth, mx: 'auto' }}>
           <BackToTokens />
-          <PageHeader title={t('profile.createToken')} />
+          <PageHeader
+            icon={PersonalTokenIcon}
+            title={t('profile.createToken')}
+          />
           <Alert severity="info">{t('profile.tokenUnavailable')}</Alert>
         </Stack>
       </SettingsPage>
@@ -153,6 +156,7 @@ export const CreatePersonalTokenPage = () => {
           <BackToTokens />
           <PageHeader
             description={t('profile.createTokenDescription')}
+            icon={PersonalTokenIcon}
             title={t('profile.createToken')}
           />
         </Stack>

@@ -15,6 +15,7 @@ import { AuditEventsTable } from './AuditEventsTable';
 import { AuditFilters } from './AuditFilters';
 import { auditPageSize } from './constants';
 import { auditQueryKeys } from './queryKeys';
+import { AuditLogIcon } from '../../components/systemIcons';
 
 export const AuditLogPage = () => {
   const { t } = useTranslation();
@@ -44,6 +45,7 @@ export const AuditLogPage = () => {
     <PageContainer>
       <PageHeader
         description={t('audit.description')}
+        icon={AuditLogIcon}
         title={t('audit.title')}
       />
       <AuditFilters

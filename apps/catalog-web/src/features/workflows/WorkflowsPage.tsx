@@ -29,6 +29,7 @@ import {
   workflowStatus,
 } from './constants';
 import { Timestamp } from '../../time/Timestamp';
+import { WorkflowIcon } from '../../components/systemIcons';
 
 const WorkflowDetailLink = Link as unknown as ComponentType<{
   params: { workflowId: string };
@@ -113,6 +114,7 @@ export const WorkflowsPage = () => {
           ) : undefined
         }
         description={t('workflows.description')}
+        icon={WorkflowIcon}
         title={t('workflows.title')}
       />
       {workflows.isError && (

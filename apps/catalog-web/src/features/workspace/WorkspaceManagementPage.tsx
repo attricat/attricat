@@ -1,7 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { Alert, Box, Button, Typography } from '@mui/material';
+import { Alert, Box, Button } from '@mui/material';
 import { SettingsPage } from '../../components/CenteredPage';
+import { PageHeader } from '../../components/PageHeader';
+import { WorkspaceIcon } from '../../components/systemIcons';
 import { useTranslation } from 'react-i18next';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
@@ -54,12 +56,14 @@ export const WorkspaceManagementPage = ({
 
   return (
     <SettingsPage>
-      <Typography variant="h4">{t('workspace.title')}</Typography>
-      <Typography color="text.secondary" sx={{ mt: 1 }}>
-        {t('workspace.active', {
+      <PageHeader
+        description={t('workspace.active', {
           workspace: session.data?.login_identifier ?? t('workspace.loading'),
         })}
-      </Typography>
+        icon={WorkspaceIcon}
+        title={t('workspace.title')}
+        titleVariant="h4"
+      />
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 3 }}>
         {sections
           .filter(

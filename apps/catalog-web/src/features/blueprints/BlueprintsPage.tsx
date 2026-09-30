@@ -24,6 +24,7 @@ import { listBlueprints } from './api';
 import { blueprintFilterWidth, blueprintStatusChipColor } from './constants';
 import { Timestamp } from '../../time/Timestamp';
 import { blueprintQueryKeys } from './queryKeys';
+import { BlueprintIcon } from '../../components/systemIcons';
 
 export const BlueprintsPage = () => {
   const { t } = useTranslation();
@@ -55,6 +56,7 @@ export const BlueprintsPage = () => {
           </Button>
         }
         description={t('blueprints.blueprintsDescription')}
+        icon={BlueprintIcon}
         title={t('blueprints.blueprints')}
       />
       <TextField

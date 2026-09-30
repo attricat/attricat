@@ -11,6 +11,7 @@ import { installExtension, registryDetails } from './managementApi';
 import { extensionManagementQueryKeys } from './managementQueryKeys';
 import { ErrorNotice } from './ExtensionErrorNotice';
 import { invalidateExtensions } from './extensionPageUtils';
+import { ExtensionIcon } from '../../components/systemIcons';
 
 export const MarketplaceExtensionPage = ({
   owner,
@@ -35,6 +36,7 @@ export const MarketplaceExtensionPage = ({
   return (
     <PageContainer>
       <PageHeader
+        icon={ExtensionIcon}
         title={
           details.data?.extension.name ?? t('extensions.extensionFallback')
         }

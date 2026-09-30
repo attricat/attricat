@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { PageHeader } from '../../components/PageHeader';
 import { RouterButton } from '../../components/RouterLink';
+import { ExplorerIcon } from '../../components/systemIcons';
 
 type Props = {
   blueprint: string | undefined;
@@ -41,6 +42,7 @@ export const ExplorerPageHeader = ({
           ? t('explorer.blueprintDescription', { blueprint: lockedName })
           : t('explorer.description')
       }
+      icon={ExplorerIcon}
       title={
         lockedName
           ? t('explorer.blueprintTitle', { blueprint: lockedName })

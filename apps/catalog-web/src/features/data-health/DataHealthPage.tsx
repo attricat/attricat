@@ -35,6 +35,7 @@ import {
 import type { DataHealthSearch } from './schemas';
 import { SectionError } from './SectionError';
 import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
+import { DataHealthIcon } from '../../components/systemIcons';
 
 export const DataHealthPage = ({ search }: { search: DataHealthSearch }) => {
   const { t } = useTranslation();
@@ -103,6 +104,7 @@ export const DataHealthPage = ({ search }: { search: DataHealthSearch }) => {
           />
         }
         description={t('dataHealth.description')}
+        icon={DataHealthIcon}
         title={t('dataHealth.title')}
       />
       <SectionError error={summary.error} />

@@ -26,6 +26,7 @@ import { FindingsSection } from './FindingsSection';
 import { ruleQueryKeys } from './queryKeys';
 import { RulesSection } from './RulesSection';
 import { RunsSection } from './RunsSection';
+import { RuleIcon } from '../../components/systemIcons';
 
 const RouterTab = createLink(Tab);
 
@@ -94,6 +95,7 @@ export const RuleInspectionPage = ({
   return (
     <PageContainer>
       <PageHeader
+        icon={RuleIcon}
         title={t('rules.title')}
         description={t('rules.description')}
       />

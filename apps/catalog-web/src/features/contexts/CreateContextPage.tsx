@@ -17,6 +17,7 @@ import { createContext, listContexts } from './api';
 import { contextMetadataMinRows, emptyContextMetadata } from './constants';
 import { parseContextMetadata } from './contextMetadata';
 import { contextQueryKeys } from './queryKeys';
+import { ContextIcon } from '../../components/systemIcons';
 
 export const CreateContextPage = () => {
   const { t } = useTranslation();
@@ -61,7 +62,11 @@ export const CreateContextPage = () => {
       <Button component={Link} to="/manage/contexts" sx={{ mb: 4 }}>
         {t('contexts.backToContexts')}
       </Button>
-      <PageHeader title={t('contexts.createContext')} titleVariant="h3" />
+      <PageHeader
+        icon={ContextIcon}
+        title={t('contexts.createContext')}
+        titleVariant="h3"
+      />
       <Paper
         component="form"
         onSubmit={(event) => {

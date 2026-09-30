@@ -5,6 +5,7 @@ import { PageHeader } from '../../components/PageHeader';
 import { blueprintStatusChipColor, blueprintStatuses } from './constants';
 import { Timestamp } from '../../time/Timestamp';
 import type { Blueprint } from './schemas';
+import { BlueprintIcon } from '../../components/systemIcons';
 
 export const BlueprintDetailHeader = ({
   blueprint,
@@ -64,6 +65,7 @@ export const BlueprintDetailHeader = ({
           </Stack>
         }
         eyebrow={t('blueprints.blueprint')}
+        icon={BlueprintIcon}
         title={blueprint.name}
       />
       <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', mt: 1 }}>

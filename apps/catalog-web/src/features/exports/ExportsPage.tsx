@@ -25,6 +25,7 @@ import {
 } from './api';
 import { EXPORT_TABLE_COLUMN_COUNT } from './constants';
 import { exportQueryKeys } from './queryKeys';
+import { ExportIcon } from '../../components/systemIcons';
 
 export const ExportsPage = () => {
   const { t } = useTranslation();
@@ -63,7 +64,7 @@ export const ExportsPage = () => {
 
   return (
     <PageContainer>
-      <PageHeader title={t('exports.title')} />
+      <PageHeader icon={ExportIcon} title={t('exports.title')} />
       <Typography color="text.secondary" sx={{ mt: 1 }}>
         {t('exports.description')}
       </Typography>

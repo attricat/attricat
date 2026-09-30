@@ -14,6 +14,7 @@ import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { listContexts } from './api';
 import { contextQueryKeys } from './queryKeys';
+import { ContextIcon } from '../../components/systemIcons';
 
 export const ContextsPage = () => {
   const { t } = useTranslation();
@@ -36,6 +37,7 @@ export const ContextsPage = () => {
             {t('contexts.createContext')}
           </Button>
         }
+        icon={ContextIcon}
         title={t('contexts.contexts')}
       />
       {contexts.isPending && (
