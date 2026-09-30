@@ -141,6 +141,7 @@ export const Explorer = ({ search: urlSearch, savedView }: Props) => {
           />
           <ExplorerSearchForm
             blueprints={blueprints.data ?? []}
+            blueprintSchema={selectedBlueprint.data}
             currentVersion={currentBlueprint?.version}
             revisions={revisions.data}
             revisionsError={revisions.error?.message}

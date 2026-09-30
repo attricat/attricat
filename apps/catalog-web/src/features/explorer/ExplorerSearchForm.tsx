@@ -2,22 +2,18 @@ import { useForm } from '@tanstack/react-form';
 import {
   Box,
   Button,
-  IconButton,
-  InputAdornment,
   MenuItem,
   Paper,
   Popover,
   Stack,
   TextField,
-  Tooltip,
   Typography,
   useMediaQuery,
   useTheme,
 } from '@mui/material';
-import { CircleQuestionMarkIcon } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { Blueprint } from '../entities/api';
+import type { Blueprint, BlueprintWithAttributes } from '../entities/api';
 import {
   blueprintSelectWidth,
   pendingVersionPlaceholder,
@@ -25,8 +21,8 @@ import {
   versionScopeSelectMinWidth,
   versionScopes,
 } from './constants';
+import { ExplorerQueryInput } from './ExplorerQueryInput';
 import type { ExplorerSearch } from './search';
-import { smallIconSize } from '../../components/iconSizes';
 
 type SearchFormValues = {
   blueprint: string;
@@ -46,6 +42,8 @@ const searchFormValues = (search: ExplorerSearch): SearchFormValues => ({
 
 type Props = {
   blueprints: Blueprint[];
+  /** Schema of the selected blueprint, used for query autocomplete. */
+  blueprintSchema?: BlueprintWithAttributes;
   currentVersion?: number;
   revisions?: Blueprint[];
   revisionsError?: string;
@@ -64,6 +62,7 @@ const inlineActionSx = { alignSelf: 'center', display: 'flex' } as const;
 
 export const ExplorerSearchForm = ({
   blueprints,
+  blueprintSchema,
   currentVersion,
   revisions = [],
   revisionsError,
@@ -81,6 +80,8 @@ export const ExplorerSearchForm = ({
   // move them above the stacked fields.
   const inlineActions = useMediaQuery(theme.breakpoints.up('md'));
   const [syntaxAnchor, setSyntaxAnchor] = useState<HTMLElement | null>(null);
+  const [queryErrorContainer, setQueryErrorContainer] =
+    useState<HTMLElement | null>(null);
   const submitValues = (value: SearchFormValues) => {
     const historicalVersion = Number(value.versionScope);
     onSubmit({
@@ -207,31 +208,12 @@ export const ExplorerSearchForm = ({
         )}
         <form.Field name="query">
           {(field) => (
-            <TextField
-              fullWidth
-              label={t('explorer.query')}
-              onChange={(event) => field.handleChange(event.target.value)}
-              placeholder={t('explorer.searchTerms')}
-              slotProps={{
-                input: {
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <Tooltip title={t('explorer.searchSyntax')}>
-                        <IconButton
-                          aria-label={t('explorer.searchSyntax')}
-                          onClick={(event) =>
-                            setSyntaxAnchor(event.currentTarget)
-                          }
-                          size="small"
-                          type="button"
-                        >
-                          <CircleQuestionMarkIcon size={smallIconSize} />
-                        </IconButton>
-                      </Tooltip>
-                    </InputAdornment>
-                  ),
-                },
-              }}
+            <ExplorerQueryInput
+              blueprint={blueprintSchema}
+              blueprints={blueprints}
+              errorContainer={queryErrorContainer}
+              onChange={field.handleChange}
+              onShowSyntax={setSyntaxAnchor}
               value={field.state.value}
             />
           )}
@@ -243,6 +225,7 @@ export const ExplorerSearchForm = ({
           <Box sx={inlineActionSx}>{endActions}</Box>
         )}
       </Stack>
+      <div ref={setQueryErrorContainer} />
       <Popover
         anchorEl={syntaxAnchor}
         anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}

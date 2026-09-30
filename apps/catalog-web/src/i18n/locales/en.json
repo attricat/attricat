@@ -536,6 +536,36 @@
     "searchSyntax": "Search syntax",
     "queryExamples": "This blueprint: term · One field: sku:term* · All fields on a related record: relationship:term · A related field: relationship.field:term · Global connected search (up to 3 hops): *:term",
     "searchTerms": "Search this blueprint, e.g. term",
+    "querySuggestions": {
+      "label": "Query suggestions",
+      "attribute": "Match only in {{name}}",
+      "relationship": "Pick a field of the linked {{target}}",
+      "linksTo": "→ {{target}}",
+      "allFields": "Match any field of the linked {{target}}",
+      "allFieldsTitle": "{{field}} (all fields)",
+      "global": "Search every blueprint, then follow links back up to 3 hops",
+      "valueHint": "Type a value to find in {{field}}. End it with * to match the beginning.",
+      "keyboardHint": "↑↓ to choose · Tab or Enter to insert · Esc to close · Ctrl+Space to reopen"
+    },
+    "queryValueTypes": {
+      "string": "Text",
+      "number": "Number",
+      "integer": "Integer",
+      "boolean": "Yes/No",
+      "date": "Date",
+      "datetime": "Date & time",
+      "time": "Time",
+      "json": "JSON",
+      "file": "File"
+    },
+    "queryErrors": {
+      "malformedTerm": "“{{term}}” is incomplete. Use field:value.",
+      "misplacedWildcard": "* can only end a term: “{{term}}”.",
+      "tooManyHops": "A search path can follow at most 3 relationships.",
+      "unknownField": "“{{field}}” is not a searchable field.",
+      "unknownRelationship": "“{{field}}” is not a relationship.",
+      "notSearchableLeaf": "“{{field}}” cannot be searched through a relationship path."
+    },
     "search": "Search",
     "context": "Context",
     "publicationForContext": "Publication ({{context}})",

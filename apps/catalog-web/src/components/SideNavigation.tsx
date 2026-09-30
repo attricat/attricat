@@ -31,7 +31,6 @@ import {
 import {
   AppsIcon,
   BrandIcon,
-  DocumentationIcon,
   ExplorerIcon,
   ManagementIcon,
 } from './systemIcons';
@@ -280,16 +279,6 @@ export const SideNavigation = ({
             trailing={<ChevronRightIcon />}
           />
         )}
-        {(compact || mobilePrimary) && (
-          <NavigationItem
-            compact={compact}
-            href={documentationUrl('home')}
-            icon={<DocumentationIcon />}
-            label={t('navigation.documentation')}
-            onClick={compact ? undefined : onNavigate}
-            sx={{ mt: 1 }}
-          />
-        )}
         {!compact && mobileSection === 'manage' && (
           <ManagementNavigationLinks
             items={managementItems}
@@ -328,6 +317,8 @@ export const SideNavigation = ({
       {(compact || mobilePrimary) && (
         <NavigationFooter
           compact={compact}
+          documentationHref={documentationUrl('home')}
+          onDocumentationClick={compact ? undefined : onNavigate}
           onProfileClick={navigateAway}
           onSignOut={onSignOut}
           pathname={pathname}

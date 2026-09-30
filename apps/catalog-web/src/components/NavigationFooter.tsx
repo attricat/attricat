@@ -5,9 +5,12 @@ import { useTranslation } from 'react-i18next';
 import { useColorMode } from '../app/colorMode';
 import { profileNavigationItem } from './navigation';
 import { NavigationItem } from './NavigationItem';
+import { DocumentationIcon } from './systemIcons';
 
 type NavigationFooterProps = {
   compact: boolean;
+  documentationHref: string;
+  onDocumentationClick?: () => void;
   onProfileClick: () => void;
   onSignOut?: () => void;
   pathname: string;
@@ -15,6 +18,8 @@ type NavigationFooterProps = {
 
 export const NavigationFooter = ({
   compact,
+  documentationHref,
+  onDocumentationClick,
   onProfileClick,
   onSignOut,
   pathname,
@@ -37,6 +42,13 @@ export const NavigationFooter = ({
           py: 1.5,
         }}
       >
+        <NavigationItem
+          compact={compact}
+          href={documentationHref}
+          icon={<DocumentationIcon />}
+          label={t('navigation.documentation')}
+          onClick={onDocumentationClick}
+        />
         <NavigationItem
           compact={compact}
           icon={createElement(profileNavigationItem.icon)}

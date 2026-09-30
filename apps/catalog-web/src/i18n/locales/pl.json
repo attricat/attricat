@@ -544,6 +544,36 @@
     "searchSyntax": "Składnia wyszukiwania",
     "queryExamples": "Ten schemat: tekst · Jedno pole: pole:tekst* · Wszystkie pola powiązanego rekordu: relacja:tekst · Pole powiązanego rekordu: relacja.pole:tekst · Globalne wyszukiwanie powiązanych rekordów (do 3 relacji): *:tekst",
     "searchTerms": "Przeszukaj ten schemat, np. tekst",
+    "querySuggestions": {
+      "label": "Podpowiedzi zapytania",
+      "attribute": "Szukaj tylko w polu {{name}}",
+      "relationship": "Wybierz pole powiązanego rekordu {{target}}",
+      "linksTo": "→ {{target}}",
+      "allFields": "Szukaj we wszystkich polach powiązanego rekordu {{target}}",
+      "allFieldsTitle": "{{field}} (wszystkie pola)",
+      "global": "Szukaj we wszystkich schematach i wróć po powiązaniach (do 3 relacji)",
+      "valueHint": "Wpisz wartość do znalezienia w {{field}}. Zakończ ją znakiem *, aby dopasować początek.",
+      "keyboardHint": "↑↓ wybór · Tab lub Enter wstawia · Esc zamyka · Ctrl+Spacja otwiera ponownie"
+    },
+    "queryValueTypes": {
+      "string": "Tekst",
+      "number": "Liczba",
+      "integer": "Liczba całkowita",
+      "boolean": "Tak/Nie",
+      "date": "Data",
+      "datetime": "Data i godzina",
+      "time": "Godzina",
+      "json": "JSON",
+      "file": "Plik"
+    },
+    "queryErrors": {
+      "malformedTerm": "„{{term}}” jest niepełne. Użyj pole:wartość.",
+      "misplacedWildcard": "* może występować tylko na końcu: „{{term}}”.",
+      "tooManyHops": "Ścieżka wyszukiwania może przejść przez najwyżej 3 relacje.",
+      "unknownField": "„{{field}}” nie jest polem, które można przeszukać.",
+      "unknownRelationship": "„{{field}}” nie jest relacją.",
+      "notSearchableLeaf": "Pola „{{field}}” nie można przeszukiwać przez ścieżkę relacji."
+    },
     "search": "Szukaj",
     "context": "Kontekst",
     "publicationForContext": "Publikacja ({{context}})",
