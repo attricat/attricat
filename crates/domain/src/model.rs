@@ -232,11 +232,16 @@ pub struct EntityAuditChange {
     pub actor_user_id: Option<Uuid>,
     pub actor_display_name: Option<String>,
     pub actor_email: Option<String>,
+    /// The actor's ready avatar in this workspace.
+    #[serde(default)]
+    pub actor_avatar_file_id: Option<Uuid>,
     pub executor_type: String,
     pub agent_run_id: Option<Uuid>,
     pub approval_decision: Option<String>,
     pub approved_by_user_id: Option<Uuid>,
     pub approved_by_display_name: Option<String>,
+    #[serde(default)]
+    pub approved_by_avatar_file_id: Option<Uuid>,
     pub attribute_id: Uuid,
     pub attribute_code: String,
     pub context_id: Option<Uuid>,

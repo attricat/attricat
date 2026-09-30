@@ -26,6 +26,8 @@ pub struct AuditEvent {
     pub actor_user_id: Option<Uuid>,
     pub actor_display_name: Option<String>,
     pub actor_email: Option<String>,
+    /// The actor's ready avatar in this workspace.
+    pub actor_avatar_file_id: Option<Uuid>,
     pub request_id: Uuid,
     pub correlation_id: Uuid,
     pub action: String,
@@ -42,6 +44,7 @@ pub struct AuditEvent {
     pub approved_by_user_id: Option<Uuid>,
     pub approved_by_display_name: Option<String>,
     pub approved_by_email: Option<String>,
+    pub approved_by_avatar_file_id: Option<Uuid>,
 }
 
 #[derive(Debug, Serialize)]
@@ -85,7 +88,7 @@ impl CatalogRepository {
             .as_deref()
             .map(|value| format!("{value}.%"));
         let rows = sqlx::query_as::<_, AuditEvent>(
-            "SELECT e.id, e.occurred_at, e.actor_user_id, actor.display_name AS actor_display_name, actor.email AS actor_email, e.request_id, e.correlation_id, e.action, e.authorization_scope, e.target, e.outcome, e.metadata, e.executor_type, e.agent_run_id, e.agent_conversation_id, e.agent_tool_call_id, e.agent_tool_name, e.approval_decision, e.approved_by_user_id, approver.display_name AS approved_by_display_name, approver.email AS approved_by_email FROM audit_events e LEFT JOIN users actor ON actor.id = e.actor_user_id LEFT JOIN users approver ON approver.id = e.approved_by_user_id WHERE e.workspace_id = $1 AND ($2::timestamptz IS NULL OR e.occurred_at >= $2) AND ($3::timestamptz IS NULL OR e.occurred_at <= $3) AND ($4::uuid IS NULL OR e.actor_user_id = $4) AND ($5::text IS NULL OR e.action LIKE $5) AND ($6::text IS NULL OR e.target->>'type' = $6) AND ($7::text IS NULL OR e.executor_type = $7) AND ($8::uuid IS NULL OR e.agent_run_id = $8) AND ($9::uuid IS NULL OR e.agent_tool_call_id = $9) ORDER BY e.occurred_at DESC, e.id DESC LIMIT $10 OFFSET $11",
+            "SELECT e.id, e.occurred_at, e.actor_user_id, actor.display_name AS actor_display_name, actor.email AS actor_email, actor_avatar.id AS actor_avatar_file_id, e.request_id, e.correlation_id, e.action, e.authorization_scope, e.target, e.outcome, e.metadata, e.executor_type, e.agent_run_id, e.agent_conversation_id, e.agent_tool_call_id, e.agent_tool_name, e.approval_decision, e.approved_by_user_id, approver.display_name AS approved_by_display_name, approver.email AS approved_by_email, approver_avatar.id AS approved_by_avatar_file_id FROM audit_events e LEFT JOIN users actor ON actor.id = e.actor_user_id LEFT JOIN users approver ON approver.id = e.approved_by_user_id LEFT JOIN workspace_memberships actor_m ON actor_m.workspace_id = e.workspace_id AND actor_m.user_id = e.actor_user_id AND actor_m.state = 'active' LEFT JOIN files actor_avatar ON actor_avatar.workspace_id = actor_m.workspace_id AND actor_avatar.id = actor_m.avatar_file_id AND actor_avatar.purpose = 'avatar' AND actor_avatar.status = 'ready' AND actor_avatar.deleted_at IS NULL LEFT JOIN workspace_memberships approver_m ON approver_m.workspace_id = e.workspace_id AND approver_m.user_id = e.approved_by_user_id AND approver_m.state = 'active' LEFT JOIN files approver_avatar ON approver_avatar.workspace_id = approver_m.workspace_id AND approver_avatar.id = approver_m.avatar_file_id AND approver_avatar.purpose = 'avatar' AND approver_avatar.status = 'ready' AND approver_avatar.deleted_at IS NULL WHERE e.workspace_id = $1 AND ($2::timestamptz IS NULL OR e.occurred_at >= $2) AND ($3::timestamptz IS NULL OR e.occurred_at <= $3) AND ($4::uuid IS NULL OR e.actor_user_id = $4) AND ($5::text IS NULL OR e.action LIKE $5) AND ($6::text IS NULL OR e.target->>'type' = $6) AND ($7::text IS NULL OR e.executor_type = $7) AND ($8::uuid IS NULL OR e.agent_run_id = $8) AND ($9::uuid IS NULL OR e.agent_tool_call_id = $9) ORDER BY e.occurred_at DESC, e.id DESC LIMIT $10 OFFSET $11",
         )
         .bind(workspace_id)
         .bind(filter.occurred_after)

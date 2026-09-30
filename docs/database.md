@@ -283,8 +283,11 @@ worker-produced variant metadata and object keys. File bytes are not stored in
 PostgreSQL, and original object keys are not returned by the API.
 
 `attribute_file_references` binds a file to its file attribute, entity, and
-context in display order. It is the source of truth for whether a file remains
-reachable. `file_processing_jobs` is a durable work queue owned by the file
+context in display order. It and `workspace_memberships.avatar_file_id` are the
+sources of truth for whether a file remains reachable. `files.purpose` is
+`attachment` for uploads that can be linked to entities or conversations and
+`avatar` for member avatars, which the worker turns into one square `avatar`
+variant and which cannot be linked to entity attributes. `file_processing_jobs` is a durable work queue owned by the file
 worker: it records attempts, availability, locks, worker identity, and a safe
 last error. Jobs are claimed with `SKIP LOCKED`; processing writes stable
 variant keys and is idempotent across retries.

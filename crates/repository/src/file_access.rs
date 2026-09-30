@@ -17,6 +17,14 @@ pub enum FileAccessOperation {
     ConversationUpload {
         conversation_id: Uuid,
     },
+    /// The authenticated member replacing their own avatar.
+    AvatarUpload {
+        user_id: Uuid,
+    },
+    /// Reading the processed variant of a workspace member's avatar.
+    AvatarRead {
+        file_id: Uuid,
+    },
     ReadMetadata {
         file_id: Uuid,
         entity_id: Uuid,

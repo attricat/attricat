@@ -550,6 +550,16 @@ pub fn router(state: AppState) -> Router {
             "/auth/preferences",
             axum::routing::patch(sessions::update_preferences),
         )
+        .route(
+            "/auth/display-name",
+            axum::routing::put(sessions::update_display_name),
+        )
+        .route(
+            "/auth/avatar",
+            axum::routing::put(files::upload_avatar)
+                .delete(files::delete_avatar)
+                .layer(axum::extract::DefaultBodyLimit::disable()),
+        )
         .route("/auth/logout", post(sessions::logout))
         .route("/auth/renew", post(sessions::renew))
         .route(

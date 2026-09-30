@@ -70,15 +70,16 @@ export const requestUpload = async <T>(
   data: FormData,
   schema: z.ZodType<T>,
   onProgress?: (progress: number) => void,
+  method: 'POST' | 'PUT' = 'POST',
 ): Promise<T> => {
   if (typeof XMLHttpRequest === 'undefined') {
-    const result = await request(path, schema, { method: 'POST', body: data });
+    const result = await request(path, schema, { method, body: data });
     onProgress?.(100);
     return result;
   }
   return new Promise<T>((resolve, reject) => {
     const upload = new XMLHttpRequest();
-    upload.open('POST', path);
+    upload.open(method, path);
     upload.withCredentials = true;
     const csrf = csrfToken();
     if (csrf) upload.setRequestHeader('X-Catalog-Csrf', csrf);

@@ -30,6 +30,7 @@ use crate::{
 
 mod agents;
 mod audit_events;
+mod avatars;
 mod blueprint_connector_jobs;
 mod blueprint_migration_batches;
 mod blueprints;
@@ -74,6 +75,7 @@ pub use agents::{
     AgentRun, AgentRunEvent, AgentToolCall, ApprovalDecision, Conversation, ConversationMessage,
 };
 pub use audit_events::{AuditEventFilter, AuditEventPage};
+pub use avatars::{AVATAR_VARIANT_KIND, OwnAvatar};
 pub use blueprint_connector_jobs::BlueprintConnectorJob;
 pub use catalog_domain::model::{FileMetadata, FileVariantMetadata};
 pub use domain_events::{EventConsumer, EventDelivery, EventPublisher, FailedEventDelivery};
@@ -1068,6 +1070,27 @@ impl CatalogRepository {
         )
         .bind(user_id)
         .bind(time_zone)
+        .execute(&mut *transaction)
+        .await?;
+        if updated.rows_affected() == 0 {
+            return Err(RepositoryError::NotFound("user"));
+        }
+        self.commit_mutation(transaction).await
+    }
+
+    /// Replaces the authenticated principal's display name. Callers validate
+    /// the name before storing it.
+    pub async fn update_user_display_name(
+        &self,
+        user_id: Uuid,
+        display_name: &str,
+    ) -> Result<(), RepositoryError> {
+        let mut transaction = self.pool.begin().await?;
+        let updated = sqlx::query(
+            "UPDATE users SET display_name = $2, updated_at = clock_timestamp() WHERE id = $1 AND state = 'active'",
+        )
+        .bind(user_id)
+        .bind(display_name)
         .execute(&mut *transaction)
         .await?;
         if updated.rows_affected() == 0 {

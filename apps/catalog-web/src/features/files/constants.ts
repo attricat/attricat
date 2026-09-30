@@ -53,3 +53,5 @@ export const uploadFormFields = {
   file: 'file',
   files: 'files',
 } as const;
+/** The square variant the file worker produces for member avatars. */
+export const AVATAR_VARIANT_KIND = 'avatar';

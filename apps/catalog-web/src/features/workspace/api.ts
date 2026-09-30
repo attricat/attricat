@@ -21,6 +21,8 @@ const memberSchema = z.object({
   user_id: uuid,
   email: z.string().email(),
   display_name: z.string().nullable(),
+  /** The member's ready avatar in this workspace. */
+  avatar_file_id: uuid.nullable().default(null),
   state: z.enum(['active', 'inactive']),
   created_at: z.string(),
   updated_at: z.string(),

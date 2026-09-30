@@ -11,6 +11,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import type { AuditEvent } from './api';
 import { Timestamp } from '../../time/Timestamp';
+import { AuditActor } from './AuditActor';
 import { auditActor, auditTarget } from './auditFormat';
 import {
   auditOutcomeSuccess,
@@ -65,7 +66,9 @@ export const AuditEventsTable = ({
                   />
                 </Button>
               </TableCell>
-              <TableCell>{auditActor(event, systemLabel)}</TableCell>
+              <TableCell>
+                <AuditActor event={event} systemLabel={systemLabel} />
+              </TableCell>
               <TableCell>
                 <Chip
                   color={

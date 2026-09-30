@@ -15,6 +15,8 @@ pub struct WorkspaceMember {
     pub user_id: Uuid,
     pub email: String,
     pub display_name: Option<String>,
+    /// The member's ready avatar in this workspace.
+    pub avatar_file_id: Option<Uuid>,
     pub state: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -249,7 +251,7 @@ impl CatalogRepository {
     ) -> Result<Vec<WorkspaceMember>, RepositoryError> {
         self.require_member_permission(actor_id, workspace_id, "members.manage")
             .await?;
-        Ok(sqlx::query_as("SELECT m.id, m.user_id, u.email, u.display_name, m.state, m.created_at, m.updated_at, coalesce(jsonb_agg(jsonb_build_object('id', g.id, 'role_id', g.role_id, 'role_code', r.code, 'scope_type', g.scope_type, 'scope_target_id', g.scope_target_id) ORDER BY g.created_at) FILTER (WHERE g.id IS NOT NULL), '[]'::jsonb) AS grants FROM workspace_memberships m JOIN users u ON u.id = m.user_id LEFT JOIN role_grants g ON g.membership_id = m.id AND g.workspace_id = m.workspace_id LEFT JOIN roles r ON r.id = g.role_id WHERE m.workspace_id = $1 GROUP BY m.id, u.id ORDER BY u.email").bind(workspace_id).fetch_all(&self.pool).await?)
+        Ok(sqlx::query_as("SELECT m.id, m.user_id, u.email, u.display_name, avatar.id AS avatar_file_id, m.state, m.created_at, m.updated_at, coalesce(jsonb_agg(jsonb_build_object('id', g.id, 'role_id', g.role_id, 'role_code', r.code, 'scope_type', g.scope_type, 'scope_target_id', g.scope_target_id) ORDER BY g.created_at) FILTER (WHERE g.id IS NOT NULL), '[]'::jsonb) AS grants FROM workspace_memberships m JOIN users u ON u.id = m.user_id LEFT JOIN files avatar ON m.state = 'active' AND avatar.workspace_id = m.workspace_id AND avatar.id = m.avatar_file_id AND avatar.purpose = 'avatar' AND avatar.status = 'ready' AND avatar.deleted_at IS NULL LEFT JOIN role_grants g ON g.membership_id = m.id AND g.workspace_id = m.workspace_id LEFT JOIN roles r ON r.id = g.role_id WHERE m.workspace_id = $1 GROUP BY m.id, u.id, avatar.id ORDER BY u.email").bind(workspace_id).fetch_all(&self.pool).await?)
     }
     pub async fn set_workspace_membership_state(
         &self,

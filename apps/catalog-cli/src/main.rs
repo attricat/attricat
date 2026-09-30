@@ -238,6 +238,11 @@ enum AuthCommand {
         #[arg(long, conflicts_with = "time_zone")]
         clear_time_zone: bool,
     },
+    /// Change the authenticated user's display name.
+    DisplayName {
+        /// 2–64 letters, digits, and spaces; no leading or trailing space.
+        name: String,
+    },
     Logout,
     Renew,
 }
@@ -2162,6 +2167,16 @@ async fn auth_command(
                 Method::PATCH,
                 "/auth/preferences",
                 Some(json!({ "time_zone": time_zone })),
+            )
+            .await
+        }
+        AuthCommand::DisplayName { name } => {
+            request(
+                client,
+                server,
+                Method::PUT,
+                "/auth/display-name",
+                Some(json!({ "display_name": name })),
             )
             .await
         }

@@ -7,6 +7,7 @@ const auditEventSchema = z.object({
   actor_user_id: z.uuid().nullable(),
   actor_display_name: z.string().nullable(),
   actor_email: z.string().nullable(),
+  actor_avatar_file_id: z.uuid().nullable().default(null),
   request_id: z.uuid(),
   correlation_id: z.uuid(),
   action: z.string(),
@@ -23,6 +24,7 @@ const auditEventSchema = z.object({
   approved_by_user_id: z.uuid().nullable(),
   approved_by_display_name: z.string().nullable(),
   approved_by_email: z.string().nullable(),
+  approved_by_avatar_file_id: z.uuid().nullable().default(null),
 });
 
 const auditEventPageSchema = z.object({

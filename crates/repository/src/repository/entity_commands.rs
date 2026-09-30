@@ -550,14 +550,18 @@ impl CatalogRepository {
         Ok(sqlx::query_as::<_, Db<EntityAuditChange>>(
             r#"SELECT c.audit_event_id, e.occurred_at, e.actor_user_id,
                       actor.display_name AS actor_display_name, actor.email AS actor_email,
+                      actor_avatar.id AS actor_avatar_file_id,
                       e.executor_type, e.agent_run_id, e.approval_decision, e.approved_by_user_id,
                       approver.display_name AS approved_by_display_name,
+                      approver_avatar.id AS approved_by_avatar_file_id,
                       c.attribute_id, c.attribute_code, c.context_id, c.context_code,
                       c.change_kind, c.before_value, c.after_value
                FROM audit_event_changes c
                JOIN audit_events e ON e.id = c.audit_event_id
                LEFT JOIN users actor ON actor.id = e.actor_user_id
                LEFT JOIN users approver ON approver.id = e.approved_by_user_id
+               LEFT JOIN workspace_memberships actor_m ON actor_m.workspace_id = c.workspace_id AND actor_m.user_id = e.actor_user_id AND actor_m.state = 'active' LEFT JOIN files actor_avatar ON actor_avatar.workspace_id = actor_m.workspace_id AND actor_avatar.id = actor_m.avatar_file_id AND actor_avatar.purpose = 'avatar' AND actor_avatar.status = 'ready' AND actor_avatar.deleted_at IS NULL
+               LEFT JOIN workspace_memberships approver_m ON approver_m.workspace_id = c.workspace_id AND approver_m.user_id = e.approved_by_user_id AND approver_m.state = 'active' LEFT JOIN files approver_avatar ON approver_avatar.workspace_id = approver_m.workspace_id AND approver_avatar.id = approver_m.avatar_file_id AND approver_avatar.purpose = 'avatar' AND approver_avatar.status = 'ready' AND approver_avatar.deleted_at IS NULL
                WHERE c.entity_id = $1 AND c.workspace_id = $2
                ORDER BY e.occurred_at DESC, c.id DESC"#,
         )
@@ -577,14 +581,18 @@ impl CatalogRepository {
         let mut rows = sqlx::query_as::<_, Db<EntityAuditChange>>(
             r#"SELECT c.audit_event_id, e.occurred_at, e.actor_user_id,
                       actor.display_name AS actor_display_name, actor.email AS actor_email,
+                      actor_avatar.id AS actor_avatar_file_id,
                       e.executor_type, e.agent_run_id, e.approval_decision, e.approved_by_user_id,
                       approver.display_name AS approved_by_display_name,
+                      approver_avatar.id AS approved_by_avatar_file_id,
                       c.attribute_id, c.attribute_code, c.context_id, c.context_code,
                       c.change_kind, c.before_value, c.after_value
                FROM audit_event_changes c
                JOIN audit_events e ON e.id = c.audit_event_id
                LEFT JOIN users actor ON actor.id = e.actor_user_id
                LEFT JOIN users approver ON approver.id = e.approved_by_user_id
+               LEFT JOIN workspace_memberships actor_m ON actor_m.workspace_id = c.workspace_id AND actor_m.user_id = e.actor_user_id AND actor_m.state = 'active' LEFT JOIN files actor_avatar ON actor_avatar.workspace_id = actor_m.workspace_id AND actor_avatar.id = actor_m.avatar_file_id AND actor_avatar.purpose = 'avatar' AND actor_avatar.status = 'ready' AND actor_avatar.deleted_at IS NULL
+               LEFT JOIN workspace_memberships approver_m ON approver_m.workspace_id = c.workspace_id AND approver_m.user_id = e.approved_by_user_id AND approver_m.state = 'active' LEFT JOIN files approver_avatar ON approver_avatar.workspace_id = approver_m.workspace_id AND approver_avatar.id = approver_m.avatar_file_id AND approver_avatar.purpose = 'avatar' AND approver_avatar.status = 'ready' AND approver_avatar.deleted_at IS NULL
                WHERE c.entity_id = $1 AND c.workspace_id = $2
                ORDER BY e.occurred_at DESC, c.id DESC
                LIMIT $3 OFFSET $4"#,

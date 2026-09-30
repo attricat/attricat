@@ -22,6 +22,7 @@ vi.mock('../extensions/ExtensionOutlet', () => ({
 
 const event: AuditEvent = {
   action: 'entity.updated',
+  actor_avatar_file_id: null,
   actor_display_name: 'Ada Lovelace',
   actor_email: null,
   actor_user_id: '00000000-0000-4000-8000-000000000001',
@@ -30,6 +31,7 @@ const event: AuditEvent = {
   agent_tool_call_id: null,
   agent_tool_name: null,
   approval_decision: null,
+  approved_by_avatar_file_id: null,
   approved_by_display_name: null,
   approved_by_email: null,
   approved_by_user_id: null,

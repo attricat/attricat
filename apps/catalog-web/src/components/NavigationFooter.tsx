@@ -3,9 +3,11 @@ import { LogOutIcon, MoonIcon, SunIcon } from 'lucide-react';
 import { createElement } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useColorMode } from '../app/colorMode';
+import { CurrentUserAvatar } from './CurrentUserAvatar';
 import { profileNavigationItem } from './navigation';
 import { NavigationItem } from './NavigationItem';
 import { DocumentationIcon } from './systemIcons';
+import { userAvatarSizes } from './userAvatars';
 
 type NavigationFooterProps = {
   compact: boolean;
@@ -51,7 +53,12 @@ export const NavigationFooter = ({
         />
         <NavigationItem
           compact={compact}
-          icon={createElement(profileNavigationItem.icon)}
+          icon={
+            <CurrentUserAvatar
+              fallback={createElement(profileNavigationItem.icon)}
+              size={userAvatarSizes.inline}
+            />
+          }
           label={t(profileNavigationItem.labelKey)}
           onClick={onProfileClick}
           selected={pathname.startsWith(profileNavigationItem.to)}

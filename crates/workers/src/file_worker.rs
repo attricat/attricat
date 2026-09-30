@@ -25,6 +25,8 @@ const DEFAULT_MAX_ATTEMPTS: i32 = 5;
 const THUMBNAIL_MAX_DIMENSION: u32 = 320;
 /// Longest edge for the high-resolution image variant served to clients.
 const DISPLAY_MAX_DIMENSION: u32 = 1600;
+/// Edge length of the square `avatar` variant, enough for high-density screens.
+const AVATAR_DIMENSION: u32 = 256;
 const DEFAULT_GRACE_SECONDS: i64 = 86_400;
 const STALE_LOCK_SECONDS: i64 = 300;
 const LEASE_HEARTBEAT_SECONDS: u64 = 60;
@@ -248,7 +250,7 @@ impl FileWorker {
         if !still_owned {
             return Err(WorkerError::LeaseLost);
         }
-        let row = sqlx::query("SELECT original_key, mime_type FROM files WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL FOR UPDATE")
+        let row = sqlx::query("SELECT original_key, mime_type, purpose FROM files WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL FOR UPDATE")
             .bind(job.file_id).bind(job.workspace_id).fetch_optional(&mut *transaction).await?;
         let Some(row) = row else {
             transaction.commit().await?;
@@ -258,6 +260,7 @@ impl FileWorker {
             .bind(job.file_id).bind(job.workspace_id).execute(&mut *transaction).await?;
         let key: String = row.try_get("original_key")?;
         let mime: String = row.try_get("mime_type")?;
+        let avatar = row.try_get::<String, _>("purpose")? == "avatar";
         transaction.commit().await?;
         if !mime.starts_with("image/") {
             sqlx::query("UPDATE files SET status = 'ready', processing_error = NULL, updated_at = now() WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM file_processing_jobs WHERE id = $3 AND status = 'running' AND lease_token = $4)")
@@ -271,7 +274,14 @@ impl FileWorker {
         let (width, height, variants) = tokio::task::spawn_blocking(move || {
             let image = decode_and_orient(&object.bytes, max_pixels)?;
             let (width, height) = image.dimensions();
-            let variants = [
+            if avatar {
+                return Ok::<_, WorkerError>((
+                    width,
+                    height,
+                    vec![encode_variant("avatar", &square_avatar(&image))?],
+                ));
+            }
+            let variants = vec![
                 encode_variant(
                     "thumbnail",
                     &image.thumbnail(THUMBNAIL_MAX_DIMENSION, THUMBNAIL_MAX_DIMENSION),
@@ -327,7 +337,7 @@ impl FileWorker {
     }
 
     async fn purge(&self, job: &ClaimedJob) -> Result<(), WorkerError> {
-        let row = sqlx::query("SELECT original_key FROM files WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NOT NULL AND purge_after <= now() AND NOT EXISTS (SELECT 1 FROM attribute_file_references r WHERE r.workspace_id = files.workspace_id AND r.file_id = files.id)")
+        let row = sqlx::query("SELECT original_key FROM files WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NOT NULL AND purge_after <= now() AND NOT EXISTS (SELECT 1 FROM attribute_file_references r WHERE r.workspace_id = files.workspace_id AND r.file_id = files.id) AND NOT EXISTS (SELECT 1 FROM workspace_memberships m WHERE m.workspace_id = files.workspace_id AND m.avatar_file_id = files.id)")
             .bind(job.file_id).bind(job.workspace_id).fetch_optional(&self.pool).await?;
         let Some(row) = row else {
             return Ok(());
@@ -369,6 +379,7 @@ impl FileWorker {
               AND (f.attachment_expires_at IS NULL OR f.attachment_expires_at <= now())
               AND NOT EXISTS (SELECT 1 FROM attribute_file_references r WHERE r.workspace_id = f.workspace_id AND r.file_id = f.id)
               AND NOT EXISTS (SELECT 1 FROM conversation_message_attachments a WHERE a.workspace_id = f.workspace_id AND a.file_id = f.id)
+              AND NOT EXISTS (SELECT 1 FROM workspace_memberships m WHERE m.workspace_id = f.workspace_id AND m.avatar_file_id = f.id)
             ORDER BY f.id
             LIMIT 256 FOR UPDATE SKIP LOCKED"#,
         )
@@ -382,7 +393,8 @@ impl FileWorker {
                   AND f.deleted_at IS NULL
                   AND (f.attachment_expires_at IS NULL OR f.attachment_expires_at <= now())
                   AND NOT EXISTS (SELECT 1 FROM attribute_file_references r WHERE r.workspace_id = f.workspace_id AND r.file_id = f.id)
-                  AND NOT EXISTS (SELECT 1 FROM conversation_message_attachments a WHERE a.workspace_id = f.workspace_id AND a.file_id = f.id)"#)
+                  AND NOT EXISTS (SELECT 1 FROM conversation_message_attachments a WHERE a.workspace_id = f.workspace_id AND a.file_id = f.id)
+              AND NOT EXISTS (SELECT 1 FROM workspace_memberships m WHERE m.workspace_id = f.workspace_id AND m.avatar_file_id = f.id)"#)
                 .bind(grace)
                 .bind(&candidates)
                 .execute(&mut *transaction)
@@ -508,6 +520,28 @@ enum WorkerError {
     Image(String),
 }
 
+/// Center-crops to a square, scales to the avatar size, and flattens any
+/// transparency onto white so avatars look the same on every background.
+/// Images smaller than the avatar size are cropped but never upscaled.
+fn square_avatar(image: &DynamicImage) -> DynamicImage {
+    let (width, height) = image.dimensions();
+    let side = width.min(height);
+    let square = image.crop_imm((width - side) / 2, (height - side) / 2, side, side);
+    let square = if side <= AVATAR_DIMENSION {
+        square
+    } else {
+        square.resize_exact(
+            AVATAR_DIMENSION,
+            AVATAR_DIMENSION,
+            image::imageops::FilterType::Lanczos3,
+        )
+    };
+    let (width, height) = square.dimensions();
+    let mut canvas = image::RgbaImage::from_pixel(width, height, image::Rgba([255, 255, 255, 255]));
+    image::imageops::overlay(&mut canvas, &square.to_rgba8(), 0, 0);
+    DynamicImage::ImageRgba8(canvas)
+}
+
 fn decode_and_orient(bytes: &[u8], max_pixels: u64) -> Result<DynamicImage, WorkerError> {
     let orientation = exif::Reader::new()
         .read_from_container(&mut Cursor::new(bytes))
@@ -550,6 +584,25 @@ mod tests {
         assert!(checked_max_attempts(u64::MAX).is_err());
         assert_eq!(checked_max_attempts(5).unwrap(), 5);
         assert!(checked_grace(i64::MAX as u64 + 1).is_err());
+    }
+
+    #[test]
+    fn avatars_are_center_cropped_squares_that_never_upscale() {
+        let wide = DynamicImage::new_rgba8(1000, 400);
+        assert_eq!(square_avatar(&wide).dimensions(), (256, 256));
+        let tall = DynamicImage::new_rgba8(300, 900);
+        assert_eq!(square_avatar(&tall).dimensions(), (256, 256));
+        let small = DynamicImage::new_rgba8(120, 80);
+        assert_eq!(square_avatar(&small).dimensions(), (80, 80));
+    }
+
+    #[test]
+    fn avatars_flatten_transparency_onto_white() {
+        let mut image = image::RgbaImage::from_pixel(10, 10, image::Rgba([0, 0, 0, 0]));
+        image.put_pixel(5, 5, image::Rgba([200, 0, 0, 255]));
+        let avatar = square_avatar(&DynamicImage::ImageRgba8(image)).to_rgba8();
+        assert_eq!(avatar.get_pixel(0, 0), &image::Rgba([255, 255, 255, 255]));
+        assert_eq!(avatar.get_pixel(5, 5), &image::Rgba([200, 0, 0, 255]));
     }
 
     #[test]
