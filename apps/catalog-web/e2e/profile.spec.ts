@@ -6,7 +6,7 @@ test('opens Profile and manages a personal API token', async ({ page }) => {
 
   await expect(page).toHaveURL(/\/profile$/);
   await expect(page.getByRole('heading', { name: 'Profile' })).toBeVisible();
-  await expect(page.getByText('Email: owner@example.test')).toBeVisible();
+  await expect(page.getByText('owner@example.test')).toBeVisible();
 
   await page.getByRole('tab', { name: 'Personal API tokens' }).click();
   await expect(page).toHaveURL(/\/profile\/personal-access-tokens$/);
@@ -23,7 +23,13 @@ test('opens Profile and manages a personal API token', async ({ page }) => {
   const token = page
     .getByRole('listitem')
     .filter({ hasText: 'playwright token' });
-  await expect(token).toContainText('Last used: Never');
+  await expect(token.locator('dt:text-is("Last used") + dd')).toHaveText(
+    'Never',
+  );
   await token.getByRole('button', { name: 'Revoke' }).click();
-  await expect(token).toContainText('Revoked:');
+  const confirm = page.getByRole('dialog', { name: 'Revoke personal token?' });
+  await expect(confirm).toContainText('playwright token');
+  await confirm.getByRole('button', { name: 'Revoke token' }).click();
+  await expect(confirm).toBeHidden();
+  await expect(token.locator('dt:text-is("Revoked") + dd')).toBeVisible();
 });

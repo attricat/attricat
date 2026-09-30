@@ -6,8 +6,10 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
+import { ClockIcon } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
+import { compactIconSize } from '../../components/iconSizes';
 import { updatePreferences } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
 import {
@@ -69,10 +71,6 @@ export const TimeZonePreference = ({ disabled }: { disabled: boolean }) => {
 
   return (
     <Stack spacing={2}>
-      <Typography variant="h6">{t('timeZone.label')}</Typography>
-      <Typography color="text.secondary" variant="body2">
-        {t('timeZone.description')}
-      </Typography>
       {save.isError && (
         <Alert severity="error">
           {t('timeZone.saveFailed', { message: save.error.message })}
@@ -95,7 +93,12 @@ export const TimeZonePreference = ({ disabled }: { disabled: boolean }) => {
         sx={{ maxWidth: timeZonePickerMaxWidth, width: '100%' }}
         value={selected}
       />
-      <Typography variant="body2">
+      <Typography
+        color="text.secondary"
+        sx={{ alignItems: 'center', display: 'flex', gap: 2 }}
+        variant="body2"
+      >
+        <ClockIcon aria-hidden size={compactIconSize} />
         <Trans
           components={{ timestamp: <Timestamp style="dateTime" value={now} /> }}
           i18nKey="timeZone.preview"

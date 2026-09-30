@@ -12,6 +12,7 @@ const tokenSchema = z.object({
   last_used_at: z.string().nullable(),
   created_at: z.string(),
 });
+export type PersonalToken = z.infer<typeof tokenSchema>;
 const permissionSchema = z.object({
   code: z.string(),
   description: z.string(),

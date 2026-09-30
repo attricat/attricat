@@ -37,3 +37,12 @@ export const profileTabIndex = {
 export const timeZonePickerMaxWidth = 480;
 /** How often the time zone preview clock advances. */
 export const previewRefreshMilliseconds = 30_000;
+export const profileAvatarSize = 48;
+/** Placeholder widths while the session loads. */
+export const profileSkeletonWidth = 180;
+export const profileValueSkeletonWidth = 240;
+export const tokenSkeletonCount = 2;
+export const tokenSkeletonHeight = 176;
+export const tokensPath = '/profile/personal-access-tokens';
+/** Forms keep a readable column inside the wider settings page. */
+export const tokenFormMaxWidth = 720;
