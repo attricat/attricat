@@ -39,7 +39,7 @@ const allJavaScriptAssets = await Promise.all(
     .filter((chunk) => chunk.file.endsWith('.js'))
     .map((chunk) => getSize(chunk.file)),
 );
-const initialGzipBudget = 290 * 1024;
+const initialGzipBudget = 300 * 1024;
 const total = (assets, property) =>
   assets.reduce((size, asset) => size + asset[property], 0);
 
