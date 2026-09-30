@@ -2,12 +2,14 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ComponentProps } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { ToastProvider } from '../../components/ToastProvider';
 import type { BlueprintWithAttributes, EntityItem } from '../entities/api';
 import { extensionQueryKeys } from '../extensions/queryKeys';
 import { ExplorerResultsTable } from './ExplorerResultsTable';
+import { useExplorerSelection } from './useExplorerSelection';
 
 const navigate = vi.fn();
 vi.mock('@tanstack/react-router', () => ({
@@ -85,6 +87,22 @@ const secondItem: EntityItem = {
   is_sample: false,
 };
 
+// Selection is owned above the table, which remounts for every search.
+const TableWithSelection = ({
+  tableKey,
+  ...props
+}: Omit<ComponentProps<typeof ExplorerResultsTable>, 'selection'> & {
+  tableKey: string;
+}) => {
+  const selection = useExplorerSelection(
+    props.blueprint.blueprint.code,
+    props.items,
+  );
+  return (
+    <ExplorerResultsTable key={tableKey} {...props} selection={selection} />
+  );
+};
+
 const renderTable = (
   items = [item, secondItem],
   canDelete = false,
@@ -92,6 +110,7 @@ const renderTable = (
   sort?: { field: string; direction: 'asc' | 'desc' },
   publicationSortAvailable = true,
   showExplorerActions = true,
+  tableKey = 'initial',
 ) => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
@@ -99,17 +118,18 @@ const renderTable = (
   queryClient.setQueryData(extensionQueryKeys.runtime(), {
     contributions: [],
   });
-  return render(
+  const tree = (tableItems: EntityItem[], key: string) => (
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
-        <ExplorerResultsTable
+        <TableWithSelection
+          tableKey={key}
           blueprint={blueprint}
           canPublish={false}
           canDelete={canDelete}
           hasNextPage={false}
           isFetching={false}
           isFetchingNextPage={false}
-          items={items}
+          items={tableItems}
           onLoadMore={vi.fn()}
           onSortChange={onSortChange}
           sort={sort}
@@ -117,12 +137,18 @@ const renderTable = (
           publicationContextId={undefined}
           publicationSortAvailable={publicationSortAvailable}
           showExplorerActions={showExplorerActions}
-          totalCount={items.length}
+          totalCount={tableItems.length}
           totalCountCapped={false}
         />
       </ToastProvider>
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
+  const view = render(tree(items, tableKey));
+  return {
+    ...view,
+    search: (nextItems: EntityItem[], key: string) =>
+      view.rerender(tree(nextItems, key)),
+  };
 };
 
 describe('ExplorerResultsTable', () => {
@@ -241,7 +267,7 @@ describe('ExplorerResultsTable', () => {
     await user.click(first);
     expect((first as HTMLInputElement).checked).toBe(true);
     expect(selectAll.getAttribute('data-indeterminate')).toBe('true');
-    expect(screen.getByText('1 of 2 selected')).toBeTruthy();
+    expect(screen.getByText('1 selected')).toBeTruthy();
     expect(outletMount).toHaveBeenCalledWith({
       outlet: 'explorer_bulk_action',
       context: {
@@ -257,9 +283,9 @@ describe('ExplorerResultsTable', () => {
     });
     await user.click(selectAll);
     expect(selectAll.checked).toBe(true);
-    expect(screen.getByText('2 of 2 selected')).toBeTruthy();
+    expect(screen.getByText('2 selected')).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Clear selection' }));
-    expect(screen.getByText('0 of 2 selected')).toBeTruthy();
+    expect(screen.getByText('0 selected')).toBeTruthy();
     expect(
       screen.getByRole('button', { name: 'Actions' }).hasAttribute('disabled'),
     ).toBe(true);
@@ -271,7 +297,37 @@ describe('ExplorerResultsTable', () => {
     );
     expect(screen.queryByRole('checkbox')).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Select entities' }));
-    expect(screen.getByText('0 of 2 selected')).toBeTruthy();
+    expect(screen.getByText('0 selected')).toBeTruthy();
+  });
+
+  it('keeps selection across searches and lets it be reviewed', async () => {
+    const user = userEvent.setup();
+    const { search } = renderTable();
+    await user.click(screen.getByRole('button', { name: 'Select entities' }));
+    await user.click(
+      screen.getByRole('checkbox', { name: 'Select Sample product' }),
+    );
+    search([secondItem], 'second-search');
+    expect(screen.getByText('1 selected')).toBeTruthy();
+    const selectAll = screen.getByRole('checkbox', {
+      name: 'Select loaded entities (up to 50)',
+    }) as HTMLInputElement;
+    expect(selectAll.checked).toBe(false);
+    expect(selectAll.getAttribute('data-indeterminate')).toBe('false');
+    await user.click(
+      screen.getByRole('checkbox', { name: 'Select Second product' }),
+    );
+    expect(screen.getByText('2 selected')).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: '2 selected' }));
+    const review = screen.getByRole('dialog', { name: 'Selected entities' });
+    expect(within(review).getByText('Sample product')).toBeTruthy();
+    await user.click(
+      within(review).getByRole('button', {
+        name: 'Remove Sample product from selection',
+      }),
+    );
+    expect(screen.getByText('1 selected')).toBeTruthy();
   });
 
   it('limits bulk selection to 50 loaded entities', async () => {
@@ -288,7 +344,7 @@ describe('ExplorerResultsTable', () => {
         name: 'Select loaded entities (up to 50)',
       }),
     );
-    expect(screen.getByText('50 of 51 selected')).toBeTruthy();
+    expect(screen.getByText('50 selected')).toBeTruthy();
     expect(
       screen.getByText(
         'Limit reached: up to 50 loaded entities can be selected',

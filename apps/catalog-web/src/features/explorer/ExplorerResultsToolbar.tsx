@@ -1,17 +1,19 @@
 import { Box, Button, IconButton, Tooltip, Typography } from '@mui/material';
-import { Columns3CogIcon, XIcon } from 'lucide-react';
+import { Columns3CogIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { compactIconSize } from '../../components/iconSizes';
+import type { EntityItem } from '../entities/api';
 import { maximumAgentSelection } from './agentSelection';
 import { ExplorerSelectionActionsMenu } from './ExplorerSelectionActionsMenu';
+import { ExplorerSelectionSummary } from './ExplorerSelectionSummary';
 
 type Props = {
   itemCount: number;
   totalCount: number | null;
   totalCountCapped: boolean;
   selectionMode: boolean;
-  selectedCount: number;
+  selectedItems: EntityItem[];
   onClearSelection: () => void;
+  onRemoveSelected: (entityId: string) => void;
   onSendSelection: () => void;
   onToggleSelection: () => void;
   onOpenColumnPreferences: () => void;
@@ -22,15 +24,14 @@ export const ExplorerResultsToolbar = ({
   totalCount,
   totalCountCapped,
   selectionMode,
-  selectedCount,
+  selectedItems,
   onClearSelection,
+  onRemoveSelected,
   onSendSelection,
   onToggleSelection,
   onOpenColumnPreferences,
 }: Props) => {
   const { t } = useTranslation();
-  const total = totalCount ?? itemCount;
-  const capped = totalCount !== null && totalCountCapped;
   return (
     <Box
       sx={{
@@ -51,47 +52,30 @@ export const ExplorerResultsToolbar = ({
           gap: 1,
         }}
       >
-        {selectionMode ? (
-          <>
-            <Typography>
-              {t(
-                capped
-                  ? 'explorer.selectedOfTotalCapped'
-                  : 'explorer.selectedOfTotal',
-                { selected: selectedCount, total },
-              )}
-            </Typography>
-            {selectedCount > 0 && (
-              <Tooltip title={t('explorer.clearSelection')}>
-                <IconButton
-                  aria-label={t('explorer.clearSelection')}
-                  onClick={onClearSelection}
-                  size="small"
-                >
-                  <XIcon size={compactIconSize} />
-                </IconButton>
-              </Tooltip>
-            )}
-            {selectedCount >= maximumAgentSelection && (
-              <Typography color="text.secondary" variant="caption">
-                {t('explorer.selectionLimit', {
-                  count: maximumAgentSelection,
-                })}
-              </Typography>
-            )}
-          </>
-        ) : (
-          <Typography>
-            {capped
-              ? t('explorer.resultCountCapped', { count: total })
-              : t('explorer.resultCount', { count: total })}
+        <Typography>
+          {totalCount === null
+            ? t('explorer.resultCount', { count: itemCount })
+            : totalCountCapped
+              ? t('explorer.resultCountCapped', { count: totalCount })
+              : t('explorer.resultCount', { count: totalCount })}
+        </Typography>
+        {selectionMode && (
+          <ExplorerSelectionSummary
+            onClear={onClearSelection}
+            onRemove={onRemoveSelected}
+            selectedItems={selectedItems}
+          />
+        )}
+        {selectionMode && selectedItems.length >= maximumAgentSelection && (
+          <Typography color="text.secondary" variant="caption">
+            {t('explorer.selectionLimit', { count: maximumAgentSelection })}
           </Typography>
         )}
       </Box>
       <Box sx={{ alignItems: 'center', display: 'flex', gap: 1 }}>
         {selectionMode && (
           <ExplorerSelectionActionsMenu
-            disabled={selectedCount === 0}
+            disabled={selectedItems.length === 0}
             onSendToAgent={onSendSelection}
           />
         )}

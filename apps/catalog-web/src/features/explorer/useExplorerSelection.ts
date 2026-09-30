@@ -1,62 +1,88 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { EntityItem } from '../entities/api';
 import { maximumAgentSelection } from './agentSelection';
 
-export const useExplorerSelection = (items: EntityItem[]) => {
-  const [selectionMode, setSelectionMode] = useState(false);
-  const [selectedEntityIds, setSelectedEntityIds] = useState<Set<string>>(
-    () => new Set(),
+type SelectionState = {
+  scope: string | undefined;
+  selectionMode: boolean;
+  entities: EntityItem[];
+};
+
+const emptySelection = (scope: string | undefined): SelectionState => ({
+  scope,
+  selectionMode: false,
+  entities: [],
+});
+
+/**
+ * Tracks bulk selection for one blueprint. Selected entities are kept as
+ * snapshots so the selection survives query, sort, and filter changes that
+ * replace the loaded rows; switching to another blueprint starts afresh.
+ */
+export const useExplorerSelection = (
+  scope: string | undefined,
+  items: EntityItem[],
+) => {
+  const [state, setState] = useState(() => emptySelection(scope));
+  if (state.scope !== scope) setState(emptySelection(scope));
+  const current = state.scope === scope ? state : emptySelection(scope);
+
+  const selectedIds = new Set(current.entities.map((entity) => entity.id));
+  const loadedById = new Map(items.map((item) => [item.id, item]));
+  // Prefer loaded rows so labels and versions reflect the latest results.
+  const selectedItems = current.entities.map(
+    (entity) => loadedById.get(entity.id) ?? entity,
   );
-  const selectedItems = items.filter((item) => selectedEntityIds.has(item.id));
-  const allLoadedSelected =
-    items.length > 0 &&
-    items
-      .slice(0, maximumAgentSelection)
-      .every((item) => selectedEntityIds.has(item.id));
+  const loadedSelectedCount = items.filter((item) =>
+    selectedIds.has(item.id),
+  ).length;
+  const canAddLoaded =
+    selectedIds.size < maximumAgentSelection &&
+    loadedSelectedCount < items.length;
+  const allLoadedSelected = loadedSelectedCount > 0 && !canAddLoaded;
+  const someLoadedSelected = loadedSelectedCount > 0 && canAddLoaded;
 
-  useEffect(() => {
-    // Loaded rows can change after a search or refresh; preserve only visible IDs.
-    // This synchronizes selection with the externally loaded result set.
-    const loaded = new Set(items.map((item) => item.id));
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setSelectedEntityIds((current) => {
-      const next = new Set([...current].filter((id) => loaded.has(id)));
-      return next.size === current.size ? current : next;
-    });
-  }, [items]);
-
-  const clearSelection = () => setSelectedEntityIds(new Set());
-  const exitSelectionMode = () => {
-    setSelectionMode(false);
-    clearSelection();
-  };
+  const updateEntities = (change: (entities: EntityItem[]) => EntityItem[]) =>
+    setState((previous) => ({
+      ...previous,
+      entities: change(previous.entities),
+    }));
+  const clearSelection = () => updateEntities(() => []);
+  const exitSelectionMode = () => setState(emptySelection(scope));
   const toggleSelectionMode = () =>
-    selectionMode ? exitSelectionMode() : setSelectionMode(true);
+    current.selectionMode
+      ? exitSelectionMode()
+      : setState({ ...current, selectionMode: true });
   const toggleLoaded = () =>
-    setSelectedEntityIds(
-      allLoadedSelected
-        ? new Set()
-        : new Set(items.slice(0, maximumAgentSelection).map((item) => item.id)),
-    );
-  const toggleEntity = (entityId: string) =>
-    setSelectedEntityIds((current) => {
-      const next = new Set(current);
-      if (next.has(entityId)) next.delete(entityId);
-      else if (next.size < maximumAgentSelection) next.add(entityId);
-      return next;
+    updateEntities((entities) => {
+      const ids = new Set(entities.map((entity) => entity.id));
+      const room = maximumAgentSelection - ids.size;
+      const addable = items.filter((item) => !ids.has(item.id));
+      if (room > 0 && addable.length > 0) {
+        return [...entities, ...addable.slice(0, room)];
+      }
+      return entities.filter((entity) => !loadedById.has(entity.id));
+    });
+  const toggleEntity = (entity: EntityItem) =>
+    updateEntities((entities) => {
+      if (entities.some((selected) => selected.id === entity.id)) {
+        return entities.filter((selected) => selected.id !== entity.id);
+      }
+      return entities.length < maximumAgentSelection
+        ? [...entities, entity]
+        : entities;
     });
   const removeEntity = (entityId: string) =>
-    setSelectedEntityIds((current) => {
-      const next = new Set(current);
-      next.delete(entityId);
-      return next;
-    });
+    updateEntities((entities) =>
+      entities.filter((entity) => entity.id !== entityId),
+    );
 
   return {
-    selectionMode,
+    selectionMode: current.selectionMode,
     selectedItems,
     allLoadedSelected,
-    isSelected: (entityId: string) => selectedEntityIds.has(entityId),
+    someLoadedSelected,
+    isSelected: (entityId: string) => selectedIds.has(entityId),
     clearSelection,
     exitSelectionMode,
     toggleSelectionMode,

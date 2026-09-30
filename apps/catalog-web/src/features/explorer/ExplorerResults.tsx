@@ -4,6 +4,7 @@ import { HiddenOutdatedNotice } from './HiddenOutdatedNotice';
 import type { AttributeFilterDraft } from './attributeFilterValues';
 import type { ExplorerSearch } from './search';
 import type { ExplorerData } from './useExplorerData';
+import { useExplorerSelection } from './useExplorerSelection';
 
 type Props = {
   data: ExplorerData;
@@ -39,6 +40,9 @@ export const ExplorerResults = ({
       ? firstPage.result_version_scope
       : undefined;
   const hiddenOutdatedCount = firstPage?.hidden_outdated_count ?? 0;
+  const items = resultPages.flatMap((page) => page.items);
+  // The table remounts for every search; selection outlives it.
+  const selection = useExplorerSelection(search.blueprint, items);
 
   return (
     <>
@@ -76,13 +80,14 @@ export const ExplorerResults = ({
               hasNextPage={results.hasNextPage}
               isFetching={results.isFetching}
               isFetchingNextPage={results.isFetchingNextPage}
-              items={resultPages.flatMap((page) => page.items)}
+              items={items}
               publicationContextCode={contextCode}
               publicationContextId={contextId}
               publicationSortAvailable={publicationSortAvailable}
               totalCount={firstPage?.total_count ?? null}
               totalCountCapped={firstPage?.total_count_capped ?? false}
               onLoadMore={() => void results.fetchNextPage()}
+              selection={selection}
               relationshipSortAvailable={
                 !search.allVersions || Boolean(singleVersionScope)
               }

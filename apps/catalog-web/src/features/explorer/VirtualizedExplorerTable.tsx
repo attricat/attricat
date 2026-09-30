@@ -83,9 +83,7 @@ export const VirtualizedExplorerTable = ({
     <Checkbox
       checked={selection.allLoadedSelected}
       disabled={items.length === 0}
-      indeterminate={
-        selection.selectedItems.length > 0 && !selection.allLoadedSelected
-      }
+      indeterminate={selection.someLoadedSelected}
       onChange={selection.toggleLoaded}
       slotProps={{
         input: {
@@ -103,7 +101,7 @@ export const VirtualizedExplorerTable = ({
         !selection.isSelected(entity.id) &&
         selection.selectedItems.length >= maximumAgentSelection
       }
-      onChange={() => selection.toggleEntity(entity.id)}
+      onChange={() => selection.toggleEntity(entity)}
       slotProps={{
         input: {
           'aria-label': t('explorer.selectEntity', {
