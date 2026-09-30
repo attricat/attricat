@@ -232,6 +232,7 @@ Stan ma maksymalnie 32 KiB i używa kluczy adresu URL przeglądarki encji: `blue
 | Metoda | Ścieżka | Opis |
 | --- | --- | --- |
 | `GET` | `/health/live`, `/health/ready` | Sondy. |
+| `GET` | `/system/health` | Uruchomiona wersja API, gałąź i commit źródła (`data_health.read`). |
 | `GET` | `/metrics` | Metryki Prometheus. |
 | `GET` | `/data-health/summary`, `/blueprints`, `/freshness`, `/completeness`, `/contexts`, `/relationships`, `/storage`, `/background-processing` | Stan danych. |
 | `POST` | `/data-health/refresh` | Czyści bufor stanu danych. |

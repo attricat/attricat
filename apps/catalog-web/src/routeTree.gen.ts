@@ -27,6 +27,7 @@ import { Route as ManageAuditLogRouteImport } from './routes/manage/audit-log'
 import { Route as ManageBackgroundProcessingRouteImport } from './routes/manage/background-processing'
 import { Route as ManageDataHealthRouteImport } from './routes/manage/data-health'
 import { Route as ManageExportsRouteImport } from './routes/manage/exports'
+import { Route as ManageSystemHealthRouteImport } from './routes/manage/system-health'
 import { Route as PasswordResetIndexRouteImport } from './routes/password-reset/index'
 import { Route as PasswordResetConfirmRouteImport } from './routes/password-reset/confirm'
 import { Route as ProfileIndexRouteImport } from './routes/profile/index'
@@ -157,6 +158,11 @@ const ManageDataHealthRoute = ManageDataHealthRouteImport.update({
 const ManageExportsRoute = ManageExportsRouteImport.update({
   id: '/manage/exports',
   path: '/manage/exports',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ManageSystemHealthRoute = ManageSystemHealthRouteImport.update({
+  id: '/manage/system-health',
+  path: '/manage/system-health',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PasswordResetIndexRoute = PasswordResetIndexRouteImport.update({
@@ -394,6 +400,7 @@ export interface FileRoutesByFullPath {
   '/manage/background-processing': typeof ManageBackgroundProcessingRoute
   '/manage/data-health': typeof ManageDataHealthRoute
   '/manage/exports': typeof ManageExportsRoute
+  '/manage/system-health': typeof ManageSystemHealthRoute
   '/password-reset/confirm': typeof PasswordResetConfirmRoute
   '/agents/': typeof AgentsIndexRoute
   '/extensions/': typeof ExtensionsIndexRoute
@@ -451,6 +458,7 @@ export interface FileRoutesByTo {
   '/manage/background-processing': typeof ManageBackgroundProcessingRoute
   '/manage/data-health': typeof ManageDataHealthRoute
   '/manage/exports': typeof ManageExportsRoute
+  '/manage/system-health': typeof ManageSystemHealthRoute
   '/password-reset/confirm': typeof PasswordResetConfirmRoute
   '/agents': typeof AgentsIndexRoute
   '/extensions': typeof ExtensionsIndexRoute
@@ -510,6 +518,7 @@ export interface FileRoutesById {
   '/manage/background-processing': typeof ManageBackgroundProcessingRoute
   '/manage/data-health': typeof ManageDataHealthRoute
   '/manage/exports': typeof ManageExportsRoute
+  '/manage/system-health': typeof ManageSystemHealthRoute
   '/password-reset/confirm': typeof PasswordResetConfirmRoute
   '/agents/': typeof AgentsIndexRoute
   '/extensions/': typeof ExtensionsIndexRoute
@@ -572,6 +581,7 @@ export interface FileRouteTypes {
     | '/manage/background-processing'
     | '/manage/data-health'
     | '/manage/exports'
+    | '/manage/system-health'
     | '/password-reset/confirm'
     | '/agents/'
     | '/extensions/'
@@ -629,6 +639,7 @@ export interface FileRouteTypes {
     | '/manage/background-processing'
     | '/manage/data-health'
     | '/manage/exports'
+    | '/manage/system-health'
     | '/password-reset/confirm'
     | '/agents'
     | '/extensions'
@@ -687,6 +698,7 @@ export interface FileRouteTypes {
     | '/manage/background-processing'
     | '/manage/data-health'
     | '/manage/exports'
+    | '/manage/system-health'
     | '/password-reset/confirm'
     | '/agents/'
     | '/extensions/'
@@ -747,6 +759,7 @@ export interface RootRouteChildren {
   ManageBackgroundProcessingRoute: typeof ManageBackgroundProcessingRoute
   ManageDataHealthRoute: typeof ManageDataHealthRoute
   ManageExportsRoute: typeof ManageExportsRoute
+  ManageSystemHealthRoute: typeof ManageSystemHealthRoute
   PasswordResetConfirmRoute: typeof PasswordResetConfirmRoute
   AgentsIndexRoute: typeof AgentsIndexRoute
   ExtensionsIndexRoute: typeof ExtensionsIndexRoute
@@ -907,6 +920,13 @@ declare module '@tanstack/react-router' {
       path: '/manage/exports'
       fullPath: '/manage/exports'
       preLoaderRoute: typeof ManageExportsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/manage/system-health': {
+      id: '/manage/system-health'
+      path: '/manage/system-health'
+      fullPath: '/manage/system-health'
+      preLoaderRoute: typeof ManageSystemHealthRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/password-reset/': {
@@ -1285,6 +1305,7 @@ const rootRouteChildren: RootRouteChildren = {
   ManageBackgroundProcessingRoute: ManageBackgroundProcessingRoute,
   ManageDataHealthRoute: ManageDataHealthRoute,
   ManageExportsRoute: ManageExportsRoute,
+  ManageSystemHealthRoute: ManageSystemHealthRoute,
   PasswordResetConfirmRoute: PasswordResetConfirmRoute,
   AgentsIndexRoute: AgentsIndexRoute,
   ExtensionsIndexRoute: ExtensionsIndexRoute,

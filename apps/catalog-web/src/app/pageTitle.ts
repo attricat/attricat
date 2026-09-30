@@ -71,6 +71,7 @@ const simpleManagementPageKeys: Record<string, string> = {
   'background-processing': 'navigation.backgroundProcessing',
   'data-health': 'navigation.dataHealth',
   exports: 'navigation.exports',
+  'system-health': 'navigation.systemHealth',
 };
 
 const managementTitle = (t: TFunction, [group, ...rest]: Segments) => {

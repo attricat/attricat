@@ -10,6 +10,17 @@ vi.mock('../auth/api', () => ({
   currentSession: vi.fn(() => Promise.resolve(null)),
 }));
 vi.mock('./api', () => ({ getApiHealth: vi.fn(() => Promise.resolve({})) }));
+vi.mock('../system-health/api', () => ({
+  getSystemHealth: vi.fn(() =>
+    Promise.resolve({
+      build: {
+        version: '0.1.0',
+        branch: 'main',
+        commit: '5748be4d1c0ffee5748be4d1c0ffee5748be4d1',
+      },
+    }),
+  ),
+}));
 
 describe('Inspector', () => {
   it('connects each tab to the active panel by stable accessible IDs', () => {
@@ -32,5 +43,19 @@ describe('Inspector', () => {
     act(() => recordFrameTiming('frame-load', 12));
     expect(within(panel).getByText(/frame-load: 12.00 ms/)).toBeTruthy();
     act(clearTimingsForTest);
+  });
+
+  it('shows the branch, short commit, and version of the running API', async () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <Inspector />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Open Inspector' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Server' }));
+    const build = await screen.findByText('Build: main @ 5748be4 · API 0.1.0');
+    expect(build.getAttribute('title')).toBe(
+      '5748be4d1c0ffee5748be4d1c0ffee5748be4d1',
+    );
   });
 });

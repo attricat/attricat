@@ -24,6 +24,11 @@ COPY apps apps
 COPY crates crates
 COPY contracts contracts
 COPY docs docs
+# The build context excludes `.git`, so the API build script reads its source
+# branch and commit from these arguments instead.
+ARG VCS_REF=unknown
+ARG VCS_BRANCH=unknown
+ENV ATTRICAT_BUILD_COMMIT=$VCS_REF ATTRICAT_BUILD_BRANCH=$VCS_BRANCH
 RUN cargo build --locked --release -p api --bins -p cli --bin acli
 
 FROM debian:bookworm-slim AS runtime

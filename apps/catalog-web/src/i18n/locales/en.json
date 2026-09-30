@@ -69,7 +69,8 @@
     "lightMode": "Light mode",
     "reusableAttributes": "Reusable attributes",
     "backgroundProcessing": "Background processing",
-    "documentation": "Documentation"
+    "documentation": "Documentation",
+    "systemHealth": "System health"
   },
   "auth": {
     "signIn": "Sign in",
@@ -791,7 +792,8 @@
     "workflowsDescription": "Create and safely operate versioned workflow definitions.",
     "rulesDescription": "Author and operate catalog-owned data quality rules.",
     "reusableAttributesDescription": "Create reusable attribute definitions, revisions, and groups.",
-    "backgroundProcessingDescription": "Monitor queued, running, and failed API background tasks."
+    "backgroundProcessingDescription": "Monitor queued, running, and failed API background tasks.",
+    "systemHealthDescription": "Check which build of Attricat is running."
   },
   "profile": {
     "never": "Never",
@@ -1116,6 +1118,8 @@
     "queryCount": "{{count}} queries",
     "timingPrivacy": "Aggregate durations only; request data is never recorded.",
     "apiStatus": "API status: {{status}}",
+    "build": "Build: {{branch}} @ {{commit}} · API {{version}}",
+    "buildUnavailable": "Build details are unavailable (requires data health access).",
     "restarting": "Restarting",
     "checking": "Checking",
     "ready": "Ready",
@@ -1304,5 +1308,16 @@
         "action": "Browse extensions"
       }
     }
+  },
+  "systemHealth": {
+    "title": "System health",
+    "description": "The state of the Attricat deployment serving this workspace.",
+    "loading": "Loading system health",
+    "forbidden": "You are not authorized to view system health in this workspace.",
+    "buildTitle": "Running build",
+    "buildDescription": "The API version and the source it was built from.",
+    "version": "API version",
+    "branch": "Branch",
+    "commit": "Commit"
   }
 }

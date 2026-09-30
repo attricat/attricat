@@ -8,7 +8,7 @@ use api::{
     extension_registry::{GitHubRegistry, GitHubRepository},
     extension_runtime::{ExtensionRuntime, ExtensionRuntimeConfig},
     file_access::{AllowFileAccess, FileAccessPolicy},
-    http::{AppState, router},
+    http::{AppState, BuildInfo, router},
     mail::{MailDelivery, MailError},
     repository::CatalogRepository,
     storage::{FakeObjectStore, ObjectStore},
@@ -278,6 +278,11 @@ async fn start_server_with_auth_mode_and_store_with_devtools(
         request_timeout: std::time::Duration::from_secs(30),
         default_body_limit: 2 * 1024 * 1024,
         devtools_enabled,
+        build_info: BuildInfo {
+            version: env!("CARGO_PKG_VERSION"),
+            branch: env!("ATTRICAT_BUILD_BRANCH"),
+            commit: env!("ATTRICAT_BUILD_COMMIT"),
+        },
     });
     let server = tokio::spawn(async move {
         axum::serve(listener, router).await.unwrap();

@@ -232,6 +232,7 @@ State is at most 32 KiB and uses the Explorer URL keys: `blueprint`, `version`, 
 | Method | Path | Description |
 | --- | --- | --- |
 | `GET` | `/health/live`, `/health/ready` | Probes. |
+| `GET` | `/system/health` | Running API version, source branch, and commit (`data_health.read`). |
 | `GET` | `/metrics` | Prometheus metrics. |
 | `GET` | `/data-health/summary`, `/blueprints`, `/freshness`, `/completeness`, `/contexts`, `/relationships`, `/storage`, `/background-processing` | Data health. |
 | `POST` | `/data-health/refresh` | Clear the data-health cache. |

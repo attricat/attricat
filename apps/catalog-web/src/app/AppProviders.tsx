@@ -7,10 +7,10 @@ import {
 import { plPL } from '@mui/material/locale';
 import { RouterProvider } from '@tanstack/react-router';
 import { LucideProvider } from 'lucide-react';
-import { useEffect, useMemo } from 'react';
+import { lazy, Suspense, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ToastProvider } from '../components/ToastProvider';
-import { Inspector } from '../features/inspector/Inspector';
+import { inspectorEnabled } from '../features/inspector/enabled';
 import { router } from './router';
 import { makeTheme } from './theme';
 import { useColorMode } from './colorMode';
@@ -18,6 +18,13 @@ import { useColorMode } from './colorMode';
 // LucideProvider types size as a number but forwards it to the SVG width and
 // height, so icons can follow their MUI container font size like SvgIcon.
 const lucideIconSize = '1em' as unknown as number;
+
+// Loaded on demand so browsers that never enable it do not download it.
+const Inspector = lazy(() =>
+  import('../features/inspector/Inspector').then(({ Inspector }) => ({
+    default: Inspector,
+  })),
+);
 
 export const AppProviders = () => {
   const { i18n } = useTranslation();
@@ -42,7 +49,11 @@ export const AppProviders = () => {
       <LucideProvider size={lucideIconSize}>
         <ToastProvider>
           <RouterProvider router={router} />
-          {import.meta.env.DEV && __CATALOG_DEVTOOLS__ && <Inspector />}
+          {inspectorEnabled && (
+            <Suspense fallback={null}>
+              <Inspector />
+            </Suspense>
+          )}
         </ToastProvider>
       </LucideProvider>
     </ThemeProvider>

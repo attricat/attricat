@@ -17,7 +17,7 @@ use api::{
     extension_registry::{DEFAULT_OFFICIAL_REGISTRY, GitHubRegistry, GitHubRepository},
     extension_runtime::{self, ExtensionRuntime, ExtensionRuntimeConfig},
     file_access::AllowFileAccess,
-    http::{AppState, router},
+    http::{AppState, BuildInfo, router},
     mail::SmtpMailDelivery,
     repository::{CatalogRepository, ValueHistoryRetentionDays},
     rule_runtime, solution_pack_housekeeping,
@@ -403,6 +403,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 DEFAULT_HTTP_DEFAULT_BODY_BYTES,
             )?,
             devtools_enabled,
+            build_info: BuildInfo {
+                version: env!("CARGO_PKG_VERSION"),
+                branch: env!("ATTRICAT_BUILD_BRANCH"),
+                commit: env!("ATTRICAT_BUILD_COMMIT"),
+            },
         }),
     )
     .with_graceful_shutdown(async move {
