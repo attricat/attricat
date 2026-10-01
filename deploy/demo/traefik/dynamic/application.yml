@@ -1,0 +1,14 @@
+# Docker DNS keeps this route scoped to this Compose deployment. Traefik does
+# not need access to the Docker socket or other projects' container labels.
+http:
+  routers:
+    attricat:
+      rule: Host(`demo.attricat.com`)
+      entryPoints: [websecure]
+      service: attricat
+      tls: {}
+  services:
+    attricat:
+      loadBalancer:
+        servers:
+          - url: http://api:3000
