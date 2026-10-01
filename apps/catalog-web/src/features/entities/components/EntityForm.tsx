@@ -3,6 +3,7 @@ import { Alert, Button, Paper, Stack, Typography } from '@mui/material';
 import type {
   Attribute,
   BlueprintWithAttributes,
+  ComponentReference,
   FormAttributeValue,
 } from '../api';
 import {
@@ -18,6 +19,8 @@ import {
   type RemovedAttributeValue,
   type ResolvedFormValues,
 } from '../entityFormAttributes';
+import { viewFieldComponents } from '../../views/viewFieldComponents';
+import { resolveViewComponent } from '../../views/components/registry';
 import { EntityView } from '../../views/components/EntityView';
 import { draftEditors, type DraftEditor } from '../../drafts/constants';
 import { DraftRestoreDialog } from '../../drafts/DraftRestoreDialog';
@@ -139,6 +142,20 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
     const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
     const [formError, setFormError] = useState<string>();
     const editView = blueprint?.blueprint.views.edit;
+    const fieldComponents = viewFieldComponents(editView);
+    const fieldValidators = new Map(
+      [...fieldComponents].flatMap(([code, component]) => {
+        const definition = resolveViewComponent(component);
+        const attribute = blueprint?.attributes.find(
+          (item) => item.code === code,
+        );
+        return definition?.validateValue &&
+          attribute &&
+          definition.value_types.includes(attribute.value_type)
+          ? [[code, definition.validateValue] as const]
+          : [];
+      }),
+    );
     const editableAttributes = editableFormAttributes(
       blueprint ? [...blueprint.attributes, ...reusableAttributes] : [],
       {
@@ -158,6 +175,8 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
         contextId === defaultContextId
           ? blueprint.blueprint.entity_schema
           : undefined,
+        undefined,
+        fieldValidators,
       );
       for (const attribute of editableAttributes) {
         const config = statusConfiguration(attribute);
@@ -316,10 +335,15 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
           {blueprint && (
             <form.Field name="fields">
               {(field) => {
-                const renderEditor = (attribute: Attribute) => (
+                const renderEditor = (
+                  attribute: Attribute,
+                  component?: ComponentReference | null,
+                ) => (
                   <EntityFormAttributeEditor
                     {...editorContext}
                     attribute={attribute}
+                    component={component ?? fieldComponents.get(attribute.code)}
+                    required={requiredAttributes.includes(attribute.code)}
                     onChange={(nextValue) => {
                       const nextFields = {
                         ...field.state.value,

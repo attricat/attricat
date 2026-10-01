@@ -1172,6 +1172,10 @@
     "acceptInvitation": "Zaakceptuj zaproszenie"
   },
   "views": {
+    "colorInvalid": "Wpisz sześciocyfrowy kolor szesnastkowy, np. #1a2b3c.",
+    "colorFormat": "Sześciocyfrowy kolor szesnastkowy (#RRGGBB). Usuń tekst, aby wyczyścić wartość.",
+    "colorPicker": "Wybierz kolor",
+    "colorPickerFor": "Wybierz kolor dla {{attribute}}",
     "availableOnPreviews": "{{label}} jest dostępne w podglądach encji.",
     "notSet": "Nie ustawiono",
     "yes": "Tak",

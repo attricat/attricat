@@ -182,5 +182,34 @@ component's version, props, placement, value type, and required `display` or
 `edit` capability. Keep this contract synchronized with the TypeScript
 definition. `registry.test.ts` verifies that their metadata is identical.
 
+### Colors
+
+Colors remain string attributes. Opt in per view with `catalog.color_display@1`
+for detail fields or table columns and `catalog.color_edit@1` for edit fields.
+Both accept only string attributes and have no props:
+
+```toml
+[views.detail]
+type = "stack"
+children = [{ type = "field", field = "hex", component = { id = "catalog.color_display", version = 1 } }]
+
+[views.edit]
+type = "stack"
+children = [{ type = "field", field = "hex", component = { id = "catalog.color_edit", version = 1 } }]
+
+[views.table]
+type = "table"
+columns = [{ field = "hex", renderer = { id = "catalog.color_display", version = 1 } }]
+```
+
+The editor accepts opaque, six-digit hex (`#RRGGBB`, case-insensitive) through
+text or a native color picker. Clear the text to unset an optional value.
+Shorthand, alpha, named colors, and CSS expressions are not supported. The
+read-only renderer shows a swatch alongside the stored text; invalid legacy
+values remain visible as text without a swatch. Neither component changes
+unconfigured string fields or enforces color syntax on API/CLI writes. For
+API-wide enforcement, add an appropriate pattern to the existing blueprint
+`entity_schema` (and `required` if the value must be present).
+
 See [Component Authoring](component-authoring.md) for the implementation and
 verification workflow.

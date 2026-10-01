@@ -1,7 +1,8 @@
 import { MenuItem, TextField, Tooltip, useTheme } from '@mui/material';
 import { InfoIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import type { Attribute } from '../api';
+import type { Attribute, ComponentReference } from '../api';
+import { resolveViewComponent } from '../../views/components/registry';
 import type { FileMetadata } from '../../files/schemas';
 import { attributeLabel } from '../entityDisplay';
 import { attributeValueTypes } from '../valueTypes';
@@ -19,10 +20,12 @@ import { StatusAttributeEditor } from './StatusAttributeEditor';
 
 export const EntityAttributeEditor = ({
   attribute,
+  component,
   statusBaseline = null,
   inheritedStatus = null,
   contextId,
   disabled,
+  required,
   entityId,
   files,
   error,
@@ -33,10 +36,12 @@ export const EntityAttributeEditor = ({
   value,
 }: {
   attribute: Attribute;
+  component?: ComponentReference | null;
   statusBaseline?: string | null;
   inheritedStatus?: string | null;
   contextId: string | null;
   disabled: boolean;
+  required?: boolean;
   entityId?: string;
   files: FileMetadata[];
   error?: string;
@@ -65,6 +70,25 @@ export const EntityAttributeEditor = ({
           inheritedValue={inheritedStatus}
           disabled={effectiveDisabled}
           error={error}
+          helperText={helperText}
+          onChange={onChange}
+        />
+      </>
+    );
+  const definition = resolveViewComponent(component);
+  const Editor = definition?.value_types.includes(attribute.value_type)
+    ? definition.valueEditor
+    : undefined;
+  if (Editor)
+    return (
+      <>
+        {migrationBadge}
+        <Editor
+          attribute={attribute}
+          value={value}
+          disabled={effectiveDisabled}
+          error={error}
+          required={required}
           helperText={helperText}
           onChange={onChange}
         />

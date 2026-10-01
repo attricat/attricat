@@ -1146,6 +1146,10 @@
     "acceptInvitation": "Accept invitation"
   },
   "views": {
+    "colorInvalid": "Enter a six-digit hex color, such as #1a2b3c.",
+    "colorFormat": "Six-digit hex color (#RRGGBB). Clear the text to unset.",
+    "colorPicker": "Pick color",
+    "colorPickerFor": "Pick color for {{attribute}}",
     "availableOnPreviews": "{{label}} is available on entity previews.",
     "notSet": "Not set",
     "yes": "Yes",

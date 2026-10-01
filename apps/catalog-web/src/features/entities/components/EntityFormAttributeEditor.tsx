@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { savedStatusValue } from '../status';
-import type { Attribute, FormAttributeValue } from '../api';
+import type { Attribute, ComponentReference, FormAttributeValue } from '../api';
 import {
   filesForAttribute,
   formatResolvedValue,
@@ -27,6 +27,8 @@ export type EntityFormAttributeEditorContext = {
 
 type Props = EntityFormAttributeEditorContext & {
   attribute: Attribute;
+  component?: ComponentReference | null;
+  required?: boolean;
   onChange: (value: string) => void;
   value: string;
 };
@@ -34,6 +36,8 @@ type Props = EntityFormAttributeEditorContext & {
 /** Renders one attribute editor with its context-aware helper text. */
 export const EntityFormAttributeEditor = ({
   attribute,
+  component,
+  required,
   statusParentContextIds = [],
   disabled = false,
   contextId,
@@ -80,6 +84,8 @@ export const EntityFormAttributeEditor = ({
   return (
     <EntityAttributeEditor
       attribute={attribute}
+      component={component}
+      required={required}
       contextId={contextId}
       disabled={disabled || readonly || defaultOnly}
       statusBaseline={savedStatusValue(attribute, statusSavedValues, [
