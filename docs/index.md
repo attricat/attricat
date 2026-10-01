@@ -39,6 +39,8 @@ runs the ignored RustFS compatibility test.
   dependency direction, ownership, and compatibility policy.
 - [Blueprint authoring](blueprints.md): schema definitions, versions, contexts,
   views, and validation.
+- [Status attributes](status-control.md): single-select display/editing, transition
+  constraints, contextual inheritance, and stale-edit protection.
 - [Database model](database.md): persisted model, value history, projections,
   contexts, and publication behavior.
 - [Tags, labels, and classifications](classifications.md): model controlled

@@ -33,6 +33,11 @@ import {
 import { useTranslation } from 'react-i18next';
 import { attributeValueTypes } from '../valueTypes';
 import { EntityBlueprintSelect } from './EntityBlueprintSelect';
+import {
+  savedStatusValue,
+  statusConfiguration,
+  statusTransitionAllowed,
+} from '../status';
 import { EntityFormAttributeEditor } from './EntityFormAttributeEditor';
 
 export type EntityFormHandle = {
@@ -63,6 +68,8 @@ const pickDraftFields = (
   );
 
 type EntityFormProps = {
+  expectedUpdatedAt?: string;
+  statusParentContextIds?: readonly string[];
   blueprint?: BlueprintWithAttributes;
   draft?: EntityFormDraft;
   initialValues?: ReturnType<typeof valuesForForm>;
@@ -86,6 +93,7 @@ type EntityFormProps = {
   onLoadBlueprint?: (code: string, version?: number) => void;
   lockedBlueprint?: boolean;
   onSubmit: (input: {
+    expected_updated_at?: string;
     values: ReturnType<typeof serializeAttributeValues>;
     relationships: ReturnType<typeof relationshipTargetsForForm>;
     remove_values: RemovedAttributeValue[];
@@ -97,6 +105,8 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
   (
     {
       blueprint,
+      expectedUpdatedAt,
+      statusParentContextIds = [],
       draft: draftOptions,
       initialValues = {},
       contextId = null,
@@ -124,6 +134,8 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
     ref,
   ) => {
     const { t } = useTranslation();
+    const [savedVersion] = useState(expectedUpdatedAt);
+    const [savedValues] = useState(existingValues);
     const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
     const [formError, setFormError] = useState<string>();
     const editView = blueprint?.blueprint.views.edit;
@@ -147,6 +159,23 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
           ? blueprint.blueprint.entity_schema
           : undefined,
       );
+      for (const attribute of editableAttributes) {
+        const config = statusConfiguration(attribute);
+        if (!config) continue;
+        const parents =
+          attribute.context_fallback === 'none' ? [] : statusParentContextIds;
+        const before = savedStatusValue(attribute, savedValues, [
+          contextId,
+          ...parents,
+        ]);
+        const after =
+          fields[attribute.code] ||
+          savedStatusValue(attribute, savedValues, parents);
+        if (!statusTransitionAllowed(config, before, after))
+          validation.fieldErrors[attribute.code] = t(
+            'entities.statusTransitionDenied',
+          );
+      }
       setFieldErrors(validation.fieldErrors);
       setFormError(validation.formError);
       return validation;
@@ -168,6 +197,7 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
         )
           return;
         onSubmit({
+          ...(savedVersion ? { expected_updated_at: savedVersion } : {}),
           values: serializeAttributeValues(
             editableAttributes,
             value.fields,
@@ -235,10 +265,13 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
     }));
 
     const editorContext = {
+      statusParentContextIds,
+      disabled: isLoadingBlueprint,
       contextId,
       defaultContextId,
       entityId,
       existingValues,
+      statusSavedValues: savedValues,
       fieldErrors,
       highlightedAttributes,
       migrationReviewMessages,

@@ -275,6 +275,29 @@ impl CatalogRepository {
         system_tags: Option<Vec<String>>,
         system_metadata: Option<Value>,
     ) -> Result<Entity, RepositoryError> {
+        self.update_entity_with_values_checked(
+            entity_id,
+            values,
+            relationships,
+            remove_values,
+            system_tags,
+            system_metadata,
+            None,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn update_entity_with_values_checked(
+        &self,
+        entity_id: Uuid,
+        values: Vec<NewAttributeValue>,
+        relationships: Vec<RelationshipTargets>,
+        remove_values: Vec<AttributeValueSelector>,
+        system_tags: Option<Vec<String>>,
+        system_metadata: Option<Value>,
+        expected_updated_at: Option<DateTime<Utc>>,
+    ) -> Result<Entity, RepositoryError> {
         if let Some(metadata) = &system_metadata {
             validate_system_metadata(metadata)?;
         }
@@ -293,6 +316,14 @@ impl CatalogRepository {
         // The row lock serializes writers for an entity. It protects both the
         // one-latest-value invariant and the preview rebuilt from that state.
         let entity = self.lock_entity(&mut transaction, entity_id).await?;
+        if expected_updated_at.is_some()
+            || self
+                .has_status_writes(&mut transaction, &entity, &values, &remove_values)
+                .await?
+        {
+            self.check_status_precondition(&mut transaction, &entity, expected_updated_at)
+                .await?;
+        }
         if let Some(tags) = &system_tags {
             validate_system_tag_update(&entity.system_tags, tags)?;
         }
@@ -692,6 +723,14 @@ impl CatalogRepository {
         .into_domain()
         .ok_or(RepositoryError::NotFound("entity"))?;
 
+        if input.expected_updated_at.is_some()
+            || self
+                .has_status_writes(&mut transaction, &entity, &input.values, &[])
+                .await?
+        {
+            self.check_status_precondition(&mut transaction, &entity, input.expected_updated_at)
+                .await?;
+        }
         let mut values = Vec::with_capacity(input.values.len());
         for value in input.values {
             values.push(self.insert_value(&mut transaction, &entity, value).await?);
@@ -1216,6 +1255,7 @@ impl CatalogRepository {
         transaction: &mut Transaction<'_, Postgres>,
         entity: &Entity,
     ) -> Result<(), RepositoryError> {
+        self.validate_status_values(transaction, entity).await?;
         let entity_schema = sqlx::query_scalar::<_, Option<Value>>(
             "SELECT entity_schema FROM blueprints WHERE id = $1 AND version = $2 AND deleted_at IS NULL",
         )
@@ -2074,6 +2114,15 @@ impl CatalogRepository {
         }
         let before = self.entity_audit_snapshot(transaction, entity_id).await?;
         let entity = self.lock_entity(transaction, entity_id).await?;
+        // The legacy extension intent ABI has no caller-supplied version token.
+        // It cannot safely edit a status, including by chaining intents.
+        if self
+            .has_status_writes(transaction, &entity, &values, &[])
+            .await?
+        {
+            self.check_status_precondition(transaction, &entity, None)
+                .await?;
+        }
         for value in values {
             self.insert_value(transaction, &entity, value).await?;
         }

@@ -281,9 +281,13 @@ export const migrateEntity = (
   input: z.input<typeof migrateEntityRequestSchema>,
 ) => {
   const entityId = uuidSchema.parse(id);
-  const payload = migrateEntityRequestSchema.parse(input);
+  const { expected_updated_at, ...payload } =
+    migrateEntityRequestSchema.parse(input);
+  const query = expected_updated_at
+    ? `?${new URLSearchParams({ expected_updated_at })}`
+    : '';
   return request(
-    `/api/v1/entities/${encodeURIComponent(entityId)}/blueprint-migration`,
+    `/api/v1/entities/${encodeURIComponent(entityId)}/blueprint-migration${query}`,
     entitySchema,
     {
       method: 'POST',

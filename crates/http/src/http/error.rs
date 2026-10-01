@@ -245,6 +245,16 @@ impl From<RepositoryError> for ApiError {
         // validation failures, while keeping it out of the HTTP response.
         let cause = error.to_string();
         let response = match error {
+            RepositoryError::StaleEntity => Self {
+                status: StatusCode::CONFLICT,
+                code: "stale_entity",
+                message: error.to_string(),
+            },
+            RepositoryError::StatusPreconditionRequired => Self {
+                status: StatusCode::PRECONDITION_REQUIRED,
+                code: "status_precondition_required",
+                message: error.to_string(),
+            },
             RepositoryError::NotFound(resource) => Self::not_found(resource),
             RepositoryError::InvitationInvalid => Self {
                 status: StatusCode::UNPROCESSABLE_ENTITY,
