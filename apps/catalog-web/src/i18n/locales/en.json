@@ -255,6 +255,7 @@
     "commaSeparatedUuids": "Comma-separated entity UUIDs",
     "requiredAttributeValue": "A value is required for the target schema.",
     "invalidRelationshipValue": "Enter comma-separated entity UUIDs.",
+    "invalidEmail": "Enter a single email address, for example name@example.com.",
     "invalidAttributeValue": "Enter a value that meets this field's requirements.",
     "additionalAttributes": "Additional attributes",
     "selectAdditionalAttribute": "Select an attribute",

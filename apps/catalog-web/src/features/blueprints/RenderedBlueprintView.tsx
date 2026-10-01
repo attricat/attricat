@@ -36,7 +36,7 @@ const TableViewPreview = ({
 }: {
   attributes: readonly Attribute[];
   fields: readonly string[];
-  columns?: {
+  columns?: readonly {
     field: string;
     label?: string | null;
     renderer?: ComponentReference | null;

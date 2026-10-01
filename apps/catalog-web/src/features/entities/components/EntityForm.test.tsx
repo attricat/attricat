@@ -84,6 +84,92 @@ afterEach(() => {
 });
 
 describe('EntityForm', () => {
+  const emailBlueprint = (overrides: Partial<Attribute> = {}) => {
+    const result = blueprint([attribute('contact', overrides)]);
+    result.blueprint.views.edit = {
+      type: 'stack',
+      children: [
+        {
+          type: 'field',
+          field: 'contact',
+          component: { id: 'catalog.email_edit', version: 1, props: {} },
+        },
+      ],
+    };
+    return result;
+  };
+
+  it('validates configured email input and preserves case and plus tags on save', async () => {
+    const { onSubmit } = renderForm({ blueprint: emailBlueprint() });
+    const input = screen.getByRole('textbox', { name: 'contact' });
+    expect(input.getAttribute('type')).toBe('email');
+    fireEvent.change(input, { target: { value: 'not an email' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(screen.getByText(/single email address/)).toBeTruthy(),
+    );
+    expect(onSubmit).not.toHaveBeenCalled();
+    fireEvent.change(input, { target: { value: 'Name+tag@Example.com' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledOnce());
+    expect(JSON.stringify(onSubmit.mock.calls[0])).toContain(
+      'Name+tag@Example.com',
+    );
+  });
+
+  it('rejects required empty email', async () => {
+    const { onSubmit } = renderForm({
+      blueprint: emailBlueprint(),
+      requiredAttributes: ['contact'],
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(screen.getByRole('textbox')).toHaveProperty('required', true);
+    expect(
+      await screen.findByText('A value is required for the target schema.'),
+    ).toBeTruthy();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { readonly: true },
+    { context_editable: 'default' as const },
+    { extension_type: { available: false } },
+  ])('disables restricted email attributes: %j', async (overrides) => {
+    const { onSubmit } = renderForm({
+      blueprint: emailBlueprint(overrides as Partial<Attribute>),
+      contextId: marketContextId,
+    });
+    const input = screen.getByRole('textbox', { name: 'contact' });
+    expect(input).toHaveProperty('disabled', true);
+    fireEvent.change(input, { target: { value: 'changed@example.test' } });
+    expect(input).toHaveProperty('value', '');
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('restores an email draft only on request and validates it', async () => {
+    writeDraft(draftKey(marketContextId), {
+      savedAt: new Date().toISOString(),
+      source: null,
+      value: { contact: 'invalid draft' },
+    });
+    const { onSubmit } = renderForm({
+      ...draftProps(marketContextId),
+      blueprint: emailBlueprint(),
+      initialValues: { contact: 'saved@example.test' },
+    });
+    await screen.findByRole('dialog', { name: 'Restore unsaved draft?' });
+    expect(
+      screen.getByRole('textbox', { hidden: true, name: 'contact' }),
+    ).toHaveProperty('value', 'saved@example.test');
+    fireEvent.click(screen.getByRole('button', { name: 'Restore draft' }));
+    expect(
+      await screen.findByRole('textbox', { name: 'contact' }),
+    ).toHaveProperty('value', 'invalid draft');
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText(/single email address/)).toBeTruthy();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
   const colorBlueprint = (overrides: Partial<Attribute> = {}) => {
     const result = blueprint([attribute('hex', overrides)]);
     result.blueprint.views.edit = {

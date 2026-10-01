@@ -255,6 +255,7 @@
     "commaSeparatedUuids": "Identyfikatory UUID encji rozdzielone przecinkami",
     "requiredAttributeValue": "Wartość jest wymagana przez docelowy schemat.",
     "invalidRelationshipValue": "Wprowadź identyfikatory UUID encji rozdzielone przecinkami.",
+    "invalidEmail": "Wprowadź jeden adres e-mail, na przykład imie@example.com.",
     "invalidAttributeValue": "Wprowadź wartość zgodną z wymaganiami pola.",
     "additionalAttributes": "Dodatkowe atrybuty",
     "selectAdditionalAttribute": "Wybierz atrybut",

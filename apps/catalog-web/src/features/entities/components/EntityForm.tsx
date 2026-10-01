@@ -303,6 +303,7 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
     return (
       <Paper
         component="form"
+        noValidate
         id={formId}
         onSubmit={(event) => {
           event.preventDefault();

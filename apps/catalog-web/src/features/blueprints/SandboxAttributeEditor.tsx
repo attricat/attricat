@@ -39,7 +39,10 @@ export const SandboxAttributeEditor = ({
         attribute={attribute}
         value={value}
         onChange={onChange}
-        disabled={attribute.readonly === true}
+        disabled={
+          attribute.readonly === true ||
+          attribute.extension_type?.available === false
+        }
       />
     );
 
