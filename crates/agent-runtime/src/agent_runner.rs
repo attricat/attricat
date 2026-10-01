@@ -625,6 +625,21 @@ fn agent_audit_context(
     }
 }
 
+pub(crate) async fn fail_run(
+    repository: &CatalogRepository,
+    run_id: Uuid,
+    code: &str,
+    message: &str,
+) -> Result<(), RepositoryError> {
+    repository
+        .append_run_event(run_id, "error", json!({"code":code,"message":message}))
+        .await?;
+    repository
+        .transition_agent_run(run_id, "failed", Some(code), Some(message))
+        .await?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::mutation_authorization;
@@ -662,19 +677,4 @@ mod tests {
             );
         }
     }
-}
-
-pub(crate) async fn fail_run(
-    repository: &CatalogRepository,
-    run_id: Uuid,
-    code: &str,
-    message: &str,
-) -> Result<(), RepositoryError> {
-    repository
-        .append_run_event(run_id, "error", json!({"code":code,"message":message}))
-        .await?;
-    repository
-        .transition_agent_run(run_id, "failed", Some(code), Some(message))
-        .await?;
-    Ok(())
 }
