@@ -14,6 +14,9 @@ pub enum FileAccessOperation {
     Upload {
         entity_id: Uuid,
     },
+    UpdateReferences {
+        entity_id: Uuid,
+    },
     ConversationUpload {
         conversation_id: Uuid,
     },

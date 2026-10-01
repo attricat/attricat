@@ -6,23 +6,62 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
-import { RotateCcwIcon } from 'lucide-react';
+import { RotateCcwIcon, XIcon } from 'lucide-react';
+import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import {
+  SUPPORTED_IMAGE_MIME_TYPES,
+  UPLOADED_FILE_THUMBNAIL_SIZE,
+} from './constants';
 import type { PendingFile } from './usePendingFileUploads';
 
-type Props = {
-  disabled: boolean;
-  item: PendingFile;
-  onRetry: () => void;
+const PendingPreview = ({ file }: { file: File }) => {
+  const image = useRef<HTMLImageElement>(null);
+  useEffect(() => {
+    const element = image.current;
+    if (!element || !SUPPORTED_IMAGE_MIME_TYPES.has(file.type)) return;
+    const url = URL.createObjectURL(file);
+    element.src = url;
+    return () => {
+      element.removeAttribute('src');
+      URL.revokeObjectURL(url);
+    };
+  }, [file]);
+  return SUPPORTED_IMAGE_MIME_TYPES.has(file.type) ? (
+    <Box
+      component="img"
+      ref={image}
+      alt=""
+      sx={{
+        width: UPLOADED_FILE_THUMBNAIL_SIZE,
+        height: UPLOADED_FILE_THUMBNAIL_SIZE,
+        objectFit: 'cover',
+        borderRadius: 1,
+      }}
+    />
+  ) : null;
 };
 
 /** A queued or uploading file with its progress or failure. */
-export const PendingFileRow = ({ disabled, item, onRetry }: Props) => {
+export const PendingFileRow = ({
+  disabled,
+  item,
+  onRetry,
+  onRemove,
+}: {
+  disabled: boolean;
+  item: PendingFile;
+  onRetry: () => void;
+  onRemove: () => void;
+}) => {
   const { t } = useTranslation();
   return (
     <Box>
       <Stack direction="row" spacing={1}>
-        <Typography>{item.file.name}</Typography>
+        <PendingPreview file={item.file} />
+        <Typography sx={{ overflowWrap: 'anywhere' }}>
+          {item.file.name}
+        </Typography>
         {item.error ? (
           <>
             <Chip color="error" label={t('files.failed')} size="small" />
@@ -44,12 +83,23 @@ export const PendingFileRow = ({ disabled, item, onRetry }: Props) => {
             size="small"
           />
         )}
+        <IconButton
+          aria-label={t('files.removeQueuedFile', { filename: item.file.name })}
+          disabled={disabled || item.progress > 0}
+          onClick={onRemove}
+        >
+          <XIcon />
+        </IconButton>
       </Stack>
       {item.progress > 0 && (
-        <LinearProgress value={item.progress} variant="determinate" />
+        <LinearProgress
+          aria-label={t('files.uploadProgress', { progress: item.progress })}
+          value={item.progress}
+          variant="determinate"
+        />
       )}
       {item.error && (
-        <Typography color="error" variant="body2">
+        <Typography role="alert" color="error" variant="body2">
           {item.error}
         </Typography>
       )}

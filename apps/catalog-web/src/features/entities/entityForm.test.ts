@@ -7,6 +7,7 @@ import {
   valuesForForm,
 } from './entityForm';
 import type { Attribute } from './api';
+import { urlEditComponent } from '../views/components/urlComponents';
 
 const attributes = [
   { code: 'title', value_type: 'string' },
@@ -31,7 +32,7 @@ describe('entity form values', () => {
         required,
         undefined,
         undefined,
-        new Set(['title']),
+        new Map([['title', urlEditComponent.validateValue]]),
       );
     expect(validate('javascript:alert(1)').fieldErrors.title).toBeTruthy();
     expect(validate('https://example.com/a?q=1').fieldErrors).toEqual({});
@@ -46,6 +47,32 @@ describe('entity form values', () => {
       })[0],
     ).toMatchObject({ value: 'https://example.com/a?q=1' });
   });
+
+  it('validates email value schemas while allowing optional empty values', () => {
+    const attributes = [
+      {
+        code: 'email',
+        value_type: 'string' as const,
+        value_schema: { type: 'string', format: 'email' },
+      },
+    ];
+    expect(
+      validateEntityForm(attributes, { email: 'invalid' }).fieldErrors.email,
+    ).toBeTruthy();
+    expect(validateEntityForm(attributes, { email: '' }).fieldErrors).toEqual(
+      {},
+    );
+    expect(
+      validateEntityForm(attributes, { email: ' Name+tag@Example.com ' })
+        .fieldErrors,
+    ).toEqual({});
+    expect(
+      serializeAttributeValues(attributes, {
+        email: ' Name+tag@Example.com ',
+      })[0],
+    ).toMatchObject({ value: 'Name+tag@Example.com' });
+  });
+
   it('serializes scalar fields and complete relationship target sets', () => {
     expect(
       serializeAttributeValues(attributes, {

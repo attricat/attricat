@@ -1,6 +1,9 @@
+import i18n from '../../../i18n';
+import { safeUrl } from '../urlPolicy';
 import { VIEW_COMPONENT_IDS, VIEW_COMPONENT_VERSION } from '../constants';
 import type { ViewComponentDefinition } from './componentTypes';
 import { UrlDisplay } from './UrlDisplay';
+import { UrlAttributeEditor } from './UrlEditor';
 
 export const urlDisplayComponent = {
   id: VIEW_COMPONENT_IDS.urlDisplay,
@@ -12,7 +15,6 @@ export const urlDisplayComponent = {
   valueRenderer: UrlDisplay,
 } satisfies ViewComponentDefinition;
 
-// EntityForm owns editor state; the selected reference is passed to its editor.
 export const urlEditComponent = {
   id: VIEW_COMPONENT_IDS.urlEdit,
   version: VIEW_COMPONENT_VERSION,
@@ -20,4 +22,7 @@ export const urlEditComponent = {
   placements: ['field'],
   value_types: ['string'],
   allowed_props: [],
+  valueEditor: UrlAttributeEditor,
+  validateValue: (value: string) =>
+    !value || safeUrl(value) ? undefined : i18n.t('views.invalidUrl'),
 } satisfies ViewComponentDefinition;

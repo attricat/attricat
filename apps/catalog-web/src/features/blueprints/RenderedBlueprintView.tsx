@@ -36,41 +36,52 @@ const TableViewPreview = ({
 }: {
   attributes: readonly Attribute[];
   fields: readonly string[];
-  columns?: { field: string; renderer?: ComponentReference | null }[];
+  columns?: readonly {
+    field: string;
+    label?: string | null;
+    renderer?: ComponentReference | null;
+  }[];
   values: SandboxValues;
 }) => {
   const attributesByCode = new Map(
     attributes.map((attribute) => [attribute.code, attribute]),
   );
-  const visibleFields = fields.flatMap((field) => {
-    const attribute = attributesByCode.get(field);
-    return attribute ? [[field, attribute] as const] : [];
+  const visibleFields = (
+    columns?.length
+      ? columns
+      : fields.map((field) => ({
+          field,
+          label: undefined,
+          renderer: undefined,
+        }))
+  ).flatMap((column) => {
+    const attribute = attributesByCode.get(column.field);
+    return attribute ? [{ ...column, attribute }] : [];
   });
   return (
     <Box sx={{ overflowX: 'auto' }}>
       <Table size="small">
         <TableHead>
           <TableRow>
-            {visibleFields.map(([field]) => (
-              <TableCell key={field}>{fieldLabel(field)}</TableCell>
+            {visibleFields.map(({ field, label }) => (
+              <TableCell key={field}>{label ?? fieldLabel(field)}</TableCell>
             ))}
           </TableRow>
         </TableHead>
         <TableBody>
           <TableRow>
-            {visibleFields.map(([field, attribute]) => (
-              <TableCell key={field}>
-                {createElement(
-                  resolveValueRenderer(
-                    columns?.find((column) => column.field === field)?.renderer,
-                  ) ?? AttributeValue,
-                  {
-                    attribute,
-                    value: values[field]?.value,
-                  },
-                )}
-              </TableCell>
-            ))}
+            {visibleFields.map(({ field, attribute, renderer }) => {
+              const Renderer = resolveValueRenderer(renderer) ?? AttributeValue;
+              return (
+                <TableCell key={field}>
+                  <Renderer
+                    attribute={attribute}
+                    component={renderer}
+                    value={values[field]?.value}
+                  />
+                </TableCell>
+              );
+            })}
           </TableRow>
         </TableBody>
       </Table>

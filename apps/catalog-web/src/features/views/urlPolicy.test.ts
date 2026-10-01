@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { safeUrl, urlEditFields } from './urlPolicy';
+import { safeUrl } from './urlPolicy';
+import { urlEditComponent } from './components/urlComponents';
 
 describe('URL navigation policy', () => {
   it.each([
@@ -36,47 +37,11 @@ describe('URL navigation policy', () => {
   ])('rejects %j', (value) => {
     expect(safeUrl(value)).toBeUndefined();
   });
-  it('collects configured editors through nested layout nodes only', () => {
-    expect([
-      ...urlEditFields({
-        type: 'tabs',
-        tabs: [
-          {
-            label: 'Links',
-            children: [
-              {
-                type: 'accordion',
-                sections: [
-                  {
-                    label: 'URLs',
-                    children: [
-                      {
-                        type: 'field',
-                        field: 'website',
-                        component: {
-                          id: 'catalog.url_edit',
-                          version: 1,
-                          props: {},
-                        },
-                      },
-                      { type: 'field', field: 'plain' },
-                      {
-                        type: 'field',
-                        field: 'future',
-                        component: {
-                          id: 'catalog.url_edit',
-                          version: 2,
-                          props: {},
-                        },
-                      },
-                    ],
-                  },
-                ],
-              },
-            ],
-          },
-        ],
-      }),
-    ]).toEqual(['website']);
+  it('validates configured URL edits while allowing optional clearing', () => {
+    expect(urlEditComponent.validateValue('')).toBeUndefined();
+    expect(
+      urlEditComponent.validateValue('https://example.com/a?q=1'),
+    ).toBeUndefined();
+    expect(urlEditComponent.validateValue('javascript:alert(1)')).toBeTruthy();
   });
 });

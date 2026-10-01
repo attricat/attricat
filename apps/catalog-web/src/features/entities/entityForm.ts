@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { safeUrl } from '../views/urlPolicy';
 import i18n from '../../i18n';
 import type {
   Attribute,
@@ -109,7 +108,10 @@ export const validateEntityForm = (
   requiredAttributes: readonly string[] = [],
   entitySchema?: JsonSchema | null,
   messages: EntityFormValidationMessages = entityFormValidationMessages(),
-  urlFields: ReadonlySet<string> = new Set(),
+  fieldValidators: ReadonlyMap<
+    string,
+    (value: string) => string | undefined
+  > = new Map(),
 ): EntityFormValidation => {
   const fieldErrors: Record<string, string> = {};
   const document: Record<string, unknown> = {};
@@ -134,19 +136,21 @@ export const validateEntityForm = (
       fieldErrors[attribute.code] = messages.required;
       continue;
     }
-    if (
-      attribute.value_type === attributeValueTypes.string &&
-      urlFields.has(attribute.code) &&
-      value &&
-      !safeUrl(value)
-    ) {
-      fieldErrors[attribute.code] = i18n.t('views.invalidUrl');
+    const configuredError = fieldValidators.get(attribute.code)?.(value);
+    if (configuredError) {
+      fieldErrors[attribute.code] = configuredError;
       continue;
     }
     const scalar = scalarValueForField(attribute, value);
     if (value.trim() && !scalar) {
       fieldErrors[attribute.code] = messages.invalidValue;
     } else if (scalar) {
+      const errors = jsonSchemaValidationErrors(
+        scalar.value,
+        attribute.value_schema,
+      );
+      if (errors === undefined || errors.length > 0)
+        fieldErrors[attribute.code] = messages.schema;
       document[attribute.code] = scalar.value;
     }
   }

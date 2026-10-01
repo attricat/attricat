@@ -1,8 +1,7 @@
 import { Button, MenuItem, TextField } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import type { Attribute, ComponentReference } from '../entities/api';
-import { UrlEditor } from '../views/components/UrlEditor';
-import { VIEW_COMPONENT_IDS, VIEW_COMPONENT_VERSION } from '../views/constants';
+import { resolveViewComponent } from '../views/components/registry';
 import { attributeValueTypes } from '../entities/valueTypes';
 import { sandboxBooleanValues, sandboxInputPlaceholders } from './constants';
 
@@ -30,17 +29,20 @@ export const SandboxAttributeEditor = ({
 }) => {
   const { t } = useTranslation();
 
-  if (
-    attribute.value_type === attributeValueTypes.string &&
-    component?.id === VIEW_COMPONENT_IDS.urlEdit &&
-    component.version === VIEW_COMPONENT_VERSION
-  )
+  const definition = resolveViewComponent(component);
+  const Editor = definition?.value_types.includes(attribute.value_type)
+    ? definition.valueEditor
+    : undefined;
+  if (Editor)
     return (
-      <UrlEditor
-        label={attribute.code}
+      <Editor
+        attribute={attribute}
         value={value}
         onChange={onChange}
-        disabled={attribute.readonly === true}
+        disabled={
+          attribute.readonly === true ||
+          attribute.extension_type?.available === false
+        }
       />
     );
 

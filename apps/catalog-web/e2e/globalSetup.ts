@@ -233,7 +233,7 @@ export default async () => {
     ],
     { stdio: 'inherit' },
   );
-  const api = start('cargo', ['run', '-p', 'api', '--bin', 'api'], {
+  const apiEnv = {
     ...process.env,
     BIND_ADDR: `127.0.0.1:${e2eApiPort}`,
     S3_ENDPOINT: e2eS3Url,
@@ -256,11 +256,17 @@ export default async () => {
     HTTP_REQUEST_TIMEOUT_SECONDS: '120',
     PASSWORD_RESET_URL: `${e2eWebUrl}/password-reset/confirm`,
     WORKSPACE_ONBOARDING_URL: `${e2eWebUrl}/onboarding`,
-  });
+  };
+  const api = start('cargo', ['run', '-p', 'api', '--bin', 'api'], apiEnv);
+  let fileWorker: ChildProcess | undefined;
 
   try {
     await waitFor(`${e2eMailpitUrl}/api/v1/messages`);
     await waitFor(`${e2eApiUrl}/health`);
+    fileWorker = start('cargo', ['run', '-p', 'api', '--bin', 'file-worker'], {
+      ...apiEnv,
+      FILE_WORKER_OPERATIONS_BIND_ADDR: '127.0.0.1:0',
+    });
     const web = start(
       'npm',
       [
@@ -298,12 +304,14 @@ export default async () => {
 
     return async () => {
       stop(web);
+      if (fileWorker) stop(fileWorker);
       stop(api);
       stop(mailpit);
       stop(rustfs);
       await database.stop();
     };
   } catch (error) {
+    if (fileWorker) stop(fileWorker);
     stop(api);
     stop(mailpit);
     stop(rustfs);

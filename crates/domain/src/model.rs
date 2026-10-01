@@ -293,6 +293,7 @@ pub enum NewAttributeValue {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AppendAttributeValues {
+    pub expected_updated_at: Option<DateTime<Utc>>,
     pub values: Vec<NewAttributeValue>,
 }
 
@@ -618,6 +619,7 @@ pub struct CreateEntityFormRequest {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct UpdateEntityFormRequest {
+    pub expected_updated_at: Option<DateTime<Utc>>,
     #[serde(default)]
     pub values: Vec<NewAttributeValue>,
     #[serde(default)]
@@ -677,6 +679,7 @@ pub struct FileVariantMetadata {
 
 #[derive(Clone, Debug, Serialize)]
 pub struct EntityFormResponse {
+    pub can_write: bool,
     pub entity: Entity,
     pub blueprint: BlueprintWithAttributes,
     pub values: Vec<FormAttributeValue>,
@@ -737,6 +740,7 @@ pub struct MigrationIssue {
 
 #[derive(Clone, Debug, Serialize)]
 pub struct EntityMigrationPreview {
+    pub source_updated_at: DateTime<Utc>,
     pub migration_id: Uuid,
     pub source_version: i64,
     pub target: BlueprintWithAttributes,

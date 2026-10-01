@@ -1,6 +1,7 @@
 import { Alert, Box, Button, Stack, Typography } from '@mui/material';
 import { CloudUploadIcon } from 'lucide-react';
-import { useRef } from 'react';
+import { useId, useRef } from 'react';
+import { ImageGalleryEditor } from './ImageGalleryEditor';
 import { useTranslation } from 'react-i18next';
 import type { Attribute } from '../entities/api';
 import { attributeLabel } from '../entities/entityDisplay';
@@ -17,20 +18,44 @@ type FileAttributeEditorProps = {
   disabled: boolean;
   entityId?: string;
   files: FileMetadata[];
+  error?: string;
+  helperText?: string;
 };
 
 const FileAttributeEditorContent = (props: FileAttributeEditorProps) => {
-  const { attribute, disabled, entityId } = props;
+  const { attribute, entityId, error, helperText } = props;
+  const disabled = props.disabled || attribute.readonly === true;
   const { t } = useTranslation();
   const input = useRef<HTMLInputElement>(null);
-  const uploads = usePendingFileUploads(props);
+  const uploads = usePendingFileUploads({ ...props, disabled });
+  const labelId = useId();
+  const helpId = useId();
   const policy = attribute.file_policy;
   if (!policy) return null;
   const queueDisabled = !uploads.canUpload || !uploads.canQueueFile;
 
   return (
-    <Stack spacing={1}>
-      <Typography>{attributeLabel(attribute)}</Typography>
+    <Stack
+      spacing={1}
+      role="group"
+      aria-labelledby={labelId}
+      aria-describedby={helpId}
+    >
+      <Typography id={labelId}>{attributeLabel(attribute)}</Typography>
+      <Typography id={helpId} variant="body2" color="text.secondary">
+        {helperText ?? t('files.savedImmediately')}
+      </Typography>
+      {helperText && entityId && !disabled && (
+        <Typography variant="body2" color="text.secondary">
+          {t('files.savedImmediately')}
+        </Typography>
+      )}
+      {error && <Alert severity="error">{error}</Alert>}
+      {uploads.errors.map((message, index) => (
+        <Alert severity="error" key={index}>
+          {message}
+        </Alert>
+      ))}
       {!entityId && (
         <Alert severity="info">{t('files.saveEntityBeforeUploading')}</Alert>
       )}
@@ -79,19 +104,25 @@ const FileAttributeEditorContent = (props: FileAttributeEditorProps) => {
       </Box>
       {uploads.pending.map((item) => (
         <PendingFileRow
-          disabled={disabled}
+          disabled={disabled || uploads.busy}
           item={item}
           key={item.id}
           onRetry={() => uploads.retry(item)}
+          onRemove={() => uploads.removePending(item.id)}
         />
       ))}
-      {uploads.uploaded.map((file) => (
-        <UploadedFileRow
-          file={file}
-          key={file.id}
-          showThumbnail={policy.image_only}
+      {policy.image_only ? (
+        <ImageGalleryEditor
+          files={uploads.uploaded}
+          disabled={!uploads.canUpload}
+          ordered={policy.ordered}
+          onChange={uploads.changeReferences}
         />
-      ))}
+      ) : (
+        uploads.uploaded.map((file) => (
+          <UploadedFileRow file={file} key={file.id} showThumbnail={false} />
+        ))
+      )}
     </Stack>
   );
 };

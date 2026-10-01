@@ -159,11 +159,13 @@ export const FileThumbnail = ({
   const metadata = useQuery({
     queryKey: fileQueryKeys.metadata(file.id),
     queryFn: () => getFileMetadata(file.id),
+    retry: false,
     refetchInterval: (query) =>
+      !query.state.error &&
       THUMBNAIL_POLLING_STATUSES.has(query.state.data?.status ?? '')
         ? THUMBNAIL_POLL_INTERVAL
         : false,
-    refetchIntervalInBackground: true,
+    refetchIntervalInBackground: false,
   });
   const currentFile = metadata.data;
   const thumbnail = currentFile?.variants.find(
@@ -174,6 +176,7 @@ export const FileThumbnail = ({
       ? fileDownloadUrl(currentFile.id, thumbnail.kind)
       : undefined;
   const unavailable =
+    metadata.isError ||
     (currentFile?.status === fileStatuses.ready && !thumbnail) ||
     currentFile?.status === fileStatuses.failed ||
     currentFile?.status === fileStatuses.deleted;

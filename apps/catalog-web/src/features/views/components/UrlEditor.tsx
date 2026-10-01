@@ -1,6 +1,8 @@
 import { TextField } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import { attributeLabel } from '../../entities/entityDisplay';
 import { safeUrl } from '../urlPolicy';
+import type { ValueEditorProps } from './componentTypes';
 
 export const UrlEditor = ({
   label,
@@ -45,3 +47,10 @@ export const UrlEditor = ({
     />
   );
 };
+
+export const UrlAttributeEditor = ({
+  attribute,
+  ...props
+}: ValueEditorProps) => (
+  <UrlEditor label={attributeLabel(attribute)} {...props} />
+);
