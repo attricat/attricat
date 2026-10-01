@@ -46,6 +46,8 @@
   },
   "navigation": {
     "open": "Otwórz nawigację",
+    "collapsePanel": "Zwiń panel nawigacji",
+    "expandPanel": "Rozwiń panel nawigacji",
     "back": "Wróć do głównej nawigacji",
     "entityExplorer": "Przeglądarka encji",
     "allEntities": "Wszystkie encje",
