@@ -1,8 +1,10 @@
 # Production operations
 
 Attricat is distributed as one immutable image. Pin it by digest, just as a
-PostgreSQL deployment pins its database image. The same image has three runtime
-roles:
+PostgreSQL deployment pins its database image. Every push to `main` publishes
+`ghcr.io/attricat/attricat:<commit-sha>` and moves `:latest` to the same image;
+use `:latest` only for evaluation, never for deployments. The same image has
+three runtime roles:
 
 ```sh
 docker run --rm --env DATABASE_URL ghcr.io/attricat/attricat@sha256:… migrate

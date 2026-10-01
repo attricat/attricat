@@ -102,6 +102,11 @@ jobs:
   release-path:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    # Serialize release runs per ref so an older main build cannot move
+    # `latest` after a newer one has published.
+    concurrency:
+      group: release-path-${{ github.ref }}
+      cancel-in-progress: false
     permissions:
       contents: read
       packages: write
@@ -119,15 +124,19 @@ jobs:
         env:
           ATTRICAT_IMAGE: attricat:ci
         run: scripts/verify-deployment.sh
-      - name: Publish immutable commit image
+      - name: Publish commit and latest images
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
-          target="ghcr.io/${GITHUB_REPOSITORY,,}:$GITHUB_SHA"
+          repository="ghcr.io/${GITHUB_REPOSITORY,,}"
+          target="$repository:$GITHUB_SHA"
           docker tag attricat:ci "$target"
           docker push "$target"
+          # `latest` is a moving convenience tag; deployments still pin the digest.
+          docker tag attricat:ci "$repository:latest"
+          docker push "$repository:latest"
           docker image inspect --format 'published={{index .RepoDigests 0}}' "$target" | tee -a deployment-evidence/result.txt
       - name: Upload deployment evidence
         if: always()
