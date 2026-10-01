@@ -63,6 +63,7 @@ mod rules;
 mod saved_views;
 mod sessions;
 mod solution_packs;
+mod status;
 mod tasks;
 mod tokens;
 mod values;
@@ -239,6 +240,10 @@ pub enum RepositoryError {
     InvalidComment,
     #[error("comment changed; reload before saving again")]
     CommentConflict,
+    #[error("entity changed since it was loaded; refresh before saving")]
+    StaleEntity,
+    #[error("status edits require expected_updated_at from the entity form")]
+    StatusPreconditionRequired,
     #[error("{0} was not found")]
     NotFound(&'static str),
     #[error("CATALOG_WORKSPACE_ID does not identify an active workspace")]

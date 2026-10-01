@@ -9,6 +9,8 @@ import { AttributeValueText } from './AttributeValueText';
 import { formatAttributeValue } from './formatAttributeValue';
 import { attributeValueTypes } from '../../../entities/valueTypes';
 import { FILE_THUMBNAIL_SIZE } from '../../constants';
+import { statusConfiguration } from '../../../entities/status';
+import { StatusValue } from './StatusValue';
 
 type RelationshipValue = {
   items?: { id: string; display?: string }[];
@@ -48,6 +50,8 @@ export const AttributeValue = ({
   renderFilePanel?: (fileId: string) => ReactNode;
 }) => {
   const { t } = useTranslation();
+  const status = statusConfiguration(attribute);
+  if (status) return <StatusValue config={status} value={value} />;
   if (
     attribute.value_type === attributeValueTypes.relationship &&
     isRelationshipValue(value)
