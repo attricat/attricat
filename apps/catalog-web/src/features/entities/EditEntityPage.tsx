@@ -20,6 +20,7 @@ import { useReusableAttributeAttachment } from './components/useReusableAttribut
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { valuesForForm } from './entityForm';
+import { statusParentContexts } from './status';
 import { entityQueryKeys } from './queryKeys';
 import {
   useEntityContextSelection,
@@ -146,6 +147,11 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
             key={`${entityForm.data.entity.id}:${contextId ?? ''}`}
             blueprint={entityForm.data.blueprint}
             disabled={!entityForm.data.can_write}
+            expectedUpdatedAt={entityForm.data.entity.updated_at}
+            statusParentContextIds={statusParentContexts(
+              contexts.data ?? [],
+              contextId,
+            )}
             contextId={contextId}
             draft={
               contextId

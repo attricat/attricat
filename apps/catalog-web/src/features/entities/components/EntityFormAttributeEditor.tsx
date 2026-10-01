@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
-import type { Attribute, FormAttributeValue } from '../api';
+import { savedStatusValue } from '../status';
+import type { Attribute, ComponentReference, FormAttributeValue } from '../api';
 import {
   filesForAttribute,
   formatResolvedValue,
@@ -12,11 +13,13 @@ import { EntityAttributeEditor } from './EntityAttributeEditor';
 import { AttributeValue } from '../../views/components/values/AttributeValue';
 
 export type EntityFormAttributeEditorContext = {
-  disabled?: boolean;
   contextId: string | null;
+  statusParentContextIds?: readonly string[];
+  disabled?: boolean;
   defaultContextId: string | null;
   entityId?: string;
   existingValues: readonly FormAttributeValue[];
+  statusSavedValues?: readonly FormAttributeValue[];
   fieldErrors: Record<string, string>;
   highlightedAttributes: readonly string[];
   migrationReviewMessages: Readonly<Record<string, string>>;
@@ -25,6 +28,8 @@ export type EntityFormAttributeEditorContext = {
 
 type Props = EntityFormAttributeEditorContext & {
   attribute: Attribute;
+  component?: ComponentReference | null;
+  required?: boolean;
   onChange: (value: string) => void;
   value: string;
 };
@@ -32,11 +37,15 @@ type Props = EntityFormAttributeEditorContext & {
 /** Renders one attribute editor with its context-aware helper text. */
 export const EntityFormAttributeEditor = ({
   attribute,
+  component,
+  required,
+  statusParentContextIds = [],
+  disabled = false,
   contextId,
   defaultContextId,
-  disabled = false,
   entityId,
   existingValues,
+  statusSavedValues = existingValues,
   fieldErrors,
   highlightedAttributes,
   migrationReviewMessages,
@@ -81,8 +90,21 @@ export const EntityFormAttributeEditor = ({
       )}
       <EntityAttributeEditor
         attribute={attribute}
+        component={component}
+        required={required}
         contextId={contextId}
         disabled={disabled || readonly || defaultOnly}
+        statusBaseline={savedStatusValue(attribute, statusSavedValues, [
+          contextId,
+          ...(attribute.context_fallback === 'none'
+            ? []
+            : statusParentContextIds),
+        ])}
+        inheritedStatus={savedStatusValue(
+          attribute,
+          statusSavedValues,
+          attribute.context_fallback === 'none' ? [] : statusParentContextIds,
+        )}
         entityId={entityId}
         files={filesForAttribute(existingValues, attribute.code, contextId)}
         error={fieldErrors[attribute.code]}

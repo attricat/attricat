@@ -66,9 +66,10 @@ export const BlueprintViewsPreview = ({
           <EntityView
             attributes={attributes}
             fallbackVisibilityScope="form"
-            renderEditor={(attribute) => (
+            renderEditor={(attribute, component) => (
               <SandboxAttributeEditor
                 attribute={attribute}
+                component={component}
                 onChange={(value) => updateField(attribute.code, value)}
                 value={fields[attribute.code] ?? ''}
               />

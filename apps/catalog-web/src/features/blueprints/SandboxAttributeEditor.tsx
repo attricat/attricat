@@ -1,6 +1,7 @@
 import { Button, MenuItem, TextField } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import type { Attribute } from '../entities/api';
+import type { Attribute, ComponentReference } from '../entities/api';
+import { resolveViewComponent } from '../views/components/registry';
 import { attributeValueTypes } from '../entities/valueTypes';
 import { sandboxBooleanValues, sandboxInputPlaceholders } from './constants';
 
@@ -17,14 +18,30 @@ const inputPlaceholder = (attribute: Attribute) => {
 /** Unsaved input for one attribute in the blueprint view preview sandbox. */
 export const SandboxAttributeEditor = ({
   attribute,
+  component,
   onChange,
   value,
 }: {
   attribute: Attribute;
+  component?: ComponentReference | null;
   onChange: (value: string) => void;
   value: string;
 }) => {
   const { t } = useTranslation();
+
+  const definition = resolveViewComponent(component);
+  const Editor = definition?.value_types.includes(attribute.value_type)
+    ? definition.valueEditor
+    : undefined;
+  if (Editor)
+    return (
+      <Editor
+        attribute={attribute}
+        value={value}
+        onChange={onChange}
+        disabled={attribute.readonly === true}
+      />
+    );
 
   if (attribute.value_type === attributeValueTypes.relationship)
     return (

@@ -1,7 +1,8 @@
 import { MenuItem, TextField, Tooltip, useTheme } from '@mui/material';
 import { InfoIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import type { Attribute } from '../api';
+import type { Attribute, ComponentReference } from '../api';
+import { resolveViewComponent } from '../../views/components/registry';
 import type { FileMetadata } from '../../files/schemas';
 import { attributeLabel } from '../entityDisplay';
 import { attributeValueTypes } from '../valueTypes';
@@ -14,11 +15,17 @@ import {
 import { FileAttributeEditor } from '../../files/FileAttributeEditor';
 import { RelationshipField } from './RelationshipField';
 import { smallIconSize } from '../../../components/iconSizes';
+import { statusConfiguration } from '../status';
+import { StatusAttributeEditor } from './StatusAttributeEditor';
 
 export const EntityAttributeEditor = ({
   attribute,
+  component,
+  statusBaseline = null,
+  inheritedStatus = null,
   contextId,
   disabled,
+  required,
   entityId,
   files,
   error,
@@ -29,8 +36,12 @@ export const EntityAttributeEditor = ({
   value,
 }: {
   attribute: Attribute;
+  component?: ComponentReference | null;
+  statusBaseline?: string | null;
+  inheritedStatus?: string | null;
   contextId: string | null;
   disabled: boolean;
+  required?: boolean;
   entityId?: string;
   files: FileMetadata[];
   error?: string;
@@ -46,6 +57,43 @@ export const EntityAttributeEditor = ({
   const migrationBadge = showMigrationBadge ? (
     <MigrationBadge message={migrationReviewMessage} />
   ) : null;
+  const status = statusConfiguration(attribute);
+  if (status)
+    return (
+      <>
+        {migrationBadge}
+        <StatusAttributeEditor
+          config={status}
+          label={attributeLabel(attribute)}
+          value={value}
+          baseline={statusBaseline}
+          inheritedValue={inheritedStatus}
+          disabled={effectiveDisabled}
+          error={error}
+          helperText={helperText}
+          onChange={onChange}
+        />
+      </>
+    );
+  const definition = resolveViewComponent(component);
+  const Editor = definition?.value_types.includes(attribute.value_type)
+    ? definition.valueEditor
+    : undefined;
+  if (Editor)
+    return (
+      <>
+        {migrationBadge}
+        <Editor
+          attribute={attribute}
+          value={value}
+          disabled={effectiveDisabled}
+          error={error}
+          required={required}
+          helperText={helperText}
+          onChange={onChange}
+        />
+      </>
+    );
   if (attribute.value_type === attributeValueTypes.relationship)
     return (
       <>

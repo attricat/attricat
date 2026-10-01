@@ -562,6 +562,40 @@ value_type = "string"
 }
 
 #[test]
+fn validates_color_components() {
+    let source = r#"
+format_version = 1
+code = "color"
+name = "Color"
+kind = "entity"
+attributes = [{ code = "hex", value_type = "string" }]
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["hex"]
+[views.detail]
+type = "stack"
+children = [{ type = "field", field = "hex", component = { id = "catalog.color_display", version = 1 } }]
+[views.edit]
+type = "stack"
+children = [{ type = "field", field = "hex", component = { id = "catalog.color_edit", version = 1 } }]
+[views.table]
+type = "table"
+columns = [{ field = "hex", renderer = { id = "catalog.color_display", version = 1 } }]
+"#;
+    assert!(compile(parse(source).unwrap(), &[], source).is_ok());
+    for invalid in [
+        source.replace("value_type = \"string\"", "value_type = \"number\""),
+        source.replace("catalog.color_display", "catalog.color_edit"),
+        source.replace("catalog.color_edit", "catalog.color_display"),
+        source.replace("version = 1 }", "version = 2 }"),
+        source.replace("version = 1 }", "version = 1, props = { alpha = true } }"),
+        source.replace("type = \"field\"", "type = \"relationship_list\""),
+    ] {
+        assert!(compile(parse(&invalid).unwrap(), &[], &invalid).is_err());
+    }
+}
+
+#[test]
 fn compiles_json_schema_contracts() {
     let source = r#"
 format_version = 1

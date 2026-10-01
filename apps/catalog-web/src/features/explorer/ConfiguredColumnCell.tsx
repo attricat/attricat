@@ -1,7 +1,9 @@
+import { createElement } from 'react';
 import { Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import type { Attribute, EntityItem } from '../entities/api';
 import type { ExtensionContribution } from '../extensions/api';
+import { resolveValueRenderer } from '../views/components/registry';
 import { AttributeValue } from '../views/components/values/AttributeValue';
 import {
   explorerExtensionContextVersion,
@@ -68,6 +70,13 @@ export const ConfiguredColumnCell = ({
   );
   if (renderer?.id === tableImageRendererId)
     return <ImageTableCell value={primaryValue} />;
+  const Renderer = resolveValueRenderer(renderer);
+  if (Renderer)
+    return createElement(Renderer, {
+      attribute,
+      component: renderer,
+      value: primaryValue,
+    });
   if (!renderer || !usesExtensionRenderer(column)) return fallback;
   const context = explorerTableCellContextSchema.parse({
     context_version: explorerExtensionContextVersion,

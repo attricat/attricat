@@ -1,4 +1,23 @@
 {
+  "comments": {
+    "title": "Comments",
+    "comment": "Comment",
+    "editComment": "Edit comment",
+    "edit": "Edit",
+    "save": "Save changes",
+    "post": "Post comment",
+    "preview": "Preview Markdown",
+    "edited": "Edited",
+    "unknownAuthor": "Member",
+    "loading": "Loading comments",
+    "empty": "No comments yet. Add the first comment below.",
+    "loadMore": "Load more comments",
+    "saved": "Comment saved.",
+    "validation": "Enter a comment of 1–{{max}} characters, without null characters.",
+    "markdownHint": "Markdown supported. {{count}} / {{max}} characters. Images and HTML are not rendered.",
+    "reload": "Reload comments and keep draft",
+    "conflict": "This comment changed elsewhere. Reload comments, then choose Edit and Restore draft to reconcile your text with the latest version."
+  },
   "language": {
     "label": "Language",
     "english": "English",
@@ -220,6 +239,11 @@
     "loadBlueprint": "Load blueprint",
     "loadingBlueprint": "Loading blueprint...",
     "couldNotLoadBlueprints": "Could not load blueprints.",
+    "statusUnknown": "Unknown or retired status: {{value}}",
+    "statusTerminal": "No status transitions are available.",
+    "statusTransitions": "Unavailable transitions are disabled. Changes apply when you save.",
+    "statusInherit": "Use inherited status: {{value}}",
+    "statusTransitionDenied": "This transition is not allowed from the saved status.",
     "managedBySystem": "Managed by system actions",
     "managedInDefault": "Managed in Default",
     "inheritedFromContext": "Inherited from {{context}} context",
@@ -1146,6 +1170,10 @@
     "acceptInvitation": "Accept invitation"
   },
   "views": {
+    "colorInvalid": "Enter a six-digit hex color, such as #1a2b3c.",
+    "colorFormat": "Six-digit hex color (#RRGGBB). Clear the text to unset.",
+    "colorPicker": "Pick color",
+    "colorPickerFor": "Pick color for {{attribute}}",
     "availableOnPreviews": "{{label}} is available on entity previews.",
     "notSet": "Not set",
     "yes": "Yes",
