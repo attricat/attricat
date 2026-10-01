@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { savedStatusValue } from '../status';
 import type { Attribute, ComponentReference, FormAttributeValue } from '../api';
 import {
   filesForAttribute,
@@ -12,9 +13,12 @@ import { EntityAttributeEditor } from './EntityAttributeEditor';
 
 export type EntityFormAttributeEditorContext = {
   contextId: string | null;
+  statusParentContextIds?: readonly string[];
+  disabled?: boolean;
   defaultContextId: string | null;
   entityId?: string;
   existingValues: readonly FormAttributeValue[];
+  statusSavedValues?: readonly FormAttributeValue[];
   fieldErrors: Record<string, string>;
   highlightedAttributes: readonly string[];
   migrationReviewMessages: Readonly<Record<string, string>>;
@@ -34,10 +38,13 @@ export const EntityFormAttributeEditor = ({
   attribute,
   component,
   required,
+  statusParentContextIds = [],
+  disabled = false,
   contextId,
   defaultContextId,
   entityId,
   existingValues,
+  statusSavedValues = existingValues,
   fieldErrors,
   highlightedAttributes,
   migrationReviewMessages,
@@ -80,7 +87,18 @@ export const EntityFormAttributeEditor = ({
       component={component}
       required={required}
       contextId={contextId}
-      disabled={readonly || defaultOnly}
+      disabled={disabled || readonly || defaultOnly}
+      statusBaseline={savedStatusValue(attribute, statusSavedValues, [
+        contextId,
+        ...(attribute.context_fallback === 'none'
+          ? []
+          : statusParentContextIds),
+      ])}
+      inheritedStatus={savedStatusValue(
+        attribute,
+        statusSavedValues,
+        attribute.context_fallback === 'none' ? [] : statusParentContextIds,
+      )}
       entityId={entityId}
       files={filesForAttribute(existingValues, attribute.code, contextId)}
       error={fieldErrors[attribute.code]}

@@ -15,10 +15,14 @@ import {
 import { FileAttributeEditor } from '../../files/FileAttributeEditor';
 import { RelationshipField } from './RelationshipField';
 import { smallIconSize } from '../../../components/iconSizes';
+import { statusConfiguration } from '../status';
+import { StatusAttributeEditor } from './StatusAttributeEditor';
 
 export const EntityAttributeEditor = ({
   attribute,
   component,
+  statusBaseline = null,
+  inheritedStatus = null,
   contextId,
   disabled,
   required,
@@ -33,6 +37,8 @@ export const EntityAttributeEditor = ({
 }: {
   attribute: Attribute;
   component?: ComponentReference | null;
+  statusBaseline?: string | null;
+  inheritedStatus?: string | null;
   contextId: string | null;
   disabled: boolean;
   required?: boolean;
@@ -51,6 +57,24 @@ export const EntityAttributeEditor = ({
   const migrationBadge = showMigrationBadge ? (
     <MigrationBadge message={migrationReviewMessage} />
   ) : null;
+  const status = statusConfiguration(attribute);
+  if (status)
+    return (
+      <>
+        {migrationBadge}
+        <StatusAttributeEditor
+          config={status}
+          label={attributeLabel(attribute)}
+          value={value}
+          baseline={statusBaseline}
+          inheritedValue={inheritedStatus}
+          disabled={effectiveDisabled}
+          error={error}
+          helperText={helperText}
+          onChange={onChange}
+        />
+      </>
+    );
   const definition = resolveViewComponent(component);
   const Editor = definition?.value_types.includes(attribute.value_type)
     ? definition.valueEditor

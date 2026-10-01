@@ -46,13 +46,40 @@ services:
       - "0.0.0.0:80:80"
       - "0.0.0.0:443:443"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
-      - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+      - ./traefik/dynamic:/etc/traefik/dynamic:ro
       - ./traefik/certs:/etc/traefik/certs:ro
     security_opt:
       - no-new-privileges:true
     networks: [edge]
+
+  # Kept running while reset.sh recreates only data/application services.
+  maintenance:
+    image: ${DEMO_RUNNER_IMAGE:-node:24-alpine}
+    command: ["node", "/fixture/maintenance.mjs", "serve"]
+    restart: unless-stopped
+    read_only: true
+    user: node
+    security_opt: [no-new-privileges:true]
+    volumes:
+      - ./reset:/fixture:ro
+    networks: [edge]
+
+  loader:
+    image: ${DEMO_RUNNER_IMAGE:-node:24-alpine}
+    profiles: [tools]
+    entrypoint: ["node", "/fixture/load.mjs"]
+    command: ["load"]
+    read_only: true
+    user: node
+    security_opt: [no-new-privileges:true]
+    environment:
+      CATALOG_SERVER: http://api:3000
+      ATTRICAT_OWNER_EMAIL: ${ATTRICAT_OWNER_EMAIL:?}
+      ATTRICAT_OWNER_PASSWORD: ${ATTRICAT_OWNER_PASSWORD:-}
+    volumes:
+      - ./reset:/fixture:ro
+    networks: [backend, edge]
 
   postgres:
     image: postgres:18-alpine
@@ -140,11 +167,6 @@ services:
       timeout: 5s
       retries: 12
       start_period: 15s
-    labels:
-      traefik.enable: "true"
-      traefik.http.routers.attricat.rule: Host(`demo.attricat.com`)
-      traefik.http.routers.attricat.entrypoints: websecure
-      traefik.http.services.attricat.loadbalancer.server.port: "3000"
 
   file-worker:
     <<: *app
