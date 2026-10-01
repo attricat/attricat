@@ -158,6 +158,11 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
           : [];
       }),
     );
+    const preservedWhitespaceFields = new Set(
+      [...fieldComponents].flatMap(([code, component]) =>
+        resolveViewComponent(component)?.preservesWhitespace ? [code] : [],
+      ),
+    );
     const editableAttributes = editableFormAttributes(
       blueprint ? [...blueprint.attributes, ...reusableAttributes] : [],
       {
@@ -179,6 +184,7 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
           : undefined,
         undefined,
         fieldValidators,
+        preservedWhitespaceFields,
       );
       for (const attribute of editableAttributes) {
         const config = statusConfiguration(attribute);
@@ -224,6 +230,7 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
             editableAttributes,
             value.fields,
             contextId,
+            preservedWhitespaceFields,
           ),
           relationships: relationshipTargetsForForm(
             editableAttributes,

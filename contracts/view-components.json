@@ -65,6 +65,22 @@
       "allowed_props": []
     },
     {
+      "id": "catalog.markdown_display",
+      "version": 1,
+      "capabilities": ["display"],
+      "placements": ["field"],
+      "value_types": ["string"],
+      "allowed_props": []
+    },
+    {
+      "id": "catalog.markdown_edit",
+      "version": 1,
+      "capabilities": ["edit"],
+      "placements": ["field"],
+      "value_types": ["string"],
+      "allowed_props": []
+    },
+    {
       "id": "catalog.field_display",
       "version": 1,
       "capabilities": ["display"],

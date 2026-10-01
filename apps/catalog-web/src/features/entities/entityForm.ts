@@ -62,6 +62,7 @@ export const serializeAttributeValues = (
   attributes: readonly Attribute[],
   fields: Record<string, string>,
   contextId: string | null = null,
+  preserveWhitespace: ReadonlySet<string> = new Set(),
 ): NewAttributeValue[] => {
   return attributes.flatMap<NewAttributeValue>(
     (attribute): NewAttributeValue[] => {
@@ -69,6 +70,7 @@ export const serializeAttributeValues = (
       const scalar = scalarValueForField(
         attribute,
         fields[attribute.code] ?? '',
+        preserveWhitespace.has(attribute.code),
       );
       return scalar ? [{ ...scalar, context_id: contextId }] : [];
     },
@@ -112,6 +114,7 @@ export const validateEntityForm = (
     string,
     (value: string) => string | undefined
   > = new Map(),
+  preserveWhitespace: ReadonlySet<string> = new Set(),
 ): EntityFormValidation => {
   const fieldErrors: Record<string, string> = {};
   const document: Record<string, unknown> = {};
@@ -141,7 +144,11 @@ export const validateEntityForm = (
       fieldErrors[attribute.code] = configuredError;
       continue;
     }
-    const scalar = scalarValueForField(attribute, value);
+    const scalar = scalarValueForField(
+      attribute,
+      value,
+      preserveWhitespace.has(attribute.code),
+    );
     if (value.trim() && !scalar) {
       fieldErrors[attribute.code] = messages.invalidValue;
     } else if (scalar) {

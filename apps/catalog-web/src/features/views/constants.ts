@@ -7,6 +7,8 @@ export const VIEW_COMPONENT_IDS = {
   emailEdit: 'catalog.email_edit',
   urlDisplay: 'catalog.url_display',
   urlEdit: 'catalog.url_edit',
+  markdownDisplay: 'catalog.markdown_display',
+  markdownEdit: 'catalog.markdown_edit',
   fieldDisplay: 'catalog.field_display',
   fieldEdit: 'catalog.field_edit',
   phoneDisplay: 'catalog.phone_display',

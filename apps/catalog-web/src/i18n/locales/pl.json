@@ -18,6 +18,7 @@
     "reload": "Odśwież komentarze i zachowaj szkic",
     "conflict": "Ten komentarz został zmieniony. Odśwież komentarze, wybierz Edytuj i przywróć szkic, aby uzgodnić swój tekst z najnowszą wersją."
   },
+  "markdown": { "write": "Edytuj", "preview": "Podgląd" },
   "language": {
     "label": "Język",
     "english": "Angielski",

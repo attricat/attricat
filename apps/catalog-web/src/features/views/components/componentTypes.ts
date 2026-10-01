@@ -55,6 +55,8 @@ export type ViewComponentDefinition = {
   valueRenderer?: ValueRenderer;
   valueEditor?: ComponentType<ValueEditorProps>;
   validateValue?: (value: string) => string | undefined;
+  /** Submit the edited string verbatim instead of trimming it. */
+  preservesWhitespace?: boolean;
   headingRenderer?: HeadingRenderer;
   incomingRelationshipRenderer?: IncomingRelationshipRenderer;
 };
