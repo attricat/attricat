@@ -1,0 +1,169 @@
+# Attricat demo at https://demo.attricat.com behind Cloudflare (Full strict,
+# Origin CA certificate in traefik/certs). Secrets live in .env (chmod 600).
+name: attricat-demo
+
+x-app: &app
+  image: ${ATTRICAT_IMAGE:-ghcr.io/attricat/attricat:latest}
+  read_only: true
+  tmpfs:
+    - /tmp:size=256m,mode=1777
+  security_opt:
+    - no-new-privileges:true
+  restart: unless-stopped
+  networks: [backend]
+
+x-environment: &environment
+  DATABASE_URL: postgres://attricat:${POSTGRES_PASSWORD:?}@postgres:5432/catalog
+  CATALOG_AUTO_MIGRATE: "false"
+  CATALOG_BOOTSTRAP_OWNER_EMAIL: ${ATTRICAT_OWNER_EMAIL:?}
+  CATALOG_BOOTSTRAP_OWNER_PASSWORD: ${ATTRICAT_OWNER_PASSWORD:-}
+  SESSION_COOKIE_SECURE: "true"
+  CATALOG_DEVTOOLS: "false"
+  RUST_LOG: info
+  S3_ENDPOINT: http://rustfs:9000
+  S3_REGION: us-east-1
+  S3_BUCKET: catalog-files
+  S3_ACCESS_KEY_ID: attricat
+  S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?}
+  S3_FORCE_PATH_STYLE: "true"
+  S3_UPLOAD_TIMEOUT_SECONDS: "30"
+  S3_DOWNLOAD_TIMEOUT_SECONDS: "30"
+  SMTP_HOST: mailpit
+  SMTP_PORT: "1025"
+  SMTP_TLS_MODE: disabled
+  MAIL_FROM: Attricat Demo <no-reply@demo.attricat.com>
+  PASSWORD_RESET_URL: https://demo.attricat.com/password-reset/confirm
+  WORKSPACE_INVITATION_URL: https://demo.attricat.com/invitations/accept
+  WORKSPACE_ONBOARDING_URL: https://demo.attricat.com/onboarding
+
+services:
+  traefik:
+    image: traefik:v3.7.13
+    restart: unless-stopped
+    # IPv4 only: Cloudflare reaches the origin through the A record, and the
+    # DOCKER-USER firewall only covers the IPv4 path.
+    ports:
+      - "0.0.0.0:80:80"
+      - "0.0.0.0:443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+      - ./traefik/certs:/etc/traefik/certs:ro
+    security_opt:
+      - no-new-privileges:true
+    networks: [edge]
+
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: catalog
+      POSTGRES_USER: attricat
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready --username=attricat --dbname=catalog"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    networks: [backend]
+
+  rustfs:
+    image: rustfs/rustfs:1.0.0-beta.12
+    command: "/data"
+    restart: unless-stopped
+    environment:
+      RUSTFS_ACCESS_KEY: attricat
+      RUSTFS_SECRET_KEY: ${S3_SECRET_ACCESS_KEY:?}
+    volumes:
+      - rustfs-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:9000/health/live >/dev/null"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    networks: [backend]
+
+  rustfs-init:
+    image: amazon/aws-cli:2.31.0
+    depends_on:
+      rustfs:
+        condition: service_healthy
+    environment:
+      AWS_ACCESS_KEY_ID: attricat
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?}
+      AWS_DEFAULT_REGION: us-east-1
+      S3_BUCKET: catalog-files
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - >-
+        if ! aws --endpoint-url http://rustfs:9000 s3api head-bucket --bucket "$$S3_BUCKET" >/dev/null 2>&1;
+        then aws --endpoint-url http://rustfs:9000 s3api create-bucket --bucket "$$S3_BUCKET"; fi
+    restart: "no"
+    networks: [backend]
+
+  mailpit:
+    image: axllent/mailpit:v1.28
+    restart: unless-stopped
+    # Reach the UI with: ssh -L 8025:127.0.0.1:8025 attricat-demo
+    ports:
+      - "127.0.0.1:8025:8025"
+    networks: [backend]
+
+  migrate:
+    <<: *app
+    command: ["migrate"]
+    restart: "no"
+    environment: *environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rustfs-init:
+        condition: service_completed_successfully
+
+  api:
+    <<: *app
+    command: ["api"]
+    environment: *environment
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks: [backend, edge]
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:3000/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.attricat.rule: Host(`demo.attricat.com`)
+      traefik.http.routers.attricat.entrypoints: websecure
+      traefik.http.services.attricat.loadbalancer.server.port: "3000"
+
+  file-worker:
+    <<: *app
+    command: ["file-worker"]
+    environment: *environment
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:3001/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+networks:
+  edge: {}
+  backend: {}
+
+volumes:
+  postgres-data:
+  rustfs-data:
