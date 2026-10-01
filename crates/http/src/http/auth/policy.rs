@@ -48,6 +48,13 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     } else {
         "blueprints.write"
     };
+    // Commenting is available to every entity reader, including viewers.
+    // Editing additionally enforces authorship in the repository transaction.
+    if path == "/v1/entities/{entity_id}/comments"
+        || path == "/v1/entities/{entity_id}/comments/{comment_id}"
+    {
+        return Some(read(TargetKind::EntityId));
+    }
     if path == "/saved-views"
         || path == "/saved-views/{id}"
         || path == "/view-state-links"

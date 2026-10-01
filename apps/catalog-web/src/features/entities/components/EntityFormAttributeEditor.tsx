@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { savedStatusValue } from '../status';
 import type { Attribute, ComponentReference, FormAttributeValue } from '../api';
 import {
   filesForAttribute,
@@ -9,12 +10,16 @@ import {
 } from '../entityFormAttributes';
 import { attributeValueTypes } from '../valueTypes';
 import { EntityAttributeEditor } from './EntityAttributeEditor';
+import { AttributeValue } from '../../views/components/values/AttributeValue';
 
 export type EntityFormAttributeEditorContext = {
   contextId: string | null;
+  statusParentContextIds?: readonly string[];
+  disabled?: boolean;
   defaultContextId: string | null;
   entityId?: string;
   existingValues: readonly FormAttributeValue[];
+  statusSavedValues?: readonly FormAttributeValue[];
   fieldErrors: Record<string, string>;
   highlightedAttributes: readonly string[];
   migrationReviewMessages: Readonly<Record<string, string>>;
@@ -24,6 +29,7 @@ export type EntityFormAttributeEditorContext = {
 type Props = EntityFormAttributeEditorContext & {
   attribute: Attribute;
   component?: ComponentReference | null;
+  required?: boolean;
   onChange: (value: string) => void;
   value: string;
 };
@@ -32,10 +38,14 @@ type Props = EntityFormAttributeEditorContext & {
 export const EntityFormAttributeEditor = ({
   attribute,
   component,
+  required,
+  statusParentContextIds = [],
+  disabled = false,
   contextId,
   defaultContextId,
   entityId,
   existingValues,
+  statusSavedValues = existingValues,
   fieldErrors,
   highlightedAttributes,
   migrationReviewMessages,
@@ -59,7 +69,8 @@ export const EntityFormAttributeEditor = ({
   const inheritedHelperText = () => {
     if (!inherited) return undefined;
     const context = resolvedValue.source_context.code;
-    return attribute.value_type === attributeValueTypes.relationship
+    return attribute.value_type === attributeValueTypes.relationship ||
+      attribute.value_type === attributeValueTypes.file
       ? t('entities.inheritedFromContext', { context })
       : t('entities.inheritedValue', {
           context,
@@ -73,19 +84,36 @@ export const EntityFormAttributeEditor = ({
       : inheritedHelperText();
 
   return (
-    <EntityAttributeEditor
-      attribute={attribute}
-      component={component}
-      contextId={contextId}
-      disabled={readonly || defaultOnly}
-      entityId={entityId}
-      files={filesForAttribute(existingValues, attribute.code, contextId)}
-      error={fieldErrors[attribute.code]}
-      helperText={helperText}
-      migrationReviewMessage={migrationReviewMessages[attribute.code]}
-      onChange={onChange}
-      showMigrationBadge={highlightedAttributes.includes(attribute.code)}
-      value={value}
-    />
+    <>
+      {inherited && attribute.value_type === attributeValueTypes.file && (
+        <AttributeValue attribute={attribute} value={resolvedValue.value} />
+      )}
+      <EntityAttributeEditor
+        attribute={attribute}
+        component={component}
+        required={required}
+        contextId={contextId}
+        disabled={disabled || readonly || defaultOnly}
+        statusBaseline={savedStatusValue(attribute, statusSavedValues, [
+          contextId,
+          ...(attribute.context_fallback === 'none'
+            ? []
+            : statusParentContextIds),
+        ])}
+        inheritedStatus={savedStatusValue(
+          attribute,
+          statusSavedValues,
+          attribute.context_fallback === 'none' ? [] : statusParentContextIds,
+        )}
+        entityId={entityId}
+        files={filesForAttribute(existingValues, attribute.code, contextId)}
+        error={fieldErrors[attribute.code]}
+        helperText={helperText}
+        migrationReviewMessage={migrationReviewMessages[attribute.code]}
+        onChange={onChange}
+        showMigrationBadge={highlightedAttributes.includes(attribute.code)}
+        value={value}
+      />
+    </>
   );
 };

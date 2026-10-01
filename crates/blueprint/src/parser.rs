@@ -357,6 +357,29 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                         attribute.value_schema,
                         &format!("attribute '{}'.value_schema", attribute.code),
                     )?;
+                    if value_schema.as_ref().is_some_and(|schema| {
+                        schema.get(catalog_validation::status::STATUS_KEY).is_some()
+                    }) && value_type != "string"
+                    {
+                        return Err(BlueprintError::InvalidJsonSchema {
+                            field: format!("attribute '{}'.value_schema", attribute.code),
+                            message: "status is only supported on string attributes".into(),
+                        });
+                    }
+                    if let (Some(schema), Some(default)) = (&value_schema, &attribute.default_value)
+                    {
+                        catalog_validation::status::validate_status_transition(
+                            schema,
+                            &serde_json::Value::Null,
+                            default,
+                        )
+                        .map_err(|message| {
+                            BlueprintError::InvalidJsonSchema {
+                                field: format!("attribute '{}'.default_value", attribute.code),
+                                message,
+                            }
+                        })?;
+                    }
                     if let Some(target_blueprint) = &attribute.target_blueprint {
                         validate_code(target_blueprint, "attribute target_blueprint")?;
                     }

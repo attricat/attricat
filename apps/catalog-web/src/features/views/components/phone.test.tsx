@@ -108,5 +108,5 @@ it('uses telephone input without normalizing edits and respects disabled state',
   rerender(<EntityAttributeEditor {...props} disabled />);
   expect(input.disabled).toBe(true);
   rerender(<EntityAttributeEditor {...props} component={undefined} />);
-  expect(input.type).toBe('text');
+  expect((screen.getByRole('textbox') as HTMLInputElement).type).toBe('text');
 });

@@ -8,14 +8,21 @@ import {
 } from '@mui/material';
 import { createElement } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { Attribute, ViewDefinition } from '../entities/api';
+import type {
+  Attribute,
+  ComponentReference,
+  ViewDefinition,
+} from '../entities/api';
 import { viewBlockTypes } from '../entities/schemas';
 import { EntityView } from '../views/components/EntityView';
 import {
   entityHeadingComponentId,
   findEntityHeading,
 } from '../views/components/blocks/EntityHeadingDefinition';
-import { resolveHeadingRenderer } from '../views/components/registry';
+import {
+  resolveHeadingRenderer,
+  resolveValueRenderer,
+} from '../views/components/registry';
 import { AttributeValue } from '../views/components/values/AttributeValue';
 import type { SandboxValues } from './sandboxValues';
 
@@ -24,39 +31,57 @@ const fieldLabel = (field: string) => field.replaceAll('_', ' ');
 const TableViewPreview = ({
   attributes,
   fields,
+  columns,
   values,
 }: {
   attributes: readonly Attribute[];
   fields: readonly string[];
+  columns?: readonly {
+    field: string;
+    label?: string | null;
+    renderer?: ComponentReference | null;
+  }[];
   values: SandboxValues;
 }) => {
   const attributesByCode = new Map(
     attributes.map((attribute) => [attribute.code, attribute]),
   );
-  const visibleFields = fields.flatMap((field) => {
-    const attribute = attributesByCode.get(field);
-    return attribute ? [[field, attribute] as const] : [];
+  const visibleFields = (
+    columns?.length
+      ? columns
+      : fields.map((field) => ({
+          field,
+          label: undefined,
+          renderer: undefined,
+        }))
+  ).flatMap((column) => {
+    const attribute = attributesByCode.get(column.field);
+    return attribute ? [{ ...column, attribute }] : [];
   });
   return (
     <Box sx={{ overflowX: 'auto' }}>
       <Table size="small">
         <TableHead>
           <TableRow>
-            {visibleFields.map(([field]) => (
-              <TableCell key={field}>{fieldLabel(field)}</TableCell>
+            {visibleFields.map(({ field, label }) => (
+              <TableCell key={field}>{label ?? fieldLabel(field)}</TableCell>
             ))}
           </TableRow>
         </TableHead>
         <TableBody>
           <TableRow>
-            {visibleFields.map(([field, attribute]) => (
-              <TableCell key={field}>
-                <AttributeValue
-                  attribute={attribute}
-                  value={values[field]?.value}
-                />
-              </TableCell>
-            ))}
+            {visibleFields.map(({ field, attribute, renderer }) => {
+              const Renderer = resolveValueRenderer(renderer) ?? AttributeValue;
+              return (
+                <TableCell key={field}>
+                  <Renderer
+                    attribute={attribute}
+                    component={renderer}
+                    value={values[field]?.value}
+                  />
+                </TableCell>
+              );
+            })}
           </TableRow>
         </TableBody>
       </Table>
@@ -83,6 +108,7 @@ export const RenderedBlueprintView = ({
       <TableViewPreview
         attributes={attributes}
         fields={view.fields}
+        columns={view.type === viewBlockTypes.table ? view.columns : undefined}
         values={values}
       />
     );

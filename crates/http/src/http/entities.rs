@@ -481,6 +481,8 @@ pub(super) async fn duplicate_entity(
 
 pub(super) async fn get_entity_form(
     State(_state): State<AppState>,
+    super::auth::AuthenticatedPrincipal(user, _): super::auth::AuthenticatedPrincipal,
+    super::auth::ActiveWorkspace(workspace_id): super::auth::ActiveWorkspace,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(entity_id): ApiPath<Uuid>,
 ) -> Result<Json<EntityFormResponse>, ApiError> {
@@ -494,6 +496,9 @@ pub(super) async fn get_entity_form(
     let reusable_attributes = repository.entity_reusable_attributes(entity_id).await?;
     let reusable_values = repository.reusable_form_values(entity_id).await?;
     Ok(Json(EntityFormResponse {
+        can_write: repository
+            .is_authorized(user, workspace_id, "entities.write", Some(entity_id), None)
+            .await?,
         context: entity
             .projections
             .get("preview")
@@ -604,10 +609,11 @@ pub(super) async fn migrate_entity_to_latest(
     State(state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(entity_id): ApiPath<Uuid>,
+    ApiQuery(version): ApiQuery<EntityVersionQuery>,
     ApiJson(input): ApiJson<MigrateEntityRequest>,
 ) -> Result<Json<Entity>, ApiError> {
     let entity = CatalogMutationService::new(&repository)
-        .migrate_entity(entity_id, input)
+        .migrate_entity_checked(entity_id, input, version.expected_updated_at)
         .await?;
     invalidate_data_health(&state, &repository);
     Ok(Json(entity))
@@ -700,13 +706,20 @@ pub(super) async fn get_value_history(
         json!({"items": items, "next_offset": next_history_offset(has_more, offset, limit)}),
     ))
 }
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct EntityVersionQuery {
+    expected_updated_at: Option<DateTime<chrono::Utc>>,
+}
+
 pub(super) async fn restore_value(
     State(state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath((entity_id, history_id)): ApiPath<(Uuid, Uuid)>,
+    ApiQuery(input): ApiQuery<EntityVersionQuery>,
 ) -> Result<(StatusCode, Json<AttributeValue>), ApiError> {
     let value = CatalogMutationService::new(&repository)
-        .restore_value(entity_id, history_id)
+        .restore_value_checked(entity_id, history_id, input.expected_updated_at)
         .await?;
     invalidate_data_health(&state, &repository);
     Ok((StatusCode::CREATED, Json(value)))

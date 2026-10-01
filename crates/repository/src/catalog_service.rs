@@ -149,13 +149,14 @@ impl<'a> CatalogMutationService<'a> {
         input: UpdateEntityFormRequest,
     ) -> Result<Entity, RepositoryError> {
         self.repository
-            .update_entity_with_values(
+            .update_entity_with_values_checked(
                 entity_id,
                 input.values,
                 input.relationships,
                 input.remove_values,
                 input.system_tags,
                 input.system_metadata,
+                input.expected_updated_at,
             )
             .await
     }
@@ -206,6 +207,17 @@ impl<'a> CatalogMutationService<'a> {
             .await
     }
 
+    pub async fn migrate_entity_checked(
+        &self,
+        entity_id: Uuid,
+        input: MigrateEntityRequest,
+        expected_updated_at: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> Result<Entity, RepositoryError> {
+        self.repository
+            .migrate_entity_to_latest_checked(entity_id, input, expected_updated_at)
+            .await
+    }
+
     pub async fn append_values(
         &self,
         entity_id: Uuid,
@@ -220,6 +232,17 @@ impl<'a> CatalogMutationService<'a> {
         history_id: Uuid,
     ) -> Result<AttributeValue, RepositoryError> {
         self.repository.restore_value(entity_id, history_id).await
+    }
+
+    pub async fn restore_value_checked(
+        &self,
+        entity_id: Uuid,
+        history_id: Uuid,
+        expected_updated_at: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> Result<AttributeValue, RepositoryError> {
+        self.repository
+            .restore_value_checked(entity_id, history_id, expected_updated_at)
+            .await
     }
 
     pub async fn replace_relationships(

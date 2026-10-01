@@ -1,4 +1,9 @@
-use super::{AppState, data_health::invalidate_data_health, error::ApiError, extractors::ApiPath};
+use super::{
+    AppState,
+    data_health::invalidate_data_health,
+    error::ApiError,
+    extractors::{ApiJson, ApiPath},
+};
 use crate::{
     file_access::{FileAccessDecision, FileAccessOperation, authorize_file_read},
     repository::{AVATAR_VARIANT_KIND, CatalogRepository, FileObject, FilePolicy, NewUploadedFile},
@@ -285,6 +290,34 @@ pub(super) async fn upload(
         metrics::counter!("catalog_file_uploads_total", "outcome" => "rejected").increment(1);
     }
     result
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct UpdateFileReferences {
+    context_id: Option<Uuid>,
+    expected_file_ids: Vec<Uuid>,
+    file_ids: Vec<Uuid>,
+}
+
+pub(super) async fn update_references(
+    State(state): State<AppState>,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    ApiPath((entity_id, attribute_code)): ApiPath<(Uuid, String)>,
+    ApiJson(input): ApiJson<UpdateFileReferences>,
+) -> Result<StatusCode, ApiError> {
+    authorize(&state, FileAccessOperation::UpdateReferences { entity_id }).await?;
+    repository
+        .update_file_references(
+            entity_id,
+            &attribute_code,
+            input.context_id,
+            &input.expected_file_ids,
+            &input.file_ids,
+        )
+        .await?;
+    invalidate_data_health(&state, &repository);
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// Stores standalone files for a conversation. It deliberately shares the
@@ -951,6 +984,7 @@ mod tests {
     fn policy() -> FilePolicy {
         FilePolicy {
             cardinality: "many".to_owned(),
+            ordered: true,
             allowed_mime_groups: vec!["image/*".to_owned()],
             allowed_extensions: vec!["png".to_owned()],
             max_bytes: Some(1024),
@@ -1006,6 +1040,7 @@ mod tests {
     fn standalone_and_unrestricted_attribute_uploads_share_mime_boundaries() {
         let unrestricted = FilePolicy {
             cardinality: "many".to_owned(),
+            ordered: true,
             allowed_mime_groups: vec![],
             allowed_extensions: vec![],
             max_bytes: None,

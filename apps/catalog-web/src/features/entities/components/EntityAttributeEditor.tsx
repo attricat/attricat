@@ -2,10 +2,7 @@ import { MenuItem, TextField, Tooltip, useTheme } from '@mui/material';
 import { InfoIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { Attribute, ComponentReference } from '../api';
-import {
-  VIEW_COMPONENT_IDS,
-  VIEW_COMPONENT_VERSION,
-} from '../../views/constants';
+import { resolveViewComponent } from '../../views/components/registry';
 import type { FileMetadata } from '../../files/schemas';
 import { attributeLabel } from '../entityDisplay';
 import { attributeValueTypes } from '../valueTypes';
@@ -18,12 +15,17 @@ import {
 import { FileAttributeEditor } from '../../files/FileAttributeEditor';
 import { RelationshipField } from './RelationshipField';
 import { smallIconSize } from '../../../components/iconSizes';
+import { statusConfiguration } from '../status';
+import { StatusAttributeEditor } from './StatusAttributeEditor';
 
 export const EntityAttributeEditor = ({
   attribute,
   component,
+  statusBaseline = null,
+  inheritedStatus = null,
   contextId,
   disabled,
+  required,
   entityId,
   files,
   error,
@@ -35,8 +37,11 @@ export const EntityAttributeEditor = ({
 }: {
   attribute: Attribute;
   component?: ComponentReference | null;
+  statusBaseline?: string | null;
+  inheritedStatus?: string | null;
   contextId: string | null;
   disabled: boolean;
+  required?: boolean;
   entityId?: string;
   files: FileMetadata[];
   error?: string;
@@ -49,13 +54,46 @@ export const EntityAttributeEditor = ({
   const { t } = useTranslation();
   const providerUnavailable = attribute.extension_type?.available === false;
   const effectiveDisabled = disabled || providerUnavailable;
-  const phone =
-    attribute.value_type === attributeValueTypes.string &&
-    component?.id === VIEW_COMPONENT_IDS.phoneEdit &&
-    component.version === VIEW_COMPONENT_VERSION;
   const migrationBadge = showMigrationBadge ? (
     <MigrationBadge message={migrationReviewMessage} />
   ) : null;
+  const status = statusConfiguration(attribute);
+  if (status)
+    return (
+      <>
+        {migrationBadge}
+        <StatusAttributeEditor
+          config={status}
+          label={attributeLabel(attribute)}
+          value={value}
+          baseline={statusBaseline}
+          inheritedValue={inheritedStatus}
+          disabled={effectiveDisabled}
+          error={error}
+          helperText={helperText}
+          onChange={onChange}
+        />
+      </>
+    );
+  const definition = resolveViewComponent(component);
+  const Editor = definition?.value_types.includes(attribute.value_type)
+    ? definition.valueEditor
+    : undefined;
+  if (Editor)
+    return (
+      <>
+        {migrationBadge}
+        <Editor
+          attribute={attribute}
+          value={value}
+          disabled={effectiveDisabled}
+          error={error}
+          required={required}
+          helperText={helperText}
+          onChange={onChange}
+        />
+      </>
+    );
   if (attribute.value_type === attributeValueTypes.relationship)
     return (
       <>
@@ -80,6 +118,8 @@ export const EntityAttributeEditor = ({
           disabled={effectiveDisabled}
           entityId={entityId}
           files={files}
+          error={error}
+          helperText={helperText}
         />
       </>
     );
@@ -114,9 +154,7 @@ export const EntityAttributeEditor = ({
         fullWidth
         disabled={effectiveDisabled}
         error={Boolean(error)}
-        helperText={
-          error ?? helperText ?? (phone ? t('entities.phoneHelp') : undefined)
-        }
+        helperText={error ?? helperText}
         label={attributeLabel(attribute)}
         onChange={(event) => onChange(event.target.value)}
         multiline={attribute.value_type === attributeValueTypes.json}
@@ -134,24 +172,20 @@ export const EntityAttributeEditor = ({
         }
         slotProps={{
           htmlInput: {
-            dir: phone ? 'ltr' : undefined,
-            inputMode: phone
-              ? 'tel'
-              : attribute.value_type === attributeValueTypes.number ||
-                  attribute.value_type === attributeValueTypes.integer
+            inputMode:
+              attribute.value_type === attributeValueTypes.number ||
+              attribute.value_type === attributeValueTypes.integer
                 ? 'decimal'
                 : undefined,
           },
         }}
         type={
-          phone
-            ? 'tel'
-            : attribute.value_type === attributeValueTypes.date
-              ? 'date'
-              : attribute.value_type === attributeValueTypes.number ||
-                  attribute.value_type === attributeValueTypes.integer
-                ? 'number'
-                : undefined
+          attribute.value_type === attributeValueTypes.date
+            ? 'date'
+            : attribute.value_type === attributeValueTypes.number ||
+                attribute.value_type === attributeValueTypes.integer
+              ? 'number'
+              : undefined
         }
         value={value}
       />

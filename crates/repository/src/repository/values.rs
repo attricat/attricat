@@ -47,7 +47,7 @@ const FORM_VALUES_SQL: &str = r#"SELECT a.code AS attribute_code, av.context_id,
 struct FileFormValueRow {
     attribute_code: String,
     context_id: Option<Uuid>,
-    file_id: Uuid,
+    file_id: Option<Uuid>,
 }
 
 #[derive(sqlx::FromRow)]
@@ -383,8 +383,8 @@ impl CatalogRepository {
     ) -> Result<Vec<FormAttributeValue>, RepositoryError> {
         let rows = sqlx::query_as::<_, FileFormValueRow>(
             r#"SELECT a.code AS attribute_code, av.context_id, r.file_id
-               FROM attribute_file_references r
-               JOIN attribute_values av ON av.id = r.attribute_value_id
+               FROM attribute_values av
+               LEFT JOIN attribute_file_references r ON av.id = r.attribute_value_id
                JOIN attributes a ON a.id = av.attribute_id
                WHERE av.entity_id = $1
                  AND av.workspace_id = $2
@@ -399,19 +399,22 @@ impl CatalogRepository {
         .await?;
         let mut values: Vec<FormAttributeValue> = Vec::new();
         for row in rows {
-            let metadata = self.file_metadata(row.file_id).await?;
+            let metadata = match row.file_id {
+                Some(id) => vec![self.file_metadata(id).await?],
+                None => vec![],
+            };
             match values.last_mut() {
                 Some(FormAttributeValue::File {
                     attribute_code,
                     context_id,
                     files,
                 }) if *attribute_code == row.attribute_code && *context_id == row.context_id => {
-                    files.push(metadata);
+                    files.extend(metadata);
                 }
                 _ => values.push(FormAttributeValue::File {
                     attribute_code: row.attribute_code,
                     context_id: row.context_id,
-                    files: vec![metadata],
+                    files: metadata,
                 }),
             }
         }
@@ -439,8 +442,8 @@ impl CatalogRepository {
         let mut values = form_attribute_values(rows)?;
         let file_rows = sqlx::query_as::<_, FileFormValueRow>(
             r#"SELECT a.code AS attribute_code, av.context_id, r.file_id
-               FROM attribute_file_references r
-               JOIN attribute_values av ON av.id = r.attribute_value_id
+               FROM attribute_values av
+               LEFT JOIN attribute_file_references r ON av.id = r.attribute_value_id
                JOIN attributes a ON a.id = av.attribute_id
                WHERE av.entity_id = $1 AND a.entity_id = $1 AND a.value_type = 'file'
                ORDER BY a.position, av.context_id, r.position"#,
@@ -449,19 +452,22 @@ impl CatalogRepository {
         .fetch_all(&self.pool)
         .await?;
         for row in file_rows {
-            let metadata = self.file_metadata(row.file_id).await?;
+            let metadata = match row.file_id {
+                Some(id) => vec![self.file_metadata(id).await?],
+                None => vec![],
+            };
             match values.last_mut() {
                 Some(FormAttributeValue::File {
                     attribute_code,
                     context_id,
                     files,
                 }) if *attribute_code == row.attribute_code && *context_id == row.context_id => {
-                    files.push(metadata)
+                    files.extend(metadata)
                 }
                 _ => values.push(FormAttributeValue::File {
                     attribute_code: row.attribute_code,
                     context_id: row.context_id,
-                    files: vec![metadata],
+                    files: metadata,
                 }),
             }
         }
@@ -678,6 +684,16 @@ impl CatalogRepository {
         entity_id: Uuid,
         history_id: Uuid,
     ) -> Result<AttributeValue, RepositoryError> {
+        self.restore_value_checked(entity_id, history_id, None)
+            .await
+    }
+
+    pub async fn restore_value_checked(
+        &self,
+        entity_id: Uuid,
+        history_id: Uuid,
+        expected_updated_at: Option<DateTime<Utc>>,
+    ) -> Result<AttributeValue, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
         self.lock_relationship_cardinality_writes(&mut transaction)
             .await?;
@@ -701,6 +717,20 @@ impl CatalogRepository {
         .await?
         .ok_or(RepositoryError::NotFound("attribute value history"))?;
 
+        let selector = NewAttributeValue::Scalar {
+            attribute_id: Some(history.attribute_id),
+            attribute_code: None,
+            context_id: history.context_id,
+            value: Value::Null,
+        };
+        if expected_updated_at.is_some()
+            || self
+                .has_status_writes(&mut transaction, &entity, &[selector], &[])
+                .await?
+        {
+            self.check_status_precondition(&mut transaction, &entity, expected_updated_at)
+                .await?;
+        }
         let value = match history.relationship_target_entity_id {
             Some(target_entity_id) if history.active => {
                 self.insert_value(

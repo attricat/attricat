@@ -132,6 +132,38 @@ field = "price"
 Every referenced field must be an effective attribute. `field` accepts scalar
 attributes; `relationship_list` accepts relationships only.
 
+## URL fields
+
+URLs remain string attributes. Opt in with `catalog.url_display@1` on a detail
+field or table column and `catalog.url_edit@1` on an edit field:
+
+```toml
+[[views.detail.children]]
+type = "field"
+field = "website"
+component = { id = "catalog.url_display", version = 1 }
+
+[[views.edit.children]]
+type = "field"
+field = "website"
+component = { id = "catalog.url_edit", version = 1 }
+
+[[views.table.columns]]
+field = "website"
+renderer = { id = "catalog.url_display", version = 1 }
+```
+
+These components accept string values and no props. Links open in a new tab
+without opener access or a referrer. Only absolute HTTP/HTTPS URLs without
+whitespace, control characters, backslashes or embedded credentials are active;
+invalid persisted values remain plain text. No destination is fetched for a
+preview. Optional inputs can be cleared; typed URLs are not silently rewritten.
+
+The editor validates input, but selecting a component does not impose an API
+constraint. Use the existing attribute/entity JSON Schema contracts when data
+must also be constrained outside the web editor. Ordinary string fields keep
+their existing behavior.
+
 ## Entity Heading
 
 The preview heading reuses a normal `stack` with the
@@ -181,6 +213,52 @@ The Rust blueprint compiler reads
 component's version, props, placement, value type, and required `display` or
 `edit` capability. Keep this contract synchronized with the TypeScript
 definition. `registry.test.ts` verifies that their metadata is identical.
+
+### Colors
+
+Colors remain string attributes. Opt in per view with `catalog.color_display@1`
+for detail fields or table columns and `catalog.color_edit@1` for edit fields.
+Both accept only string attributes and have no props:
+
+```toml
+[views.detail]
+type = "stack"
+children = [{ type = "field", field = "hex", component = { id = "catalog.color_display", version = 1 } }]
+
+[views.edit]
+type = "stack"
+children = [{ type = "field", field = "hex", component = { id = "catalog.color_edit", version = 1 } }]
+
+[views.table]
+type = "table"
+columns = [{ field = "hex", renderer = { id = "catalog.color_display", version = 1 } }]
+```
+
+The editor accepts opaque, six-digit hex (`#RRGGBB`, case-insensitive) through
+text or a native color picker. Clear the text to unset an optional value.
+Shorthand, alpha, named colors, and CSS expressions are not supported. The
+read-only renderer shows a swatch alongside the stored text; invalid legacy
+values remain visible as text without a swatch. Neither component changes
+unconfigured string fields or enforces color syntax on API/CLI writes. For
+API-wide enforcement, add an appropriate pattern to the existing blueprint
+`entity_schema` (and `required` if the value must be present).
+
+### Email fields
+
+Use `catalog.email_display` version 1 for a string field in a detail view or
+as a table column's `renderer`; use `catalog.email_edit` version 1 for a field
+in an edit view. Neither component accepts props. Store the address as a string,
+not a `mailto:` URL, and set the attribute's
+`value_schema = '{"type":"string","format":"email"}'` to validate API writes too.
+Choosing an input component alone does not impose a server-side data constraint.
+
+The input supports a single ASCII dot-atom address (including plus tags),
+preserves case, and uses the normal form trimming, required-field, context and
+draft behavior. Internationalized addresses, quoted local parts, display names
+and recipient lists are not supported by this control. JSON Schema email format
+validation on the server may accept a broader set of addresses. Unsupported or
+malformed stored values remain visible as plain text; supported values link to
+the user's mail client. The component never sends mail or checks deliverability.
 
 ### Phone numbers
 

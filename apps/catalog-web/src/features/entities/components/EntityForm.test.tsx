@@ -79,11 +79,322 @@ const draftProps = (contextId: string) => ({
 const titleBox = () =>
   screen.getByRole('textbox', { hidden: true, name: 'title' });
 
+it('selects URL editors, blocks invalid programmatic values, saves and clears URLs', async () => {
+  const definition = blueprint([attribute('website')]);
+  definition.blueprint.views.edit = {
+    type: 'stack',
+    children: [
+      {
+        type: 'field',
+        field: 'website',
+        component: { id: 'catalog.url_edit', version: 1, props: {} },
+      },
+    ],
+  };
+  const { onSubmit, ref } = renderForm({ blueprint: definition });
+  const input = screen.getByRole('textbox', { name: 'website' });
+  expect(input.getAttribute('type')).toBe('url');
+  fireEvent.change(input, { target: { value: 'javascript:alert(1)' } });
+  fireEvent.submit(input.closest('form')!);
+  await waitFor(() => expect(input.getAttribute('aria-invalid')).toBe('true'));
+  expect(onSubmit).not.toHaveBeenCalled();
+  fireEvent.change(input, { target: { value: 'https://example.com/a?b=1' } });
+  fireEvent.submit(input.closest('form')!);
+  await waitFor(() =>
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        values: [
+          expect.objectContaining({ value: 'https://example.com/a?b=1' }),
+        ],
+      }),
+    ),
+  );
+  expect(ref.current?.getDraftValues().website).toBe(
+    'https://example.com/a?b=1',
+  );
+  onSubmit.mockClear();
+  fireEvent.change(input, { target: { value: '' } });
+  fireEvent.submit(input.closest('form')!);
+  await waitFor(() =>
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ values: [] }),
+    ),
+  );
+});
+
 afterEach(() => {
   sessionStorage.clear();
 });
 
 describe('EntityForm', () => {
+  const emailBlueprint = (overrides: Partial<Attribute> = {}) => {
+    const result = blueprint([attribute('contact', overrides)]);
+    result.blueprint.views.edit = {
+      type: 'stack',
+      children: [
+        {
+          type: 'field',
+          field: 'contact',
+          component: { id: 'catalog.email_edit', version: 1, props: {} },
+        },
+      ],
+    };
+    return result;
+  };
+
+  it('validates configured email input and preserves case and plus tags on save', async () => {
+    const { onSubmit } = renderForm({ blueprint: emailBlueprint() });
+    const input = screen.getByRole('textbox', { name: 'contact' });
+    expect(input.getAttribute('type')).toBe('email');
+    fireEvent.change(input, { target: { value: 'not an email' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(screen.getByText(/single email address/)).toBeTruthy(),
+    );
+    expect(onSubmit).not.toHaveBeenCalled();
+    fireEvent.change(input, { target: { value: 'Name+tag@Example.com' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledOnce());
+    expect(JSON.stringify(onSubmit.mock.calls[0])).toContain(
+      'Name+tag@Example.com',
+    );
+  });
+
+  it('rejects required empty email', async () => {
+    const { onSubmit } = renderForm({
+      blueprint: emailBlueprint(),
+      requiredAttributes: ['contact'],
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(screen.getByRole('textbox')).toHaveProperty('required', true);
+    expect(
+      await screen.findByText('A value is required for the target schema.'),
+    ).toBeTruthy();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { readonly: true },
+    { context_editable: 'default' as const },
+    { extension_type: { available: false } },
+  ])('disables restricted email attributes: %j', async (overrides) => {
+    const { onSubmit } = renderForm({
+      blueprint: emailBlueprint(overrides as Partial<Attribute>),
+      contextId: marketContextId,
+    });
+    const input = screen.getByRole('textbox', { name: 'contact' });
+    expect(input).toHaveProperty('disabled', true);
+    fireEvent.change(input, { target: { value: 'changed@example.test' } });
+    expect(input).toHaveProperty('value', '');
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('restores an email draft only on request and validates it', async () => {
+    writeDraft(draftKey(marketContextId), {
+      savedAt: new Date().toISOString(),
+      source: null,
+      value: { contact: 'invalid draft' },
+    });
+    const { onSubmit } = renderForm({
+      ...draftProps(marketContextId),
+      blueprint: emailBlueprint(),
+      initialValues: { contact: 'saved@example.test' },
+    });
+    await screen.findByRole('dialog', { name: 'Restore unsaved draft?' });
+    expect(
+      screen.getByRole('textbox', { hidden: true, name: 'contact' }),
+    ).toHaveProperty('value', 'saved@example.test');
+    fireEvent.click(screen.getByRole('button', { name: 'Restore draft' }));
+    expect(
+      await screen.findByRole('textbox', { name: 'contact' }),
+    ).toHaveProperty('value', 'invalid draft');
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText(/single email address/)).toBeTruthy();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  const colorBlueprint = (overrides: Partial<Attribute> = {}) => {
+    const result = blueprint([attribute('hex', overrides)]);
+    result.blueprint.views.edit = {
+      type: 'tabs',
+      tabs: [
+        {
+          label: 'Color',
+          children: [
+            {
+              type: 'section',
+              children: [
+                {
+                  type: 'field',
+                  field: 'hex',
+                  component: {
+                    id: 'catalog.color_edit',
+                    version: 1,
+                    props: {},
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    return result;
+  };
+
+  it.each([false, true])(
+    'validates and saves configured colors with showAll=%s',
+    async (showAllAttributes) => {
+      const { onSubmit } = renderForm({
+        blueprint: colorBlueprint(),
+        showAllAttributes,
+      });
+      const text = screen.getByRole('textbox', { name: 'hex' });
+      fireEvent.change(text, { target: { value: '#fff' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() =>
+        expect(screen.getByText(/Enter a six-digit/)).toBeTruthy(),
+      );
+      expect(onSubmit).not.toHaveBeenCalled();
+      fireEvent.change(text, { target: { value: '#aBcDeF' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() =>
+        expect(onSubmit).toHaveBeenCalledWith(
+          expect.objectContaining({
+            values: [
+              expect.objectContaining({
+                attribute_code: 'hex',
+                value: '#aBcDeF',
+              }),
+            ],
+          }),
+        ),
+      );
+    },
+  );
+
+  it.each([{ readonly: true }, { context_editable: 'default' as const }])(
+    'does not mutate restricted colors: %j',
+    async (overrides) => {
+      const { onSubmit } = renderForm({
+        blueprint: colorBlueprint(overrides),
+        contextId: marketContextId,
+      });
+      const input = screen.getByRole('textbox', { name: 'hex' });
+      expect(input).toHaveProperty('disabled', true);
+      expect(screen.getByLabelText('Pick color for hex')).toHaveProperty(
+        'disabled',
+        true,
+      );
+      fireEvent.change(input, { target: { value: '#ffffff' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() =>
+        expect(onSubmit).toHaveBeenCalledWith(
+          expect.objectContaining({ values: [] }),
+        ),
+      );
+    },
+  );
+
+  it('rejects clearing required colors', async () => {
+    const { onSubmit } = renderForm({
+      blueprint: colorBlueprint(),
+      requiredAttributes: ['hex'],
+      initialValues: { hex: '#ffffff' },
+    });
+    fireEvent.change(screen.getByRole('textbox', { name: 'hex' }), {
+      target: { value: '' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(
+        screen
+          .getByRole('textbox', { name: 'hex' })
+          .getAttribute('aria-invalid'),
+      ).toBe('true'),
+    );
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('clears an optional local color through the existing removal path', async () => {
+    const { onSubmit } = renderForm({
+      blueprint: colorBlueprint(),
+      contextId: marketContextId,
+      initialValues: { hex: '#ffffff' },
+      existingValues: [
+        {
+          kind: 'scalar',
+          attribute_code: 'hex',
+          value: '#ffffff',
+          context_id: marketContextId,
+        },
+      ],
+    });
+    fireEvent.change(screen.getByRole('textbox', { name: 'hex' }), {
+      target: { value: '' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          values: [],
+          remove_values: [
+            { attribute_code: 'hex', context_id: marketContextId },
+          ],
+        }),
+      ),
+    );
+  });
+
+  it('restores color drafts and keeps inherited context feedback', async () => {
+    writeDraft(draftKey(marketContextId), {
+      savedAt: new Date().toISOString(),
+      source: JSON.stringify(['1', JSON.stringify({ hex: '' })]),
+      value: { hex: '#aBcDeF' },
+    });
+    renderForm({
+      blueprint: colorBlueprint(),
+      ...draftProps(marketContextId),
+      initialValues: { hex: '' },
+      resolvedValues: {
+        hex: {
+          value: '#ffffff',
+          source_context: { id: 'default', code: 'default' },
+        },
+      },
+    });
+    await screen.findByRole('dialog', { name: 'Restore unsaved draft?' });
+    expect(
+      screen.getByRole('textbox', { name: 'hex', hidden: true }),
+    ).toHaveProperty('value', '');
+    fireEvent.click(screen.getByRole('button', { name: 'Restore draft' }));
+    expect(await screen.findByRole('textbox', { name: 'hex' })).toHaveProperty(
+      'value',
+      '#aBcDeF',
+    );
+    expect(screen.getByLabelText('Pick color for hex')).toHaveProperty(
+      'value',
+      '#abcdef',
+    );
+    expect(screen.getByText(/Inherited.*#ffffff/)).toBeTruthy();
+  });
+
+  it('does not interpret ordinary strings as configured colors', async () => {
+    const { onSubmit } = renderForm({
+      blueprint: blueprint([attribute('hex')]),
+      initialValues: { hex: 'red' },
+    });
+    expect(screen.queryByLabelText('Pick color for hex')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          values: [expect.objectContaining({ value: 'red' })],
+        }),
+      ),
+    );
+  });
+
   it('offers a context draft and applies it only when restored', async () => {
     writeDraft(draftKey(marketContextId), {
       savedAt: new Date().toISOString(),

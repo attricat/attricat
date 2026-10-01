@@ -147,6 +147,21 @@ fn parse_definition(
             "invalid context policy or blank name".to_owned(),
         ));
     }
+    if let Some(schema) = toml_value_to_json(definition.value_schema.clone())? {
+        catalog_validation::validate_json_schema_definition(&schema)
+            .map_err(RepositoryError::InvalidReusableAttributeDefinition)?;
+        if let Some(default) = toml_value_to_json(definition.default_value.clone())? {
+            catalog_validation::status::validate_status_transition(&schema, &Value::Null, &default)
+                .map_err(RepositoryError::InvalidReusableAttributeDefinition)?;
+        }
+        if schema.get(catalog_validation::status::STATUS_KEY).is_some()
+            && definition.value_type != "string"
+        {
+            return Err(RepositoryError::InvalidReusableAttributeDefinition(
+                "status is only supported on string attributes".into(),
+            ));
+        }
+    }
     Ok(definition)
 }
 
@@ -492,6 +507,9 @@ impl CatalogRepository {
             )
             .await?;
         }
+        self.validate_status_values(transaction, entity).await?;
+        let preview = Self::build_preview_projection(transaction, entity.id).await?;
+        self.store_preview(transaction, entity.id, preview).await?;
         Ok(attachment_id)
     }
 
