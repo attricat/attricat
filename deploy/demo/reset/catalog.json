@@ -1,0 +1,481 @@
+{
+  "format_version": 1,
+  "name": "Hand tools demo",
+  "notes": "Real manufacturer part numbers and nominal lengths from the linked official product-family listings. Descriptions are original summaries. No affiliation, copied marketing text, images, prices, or inventory claims. Runtime resets never fetch these sources.",
+  "product_blueprint": "tool_product",
+  "context": "default",
+  "publication_channels": ["default"],
+  "blueprints": [
+    {
+      "code": "tool_manufacturer",
+      "name": "Manufacturer",
+      "attributes": [
+        {
+          "code": "name",
+          "value_type": "string",
+          "tags": ["display", "searchable"]
+        },
+        {
+          "code": "website",
+          "value_type": "string"
+        }
+      ],
+      "table_columns": [
+        {
+          "field": "name",
+          "label": "Manufacturer"
+        }
+      ]
+    },
+    {
+      "code": "tool_category",
+      "name": "Tool category",
+      "attributes": [
+        {
+          "code": "name",
+          "value_type": "string",
+          "tags": ["display", "searchable"]
+        },
+        {
+          "code": "description",
+          "value_type": "string"
+        }
+      ],
+      "table_columns": [
+        {
+          "field": "name",
+          "label": "Category"
+        }
+      ]
+    },
+    {
+      "code": "tool_product",
+      "name": "Hand tool",
+      "attributes": [
+        {
+          "code": "name",
+          "value_type": "string",
+          "tags": ["display", "searchable"]
+        },
+        {
+          "code": "part_number",
+          "value_type": "string",
+          "tags": ["searchable"]
+        },
+        {
+          "code": "description",
+          "value_type": "string"
+        },
+        {
+          "code": "length_mm",
+          "value_type": "number"
+        },
+        {
+          "code": "source_url",
+          "value_type": "string"
+        },
+        {
+          "code": "manufacturer",
+          "value_type": "relationship",
+          "target_blueprint": "tool_manufacturer",
+          "cardinality": "one"
+        },
+        {
+          "code": "category",
+          "value_type": "relationship",
+          "target_blueprint": "tool_category",
+          "cardinality": "one"
+        }
+      ],
+      "table_columns": [
+        {
+          "field": "name",
+          "label": "Product"
+        },
+        {
+          "field": "part_number",
+          "label": "Part number"
+        },
+        {
+          "field": "length_mm",
+          "label": "Length (mm)"
+        },
+        {
+          "field": "manufacturer.name",
+          "label": "Manufacturer"
+        },
+        {
+          "field": "category.name",
+          "label": "Category"
+        }
+      ]
+    }
+  ],
+  "navigation": [
+    {
+      "blueprint_code": "tool_product"
+    },
+    {
+      "blueprint_code": "tool_category"
+    },
+    {
+      "blueprint_code": "tool_manufacturer"
+    }
+  ],
+  "records": [
+    {
+      "key": "knipex",
+      "blueprint": "tool_manufacturer",
+      "values": {
+        "name": "KNIPEX",
+        "website": "https://www.knipex.com"
+      },
+      "relationships": {}
+    },
+    {
+      "key": "cobra",
+      "blueprint": "tool_category",
+      "values": {
+        "name": "Water pump pliers",
+        "description": "Adjustable water pump pliers with push-button adjustment."
+      },
+      "relationships": {}
+    },
+    {
+      "key": "knipex_8701125",
+      "blueprint": "tool_product",
+      "values": {
+        "name": "KNIPEX Cobra water pump pliers, 125 mm",
+        "part_number": "87 01 125",
+        "description": "Adjustable water pump pliers with push-button adjustment.",
+        "length_mm": 125,
+        "source_url": "https://www.knipex.com/products/pipe-wrenches-and-water-pump-pliers/knipex-cobra-high-tech-water-pump-pliers/knipex-cobra-high-tech-water-pump-pliers/8701150"
+      },
+      "relationships": {
+        "manufacturer": ["knipex"],
+        "category": ["cobra"]
+      }
+    },
+    {
+      "key": "knipex_8701150",
+      "blueprint": "tool_product",
+      "values": {
+        "name": "KNIPEX Cobra water pump pliers, 150 mm",
+        "part_number": "87 01 150",
+        "description": "Adjustable water pump pliers with push-button adjustment.",
+        "length_mm": 150,
+        "source_url": "https://www.knipex.com/products/pipe-wrenches-and-water-pump-pliers/knipex-cobra-high-tech-water-pump-pliers/knipex-cobra-high-tech-water-pump-pliers/8701150"
+      },
+      "relationships": {
+        "manufacturer": ["knipex"],
+        "category": ["cobra"]
+      }
+    },
+    {
+      "key": "knipex_8701180",
+      "blueprint": "tool_product",
+      "values": {
+        "name": "KNIPEX Cobra water pump pliers, 180 mm",
+        "part_number": "87 01 180",
+        "description": "Adjustable water pump pliers with push-button adjustment.",
+        "length_mm": 180,
+        "source_url": "https://www.knipex.com/products/pipe-wrenches-and-water-pump-pliers/knipex-cobra-high-tech-water-pump-pliers/knipex-cobra-high-tech-water-pump-pliers/8701150"
+      },
+      "relationships": {
+        "manufacturer": ["knipex"],
+        "category": ["cobra"]
+      }
+    },
+    {
+      "key": "knipex_8701250",
+      "blueprint": "tool_product",
+      "values": {
+        "name": "KNIPEX Cobra water pump pliers, 250 mm",
+        "part_number": "87 01 250",
+        "description": "Adjustable water pump pliers with push-button adjustment.",
+        "length_mm": 250,
+        "source_url": "https://www.knipex.com/products/pipe-wrenches-and-water-pump-pliers/knipex-cobra-high-tech-water-pump-pliers/knipex-cobra-high-tech-water-pump-pliers/8701150"
+      },
+      "relationships": {
+        "manufacturer": ["knipex"],
+        "category": ["cobra"]
+      }
+    },
+    {
+      "key": "knipex_8701300",
+      "blueprint": "tool_product",
+      "values": {
+        "name": "KNIPEX Cobra water pump pliers, 300 mm",
+        "part_number": "87 01 300",
+        "description": "Adjustable water pump pliers with push-button adjustment.",
+        "length_mm": 300,
+        "source_url": "https://www.knipex.com/products/pipe-wrenches-and-water-pump-pliers/knipex-cobra-high-tech-water-pump-pliers/knipex-cobra-high-tech-water-pump-pliers/8701150"
+      },
+      "relationships": {
+        "manufacturer": ["knipex"],
+        "category": ["cobra"]
+      }
+    },
+    {
+      "key": "pliers_wrench",
+      "blueprint": "tool_category",
+      "values": {
+        "name": "Pliers wrenches",
+        "description": "Adjustable pliers wrench with smooth jaws."
+      },
+      "relationships": {}
+    },
+    {
+      "key": "knipex_8603125",
+      "blueprint": "tool_product",
+      "values": {
+        "name": "KNIPEX Pliers wrench, 125 mm",
+        "part_number": "86 03 125",
+        "description": "Adjustable pliers wrench with smooth jaws.",
+        "length_mm": 125,
+        "source_url": "https://www.knipex.com/products/pliers-wrenches-pliers-and-a-wrench-in-a-single-tool/chrome-plated-und-zinc-plated?v=185367"
+      },
+      "relationships": {
+        "manufacturer": ["knipex"],
+        "category": ["pliers_wrench"]
+      }
+    },
+    {
+      "key": "knipex_8603150",
+      "blueprint": "tool_product",
+      "values": {
+        "name": "KNIPEX Pliers wrench, 150 mm",
+        "part_number": "86 03 150",
+        "description": "Adjustable pliers wrench with smooth jaws.",
+        "length_mm": 150,
+        "source_url": "https://www.knipex.com/products/pliers-wrenches-pliers-and-a-wrench-in-a-single-tool/chrome-plated-und-zinc-plated?v=185367"
+      },
+      "relationships": {
+        "manufacturer": ["knipex"],
+        "category": ["pliers_wrench"]
+      }
+    },
+    {
+      "key": "knipex_8603180",
+      "blueprint": "tool_product",
+      "values": {
+        "name": "KNIPEX Pliers wrench, 180 mm",
+        "part_number": "86 03 180",
+        "description": "Adjustable pliers wrench with smooth jaws.",
+        "length_mm": 180,
+        "source_url": "https://www.knipex.com/products/pliers-wrenches-pliers-and-a-wrench-in-a-single-tool/chrome-plated-und-zinc-plated?v=185367"
+      },
+      "relationships": {
+        "manufacturer": ["knipex"],
+        "category": ["pliers_wrench"]
+      }
+    },
+    {
+      "key": "knipex_8603250",
+      "blueprint": "tool_product",
+      "values": {
+        "name": "KNIPEX Pliers wrench, 250 mm",
+        "part_number": "86 03 250",
+        "description": "Adjustable pliers wrench with smooth jaws.",
+        "length_mm": 250,
+        "source_url": "https://www.knipex.com/products/pliers-wrenches-pliers-and-a-wrench-in-a-single-tool/chrome-plated-und-zinc-plated?v=185367"
+      },
+      "relationships": {
+        "manufacturer": ["knipex"],
+        "category": ["pliers_wrench"]
+      }
+    },
+    {
+      "key": "knipex_8603300",
+      "blueprint": "tool_product",
+      "values": {
+        "name": "KNIPEX Pliers wrench, 300 mm",
+        "part_number": "86 03 300",
+        "description": "Adjustable pliers wrench with smooth jaws.",
+        "length_mm": 300,
+        "source_url": "https://www.knipex.com/products/pliers-wrenches-pliers-and-a-wrench-in-a-single-tool/chrome-plated-und-zinc-plated?v=185367"
+      },
+      "relationships": {
+        "manufacturer": ["knipex"],
+        "category": ["pliers_wrench"]
+      }
+    },
+    {
+      "key": "diagonal",
+      "blueprint": "tool_category",
+      "values": {
+        "name": "Diagonal cutters",
+        "description": "Diagonal cutting pliers with comfort handles."
+      },
+      "relationships": {}
+    },
+    {
+      "key": "knipex_7002125",
+      "blueprint": "tool_product",
+      "values": {
+        "name": "KNIPEX Diagonal cutters, 125 mm",
+        "part_number": "70 02 125",
+        "description": "Diagonal cutting pliers with comfort handles.",
+        "length_mm": 125,
+        "source_url": "https://www.knipex.com/products/diagonal-cutters"
+      },
+      "relationships": {
+        "manufacturer": ["knipex"],
+        "category": ["diagonal"]
+      }
+    },
+    {
+      "key": "knipex_7002140",
+      "blueprint": "tool_product",
+      "values": {
+        "name": "KNIPEX Diagonal cutters, 140 mm",
+        "part_number": "70 02 140",
+        "description": "Diagonal cutting pliers with comfort handles.",
+        "length_mm": 140,
+        "source_url": "https://www.knipex.com/products/diagonal-cutters"
+      },
+      "relationships": {
+        "manufacturer": ["knipex"],
+        "category": ["diagonal"]
+      }
+    },
+    {
+      "key": "knipex_7002160",
+      "blueprint": "tool_product",
+      "values": {
+        "name": "KNIPEX Diagonal cutters, 160 mm",
+        "part_number": "70 02 160",
+        "description": "Diagonal cutting pliers with comfort handles.",
+        "length_mm": 160,
+        "source_url": "https://www.knipex.com/products/diagonal-cutters"
+      },
+      "relationships": {
+        "manufacturer": ["knipex"],
+        "category": ["diagonal"]
+      }
+    },
+    {
+      "key": "knipex_7002180",
+      "blueprint": "tool_product",
+      "values": {
+        "name": "KNIPEX Diagonal cutters, 180 mm",
+        "part_number": "70 02 180",
+        "description": "Diagonal cutting pliers with comfort handles.",
+        "length_mm": 180,
+        "source_url": "https://www.knipex.com/products/diagonal-cutters"
+      },
+      "relationships": {
+        "manufacturer": ["knipex"],
+        "category": ["diagonal"]
+      }
+    },
+    {
+      "key": "combination",
+      "blueprint": "tool_category",
+      "values": {
+        "name": "Combination pliers",
+        "description": "Combination gripping and cutting pliers with comfort handles."
+      },
+      "relationships": {}
+    },
+    {
+      "key": "knipex_0302160",
+      "blueprint": "tool_product",
+      "values": {
+        "name": "KNIPEX Combination pliers, 160 mm",
+        "part_number": "03 02 160",
+        "description": "Combination gripping and cutting pliers with comfort handles.",
+        "length_mm": 160,
+        "source_url": "https://www.knipex.com/products/combination-and-multifunctional-pliers"
+      },
+      "relationships": {
+        "manufacturer": ["knipex"],
+        "category": ["combination"]
+      }
+    },
+    {
+      "key": "knipex_0302180",
+      "blueprint": "tool_product",
+      "values": {
+        "name": "KNIPEX Combination pliers, 180 mm",
+        "part_number": "03 02 180",
+        "description": "Combination gripping and cutting pliers with comfort handles.",
+        "length_mm": 180,
+        "source_url": "https://www.knipex.com/products/combination-and-multifunctional-pliers"
+      },
+      "relationships": {
+        "manufacturer": ["knipex"],
+        "category": ["combination"]
+      }
+    },
+    {
+      "key": "knipex_0302200",
+      "blueprint": "tool_product",
+      "values": {
+        "name": "KNIPEX Combination pliers, 200 mm",
+        "part_number": "03 02 200",
+        "description": "Combination gripping and cutting pliers with comfort handles.",
+        "length_mm": 200,
+        "source_url": "https://www.knipex.com/products/combination-and-multifunctional-pliers"
+      },
+      "relationships": {
+        "manufacturer": ["knipex"],
+        "category": ["combination"]
+      }
+    },
+    {
+      "key": "high_leverage",
+      "blueprint": "tool_category",
+      "values": {
+        "name": "High-leverage cutters",
+        "description": "High-leverage diagonal cutting pliers with comfort handles."
+      },
+      "relationships": {}
+    },
+    {
+      "key": "knipex_7402160",
+      "blueprint": "tool_product",
+      "values": {
+        "name": "KNIPEX High-leverage diagonal cutters, 160 mm",
+        "part_number": "74 02 160",
+        "description": "High-leverage diagonal cutting pliers with comfort handles.",
+        "length_mm": 160,
+        "source_url": "https://www.knipex.com/products/cutting-pliers/high-leverage-diagonal-cutters"
+      },
+      "relationships": {
+        "manufacturer": ["knipex"],
+        "category": ["high_leverage"]
+      }
+    },
+    {
+      "key": "knipex_7402180",
+      "blueprint": "tool_product",
+      "values": {
+        "name": "KNIPEX High-leverage diagonal cutters, 180 mm",
+        "part_number": "74 02 180",
+        "description": "High-leverage diagonal cutting pliers with comfort handles.",
+        "length_mm": 180,
+        "source_url": "https://www.knipex.com/products/cutting-pliers/high-leverage-diagonal-cutters"
+      },
+      "relationships": {
+        "manufacturer": ["knipex"],
+        "category": ["high_leverage"]
+      }
+    },
+    {
+      "key": "knipex_7402200",
+      "blueprint": "tool_product",
+      "values": {
+        "name": "KNIPEX High-leverage diagonal cutters, 200 mm",
+        "part_number": "74 02 200",
+        "description": "High-leverage diagonal cutting pliers with comfort handles.",
+        "length_mm": 200,
+        "source_url": "https://www.knipex.com/products/cutting-pliers/high-leverage-diagonal-cutters"
+      },
+      "relationships": {
+        "manufacturer": ["knipex"],
+        "category": ["high_leverage"]
+      }
+    }
+  ]
+}
