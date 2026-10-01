@@ -38,6 +38,7 @@ mod bootstrap;
 mod contexts;
 mod domain_events;
 mod entity_commands;
+mod entity_comments;
 mod entity_migration;
 mod entity_projection;
 mod entity_publications;
@@ -69,6 +70,7 @@ mod workflow_runs;
 mod workflows;
 mod workspace_navigation;
 
+pub use entity_comments::{COMMENT_PAGE_SIZE, EntityComment};
 pub use saved_views::SavedView;
 
 pub use agents::{
@@ -233,6 +235,10 @@ impl FromStr for ValueHistoryRetentionDays {
 
 #[derive(Debug, Error)]
 pub enum RepositoryError {
+    #[error("comment must contain 1 to 10000 characters and no null characters")]
+    InvalidComment,
+    #[error("comment changed; reload before saving again")]
+    CommentConflict,
     #[error("{0} was not found")]
     NotFound(&'static str),
     #[error("CATALOG_WORKSPACE_ID does not identify an active workspace")]
