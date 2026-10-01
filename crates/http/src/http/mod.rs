@@ -6,6 +6,7 @@ mod blueprints;
 mod contexts;
 mod data_health;
 mod entities;
+mod entity_comments;
 mod entity_reads;
 mod error;
 mod event_deliveries;
@@ -875,11 +876,23 @@ pub fn router(state: AppState) -> Router {
             "/entities/{entity_id}/file-attributes/{attribute_code}/uploads",
             post(files::upload).layer(axum::extract::DefaultBodyLimit::disable()),
         )
+        .route(
+            "/entities/{entity_id}/file-attributes/{attribute_code}/references",
+            put(files::update_references),
+        )
         .route("/files/{file_id}", get(files::metadata))
         .route("/files/{file_id}/download", get(files::download_original))
         .route(
             "/files/{file_id}/variants/{kind}/download",
             get(files::download_variant),
+        )
+        .route(
+            "/v1/entities/{entity_id}/comments",
+            get(entity_comments::list).post(entity_comments::create),
+        )
+        .route(
+            "/v1/entities/{entity_id}/comments/{comment_id}",
+            axum::routing::patch(entity_comments::update),
         )
         .route("/entities", get(entity_reads::list_previews))
         .route(

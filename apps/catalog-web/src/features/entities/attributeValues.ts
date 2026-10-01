@@ -57,12 +57,13 @@ export const valueForField = (
 export const scalarValueForField = (
   attribute: Attribute,
   fieldValue: string,
+  preserveWhitespace = false,
 ):
   | Extract<NewAttributeValue, { kind: typeof attributeValueKinds.scalar }>
   | undefined => {
   if (!fieldValue.trim()) return undefined;
   const value =
-    attribute.value_type === attributeValueTypes.string
+    preserveWhitespace && attribute.value_type === attributeValueTypes.string
       ? fieldValue
       : fieldValue.trim();
   if (

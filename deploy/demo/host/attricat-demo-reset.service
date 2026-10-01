@@ -1,0 +1,15 @@
+[Unit]
+Description=Restore the shared Attricat demo catalog
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/attricat-demo
+EnvironmentFile=-/etc/attricat-demo-reset.env
+ExecStart=/opt/attricat-demo/reset.sh
+TimeoutStartSec=20min
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=attricat-demo-reset

@@ -1,16 +1,36 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  fireEvent,
+  render as testingRender,
+  screen,
+  waitFor,
+} from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import type { Attribute } from '../entities/api';
-import { uploadFiles } from './api';
+import { uploadFiles, updateFileReferences, getFileMetadata } from './api';
 import { FileAttributeEditor } from './FileAttributeEditor';
 import type { FileMetadata } from './schemas';
 
 vi.mock('./api', () => ({
   uploadFiles: vi.fn(),
+  updateFileReferences: vi.fn(),
+  getFileMetadata: vi.fn().mockRejectedValue(new Error('Unavailable')),
   fileDownloadUrl: (id: string) => `/files/${id}`,
 }));
+
+const render = (ui: ReactElement) => {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return testingRender(ui, {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    ),
+  });
+};
 
 const attribute = {
   code: 'document',
@@ -39,6 +59,8 @@ const renderEditor = (files: FileMetadata[] = [], id?: string) =>
 
 beforeEach(() => {
   vi.mocked(uploadFiles).mockReset();
+  vi.mocked(updateFileReferences).mockReset();
+  vi.mocked(getFileMetadata).mockRejectedValue(new Error('Unavailable'));
 });
 
 describe('FileAttributeEditor', () => {
@@ -150,5 +172,116 @@ describe('FileAttributeEditor', () => {
       />,
     );
     expect(screen.getByText('server.txt')).toBeTruthy();
+  });
+
+  it('rejects unsafe images and removes queued previews without uploading', () => {
+    URL.createObjectURL = vi.fn().mockReturnValue('blob:queued');
+    URL.revokeObjectURL = vi.fn();
+    const imageAttribute = {
+      ...attribute,
+      file_policy: { ...attribute.file_policy!, image_only: true },
+    };
+    const view = render(
+      <FileAttributeEditor
+        attribute={imageAttribute}
+        contextId={null}
+        disabled={false}
+        entityId={entityId}
+        files={[]}
+      />,
+    );
+    fireEvent.change(view.container.querySelector('input[type="file"]')!, {
+      target: {
+        files: [
+          new File(['png'], 'photo.png', { type: 'image/png' }),
+          new File(['svg'], 'unsafe.svg', { type: 'image/svg+xml' }),
+        ],
+      },
+    });
+    expect(screen.getByRole('alert').textContent).toContain(
+      'unsafe.svg was not added',
+    );
+    expect(URL.createObjectURL).toHaveBeenCalledOnce();
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Remove photo.png from upload queue',
+      }),
+    );
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:queued');
+    expect(screen.queryByRole('button', { name: /Upload 1/ })).toBeNull();
+    expect(uploadFiles).not.toHaveBeenCalled();
+  });
+
+  it('blocks drop, retry and queued removal when disabled after an upload error', async () => {
+    vi.mocked(uploadFiles).mockRejectedValue(new Error('Upload denied'));
+    const view = renderEditor([], entityId);
+    fireEvent.change(view.container.querySelector('input[type="file"]')!, {
+      target: { files: [file] },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Upload 1/ }));
+    expect(await screen.findByText('Upload denied')).toBeTruthy();
+    view.rerender(
+      <FileAttributeEditor
+        attribute={attribute}
+        contextId={null}
+        disabled
+        entityId={entityId}
+        files={[]}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Retry document.txt' }));
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Remove document.txt from upload queue',
+      }),
+    );
+    fireEvent.drop(view.container.querySelector('.MuiBox-root')!, {
+      dataTransfer: { files: [new File(['x'], 'blocked.txt')] },
+    });
+    expect(screen.queryByText('blocked.txt')).toBeNull();
+    expect(screen.getByText('document.txt')).toBeTruthy();
+    expect(uploadFiles).toHaveBeenCalledOnce();
+  });
+
+  it('sends compare-and-swap references and keeps attachments on conflicts', async () => {
+    const images = [
+      { id: entityId, filename: 'a.png', status: 'ready' },
+      {
+        id: '123e4567-e89b-12d3-a456-426614174001',
+        filename: 'b.png',
+        status: 'ready',
+      },
+    ] as FileMetadata[];
+    vi.mocked(updateFileReferences).mockRejectedValue(
+      new Error('References changed; refresh'),
+    );
+    render(
+      <FileAttributeEditor
+        attribute={{
+          ...attribute,
+          file_policy: {
+            ...attribute.file_policy!,
+            ordered: true,
+            image_only: true,
+          },
+        }}
+        contextId={null}
+        disabled={false}
+        entityId={entityId}
+        files={images}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Move a.png later' }));
+    expect(await screen.findByText('References changed; refresh')).toBeTruthy();
+    expect(updateFileReferences).toHaveBeenCalledWith(entityId, 'document', {
+      context_id: null,
+      expected_file_ids: images.map((file) => file.id),
+      file_ids: [images[1].id, images[0].id],
+    });
+    expect(
+      screen
+        .getAllByRole('button', { name: /^Preview/ })
+        .map((button) => button.getAttribute('aria-label')),
+    ).toEqual(['Preview a.png', 'Preview b.png']);
   });
 });

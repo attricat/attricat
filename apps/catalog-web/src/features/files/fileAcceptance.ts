@@ -3,6 +3,7 @@ import {
   IMAGE_MIME_PREFIX,
   MIME_GROUP_WILDCARD_SUFFIX,
   PENDING_FILE_ID_PREFIX,
+  SUPPORTED_IMAGE_MIME_TYPES,
 } from './constants';
 
 type FilePolicy = NonNullable<Attribute['file_policy']>;
@@ -28,7 +29,8 @@ const normalizedExtension = (extension: string) =>
 export const acceptedFileTypes = (policy: FilePolicy) =>
   policy.allowed_extensions
     .map((value) => `.${value.replace(/^\./, '')}`)
-    .join(',') || undefined;
+    .join(',') ||
+  (policy.image_only ? [...SUPPORTED_IMAGE_MIME_TYPES].join(',') : undefined);
 
 /** Whether a file satisfies the attribute's file policy. */
 export const acceptsFile = (file: File, attribute: Attribute) => {
@@ -42,7 +44,9 @@ export const acceptsFile = (file: File, attribute: Attribute) => {
   );
   return (
     (!policy.max_bytes || file.size <= policy.max_bytes) &&
-    (!policy.image_only || file.type.startsWith(IMAGE_MIME_PREFIX)) &&
+    (!policy.image_only ||
+      (file.type.startsWith(IMAGE_MIME_PREFIX) &&
+        SUPPORTED_IMAGE_MIME_TYPES.has(file.type))) &&
     (!policy.allowed_extensions.length ||
       Boolean(
         extension &&

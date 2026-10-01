@@ -1,6 +1,8 @@
 import { Box, Tab, Tabs, TextField } from '@mui/material';
 import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { attributeLabel } from '../entities/entityDisplay';
+import type { ValueEditorProps } from '../views/components/componentTypes';
 import { MarkdownContent } from './MarkdownContent';
 
 export const MarkdownEditor = ({
@@ -70,3 +72,21 @@ export const MarkdownEditor = ({
     </Box>
   );
 };
+
+export const MarkdownAttributeEditor = ({
+  attribute,
+  value,
+  disabled,
+  error,
+  helperText,
+  onChange,
+}: ValueEditorProps) => (
+  <MarkdownEditor
+    label={attributeLabel(attribute)}
+    value={value}
+    disabled={disabled}
+    error={error}
+    helperText={helperText}
+    onChange={onChange}
+  />
+);

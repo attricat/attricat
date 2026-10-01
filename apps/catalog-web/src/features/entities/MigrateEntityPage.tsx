@@ -61,16 +61,19 @@ export const MigrateEntityPage = ({ entityId }: { entityId: string }) => {
     );
   const migrate = useMutation({
     mutationFn: ({
+      expected_updated_at,
       values,
       relationships,
       discardAttributes,
     }: {
+      expected_updated_at?: string;
       values: Parameters<typeof migrateEntity>[1]['values'];
       relationships: Parameters<typeof migrateEntity>[1]['relationships'];
       discardAttributes: string[];
     }) => {
       if (!preview.data) throw new Error(t('entities.loadMigrationFirst'));
       return migrateEntity(entityId, {
+        expected_updated_at,
         migration_id: preview.data.migration_id,
         expected_target_version: preview.data.target.blueprint.version,
         values,
@@ -118,6 +121,7 @@ export const MigrateEntityPage = ({ entityId }: { entityId: string }) => {
           />
           <EntityForm
             blueprint={preview.data.target}
+            expectedUpdatedAt={preview.data.source_updated_at}
             contextId={defaultContextId}
             defaultContextId={defaultContextId}
             error={migrate.error}
@@ -133,8 +137,9 @@ export const MigrateEntityPage = ({ entityId }: { entityId: string }) => {
               defaultContextId,
             )}
             isLoadingBlueprint={migrate.isPending}
-            onSubmit={({ values, relationships }) =>
+            onSubmit={({ values, relationships, expected_updated_at }) =>
               migrate.mutate({
+                expected_updated_at,
                 values,
                 relationships,
                 discardAttributes: [...discardAttributes],

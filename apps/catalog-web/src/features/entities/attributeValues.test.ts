@@ -5,11 +5,11 @@ describe('attribute values', () => {
   it('preserves Markdown whitespace in strings while treating blank input as unset', () => {
     const attribute = { code: 'description', value_type: 'string' as const };
     const source = '    indented code\n\nline  \nnext\n';
-    expect(scalarValueForField(attribute, source)?.value).toBe(source);
+    expect(scalarValueForField(attribute, source, true)?.value).toBe(source);
     expect(scalarValueForField(attribute, '  plain text  ')?.value).toBe(
-      '  plain text  ',
+      'plain text',
     );
-    expect(scalarValueForField(attribute, ' \n ')).toBeUndefined();
+    expect(scalarValueForField(attribute, ' \n ', true)).toBeUndefined();
     expect(
       scalarValueForField({ code: 'count', value_type: 'integer' }, ' 12 ')
         ?.value,

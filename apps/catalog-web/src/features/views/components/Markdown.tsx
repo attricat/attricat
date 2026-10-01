@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { MarkdownContent } from '../../markdown/MarkdownContent';
+import { MarkdownAttributeEditor } from '../../markdown/MarkdownEditor';
 import { VIEW_COMPONENT_IDS, VIEW_COMPONENT_VERSION } from '../constants';
 import type { ViewComponentDefinition, ValueRenderer } from './componentTypes';
 
@@ -29,4 +30,6 @@ export const markdownEditComponent = {
   placements: ['field'],
   value_types: ['string'],
   allowed_props: [],
+  valueEditor: MarkdownAttributeEditor,
+  preservesWhitespace: true,
 } satisfies ViewComponentDefinition;

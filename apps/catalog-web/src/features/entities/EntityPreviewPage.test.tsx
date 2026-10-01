@@ -58,6 +58,10 @@ vi.mock('../extensions/ExtensionOutlet', () => ({
   },
 }));
 
+vi.mock('../entity-comments/EntityCommentsPanel', () => ({
+  EntityCommentsPanel: () => <section aria-label="Comments" />,
+}));
+
 vi.mock('./components/EntityAgentDrawer', () => ({
   EntityAgentDrawer: (props: unknown) => {
     agentDrawerRender(props);

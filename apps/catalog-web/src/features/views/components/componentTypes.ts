@@ -23,6 +23,16 @@ export type ValueRenderer = ComponentType<{
   renderFilePanel?: (fileId: string) => ReactNode;
 }>;
 
+export type ValueEditorProps = {
+  attribute: Attribute;
+  value: string;
+  disabled: boolean;
+  required?: boolean;
+  error?: string;
+  helperText?: string;
+  onChange: (value: string) => void;
+};
+
 export type HeadingRenderer = ComponentType<{
   attributes: readonly Attribute[];
   entityId: string;
@@ -43,6 +53,10 @@ export type ViewComponentDefinition = {
   value_types: readonly Attribute['value_type'][];
   allowed_props: readonly string[];
   valueRenderer?: ValueRenderer;
+  valueEditor?: ComponentType<ValueEditorProps>;
+  validateValue?: (value: string) => string | undefined;
+  /** Submit the edited string verbatim instead of trimming it. */
+  preservesWhitespace?: boolean;
   headingRenderer?: HeadingRenderer;
   incomingRelationshipRenderer?: IncomingRelationshipRenderer;
 };

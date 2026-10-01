@@ -350,6 +350,7 @@ export const entityIdentitySchema = z.object({
 });
 export const entitySchema = entityIdentitySchema
   .extend({
+    updated_at: z.string().datetime({ offset: true }).optional(),
     system_tags: z.array(z.string()).optional(),
     system_metadata: jsonObjectSchema.optional(),
   })
@@ -507,6 +508,7 @@ const reusableEntityAttributeSchema = attributeSchema.extend({
   position: z.number().int(),
 });
 const entityFormResponseSchema = z.object({
+  can_write: z.boolean().default(false),
   entity: entitySchema,
   blueprint: blueprintWithAttributesSchema,
   values: z.array(formAttributeValueSchema),
@@ -526,6 +528,7 @@ const migrationIssueSchema = z.object({
   message: z.string(),
 });
 export const entityMigrationPreviewSchema = z.object({
+  source_updated_at: z.string().datetime({ offset: true }).optional(),
   migration_id: uuidSchema,
   source_version: z.number().int().positive(),
   target: blueprintWithAttributesSchema,
@@ -610,6 +613,7 @@ export const smartFillEntityFormResponseSchema = z.object({
   explanation: z.string().optional(),
 });
 export const updateEntityRequestSchema = z.object({
+  expected_updated_at: z.string().datetime({ offset: true }).optional(),
   values: z.array(newAttributeValueSchema),
   relationships: z.array(relationshipTargetsSchema),
   remove_values: z.array(attributeValueSelectorSchema).default([]),
@@ -617,6 +621,7 @@ export const updateEntityRequestSchema = z.object({
   system_metadata: jsonObjectSchema.optional(),
 });
 export const migrateEntityRequestSchema = z.object({
+  expected_updated_at: z.string().datetime({ offset: true }).optional(),
   migration_id: uuidSchema,
   expected_target_version: z.number().int().positive(),
   values: z.array(newAttributeValueSchema),

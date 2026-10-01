@@ -1,4 +1,5 @@
 import i18n from 'i18next';
+import { statusLabel } from '../../../entities/status';
 import { attributeValueTypes } from '../../../entities/valueTypes';
 import type { Attribute } from '../../../entities/api';
 import { formatCalendarDate } from '../../../../time/instantFormat';
@@ -10,6 +11,8 @@ import { formatCalendarDate } from '../../../../time/instantFormat';
 
 export const formatAttributeValue = (attribute: Attribute, value: unknown) => {
   if (value === null || value === undefined) return i18n.t('views.notSet');
+  const label = statusLabel(attribute, value);
+  if (label) return label;
   if (attribute.value_type === attributeValueTypes.boolean)
     return value ? i18n.t('views.yes') : i18n.t('views.no');
   if (attribute.value_type === attributeValueTypes.json)

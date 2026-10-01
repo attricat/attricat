@@ -35,5 +35,11 @@ export const conversationUploadResultSchema = z.object({
   files: uploadedFilesSchema,
 });
 
+export const updateFileReferencesSchema = z.object({
+  context_id: z.uuid().nullable(),
+  expected_file_ids: z.array(z.uuid()),
+  file_ids: z.array(z.uuid()),
+});
+
 export type FileMetadata = z.infer<typeof fileMetadataSchema>;
 export type FileUploadResult = z.infer<typeof fileUploadResultSchema>;
