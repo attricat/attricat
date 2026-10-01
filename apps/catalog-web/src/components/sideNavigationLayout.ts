@@ -2,6 +2,7 @@ export const compactNavigationWidth = 88;
 export const expandedNavigationWidth = 264;
 export const managementSidebarWidth = 248;
 export const navigationHeaderHeight = 64;
+export const navigationEdgeToggleSize = 24;
 export const mobileExplorePanelId = 'mobile-explore-panel';
 
 export const compactNavigationLabelSx = {

@@ -68,12 +68,12 @@ const renderAppLayout = () => {
     defaultOptions: { queries: { retry: false } },
   });
   const clear = vi.spyOn(queryClient, 'clear');
-  render(
+  const view = render(
     <QueryClientProvider client={queryClient}>
       <AppLayout />
     </QueryClientProvider>,
   );
-  return { clear, queryClient };
+  return { clear, queryClient, unmount: view.unmount };
 };
 
 describe('SessionErrorState', () => {
@@ -122,6 +122,60 @@ describe('AppLayout navigation', () => {
         '336px',
       ),
     );
+  });
+
+  it('toggles the desktop panel from the edge chevron and remembers a collapse', async () => {
+    const stored = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => stored.get(key) ?? null,
+      removeItem: (key: string) => stored.delete(key),
+      setItem: (key: string, value: string) => stored.set(key, value),
+    });
+    pathname = '/';
+    currentSessionMock.mockResolvedValue(session);
+    const { unmount } = renderAppLayout();
+    const user = userEvent.setup();
+    const paperWidth = async () =>
+      window.getComputedStyle(
+        (await screen.findByRole('button', { name: 'Sign out' })).closest(
+          '.MuiDrawer-paper',
+        ) as Element,
+      ).width;
+    expect(await paperWidth()).toBe('336px');
+
+    await user.click(
+      screen.getByRole('button', { name: 'Collapse navigation panel' }),
+    );
+    expect(await paperWidth()).toBe('88px');
+
+    unmount();
+    renderAppLayout();
+    expect(await paperWidth()).toBe('88px');
+
+    await user.click(
+      screen.getByRole('button', { name: 'Expand navigation panel' }),
+    );
+    expect(await paperWidth()).toBe('336px');
+    expect(stored.has('attricat.navigation-panel-collapsed')).toBe(false);
+
+    await user.click(
+      screen.getByRole('button', { name: 'Collapse navigation panel' }),
+    );
+    await user.click(screen.getByRole('button', { name: 'Open Explore' }));
+    expect(await paperWidth()).toBe('336px');
+    expect(stored.has('attricat.navigation-panel-collapsed')).toBe(false);
+    pathname = '/catalog';
+    vi.unstubAllGlobals();
+  });
+
+  it('hides the edge chevron on routes without a panel', async () => {
+    currentSessionMock.mockResolvedValue(session);
+    renderAppLayout();
+    await screen.findByRole('button', { name: 'Sign out' });
+
+    expect(
+      screen.queryByRole('button', { name: /navigation panel/ }),
+    ).toBeNull();
   });
 });
 

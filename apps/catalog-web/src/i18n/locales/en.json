@@ -46,6 +46,8 @@
   },
   "navigation": {
     "open": "Open navigation",
+    "collapsePanel": "Collapse navigation panel",
+    "expandPanel": "Expand navigation panel",
     "back": "Back to main navigation",
     "entityExplorer": "Entity explorer",
     "allEntities": "All entities",

@@ -5,6 +5,17 @@ import { isWithinRoute } from './sideNavigationLayout';
 const compactNavigationPanels = ['explore', 'extensions', 'manage'] as const;
 export type CompactNavigationPanel = (typeof compactNavigationPanels)[number];
 
+// The panel presenting the section a route belongs to, if it has one.
+export const compactNavigationPanelForRoute = (
+  pathname: string,
+): CompactNavigationPanel | undefined => {
+  if (pathname === navigationRoutes.explore) return 'explore';
+  if (isWithinRoute(pathname, navigationRoutes.extensionContributions))
+    return 'extensions';
+  if (isWithinRoute(pathname, navigationRoutes.manage)) return 'manage';
+  return undefined;
+};
+
 type PanelControl = {
   onOpenChange?: (open: boolean) => void;
   open?: boolean;

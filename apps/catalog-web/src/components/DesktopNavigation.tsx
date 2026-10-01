@@ -1,12 +1,16 @@
 import { Drawer } from '@mui/material';
 import { useState } from 'react';
-import { navigationRoutes } from './navigation';
+import { NavigationEdgeToggle } from './NavigationEdgeToggle';
+import {
+  saveNavigationPanelCollapsed,
+  savedNavigationPanelCollapsed,
+} from './navigationPanelPreference';
 import { SideNavigation } from './SideNavigation';
 import {
   compactNavigationWidth,
-  isWithinRoute,
   managementSidebarWidth,
 } from './sideNavigationLayout';
+import { compactNavigationPanelForRoute } from './useCompactNavigationPanels';
 
 export const DesktopNavigation = ({
   onSignOut,
@@ -15,36 +19,66 @@ export const DesktopNavigation = ({
   onSignOut: () => void;
   pathname: string;
 }) => {
-  const [manageOpen, setManageOpen] = useState(
-    isWithinRoute(pathname, navigationRoutes.manage),
+  const [initialPanel] = useState(() =>
+    savedNavigationPanelCollapsed()
+      ? undefined
+      : compactNavigationPanelForRoute(pathname),
   );
-  const [exploreOpen, setExploreOpen] = useState(
-    pathname === navigationRoutes.explore,
-  );
+  const [manageOpen, setManageOpen] = useState(initialPanel === 'manage');
+  const [exploreOpen, setExploreOpen] = useState(initialPanel === 'explore');
   const [extensionsOpen, setExtensionsOpen] = useState(
-    isWithinRoute(pathname, navigationRoutes.extensionContributions),
+    initialPanel === 'extensions',
   );
+  // Opening any panel from the rail forgets an earlier collapse.
+  const rememberingOpen =
+    (setOpen: (open: boolean) => void) => (open: boolean) => {
+      if (open) saveNavigationPanelCollapsed(false);
+      setOpen(open);
+    };
+  const panelOpen = manageOpen || exploreOpen || extensionsOpen;
+  const routePanel = compactNavigationPanelForRoute(pathname);
   const width =
-    compactNavigationWidth +
-    (manageOpen || exploreOpen || extensionsOpen ? managementSidebarWidth : 0);
+    compactNavigationWidth + (panelOpen ? managementSidebarWidth : 0);
+  const togglePanel = () => {
+    if (panelOpen) {
+      setManageOpen(false);
+      setExploreOpen(false);
+      setExtensionsOpen(false);
+      saveNavigationPanelCollapsed(true);
+      return;
+    }
+    saveNavigationPanelCollapsed(false);
+    if (routePanel === 'manage') setManageOpen(true);
+    if (routePanel === 'explore') setExploreOpen(true);
+    if (routePanel === 'extensions') setExtensionsOpen(true);
+  };
 
   return (
-    <Drawer
-      open
-      sx={{ flexShrink: 0, width }}
-      slotProps={{ paper: { sx: { overflow: 'hidden', width } } }}
-      variant="permanent"
-    >
-      <SideNavigation
-        compact
-        compactExploreOpen={exploreOpen}
-        compactExtensionsOpen={extensionsOpen}
-        compactManageOpen={manageOpen}
-        onCompactExploreOpenChange={setExploreOpen}
-        onCompactExtensionsOpenChange={setExtensionsOpen}
-        onCompactManageOpenChange={setManageOpen}
-        onSignOut={onSignOut}
-      />
-    </Drawer>
+    <>
+      <Drawer
+        open
+        sx={{ flexShrink: 0, width }}
+        slotProps={{ paper: { sx: { overflow: 'hidden', width } } }}
+        variant="permanent"
+      >
+        <SideNavigation
+          compact
+          compactExploreOpen={exploreOpen}
+          compactExtensionsOpen={extensionsOpen}
+          compactManageOpen={manageOpen}
+          onCompactExploreOpenChange={rememberingOpen(setExploreOpen)}
+          onCompactExtensionsOpenChange={rememberingOpen(setExtensionsOpen)}
+          onCompactManageOpenChange={rememberingOpen(setManageOpen)}
+          onSignOut={onSignOut}
+        />
+      </Drawer>
+      {(panelOpen || routePanel) && (
+        <NavigationEdgeToggle
+          edge={width}
+          expanded={panelOpen}
+          onToggle={togglePanel}
+        />
+      )}
+    </>
   );
 };
