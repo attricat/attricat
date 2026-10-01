@@ -1,6 +1,7 @@
 import type { ComponentReference } from '../../entities/api';
 import { colorDisplayComponent, colorEditComponent } from './colorComponents';
 import { emailDisplayComponent, emailEditComponent } from './emailComponents';
+import { urlDisplayComponent, urlEditComponent } from './urlComponents';
 import { fieldDisplayComponent } from './FieldDisplay';
 import { fieldEditComponent } from './FieldEdit';
 import { relationshipListDisplayComponent } from './RelationshipListDisplay';
@@ -23,6 +24,8 @@ export const viewComponents: readonly ViewComponentDefinition[] = [
   colorEditComponent,
   emailDisplayComponent,
   emailEditComponent,
+  urlDisplayComponent,
+  urlEditComponent,
   fieldDisplayComponent,
   fieldEditComponent,
   relationshipListDisplayComponent,

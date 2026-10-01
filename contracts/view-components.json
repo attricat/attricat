@@ -33,6 +33,22 @@
       "allowed_props": []
     },
     {
+      "id": "catalog.url_display",
+      "version": 1,
+      "capabilities": ["display"],
+      "placements": ["field", "table"],
+      "value_types": ["string"],
+      "allowed_props": []
+    },
+    {
+      "id": "catalog.url_edit",
+      "version": 1,
+      "capabilities": ["edit"],
+      "placements": ["field"],
+      "value_types": ["string"],
+      "allowed_props": []
+    },
+    {
       "id": "catalog.field_display",
       "version": 1,
       "capabilities": ["display"],

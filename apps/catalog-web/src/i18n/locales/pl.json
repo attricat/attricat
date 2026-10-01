@@ -1201,6 +1201,8 @@
     "colorFormat": "Sześciocyfrowy kolor szesnastkowy (#RRGGBB). Usuń tekst, aby wyczyścić wartość.",
     "colorPicker": "Wybierz kolor",
     "colorPickerFor": "Wybierz kolor dla {{attribute}}",
+    "invalidUrl": "Wpisz pełny adres HTTP lub HTTPS bez spacji i danych logowania.",
+    "urlOpenNewTab": "{{url}} (otwiera się w nowej karcie)",
     "availableOnPreviews": "{{label}} jest dostępne w podglądach encji.",
     "notSet": "Nie ustawiono",
     "yes": "Tak",

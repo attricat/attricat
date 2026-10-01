@@ -215,6 +215,21 @@ describe('definitionCompletions', () => {
     expect(renderer.labels).toEqual(['catalog.table_image']);
   });
 
+  it('suggests URL controls only for matching string placements', async () => {
+    const attributes =
+      '\n[[attributes]]\ncode = "website"\nvalue_type = "string"\n';
+    const edit = await complete(
+      `${header}[[views.edit.children]]\ntype = "field"\nfield = "website"\ncomponent = { id = "|" }\n${attributes}`,
+    );
+    expect(edit.labels).toContain('catalog.url_edit');
+    expect(edit.labels).not.toContain('catalog.url_display');
+    const table = await complete(
+      `${header}[[views.table.columns]]\nfield = "website"\nrenderer = { id = "|" }\n${attributes}`,
+    );
+    expect(table.labels).toContain('catalog.url_display');
+    expect(table.labels).not.toContain('catalog.url_edit');
+  });
+
   it('completes roles, events, and tags', async () => {
     expect(
       (await complete(`${header}[publication]\nretain_on_edit_roles = ["|"]`))

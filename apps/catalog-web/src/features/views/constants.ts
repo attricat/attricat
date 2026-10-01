@@ -5,6 +5,8 @@ export const VIEW_COMPONENT_IDS = {
   colorEdit: 'catalog.color_edit',
   emailDisplay: 'catalog.email_display',
   emailEdit: 'catalog.email_edit',
+  urlDisplay: 'catalog.url_display',
+  urlEdit: 'catalog.url_edit',
   fieldDisplay: 'catalog.field_display',
   fieldEdit: 'catalog.field_edit',
   incomingRelationshipListDisplay: 'catalog.incoming_relationship_list_display',
