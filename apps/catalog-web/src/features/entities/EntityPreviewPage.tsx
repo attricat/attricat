@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { Alert, Box, CircularProgress } from '@mui/material';
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
@@ -35,6 +35,12 @@ import {
 } from './useEntityContexts';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
+
+const EntityCommentsPanel = lazy(() =>
+  import('../entity-comments/EntityCommentsPanel').then((module) => ({
+    default: module.EntityCommentsPanel,
+  })),
+);
 
 export const EntityPreviewPage = ({
   entityId,
@@ -244,6 +250,13 @@ export const EntityPreviewPage = ({
             />
           )}
         </>
+      )}
+      {resolved.data && (
+        <Suspense
+          fallback={<CircularProgress aria-label={t('comments.loading')} />}
+        >
+          <EntityCommentsPanel key={entityId} entityId={entityId} />
+        </Suspense>
       )}
       <EntityAgentDrawer
         key={`${entityId}:${selectedContextId ?? ''}`}

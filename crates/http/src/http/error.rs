@@ -256,6 +256,12 @@ impl From<RepositoryError> for ApiError {
                 message: error.to_string(),
             },
             RepositoryError::NotFound(resource) => Self::not_found(resource),
+            RepositoryError::InvalidComment => Self::invalid_input(error.to_string()),
+            RepositoryError::CommentConflict => Self {
+                status: StatusCode::CONFLICT,
+                code: "comment_conflict",
+                message: error.to_string(),
+            },
             RepositoryError::InvitationInvalid => Self {
                 status: StatusCode::UNPROCESSABLE_ENTITY,
                 code: "invitation_invalid",
