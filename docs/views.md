@@ -260,5 +260,20 @@ validation on the server may accept a broader set of addresses. Unsupported or
 malformed stored values remain visible as plain text; supported values link to
 the user's mail client. The component never sends mail or checks deliverability.
 
+### Phone numbers
+
+Phone components use ordinary `string` attributes, without changing stored text.
+Select `catalog.phone_display` (version 1) on a detail field or table column's
+`renderer`, and `catalog.phone_edit` (version 1) on an edit field. Neither accepts
+props. Unconfigured fields retain their standard string control.
+
+The editor supports typing, pasting and clearing numbers, including national
+numbers and extensions. The display preserves the original text. International
+numbers beginning with `+` can become `tel:` links; spaces, parentheses, periods
+and hyphens are removed only from the dial target. Numeric extensions prefixed
+with `ext.`, `ext` or `x` become `;ext=`. National, ambiguous or unsafe values stay
+plain text. No country is inferred, and a link does not verify reachability.
+Existing blueprint schema constraints remain authoritative for validation.
+
 See [Component Authoring](component-authoring.md) for the implementation and
 verification workflow.

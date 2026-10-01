@@ -4,6 +4,7 @@ import { emailDisplayComponent, emailEditComponent } from './emailComponents';
 import { urlDisplayComponent, urlEditComponent } from './urlComponents';
 import { fieldDisplayComponent } from './FieldDisplay';
 import { fieldEditComponent } from './FieldEdit';
+import { phoneDisplayComponent, phoneEditComponent } from './phone';
 import { relationshipListDisplayComponent } from './RelationshipListDisplay';
 import { relationshipListEditComponent } from './RelationshipListEdit';
 import { incomingRelationshipListDisplayComponent } from './IncomingRelationshipListDisplay';
@@ -26,6 +27,8 @@ export const viewComponents: readonly ViewComponentDefinition[] = [
   emailEditComponent,
   urlDisplayComponent,
   urlEditComponent,
+  phoneDisplayComponent,
+  phoneEditComponent,
   fieldDisplayComponent,
   fieldEditComponent,
   relationshipListDisplayComponent,

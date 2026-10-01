@@ -226,6 +226,7 @@
     "never": "Nigdy"
   },
   "entities": {
+    "phoneHelp": "Dodaj + i numer kierunkowy kraju, aby umożliwić połączenie. Numer wewnętrzny można poprzedzić ext. lub x.",
     "createEntity": "Utwórz encję",
     "editEntity": "Edytuj encję",
     "duplicateEntity": "Duplikuj encję",
@@ -1203,6 +1204,7 @@
     "colorPickerFor": "Wybierz kolor dla {{attribute}}",
     "invalidUrl": "Wpisz pełny adres HTTP lub HTTPS bez spacji i danych logowania.",
     "urlOpenNewTab": "{{url}} (otwiera się w nowej karcie)",
+    "callPhone": "Zadzwoń pod {{number}}",
     "availableOnPreviews": "{{label}} jest dostępne w podglądach encji.",
     "notSet": "Nie ustawiono",
     "yes": "Tak",

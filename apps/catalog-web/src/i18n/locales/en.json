@@ -226,6 +226,7 @@
     "never": "Never"
   },
   "entities": {
+    "phoneHelp": "Include + and the country code to enable calling. Extensions may use ext. or x.",
     "createEntity": "Create entity",
     "editEntity": "Edit entity",
     "duplicateEntity": "Duplicate entity",
@@ -1177,6 +1178,7 @@
     "colorPickerFor": "Pick color for {{attribute}}",
     "invalidUrl": "Enter an absolute HTTP or HTTPS URL without spaces or embedded credentials.",
     "urlOpenNewTab": "{{url}} (opens in a new tab)",
+    "callPhone": "Call {{number}}",
     "availableOnPreviews": "{{label}} is available on entity previews.",
     "notSet": "Not set",
     "yes": "Yes",

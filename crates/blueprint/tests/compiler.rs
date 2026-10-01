@@ -562,6 +562,46 @@ value_type = "string"
 }
 
 #[test]
+fn validates_phone_components() {
+    let source = r#"
+format_version = 1
+code = "contact"
+name = "Contact"
+kind = "entity"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["phone"]
+
+[views.detail]
+type = "stack"
+children = [{ type = "field", field = "phone", component = { id = "catalog.phone_display", version = 1 } }]
+
+[views.edit]
+type = "stack"
+children = [{ type = "field", field = "phone", component = { id = "catalog.phone_edit", version = 1 } }]
+
+[views.table]
+type = "table"
+columns = [{ field = "phone", renderer = { id = "catalog.phone_display", version = 1 } }]
+
+[[attributes]]
+code = "phone"
+value_type = "string"
+"#;
+    assert!(compile(parse(source).unwrap(), &[], source).is_ok());
+    for invalid in [
+        source.replace("value_type = \"string\"", "value_type = \"integer\""),
+        source.replace("catalog.phone_edit", "catalog.phone_display"),
+        source.replace("catalog.phone_display", "catalog.phone_edit"),
+        source.replace("version = 1 }", "version = 2 }"),
+        source.replace("version = 1 }", "version = 1, props = { region = \"PL\" } }"),
+    ] {
+        assert!(compile(parse(&invalid).unwrap(), &[], &invalid).is_err());
+    }
+}
+
+#[test]
 fn validates_url_components() {
     let source = r#"
 format_version = 1
