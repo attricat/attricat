@@ -1,109 +1,147 @@
-# Catalog
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="apps/catalog-web/design/assets/logos/wordmark-dark.svg">
+    <img alt="Attricat" src="apps/catalog-web/design/assets/logos/wordmark-light.svg" width="242" height="48">
+  </picture>
+</p>
 
-Catalog is a versioned catalog engine with a Rust API and CLI plus a React web
-application. Blueprints define versioned entity schemas; entities retain the
-exact revision they were created with.
+Attricat is a catalog for structured records whose shape changes over time.
 
-## Run Locally
+You describe a kind of record with a **blueprint**, which lists its fields and
+their types. Records built from a blueprint are **entities**. When you change a
+blueprint, Attricat saves it as a new revision. Each entity keeps the exact
+revision it was created with.
 
-Install a Docker-compatible container runtime, Rust, Node.js 24 (the CI
-version), `pnpm` 11, `just`, `process-compose`, and `watchexec`. Then, from the repository root:
+The project has three parts:
+
+| Part | Path | What it is |
+| --- | --- | --- |
+| API | `apps/api` | Rust (Axum) server and SQLx database migrations |
+| CLI | `apps/catalog-cli` | Command-line client for the API, with JSON output |
+| Web app | `apps/catalog-web` | React and Vite interface |
+
+## Run it locally
+
+You need:
+
+- Docker or another compatible container runtime
+- Rust
+- Node.js 24 and `pnpm` 11
+- `just`, `process-compose`, and `watchexec`
+
+From the repository root:
 
 ```sh
-just setup
-just dev
+just setup   # once per checkout
+just dev     # starts everything
 ```
 
-The web app uses a pinned snapshot of the [Attricat design system](apps/catalog-web/design/)
-for its visual tokens and brand assets. See the [upstream style guide](https://github.com/attricat/design/blob/main/STYLE.md)
-for UI changes.
+`just setup` creates `.env` from `.env.example` and picks ports for this
+checkout, so several worktrees can run side by side. It writes those ports and
+the URLs below to `.worktree`. Run it before any other `just` command.
 
-Run `just setup` once before any other `just` recipe. It assigns persistent,
-worktree-specific ports, writes them and ready-to-open `WEB_URL`, `DOCS_URL`,
-`MAILPIT_UI_URL`, `JAEGER_UI_URL`, and `RUSTFS_UI_URL` values to the ignored
-`.worktree` file, and creates `.env` from `.env.example`. `just dev`
-starts PostgreSQL, Mailpit, Jaeger, and RustFS (the local S3-compatible object store)
-before starting the API, file worker, web app, and public documentation site.
-Stop `just dev` with `Ctrl-C`; its exit trap also runs `just down`, stopping
-and removing the local containers.
+`just dev` starts PostgreSQL, Mailpit, Jaeger and RustFS in containers, then
+the API, the file worker, the web app and the docs site. Press `Ctrl-C` to stop
+it. That also stops and removes the containers.
 
-For database debugging, `just sql` opens an interactive `psql` session inside
-this worktree's PostgreSQL container.
+To find the URLs:
 
-See [Getting Started](docs/index.md#getting-started) for database, migration,
-and test instructions. The public docs site is available at `$DOCS_URL`; source
-`.worktree` and open it after starting `just dev`. Mailpit also starts
-with the local stack; open `$MAILPIT_UI_URL` to inspect local email. Jaeger receives
-API and file-worker traces; open `$JAEGER_UI_URL` to inspect them.
+```sh
+source .worktree
+echo $WEB_URL
+```
 
-## Sign in locally
+| Variable | Opens |
+| --- | --- |
+| `WEB_URL` | The web app |
+| `DOCS_URL` | The documentation site |
+| `MAILPIT_UI_URL` | Email sent by the local server |
+| `JAEGER_UI_URL` | Traces from the API and file worker |
+| `RUSTFS_UI_URL` | The local S3-compatible file store |
 
-Open `/login` and enter the bootstrap workspace identifier `default.local`, then
-select **Continue**. Sign in with the bootstrap-owner email configured in `.env`
-(`CATALOG_BOOTSTRAP_OWNER_EMAIL`) and its password. The workspace UUID is an
-internal database/configuration identifier; clients do not select it directly.
+To open `psql` in this checkout's database, run `just sql`.
 
-## Conversational agents
+[Getting Started](docs/index.md#getting-started) covers migrations and tests.
 
-Agents are optional. Set `LLM_API_KEY` in the API process environment (and, if
-needed, `LLM_BASE_URL` and `LLM_MODEL`), restart the API, then open
-**Conversations** in the web application. The browser never receives the
-provider credential; an absent or blank key disables agent runs without
-preventing normal catalog use.
+## Sign in
 
-Treat an enabled provider as a trusted operator integration: conversation
-content and tool results are sent to the configured provider. Read-only tools
-run automatically, but every catalog mutation—interactive or scheduled—stops
-for a durable, explicit approval. An approved scheduled run is re-authorized
-as its initiating user before it writes. Review the proposed arguments and
-change summary, use a least-privileged provider account, and only grant
-`agents.run` to users allowed to request catalog changes. See the
-[agent configuration](docs/configuration.md#agent-provider) and
-[agent API contract](docs/api.md#agents) for limits and operational behavior.
+1. Open `/login` in the web app.
+2. Enter the workspace identifier `default.local` and select **Continue**.
+3. Sign in with `CATALOG_BOOTSTRAP_OWNER_EMAIL` and its password from `.env`.
 
-## Production image
+## Conversational agents (optional)
 
-Attricat ships as one immutable image with `migrate`, `api`, and `file-worker`
-commands. The API command also serves the compiled web UI; PostgreSQL, private
-S3-compatible storage, SMTP, and monitoring remain external services. See
-[`deploy/compose.yml`](deploy/compose.yml), the matching production environment
-example, and [Production operations](docs/operations.md) for rollout, backup,
-restore, and rollback.
+Users can ask an LLM to read and change the catalog.
+
+To turn it on, set `LLM_API_KEY` for the API process, and `LLM_BASE_URL` or
+`LLM_MODEL` if you need them. Restart the API, then open **Conversations** in
+the web app. Without a key, agents are off and everything else works as usual.
+
+Before you turn it on:
+
+- Conversation text and tool results go to the configured provider. The
+  browser never sees the provider key.
+- Read-only tools run on their own. Every change to the catalog, including
+  changes from scheduled runs, waits for a person to approve it. Review the
+  proposed arguments and change summary before you approve.
+- An approved scheduled run writes with the permissions of the user who started
+  it.
+- Use a provider account with no more access than it needs.
+- Give the `agents.run` permission only to people who are allowed to request
+  catalog changes.
+
+See [agent configuration](docs/configuration.md#agent-provider) and the
+[agent API](docs/api.md#agents) for limits and details.
+
+## Deploy
+
+Attricat ships as one container image with three commands:
+
+- `migrate` applies database migrations
+- `api` runs the API and serves the web app
+- `file-worker` generates file variants and deletes stored files
+
+You provide PostgreSQL, private S3-compatible storage, SMTP and monitoring.
+Start from [`deploy/compose.yml`](deploy/compose.yml) and read
+[Production operations](docs/operations.md) for rollout, backup, restore and
+rollback.
 
 ## Documentation
 
-- Public documentation site: `apps/docs` (run with `pnpm --dir apps/docs dev`)
+The documentation site lives in `apps/docs`. Run it alone with
+`pnpm --dir apps/docs dev`.
+
 - [Documentation index](docs/index.md)
-- [Blueprint authoring](docs/blueprints.md)
-- [Extension development and local side-loading](docs/extensions.md#local-extension-integration-testing)
-- [Catalog CLI](docs/cli.md)
-- [API reference](docs/api.md)
-- [Configuration reference](docs/configuration.md)
-- [Database model](docs/database.md)
-- [File storage, worker, and retention configuration](docs/configuration.md#file-storage-operations)
-- [Local account lifecycle](docs/authentication.md)
-- [Demo catalog generator](examples/generate.md)
+- [Writing blueprints](docs/blueprints.md)
 - [Relationships walkthrough](examples/relationships/README.md)
+- [Demo catalog generator](examples/generate.md)
+- [CLI](docs/cli.md)
+- [API reference](docs/api.md)
+- [Configuration](docs/configuration.md)
+- [File storage and retention](docs/configuration.md#file-storage-operations)
+- [Accounts](docs/authentication.md)
+- [Database model](docs/database.md)
+- [Building and side-loading extensions](docs/extensions.md#local-extension-integration-testing)
+
+## Contributing
+
+**UI.** The web app uses a pinned copy of the
+[Attricat design system](apps/catalog-web/design/). Read the
+[style guide](https://github.com/attricat/design/blob/main/STYLE.md) before
+changing the interface, and check both light and dark mode.
+
+**Database.** Migrations only declare structure: tables, columns, indexes,
+foreign keys, `NOT NULL`, `UNIQUE` and `CHECK` constraints, and required types
+or extensions. Do not add SQL functions, procedures, triggers, views, RLS
+policies or `DO` blocks. Authorization, validation, state changes, rate
+limits, auditing and retention belong in the Rust code, inside repository
+transactions.
 
 ## License
 
-The code in this repository is licensed under the [GNU Affero General Public
-License, version 3](LICENSE) (`AGPL-3.0-only`). The pinned design-system assets
-in `apps/catalog-web/design/` come from the separate [Attricat design
-repository](https://github.com/attricat/design); see its licensing terms for
-those files. Third-party dependencies retain their respective licenses.
+The code is licensed under the [GNU Affero General Public License, version
+3](LICENSE) (`AGPL-3.0-only`).
 
-## Applications
-
-- `apps/api`: Axum API and SQLx migrations.
-- `apps/catalog-cli`: JSON-first HTTP command-line client.
-- `apps/catalog-web`: React and Vite web application.
-
-## Database policy
-
-Database migrations are declarative only: schema objects, columns, indexes,
-foreign keys, `NOT NULL`, `UNIQUE`, and `CHECK` constraints, and required types
-or extensions. Do not add SQL functions, procedures, triggers, views, RLS
-policies, or `DO` blocks. Authorization, validation, state transitions,
-rate-limiting, auditing, retention, and all other behavior belong in the Rust
-application and must be performed through repository transactions.
+The design assets in `apps/catalog-web/design/` come from the separate
+[Attricat design repository](https://github.com/attricat/design) and follow its
+license. Third-party dependencies keep their own licenses.
