@@ -14,6 +14,7 @@ import { useTranslation } from 'react-i18next';
 import {
   viewBlockTypes,
   type Attribute,
+  type ComponentReference,
   type ViewDefinition,
   type ViewNode,
 } from '../../entities/api';
@@ -41,7 +42,10 @@ type Props = {
   view?: ViewDefinition;
   attributes: readonly Attribute[];
   values: Record<string, ResolvedValue>;
-  renderEditor?: (attribute: Attribute) => ReactNode;
+  renderEditor?: (
+    attribute: Attribute,
+    component?: ComponentReference | null,
+  ) => ReactNode;
   renderAttributeDecoration?: (attribute: Attribute) => ReactNode;
   renderAttributePanel?: (attribute: Attribute) => ReactNode;
   renderFilePanel?: (attribute: Attribute, fileId: string) => ReactNode;
