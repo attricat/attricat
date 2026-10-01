@@ -79,6 +79,49 @@ const draftProps = (contextId: string) => ({
 const titleBox = () =>
   screen.getByRole('textbox', { hidden: true, name: 'title' });
 
+it('selects URL editors, blocks invalid programmatic values, saves and clears URLs', async () => {
+  const definition = blueprint([attribute('website')]);
+  definition.blueprint.views.edit = {
+    type: 'stack',
+    children: [
+      {
+        type: 'field',
+        field: 'website',
+        component: { id: 'catalog.url_edit', version: 1, props: {} },
+      },
+    ],
+  };
+  const { onSubmit, ref } = renderForm({ blueprint: definition });
+  const input = screen.getByRole('textbox', { name: 'website' });
+  expect(input.getAttribute('type')).toBe('url');
+  fireEvent.change(input, { target: { value: 'javascript:alert(1)' } });
+  fireEvent.submit(input.closest('form')!);
+  await waitFor(() => expect(input.getAttribute('aria-invalid')).toBe('true'));
+  expect(onSubmit).not.toHaveBeenCalled();
+  fireEvent.change(input, { target: { value: 'https://example.com/a?b=1' } });
+  fireEvent.submit(input.closest('form')!);
+  await waitFor(() =>
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        values: [
+          expect.objectContaining({ value: 'https://example.com/a?b=1' }),
+        ],
+      }),
+    ),
+  );
+  expect(ref.current?.getDraftValues().website).toBe(
+    'https://example.com/a?b=1',
+  );
+  onSubmit.mockClear();
+  fireEvent.change(input, { target: { value: '' } });
+  fireEvent.submit(input.closest('form')!);
+  await waitFor(() =>
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ values: [] }),
+    ),
+  );
+});
+
 afterEach(() => {
   sessionStorage.clear();
 });

@@ -8,14 +8,21 @@ import {
 } from '@mui/material';
 import { createElement } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { Attribute, ViewDefinition } from '../entities/api';
+import type {
+  Attribute,
+  ComponentReference,
+  ViewDefinition,
+} from '../entities/api';
 import { viewBlockTypes } from '../entities/schemas';
 import { EntityView } from '../views/components/EntityView';
 import {
   entityHeadingComponentId,
   findEntityHeading,
 } from '../views/components/blocks/EntityHeadingDefinition';
-import { resolveHeadingRenderer } from '../views/components/registry';
+import {
+  resolveHeadingRenderer,
+  resolveValueRenderer,
+} from '../views/components/registry';
 import { AttributeValue } from '../views/components/values/AttributeValue';
 import type { SandboxValues } from './sandboxValues';
 
@@ -24,10 +31,12 @@ const fieldLabel = (field: string) => field.replaceAll('_', ' ');
 const TableViewPreview = ({
   attributes,
   fields,
+  columns,
   values,
 }: {
   attributes: readonly Attribute[];
   fields: readonly string[];
+  columns?: { field: string; renderer?: ComponentReference | null }[];
   values: SandboxValues;
 }) => {
   const attributesByCode = new Map(
@@ -51,10 +60,15 @@ const TableViewPreview = ({
           <TableRow>
             {visibleFields.map(([field, attribute]) => (
               <TableCell key={field}>
-                <AttributeValue
-                  attribute={attribute}
-                  value={values[field]?.value}
-                />
+                {createElement(
+                  resolveValueRenderer(
+                    columns?.find((column) => column.field === field)?.renderer,
+                  ) ?? AttributeValue,
+                  {
+                    attribute,
+                    value: values[field]?.value,
+                  },
+                )}
               </TableCell>
             ))}
           </TableRow>
@@ -83,6 +97,7 @@ export const RenderedBlueprintView = ({
       <TableViewPreview
         attributes={attributes}
         fields={view.fields}
+        columns={view.type === viewBlockTypes.table ? view.columns : undefined}
         values={values}
       />
     );

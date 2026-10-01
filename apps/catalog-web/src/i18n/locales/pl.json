@@ -1148,6 +1148,8 @@
     "acceptInvitation": "Zaakceptuj zaproszenie"
   },
   "views": {
+    "invalidUrl": "Wpisz pełny adres HTTP lub HTTPS bez spacji i danych logowania.",
+    "urlOpenNewTab": "{{url}} (otwiera się w nowej karcie)",
     "availableOnPreviews": "{{label}} jest dostępne w podglądach encji.",
     "notSet": "Nie ustawiono",
     "yes": "Tak",

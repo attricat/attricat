@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { safeUrl } from '../views/urlPolicy';
 import i18n from '../../i18n';
 import type {
   Attribute,
@@ -108,6 +109,7 @@ export const validateEntityForm = (
   requiredAttributes: readonly string[] = [],
   entitySchema?: JsonSchema | null,
   messages: EntityFormValidationMessages = entityFormValidationMessages(),
+  urlFields: ReadonlySet<string> = new Set(),
 ): EntityFormValidation => {
   const fieldErrors: Record<string, string> = {};
   const document: Record<string, unknown> = {};
@@ -130,6 +132,15 @@ export const validateEntityForm = (
 
     if (required && !value.trim()) {
       fieldErrors[attribute.code] = messages.required;
+      continue;
+    }
+    if (
+      attribute.value_type === attributeValueTypes.string &&
+      urlFields.has(attribute.code) &&
+      value &&
+      !safeUrl(value)
+    ) {
+      fieldErrors[attribute.code] = i18n.t('views.invalidUrl');
       continue;
     }
     const scalar = scalarValueForField(attribute, value);

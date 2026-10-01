@@ -1122,6 +1122,8 @@
     "acceptInvitation": "Accept invitation"
   },
   "views": {
+    "invalidUrl": "Enter an absolute HTTP or HTTPS URL without spaces or embedded credentials.",
+    "urlOpenNewTab": "{{url}} (opens in a new tab)",
     "availableOnPreviews": "{{label}} is available on entity previews.",
     "notSet": "Not set",
     "yes": "Yes",

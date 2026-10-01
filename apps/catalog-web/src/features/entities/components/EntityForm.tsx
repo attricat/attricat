@@ -2,6 +2,7 @@ import { useForm, useStore } from '@tanstack/react-form';
 import { Alert, Button, Paper, Stack, Typography } from '@mui/material';
 import type {
   Attribute,
+  ComponentReference,
   BlueprintWithAttributes,
   FormAttributeValue,
 } from '../api';
@@ -18,6 +19,7 @@ import {
   type RemovedAttributeValue,
   type ResolvedFormValues,
 } from '../entityFormAttributes';
+import { urlEditFields } from '../../views/urlPolicy';
 import { EntityView } from '../../views/components/EntityView';
 import { draftEditors, type DraftEditor } from '../../drafts/constants';
 import { DraftRestoreDialog } from '../../drafts/DraftRestoreDialog';
@@ -146,6 +148,8 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
         contextId === defaultContextId
           ? blueprint.blueprint.entity_schema
           : undefined,
+        undefined,
+        urlEditFields(showAllAttributes ? undefined : editView),
       );
       setFieldErrors(validation.fieldErrors);
       setFormError(validation.formError);
@@ -283,10 +287,15 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
           {blueprint && (
             <form.Field name="fields">
               {(field) => {
-                const renderEditor = (attribute: Attribute) => (
+                const renderEditor = (
+                  attribute: Attribute,
+                  component?: ComponentReference | null,
+                ) => (
                   <EntityFormAttributeEditor
                     {...editorContext}
                     attribute={attribute}
+                    component={component}
+                    required={requiredAttributes.includes(attribute.code)}
                     onChange={(nextValue) => {
                       const nextFields = {
                         ...field.state.value,

@@ -23,6 +23,29 @@ const typedAttributes = [
 ] as const satisfies readonly Attribute[];
 
 describe('entity form values', () => {
+  it('validates only configured URL editors, including required and optional clearing', () => {
+    const validate = (title: string, required: string[] = []) =>
+      validateEntityForm(
+        attributes,
+        { title },
+        required,
+        undefined,
+        undefined,
+        new Set(['title']),
+      );
+    expect(validate('javascript:alert(1)').fieldErrors.title).toBeTruthy();
+    expect(validate('https://example.com/a?q=1').fieldErrors).toEqual({});
+    expect(validate('').fieldErrors).toEqual({});
+    expect(validate('', ['title']).fieldErrors.title).toBeTruthy();
+    expect(
+      validateEntityForm(attributes, { title: 'ordinary text' }).fieldErrors,
+    ).toEqual({});
+    expect(
+      serializeAttributeValues(attributes, {
+        title: 'https://example.com/a?q=1',
+      })[0],
+    ).toMatchObject({ value: 'https://example.com/a?q=1' });
+  });
   it('serializes scalar fields and complete relationship target sets', () => {
     expect(
       serializeAttributeValues(attributes, {

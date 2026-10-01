@@ -132,6 +132,38 @@ field = "price"
 Every referenced field must be an effective attribute. `field` accepts scalar
 attributes; `relationship_list` accepts relationships only.
 
+## URL fields
+
+URLs remain string attributes. Opt in with `catalog.url_display@1` on a detail
+field or table column and `catalog.url_edit@1` on an edit field:
+
+```toml
+[[views.detail.children]]
+type = "field"
+field = "website"
+component = { id = "catalog.url_display", version = 1 }
+
+[[views.edit.children]]
+type = "field"
+field = "website"
+component = { id = "catalog.url_edit", version = 1 }
+
+[[views.table.columns]]
+field = "website"
+renderer = { id = "catalog.url_display", version = 1 }
+```
+
+These components accept string values and no props. Links open in a new tab
+without opener access or a referrer. Only absolute HTTP/HTTPS URLs without
+whitespace, control characters, backslashes or embedded credentials are active;
+invalid persisted values remain plain text. No destination is fetched for a
+preview. Optional inputs can be cleared; typed URLs are not silently rewritten.
+
+The editor validates input, but selecting a component does not impose an API
+constraint. Use the existing attribute/entity JSON Schema contracts when data
+must also be constrained outside the web editor. Ordinary string fields keep
+their existing behavior.
+
 ## Entity Heading
 
 The preview heading reuses a normal `stack` with the

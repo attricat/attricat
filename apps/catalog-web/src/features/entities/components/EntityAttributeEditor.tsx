@@ -1,7 +1,12 @@
 import { MenuItem, TextField, Tooltip, useTheme } from '@mui/material';
 import { InfoIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import type { Attribute } from '../api';
+import type { Attribute, ComponentReference } from '../api';
+import { UrlEditor } from '../../views/components/UrlEditor';
+import {
+  VIEW_COMPONENT_IDS,
+  VIEW_COMPONENT_VERSION,
+} from '../../views/constants';
 import type { FileMetadata } from '../../files/schemas';
 import { attributeLabel } from '../entityDisplay';
 import { attributeValueTypes } from '../valueTypes';
@@ -17,6 +22,8 @@ import { smallIconSize } from '../../../components/iconSizes';
 
 export const EntityAttributeEditor = ({
   attribute,
+  component,
+  required,
   contextId,
   disabled,
   entityId,
@@ -29,6 +36,8 @@ export const EntityAttributeEditor = ({
   value,
 }: {
   attribute: Attribute;
+  component?: ComponentReference | null;
+  required?: boolean;
   contextId: string | null;
   disabled: boolean;
   entityId?: string;
@@ -46,6 +55,25 @@ export const EntityAttributeEditor = ({
   const migrationBadge = showMigrationBadge ? (
     <MigrationBadge message={migrationReviewMessage} />
   ) : null;
+  if (
+    attribute.value_type === attributeValueTypes.string &&
+    component?.id === VIEW_COMPONENT_IDS.urlEdit &&
+    component.version === VIEW_COMPONENT_VERSION
+  )
+    return (
+      <>
+        {migrationBadge}
+        <UrlEditor
+          label={attributeLabel(attribute)}
+          value={value}
+          onChange={onChange}
+          disabled={effectiveDisabled}
+          required={required}
+          error={error}
+          helperText={helperText}
+        />
+      </>
+    );
   if (attribute.value_type === attributeValueTypes.relationship)
     return (
       <>
