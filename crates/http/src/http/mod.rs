@@ -952,11 +952,17 @@ pub fn router(state: AppState) -> Router {
     if web_dist.is_empty() {
         return api;
     }
-    let index = format!("{web_dist}/index.html");
     Router::new()
         .nest("/api", api.clone())
         .merge(api)
-        .fallback_service(ServeDir::new(web_dist).not_found_service(ServeFile::new(index)))
+        .fallback_service(web_app(web_dist))
+}
+
+/// Serves the compiled web app. Paths without a file are client-side routes,
+/// so they receive `index.html` with `200 OK`; `not_found_service` would send
+/// the same page as a 404, which monitors, proxies, and crawlers treat as broken.
+fn web_app(web_dist: &str) -> ServeDir<ServeFile> {
+    ServeDir::new(web_dist).fallback(ServeFile::new(format!("{web_dist}/index.html")))
 }
 
 /// A handler panic becomes a logged JSON 500 instead of an aborted connection,
@@ -1026,6 +1032,39 @@ mod timing_tests {
             .body(axum::body::Body::empty())
             .unwrap();
         assert_ne!(request_id(&invalid), Uuid::nil());
+    }
+
+    #[tokio::test]
+    async fn web_app_serves_client_routes_as_index_with_ok() {
+        use tower::ServiceExt;
+
+        let dist = std::env::temp_dir().join(format!("catalog-web-dist-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(dist.join("assets")).unwrap();
+        std::fs::write(dist.join("index.html"), "<!doctype html>index").unwrap();
+        std::fs::write(dist.join("assets/app.js"), "app").unwrap();
+
+        for (path, body) in [
+            ("/", "<!doctype html>index"),
+            ("/login", "<!doctype html>index"),
+            ("/entities/123/edit", "<!doctype html>index"),
+            ("/assets/app.js", "app"),
+        ] {
+            let request = axum::http::Request::builder()
+                .uri(path)
+                .body(axum::body::Body::empty())
+                .unwrap();
+            let response = web_app(dist.to_str().unwrap())
+                .oneshot(request)
+                .await
+                .unwrap();
+            assert_eq!(response.status(), axum::http::StatusCode::OK, "{path}");
+            let bytes = axum::body::to_bytes(axum::body::Body::new(response.into_body()), 1024)
+                .await
+                .unwrap();
+            assert_eq!(bytes, body.as_bytes(), "{path}");
+        }
+
+        std::fs::remove_dir_all(dist).unwrap();
     }
 
     #[test]
