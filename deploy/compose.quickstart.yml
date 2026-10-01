@@ -1,0 +1,100 @@
+# Runs the published image on one host for evaluation, reusing the
+# development infrastructure from apps/api/compose.yml. For production, use
+# deploy/compose.yml and docs/operations.md.
+name: attricat-quickstart
+
+x-app: &app
+  image: ${ATTRICAT_IMAGE:-ghcr.io/attricat/attricat:latest}
+  # The published image is amd64-only; arm64 hosts run it under emulation.
+  platform: linux/amd64
+  read_only: true
+  tmpfs:
+    - /tmp:size=256m,mode=1777
+  security_opt:
+    - no-new-privileges:true
+  restart: unless-stopped
+
+x-environment: &environment
+  DATABASE_URL: postgres://postgres:postgres@postgres:5432/catalog
+  CATALOG_AUTO_MIGRATE: "false"
+  CATALOG_BOOTSTRAP_OWNER_EMAIL: ${ATTRICAT_OWNER_EMAIL:-owner@example.com}
+  CATALOG_BOOTSTRAP_OWNER_PASSWORD: ${ATTRICAT_OWNER_PASSWORD:-change-me-now}
+  SESSION_COOKIE_SECURE: "false"
+  CATALOG_DEVTOOLS: "false"
+  S3_ENDPOINT: http://rustfs:9000
+  S3_REGION: us-east-1
+  S3_BUCKET: catalog-files
+  S3_ACCESS_KEY_ID: catalog-dev
+  S3_SECRET_ACCESS_KEY: catalog-dev-secret
+  S3_FORCE_PATH_STYLE: "true"
+  S3_UPLOAD_TIMEOUT_SECONDS: "30"
+  S3_DOWNLOAD_TIMEOUT_SECONDS: "30"
+  SMTP_HOST: mailpit
+  SMTP_PORT: "1025"
+  SMTP_TLS_MODE: disabled
+  MAIL_FROM: Attricat <no-reply@example.com>
+  PASSWORD_RESET_URL: http://localhost:${ATTRICAT_PORT:-3000}/password-reset/confirm
+  WORKSPACE_INVITATION_URL: http://localhost:${ATTRICAT_PORT:-3000}/invitations/accept
+  WORKSPACE_ONBOARDING_URL: http://localhost:${ATTRICAT_PORT:-3000}/onboarding
+
+services:
+  # Infrastructure comes from the development stack. Only Mailpit's web UI is
+  # published; the app reaches everything else on the compose network.
+  postgres:
+    extends: { file: ../apps/api/compose.yml, service: postgres }
+    ports: !reset []
+    restart: unless-stopped
+  rustfs:
+    extends: { file: ../apps/api/compose.yml, service: rustfs }
+    ports: !reset []
+    restart: unless-stopped
+  rustfs-init:
+    extends: { file: ../apps/api/compose.yml, service: rustfs-init }
+  mailpit:
+    extends: { file: ../apps/api/compose.yml, service: mailpit }
+    ports: !override
+      - "127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025"
+    restart: unless-stopped
+
+  migrate:
+    <<: *app
+    command: ["migrate"]
+    restart: "no"
+    environment: *environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rustfs-init:
+        condition: service_completed_successfully
+
+  api:
+    <<: *app
+    command: ["api"]
+    environment: *environment
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:${ATTRICAT_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:3000/health/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  file-worker:
+    <<: *app
+    command: ["file-worker"]
+    environment: *environment
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:3001/health/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  postgres-data:
+  rustfs-data:
