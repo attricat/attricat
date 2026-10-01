@@ -108,6 +108,10 @@ export const validateEntityForm = (
   requiredAttributes: readonly string[] = [],
   entitySchema?: JsonSchema | null,
   messages: EntityFormValidationMessages = entityFormValidationMessages(),
+  fieldValidators: ReadonlyMap<
+    string,
+    (value: string) => string | undefined
+  > = new Map(),
 ): EntityFormValidation => {
   const fieldErrors: Record<string, string> = {};
   const document: Record<string, unknown> = {};
@@ -130,6 +134,11 @@ export const validateEntityForm = (
 
     if (required && !value.trim()) {
       fieldErrors[attribute.code] = messages.required;
+      continue;
+    }
+    const configuredError = fieldValidators.get(attribute.code)?.(value);
+    if (configuredError) {
+      fieldErrors[attribute.code] = configuredError;
       continue;
     }
     const scalar = scalarValueForField(attribute, value);

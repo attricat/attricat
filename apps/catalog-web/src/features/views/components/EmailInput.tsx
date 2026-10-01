@@ -1,6 +1,8 @@
 import { TextField } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import { attributeLabel } from '../../entities/entityDisplay';
 import { isEmailAddress } from '../email';
+import type { ValueEditorProps } from './componentTypes';
 
 export const EmailInput = ({
   label,
@@ -48,3 +50,10 @@ export const EmailInput = ({
     />
   );
 };
+
+export const EmailAttributeEditor = ({
+  attribute,
+  ...props
+}: ValueEditorProps) => (
+  <EmailInput label={attributeLabel(attribute)} {...props} />
+);

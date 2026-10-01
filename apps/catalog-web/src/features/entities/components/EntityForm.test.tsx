@@ -170,6 +170,188 @@ describe('EntityForm', () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
+  const colorBlueprint = (overrides: Partial<Attribute> = {}) => {
+    const result = blueprint([attribute('hex', overrides)]);
+    result.blueprint.views.edit = {
+      type: 'tabs',
+      tabs: [
+        {
+          label: 'Color',
+          children: [
+            {
+              type: 'section',
+              children: [
+                {
+                  type: 'field',
+                  field: 'hex',
+                  component: {
+                    id: 'catalog.color_edit',
+                    version: 1,
+                    props: {},
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    return result;
+  };
+
+  it.each([false, true])(
+    'validates and saves configured colors with showAll=%s',
+    async (showAllAttributes) => {
+      const { onSubmit } = renderForm({
+        blueprint: colorBlueprint(),
+        showAllAttributes,
+      });
+      const text = screen.getByRole('textbox', { name: 'hex' });
+      fireEvent.change(text, { target: { value: '#fff' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() =>
+        expect(screen.getByText(/Enter a six-digit/)).toBeTruthy(),
+      );
+      expect(onSubmit).not.toHaveBeenCalled();
+      fireEvent.change(text, { target: { value: '#aBcDeF' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() =>
+        expect(onSubmit).toHaveBeenCalledWith(
+          expect.objectContaining({
+            values: [
+              expect.objectContaining({
+                attribute_code: 'hex',
+                value: '#aBcDeF',
+              }),
+            ],
+          }),
+        ),
+      );
+    },
+  );
+
+  it.each([{ readonly: true }, { context_editable: 'default' as const }])(
+    'does not mutate restricted colors: %j',
+    async (overrides) => {
+      const { onSubmit } = renderForm({
+        blueprint: colorBlueprint(overrides),
+        contextId: marketContextId,
+      });
+      const input = screen.getByRole('textbox', { name: 'hex' });
+      expect(input).toHaveProperty('disabled', true);
+      expect(screen.getByLabelText('Pick color for hex')).toHaveProperty(
+        'disabled',
+        true,
+      );
+      fireEvent.change(input, { target: { value: '#ffffff' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() =>
+        expect(onSubmit).toHaveBeenCalledWith(
+          expect.objectContaining({ values: [] }),
+        ),
+      );
+    },
+  );
+
+  it('rejects clearing required colors', async () => {
+    const { onSubmit } = renderForm({
+      blueprint: colorBlueprint(),
+      requiredAttributes: ['hex'],
+      initialValues: { hex: '#ffffff' },
+    });
+    fireEvent.change(screen.getByRole('textbox', { name: 'hex' }), {
+      target: { value: '' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(
+        screen
+          .getByRole('textbox', { name: 'hex' })
+          .getAttribute('aria-invalid'),
+      ).toBe('true'),
+    );
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('clears an optional local color through the existing removal path', async () => {
+    const { onSubmit } = renderForm({
+      blueprint: colorBlueprint(),
+      contextId: marketContextId,
+      initialValues: { hex: '#ffffff' },
+      existingValues: [
+        {
+          kind: 'scalar',
+          attribute_code: 'hex',
+          value: '#ffffff',
+          context_id: marketContextId,
+        },
+      ],
+    });
+    fireEvent.change(screen.getByRole('textbox', { name: 'hex' }), {
+      target: { value: '' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          values: [],
+          remove_values: [
+            { attribute_code: 'hex', context_id: marketContextId },
+          ],
+        }),
+      ),
+    );
+  });
+
+  it('restores color drafts and keeps inherited context feedback', async () => {
+    writeDraft(draftKey(marketContextId), {
+      savedAt: new Date().toISOString(),
+      source: JSON.stringify(['1', JSON.stringify({ hex: '' })]),
+      value: { hex: '#aBcDeF' },
+    });
+    renderForm({
+      blueprint: colorBlueprint(),
+      ...draftProps(marketContextId),
+      initialValues: { hex: '' },
+      resolvedValues: {
+        hex: {
+          value: '#ffffff',
+          source_context: { id: 'default', code: 'default' },
+        },
+      },
+    });
+    await screen.findByRole('dialog', { name: 'Restore unsaved draft?' });
+    expect(
+      screen.getByRole('textbox', { name: 'hex', hidden: true }),
+    ).toHaveProperty('value', '');
+    fireEvent.click(screen.getByRole('button', { name: 'Restore draft' }));
+    expect(await screen.findByRole('textbox', { name: 'hex' })).toHaveProperty(
+      'value',
+      '#aBcDeF',
+    );
+    expect(screen.getByLabelText('Pick color for hex')).toHaveProperty(
+      'value',
+      '#abcdef',
+    );
+    expect(screen.getByText(/Inherited.*#ffffff/)).toBeTruthy();
+  });
+
+  it('does not interpret ordinary strings as configured colors', async () => {
+    const { onSubmit } = renderForm({
+      blueprint: blueprint([attribute('hex')]),
+      initialValues: { hex: 'red' },
+    });
+    expect(screen.queryByLabelText('Pick color for hex')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          values: [expect.objectContaining({ value: 'red' })],
+        }),
+      ),
+    );
+  });
+
   it('offers a context draft and applies it only when restored', async () => {
     writeDraft(draftKey(marketContextId), {
       savedAt: new Date().toISOString(),

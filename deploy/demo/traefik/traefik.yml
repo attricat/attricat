@@ -31,11 +31,9 @@ entryPoints:
       tls: {}
 
 providers:
-  docker:
-    exposedByDefault: false
-    network: attricat-demo_edge
   file:
-    filename: /etc/traefik/dynamic.yml
+    directory: /etc/traefik/dynamic
+    watch: true
 
 accessLog: {}
 log:

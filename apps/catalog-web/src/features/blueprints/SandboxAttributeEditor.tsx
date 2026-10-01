@@ -1,9 +1,7 @@
 import { Button, MenuItem, TextField } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import { EmailInput } from '../views/components/EmailInput';
-import { isEmailEditor } from '../views/email';
-import { attributeLabel } from '../entities/entityDisplay';
 import type { Attribute, ComponentReference } from '../entities/api';
+import { resolveViewComponent } from '../views/components/registry';
 import { attributeValueTypes } from '../entities/valueTypes';
 import { sandboxBooleanValues, sandboxInputPlaceholders } from './constants';
 
@@ -31,13 +29,14 @@ export const SandboxAttributeEditor = ({
 }) => {
   const { t } = useTranslation();
 
-  if (
-    attribute.value_type === attributeValueTypes.string &&
-    isEmailEditor(component)
-  )
+  const definition = resolveViewComponent(component);
+  const Editor = definition?.value_types.includes(attribute.value_type)
+    ? definition.valueEditor
+    : undefined;
+  if (Editor)
     return (
-      <EmailInput
-        label={attributeLabel(attribute)}
+      <Editor
+        attribute={attribute}
         value={value}
         onChange={onChange}
         disabled={

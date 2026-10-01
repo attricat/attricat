@@ -1260,6 +1260,7 @@ pub async fn execute_mutation(
                     .append_values(
                         input.entity_id,
                         crate::model::AppendAttributeValues {
+                            expected_updated_at: None,
                             values: input.values,
                         },
                     )
@@ -1299,6 +1300,7 @@ pub async fn execute_mutation(
                     .update_entity(
                         input.entity_id,
                         crate::model::UpdateEntityFormRequest {
+                            expected_updated_at: None,
                             values: vec![],
                             relationships: vec![],
                             remove_values: input.remove_values,
@@ -1753,6 +1755,7 @@ pub async fn execute_mutation(
                     .update_entity(
                         input.entity_id,
                         crate::model::UpdateEntityFormRequest {
+                            expected_updated_at: None,
                             values: vec![],
                             relationships: vec![],
                             remove_values: vec![],

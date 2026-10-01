@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { emailFieldsInView, emailHref, isEmailAddress } from './email';
+import { emailHref, isEmailAddress } from './email';
+import { emailEditComponent } from './components/emailComponents';
 import { validatesJsonSchema } from '../entities/jsonSchema';
 
 const valid = [
@@ -52,33 +53,13 @@ describe('email values', () => {
     );
     expect(emailHref({ email: 'a@example.test' })).toBeUndefined();
   });
-  it('finds configured email editors inside nested views', () => {
+  it('validates configured email edits after trimming', () => {
+    expect(emailEditComponent.validateValue('')).toBeUndefined();
     expect(
-      emailFieldsInView({
-        type: 'tabs',
-        tabs: [
-          {
-            label: 'Contact',
-            children: [
-              {
-                type: 'section',
-                children: [
-                  {
-                    type: 'field',
-                    field: 'email',
-                    component: {
-                      id: 'catalog.email_edit',
-                      version: 1,
-                      props: {},
-                    },
-                  },
-                ],
-              },
-            ],
-          },
-        ],
-      }),
-    ).toEqual(new Set(['email']));
-    expect(emailFieldsInView()).toEqual(new Set());
+      emailEditComponent.validateValue(' Name+tag@Example.com '),
+    ).toBeUndefined();
+    expect(emailEditComponent.validateValue('not an email')).toMatch(
+      /single email address/,
+    );
   });
 });

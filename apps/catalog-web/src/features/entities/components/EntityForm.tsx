@@ -2,8 +2,8 @@ import { useForm, useStore } from '@tanstack/react-form';
 import { Alert, Button, Paper, Stack, Typography } from '@mui/material';
 import type {
   Attribute,
-  ComponentReference,
   BlueprintWithAttributes,
+  ComponentReference,
   FormAttributeValue,
 } from '../api';
 import {
@@ -19,7 +19,8 @@ import {
   type RemovedAttributeValue,
   type ResolvedFormValues,
 } from '../entityFormAttributes';
-import { emailFieldsInView, isEmailAddress } from '../../views/email';
+import { viewFieldComponents } from '../../views/viewFieldComponents';
+import { resolveViewComponent } from '../../views/components/registry';
 import { EntityView } from '../../views/components/EntityView';
 import { draftEditors, type DraftEditor } from '../../drafts/constants';
 import { DraftRestoreDialog } from '../../drafts/DraftRestoreDialog';
@@ -35,6 +36,11 @@ import {
 import { useTranslation } from 'react-i18next';
 import { attributeValueTypes } from '../valueTypes';
 import { EntityBlueprintSelect } from './EntityBlueprintSelect';
+import {
+  savedStatusValue,
+  statusConfiguration,
+  statusTransitionAllowed,
+} from '../status';
 import { EntityFormAttributeEditor } from './EntityFormAttributeEditor';
 
 export type EntityFormHandle = {
@@ -65,6 +71,8 @@ const pickDraftFields = (
   );
 
 type EntityFormProps = {
+  expectedUpdatedAt?: string;
+  statusParentContextIds?: readonly string[];
   blueprint?: BlueprintWithAttributes;
   draft?: EntityFormDraft;
   initialValues?: ReturnType<typeof valuesForForm>;
@@ -77,6 +85,7 @@ type EntityFormProps = {
   resolvedValues?: ResolvedFormValues;
   formId?: string;
   isLoadingBlueprint?: boolean;
+  disabled?: boolean;
   showBlueprintMetadata?: boolean;
   showSubmitButton?: boolean;
   showAllAttributes?: boolean;
@@ -88,6 +97,7 @@ type EntityFormProps = {
   onLoadBlueprint?: (code: string, version?: number) => void;
   lockedBlueprint?: boolean;
   onSubmit: (input: {
+    expected_updated_at?: string;
     values: ReturnType<typeof serializeAttributeValues>;
     relationships: ReturnType<typeof relationshipTargetsForForm>;
     remove_values: RemovedAttributeValue[];
@@ -99,6 +109,8 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
   (
     {
       blueprint,
+      expectedUpdatedAt,
+      statusParentContextIds = [],
       draft: draftOptions,
       initialValues = {},
       contextId = null,
@@ -110,6 +122,7 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
       resolvedValues = {},
       formId,
       isLoadingBlueprint = false,
+      disabled = false,
       showBlueprintMetadata = true,
       showSubmitButton = true,
       showAllAttributes = false,
@@ -126,9 +139,25 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
     ref,
   ) => {
     const { t } = useTranslation();
+    const [savedVersion] = useState(expectedUpdatedAt);
+    const [savedValues] = useState(existingValues);
     const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
     const [formError, setFormError] = useState<string>();
     const editView = blueprint?.blueprint.views.edit;
+    const fieldComponents = viewFieldComponents(editView);
+    const fieldValidators = new Map(
+      [...fieldComponents].flatMap(([code, component]) => {
+        const definition = resolveViewComponent(component);
+        const attribute = blueprint?.attributes.find(
+          (item) => item.code === code,
+        );
+        return definition?.validateValue &&
+          attribute &&
+          definition.value_types.includes(attribute.value_type)
+          ? [[code, definition.validateValue] as const]
+          : [];
+      }),
+    );
     const editableAttributes = editableFormAttributes(
       blueprint ? [...blueprint.attributes, ...reusableAttributes] : [],
       {
@@ -148,15 +177,25 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
         contextId === defaultContextId
           ? blueprint.blueprint.entity_schema
           : undefined,
+        undefined,
+        fieldValidators,
       );
-      for (const code of emailFieldsInView(editView)) {
-        if (
-          editableAttributes.some((attribute) => attribute.code === code) &&
-          fields[code]?.trim() &&
-          !isEmailAddress(fields[code].trim())
-        ) {
-          validation.fieldErrors[code] = t('entities.invalidEmail');
-        }
+      for (const attribute of editableAttributes) {
+        const config = statusConfiguration(attribute);
+        if (!config) continue;
+        const parents =
+          attribute.context_fallback === 'none' ? [] : statusParentContextIds;
+        const before = savedStatusValue(attribute, savedValues, [
+          contextId,
+          ...parents,
+        ]);
+        const after =
+          fields[attribute.code] ||
+          savedStatusValue(attribute, savedValues, parents);
+        if (!statusTransitionAllowed(config, before, after))
+          validation.fieldErrors[attribute.code] = t(
+            'entities.statusTransitionDenied',
+          );
       }
       setFieldErrors(validation.fieldErrors);
       setFormError(validation.formError);
@@ -168,6 +207,7 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
         fields: initialValues,
       },
       onSubmit: ({ value }) => {
+        if (disabled) return;
         if (!blueprint) {
           onLoadBlueprint?.(value.blueprintCode);
           return;
@@ -179,6 +219,7 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
         )
           return;
         onSubmit({
+          ...(savedVersion ? { expected_updated_at: savedVersion } : {}),
           values: serializeAttributeValues(
             editableAttributes,
             value.fields,
@@ -246,10 +287,13 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
     }));
 
     const editorContext = {
+      statusParentContextIds,
+      disabled: disabled || isLoadingBlueprint,
       contextId,
       defaultContextId,
       entityId,
       existingValues,
+      statusSavedValues: savedValues,
       fieldErrors,
       highlightedAttributes,
       migrationReviewMessages,
@@ -302,7 +346,7 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
                   <EntityFormAttributeEditor
                     {...editorContext}
                     attribute={attribute}
-                    component={component}
+                    component={component ?? fieldComponents.get(attribute.code)}
                     required={requiredAttributes.includes(attribute.code)}
                     onChange={(nextValue) => {
                       const nextFields = {
@@ -349,7 +393,7 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
           {footerActions}
           {showSubmitButton && (
             <Button
-              disabled={isLoadingBlueprint}
+              disabled={disabled || isLoadingBlueprint}
               type="submit"
               variant="contained"
             >

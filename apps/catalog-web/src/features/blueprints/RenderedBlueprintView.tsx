@@ -47,8 +47,13 @@ const TableViewPreview = ({
     attributes.map((attribute) => [attribute.code, attribute]),
   );
   const visibleFields = (
-    columns ??
-    fields.map((field) => ({ field, label: undefined, renderer: undefined }))
+    columns?.length
+      ? columns
+      : fields.map((field) => ({
+          field,
+          label: undefined,
+          renderer: undefined,
+        }))
   ).flatMap((column) => {
     const attribute = attributesByCode.get(column.field);
     return attribute ? [{ ...column, attribute }] : [];

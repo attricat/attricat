@@ -1,9 +1,10 @@
 import { z } from 'zod';
-import { request, requestUpload } from '../../api/request';
+import { request, requestNoContent, requestUpload } from '../../api/request';
 import {
   conversationUploadResultSchema,
   fileMetadataSchema,
   fileUploadResultSchema,
+  updateFileReferencesSchema,
 } from './schemas';
 import { uploadFormFields } from './constants';
 
@@ -41,6 +42,20 @@ export const uploadFiles = async ({
   const path = `/api/entities/${encodeURIComponent(z.uuid().parse(entityId))}/file-attributes/${encodeURIComponent(attributeCode)}/uploads`;
   return requestUpload(path, data, fileUploadResultSchema, onProgress);
 };
+
+export const updateFileReferences = (
+  entityId: string,
+  attributeCode: string,
+  input: z.infer<typeof updateFileReferencesSchema>,
+) =>
+  requestNoContent(
+    `/api/entities/${encodeURIComponent(z.uuid().parse(entityId))}/file-attributes/${encodeURIComponent(attributeCode)}/references`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updateFileReferencesSchema.parse(input)),
+    },
+  );
 
 export const uploadConversationFiles = async (
   conversationId: string,

@@ -1,9 +1,9 @@
+import { createElement } from 'react';
 import { Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import type { Attribute, EntityItem } from '../entities/api';
 import type { ExtensionContribution } from '../extensions/api';
-import { EmailValue } from '../views/components/values/EmailValue';
-import { VIEW_COMPONENT_IDS, VIEW_COMPONENT_VERSION } from '../views/constants';
+import { resolveValueRenderer } from '../views/components/registry';
 import { AttributeValue } from '../views/components/values/AttributeValue';
 import {
   explorerExtensionContextVersion,
@@ -68,13 +68,15 @@ export const ConfiguredColumnCell = ({
   ) : (
     <AttributeValue attribute={attribute} compact value={primaryValue} />
   );
-  if (
-    renderer?.id === VIEW_COMPONENT_IDS.emailDisplay &&
-    renderer.version === VIEW_COMPONENT_VERSION
-  )
-    return <EmailValue value={primaryValue} />;
   if (renderer?.id === tableImageRendererId)
     return <ImageTableCell value={primaryValue} />;
+  const Renderer = resolveValueRenderer(renderer);
+  if (Renderer)
+    return createElement(Renderer, {
+      attribute,
+      component: renderer,
+      value: primaryValue,
+    });
   if (!renderer || !usesExtensionRenderer(column)) return fallback;
   const context = explorerTableCellContextSchema.parse({
     context_version: explorerExtensionContextVersion,

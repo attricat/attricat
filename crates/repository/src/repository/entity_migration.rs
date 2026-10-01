@@ -270,6 +270,7 @@ impl CatalogRepository {
         }
         self.commit_mutation(transaction).await?;
         Ok(EntityMigrationPreview {
+            source_updated_at: entity.updated_at,
             migration_id,
             source_version: entity.blueprint_version,
             target,
@@ -283,6 +284,16 @@ impl CatalogRepository {
         &self,
         entity_id: Uuid,
         input: MigrateEntityRequest,
+    ) -> Result<Entity, RepositoryError> {
+        self.migrate_entity_to_latest_checked(entity_id, input, None)
+            .await
+    }
+
+    pub async fn migrate_entity_to_latest_checked(
+        &self,
+        entity_id: Uuid,
+        input: MigrateEntityRequest,
+        expected_updated_at: Option<chrono::DateTime<chrono::Utc>>,
     ) -> Result<Entity, RepositoryError> {
         let migration_input = serde_json::to_value(&input).expect("migration input serializes");
         let mut input = input;
@@ -320,6 +331,14 @@ impl CatalogRepository {
                 .record(lock_started.elapsed().as_secs_f64());
         }
         let entity = self.lock_entity(&mut transaction, entity_id).await?;
+        if expected_updated_at.is_some()
+            || self
+                .has_status_writes(&mut transaction, &entity, &input.values, &[])
+                .await?
+        {
+            self.check_status_precondition(&mut transaction, &entity, expected_updated_at)
+                .await?;
+        }
         let migration = sqlx::query_as::<_, (Uuid, i64, i64, String)>(
             "SELECT entity_id, source_version, target_version, status FROM entity_blueprint_migrations WHERE id = $1 AND workspace_id = $2 FOR UPDATE",
         )
@@ -647,11 +666,21 @@ impl CatalogRepository {
                         .len() as u64
                 })
                 .sum::<u64>();
+        if expected_updated_at.is_none()
+            && self
+                .has_status_writes(&mut transaction, &target_entity, &input.values, &[])
+                .await?
+        {
+            return Err(RepositoryError::StatusPreconditionRequired);
+        }
         for value in input.values {
             self.insert_value(&mut transaction, &target_entity, value)
                 .await?;
         }
         self.replace_relationship_sets(&mut transaction, &target_entity, input.relationships)
+            .await?;
+        // A migration is not an implicit escape hatch from the source status policy.
+        self.validate_status_values(&mut transaction, &entity)
             .await?;
         self.validate_entity_schema(&mut transaction, &target_entity)
             .await?;

@@ -38,6 +38,7 @@ mod bootstrap;
 mod contexts;
 mod domain_events;
 mod entity_commands;
+mod entity_comments;
 mod entity_migration;
 mod entity_projection;
 mod entity_publications;
@@ -62,6 +63,7 @@ mod rules;
 mod saved_views;
 mod sessions;
 mod solution_packs;
+mod status;
 mod tasks;
 mod tokens;
 mod values;
@@ -69,6 +71,7 @@ mod workflow_runs;
 mod workflows;
 mod workspace_navigation;
 
+pub use entity_comments::{COMMENT_PAGE_SIZE, EntityComment};
 pub use saved_views::SavedView;
 
 pub use agents::{
@@ -233,6 +236,14 @@ impl FromStr for ValueHistoryRetentionDays {
 
 #[derive(Debug, Error)]
 pub enum RepositoryError {
+    #[error("comment must contain 1 to 10000 characters and no null characters")]
+    InvalidComment,
+    #[error("comment changed; reload before saving again")]
+    CommentConflict,
+    #[error("entity changed since it was loaded; refresh before saving")]
+    StaleEntity,
+    #[error("status edits require expected_updated_at from the entity form")]
+    StatusPreconditionRequired,
     #[error("{0} was not found")]
     NotFound(&'static str),
     #[error("CATALOG_WORKSPACE_ID does not identify an active workspace")]
@@ -279,6 +290,12 @@ pub enum RepositoryError {
     ReusableAttributeAlreadyAttached,
     #[error("file attribute policy is invalid")]
     InvalidFilePolicy,
+    #[error("file attribute is read-only")]
+    FileAttributeReadonly,
+    #[error("file references changed; refresh and try again")]
+    FileReferencesChanged,
+    #[error("file references must be unique existing attachments in an allowed order")]
+    InvalidFileReferences,
     #[error("file count is incompatible with the attribute cardinality")]
     FileCardinality,
     #[error("provide exactly one of attribute_id or attribute_code")]
