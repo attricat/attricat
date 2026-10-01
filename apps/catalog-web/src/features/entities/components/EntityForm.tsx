@@ -2,6 +2,7 @@ import { useForm, useStore } from '@tanstack/react-form';
 import { Alert, Button, Paper, Stack, Typography } from '@mui/material';
 import type {
   Attribute,
+  ComponentReference,
   BlueprintWithAttributes,
   FormAttributeValue,
 } from '../api';
@@ -18,6 +19,7 @@ import {
   type RemovedAttributeValue,
   type ResolvedFormValues,
 } from '../entityFormAttributes';
+import { emailFieldsInView, isEmailAddress } from '../../views/email';
 import { EntityView } from '../../views/components/EntityView';
 import { draftEditors, type DraftEditor } from '../../drafts/constants';
 import { DraftRestoreDialog } from '../../drafts/DraftRestoreDialog';
@@ -147,6 +149,15 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
           ? blueprint.blueprint.entity_schema
           : undefined,
       );
+      for (const code of emailFieldsInView(editView)) {
+        if (
+          editableAttributes.some((attribute) => attribute.code === code) &&
+          fields[code]?.trim() &&
+          !isEmailAddress(fields[code].trim())
+        ) {
+          validation.fieldErrors[code] = t('entities.invalidEmail');
+        }
+      }
       setFieldErrors(validation.fieldErrors);
       setFormError(validation.formError);
       return validation;
@@ -248,6 +259,7 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
     return (
       <Paper
         component="form"
+        noValidate
         id={formId}
         onSubmit={(event) => {
           event.preventDefault();
@@ -283,10 +295,15 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
           {blueprint && (
             <form.Field name="fields">
               {(field) => {
-                const renderEditor = (attribute: Attribute) => (
+                const renderEditor = (
+                  attribute: Attribute,
+                  component?: ComponentReference | null,
+                ) => (
                   <EntityFormAttributeEditor
                     {...editorContext}
                     attribute={attribute}
+                    component={component}
+                    required={requiredAttributes.includes(attribute.code)}
                     onChange={(nextValue) => {
                       const nextFields = {
                         ...field.state.value,

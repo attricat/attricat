@@ -1,6 +1,8 @@
 export const VIEW_COMPONENT_VERSION = 1;
 
 export const VIEW_COMPONENT_IDS = {
+  emailDisplay: 'catalog.email_display',
+  emailEdit: 'catalog.email_edit',
   fieldDisplay: 'catalog.field_display',
   fieldEdit: 'catalog.field_edit',
   incomingRelationshipListDisplay: 'catalog.incoming_relationship_list_display',

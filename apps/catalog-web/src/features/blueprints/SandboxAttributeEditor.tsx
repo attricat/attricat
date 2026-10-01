@@ -1,6 +1,9 @@
 import { Button, MenuItem, TextField } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import type { Attribute } from '../entities/api';
+import { EmailInput } from '../views/components/EmailInput';
+import { isEmailEditor } from '../views/email';
+import { attributeLabel } from '../entities/entityDisplay';
+import type { Attribute, ComponentReference } from '../entities/api';
 import { attributeValueTypes } from '../entities/valueTypes';
 import { sandboxBooleanValues, sandboxInputPlaceholders } from './constants';
 
@@ -17,14 +20,32 @@ const inputPlaceholder = (attribute: Attribute) => {
 /** Unsaved input for one attribute in the blueprint view preview sandbox. */
 export const SandboxAttributeEditor = ({
   attribute,
+  component,
   onChange,
   value,
 }: {
   attribute: Attribute;
+  component?: ComponentReference | null;
   onChange: (value: string) => void;
   value: string;
 }) => {
   const { t } = useTranslation();
+
+  if (
+    attribute.value_type === attributeValueTypes.string &&
+    isEmailEditor(component)
+  )
+    return (
+      <EmailInput
+        label={attributeLabel(attribute)}
+        value={value}
+        onChange={onChange}
+        disabled={
+          attribute.readonly === true ||
+          attribute.extension_type?.available === false
+        }
+      />
+    );
 
   if (attribute.value_type === attributeValueTypes.relationship)
     return (

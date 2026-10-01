@@ -136,6 +136,12 @@ export const validateEntityForm = (
     if (value.trim() && !scalar) {
       fieldErrors[attribute.code] = messages.invalidValue;
     } else if (scalar) {
+      const errors = jsonSchemaValidationErrors(
+        scalar.value,
+        attribute.value_schema,
+      );
+      if (errors === undefined || errors.length > 0)
+        fieldErrors[attribute.code] = messages.schema;
       document[attribute.code] = scalar.value;
     }
   }

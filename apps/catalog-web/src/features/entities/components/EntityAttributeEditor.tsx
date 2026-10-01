@@ -1,7 +1,9 @@
 import { MenuItem, TextField, Tooltip, useTheme } from '@mui/material';
 import { InfoIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import type { Attribute } from '../api';
+import type { Attribute, ComponentReference } from '../api';
+import { EmailInput } from '../../views/components/EmailInput';
+import { isEmailEditor } from '../../views/email';
 import type { FileMetadata } from '../../files/schemas';
 import { attributeLabel } from '../entityDisplay';
 import { attributeValueTypes } from '../valueTypes';
@@ -17,6 +19,8 @@ import { smallIconSize } from '../../../components/iconSizes';
 
 export const EntityAttributeEditor = ({
   attribute,
+  component,
+  required,
   contextId,
   disabled,
   entityId,
@@ -29,6 +33,8 @@ export const EntityAttributeEditor = ({
   value,
 }: {
   attribute: Attribute;
+  component?: ComponentReference | null;
+  required?: boolean;
   contextId: string | null;
   disabled: boolean;
   entityId?: string;
@@ -46,6 +52,24 @@ export const EntityAttributeEditor = ({
   const migrationBadge = showMigrationBadge ? (
     <MigrationBadge message={migrationReviewMessage} />
   ) : null;
+  if (
+    attribute.value_type === attributeValueTypes.string &&
+    isEmailEditor(component)
+  )
+    return (
+      <>
+        {migrationBadge}
+        <EmailInput
+          label={attributeLabel(attribute)}
+          value={value}
+          onChange={onChange}
+          disabled={effectiveDisabled}
+          required={required}
+          error={error}
+          helperText={helperText}
+        />
+      </>
+    );
   if (attribute.value_type === attributeValueTypes.relationship)
     return (
       <>
