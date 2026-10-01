@@ -1,669 +1,175 @@
-# Solution packs
-
-A solution pack is a versioned, declarative `.tar.zst` archive uploaded by an
-authorized workspace administrator. It can bootstrap blueprints, bounded
-workspace defaults, presentation assets, extension requirements, and setup
-guidance. It is not a backup, executable installer, or source of continuing
-ownership over the resulting workspace resources.
-
-The CLI uploads the archive for server-side inspection and an immutable dry-run
-plan. Only an explicit apply mutates workspace resources. Ordinary users work
-with those resources rather than with the pack. A pack never installs, grants,
-configures, or enables an extension on its own.
-
-## Shipped boundary
-
-- Create new blueprints or explicitly reuse exact published revisions; plan
-  added and unchanged resources from one named earlier application. Changed
-  definitions block, rather than updating an existing blueprint.
-- Merge only bounded Explore navigation and extension layout defaults. Evaluate
-  installed extension requirements without changing extension lifecycle state.
-- Create or explicitly map immutable presentation assets. Inspect bounded
-  guidance and rerun informational checks.
-- Create synthetic [sample data](solution-pack-sample-data.md) only when the
-  administrator explicitly opts in at plan creation. Ordinary audit and
-  automation apply to the created entities.
-
-There is no pack-level uninstall, automatic adoption, generic settings merge,
-prerequisite-pack resolution, blueprint update, or export. Contexts and
-publication-channel defaults are not pack content. See [future design ideas](solution-packs-future.md)
-for proposals that are **not** accepted manifest syntax or available operations.
-
-## Package and distribution
-
-Solution packs use the same `.tar.zst` container format as extensions, but have
-an independent manifest and validation contract. A pack archive has one
-`solution-pack.json` at its root. It must not be interpreted as an extension
-archive, even if it also contains a file named `manifest.json`.
-
-The `.tar.zst` file is the only installation input. An administrator obtains an
-immutable pack archive through an out-of-band distribution process and uploads
-that file with `acli`. Catalog does not discover packs, access source
-repositories, resolve release tags, fetch URLs, or manage repository
-credentials. A pack's private source repository may remain its authoring,
-documentation, and release home, but it is outside the Catalog protocol and
-trust boundary.
-
-Every uploaded archive receives the same schema, path, size, media-type,
-compatibility, digest, and content validation. Catalog identifies the input by
-the pack ID and version declared in the manifest plus the server-computed
-whole-archive digest. It never relies on a file name or an unverified repository
-claim for identity or provenance.
-
-Before planning, Catalog validates at least:
-
-- bounded compressed and expanded sizes, entry counts, individual files, and
-  blueprint/include/attribute complexity;
-- relative UTF-8 file paths without traversal, links, devices, or duplicates;
-- exactly one strict, supported solution-pack manifest;
-- a matching immutable pack ID and SemVer release;
-- declared files, media types, and cryptographic digests;
-- declared pack identity and version plus the whole-archive digest;
-- host compatibility and supported resource contract versions;
-- uniqueness and referential integrity of logical resource keys; and
-- schemas for blueprints, settings, templates, and checks before any workspace
-  mutation, and the strict sample-data schema when that optional resource is declared.
-
-Unknown manifest fields are rejected at the contract version where they occur.
-Archive validity does not imply that its proposed changes are safe for a
-particular workspace; the planner decides that separately.
-
-## Manifest
-
-The manifest owns package metadata and indexes content files. Large resource
-bodies live in declared files rather than being hidden in the manifest. The
-following example illustrates the v1 contract. The strict
-[manifest schema](../contracts/solution-pack-manifest-v1.schema.json) defines
-accepted fields:
-
-```json
-{
-  "manifest_version": 1,
-  "id": "attricat.ecommerce",
-  "name": "Ecommerce Catalog",
-  "version": "1.2.0",
-  "description": "Product and category blueprint foundations.",
-  "catalog": {
-    "host_api": ">=1.0.0 <2.0.0"
-  },
-  "documentation": {
-    "readme": {"path": "README.md", "sha256": "<lowercase-sha256>"},
-    "release_notes": {"path": "RELEASE_NOTES.md", "sha256": "<lowercase-sha256>"},
-    "setup_checklist": {"path": "setup/checklist.json", "sha256": "<lowercase-sha256>"}
-  },
-  "checks": {"path": "checks/checks.json", "sha256": "<lowercase-sha256>"},
-  "resources": {
-    "blueprints": [{
-      "key": "blueprints/product",
-      "path": "blueprints/product.toml",
-      "required": true,
-      "sha256": "<lowercase-sha256>"
-    }],
-    "workspace_settings": [{
-      "key": "workspace/explore-navigation",
-      "path": "workspace/explore-navigation.json",
-      "required": false,
-      "sha256": "<lowercase-sha256>"
-    }],
-    "presentation_assets": [{
-      "key": "assets/brand-logo",
-      "path": "assets/brand-logo.svg",
-      "required": true,
-      "purpose": "logo",
-      "media_type": "image/svg+xml",
-      "sha256": "<lowercase-sha256>"
-    }]
-  },
-  "extensions": [{
-    "key": "extensions/shopify",
-    "id": "acme.shopify",
-    "version": ">=2.1.0 <3.0.0",
-    "required": false,
-    "configuration_template": {
-      "path": "extensions/shopify.json",
-      "sha256": "<hex digest>"
-    }
-  }]
-}
-```
-
-Every resource entry has a pack-local `key`, a declared resource contract, and
-an explicit required/optional state. Pack-global references combine the pack ID
-and key, for example:
-
-```text
-attricat.ecommerce/blueprints/product
-attricat.ecommerce/blueprints/product/attributes/sku
-attricat.ecommerce/extensions/shopify
-```
-
-Keys are immutable after publication. Renaming a key means removing one logical
-resource and adding another and must be treated as such when planning a later
-release. Display names are not identifiers.
-
-## Logical identifiers and workspace mappings
-
-Implemented mapping covers newly created resources, explicit administrator-selected
-exact blueprint reuse, explicit reuse of unchanged blueprints from one named completed
-prior application of the same pack, and the two bounded workspace-setting merges.
-Automatic discovery or suggestions, non-blueprint existing-resource adoption, and
-update/successor planning remain out of scope.
-
-Pack files reference logical keys, never workspace UUIDs or assumed physical
-codes. During application, the planner resolves every key to one
-workspace-owned resource and records that mapping in the immutable application
-record.
-
-For a new globally code-addressed resource, an administrator chooses or accepts
-a pack prefix. The planner can then produce codes such as `ecom_product` and
-`ecom_category`. Attribute codes such as `sku` remain local to
-the mapped blueprint, but references to them still use logical attribute keys.
-Relationships, views, templates, layouts, checks, and settings are compiled
-through the same stored mapping.
-
-Contexts are administrator-managed workspace operating structure, not solution-pack
-resources. Pack manifests cannot declare context keys or hierarchy references,
-and application plans never create, map, or update contexts.
-
-If a proposed code collides, select a different prefix and create a new
-blueprint, or supply an explicit `--map` to an exactly compatible published
-blueprint. Asset reuse similarly requires an explicit `--map-asset` to an exact
-same-workspace asset. Unmet optional settings or contribution entries may be
-skipped; incompatible required entries block the plan. There is no per-resource
-rename, generic adoption, or arbitrary installer-option flow.
-
-Catalog never silently overwrites, renames, or maps an existing blueprint,
-setting, or asset. A successful application preserves its mapping as
-provenance. Existing-blueprint selection is always explicit: administrators either
-supply `--map` choices or name exactly one completed application with
-`--from-application`. Catalog never searches application history or suggests a
-candidate. The record does not make the resource pack-owned or prevent ordinary
-workspace changes. This allows packs with overlapping local names to coexist.
-
-The plan distinguishes a newly created resource from an exactly compatible
-existing resource selected by the administrator. That distinction is historical
-provenance only. Both become or remain ordinary workspace-owned resources as
-soon as the plan is applied.
-
-## Multiple packs in one workspace
-
-The implemented v1 can apply multiple plans when newly created target codes do
-not collide. An administrator may explicitly map pack blueprint keys to the same
-compatible existing blueprint across multiple plans. Explore-navigation and extension-layout entries compose through
-their bounded item-level merge rules: absent entries append, exact entries are
-no-ops, and incompatible placements conflict without replacing unrelated data.
-Compatible installed contributions may be shared as declarative availability,
-but packs never mutate their lifecycle. Automatic or suggested resource mapping,
-non-blueprint compatibility mapping, configuration composition, and generic
-workspace-setting composition remain outside the implemented contract.
-
-A workspace may apply multiple solution packs. This is a core composition
-requirement, not an exceptional migration path: for example, one workspace may
-combine Ecommerce, DAM, SEO, marketplace, and warehouse templates.
-
-Each application has its own prefix, mapping snapshot, and provenance record.
-Physical codes must be unique across the workspace, but packs may have
-overlapping local key names because references are qualified by pack ID and
-resolved while each plan is created.
-
-Installed extension contributions and exact bounded workspace-setting entries
-can be shared by multiple plans through `satisfied` actions. An administrator
-may explicitly map a second pack to an exactly compatible blueprint produced by
-an earlier application; automatic inference from prior applications is not
-implemented. No application gives a pack continuing ownership or creates a
-permanent pack dependency; applied resources and settings remain workspace-owned.
-
-Implemented composition follows these rules:
-
-- plans evaluate current target codes, bounded settings, and installed extension
-  release snapshots;
-- no pack receives implicit precedence because it was applied most recently;
-- Explore-navigation and extension-layout entries merge only through their
-  registered item-level keys and merge rules;
-- incompatible bounded setting proposals become conflicts rather than
-  last-writer-wins updates;
-- extension version requirements and contribution declarations must match the
-  exact compatible release selected when the plan was created; and
-- extension grants, configuration, and enablement remain ordinary workspace
-  decisions outside pack application.
-
-Generic settings, non-blueprint existing-resource adoption, configuration
-composition, and automatic prior-application discovery remain out of scope.
-
-An administrator may explicitly select one completed same-workspace application of
-the same pack when planning a strictly newer SemVer release. Unchanged current
-blueprint keys reuse the exact published target revision from that application;
-new keys use ordinary create planning. Changed definitions are blocked as
-`update_not_supported`. Missing, deleted, unpublished, newer-revision, or hash-drifted
-prior targets conflict rather than being replaced. Removed prior blueprint keys are
-bounded informational evidence only and never produce an action or deletion. Prior
-create and map targets follow the same rules, while a target created as draft by the
-prior application is not eligible for reuse. This lineage does not create managed
-ownership, updates, successors, migrations, downgrade/replay behavior, or uninstall
-semantics.
-
-## Pack contents (v1 blueprints, settings, extensions, and guidance)
-
-### Blueprints and views
-
-A pack may declare entity and mixin blueprints, attributes, includes,
-relationships, JSON Schema validation, dropdown views, detail/edit/table views,
-and entity-owned extension layout defaults described in
-[Blueprint authoring](blueprints.md) and [View configuration](views.md).
-
-Pack authoring uses logical references for blueprint, include, relationship,
-and attribute targets. During planning, Catalog resolves those references and
-compiles a native blueprint definition using the application's mapped codes.
-The resulting definition must pass the ordinary blueprint compiler.
-
-An application may create and publish a new blueprint only when the plan
-explicitly says so. **Future-only design:** a later-release planner may propose a
-draft successor and show schema and entity-migration consequences before
-publication. Implemented v1 does not create successor revisions or update an
-existing blueprint through a solution pack.
-
-### Context boundary
-
-Contexts are ordinary, administrator-managed workspace operating structure and
-are never solution-pack content. The manifest has no `resources.contexts`
-field; strict manifests that include it are rejected as unknown. Pack logical
-references cannot use context keys, and planning or
-application cannot create, map, update, or reference a context hierarchy.
-Guidance and checks do not gain an implicit context prerequisite contract in v1.
-
-### Extension requirements
-
-A pack may name at most 64 unique required or optional extension IDs and SemVer
-ranges, each with an optional literal JSON configuration template. Planning
-reports whether the workspace's installed release is compatible and whether the
-declared non-sensitive configuration subset matches. It never proposes an
-extension source, installation, upgrade, grant, configuration write, or
-lifecycle transition. Extension packages remain independently sourced and
-validated through ordinary administrator workflows.
-
-A pack cannot grant permissions, approve host access, bypass extension source
-rules, inject extension artifacts, or enable an extension. Disabled compatible
-installations can satisfy a requirement; quarantined installations cannot.
-Required operator approvals remain effective even for an official pack.
-Compatible manifest-declared UI contributions may be referenced by stable
-`<extension-id>:<contribution-id>` keys in the bounded layout defaults described
-below. Guided setup may refer to these declarations but never mutates extension
-lifecycle state.
-
-### Extension configuration templates and inputs
-
-The implemented template subset is a bounded literal JSON object. Object
-matching is recursive containment; scalar and array values match exactly. There
-is no interpolation, typed input language, logical-reference resolution, or
-mutation behavior. Template files are public pack material, so authors must not
-put sensitive values in them. Catalog rejects a bounded denylist of secret-like
-keys as defense in depth, but this heuristic is not proof that arbitrary values
-are non-sensitive. Template and installed-configuration values are private to
-validation and are never included in inspection, plan, application, or audit
-responses.
-
-Typed installer inputs, secret references, and post-install setup steps remain
-future design. Secret values, access tokens, passwords, private keys, and
-connection credentials must not be stored in a pack archive or solution-pack
-plan.
-
-### Workspace defaults (Explore navigation and extension layout)
-
-V1 accepts at most two `workspace_settings` resources, one of each fixed kind.
-Explore navigation uses key `workspace/explore-navigation` and path
-`workspace/explore-navigation.json`. The strict file has `format_version: 1`,
-`kind: "explore_navigation"`, and 1–64
-entries. Each entry contains a declared entity-blueprint logical key and at most
-16 unique role **codes**; UUID references and unknown fields are rejected.
-
-The planner maps logical blueprint keys to deterministic physical codes. An
-absent entry is appended, an exact entry (including the canonical role-code set)
-is satisfied without a write, and a different role list for the same blueprint
-is a conflict. Required unavailable blueprints or unknown roles block a plan;
-optional unmet entries are skipped while other valid entries remain actionable.
-Pack-created targets require `publish`.
-Existing order is preserved and new entries are appended in file order. Malformed
-or duplicate existing navigation is a non-ready conflict and is never rewritten.
-
-Application locks the workspace row shared with ordinary navigation replacement,
-then revalidates entry absence/exactness, published entity blueprints, and role
-codes. This prevents lost updates and makes retries idempotent. Only bounded
-entry summaries and outcomes are retained; unrelated navigation and every other
-workspace setting are preserved.
-Extension layout uses key `workspace/extension-layout` and path
-`workspace/extension-layout.json`. Its strict v1 file contains 1–64 entries with
-a stable contribution key, manifest outlet, required flag, primary placement
-(`hidden` or ordered), and navigation-only `promoted` flag. Contribution keys
-are semantically unique across the file even when two JSON entry objects differ;
-exact duplicate objects are additionally rejected by the published JSON schema.
-A hidden contribution cannot also be promoted. Planning accepts
-only a contribution declared at the exact compatible installed release;
-disabled releases can satisfy availability, while missing, incompatible,
-quarantined, policy-denied, missing-contribution, or wrong-outlet entries are
-unmet. Required unmet entries block and optional unmet entries skip. Exact
-placements are no-ops, absent placements append in file order, and placement or
-promotion mismatches conflict. Application revalidates and locks before merging,
-preserving unrelated entries, outlet order, and every other setting. It never
-installs, upgrades, configures, grants, enables, or otherwise changes an
-extension.
-
-Entity-blueprint `extension_layout` views are also accepted for newly created
-pack blueprints, limited by the ordinary compiler to entity-owned outlets.
-References are checked against the same immutable release snapshot. Optional
-extension requirements remove only unavailable layout keys; required unavailable
-keys block blueprint creation. Existing blueprints are never updated or
-automatically adopted; explicit reuse is limited to the exact blueprint mapping
-contract above.
-
-Generic settings, automatic adoption, ownership, and uninstall remain out of
-scope.
-
-### Branding, themes, and static assets
-
-A pack may declare 1–64 presentation assets under `resources.presentation_assets`.
-Each declaration has a logical `assets/<key>`, safe `assets/...` archive path,
-`required`, purpose (`logo`, `icon`, or `illustration`), fixed media type, and
-lowercase SHA-256. Each source is limited to 2 MiB, all asset sources to 16 MiB,
-and SVG source/output to 256 KiB. PNG, WebP, and SVG are accepted for every
-purpose; JPEG is illustration-only. Raster images must decode completely, must
-be static, and are limited to 4096×4096 and 16 megapixels.
-
-SVG uses a parsed, fail-closed static element/attribute allowlist and deterministic
-serialization. Scripts, event attributes, foreign objects, animation, style and
-font content, unknown namespaces, declarations/entities, and non-local or active
-references are rejected. Inspection returns logical metadata and source/stored
-digests, never source bytes or archive/object paths.
-
-The ordinary administrator-only presentation-asset API exposes opaque UUID
-metadata and authenticated, bounded, integrity-verified content for assets created by
-successful pack application. `acli presentation-asset list`, `show`, and `download`
-provide the discovery workflow needed before an explicit `--map-asset`. Direct asset
-creation is intentionally unavailable so every private object has durable plan staging
-and reconciliation evidence. Assets are immutable in this slice; there is no create,
-update, or delete endpoint.
-
-Planning preallocates opaque asset UUIDs and durably stages only normalized bytes
-to deterministic private keys. Staging identity and source/stored digests are
-covered by immutable plan evidence; raw archives are never retained. Apply
-revalidates object digest/size and atomically inserts the ordinary workspace asset,
-claims the staging row, records step/audit evidence, and supports retry after
-storage or ambiguous commit failures. Explicit maps require an exact same-workspace
-asset and object; there is no digest search or automatic adoption. With
-`--from-application`, added assets create, unchanged assets map to the exact prior
-target, changed assets block as `update_not_supported`, and removed assets are
-history only. Pack history never owns, updates, deletes, or uninstalls an asset.
-
-### Documentation, checklist, and validation checks
-
-A pack may declare digest-bearing README (64 KiB), release notes (32 KiB), a
-strict JSON setup checklist (64 KiB and 64 items), and a strict JSON checks file
-(128 KiB and 64 checks). Markdown is persisted as normalized UTF-8 source.
-Raw HTML, images, executable/code constructs, autolinks, and links other than
-same-document fragments are rejected. Consumers must render with HTML disabled.
-Checklist keys use `checklist/<key>` and may refer to one declared `checks/<key>`;
-there is no manual completion state or checklist mutation API. The file referenced
-by the manifest's `checks` member has this separate shape:
-
-```json
-{
-  "format_version": 1,
-  "checks": [{
-    "key": "checks/product-published",
-    "title": "Product is published",
-    "predicate": {
-      "type": "blueprint_published",
-      "blueprint": "blueprints/product"
-    }
-  }]
-}
-```
-
-Checks are strictly one of `blueprint_published`, `extension_installed`,
-`extension_enabled`, `extension_configuration_matches`,
-`explore_navigation_entry_present`, or
-`workspace_extension_layout_placement_present`. Their operands are pack logical
-keys or one declared workspace layout contribution. Unknown fields and
-unresolvable archive references are rejected; skipped optional application
-mappings evaluate false with `not_resolvable` evidence.
-
-All checks are informational. False results are successful evaluations and
-never change plan readiness, application completion, resources, settings, or
-extension lifecycle. A completed application receives one idempotent
-`post_apply` run. Administrators may create later `manual` runs against current
-tenant state. Each run, all ordered results, actor/token identity,
-request/correlation IDs, and its audit event commit atomically; evaluator errors
-leave no partial run. Definitions and configuration templates remain private.
-Public responses expose only bounded guidance, check key/title/type, run counts,
-and safe result evidence—never resource source, extension manifests, installed
-configuration, or template values.
-
-### Optional sample data
-
-The implemented [optional sample-data contract](solution-pack-sample-data.md)
-requires explicit
-`--include-sample-data` selection, synthetic author attestation plus fail-closed
-syntactic screening and trusted review, durable same-release identity
-reservation with original-plan retry and strictly-newer lineage, private value
-cleanup, ordinary audit and automation, default-context resolution, a visible
-removable sample marker, and same-file acyclic relationships.
-
-Planning selects sample data only with `--include-sample-data`; omission is a
-recorded non-selection and `apply` takes only the immutable plan ID. Inspection
-and selected plans expose counts and digests, never scalar values, together
-with the warning that ordinary audit and `entity.created.v1` processing may run
-automation and retain value copies. The feature does not
-claim semantic or provenance proof and does not introduce entity publication,
-update, delete, ownership, reconciliation, entity cleanup, or uninstall
-behavior.
-
-## Content that packs must not include
-
-Packs cannot contain or confer authority through:
-
-- workspace, user, role, entity, context, blueprint, release, or installation
-  UUIDs copied from another workspace;
-- database dumps, SQL, migrations, triggers, procedures, or direct table data;
-- executable install, upgrade, validation, or uninstall scripts;
-- extension binaries disguised as pack assets;
-- secrets, credentials, session material, signed URLs, or secret defaults;
-- arbitrary authorization grants or membership changes;
-- arbitrary workspace-settings replacement;
-- undeclared remote downloads; or
-- customer production data in an official or reusable pack.
-
-## CLI administration
-
-Solution-pack inspection, dry-run planning, application, and application history are administrator-only CLI workflows.
-The implemented inspection command uploads an archive to the authoritative
-server for read-only validation and returns only safe metadata and resource
-summaries:
+# Install and operate solution packs
+
+A solution pack is a versioned `.tar.zst` archive supplied by a publisher. It
+sets up ordinary workspace resources for a use case: blueprints, navigation,
+extension layouts, presentation assets, setup guidance, and optional samples.
+
+After applying a pack, users work with its resources through normal Attricat
+features. There is no pack service to keep running, and packs do not retain
+ownership, synchronize resources, or uninstall them later.
+
+## Before you start
+
+- Obtain an immutable archive from a trusted publisher and review its release
+  notes and compatibility requirements. Attricat does not discover packs, fetch
+  repository URLs, or download releases on your behalf.
+- Use an authenticated `acli` session or personal token for the intended
+  workspace. Pack administration requires `solution_packs.manage`, granted to
+  the workspace owner and administrator roles by default. See [CLI](cli.md) and
+  [authentication](authentication.md).
+- Check the selected server and workspace before applying. Test unfamiliar
+  packs in a disposable development workspace first, especially with samples.
+- Install required extensions separately using the normal
+  [extension administration workflow](extensions.md). A pack never installs,
+  configures, grants permissions to, enables, or removes an extension.
+
+Do not edit or repackage a supplied archive to work around validation errors.
+Ask its publisher for a compatible release.
+
+## Inspect the archive
 
 ```sh
 acli solution-pack inspect --file pack.tar.zst
 ```
 
-Inspection does not persist the archive, apply resources, or expose blueprint
-source or normalized resource payloads in its response. The implemented uploaded-archive
-planner uses an explicit prefix and blueprint publication preference:
+The server validates the archive and returns its identity, version, digest,
+resource summaries, extension requirements, guidance counts, and sample-data
+warnings. Inspection does not apply resources or persist the archive. Validation
+alone does not mean the pack is suitable for your workspace.
+
+## Create and review a plan
 
 ```sh
-acli solution-pack plan --file pack.tar.zst --prefix ecom --blueprint-publication draft
-acli solution-pack plan --file pack.tar.zst --prefix ecom --blueprint-publication publish --include-sample-data
-acli solution-pack plan --file pack.tar.zst --prefix ecom --blueprint-publication publish \
-  --map blueprints/product=shared_product --map blueprints/category=shared_category \
-  --map-asset assets/brand-logo=<existing-asset-uuid>
-acli solution-pack plan --file pack-v2.tar.zst --prefix ecom --blueprint-publication publish \
-  --from-application <completed-application-id>
+acli solution-pack plan --file pack.tar.zst \
+  --prefix example --blueprint-publication publish
 acli solution-pack plan show <plan-id>
+```
+
+Planning saves an immutable dry run without changing catalog resources. Review
+readiness, all actions, conflicts, extension requirements, and the sample-data
+selection.
+
+- `--prefix` determines new blueprint codes, such as `example_product`. It must
+  be 1–32 characters, start with a lowercase letter, contain only lowercase
+  letters, digits, and underscores, and not end with an underscore.
+- `--blueprint-publication draft` creates drafts on apply; `publish` creates
+  published blueprints. Navigation entries and sample creation may require
+  published targets, so choosing `draft` can block such a pack.
+- Sample data is omitted unless you explicitly add `--include-sample-data`
+  during planning. Review [sample-data safety](solution-pack-sample-data.md)
+  before selecting it.
+
+| Action | Meaning |
+| --- | --- |
+| `create` | Create a new blueprint, asset, or selected sample entity. |
+| `map` | Reuse an explicitly selected compatible resource. |
+| `append` | Add navigation or extension-layout entries. |
+| `satisfied` | The requested setting is already present exactly. |
+| `skip` | Leave an optional unavailable item out. |
+| `conflict` | Existing workspace state prevents the operation. |
+| `blocked` | A requirement is unmet or the requested change is unsupported. |
+
+Only ready plans can be applied. Plans expire after 24 hours if application has
+not started. Planning does not reserve ordinary blueprint codes against other
+users; apply checks the workspace again.
+
+## Resolve conflicts and requirements
+
+For a code collision, choose a different prefix, or explicitly reuse a published
+blueprint whose definition matches the pack exactly. Use resource keys reported
+by inspection and the publisher's installation instructions:
+
+```sh
+acli solution-pack plan --file pack.tar.zst --prefix example \
+  --blueprint-publication publish \
+  --map blueprints/product=shared_product
+```
+
+You must select existing resources explicitly. If a resource does not match,
+Attricat reports a conflict without overwriting or automatically adopting it.
+
+For presentation-asset reuse, inspect existing assets and supply an exact match:
+
+```sh
+acli presentation-asset list
+acli presentation-asset show <asset-id>
+acli solution-pack plan --file pack.tar.zst --prefix example \
+  --blueprint-publication publish \
+  --map-asset assets/brand-logo=<asset-id>
+```
+
+If an extension requirement is unmet, resolve it through normal extension
+administration and create a fresh plan. A compatible disabled extension can
+satisfy installation requirements; operators must still approve permissions and
+enablement separately. Attricat preserves unrelated settings.
+
+## Apply and verify
+
+```sh
 acli solution-pack apply <plan-id>
 acli solution-pack applications list
 acli solution-pack applications show <application-id>
-acli solution-pack applications abandon <application-id>
-acli solution-pack checks rerun <application-id>
 acli solution-pack checks list <application-id> --limit 25 --offset 0
 acli solution-pack checks show <application-id> <run-id>
+acli solution-pack checks rerun <application-id>
 ```
 
-`draft` and `publish` describe what a later apply operation would do; planning
-never creates or publishes a blueprint. Prefixes are 1–32 bytes, begin with a
-lowercase ASCII letter, contain only lowercase letters, digits, and underscores,
-and do not end in an underscore. Optional v1 resources are conservatively
-skipped; a selected required resource whose dependency would be skipped is
-blocked. Existing target codes remain conflicts unless the administrator
-explicitly supplies a `--map logical_key=existing_code` choice. A mapped target
-must be a same-workspace, non-deleted published blueprint whose definition,
-after the same TOML parse/serialize canonicalization as the pack definition,
-matches exactly, including kind, references, and effective include revisions.
-Formatting, comments, and source table ordering do not affect compatibility;
-the separately persisted raw stored-source hash remains an apply-time stale
-precondition. Catalog never searches for or suggests mappings and never mutates a
-mapped blueprint. Presentation assets similarly require `--map-asset logical_key=uuid`
-for exact reuse; otherwise a distinct ordinary asset is created, even when another asset
-has the same digest. `--map` and `--map-asset` may be used together; `--from-application` cannot
-be combined with either. The latter
-UUID is a query choice while the archive remains a raw `application/zstd` request.
-The plan and application history retain the selected prior application plus ordered
-added/unchanged/changed/removed evidence and canonical definition hashes. Pack
-blueprints reject workspace-role publication policies and
-extension-provided table renderers. Entity-owned extension layouts are validated
-against tenant-scoped immutable installed-release manifests. Planning snapshots
-the exact release, lifecycle state, policy compatibility, declared contributions,
-and configuration needed for requirements; role and grant state is not part of
-requirement satisfaction.
+Apply accepts only the reviewed plan ID; you cannot change its choices. The server revalidates
+workspace state before each step. Completed applications receive an informational
+check run; operators can rerun checks after setup changes. False check results
+do not roll back resources or block an otherwise completed application.
 
-Application accepts only an immutable plan ID and never recomputes choices from
-CLI flags. Each create step commits its ordinary Catalog mutation together with
-durable step evidence; retries verify completed targets and continue pending
-steps without duplicate resources. Planning remains separate from application;
-there is no repository-selection or remote-fetch path.
+Follow the publisher's setup checklist and try the intended business workflow.
+The application record documents the resources created or reused. It does not
+track later user edits.
 
-The CLI authenticates normally and the API requires a dedicated
-`solution_packs.manage` permission, initially granted to workspace owner and
-administrator roles. Possession of an archive or CLI access is not authority to
-inspect, plan, or apply it; every operation is authorized by the server.
+## Retry and recovery
 
-## Planning and application (implemented v1)
+Retry an interrupted or resumable failed application with the same plan ID.
+The server verifies completed steps and continues pending steps without
+duplicating resources. A started application can resume after the original plan expires,
+subject to its application-specific retention deadline.
 
-Validation produces no workspace changes. An authorized administrator uploads a
-`.tar.zst` archive and creates an immutable, workspace-scoped plan with a prefix and
-`draft` or `publish` blueprint choice.
+A stale plan cannot silently overwrite changed workspace state. Review the
+application's completed steps and diagnostic before planning again. If a later
+step fails permanently, previously completed writes remain in the workspace;
+Attricat does not roll them back.
 
-Blueprint and workspace-setting plan actions include:
+Sample-selected plans have additional identity and recovery constraints. Do not
+create a fresh plan expecting it to replay the same dataset. See
+[sample retry, expiry, and abandonment](solution-pack-sample-data.md#retry-expiry-and-abandonment).
 
-- `create`: create a selected blueprint or presentation asset at its persisted target;
-- `map`: reuse only an explicitly selected exact published blueprint revision or immutable asset, including unchanged targets from a named prior application;
-- `append`: append absent Explore navigation or extension-layout entries;
-- `satisfied`: record exact workspace-setting entries without changing them;
-- `skip`: omit an optional resource or unmet optional navigation/layout entry;
-- `conflict`: a required target code, navigation entry, or contribution
-  placement/promotion conflicts with current workspace state; or
-- `blocked`: a selected dependency or required navigation/contribution reference
-  is unavailable, incompatible, quarantined, policy-denied, or absent from the
-  exact installed release manifest.
+## Apply a newer release
 
-V1 does not emit `adopt`, `update`, or `keep`. Candidate mappings remain visible
-in the plan, including skipped resources. The application mapping snapshot
-contains mappings for executed `create`, `map`, `append`, and `satisfied`
-actions. Existing mappings pin target ID, code, revision, raw definition hash,
-canonical compatibility hash, kind, published status, and non-deletion as
-immutable preconditions. A versioned server-computed plan evidence digest covers lineage, ordered release
-changes, mappings, actions, and extension-requirement evaluations so inconsistent
-persisted choices fail closed before application.
+Explicitly name one completed application of the same pack in the same workspace:
 
-Extension requirements are immutable plan evidence, not application steps. A
-compatible installed release satisfies a requirement when it is enabled or
-disabled and its configuration recursively contains the optional template;
-object extras are ignored, while arrays and scalar values match exactly.
-Quarantined, missing, version-incompatible, or configuration-mismatched releases
-do not satisfy a requirement. An unmet required requirement blocks readiness.
-An unmet optional requirement is shown as `skipped` and does not block the plan.
-Grants, host access, workspace emergency mode, and dependency enablement are not
-inspected for satisfaction.
+```sh
+acli solution-pack plan --file pack-v2.tar.zst --prefix example \
+  --blueprint-publication publish --from-application <application-id>
+```
 
-A manifest may declare at most 64 extension requirements, with unique logical
-keys, extension IDs, and template paths. Configuration templates are literal
-JSON objects at most 64 KiB, depth 16, and 256 total object members/array
-elements; keys are at most 128 bytes and strings at most 4 KiB. They are public
-pack material and must contain no secrets. Keys equal to or ending in
-`password`, `secret`, `token`, `api_key`, `private_key`, `credential`, or
-`authorization` (case-insensitive) are rejected recursively. Template values
-and installed configuration values are never returned by inspection,
-plan, application, or audit responses. Inspection exposes only requirement and
-template path/digest summaries.
+The new release must have a strictly newer version. This option cannot be
+combined with `--map` or `--map-asset`; Attricat does not search history or infer
+lineage automatically.
 
-Applying a pack never installs, upgrades, grants, configures, enables, disables,
-quarantines, or removes an extension. Administrators remediate requirements with
-the ordinary `acli extension install`, `sideload`, `upgrade`, `configure`,
-`grant`, and `enable` lifecycle commands as appropriate, then upload the archive
-to create a fresh plan. Apply revalidates each required requirement that was
-satisfied when planned. Becoming missing, version-incompatible, quarantined, or
-mismatched against the relevant configuration template makes the immutable plan
-stale; a still-compatible release or enabled/disabled transition remains
-satisfied. Optional skipped requirements remain skipped even if the workspace
-later changes.
+- Unchanged exact published blueprint targets and unchanged assets can be reused.
+- New resources can be created.
+- Changed definitions are blocked as `update_not_supported`.
+- Removed resources are reported without deleting anything.
+- Missing, deleted, unpublished, or changed prior targets may cause conflicts.
 
-A new application may start only while its ready plan is unexpired. Each create
-step revalidates its persisted `target_absent` code precondition. Every map step
-and each downstream step revalidate the mapped blueprint's exact workspace, ID,
-code, revision, definition hash, published status, and non-deletion. Map steps
-record durable `reused` evidence but produce no blueprint mutation or domain
-event. A target that
-appears before or while the ordinary blueprint mutation runs makes the
-application invalid with `plan_stale`; Catalog never adopts or overwrites it.
-Once an application has started, plan expiry does not strand it: retries
-revalidate completed and pending targets and resume durable work.
+If a release needs unsupported updates, agree on a supported migration procedure
+with the publisher. A new pack version cannot update existing blueprints.
 
-One durable application exists per immutable plan. Each resource mutation, step
-result, audit event, and domain event commits atomically. Repeated and concurrent
-apply requests lock the application and converge without duplicate resources.
-If a client observes an ambiguous commit error, failure reconciliation checks
-the exact attempted step; a step already committed as completed is continued,
-not misreported against a later pending step.
+## Limits and removal
 
-Implemented application evidence contains the uploaded-archive source marker
-and digest, pack ID/version, blueprint publication choice, executed mapping
-snapshot, ordered blueprint/workspace-setting step results, state and
-bounded diagnostics, actor token/user columns, timestamps, and
-request/correlation identifiers. List
-responses are compact and omit mappings and steps; show responses include both.
-Neither response contains normalized payloads, blueprint definitions, archive
-bytes, or secret values.
+Packs cannot create contexts or publication channels, alter membership or grants,
+run executable installers, resolve prerequisite packs automatically, or update
+existing blueprints. There is no generic settings replacement or continuing
+resource ownership.
 
-Remote source provenance, generic settings fragments, extension mutation outcomes,
-and manual checklist completion are future design. Application records are
-administrator-facing evidence, not controllers: they do not retain ownership,
-lock resources, detect drift, authorize later changes, or provide uninstall.
-
-## Later releases and workspace changes
-
-The implemented conservative subset requires an administrator to name exactly
-one completed application with `--from-application`. It compares a strictly
-newer release of the same pack against that explicit lineage, reuses only
-unchanged exact published targets, creates new keys through ordinary planning,
-blocks changed definitions, and records removed keys without deleting them.
-Catalog never searches history or infers lineage automatically.
-
-A successful application is not a continuing desired-state declaration.
-Administrators may freely edit the resulting blueprints and settings,
-extension configuration, and data through their ordinary workflows. A later
-plan detects missing, unpublished, revision-changed, or hash-drifted retained
-targets as conflicts; it does not restore them or claim ownership.
-
-Application-history commands show the explicitly selected prior application,
-release comparison, original mappings, and recorded results. They do not claim
-that the current resource still matches the pack.
-
-## No pack-level uninstall
-
-There is no detach or uninstall operation for a solution pack as a whole. Once
-a plan is applied, its created blueprints, settings, assets, and optional sample
-entities are ordinary workspace state. Extensions named as requirements were
-never installed or owned by the pack. The application record remains as audit
-and provenance history.
-
-Administrators may later edit or remove individual resources through their
-normal resource-specific commands, subject to ordinary authorization,
-dependency, publication, data-retention, and destructive-change protections.
-Removing an application record is not a supported way to remove resources.
-Extensions are managed through the existing extension lifecycle, never removed
-merely because a pack originally requested them.
+There is no pack-level uninstall or rollback command. Administrators may edit or
+remove individual resources through normal operations, subject to permissions,
+dependencies, publication, and retention rules. Review business data before any
+removal; never assume everything mentioned in an application record is disposable.
+Removing application history is not a supported way to remove resources.

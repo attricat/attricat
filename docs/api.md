@@ -17,17 +17,26 @@ synchronizer token or receive `403`. An authenticated principal without the
 required permission or scope receives `403` without revealing whether a target
 exists.
 
-Permissions are evaluated from active workspace membership role grants:
-blueprint reads/writes/publishing require `blueprints.read`, `blueprints.write`,
-and `blueprints.publish`; workflow reads and management require `workflows.read` and `workflows.manage`; entity operations require `entities.read`,
-`entities.write`, `entities.delete`, or `entities.publish`; context operations require
-`contexts.read` or `contexts.write`; data-health, metrics, and event-delivery
-dead-letter inspection require `data_health.read`; event-delivery replay and
-role management require `roles.manage`; extension release discovery requires `extensions.read`, trusted registry source management requires `extensions.manage`, and solution-pack archive inspection, planning, application, and history require `solution_packs.manage`. The solution-pack permission is bootstrapped for the fixed owner and administrator roles. A context-subtree grant applies to its root and descendants,
-never its ancestors or siblings.
+Permissions come from role grants on active workspace memberships:
 
-Browser-session request tenancy is selected from the workspace stored in the
-verified session; it is never selected by a client workspace header.
+- Blueprint reads, writes, and publishing require `blueprints.read`,
+  `blueprints.write`, and `blueprints.publish`, respectively.
+- Workflow reads and management require `workflows.read` and `workflows.manage`.
+- Entity operations require `entities.read`, `entities.write`, `entities.delete`,
+  or `entities.publish`.
+- Context operations require `contexts.read` or `contexts.write`.
+- Data-health, metrics, and event-delivery dead-letter inspection require
+  `data_health.read`.
+- Event-delivery replay and role management require `roles.manage`.
+- Extension release discovery requires `extensions.read`; trusted registry
+  source management requires `extensions.manage`.
+- Solution-pack archive inspection, planning, application, and history require
+  `solution_packs.manage`. The fixed owner and administrator roles receive this
+  permission during bootstrap.
+
+A context-subtree grant applies to its root and descendants, never its ancestors
+or siblings. Browser requests use the workspace stored in the verified session.
+A client workspace header cannot select a different workspace.
 
 `POST /auth/renew` atomically rotates the browser session, `POST /auth/logout`
 revokes it, and login, renew, and `GET /auth/session` return the active user identity,
@@ -192,10 +201,10 @@ object keys.
 omitting it skips them. A `from_application=<uuid>` query parameter selects
 one completed application of the same pack in the same workspace, at a lower
 SemVer release. It cannot be combined with explicit maps. Catalog does not
-search history or suggest a mapping. Added keys create, unchanged exact
-published targets reuse, changed definitions block, and missing, unpublished,
-revision-drifted, or hash-drifted targets conflict; removed keys are evidence
-only.
+search history or suggest a mapping. The planner creates resources for added
+keys and reuses unchanged, exactly matching published targets. It blocks changed
+definitions and reports conflicts for missing, unpublished, revision-drifted, or
+hash-drifted targets. Removed keys are recorded without deleting resources.
 
 Without explicit maps, upload the archive as `application/zstd`, including
 when using `from_application`. For explicit reuse, send `multipart/form-data`
@@ -212,7 +221,7 @@ optional prior-application identity, ordered release-change evidence, mapping
 and action summaries, extension requirement outcomes, reasons, preconditions,
 readiness, and a fixed 24-hour expiry. It never includes blueprint definitions,
 normalized resource payloads, configuration templates or installed values,
-archive paths, staged bytes, or object keys. See [solution-pack planning](solution-packs.md#planning-and-application-implemented-v1)
+archive paths, staged bytes, or object keys. See [solution-pack operation](solution-packs.md#apply-and-verify)
 for apply-time behavior.
 
 `POST /solution-packs/plans/{plan-id}/apply` starts only a ready, unexpired plan,
@@ -318,7 +327,14 @@ controls and sortable headers.
 
 ## Saved views and share links
 
-All routes require an authenticated workspace principal with `entities.read`. `GET /saved-views` lists the current user's private and workspace-visible named views (up to 100); the optional `q` parameter (at most 120 characters) keeps views whose name or description contains it, ignoring case. `GET /saved-views/{id}` reads a named view; `POST /saved-views` creates one; `PUT /saved-views/{id}` and `DELETE /saved-views/{id}` update/delete a view owned by the caller. Nonexistent or inaccessible views return 404.
+All routes require an authenticated workspace principal with `entities.read`.
+`GET /saved-views` lists up to 100 of the current user's private and
+workspace-visible named views. The optional `q` parameter accepts up to 120
+characters and matches names or descriptions, ignoring case.
+
+`GET /saved-views/{id}` reads a named view; `POST /saved-views` creates one.
+`PUT /saved-views/{id}` and `DELETE /saved-views/{id}` update or delete a view
+owned by the caller. Nonexistent or inaccessible views return 404.
 
 `POST /view-state-links` creates or reuses an unnamed link snapshot. `GET /view-state-links/{id}` reads a snapshot for an authorized workspace member. A link is not anonymous access and does not authorize the subsequent entity search.
 
@@ -333,10 +349,10 @@ Use `visibility: "private"` or `"workspace"` for named views. For a snapshot, om
 ## Entity system annotations
 
 Entities include `system_tags` (an array of unique, non-empty strings) and
-`system_metadata` (a JSON object, up to 64 KiB). These fields are intentionally
-outside the versioned blueprint and EAV value model, so automation and operators
-can retain workflow markers and diagnostic data without changing an entity's
-schema. They are returned with entity reads and form responses, but never added
+`system_metadata` (a JSON object, up to 64 KiB). These fields are
+outside the versioned blueprint and EAV value model. Operators and automation
+can store workflow markers and diagnostic data there without changing the
+entity's schema. They are returned with entity reads and form responses, but never added
 to projections or views.
 
 `POST /v1/entities` accepts both fields; omitted values default to `[]` and
@@ -371,8 +387,7 @@ request.
 ## Request performance
 
 Every API response includes a standard `Server-Timing` header. Chrome DevTools
-shows these values in **Network → Timing**, so a developer can inspect the
-server work for an individual request without any extra tooling.
+shows these values in **Network → Timing** for each request.
 
 - `app;dur=<milliseconds>` is the total time spent handling the API request.
 - Data-health responses also include `cache;desc=HIT`, `MISS`, or `BYPASS`.
@@ -427,7 +442,7 @@ creates conversations. `GET`/`PATCH`/`DELETE /agent/conversations/{id}` reads,
 renames, or archives a thread; it exposes ordered messages at
 `/agent/conversations/{id}/messages` and run history at
 `/agent/conversations/{id}/runs`. Posting a message creates a durable queued
-run and returns `202`; execution is owned by the API worker rather than the
+run and returns `202`. The API worker executes the run independently of the
 HTTP request.
 
 `GET /agent/runs/{run_id}/events` is an SSE stream of durable status, message,

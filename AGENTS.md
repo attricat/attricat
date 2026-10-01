@@ -4,18 +4,29 @@ Follow [Frontend Conventions](docs/frontend.md) for `apps/catalog-web`.
 
 ## Attricat design system
 
-The canonical Attricat visual identity is maintained in the
-[design repository](https://github.com/attricat/design). A pinned snapshot of
-its tokens and brand assets lives in [`apps/catalog-web/design/`](apps/catalog-web/design/)
-for reproducible builds; see its README for the upstream revision. Before
+The [design repository](https://github.com/attricat/design) defines Attricat's
+visual identity. A pinned copy of its tokens and brand assets is stored in
+[`apps/catalog-web/design/`](apps/catalog-web/design/) for reproducible builds;
+see its README for the upstream revision. Before
 creating or significantly modifying UI, consult the upstream `STYLE.md` and
 MUI patterns. Do not introduce new colors, typography scales, spacing systems,
 border-radius conventions or visual patterns unless there is a specific reason
 to extend the design system. Check both light and dark modes.
 
+# Solution-pack documentation boundary
+
+Public documentation in this repository covers installing and operating existing
+solution packs only: inspection, planning, application, checks, recovery, and
+sample-data safety. Keep pack-authoring tutorials, manifest/resource examples,
+packaging recipes, and pack-development design notes in the private
+`attricat/attricat-solution-pack-example` repository, not here or in either
+language of the public docs site. Generic Core blueprint/extension documentation
+and runtime/conformance-test contracts remain in Core; do not remove validation
+or tests to hide the format.
+
 # Development
 
-The development server is already running via Process Compose when developing the app.
+The app's development server is already running through Process Compose.
 
 ## Worktree development server
 
@@ -42,8 +53,7 @@ migration files manually.
 
 ## Catalog inspection
 
-When an agent needs to inspect catalog state, it must query the API through the
-CLI first:
+To inspect catalog state, query the API through the CLI first:
 
 ```sh
 cargo run -p cli -- <command>

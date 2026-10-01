@@ -128,11 +128,6 @@ export default defineConfig({
               slug: 'builders/workflows',
               translations: polish('Przepływy pracy'),
             },
-            {
-              label: 'Solution packs',
-              slug: 'builders/solution-packs',
-              translations: polish('Pakiety rozwiązań'),
-            },
           ],
         },
         {
@@ -175,6 +170,12 @@ export default defineConfig({
           label: 'Operate',
           translations: polish('Administracja'),
           items: [
+            {
+              label: 'Install solution packs',
+              // Preserve the existing public URL while grouping this operator guide correctly.
+              slug: 'builders/solution-packs',
+              translations: polish('Instalacja pakietów rozwiązań'),
+            },
             {
               label: 'Workspace administration',
               slug: 'operate/workspaces',

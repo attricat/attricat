@@ -20,10 +20,10 @@ just migrate
 Stop `just dev` with `Ctrl-C`. Its exit trap also runs `just down`, stopping
 and removing the local containers.
 
-See [Configuration](configuration.md) for connection, proxy, file-storage, and API limit
-settings, and [Production operations](operations.md) for rollout, recovery, and
-backup/restore procedures. The local RustFS-backed production-compatibility check is opt-in and
-uses the same `S3_*` settings as the API:
+See [Configuration](configuration.md) for connection, proxy, file-storage, and
+API limits. See [Production operations](operations.md) for rollout, recovery,
+and backup/restore procedures. To run the optional production-compatibility test
+against local RustFS, use the same `S3_*` settings as the API:
 
 ```sh
 just dev # leave this running in another terminal to start RustFS
@@ -48,16 +48,16 @@ runs the ignored RustFS compatibility test.
 - [Rules](rules.md): blueprint checks and finding lifecycles.
 - [Extensions](extensions.md): manifest, permissions, runtime, and lifecycle contracts;
   webhook delivery is not implemented.
-- [Solution packs](solution-packs.md): uploaded templates, application, and provenance.
-  [Optional sample data](solution-pack-sample-data.md) has separate trust and
-  retention rules; [future pack ideas](solution-packs-future.md) are not features.
 - [Authentication and identity adapters](authentication.md): local password
-  lifecycle plus the provider-neutral external identity seam.
+  management and the interface for external identity providers.
 - [JSON Schema validation](json-schema-validation.md): attribute and entity
   validation contracts.
 
 ## Use Catalog
 
+- [Install and operate solution packs](solution-packs.md): inspect existing archives,
+  review plans, apply, verify, and recover. See [optional sample data](solution-pack-sample-data.md)
+  for opt-in, automation warnings, retry, and cleanup limits.
 - [Catalog CLI](cli.md): automation and command-line workflows.
 - [API reference](api.md): HTTP routes and API behavior.
 - [Saved searches](saved-views.md): named views, share links, and access rules.

@@ -1,184 +1,125 @@
 ---
-title: Pakiety rozwiązań
-description: Przygotuj obszar roboczy z wersjonowanego archiwum Schematów, nawigacji, układu rozszerzeń, zasobów graficznych i kontroli konfiguracji.
+title: Instalacja i obsługa pakietów rozwiązań
+description: Bezpieczne sprawdzanie, planowanie, stosowanie i obsługa istniejących pakietów rozwiązań.
 ---
 
-Pakiet rozwiązania to archiwum `.tar.zst`, które konfiguruje obszar roboczy pod konkretny przypadek użycia, np. katalog e-commerce. Może zawierać Schematy, skróty nawigacji eksploracji, domyślny układ rozszerzeń, logotypy i ilustracje, wskazówki konfiguracyjne, kontrole i opcjonalne dane przykładowe.
+Pakiet rozwiązania to wersjonowane archiwum `.tar.zst` dostarczone przez wydawcę. Przygotowuje obszar roboczy do konkretnego zastosowania: może dostarczać Schematy, nawigację, układ rozszerzeń, zasoby graficzne, wskazówki i opcjonalne dane przykładowe.
 
-Zastosowanie pakietu to jednorazowy krok konfiguracji. Później wszystko, co utworzył, jest zwykłymi danymi obszaru roboczego, które administratorzy edytują jak zwykle. Pakiet nie jest właścicielem tych zasobów, nie synchronizuje ich i nie usuwa ich później.
+Po zastosowaniu pakietu użytkownicy pracują z jego zasobami przez zwykłe funkcje Attricat. Nie trzeba utrzymywać działającej usługi pakietu. Pakiet nie jest właścicielem zasobów, nie synchronizuje ich ani nie usuwa ich później.
 
-## Co pakiet może, a czego nie może
+## Zanim zaczniesz
 
-Pakiet może:
+- Pobierz archiwum od zaufanego wydawcy i przeczytaj informacje o wydaniu. Attricat nie pobiera pakietów ani zawartości repozytoriów.
+- Zaloguj się przez CLI do odpowiedniego obszaru roboczego. Obsługa pakietów wymaga `solution_packs.manage`, domyślnie dostępnego właścicielom i administratorom.
+- Nieznane pakiety testuj w jednorazowym obszarze roboczym, szczególnie z danymi przykładowymi.
+- Wymaganymi rozszerzeniami zarządzaj w [zwykły sposób](/pl/builders/extensions/). Pakiet nigdy nie instaluje, nie konfiguruje, nie włącza ani nie usuwa rozszerzeń i nie nadaje im uprawnień.
 
-- tworzyć nowe Schematy (jako szkice lub opublikowane) albo ponownie używać pasujących opublikowanych Schematów, które wskażesz;
-- dodawać wpisy do nawigacji eksploracji i do układu rozszerzeń obszaru roboczego;
-- tworzyć logotypy, ikony i ilustracje;
-- sprawdzać, czy wymagane rozszerzenia są zainstalowane i skonfigurowane;
-- dostarczać README, informacje o wydaniu, listę kontrolną konfiguracji i kontrole informacyjne;
-- tworzyć syntetyczne encje przykładowe, jeśli się na to zgodzisz.
+Jeśli archiwum zostanie odrzucone, poproś wydawcę o zgodne wydanie zamiast samodzielnie je edytować lub przepakowywać.
 
-Pakiet nie może:
-
-- instalować, konfigurować, przyznawać uprawnień ani włączać rozszerzenia;
-- tworzyć ani zmieniać kontekstów ani kanałów eksportu;
-- aktualizować istniejącego Schematu ani nadpisywać czegokolwiek, co już jest w obszarze roboczym;
-- zmieniać członków, ról ani uprawnień;
-- uruchamiać skryptów, SQL ani niczego innego wykonywalnego;
-- zawierać sekretów.
-
-Nie ma odinstalowania. Aby wycofać pakiet, usuń utworzone przez niego zasoby jeden po drugim.
-
-## Zastosuj pakiet
-
-Administrowanie pakietami odbywa się przez CLI i wymaga `solution_packs.manage`, które role właściciela i administratora mają domyślnie. Archiwum otrzymujesz od jego wydawcy; Attricat nigdy sam nie pobiera pakietów.
-
-### 1. Sprawdź
+## 1. Sprawdź
 
 ```sh
-acli solution-pack inspect --file ecommerce-1.2.0.tar.zst
+acli solution-pack inspect --file pack.tar.zst
 ```
 
-Serwer waliduje archiwum i zwraca jego identyfikator, wersję, skrót oraz podsumowanie zawartości. Nic nie jest zapisywane.
+Serwer sprawdza archiwum i zwraca jego identyfikator, wersję, skrót, podsumowanie zasobów i ostrzeżenia dotyczące danych przykładowych. Nie tworzy zasobów ani nie zapisuje archiwum. Poprawna walidacja nie gwarantuje, że pakiet jest odpowiedni dla Twojego obszaru roboczego.
 
-### 2. Zaplanuj
+## 2. Zaplanuj
 
 ```sh
-acli solution-pack plan --file ecommerce-1.2.0.tar.zst \
-  --prefix ecom --blueprint-publication publish
+acli solution-pack plan --file pack.tar.zst \
+  --prefix example --blueprint-publication publish
+acli solution-pack plan show <plan-id>
 ```
 
-Plan to przebieg próbny zapisany na serwerze. Wymienia każdą akcję, którą wykonałby pakiet, i informuje, czy jest to możliwe.
+Planowanie zapisuje niezmienny plan próbny bez zmieniania zasobów katalogu. Sprawdź gotowość, akcje, konflikty i wymagania dotyczące rozszerzeń.
 
-- `--prefix` jest dodawany przed kodami nowych Schematów, więc `product` z pakietu staje się `ecom_product`. Musi mieć od 1 do 32 znaków: małe litery, cyfry i podkreślenia, zaczynać się literą i nie kończyć podkreśleniem.
-- `--blueprint-publication` ma wartość `draft` lub `publish`. Wybierz `draft`, aby przejrzeć Schematy, zanim ktokolwiek będzie mógł tworzyć encje.
-- `--include-sample-data` dodaje syntetyczne encje przykładowe z pakietu. Pomiń tę opcję, chyba że ich potrzebujesz.
-
-Każda akcja w planie to jedna z:
+- `--prefix` tworzy kody nowych Schematów, takie jak `example_product`. Użyj od 1 do 32 małych liter, cyfr lub podkreśleń; zacznij literą i nie kończ podkreśleniem.
+- `--blueprint-publication` przyjmuje `draft` lub `publish`. Nawigacja i dane przykładowe mogą wymagać opublikowanych Schematów, więc wybór `draft` może zablokować taki pakiet.
+- `--include-sample-data` jawnie wybiera fikcyjne encje przykładowe. Pomiń tę opcję, jeśli ich nie potrzebujesz.
 
 | Akcja | Znaczenie |
 | --- | --- |
-| `create` | Utworzenie nowego Schematu lub zasobu. |
-| `map` | Ponowne użycie wybranego istniejącego Schematu lub zasobu. |
-| `append` | Dodanie wpisu nawigacji lub układu rozszerzeń. |
-| `satisfied` | Wpis już istnieje w dokładnie tej postaci; nic do zrobienia. |
-| `skip` | Opcjonalnego elementu nie da się zastosować i zostanie pominięty. |
-| `conflict` | Coś w obszarze roboczym stoi na przeszkodzie, np. Schemat o tym samym kodzie. |
-| `blocked` | Brakuje wymaganej zależności, np. wymaganego rozszerzenia. |
+| `create` | Utworzenie Schematu, zasobu graficznego lub wybranej encji przykładowej. |
+| `map` | Ponowne użycie jawnie wskazanego zgodnego zasobu. |
+| `append` | Dodanie wpisów nawigacji lub układu rozszerzeń. |
+| `satisfied` | Żądane ustawienie już istnieje w dokładnie tej postaci. |
+| `skip` | Pominięcie niedostępnego elementu opcjonalnego. |
+| `conflict` | Obecny stan obszaru roboczego uniemożliwia operację. |
+| `blocked` | Wymaganie nie jest spełnione lub zmiana nie jest obsługiwana. |
 
-Planu z konfliktami lub zablokowanymi akcjami nie można zastosować. Plany wygasają po 24 godzinach.
+Można zastosować tylko gotowe plany. Plan wygasa po 24 godzinach, jeśli jego stosowanie jeszcze się nie rozpoczęło.
 
-### 3. Rozwiąż konflikty
+## 3. Rozwiąż konflikty
 
-Jeśli kod Schematu jest zajęty, wybierz inny `--prefix` albo każ planerowi ponownie użyć istniejącego opublikowanego Schematu, którego definicja jest dokładnie taka sama:
+W przypadku zajętego kodu wybierz inny prefiks albo jawnie wskaż dokładnie zgodny opublikowany Schemat. Używaj kluczy zasobów z wyniku sprawdzania archiwum i instrukcji instalacji wydawcy:
 
 ```sh
-acli solution-pack plan --file ecommerce-1.2.0.tar.zst --prefix ecom \
+acli solution-pack plan --file pack.tar.zst --prefix example \
   --blueprint-publication publish \
-  --map blueprints/product=shared_product \
-  --map-asset assets/brand-logo=<existing-asset-uuid>
+  --map blueprints/product=shared_product
 ```
 
-Jeśli brakuje wymaganego rozszerzenia, zainstaluj je i skonfiguruj w zwykły [sposób dla rozszerzeń](/pl/builders/extensions/), a następnie zaplanuj ponownie.
+Aby ponownie użyć dokładnie zgodnego zasobu graficznego, najpierw znajdź jego identyfikator:
 
-### 4. Zastosuj
+```sh
+acli presentation-asset list
+acli presentation-asset show <asset-id>
+acli solution-pack plan --file pack.tar.zst --prefix example \
+  --blueprint-publication publish \
+  --map-asset assets/brand-logo=<asset-id>
+```
+
+Istniejące zasoby musisz wskazać jawnie; Attricat nie nadpisuje ich po cichu. Jeśli wymaganie dotyczące rozszerzenia nie jest spełnione, rozwiąż problem przez standardowe zarządzanie rozszerzeniami i utwórz nowy plan. Zgodna, wyłączona instalacja może spełniać wymaganie; administrator musi osobno zatwierdzić uprawnienia i włączenie.
+
+## 4. Zastosuj i zweryfikuj
 
 ```sh
 acli solution-pack apply <plan-id>
-```
-
-Zastosowanie przyjmuje tylko identyfikator planu; między planowaniem a zastosowaniem nic nie może się zmienić. Przed każdym krokiem Attricat sprawdza, czy obszar roboczy nadal odpowiada planowi. Jeśli coś się zmieniło, zastosowanie zatrzymuje się jako nieaktualne i trzeba zaplanować ponownie. Przerwane zastosowanie można uruchomić ponownie; będzie kontynuowane od miejsca, w którym się zatrzymało.
-
-### 5. Przejrzyj
-
-```sh
 acli solution-pack applications list
 acli solution-pack applications show <application-id>
 acli solution-pack checks list <application-id>
+acli solution-pack checks show <application-id> <run-id>
 acli solution-pack checks rerun <application-id>
 ```
 
-Rekord zastosowania przechowuje na potrzeby audytu informację o tym, co zostało utworzone lub ponownie użyte. Kontrole raportują stan konfiguracji, np. „Schemat produktu jest opublikowany” albo „rozszerzenie X jest włączone”. Mają charakter informacyjny: niespełniona kontrola nigdy niczego nie blokuje ani nie cofa.
+Zastosowanie przyjmuje tylko identyfikator przejrzanego planu. Serwer ponownie sprawdza stan obszaru roboczego przed każdym krokiem. Wykonaj kroki z listy kontrolnej konfiguracji i wypróbuj scenariusz biznesowy pakietu.
 
-## Uaktualnij do nowszego wydania pakietu
+Kontrole są informacyjne. Negatywny wynik nie cofa zasobów ani nie blokuje ukończonego zastosowania. Historia zawiera informacje o utworzonych lub ponownie użytych zasobach; nie śledzi późniejszych zmian użytkowników.
 
-Aby zastosować nowsze wydanie pakietu, który był już zastosowany, wskaż wcześniejsze zastosowanie:
+## Ponawianie i odzyskiwanie
+
+Jeśli stosowanie pakietu zostało przerwane lub zakończyło się błędem, który pozwala na wznowienie, ponów je z tym samym identyfikatorem planu. Serwer sprawdza ukończone kroki i kontynuuje pozostałe bez tworzenia duplikatów. Rozpoczęte stosowanie można wznowić po wygaśnięciu planu, dopóki nie upłynie termin przechowywania jego danych.
+
+Jeśli zmiany w obszarze roboczym unieważniły plan, przejrzyj ukończone kroki i diagnostykę przed utworzeniem kolejnego. Jeśli późniejszy krok zakończy się trwałym błędem, wcześniejsze udane zapisy pozostają w obszarze roboczym; Attricat ich nie wycofuje.
+
+## Zastosuj nowsze wydanie
 
 ```sh
-acli solution-pack plan --file ecommerce-1.3.0.tar.zst --prefix ecom \
+acli solution-pack plan --file pack-v2.tar.zst --prefix example \
   --blueprint-publication publish --from-application <application-id>
 ```
 
-Niezmienione Schematy są używane ponownie. Nowe Schematy są tworzone. Schematy zmienione w nowym wydaniu są blokowane z `update_not_supported`, ponieważ pakiet nigdy nie aktualizuje istniejącego Schematu. Zaktualizuj je samodzielnie, tworząc nową wersję. Schematy usunięte w nowym wydaniu są raportowane i pozostawiane bez zmian.
+Wskaż jedno ukończone zastosowanie tego samego pakietu w tym samym obszarze roboczym. Wydanie musi być nowsze. `--from-application` nie można łączyć z jawnymi mapowaniami.
 
-## Dane przykładowe
+Niezmienione, dokładnie zgodne opublikowane Schematy i niezmienione zasoby graficzne mogą być użyte ponownie; nowe zasoby mogą zostać utworzone. Zmienione definicje są blokowane jako `update_not_supported`. Usunięte zasoby są raportowane, ale nie kasowane. Brakujące lub zmodyfikowane wcześniejsze zasoby mogą powodować konflikty. Dla zmian, których pakiet nie obsługuje, uzgodnij z wydawcą procedurę migracji.
 
-Gdy planujesz z `--include-sample-data`, syntetyczne encje z pakietu są tworzone w kontekście domyślnym i oznaczane jako przykładowe, aby łatwo było je znaleźć i usunąć. Ich utworzenie uruchamia ten sam audyt i tę samą automatyzację co każda inna nowa encja, w tym przepływy pracy nasłuchujące `entity.created.v1`.
+## Opcjonalne dane przykładowe
 
-## Zbuduj pakiet
+Dodaj `--include-sample-data` podczas planowania dopiero po przeczytaniu ostrzeżenia. Encje przykładowe powstają w kontekście domyślnym na podstawie opublikowanych Schematów i otrzymują widoczne oznaczenie danych przykładowych. Są zwykłymi encjami: ich tworzenie zapisuje audyt i zdarzenia `entity.created.v1`, może uruchamiać aktywne przepływy pracy lub rozszerzenia i powodować skutki w systemach zewnętrznych. Wartości mogą pozostać w historii audytu i zdarzeń po usunięciu tymczasowych danych pakietu.
 
-Pakiet to archiwum `.tar.zst` z plikiem `solution-pack.json` w katalogu głównym. Manifest wymienia każdy plik wraz z jego skrótem SHA-256:
+Pierwszy plan z danymi przykładowymi rezerwuje dokładnie tę kombinację wydania, archiwum i zestawu danych. Drugi plan nie może wybrać tej samej kombinacji, nawet po wygaśnięciu lub porzuceniu pierwszego; zmiana prefiksu nie usuwa rezerwacji. Ponawiaj oryginalny plan. Jeśli wygaśnie przed rozpoczęciem stosowania, uzgodnij nowe wydanie z wydawcą.
 
-```json
-{
-  "manifest_version": 1,
-  "id": "acme.ecommerce",
-  "name": "Ecommerce Catalog",
-  "version": "1.2.0",
-  "description": "Product and category blueprints.",
-  "catalog": { "host_api": ">=1.0.0 <2.0.0" },
-  "documentation": {
-    "readme": { "path": "README.md", "sha256": "…" },
-    "setup_checklist": { "path": "setup/checklist.json", "sha256": "…" }
-  },
-  "checks": { "path": "checks/checks.json", "sha256": "…" },
-  "resources": {
-    "blueprints": [
-      { "key": "blueprints/product", "path": "blueprints/product.toml", "required": true, "sha256": "…" }
-    ],
-    "workspace_settings": [
-      { "key": "workspace/explore-navigation", "path": "workspace/explore-navigation.json", "required": false, "sha256": "…" }
-    ],
-    "presentation_assets": [
-      { "key": "assets/brand-logo", "path": "assets/brand-logo.svg", "required": true,
-        "purpose": "logo", "media_type": "image/svg+xml", "sha256": "…" }
-    ]
-  },
-  "extensions": [
-    { "key": "extensions/shopify", "id": "acme.shopify", "version": ">=2.1.0 <3.0.0", "required": false }
-  ]
-}
+Stosowanie pakietu z danymi przykładowymi można wznowić przez 30 dni od rozpoczęcia. Aby trwale je zatrzymać:
+
+```sh
+acli solution-pack applications abandon <application-id>
 ```
 
-Schematy JSON dla manifestu, kontroli, listy kontrolnej konfiguracji, nawigacji eksploracji, układu rozszerzeń i plików danych przykładowych są opublikowane w repozytorium jako `contracts/solution-pack-*-v1.schema.json`. Nieznane pola są odrzucane.
+Po porzuceniu serwer usuwa tymczasowe dane wejściowe. Wcześniej utworzone encje i zwykła historia audytu oraz zdarzeń pozostają bez zmian. Późniejsze wydania nie resetują bieżących wartości ani nie przywracają usuniętych oznaczeń danych przykładowych. Nie ma polecenia resetowania zestawu ani automatycznego sprzątania.
 
-Wskazówki dla autorów pakietów:
+## Ograniczenia i usuwanie
 
-- **Używaj kluczy logicznych, a nie kodów ani UUID.** Schematy pakietu odwołują się do siebie po kluczu; planer zamienia klucze na rzeczywiste kody z użyciem prefiksu administratora.
-- **Klucze są trwałe.** Zmiana nazwy klucza w późniejszym wydaniu wygląda jak usunięcie jednego zasobu i dodanie innego.
-- **Zachowaj deklaratywność pakietów.** Schematy pakietu nie mogą używać zasad ról `[publication]` ani rendererów komórek z rozszerzeń.
-- **Bez sekretów.** Szablony konfiguracji rozszerzeń są publiczne. Klucze o nazwach w rodzaju `password`, `secret`, `token`, `api_key`, `private_key`, `credential` lub `authorization` są odrzucane.
-- **Zasoby graficzne**: PNG, WebP i SVG do dowolnego celu; JPEG tylko do ilustracji. Do 2 MiB każdy, łącznie 16 MiB, maksymalnie 4096×4096 pikseli. SVG jest ograniczony do 256 KiB i bezpiecznego podzbioru bez skryptów, stylów, czcionek, animacji i odwołań zewnętrznych.
-- **Dokumentacja**: README do 64 KiB, informacje o wydaniu do 32 KiB. Markdown jest wyświetlany z wyłączonym HTML; dozwolone są tylko linki w obrębie tego samego dokumentu.
-- **Kontrole** używają jednego z: `blueprint_published`, `extension_installed`, `extension_enabled`, `extension_configuration_matches`, `explore_navigation_entry_present` lub `workspace_extension_layout_placement_present`.
+Pakiety nie mogą tworzyć kontekstów ani kanałów eksportu, zmieniać członkostwa lub uprawnień, uruchamiać wykonywalnych instalatorów, automatycznie rozwiązywać zależności od innych pakietów ani aktualizować istniejących Schematów.
 
-```json
-{
-  "format_version": 1,
-  "checks": [{
-    "key": "checks/product-published",
-    "title": "Product is published",
-    "predicate": { "type": "blueprint_published", "blueprint": "blueprints/product" }
-  }]
-}
-```
-
-Plik nawigacji eksploracji przypina Schematy i opcjonalnie ogranicza ich widoczność do kodów ról:
-
-```json
-{
-  "format_version": 1,
-  "kind": "explore_navigation",
-  "entries": [{ "blueprint": "blueprints/product", "visible_to_role_codes": ["editor"] }]
-}
-```
+Nie ma odinstalowania ani wycofania całego pakietu. Administratorzy mogą edytować lub usuwać pojedyncze zasoby zwykłymi operacjami, z uwzględnieniem autoryzacji, zależności, publikacji i zasad przechowywania. Przed usunięciem sprawdź dane biznesowe; zasoby wskazane w historii zastosowania mogą być współdzielone lub zmodyfikowane.
