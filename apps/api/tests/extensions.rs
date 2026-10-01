@@ -3330,6 +3330,7 @@ async fn packaged_csv_connector_exports_through_the_real_host(pool: sqlx::PgPool
                 .append_values(
                     last.id,
                     api::model::AppendAttributeValues {
+                        expected_updated_at: None,
                         values: vec![NewAttributeValue::Scalar {
                             attribute_id: None,
                             attribute_code: Some("external_id".into()),

@@ -14,9 +14,13 @@ import {
 import { FileAttributeEditor } from '../../files/FileAttributeEditor';
 import { RelationshipField } from './RelationshipField';
 import { smallIconSize } from '../../../components/iconSizes';
+import { statusConfiguration } from '../status';
+import { StatusAttributeEditor } from './StatusAttributeEditor';
 
 export const EntityAttributeEditor = ({
   attribute,
+  statusBaseline = null,
+  inheritedStatus = null,
   contextId,
   disabled,
   entityId,
@@ -29,6 +33,8 @@ export const EntityAttributeEditor = ({
   value,
 }: {
   attribute: Attribute;
+  statusBaseline?: string | null;
+  inheritedStatus?: string | null;
   contextId: string | null;
   disabled: boolean;
   entityId?: string;
@@ -46,6 +52,24 @@ export const EntityAttributeEditor = ({
   const migrationBadge = showMigrationBadge ? (
     <MigrationBadge message={migrationReviewMessage} />
   ) : null;
+  const status = statusConfiguration(attribute);
+  if (status)
+    return (
+      <>
+        {migrationBadge}
+        <StatusAttributeEditor
+          config={status}
+          label={attributeLabel(attribute)}
+          value={value}
+          baseline={statusBaseline}
+          inheritedValue={inheritedStatus}
+          disabled={effectiveDisabled}
+          error={error}
+          helperText={helperText}
+          onChange={onChange}
+        />
+      </>
+    );
   if (attribute.value_type === attributeValueTypes.relationship)
     return (
       <>

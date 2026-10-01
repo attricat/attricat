@@ -678,6 +678,16 @@ impl CatalogRepository {
         entity_id: Uuid,
         history_id: Uuid,
     ) -> Result<AttributeValue, RepositoryError> {
+        self.restore_value_checked(entity_id, history_id, None)
+            .await
+    }
+
+    pub async fn restore_value_checked(
+        &self,
+        entity_id: Uuid,
+        history_id: Uuid,
+        expected_updated_at: Option<DateTime<Utc>>,
+    ) -> Result<AttributeValue, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
         self.lock_relationship_cardinality_writes(&mut transaction)
             .await?;
@@ -701,6 +711,20 @@ impl CatalogRepository {
         .await?
         .ok_or(RepositoryError::NotFound("attribute value history"))?;
 
+        let selector = NewAttributeValue::Scalar {
+            attribute_id: Some(history.attribute_id),
+            attribute_code: None,
+            context_id: history.context_id,
+            value: Value::Null,
+        };
+        if expected_updated_at.is_some()
+            || self
+                .has_status_writes(&mut transaction, &entity, &[selector], &[])
+                .await?
+        {
+            self.check_status_precondition(&mut transaction, &entity, expected_updated_at)
+                .await?;
+        }
         let value = match history.relationship_target_entity_id {
             Some(target_entity_id) if history.active => {
                 self.insert_value(
