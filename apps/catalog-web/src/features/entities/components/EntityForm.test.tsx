@@ -84,6 +84,31 @@ afterEach(() => {
 });
 
 describe('EntityForm', () => {
+  it('dispatches the configured Markdown editor and submits unchanged source', async () => {
+    const definition = blueprint([attribute('description')]);
+    definition.blueprint.views.edit = {
+      type: 'stack',
+      children: [
+        {
+          type: 'field',
+          field: 'description',
+          component: { id: 'catalog.markdown_edit', version: 1, props: {} },
+        },
+      ],
+    };
+    const { onSubmit } = renderForm({ blueprint: definition });
+    const source = '    code\n\n**Hello**  \nworld\n';
+    fireEvent.change(screen.getByRole('textbox', { name: 'description' }), {
+      target: { value: source },
+    });
+    fireEvent.click(screen.getByRole('tab', { name: 'Preview' }));
+    expect(screen.getByText('Hello').tagName).toBe('STRONG');
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    expect(JSON.stringify(onSubmit.mock.calls[0])).toContain(
+      JSON.stringify(source),
+    );
+  });
   it('offers a context draft and applies it only when restored', async () => {
     writeDraft(draftKey(marketContextId), {
       savedAt: new Date().toISOString(),

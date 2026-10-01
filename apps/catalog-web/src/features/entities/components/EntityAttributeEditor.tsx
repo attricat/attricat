@@ -1,7 +1,9 @@
 import { MenuItem, TextField, Tooltip, useTheme } from '@mui/material';
 import { InfoIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import type { Attribute } from '../api';
+import { MarkdownEditor } from '../../markdown/MarkdownEditor';
+import { VIEW_COMPONENT_IDS } from '../../views/constants';
+import type { Attribute, ComponentReference } from '../api';
 import type { FileMetadata } from '../../files/schemas';
 import { attributeLabel } from '../entityDisplay';
 import { attributeValueTypes } from '../valueTypes';
@@ -17,6 +19,7 @@ import { smallIconSize } from '../../../components/iconSizes';
 
 export const EntityAttributeEditor = ({
   attribute,
+  component,
   contextId,
   disabled,
   entityId,
@@ -29,6 +32,7 @@ export const EntityAttributeEditor = ({
   value,
 }: {
   attribute: Attribute;
+  component?: ComponentReference | null;
   contextId: string | null;
   disabled: boolean;
   entityId?: string;
@@ -46,6 +50,24 @@ export const EntityAttributeEditor = ({
   const migrationBadge = showMigrationBadge ? (
     <MigrationBadge message={migrationReviewMessage} />
   ) : null;
+  if (
+    attribute.value_type === attributeValueTypes.string &&
+    component?.id === VIEW_COMPONENT_IDS.markdownEdit &&
+    component.version === 1
+  )
+    return (
+      <>
+        {migrationBadge}
+        <MarkdownEditor
+          label={attributeLabel(attribute)}
+          value={value}
+          onChange={onChange}
+          disabled={effectiveDisabled}
+          error={error}
+          helperText={helperText}
+        />
+      </>
+    );
   if (attribute.value_type === attributeValueTypes.relationship)
     return (
       <>

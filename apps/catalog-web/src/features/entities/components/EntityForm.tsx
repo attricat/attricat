@@ -2,6 +2,7 @@ import { useForm, useStore } from '@tanstack/react-form';
 import { Alert, Button, Paper, Stack, Typography } from '@mui/material';
 import type {
   Attribute,
+  ComponentReference,
   BlueprintWithAttributes,
   FormAttributeValue,
 } from '../api';
@@ -283,9 +284,13 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
           {blueprint && (
             <form.Field name="fields">
               {(field) => {
-                const renderEditor = (attribute: Attribute) => (
+                const renderEditor = (
+                  attribute: Attribute,
+                  component?: ComponentReference | null,
+                ) => (
                   <EntityFormAttributeEditor
                     {...editorContext}
+                    component={component}
                     attribute={attribute}
                     onChange={(nextValue) => {
                       const nextFields = {

@@ -2,6 +2,19 @@ import { describe, expect, it } from 'vitest';
 import { scalarValueForField, valueForField } from './attributeValues';
 
 describe('attribute values', () => {
+  it('preserves Markdown whitespace in strings while treating blank input as unset', () => {
+    const attribute = { code: 'description', value_type: 'string' as const };
+    const source = '    indented code\n\nline  \nnext\n';
+    expect(scalarValueForField(attribute, source)?.value).toBe(source);
+    expect(scalarValueForField(attribute, '  plain text  ')?.value).toBe(
+      '  plain text  ',
+    );
+    expect(scalarValueForField(attribute, ' \n ')).toBeUndefined();
+    expect(
+      scalarValueForField({ code: 'count', value_type: 'integer' }, ' 12 ')
+        ?.value,
+    ).toBe(12);
+  });
   it('formats API scalar values for form fields', () => {
     expect(valueForField(false)).toBe('false');
     expect(

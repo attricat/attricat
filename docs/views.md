@@ -182,5 +182,16 @@ component's version, props, placement, value type, and required `display` or
 `edit` capability. Keep this contract synchronized with the TypeScript
 definition. `registry.test.ts` verifies that their metadata is identical.
 
+For Markdown string attributes, select `catalog.markdown_display@1` in a
+field of a display view and `catalog.markdown_edit@1` in a field of an edit
+view (using the component reference's `id` and `version` fields). These
+components accept no props and do not apply to table columns. The editor
+provides Write and Preview tabs; both preview and display use CommonMark.
+Raw HTML is ignored, images show alt text without fetching the image, and
+links are limited to HTTP(S), relative paths, and fragments. Source text is
+stored as a string, preserving indentation and trailing spaces; whitespace-only
+input follows the existing unset-value behavior. Attribute JSON Schema
+constraints and existing edit permissions still apply.
+
 See [Component Authoring](component-authoring.md) for the implementation and
 verification workflow.

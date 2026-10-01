@@ -1,4 +1,5 @@
 {
+  "markdown": { "write": "Write", "preview": "Preview" },
   "language": {
     "label": "Language",
     "english": "English",

@@ -1,3 +1,4 @@
+import { markdownDisplayComponent, markdownEditComponent } from './Markdown';
 import type { ComponentReference } from '../../entities/api';
 import { fieldDisplayComponent } from './FieldDisplay';
 import { fieldEditComponent } from './FieldEdit';
@@ -17,6 +18,8 @@ import type {
 } from './componentTypes';
 
 export const viewComponents: readonly ViewComponentDefinition[] = [
+  markdownDisplayComponent,
+  markdownEditComponent,
   fieldDisplayComponent,
   fieldEditComponent,
   relationshipListDisplayComponent,
