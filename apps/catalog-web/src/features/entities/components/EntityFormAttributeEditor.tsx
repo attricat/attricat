@@ -9,8 +9,10 @@ import {
 } from '../entityFormAttributes';
 import { attributeValueTypes } from '../valueTypes';
 import { EntityAttributeEditor } from './EntityAttributeEditor';
+import { AttributeValue } from '../../views/components/values/AttributeValue';
 
 export type EntityFormAttributeEditorContext = {
+  disabled?: boolean;
   contextId: string | null;
   defaultContextId: string | null;
   entityId?: string;
@@ -32,6 +34,7 @@ export const EntityFormAttributeEditor = ({
   attribute,
   contextId,
   defaultContextId,
+  disabled = false,
   entityId,
   existingValues,
   fieldErrors,
@@ -57,7 +60,8 @@ export const EntityFormAttributeEditor = ({
   const inheritedHelperText = () => {
     if (!inherited) return undefined;
     const context = resolvedValue.source_context.code;
-    return attribute.value_type === attributeValueTypes.relationship
+    return attribute.value_type === attributeValueTypes.relationship ||
+      attribute.value_type === attributeValueTypes.file
       ? t('entities.inheritedFromContext', { context })
       : t('entities.inheritedValue', {
           context,
@@ -71,18 +75,23 @@ export const EntityFormAttributeEditor = ({
       : inheritedHelperText();
 
   return (
-    <EntityAttributeEditor
-      attribute={attribute}
-      contextId={contextId}
-      disabled={readonly || defaultOnly}
-      entityId={entityId}
-      files={filesForAttribute(existingValues, attribute.code, contextId)}
-      error={fieldErrors[attribute.code]}
-      helperText={helperText}
-      migrationReviewMessage={migrationReviewMessages[attribute.code]}
-      onChange={onChange}
-      showMigrationBadge={highlightedAttributes.includes(attribute.code)}
-      value={value}
-    />
+    <>
+      {inherited && attribute.value_type === attributeValueTypes.file && (
+        <AttributeValue attribute={attribute} value={resolvedValue.value} />
+      )}
+      <EntityAttributeEditor
+        attribute={attribute}
+        contextId={contextId}
+        disabled={disabled || readonly || defaultOnly}
+        entityId={entityId}
+        files={filesForAttribute(existingValues, attribute.code, contextId)}
+        error={fieldErrors[attribute.code]}
+        helperText={helperText}
+        migrationReviewMessage={migrationReviewMessages[attribute.code]}
+        onChange={onChange}
+        showMigrationBadge={highlightedAttributes.includes(attribute.code)}
+        value={value}
+      />
+    </>
   );
 };

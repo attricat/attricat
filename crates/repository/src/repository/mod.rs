@@ -279,6 +279,12 @@ pub enum RepositoryError {
     ReusableAttributeAlreadyAttached,
     #[error("file attribute policy is invalid")]
     InvalidFilePolicy,
+    #[error("file attribute is read-only")]
+    FileAttributeReadonly,
+    #[error("file references changed; refresh and try again")]
+    FileReferencesChanged,
+    #[error("file references must be unique existing attachments in an allowed order")]
+    InvalidFileReferences,
     #[error("file count is incompatible with the attribute cardinality")]
     FileCardinality,
     #[error("provide exactly one of attribute_id or attribute_code")]

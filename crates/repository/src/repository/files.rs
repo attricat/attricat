@@ -7,6 +7,8 @@ use sqlx::Transaction;
 #[derive(Clone, Debug, Deserialize)]
 pub struct FilePolicy {
     pub cardinality: String,
+    #[serde(default)]
+    pub ordered: bool,
     pub allowed_mime_groups: Vec<String>,
     pub allowed_extensions: Vec<String>,
     pub max_bytes: Option<u64>,
@@ -212,6 +214,94 @@ impl CatalogRepository {
             context_id,
             files: result,
         })
+    }
+
+    /// Removes or reorders existing references only. The expected ordered list
+    /// is a compare-and-swap guard against concurrent uploads and edits. Archived
+    /// references preserve history; this never deletes shared file objects.
+    pub async fn update_file_references(
+        &self,
+        entity_id: Uuid,
+        attribute_code: &str,
+        context_id: Option<Uuid>,
+        expected_file_ids: &[Uuid],
+        file_ids: &[Uuid],
+    ) -> Result<(), RepositoryError> {
+        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let mut transaction = self.pool.begin().await?;
+        let entity = self.lock_entity(&mut transaction, entity_id).await?;
+        let (attribute_id, policy, context_editable) = self
+            .file_upload_attribute(&mut transaction, &entity, attribute_code)
+            .await?;
+        let context_id = self
+            .file_upload_context(&mut transaction, context_id)
+            .await?;
+        self.validate_context_editable(&mut transaction, Some(context_id), &context_editable)
+            .await?;
+        let current: Vec<Uuid> = sqlx::query_scalar(
+            "SELECT r.file_id FROM attribute_file_references r JOIN attribute_values v ON v.id = r.attribute_value_id AND v.workspace_id = r.workspace_id WHERE v.entity_id = $1 AND v.attribute_id = $2 AND v.context_id = $3 AND v.workspace_id = $4 ORDER BY r.position, r.file_id",
+        )
+        .bind(entity_id).bind(attribute_id).bind(context_id).bind(workspace_id)
+        .fetch_all(&mut *transaction).await?;
+        if current != expected_file_ids {
+            return Err(RepositoryError::FileReferencesChanged);
+        }
+        let unique: std::collections::HashSet<_> = file_ids.iter().collect();
+        let existing: std::collections::HashSet<_> = current.iter().collect();
+        if unique.len() != file_ids.len() || !unique.is_subset(&existing) {
+            return Err(RepositoryError::InvalidFileReferences);
+        }
+        if !policy.ordered
+            && current
+                .iter()
+                .filter(|id| unique.contains(id))
+                .copied()
+                .collect::<Vec<_>>()
+                != file_ids
+        {
+            return Err(RepositoryError::InvalidFileReferences);
+        }
+        if policy.cardinality == "one" && file_ids.len() > 1 {
+            return Err(RepositoryError::FileCardinality);
+        }
+        if current == file_ids {
+            transaction.commit().await?;
+            return Ok(());
+        }
+        self.archive_current_value(
+            &mut transaction,
+            entity_id,
+            attribute_id,
+            Some(context_id),
+            None,
+        )
+        .await?;
+        // Keep an explicit empty local value: removing every image must not
+        // unexpectedly reveal photos inherited from a fallback context.
+        let value_id = Uuid::new_v4();
+        sqlx::query("INSERT INTO attribute_values (id, workspace_id, entity_id, attribute_id, context_id, active) VALUES ($1, $2, $3, $4, $5, true)")
+            .bind(value_id).bind(workspace_id).bind(entity_id).bind(attribute_id).bind(context_id)
+            .execute(&mut *transaction).await?;
+        for (position, file_id) in file_ids.iter().enumerate() {
+            sqlx::query("INSERT INTO attribute_file_references (attribute_value_id, workspace_id, file_id, position) VALUES ($1, $2, $3, $4)")
+                .bind(value_id).bind(workspace_id).bind(file_id).bind(position as i32)
+                .execute(&mut *transaction).await?;
+        }
+        sqlx::query("UPDATE entities SET updated_at = now() WHERE id = $1 AND workspace_id = $2")
+            .bind(entity_id)
+            .bind(workspace_id)
+            .execute(&mut *transaction)
+            .await?;
+        let retained_role = self
+            .reconcile_entity_publication(&mut transaction, entity_id, "entity_changed")
+            .await?;
+        self.write_audit_event_with_publication_metadata(
+            &mut transaction,
+            Some(publication_disposition_metadata(retained_role)),
+        )
+        .await?;
+        transaction.commit().await?;
+        Ok(())
     }
 
     /// Links an existing workspace file to a file attribute without copying
@@ -446,14 +536,18 @@ impl CatalogRepository {
         entity: &Entity,
         attribute_code: &str,
     ) -> Result<(Uuid, FilePolicy, String), RepositoryError> {
-        let row = sqlx::query_as::<_, (Uuid, String, Option<Value>, String)>(
-            "SELECT id, value_type, file_policy, context_editable FROM attributes WHERE code = $1 AND ((blueprint_id = $2 AND blueprint_version = $3) OR entity_id = $4) AND deleted_at IS NULL",
+        let row = sqlx::query_as::<_, (Uuid, String, Option<Value>, String, bool)>(
+            "SELECT id, value_type, file_policy, context_editable, readonly FROM attributes WHERE code = $1 AND ((blueprint_id = $2 AND blueprint_version = $3) OR entity_id = $4) AND workspace_id = $5 AND deleted_at IS NULL",
         )
         .bind(attribute_code).bind(entity.blueprint_id).bind(entity.blueprint_version).bind(entity.id)
+        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
         .fetch_optional(&mut **transaction).await?
         .ok_or(RepositoryError::AttributeNotApplicable)?;
         if row.1 != "file" {
             return Err(RepositoryError::AttributeNotApplicable);
+        }
+        if row.4 {
+            return Err(RepositoryError::FileAttributeReadonly);
         }
         let policy = row
             .2

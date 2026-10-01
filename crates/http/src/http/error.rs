@@ -271,6 +271,21 @@ impl From<RepositoryError> for ApiError {
                 code: "invalid_system_tags",
                 message: error.to_string(),
             },
+            RepositoryError::FileAttributeReadonly => Self {
+                status: StatusCode::UNPROCESSABLE_ENTITY,
+                code: "file_attribute_readonly",
+                message: error.to_string(),
+            },
+            RepositoryError::FileReferencesChanged => Self {
+                status: StatusCode::CONFLICT,
+                code: "file_references_changed",
+                message: error.to_string(),
+            },
+            RepositoryError::InvalidFileReferences => Self {
+                status: StatusCode::UNPROCESSABLE_ENTITY,
+                code: "invalid_file_references",
+                message: error.to_string(),
+            },
             RepositoryError::FileCardinality => Self {
                 status: StatusCode::UNPROCESSABLE_ENTITY,
                 code: "file_cardinality_exceeded",

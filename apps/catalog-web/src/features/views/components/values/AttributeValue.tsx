@@ -4,11 +4,10 @@ import { useTranslation } from 'react-i18next';
 import type { ReactNode } from 'react';
 import type { Attribute } from '../../../entities/api';
 import { fileDownloadUrl } from '../../../files/api';
-import { FileThumbnail } from '../../../files/FileThumbnail';
+import { ImageGallery } from '../../../files/ImageGallery';
 import { AttributeValueText } from './AttributeValueText';
 import { formatAttributeValue } from './formatAttributeValue';
 import { attributeValueTypes } from '../../../entities/valueTypes';
-import { FILE_THUMBNAIL_SIZE } from '../../constants';
 
 type RelationshipValue = {
   items?: { id: string; display?: string }[];
@@ -41,10 +40,14 @@ export const AttributeValue = ({
   value,
   compact = false,
   renderFilePanel,
+  contextId,
+  entityId,
 }: {
   attribute: Attribute;
   value: unknown;
   compact?: boolean;
+  contextId?: string;
+  entityId?: string;
   renderFilePanel?: (fileId: string) => ReactNode;
 }) => {
   const { t } = useTranslation();
@@ -96,14 +99,21 @@ export const AttributeValue = ({
       );
     }
 
+    if (attribute.file_policy?.image_only) {
+      return (
+        <ImageGallery
+          key={`${entityId ?? ''}:${contextId ?? ''}:${attribute.code}`}
+          files={value}
+          renderFilePanel={renderFilePanel}
+        />
+      );
+    }
+
     return (
       <Stack spacing={1}>
         {value.map((file) => (
           <Stack key={file.id} spacing={1}>
             <Stack direction="row" spacing={1}>
-              {attribute.file_policy?.image_only && (
-                <FileThumbnail file={file} size={FILE_THUMBNAIL_SIZE} />
-              )}
               <Typography
                 component="a"
                 href={fileDownloadUrl(file.id)}

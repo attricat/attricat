@@ -481,6 +481,8 @@ pub(super) async fn duplicate_entity(
 
 pub(super) async fn get_entity_form(
     State(_state): State<AppState>,
+    super::auth::AuthenticatedPrincipal(user, _): super::auth::AuthenticatedPrincipal,
+    super::auth::ActiveWorkspace(workspace_id): super::auth::ActiveWorkspace,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(entity_id): ApiPath<Uuid>,
 ) -> Result<Json<EntityFormResponse>, ApiError> {
@@ -494,6 +496,9 @@ pub(super) async fn get_entity_form(
     let reusable_attributes = repository.entity_reusable_attributes(entity_id).await?;
     let reusable_values = repository.reusable_form_values(entity_id).await?;
     Ok(Json(EntityFormResponse {
+        can_write: repository
+            .is_authorized(user, workspace_id, "entities.write", Some(entity_id), None)
+            .await?,
         context: entity
             .projections
             .get("preview")

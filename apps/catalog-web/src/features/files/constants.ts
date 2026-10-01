@@ -26,6 +26,18 @@ export const THUMBNAIL_POLLING_STATUSES: ReadonlySet<string> = new Set([
 ]);
 
 export const THUMBNAIL_VARIANT_KIND = 'thumbnail';
+export const DISPLAY_VARIANT_KIND = 'display';
+export const GALLERY_THUMBNAIL_SIZE = 128;
+export const GALLERY_PAGE_SIZE = 24;
+export const IMAGE_ZOOM_STEP = 0.5;
+export const IMAGE_MIN_ZOOM = 1;
+export const IMAGE_MAX_ZOOM = 4;
+export const SUPPORTED_IMAGE_MIME_TYPES: ReadonlySet<string> = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/gif',
+  'image/webp',
+]);
 export const THUMBNAIL_POLL_INTERVAL = 1_000;
 export const MAX_THUMBNAIL_RETRIES = 3;
 /** Query parameter that busts the browser cache when retrying a thumbnail. */

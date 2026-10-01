@@ -70,6 +70,8 @@ export const EntityAttributeEditor = ({
           disabled={effectiveDisabled}
           entityId={entityId}
           files={files}
+          error={error}
+          helperText={helperText}
         />
       </>
     );

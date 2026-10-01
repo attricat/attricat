@@ -75,6 +75,7 @@ type EntityFormProps = {
   resolvedValues?: ResolvedFormValues;
   formId?: string;
   isLoadingBlueprint?: boolean;
+  disabled?: boolean;
   showBlueprintMetadata?: boolean;
   showSubmitButton?: boolean;
   showAllAttributes?: boolean;
@@ -108,6 +109,7 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
       resolvedValues = {},
       formId,
       isLoadingBlueprint = false,
+      disabled = false,
       showBlueprintMetadata = true,
       showSubmitButton = true,
       showAllAttributes = false,
@@ -157,6 +159,7 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
         fields: initialValues,
       },
       onSubmit: ({ value }) => {
+        if (disabled) return;
         if (!blueprint) {
           onLoadBlueprint?.(value.blueprintCode);
           return;
@@ -235,6 +238,7 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
     }));
 
     const editorContext = {
+      disabled: disabled || isLoadingBlueprint,
       contextId,
       defaultContextId,
       entityId,
@@ -332,7 +336,7 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
           {footerActions}
           {showSubmitButton && (
             <Button
-              disabled={isLoadingBlueprint}
+              disabled={disabled || isLoadingBlueprint}
               type="submit"
               variant="contained"
             >

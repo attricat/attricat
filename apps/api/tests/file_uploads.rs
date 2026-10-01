@@ -723,6 +723,42 @@ async fn file_reads_use_active_linked_entity_scopes(pool: PgPool) {
         reqwest::header::HeaderValue::from_static(BOOTSTRAP_WORKSPACE_ID),
     );
     let reader = Client::builder().default_headers(headers).build().unwrap();
+    let permitted_entity_id = permitted_entity["id"].as_str().unwrap();
+    let form: Value = reader
+        .get(format!("{base_url}/v1/entities/{permitted_entity_id}"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(form["can_write"], false);
+    assert_eq!(
+        reader
+            .put(format!(
+                "{base_url}/entities/{permitted_entity_id}/file-attributes/image/references"
+            ))
+            .json(&json!({"expected_file_ids":[permitted_file_id],"file_ids":[]}))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        reader
+            .post(format!(
+                "{base_url}/entities/{permitted_entity_id}/file-attributes/image/uploads"
+            ))
+            .multipart(Form::new().part("file", png_part("denied.png")))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::FORBIDDEN
+    );
 
     for path in [
         format!("/files/{permitted_file_id}"),
