@@ -1,7 +1,11 @@
 import { MenuItem, TextField, Tooltip, useTheme } from '@mui/material';
 import { InfoIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import type { Attribute } from '../api';
+import type { Attribute, ComponentReference } from '../api';
+import {
+  VIEW_COMPONENT_IDS,
+  VIEW_COMPONENT_VERSION,
+} from '../../views/constants';
 import type { FileMetadata } from '../../files/schemas';
 import { attributeLabel } from '../entityDisplay';
 import { attributeValueTypes } from '../valueTypes';
@@ -17,6 +21,7 @@ import { smallIconSize } from '../../../components/iconSizes';
 
 export const EntityAttributeEditor = ({
   attribute,
+  component,
   contextId,
   disabled,
   entityId,
@@ -29,6 +34,7 @@ export const EntityAttributeEditor = ({
   value,
 }: {
   attribute: Attribute;
+  component?: ComponentReference | null;
   contextId: string | null;
   disabled: boolean;
   entityId?: string;
@@ -43,6 +49,10 @@ export const EntityAttributeEditor = ({
   const { t } = useTranslation();
   const providerUnavailable = attribute.extension_type?.available === false;
   const effectiveDisabled = disabled || providerUnavailable;
+  const phone =
+    attribute.value_type === attributeValueTypes.string &&
+    component?.id === VIEW_COMPONENT_IDS.phoneEdit &&
+    component.version === VIEW_COMPONENT_VERSION;
   const migrationBadge = showMigrationBadge ? (
     <MigrationBadge message={migrationReviewMessage} />
   ) : null;
@@ -104,7 +114,9 @@ export const EntityAttributeEditor = ({
         fullWidth
         disabled={effectiveDisabled}
         error={Boolean(error)}
-        helperText={error ?? helperText}
+        helperText={
+          error ?? helperText ?? (phone ? t('entities.phoneHelp') : undefined)
+        }
         label={attributeLabel(attribute)}
         onChange={(event) => onChange(event.target.value)}
         multiline={attribute.value_type === attributeValueTypes.json}
@@ -122,20 +134,24 @@ export const EntityAttributeEditor = ({
         }
         slotProps={{
           htmlInput: {
-            inputMode:
-              attribute.value_type === attributeValueTypes.number ||
-              attribute.value_type === attributeValueTypes.integer
+            dir: phone ? 'ltr' : undefined,
+            inputMode: phone
+              ? 'tel'
+              : attribute.value_type === attributeValueTypes.number ||
+                  attribute.value_type === attributeValueTypes.integer
                 ? 'decimal'
                 : undefined,
           },
         }}
         type={
-          attribute.value_type === attributeValueTypes.date
-            ? 'date'
-            : attribute.value_type === attributeValueTypes.number ||
-                attribute.value_type === attributeValueTypes.integer
-              ? 'number'
-              : undefined
+          phone
+            ? 'tel'
+            : attribute.value_type === attributeValueTypes.date
+              ? 'date'
+              : attribute.value_type === attributeValueTypes.number ||
+                  attribute.value_type === attributeValueTypes.integer
+                ? 'number'
+                : undefined
         }
         value={value}
       />

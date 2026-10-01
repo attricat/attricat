@@ -3,6 +3,8 @@ export const VIEW_COMPONENT_VERSION = 1;
 export const VIEW_COMPONENT_IDS = {
   fieldDisplay: 'catalog.field_display',
   fieldEdit: 'catalog.field_edit',
+  phoneDisplay: 'catalog.phone_display',
+  phoneEdit: 'catalog.phone_edit',
   incomingRelationshipListDisplay: 'catalog.incoming_relationship_list_display',
   relationshipHierarchy: 'catalog.relationship_hierarchy',
   relationshipListDisplay: 'catalog.relationship_list_display',

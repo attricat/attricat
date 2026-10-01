@@ -207,6 +207,7 @@
     "never": "Never"
   },
   "entities": {
+    "phoneHelp": "Include + and the country code to enable calling. Extensions may use ext. or x.",
     "createEntity": "Create entity",
     "editEntity": "Edit entity",
     "duplicateEntity": "Duplicate entity",
@@ -1122,6 +1123,7 @@
     "acceptInvitation": "Accept invitation"
   },
   "views": {
+    "callPhone": "Call {{number}}",
     "availableOnPreviews": "{{label}} is available on entity previews.",
     "notSet": "Not set",
     "yes": "Yes",

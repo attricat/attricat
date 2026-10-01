@@ -25,7 +25,10 @@ export const ValueField = ({
 }: {
   attribute: Attribute;
   resolved?: ResolvedValue;
-  renderEditor?: (attribute: Attribute) => ReactNode;
+  renderEditor?: (
+    attribute: Attribute,
+    component?: ComponentReference | null,
+  ) => ReactNode;
   renderAttributeDecoration?: (attribute: Attribute) => ReactNode;
   renderAttributePanel?: (attribute: Attribute) => ReactNode;
   renderFilePanel?: (attribute: Attribute, fileId: string) => ReactNode;
@@ -42,7 +45,7 @@ export const ValueField = ({
     >
       <Stack spacing={0.5}>
         {renderEditor ? (
-          renderEditor(attribute)
+          renderEditor(attribute, component)
         ) : (
           <>
             <Box sx={{ alignItems: 'center', display: 'flex', gap: 0.5 }}>

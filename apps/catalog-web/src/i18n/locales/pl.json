@@ -207,6 +207,7 @@
     "never": "Nigdy"
   },
   "entities": {
+    "phoneHelp": "Dodaj + i numer kierunkowy kraju, aby umożliwić połączenie. Numer wewnętrzny można poprzedzić ext. lub x.",
     "createEntity": "Utwórz encję",
     "editEntity": "Edytuj encję",
     "duplicateEntity": "Duplikuj encję",
@@ -1148,6 +1149,7 @@
     "acceptInvitation": "Zaakceptuj zaproszenie"
   },
   "views": {
+    "callPhone": "Zadzwoń pod {{number}}",
     "availableOnPreviews": "{{label}} jest dostępne w podglądach encji.",
     "notSet": "Nie ustawiono",
     "yes": "Tak",
