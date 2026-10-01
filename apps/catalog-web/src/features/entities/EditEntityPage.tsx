@@ -146,6 +146,7 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
           <EntityForm
             key={`${entityForm.data.entity.id}:${contextId ?? ''}`}
             blueprint={entityForm.data.blueprint}
+            disabled={!entityForm.data.can_write}
             expectedUpdatedAt={entityForm.data.entity.updated_at}
             statusParentContextIds={statusParentContexts(
               contexts.data ?? [],

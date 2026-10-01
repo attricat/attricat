@@ -1,7 +1,9 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import type { Attribute } from '../entities/api';
-import { uploadFiles } from './api';
+import { entityQueryKeys } from '../entities/queryKeys';
+import { uploadFiles, updateFileReferences } from './api';
 import { fileCardinalities } from './constants';
 import { acceptsFile, pendingFileId } from './fileAcceptance';
 import type { FileMetadata } from './schemas';
@@ -21,84 +23,163 @@ type Options = {
   files: FileMetadata[];
 };
 
-/** Queues files for a file attribute and uploads them one at a time. */
-export const usePendingFileUploads = ({
-  attribute,
-  contextId,
-  disabled,
-  entityId,
-  files,
-}: Options) => {
+/** Files save separately from scalar form values. Never persist file inputs in drafts. */
+export const usePendingFileUploads = (options: Options) => {
+  const { attribute, contextId, disabled, entityId, files } = options;
   const { t } = useTranslation();
+  const client = useQueryClient();
   const [pending, setPending] = useState<PendingFile[]>([]);
-  const [newUploads, setNewUploads] = useState<FileMetadata[]>([]);
-  const uploadingIds = useRef(new Set<string>());
-  const uploaded = [
-    ...files,
-    ...newUploads.filter((item) => !files.some((file) => file.id === item.id)),
-  ];
+  const [saved, setSaved] = useState<{
+    source: FileMetadata[];
+    value: FileMetadata[];
+  } | null>(null);
+  const [errors, setErrors] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const lock = useRef(false);
+  const current = useRef(options);
+  const active = useRef(true);
+  useEffect(() => {
+    current.current = options;
+  });
+  useEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+    };
+  }, []);
+  // A refetch is authoritative, including files removed by another editor.
+  const uploaded = saved?.source === files ? saved.value : files;
   const singleFile =
     attribute.file_policy?.cardinality === fileCardinalities.one;
   const canQueueFile =
     !singleFile || (uploaded.length === 0 && pending.length === 0);
-  const canUpload = !disabled && Boolean(entityId);
-
-  const updatePending = (id: string, change: Partial<PendingFile>) =>
-    setPending((items) =>
-      items.map((value) => (value.id === id ? { ...value, ...change } : value)),
+  const canUpload = !disabled && Boolean(entityId) && !busy;
+  const permitted = () =>
+    active.current &&
+    !current.current.disabled &&
+    Boolean(current.current.entityId);
+  const refresh = async () => {
+    if (!entityId) return;
+    await Promise.all(
+      [
+        entityQueryKeys.form(entityId),
+        entityQueryKeys.preview(entityId),
+        entityQueryKeys.resolvedPreviews(entityId),
+        entityQueryKeys.changes(entityId),
+        entityQueryKeys.publication(entityId),
+        entityQueryKeys.searches(),
+      ].map((queryKey) => client.invalidateQueries({ queryKey })),
     );
-
+  };
   const add = (candidates: FileList | File[]) => {
-    if (!canUpload || !canQueueFile) return;
-    const accepted = Array.from(candidates)
-      .filter((file) => acceptsFile(file, attribute))
-      .slice(0, singleFile ? 1 : undefined);
-    setPending((current) => [
-      ...current,
-      ...accepted.map((file) => ({ file, id: pendingFileId(), progress: 0 })),
+    if (!canUpload || !canQueueFile || lock.current || !permitted()) return;
+    const rejected: string[] = [];
+    const accepted = Array.from(candidates).filter((file) => {
+      if (acceptsFile(file, attribute)) return true;
+      rejected.push(t('files.fileRejected', { filename: file.name }));
+      return false;
+    });
+    if (singleFile && accepted.length > 1)
+      rejected.push(t('files.singleFileOnly'));
+    setErrors(rejected);
+    setPending((items) => [
+      ...items,
+      ...accepted
+        .slice(0, singleFile ? 1 : undefined)
+        .map((file) => ({ file, id: pendingFileId(), progress: 0 })),
     ]);
   };
-
-  const send = async (item: PendingFile) => {
-    if (!entityId || disabled || uploadingIds.current.has(item.id)) return;
-    uploadingIds.current.add(item.id);
-    updatePending(item.id, { error: undefined, progress: 1 });
+  const updatePending = (id: string, change: Partial<PendingFile>) =>
+    setPending((items) =>
+      items.map((item) => (item.id === id ? { ...item, ...change } : item)),
+    );
+  const upload = async (items: PendingFile[]) => {
+    if (lock.current || !permitted()) return;
+    lock.current = true;
+    setBusy(true);
+    let next = uploaded;
     try {
-      const result = await uploadFiles({
-        entityId,
-        attributeCode: attribute.code,
-        contextId,
-        files: [item.file],
-        onProgress: (progress) => updatePending(item.id, { progress }),
-      });
-      setNewUploads((items) => [...items, ...result.files]);
-      setPending((items) => items.filter((value) => value.id !== item.id));
-    } catch (error) {
-      updatePending(item.id, {
-        error: error instanceof Error ? error.message : t('files.uploadFailed'),
-        progress: 0,
-      });
+      for (const item of items) {
+        if (!permitted()) break;
+        updatePending(item.id, { error: undefined, progress: 1 });
+        try {
+          const result = await uploadFiles({
+            entityId: entityId!,
+            attributeCode: attribute.code,
+            contextId,
+            files: [item.file],
+            onProgress: (progress) => updatePending(item.id, { progress }),
+          });
+          next = [...next, ...result.files];
+          if (active.current) {
+            setSaved({ source: current.current.files, value: next });
+            setPending((queue) =>
+              queue.filter((value) => value.id !== item.id),
+            );
+          }
+        } catch (error) {
+          if (active.current)
+            updatePending(item.id, {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : t('files.uploadFailed'),
+              progress: 0,
+            });
+        }
+      }
+      await refresh();
     } finally {
-      uploadingIds.current.delete(item.id);
+      lock.current = false;
+      if (active.current) setBusy(false);
     }
   };
-
-  const uploadPending = async () => {
-    for (const item of pending.filter(
-      (item) => !item.error && item.progress === 0,
-    )) {
-      await send(item);
+  const changeReferences = async (fileIds: string[]) => {
+    if (lock.current || !permitted()) return false;
+    lock.current = true;
+    setBusy(true);
+    setErrors([]);
+    try {
+      await updateFileReferences(entityId!, attribute.code, {
+        context_id: contextId,
+        expected_file_ids: uploaded.map((file) => file.id),
+        file_ids: fileIds,
+      });
+      if (active.current)
+        setSaved({
+          source: current.current.files,
+          value: fileIds.map((id) => uploaded.find((file) => file.id === id)!),
+        });
+      await refresh();
+      return true;
+    } catch (error) {
+      if (active.current)
+        setErrors([
+          error instanceof Error ? error.message : t('files.updateFailed'),
+        ]);
+      await refresh();
+      return false;
+    } finally {
+      lock.current = false;
+      if (active.current) setBusy(false);
     }
   };
-
   return {
     add,
+    busy,
+    errors,
     canQueueFile,
     canUpload,
+    changeReferences,
     hasQueuedFiles: pending.some((item) => !item.error && item.progress === 0),
     pending,
-    retry: (item: PendingFile) => void send(item),
     uploaded,
-    uploadPending: () => void uploadPending(),
+    removePending: (id: string) => {
+      if (permitted() && !lock.current)
+        setPending((items) => items.filter((item) => item.id !== id));
+    },
+    retry: (item: PendingFile) => void upload([item]),
+    uploadPending: () =>
+      void upload(pending.filter((item) => !item.error && item.progress === 0)),
   };
 };

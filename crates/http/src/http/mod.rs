@@ -876,6 +876,10 @@ pub fn router(state: AppState) -> Router {
             "/entities/{entity_id}/file-attributes/{attribute_code}/uploads",
             post(files::upload).layer(axum::extract::DefaultBodyLimit::disable()),
         )
+        .route(
+            "/entities/{entity_id}/file-attributes/{attribute_code}/references",
+            put(files::update_references),
+        )
         .route("/files/{file_id}", get(files::metadata))
         .route("/files/{file_id}/download", get(files::download_original))
         .route(

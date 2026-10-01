@@ -679,6 +679,7 @@ pub struct FileVariantMetadata {
 
 #[derive(Clone, Debug, Serialize)]
 pub struct EntityFormResponse {
+    pub can_write: bool,
     pub entity: Entity,
     pub blueprint: BlueprintWithAttributes,
     pub values: Vec<FormAttributeValue>,

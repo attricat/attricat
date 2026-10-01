@@ -508,6 +508,7 @@ const reusableEntityAttributeSchema = attributeSchema.extend({
   position: z.number().int(),
 });
 const entityFormResponseSchema = z.object({
+  can_write: z.boolean().default(false),
   entity: entitySchema,
   blueprint: blueprintWithAttributesSchema,
   values: z.array(formAttributeValueSchema),

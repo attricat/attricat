@@ -10,6 +10,7 @@ import {
 } from '../entityFormAttributes';
 import { attributeValueTypes } from '../valueTypes';
 import { EntityAttributeEditor } from './EntityAttributeEditor';
+import { AttributeValue } from '../../views/components/values/AttributeValue';
 
 export type EntityFormAttributeEditorContext = {
   contextId: string | null;
@@ -68,7 +69,8 @@ export const EntityFormAttributeEditor = ({
   const inheritedHelperText = () => {
     if (!inherited) return undefined;
     const context = resolvedValue.source_context.code;
-    return attribute.value_type === attributeValueTypes.relationship
+    return attribute.value_type === attributeValueTypes.relationship ||
+      attribute.value_type === attributeValueTypes.file
       ? t('entities.inheritedFromContext', { context })
       : t('entities.inheritedValue', {
           context,
@@ -82,31 +84,36 @@ export const EntityFormAttributeEditor = ({
       : inheritedHelperText();
 
   return (
-    <EntityAttributeEditor
-      attribute={attribute}
-      component={component}
-      required={required}
-      contextId={contextId}
-      disabled={disabled || readonly || defaultOnly}
-      statusBaseline={savedStatusValue(attribute, statusSavedValues, [
-        contextId,
-        ...(attribute.context_fallback === 'none'
-          ? []
-          : statusParentContextIds),
-      ])}
-      inheritedStatus={savedStatusValue(
-        attribute,
-        statusSavedValues,
-        attribute.context_fallback === 'none' ? [] : statusParentContextIds,
+    <>
+      {inherited && attribute.value_type === attributeValueTypes.file && (
+        <AttributeValue attribute={attribute} value={resolvedValue.value} />
       )}
-      entityId={entityId}
-      files={filesForAttribute(existingValues, attribute.code, contextId)}
-      error={fieldErrors[attribute.code]}
-      helperText={helperText}
-      migrationReviewMessage={migrationReviewMessages[attribute.code]}
-      onChange={onChange}
-      showMigrationBadge={highlightedAttributes.includes(attribute.code)}
-      value={value}
-    />
+      <EntityAttributeEditor
+        attribute={attribute}
+        component={component}
+        required={required}
+        contextId={contextId}
+        disabled={disabled || readonly || defaultOnly}
+        statusBaseline={savedStatusValue(attribute, statusSavedValues, [
+          contextId,
+          ...(attribute.context_fallback === 'none'
+            ? []
+            : statusParentContextIds),
+        ])}
+        inheritedStatus={savedStatusValue(
+          attribute,
+          statusSavedValues,
+          attribute.context_fallback === 'none' ? [] : statusParentContextIds,
+        )}
+        entityId={entityId}
+        files={filesForAttribute(existingValues, attribute.code, contextId)}
+        error={fieldErrors[attribute.code]}
+        helperText={helperText}
+        migrationReviewMessage={migrationReviewMessages[attribute.code]}
+        onChange={onChange}
+        showMigrationBadge={highlightedAttributes.includes(attribute.code)}
+        value={value}
+      />
+    </>
   );
 };
