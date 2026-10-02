@@ -234,15 +234,16 @@ impl CatalogRepository {
             validate_attribute_default_value(&attribute)?;
             attributes.push(
                 sqlx::query_as::<_, Db<Attribute>>(
-                    r#"INSERT INTO attributes (id, workspace_id, blueprint_id, blueprint_version, code, value_type, value_schema, extension_type, default_value, file_policy, target_blueprint_code, cardinality, target_cardinality, tags, context_fallback, context_editable, readonly, position)
-                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
-                       RETURNING id, blueprint_id, blueprint_version, code, value_type, value_schema, extension_type, default_value, file_policy, target_blueprint_code, cardinality, target_cardinality, tags, context_fallback, context_editable, readonly, position, created_at, updated_at, deleted_at"#,
+                    r#"INSERT INTO attributes (id, workspace_id, blueprint_id, blueprint_version, code, name, value_type, value_schema, extension_type, default_value, file_policy, target_blueprint_code, cardinality, target_cardinality, tags, context_fallback, context_editable, readonly, position)
+                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+                       RETURNING id, blueprint_id, blueprint_version, code, name, value_type, value_schema, extension_type, default_value, file_policy, target_blueprint_code, cardinality, target_cardinality, tags, context_fallback, context_editable, readonly, position, created_at, updated_at, deleted_at"#,
                 )
                 .bind(Uuid::new_v4())
                 .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
                 .bind(blueprint_id)
                 .bind(version)
                 .bind(attribute.code)
+                .bind(attribute.name)
                 .bind(attribute.value_type)
                 .bind(attribute.value_schema)
                 .bind(attribute.extension_type)
@@ -643,7 +644,7 @@ impl CatalogRepository {
         blueprint_version: i64,
     ) -> Result<Vec<Attribute>, RepositoryError> {
         Ok(sqlx::query_as::<_, Db<Attribute>>(
-            r#"SELECT id, blueprint_id, blueprint_version, code, value_type, value_schema, extension_type, default_value, file_policy, target_blueprint_code, cardinality, target_cardinality, tags, context_fallback, context_editable, readonly, position, created_at, updated_at, deleted_at
+            r#"SELECT id, blueprint_id, blueprint_version, code, name, value_type, value_schema, extension_type, default_value, file_policy, target_blueprint_code, cardinality, target_cardinality, tags, context_fallback, context_editable, readonly, position, created_at, updated_at, deleted_at
                FROM attributes
                WHERE blueprint_id = $1 AND blueprint_version = $2 AND workspace_id = $3 AND deleted_at IS NULL
                ORDER BY position"#,
@@ -702,7 +703,7 @@ impl CatalogRepository {
                     break;
                 };
                 let Some(next) = sqlx::query_as::<_, Db<Attribute>>(
-                    r#"SELECT a.id, a.blueprint_id, a.blueprint_version, a.code, a.value_type,
+                    r#"SELECT a.id, a.blueprint_id, a.blueprint_version, a.code, a.name, a.value_type,
                               a.value_schema, a.extension_type, a.default_value, a.file_policy, a.target_blueprint_code,
                               a.cardinality, a.target_cardinality, a.tags, a.context_fallback,
                               a.context_editable, a.readonly, a.position, a.created_at, a.updated_at,

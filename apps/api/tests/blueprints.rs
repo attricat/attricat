@@ -119,6 +119,84 @@ readonly = true
 }
 
 #[sqlx::test]
+async fn persists_attribute_names_through_includes(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    create_blueprint(
+        &client,
+        &base_url,
+        r#"
+format_version = 1
+code = "named_seo"
+name = "Named SEO"
+kind = "mixin"
+
+[[attributes]]
+code = "meta_title"
+name = "SEO title"
+value_type = "string"
+"#,
+    )
+    .await;
+    let blueprint = create_blueprint(
+        &client,
+        &base_url,
+        r#"
+format_version = 1
+code = "named_product"
+name = "Named product"
+kind = "entity"
+
+[[includes]]
+alias = "seo"
+code = "named_seo"
+version = 1
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["product_family"]
+
+[[attributes]]
+code = "product_family"
+name = "Family"
+value_type = "string"
+
+[[attributes]]
+code = "sku"
+value_type = "string"
+
+[[attributes]]
+code = "meta_title"
+from = "seo.meta_title"
+"#,
+    )
+    .await;
+    let blueprint_id = blueprint["blueprint"]["id"].as_str().unwrap();
+    let current: Value = client
+        .get(format!("{base_url}/blueprints/{blueprint_id}"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+
+    for response in [&blueprint, &current] {
+        let names: Vec<_> = response["attributes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|attribute| attribute["name"].clone())
+            .collect();
+        assert_eq!(names, [json!("Family"), Value::Null, json!("SEO title")]);
+    }
+
+    server.abort();
+}
+
+#[sqlx::test]
 async fn rejects_invalid_toml_and_mixin_entity_creation(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();

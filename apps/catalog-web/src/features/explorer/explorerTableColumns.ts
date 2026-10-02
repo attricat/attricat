@@ -1,5 +1,6 @@
 import type { TFunction } from 'i18next';
 import type { BlueprintWithAttributes } from '../entities/api';
+import { attributeLabel } from '../entities/entityDisplay';
 import {
   builtInConfigurableColumnIds,
   catalogRendererPrefix,
@@ -37,6 +38,14 @@ export const buildExplorerTableColumns = (
   blueprint: BlueprintWithAttributes,
   relationshipSortAvailable: boolean,
 ): ExplorerTableColumn[] => {
+  // Local columns default to the attribute's name; relationship paths keep
+  // the humanized path.
+  const defaultLabel = (field: string) => {
+    const attribute = blueprint.attributes.find(
+      (candidate) => candidate.code === field,
+    );
+    return attribute ? attributeLabel(attribute) : undefined;
+  };
   const tableView =
     blueprint.blueprint.views.table?.type === 'table'
       ? blueprint.blueprint.views.table
@@ -44,6 +53,7 @@ export const buildExplorerTableColumns = (
   if (!tableView?.columns?.length)
     return (tableView?.fields ?? []).map((field) => ({
       field,
+      label: defaultLabel(field),
       relationshipSortBlocked: false,
       sortable: false,
     }));
@@ -58,6 +68,7 @@ export const buildExplorerTableColumns = (
       !relationshipSortAvailable;
     return {
       ...column,
+      label: column.label ?? defaultLabel(column.field),
       relationshipSortBlocked,
       sortable: configuredSortable && !relationshipSortBlocked,
     };

@@ -82,6 +82,11 @@ struct RawAttributeDeclaration {
     /// Attribute identifier, unique within the blueprint.
     #[schemars(regex(pattern = CODE_PATTERN))]
     code: String,
+    /// Human-readable label shown in forms, filters, and table headers.
+    /// Defaults to the humanized `code`. Attributes selected with `from` use
+    /// the mixin's name and cannot set their own.
+    #[schemars(length(min = 1))]
+    name: Option<String>,
     /// Stored value type.
     #[schemars(extend("enum" = ATTRIBUTE_VALUE_TYPES))]
     value_type: Option<String>,
@@ -264,6 +269,9 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
         if !codes.insert(attribute.code.clone()) {
             return Err(BlueprintError::DuplicateAttributeCode(attribute.code));
         }
+        if let Some(name) = &attribute.name {
+            validate_non_empty(name, "attribute name")?;
+        }
 
         attributes.push(
             match (
@@ -403,6 +411,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                     }
                     AttributeDeclaration::Local(Box::new(LocalAttributeDeclaration {
                         code: attribute.code,
+                        name: attribute.name,
                         value_type,
                         value_schema,
                         extension_type: None,
@@ -418,7 +427,9 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                         readonly: attribute.readonly,
                     }))
                 }
-                (None, None, Some(source)) if attribute.target_blueprint.is_none() => {
+                (None, None, Some(source))
+                    if attribute.target_blueprint.is_none() && attribute.name.is_none() =>
+                {
                     let (include_alias, attribute_code) =
                         parse_selection(&attribute.code, &source)?;
                     AttributeDeclaration::Selection {
@@ -460,6 +471,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                     )?;
                     AttributeDeclaration::Local(Box::new(LocalAttributeDeclaration {
                         code: attribute.code,
+                        name: attribute.name,
                         // Resolved before persistence; this keeps the pure compiler
                         // useful without giving extensions storage control.
                         value_type: "string".to_owned(),

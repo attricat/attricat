@@ -51,6 +51,7 @@ value_type = "string"
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
 | `code` | code | Required | Unique within the blueprint, including attributes pulled in from mixins. |
+| `name` | string | Humanized `code` | Human-readable label shown in forms, filters, previews, and as the default table column heading. Must not be blank. Not allowed with `from`; a selected attribute keeps the mixin attribute's name. |
 | `value_type` | string | | One of the [value types](#value-types). |
 | `from` | string | | `"<include-alias>.<attribute-code>"`. Materializes an attribute from an included mixin. `code` must equal the mixin attribute's code. |
 | `extension_type` | string | | `"<extension-id>:<type-id>@<semver-range>"`. Uses an attribute type declared by an enabled extension. See [Extension attribute types](#extension-attribute-types). |

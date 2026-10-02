@@ -58,7 +58,9 @@ label = "Product type"
 segment must be a relationship and relationship-path leaves must be scalar.
 Direct columns may also be file attributes when a compatible renderer is used.
 Paths are resolved with each linked entity's pinned blueprint revision; incompatible
-historical revisions yield an empty cell. `label` is optional.
+historical revisions yield an empty cell. `label` is optional; a direct column
+defaults to the attribute's `name`, and a column without either uses the
+humanized field path.
 
 Use `catalog.table_image@1` to render a direct, image-only single-file attribute
 as a thumbnail:

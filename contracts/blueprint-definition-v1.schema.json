@@ -308,6 +308,14 @@
             "file"
           ]
         },
+        "name": {
+          "description": "Human-readable label shown in forms, filters, and table headers.\nDefaults to the humanized `code`. Attributes selected with `from` use\nthe mixin's name and cannot set their own.",
+          "minLength": 1,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "ordered": {
           "description": "Whether multiple files keep their order. Defaults to `true` for `many`.",
           "type": [
