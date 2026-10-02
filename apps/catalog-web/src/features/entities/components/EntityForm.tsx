@@ -14,10 +14,12 @@ import {
 } from '../entityForm';
 import {
   editableFormAttributes,
+  entitySchemaRequiredAttributes,
   removedFormValues,
   smartFillFormFields,
   type RemovedAttributeValue,
   type ResolvedFormValues,
+  unplacedRequiredAttributes,
 } from '../entityFormAttributes';
 import {
   viewFieldComponents,
@@ -166,6 +168,23 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
       },
     );
     const fieldEditors = viewFieldEditors(fieldComponents, editableAttributes);
+    const unplacedRequired =
+      blueprint && editView && !showAllAttributes
+        ? unplacedRequiredAttributes(
+            editableAttributes.filter((attribute) =>
+              blueprint.attributes.includes(attribute),
+            ),
+            editView,
+            [
+              ...requiredAttributes,
+              ...(contextId === defaultContextId
+                ? entitySchemaRequiredAttributes(
+                    blueprint.blueprint.entity_schema,
+                  )
+                : []),
+            ],
+          )
+        : [];
     const validateFields = (fields: Record<string, string>) => {
       if (!blueprint) return { fieldErrors: {} };
       const validation = validateEntityForm(
@@ -371,6 +390,18 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
                       view={showAllAttributes ? undefined : editView}
                       renderEditor={renderEditor}
                     />
+                    {unplacedRequired.length > 0 && (
+                      <>
+                        <Typography sx={{ mt: 3 }} variant="h6">
+                          {t('entities.otherRequiredAttributes')}
+                        </Typography>
+                        <EntityView
+                          attributes={unplacedRequired}
+                          values={resolvedValues}
+                          renderEditor={renderEditor}
+                        />
+                      </>
+                    )}
                     {reusableAttributes.length > 0 && (
                       <>
                         <Typography sx={{ mt: 3 }} variant="h6">

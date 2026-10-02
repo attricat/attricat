@@ -14,6 +14,12 @@ that do not define them.
 `detail` and `edit` use recursive layout roots. A table column may reference a
 local scalar field or a scalar leaf through at most three relationship hops.
 
+A custom `edit` layout must place (as `field` or `relationship_list`) every
+non-readonly attribute in `entity_schema.required`; the compiler rejects it
+otherwise. For blueprints stored before that check, `EntityForm` renders
+required attributes the view omits after the layout so Save is never blocked
+by a hidden field.
+
 ## Extension layout
 
 Entity blueprint revisions may override workspace extension placement for their

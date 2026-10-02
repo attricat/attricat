@@ -78,6 +78,8 @@ tabs = [
 
 `field` przyjmuje atrybuty skalarne i plikowe. `relationship_list` przyjmuje atrybuty relacji. Odwołanie do atrybutu, którego schemat nie ma, lub do atrybutu niewłaściwego rodzaju kończy się błędem walidacji.
 
+Układ `edit` musi zawierać każdy atrybut wymieniony w `entity_schema.required`, z wyjątkiem atrybutów tylko do odczytu. W przeciwnym razie schemat nie przejdzie walidacji. Schematy opublikowane przed wprowadzeniem tej reguły nadal działają: formularz pokazuje pominięte wymagane pola w sekcji **Pozostałe wymagane atrybuty**.
+
 ## Nagłówek encji
 
 Aby nadać stronie szczegółów właściwy tytuł, umieść pola w `stack` z komponentem `catalog.entity_heading`. Jego pierwszy element podrzędny musi być polem skalarnym i staje się nagłówkiem strony. Kolejne elementy, tekst lub pola skalarne, tworzą podtytuł.

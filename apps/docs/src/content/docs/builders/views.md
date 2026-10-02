@@ -78,6 +78,8 @@ tabs = [
 
 `field` accepts scalar and file attributes. `relationship_list` accepts relationship attributes. Referencing an attribute the blueprint does not have, or the wrong kind, fails validation.
 
+An `edit` layout must place every attribute listed in `entity_schema.required`, except readonly ones. Otherwise the blueprint fails validation. Blueprints published before this check existed still work: the form shows any required field the layout leaves out under **Other required attributes**.
+
 ## Entity heading
 
 To give the detail page a proper title, wrap fields in a `stack` with the `catalog.entity_heading` component. Its first child must be a scalar field and becomes the page heading. Later children, text or scalar fields, form the subtitle.
