@@ -108,6 +108,8 @@ fn audit_permission(method: &Method, route: &str) -> &'static str {
         "workflows.manage"
     } else if route.starts_with("/rules") || route.starts_with("/rule-findings") {
         "rules.manage"
+    } else if route.starts_with("/lexicon") {
+        "blueprints.write"
     } else if route.starts_with("/blueprints") {
         if route.ends_with("/publish") {
             "blueprints.publish"
@@ -151,6 +153,8 @@ fn audit_context(method: &Method, route: &str, path: &str) -> (Value, Value) {
         "workflow"
     } else if route.contains("/blueprints") {
         "blueprint"
+    } else if route.starts_with("/lexicon") {
+        "lexicon"
     } else if route.contains("/contexts") || route.contains("/publication-channels") {
         "context"
     } else if route.contains("/entities") {

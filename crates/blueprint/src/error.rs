@@ -130,6 +130,11 @@ pub enum BlueprintError {
     EmptyIncomingRelationships { view: String },
     #[error("view '{view}' incoming_relationship_list page_size must be greater than zero")]
     InvalidIncomingRelationshipPageSize { view: String },
+    #[error("{location} has an invalid lexicon reference: {error}")]
+    InvalidLexiconReference {
+        location: String,
+        error: catalog_lexicon::ReferenceError,
+    },
     #[error("incoming_relationship_list can only be used in views.detail")]
     IncomingRelationshipListOutsideDetail,
 }

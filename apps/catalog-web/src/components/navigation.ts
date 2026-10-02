@@ -8,6 +8,7 @@ import {
   ExplorerIcon,
   ExtensionIcon,
   ExportIcon,
+  LexiconIcon,
   ProfileIcon,
   ReusableAttributeIcon,
   RuleIcon,
@@ -35,6 +36,7 @@ export const navigationRoutes = {
   dataHealth: '/manage/data-health',
   backgroundProcessing: '/manage/background-processing',
   explore: '/',
+  lexicon: '/manage/lexicon',
   extensions: '/manage/extensions',
   extensionContributions: '/extensions',
   exports: '/manage/exports',
@@ -85,6 +87,12 @@ export const managementNavigationItems = [
     icon: ReusableAttributeIcon,
     labelKey: 'navigation.reusableAttributes',
     to: navigationRoutes.reusableAttributes,
+  },
+  {
+    descriptionKey: 'management.lexiconDescription',
+    icon: LexiconIcon,
+    labelKey: 'navigation.lexicon',
+    to: navigationRoutes.lexicon,
   },
   {
     descriptionKey: 'management.exportsDescription',

@@ -3007,6 +3007,7 @@ impl CatalogRepository {
                             (mapping.logical_key.as_str(), mapping.target_code.as_str()),
                             ("workspace/explore-navigation", "explore_navigation")
                                 | ("workspace/extension-layout", "extension_layout")
+                                | ("workspace/lexicon", "lexicon")
                         )
                 }
                 _ => false,
@@ -3736,6 +3737,14 @@ impl CatalogRepository {
                     if !valid {
                         return Err(RepositoryError::SolutionPackPlanStale);
                     }
+                } else if step.target_code == "lexicon" {
+                    // Applying lexicon entries never conflicts with workspace
+                    // state, so only the persisted payload is checked.
+                    parse_lexicon_payload(step.normalized_payload.ok_or_else(|| {
+                        RepositoryError::InvalidSolutionPackPlan(
+                            "missing workspace setting payload".into(),
+                        )
+                    })?)?;
                 } else if step.target_code == "extension_layout" {
                     let payload = parse_extension_layout_payload(
                         step.normalized_payload.ok_or_else(|| {
@@ -4422,6 +4431,37 @@ impl CatalogRepository {
                                 "setting": "explore_navigation",
                                 "entry_count": desired.len(),
                                 "outcome": outcome,
+                            }),
+                            Vec::new(),
+                        )
+                    } else if step.target_code == "lexicon" {
+                        let entries = parse_lexicon_payload(
+                            step.normalized_payload.clone().ok_or_else(|| {
+                                RepositoryError::InvalidSolutionPackPlan(
+                                    "missing workspace setting payload".into(),
+                                )
+                            })?,
+                        )?;
+                        let pack_id: String = sqlx::query_scalar(
+                            "SELECT pack_id FROM solution_pack_applications WHERE workspace_id=$1 AND id=$2",
+                        )
+                        .bind(workspace_id)
+                        .bind(application_id)
+                        .fetch_one(&mut *tx)
+                        .await?;
+                        let written = Self::apply_solution_pack_lexicon_in_transaction(
+                            &mut tx,
+                            workspace_id,
+                            &pack_id,
+                            &entries,
+                        )
+                        .await?;
+                        (
+                            serde_json::json!({
+                                "setting": "lexicon",
+                                "entry_count": entries.len(),
+                                "written_count": written,
+                                "outcome": if written == 0 { "satisfied" } else { "appended" },
                             }),
                             Vec::new(),
                         )
@@ -5244,6 +5284,34 @@ fn json_sha256(value: &Value) -> Result<String, RepositoryError> {
         .map_err(|error| RepositoryError::InvalidSolutionPackPlan(error.to_string()))?;
     let digest = Sha256::digest(bytes);
     Ok(digest.iter().map(|byte| format!("{byte:02x}")).collect())
+}
+
+/// Re-validates persisted lexicon entries; plans are data, not trusted code.
+fn parse_lexicon_payload(payload: Value) -> Result<Vec<catalog_lexicon::Entry>, RepositoryError> {
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct LexiconPayload {
+        entries: Vec<catalog_lexicon::Entry>,
+    }
+    let payload: LexiconPayload = serde_json::from_value(payload).map_err(|_| {
+        RepositoryError::InvalidSolutionPackPlan("persisted lexicon payload is invalid".into())
+    })?;
+    if payload.entries.is_empty() || payload.entries.len() > catalog_lexicon::MAX_FILE_ENTRIES {
+        return Err(RepositoryError::InvalidSolutionPackPlan(
+            "persisted lexicon payload is invalid".into(),
+        ));
+    }
+    payload
+        .entries
+        .into_iter()
+        .map(|entry| {
+            entry.validated().map_err(|_| {
+                RepositoryError::InvalidSolutionPackPlan(
+                    "persisted lexicon payload is invalid".into(),
+                )
+            })
+        })
+        .collect()
 }
 
 fn parse_explore_navigation_payload(

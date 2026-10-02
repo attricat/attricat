@@ -210,6 +210,19 @@ acli saved-view link --state <json>
 
 Stan musi zawierać co najmniej kod schematu, np. `{"blueprint":"product","query":"linen"}`.
 
+### Tłumaczenia
+
+```sh
+acli lexicon list [--language <znacznik>]
+acli lexicon set --key <tekst> --language <znacznik> --text <tekst> [--context <tekst>] [--plural-category <kategoria>]
+acli lexicon delete --key <tekst> --language <znacznik> [--context <tekst>] [--plural-category <kategoria>]
+acli lexicon export --language <znacznik>
+acli lexicon import --file <lexicon.json|lexicon.toml> [--replace]
+acli lexicon report [--language <znacznik>]...
+```
+
+`--plural-category` to `zero`, `one`, `two`, `few`, `many` lub `other` (domyślnie) i musi być używana przez dany język. `export` wypisuje plik, który przyjmuje `import`; `--replace` usuwa wpisy języka, których nie ma w pliku. Powtórz `--language`, aby objąć raportem kilka języków; domyślnie raport obejmuje angielski i każdy język, który ma wpisy. Zmiany wymagają uprawnienia `blueprints.write`. Zobacz [Tłumaczenie etykiet](/pl/builders/translations/).
+
 ### Reguły i przepływy pracy
 
 ```sh

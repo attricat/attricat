@@ -10,6 +10,7 @@ import type { listSidebarExploreNavigation } from '../features/workspace/api';
 import { navigationRoutes } from './navigation';
 import { RouterListItemButton } from './RouterLink';
 import { ExplorerIcon, ExplorerShortcutIcon } from './systemIcons';
+import { lexiconText } from '../features/lexicon/lexicon';
 
 type ExploreShortcut = Awaited<
   ReturnType<typeof listSidebarExploreNavigation>
@@ -47,7 +48,7 @@ export const ExploreNavigationLinks = ({
       ) : null}
       {shortcuts?.map((item) => (
         <RouterListItemButton
-          aria-label={item.blueprint_name}
+          aria-label={lexiconText(item.blueprint_name)}
           key={item.blueprint_code}
           onClick={onNavigate}
           search={{ blueprint: item.blueprint_code, locked: true }}
@@ -58,7 +59,7 @@ export const ExploreNavigationLinks = ({
           <ListItemIcon>
             <ExplorerShortcutIcon />
           </ListItemIcon>
-          <ListItemText primary={item.blueprint_name} />
+          <ListItemText primary={lexiconText(item.blueprint_name)} />
         </RouterListItemButton>
       ))}
     </>

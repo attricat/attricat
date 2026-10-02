@@ -55,6 +55,7 @@ mod extension_storage;
 mod extensions;
 mod files;
 mod health;
+mod lexicon;
 mod members;
 mod presentation_assets;
 mod reusable_attributes;
@@ -72,6 +73,7 @@ mod workflows;
 mod workspace_navigation;
 
 pub use entity_comments::{COMMENT_PAGE_SIZE, EntityComment};
+pub use lexicon::{LexiconEntry, LexiconImportMode, LexiconImportSummary};
 pub use saved_views::SavedView;
 
 pub use agents::{
@@ -246,6 +248,8 @@ pub enum RepositoryError {
     StatusPreconditionRequired,
     #[error("{0} was not found")]
     NotFound(&'static str),
+    #[error(transparent)]
+    InvalidLexiconEntry(#[from] catalog_lexicon::EntryError),
     #[error("CATALOG_WORKSPACE_ID does not identify an active workspace")]
     BootstrapWorkspaceNotActive,
     #[error("invalid bootstrap password: {0}")]

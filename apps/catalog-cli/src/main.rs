@@ -82,6 +82,11 @@ enum Command {
         #[command(subcommand)]
         command: EntityCommand,
     },
+    /// Manage workspace translations for `{{…}}` references in catalog labels.
+    Lexicon {
+        #[command(subcommand)]
+        command: LexiconCommand,
+    },
     /// Create and share Explorer saved views.
     SavedView {
         #[command(subcommand)]
@@ -154,6 +159,63 @@ enum Command {
     Token {
         #[command(subcommand)]
         command: TokenCommand,
+    },
+}
+
+#[derive(Args)]
+struct LexiconIdentity {
+    /// English source text, as written inside `{{…}}`.
+    #[arg(long)]
+    key: String,
+    /// Disambiguation context, as written after `|`.
+    #[arg(long)]
+    context: Option<String>,
+    /// BCP 47 language tag, such as `pl`.
+    #[arg(long)]
+    language: String,
+    /// CLDR plural category: zero, one, two, few, many, or other.
+    #[arg(long, default_value = "other")]
+    plural_category: String,
+}
+
+#[derive(Subcommand)]
+enum LexiconCommand {
+    /// List entries, optionally for one language.
+    List {
+        #[arg(long)]
+        language: Option<String>,
+    },
+    /// Create or replace one entry.
+    Set {
+        #[command(flatten)]
+        identity: LexiconIdentity,
+        #[arg(long)]
+        text: String,
+    },
+    /// Delete one entry.
+    Delete {
+        #[command(flatten)]
+        identity: LexiconIdentity,
+    },
+    /// Print one language as an importable lexicon file.
+    Export {
+        #[arg(long)]
+        language: String,
+    },
+    /// Import a JSON or TOML lexicon file for one language.
+    Import {
+        #[arg(long)]
+        file: PathBuf,
+        /// Delete entries of the file's language that the file does not contain.
+        #[arg(long)]
+        replace: bool,
+    },
+    /// Report untranslated references, missing plural forms, and orphaned entries.
+    Report {
+        /// Language to report; repeat for several. Defaults to `en` and every
+        /// language with entries.
+        #[arg(long)]
+        language: Vec<String>,
     },
 }
 
@@ -1479,6 +1541,10 @@ async fn run(cli: Cli) -> Result<String, CliError> {
 
     match cli.command {
         Command::Health => request(&client, &server, Method::GET, "/health", None).await,
+        Command::Lexicon { command } => {
+            let (method, path, payload) = lexicon_request(command)?;
+            request(&client, &server, method, &path, payload).await
+        }
         Command::SavedView { command } => {
             let (method, path, payload, url_key) = match command {
                 SavedViewCommand::List { query } => {
@@ -3950,6 +4016,93 @@ fn saved_view_payload(
     }))
 }
 
+fn lexicon_request(command: LexiconCommand) -> Result<(Method, String, Option<Value>), CliError> {
+    let identity_query = |identity: &LexiconIdentity| {
+        let mut query = url::form_urlencoded::Serializer::new(String::new());
+        query.append_pair("key", &identity.key);
+        if let Some(context) = &identity.context {
+            query.append_pair("context", context);
+        }
+        query.append_pair("language", &identity.language);
+        query.append_pair("plural_category", &identity.plural_category);
+        query.finish()
+    };
+    let language_query = |name: &str, language: &str| {
+        let mut query = url::form_urlencoded::Serializer::new(String::new());
+        query.append_pair(name, language);
+        query.finish()
+    };
+    Ok(match command {
+        LexiconCommand::List { language } => (
+            Method::GET,
+            match language {
+                Some(language) => {
+                    format!("/lexicon/entries?{}", language_query("language", &language))
+                }
+                None => "/lexicon/entries".to_owned(),
+            },
+            None,
+        ),
+        LexiconCommand::Set { identity, text } => (
+            Method::PUT,
+            "/lexicon/entries".to_owned(),
+            Some(json!({
+                "key": identity.key,
+                "context": identity.context,
+                "language": identity.language,
+                "plural_category": identity.plural_category,
+                "text": text,
+            })),
+        ),
+        LexiconCommand::Delete { identity } => (
+            Method::DELETE,
+            format!("/lexicon/entries?{}", identity_query(&identity)),
+            None,
+        ),
+        LexiconCommand::Export { language } => (
+            Method::GET,
+            format!("/lexicon/export?{}", language_query("language", &language)),
+            None,
+        ),
+        LexiconCommand::Import { file, replace } => (
+            Method::POST,
+            format!(
+                "/lexicon/import?mode={}",
+                if replace { "replace" } else { "merge" }
+            ),
+            Some(lexicon_file(&file)?),
+        ),
+        LexiconCommand::Report { language } => (
+            Method::GET,
+            if language.is_empty() {
+                "/lexicon/report".to_owned()
+            } else {
+                format!(
+                    "/lexicon/report?{}",
+                    language_query("languages", &language.join(","))
+                )
+            },
+            None,
+        ),
+    })
+}
+
+/// Reads a lexicon file as JSON, or as TOML when the extension is `.toml`.
+fn lexicon_file(path: &PathBuf) -> Result<Value, CliError> {
+    let source = fs::read_to_string(path).map_err(|error| CliError::Input(error.to_string()))?;
+    if path
+        .extension()
+        .is_some_and(|extension| extension == "toml")
+    {
+        let value: toml::Value = toml::from_str(&source)
+            .map_err(|error| CliError::Input(format!("invalid lexicon TOML: {error}")))?;
+        serde_json::to_value(value).map_err(|error| CliError::Input(error.to_string()))
+    } else {
+        serde_json::from_str(&source)
+            .map_err(|error| CliError::Input(format!("invalid lexicon JSON: {error}")))
+    }
+}
+
 fn json_object_argument(input: &str) -> Result<Value, CliError> {
     let value: Value = serde_json::from_str(input)
         .map_err(|error| CliError::Input(format!("invalid --system-metadata JSON: {error}")))?;
@@ -4165,6 +4318,69 @@ mod tests {
                 "--clear-time-zone"
             ])
             .is_err()
+        );
+    }
+
+    #[test]
+    fn lexicon_commands_build_requests_and_read_toml_files() {
+        let parse = |args: &[&str]| match Cli::try_parse_from(args).unwrap().command {
+            Command::Lexicon { command } => lexicon_request(command).unwrap(),
+            _ => unreachable!(),
+        };
+        let (method, path, _) = parse(&[
+            "acli",
+            "lexicon",
+            "delete",
+            "--key",
+            "Order",
+            "--context",
+            "sorting & paging",
+            "--language",
+            "pl",
+        ]);
+        assert_eq!(method, Method::DELETE);
+        assert_eq!(
+            path,
+            "/lexicon/entries?key=Order&context=sorting+%26+paging&language=pl&plural_category=other"
+        );
+        let (_, path, _) = parse(&[
+            "acli",
+            "lexicon",
+            "report",
+            "--language",
+            "pl",
+            "--language",
+            "de",
+        ]);
+        assert_eq!(path, "/lexicon/report?languages=pl%2Cde");
+        let (_, _, body) = parse(&[
+            "acli",
+            "lexicon",
+            "set",
+            "--key",
+            "Product",
+            "--language",
+            "pl",
+            "--plural-category",
+            "few",
+            "--text",
+            "Produkty",
+        ]);
+        assert_eq!(body.unwrap()["plural_category"], "few");
+
+        let file = tempfile::Builder::new().suffix(".toml").tempfile().unwrap();
+        fs::write(
+            file.path(),
+            "format_version = 1\nlanguage = \"pl\"\n[[entries]]\nkey = \"Product\"\ntext = \"Produkt\"\n",
+        )
+        .unwrap();
+        let path = file.path().to_str().unwrap();
+        let (_, request_path, body) =
+            parse(&["acli", "lexicon", "import", "--file", path, "--replace"]);
+        assert_eq!(request_path, "/lexicon/import?mode=replace");
+        assert_eq!(
+            body.unwrap(),
+            json!({"format_version": 1, "language": "pl", "entries": [{"key": "Product", "text": "Produkt"}]})
         );
     }
 

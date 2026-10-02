@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RouterButton } from '../../../components/RouterLink';
 import { BlueprintIcon } from '../../../components/systemIcons';
+import { lexiconText } from '../../lexicon/lexicon';
 
 type Props = {
   blueprint?: { id: string; name: string };
@@ -24,7 +25,7 @@ export const EntityBlueprintHeaderActions = ({
         <Chip color="info" label={t('entities.sample')} size="small" />
       )}
       {blueprint && (
-        <Tooltip title={blueprint.name}>
+        <Tooltip title={lexiconText(blueprint.name)}>
           <RouterButton
             params={{ blueprintId: blueprint.id }}
             size="small"
@@ -32,7 +33,9 @@ export const EntityBlueprintHeaderActions = ({
             to="/manage/blueprints/$blueprintId"
             variant="text"
           >
-            {t('entities.blueprintLabel', { name: blueprint.name })}
+            {t('entities.blueprintLabel', {
+              name: lexiconText(blueprint.name),
+            })}
           </RouterButton>
         </Tooltip>
       )}

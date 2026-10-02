@@ -9,6 +9,7 @@ publish.workspace = true
 [dependencies]
 base64.workspace = true
 catalog-blueprint = { path = "../blueprint" }
+catalog-lexicon = { path = "../lexicon" }
 catalog-extension-manifest = { path = "../extension-manifest" }
 catalog-validation = { path = "../validation" }
 chrono.workspace = true

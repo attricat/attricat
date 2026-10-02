@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next';
 import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
 import { blueprintExtensionContextVersion } from './constants';
 import type { Blueprint } from './schemas';
+import { lexiconText } from '../lexicon/lexicon';
 
 export const PublishBlueprintDialog = ({
   blueprint,
@@ -32,7 +33,7 @@ export const PublishBlueprintDialog = ({
       <DialogContent>
         <DialogContentText>
           {t('blueprints.publishBlueprintDescription', {
-            name: blueprint.name,
+            name: lexiconText(blueprint.name),
             version: blueprint.version,
           })}
         </DialogContentText>

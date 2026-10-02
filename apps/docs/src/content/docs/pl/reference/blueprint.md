@@ -11,6 +11,10 @@ Kompilator jest rygorystyczny. Nieznany klucz, wartość złego typu lub odwoła
 
 Kody schematów, kody atrybutów, aliasy dołączeń, cele relacji, kody reguł, kody zadań konektorów i kody ról w `[publication]` muszą być **kodami**: niepustymi ciągami złożonymi z liter ASCII, cyfr, `-` i `_`. `product`, `seo-fields` i `stock_on_hand` są prawidłowe. `product type` i `prodükt` nie są.
 
+## Tłumaczone etykiety
+
+Pola `name` schematu, `name` atrybutu, `label` kart i sekcji akordeonu, `columns[].label` tabeli oraz `label` bloku `incoming_relationship_list` mogą zawierać odwołania do leksykonu: `{{Product}}` lub `{{Order|purchase}}` z kontekstem. Tekst poza nawiasami jest dosłowny, a `\{{` zapisuje dosłowne `{{`. Nieprawidłowe odwołania są odrzucane przy zapisie schematu. Zobacz [Tłumaczenie etykiet](/pl/builders/translations/).
+
 ## Poziom główny
 
 ```toml

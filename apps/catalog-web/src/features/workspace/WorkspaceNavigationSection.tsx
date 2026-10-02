@@ -20,6 +20,7 @@ import {
 } from './api';
 import { navigationSelectMinWidth } from './constants';
 import { workspaceQueryKeys } from './queryKeys';
+import { lexiconText } from '../lexicon/lexicon';
 
 export const WorkspaceNavigationSection = ({
   canManage,
@@ -119,7 +120,7 @@ export const WorkspaceNavigationSection = ({
                   key={blueprint.code}
                   value={blueprint.code}
                 >
-                  {blueprint.name} ({blueprint.code})
+                  {lexiconText(blueprint.name)} ({blueprint.code})
                 </MenuItem>
               ))}
             </TextField>

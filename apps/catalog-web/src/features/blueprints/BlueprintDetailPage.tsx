@@ -25,6 +25,7 @@ import { SafeMigrationDialog } from './SafeMigrationDialog';
 import { useBlueprintDetailActions } from './useBlueprintDetailActions';
 import { useBlueprintRevisionComparison } from './useBlueprintRevisionComparison';
 import { useSafeBlueprintMigration } from './useSafeBlueprintMigration';
+import { lexiconText } from '../lexicon/lexicon';
 
 type BlueprintDetailDialog = 'publish' | 'publishEntities' | 'safeMigration';
 
@@ -62,7 +63,10 @@ export const BlueprintDetailPage = ({
   const migration = useSafeBlueprintMigration(blueprintId, revisionItems);
   const blueprint = revisionItems[0];
   const metadataRevision = comparison.left.data;
-  useResourcePageTitle(blueprint?.name, t('navigation.blueprints'));
+  useResourcePageTitle(
+    blueprint && lexiconText(blueprint.name),
+    t('navigation.blueprints'),
+  );
 
   return (
     <PageContainer>

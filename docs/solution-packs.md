@@ -2,7 +2,8 @@
 
 A solution pack is a versioned `.tar.zst` archive supplied by a publisher. It
 sets up ordinary workspace resources for a use case: blueprints, navigation,
-extension layouts, presentation assets, setup guidance, and optional samples.
+extension layouts, label translations, presentation assets, setup guidance, and
+optional samples.
 
 After applying a pack, users work with its resources through normal Attricat
 features. There is no pack service to keep running, and packs do not retain
@@ -63,7 +64,7 @@ selection.
 | --- | --- |
 | `create` | Create a new blueprint, asset, or selected sample entity. |
 | `map` | Reuse an explicitly selected compatible resource. |
-| `append` | Add navigation or extension-layout entries. |
+| `append` | Add navigation, extension-layout, or translation entries. |
 | `satisfied` | The requested setting is already present exactly. |
 | `skip` | Leave an optional unavailable item out. |
 | `conflict` | Existing workspace state prevents the operation. |
@@ -160,6 +161,17 @@ lineage automatically.
 
 If a release needs unsupported updates, agree on a supported migration procedure
 with the publisher. A new pack version cannot update existing blueprints.
+
+## Translations
+
+A pack may ship entries for the workspace [lexicon](blueprints.md#translated-labels),
+shown as the `workspace/lexicon` setting in inspection and as one `append`
+action in the plan. Applying it adds entries that are missing and updates
+entries a pack supplied earlier. Entries written in the workspace, before or
+after installation, are never overwritten, and editing a pack-supplied entry
+makes it a workspace entry. Translation entries never conflict, so the step's
+result reports how many entries were written (`written_count`). Manage the
+entries afterwards with `acli lexicon` ([CLI](cli.md#translations)).
 
 ## Limits and removal
 

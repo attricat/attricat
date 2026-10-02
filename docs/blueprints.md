@@ -332,6 +332,71 @@ See [View Configuration](views.md) for the complete block grammar, heading
 configuration, and component contracts. See
 [Component Authoring](component-authoring.md) for the implementation workflow.
 
+## Translated labels
+
+Catalog labels are literal text unless they reference the workspace lexicon
+with double braces. The text inside the braces is both the lexicon key and the
+English default:
+
+```toml
+name = "{{Product}}"
+
+[[views.detail.tabs]]
+label = "{{Overview}}"
+
+[[views.detail.tabs.children]]
+type = "incoming_relationship_list"
+label = "{{Products in this category}}"
+```
+
+These fields resolve references: the blueprint `name`, inline attribute
+`name`, `tabs` and `accordion` section `label`, table `columns[].label`,
+`incoming_relationship_list` `label`, and the `name` of a reusable attribute
+definition. Headings, text blocks, separators, and values are always literal.
+
+- `{{key}}` is a reference. The web app shows the lexicon entry for the user's
+  UI language, then the `en` entry, then the key itself, so an untranslated
+  label still reads correctly in English.
+- `{{key|context}}` adds a disambiguation context (gettext `msgctxt`) for
+  homonyms and grammatical agreement, such as `{{Order|purchase}}` and
+  `{{Order|sorting}}`. The context is never displayed, and a reference with a
+  context never falls back to the entry without one.
+- Keys and contexts are compared exactly after trimming and collapsing
+  whitespace; case matters. Keys are never derived from attribute codes.
+- Text outside braces is literal. `\{{` writes a literal `{{`; other
+  backslashes are literal.
+- Wrap whole phrases (`"{{Products in this category}}"`), not single words in a
+  sentence (`"{{Products}} in this category"`): word order, case, and gender
+  differ between languages.
+
+Saving a definition rejects malformed references in these fields: an
+unclosed `{{`, an empty key or context, more than one `|`, or a brace inside a
+reference. The grammar is implemented once in `crates/lexicon` and mirrored by
+the web app; both run the cases in `contracts/lexicon-references.json`.
+
+The lexicon is workspace data outside blueprints, so translation fixes and new
+languages never need a new blueprint revision. Each entry is identified by
+`(key, context, language, plural_category)`. An `en` entry overrides the
+displayed English without re-keying, so existing translations stay attached.
+Labels follow the user's UI language, independently of the selected attribute
+context.
+
+Labels without a count use separate keys for singular and plural wording
+(`{{Product}}`, `{{Products}}`). Where the app renders a count of entities (the
+Explorer result total), it uses the blueprint name's plural forms: entries for
+each CLDR plural category of the language (`one`/`other` in English;
+`one`/`few`/`many`/`other` in Polish). Forms contain only the noun; the app's
+own string positions the number. Without plural forms for the user's language
+or English, the app keeps its generic wording. When an entry has plural forms,
+countless lookups use its `one` form. Entries without plural forms use
+`other`.
+
+Manage entries on the web app's **Manage → Translations** page or with
+`acli lexicon` ([CLI](cli.md#translations), [API](api.md#lexicon))
+and use `acli lexicon report` to find untranslated references, missing plural
+categories (blueprint names always need them), and orphaned entries no
+non-deleted blueprint revision or reusable attribute references.
+
 ## JSON Schema Validation
 
 Blueprint attributes can define scalar `value_schema` contracts and entity

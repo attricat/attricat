@@ -25,6 +25,7 @@ import { blueprintFilterWidth, blueprintStatusChipColor } from './constants';
 import { Timestamp } from '../../time/Timestamp';
 import { blueprintQueryKeys } from './queryKeys';
 import { BlueprintIcon } from '../../components/systemIcons';
+import { lexiconText } from '../lexicon/lexicon';
 
 export const BlueprintsPage = () => {
   const { t } = useTranslation();
@@ -38,6 +39,7 @@ export const BlueprintsPage = () => {
     return (
       blueprint.code.toLowerCase().includes(term) ||
       blueprint.name.toLowerCase().includes(term) ||
+      lexiconText(blueprint.name).toLowerCase().includes(term) ||
       blueprint.kind.toLowerCase().includes(term) ||
       blueprint.status.toLowerCase().includes(term)
     );
@@ -107,7 +109,7 @@ export const BlueprintsPage = () => {
                           params={{ blueprintId: blueprint.id }}
                           to="/manage/blueprints/$blueprintId"
                         >
-                          {blueprint.name}
+                          {lexiconText(blueprint.name)}
                         </Link>
                         <Typography color="text.secondary" variant="caption">
                           {blueprint.code}

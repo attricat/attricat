@@ -210,6 +210,19 @@ acli saved-view link --state <json>
 
 The state needs at least a blueprint code, for example `{"blueprint":"product","query":"linen"}`.
 
+### Translations
+
+```sh
+acli lexicon list [--language <tag>]
+acli lexicon set --key <text> --language <tag> --text <text> [--context <text>] [--plural-category <category>]
+acli lexicon delete --key <text> --language <tag> [--context <text>] [--plural-category <category>]
+acli lexicon export --language <tag>
+acli lexicon import --file <lexicon.json|lexicon.toml> [--replace]
+acli lexicon report [--language <tag>]...
+```
+
+`--plural-category` is `zero`, `one`, `two`, `few`, `many`, or `other` (the default) and must be used by the language. `export` prints a file that `import` accepts; `--replace` deletes the language's entries that the file does not contain. Repeat `--language` to report several languages; by default the report covers English and every language with entries. Changes require `blueprints.write`. See [Translate labels](/builders/translations/).
+
 ### Rules and workflows
 
 ```sh

@@ -151,6 +151,17 @@ is the primary key.
 The current blueprint is derived, not stored: it is the published, non-deleted
 row with the greatest `version` for its `id`.
 
+### `lexicon_entries`
+
+Workspace translations for `{{key|context}}` references in catalog labels.
+The unique identity is `(workspace_id, key, context, language,
+plural_category)`; `context` is `''` when absent so the constraint covers it.
+`source` is `workspace` for API writes or `solution_pack` (with
+`solution_pack_id`) for entries a pack applied and nobody has edited since. A
+workspace write takes over a pack entry; pack applies never update workspace
+entries. Key normalization, language and plural-category validation, and the
+override rule live in `catalog-lexicon` and the repository, not SQL.
+
 ### `attributes`
 
 Attributes are compiler-generated metadata for individual blueprint versions;

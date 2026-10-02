@@ -3,7 +3,7 @@ export const attributeLabel = (attribute: {
   name?: unknown;
 }): string => {
   if (typeof attribute.name === 'string' && attribute.name.trim())
-    return attribute.name;
+    return lexiconText(attribute.name);
   return attribute.code.replaceAll('_', ' ');
 };
 
@@ -31,6 +31,7 @@ export const dropdownOptionLabel = (
   return label || undefined;
 };
 import { z } from 'zod';
+import { lexiconText } from '../lexicon/lexicon';
 
 const dropdownOptionSchema = z.object({
   fields: z.array(z.string()),

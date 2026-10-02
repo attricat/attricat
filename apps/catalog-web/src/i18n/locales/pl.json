@@ -18,7 +18,10 @@
     "reload": "Odśwież komentarze i zachowaj szkic",
     "conflict": "Ten komentarz został zmieniony. Odśwież komentarze, wybierz Edytuj i przywróć szkic, aby uzgodnić swój tekst z najnowszą wersją."
   },
-  "markdown": { "write": "Edytuj", "preview": "Podgląd" },
+  "markdown": {
+    "write": "Edytuj",
+    "preview": "Podgląd"
+  },
   "language": {
     "label": "Język",
     "english": "Angielski",
@@ -90,6 +93,7 @@
     "darkMode": "Tryb ciemny",
     "lightMode": "Tryb jasny",
     "reusableAttributes": "Atrybuty wielokrotnego użytku",
+    "lexicon": "Tłumaczenia",
     "backgroundProcessing": "Przetwarzanie w tle",
     "documentation": "Dokumentacja",
     "systemHealth": "Stan systemu"
@@ -717,6 +721,8 @@
     "resultCount_few": "{{count}} wyniki",
     "resultCount_many": "{{count}} wyników",
     "resultCountCapped": "{{count}}+ wyników",
+    "entityCount": "{{count}} {{noun}}",
+    "entityCountCapped": "{{count}}+ {{noun}}",
     "resultCount_other": "{{count}} wyniku",
     "noMatchingEntities": "Żadna encja nie pasuje do tego wyszukiwania.",
     "selectEntities": "Wybierz encje",
@@ -883,6 +889,7 @@
     "workflowsDescription": "Twórz i bezpiecznie obsługuj wersjonowane definicje przepływów pracy.",
     "rulesDescription": "Twórz i obsługuj katalogowe reguły jakości danych.",
     "reusableAttributesDescription": "Twórz definicje, wersje i grupy atrybutów wielokrotnego użytku.",
+    "lexiconDescription": "Tłumacz nazwy schematów, nazwy atrybutów i etykiety widoków na język każdego użytkownika.",
     "backgroundProcessingDescription": "Monitoruj oczekujące, uruchomione i nieudane zadania API w tle.",
     "systemHealthDescription": "Sprawdź, która kompilacja Attricat jest uruchomiona."
   },

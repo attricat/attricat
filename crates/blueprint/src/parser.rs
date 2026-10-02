@@ -40,7 +40,8 @@ struct RawBlueprintDefinition {
     /// Stable blueprint identifier, using ASCII letters, numbers, hyphens, and underscores.
     #[schemars(regex(pattern = CODE_PATTERN))]
     code: String,
-    /// Human-readable blueprint name.
+    /// Human-readable blueprint name. `{{…}}` references resolve from the
+    /// workspace lexicon.
     #[schemars(length(min = 1))]
     name: String,
     kind: BlueprintKind,
@@ -84,7 +85,8 @@ struct RawAttributeDeclaration {
     code: String,
     /// Human-readable label shown in forms, filters, and table headers.
     /// Defaults to the humanized `code`. Attributes selected with `from` use
-    /// the mixin's name and cannot set their own.
+    /// the mixin's name and cannot set their own. `{{…}}` references resolve
+    /// from the workspace lexicon.
     #[schemars(length(min = 1))]
     name: Option<String>,
     /// Stored value type.
@@ -523,7 +525,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
         }
     }
 
-    Ok(BlueprintDefinition {
+    let definition = BlueprintDefinition {
         format_version: raw.format_version,
         code: raw.code,
         name: raw.name,
@@ -535,7 +537,9 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
         connector_jobs: raw.connector_jobs,
         rules,
         attributes,
-    })
+    };
+    crate::lexicon_text::validate_lexicon_references(&definition)?;
+    Ok(definition)
 }
 
 fn parse_file_policy(

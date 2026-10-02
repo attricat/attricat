@@ -6,6 +6,7 @@ import { blueprintStatusChipColor, blueprintStatuses } from './constants';
 import { Timestamp } from '../../time/Timestamp';
 import type { Blueprint } from './schemas';
 import { BlueprintIcon } from '../../components/systemIcons';
+import { lexiconText } from '../lexicon/lexicon';
 
 export const BlueprintDetailHeader = ({
   blueprint,
@@ -66,7 +67,7 @@ export const BlueprintDetailHeader = ({
         }
         eyebrow={t('blueprints.blueprint')}
         icon={BlueprintIcon}
-        title={blueprint.name}
+        title={lexiconText(blueprint.name)}
       />
       <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', mt: 1 }}>
         <Chip label={blueprint.code} variant="outlined" />

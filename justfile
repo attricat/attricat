@@ -38,6 +38,7 @@ contracts:
     UPDATE_CONTRACTS=1 cargo test --locked -p catalog-validation status_contract_is_current
     UPDATE_CONTRACTS=1 cargo test --locked -p catalog-blueprint --test definition_schema definition_schema_contract_is_current
     UPDATE_CONTRACTS=1 cargo test --locked -p catalog-repository --lib definition_schema_contract_is_current
+    UPDATE_CONTRACTS=1 cargo test --locked -p catalog-lexicon --test conformance lexicon_schema_contract_is_current
 
 deny:
     cargo deny check

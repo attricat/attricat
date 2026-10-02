@@ -11,6 +11,10 @@ The compiler is strict. An unknown key, a value of the wrong type, or a referenc
 
 Blueprint codes, attribute codes, include aliases, relationship targets, rule codes, connector job codes, and role codes in `[publication]` must be **codes**: non-empty strings of ASCII letters, digits, `-`, and `_`. `product`, `seo-fields`, and `stock_on_hand` are valid. `product type` and `prodükt` are not.
 
+## Translated labels
+
+The blueprint `name`, attribute `name`, tab and accordion section `label`, table `columns[].label`, and `incoming_relationship_list` `label` can contain lexicon references: `{{Product}}`, or `{{Order|purchase}}` with a context. Text outside braces is literal, and `\{{` writes a literal `{{`. Malformed references are rejected when the blueprint is saved. See [Translate labels](/builders/translations/).
+
 ## Top level
 
 ```toml

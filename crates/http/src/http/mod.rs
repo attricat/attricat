@@ -14,6 +14,7 @@ mod extension_registries;
 mod extensions;
 mod extractors;
 mod files;
+mod lexicon;
 mod members;
 mod pagination;
 mod presentation_assets;
@@ -604,6 +605,20 @@ pub fn router(state: AppState) -> Router {
             post(data_health::refresh_data_health),
         )
         .route("/audit-events", get(audit_events::list))
+        .route(
+            "/lexicon/entries",
+            get(lexicon::list)
+                .put(lexicon::upsert)
+                .delete(lexicon::delete),
+        )
+        .route("/lexicon/export", get(lexicon::export))
+        .route(
+            "/lexicon/import",
+            post(lexicon::import).layer(axum::extract::DefaultBodyLimit::max(
+                lexicon::MAX_IMPORT_BYTES,
+            )),
+        )
+        .route("/lexicon/report", get(lexicon::report))
         .route(
             "/saved-views",
             get(saved_views::list).post(saved_views::create),

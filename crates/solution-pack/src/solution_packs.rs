@@ -48,7 +48,7 @@ pub const MAX_SOLUTION_PACK_PRESENTATION_ASSET_TOTAL_BYTES: usize = 16 * 1024 * 
 pub const MAX_SOLUTION_PACK_SVG_BYTES: usize = 256 * 1024;
 pub const MAX_SOLUTION_PACK_ASSET_DIMENSION: u32 = 4096;
 pub const MAX_SOLUTION_PACK_ASSET_PIXELS: u64 = 16_000_000;
-pub const MAX_SOLUTION_PACK_WORKSPACE_SETTINGS: usize = 2;
+pub const MAX_SOLUTION_PACK_WORKSPACE_SETTINGS: usize = 3;
 pub const MAX_SOLUTION_PACK_EXPLORE_NAVIGATION_ENTRIES: usize = 64;
 pub const MAX_SOLUTION_PACK_EXTENSION_LAYOUT_ENTRIES: usize = 64;
 pub const MAX_SOLUTION_PACK_EXPLORE_NAVIGATION_ROLES: usize = 16;
@@ -285,6 +285,23 @@ pub struct SolutionPackExploreNavigationEntry {
     pub visible_to_role_codes: Vec<String>,
 }
 
+/// Translations for `{{…}}` references in the pack's catalog labels, applied
+/// as solution-pack lexicon entries that workspace entries override.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct SolutionPackLexicon {
+    pub format_version: u32,
+    pub kind: String,
+    pub languages: Vec<SolutionPackLexiconLanguage>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct SolutionPackLexiconLanguage {
+    pub language: String,
+    pub entries: Vec<catalog_lexicon::LexiconFileEntry>,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct SolutionPackExtensionLayout {
@@ -323,6 +340,7 @@ pub struct ValidatedSolutionPack {
     blueprints: BTreeMap<String, SolutionPackBlueprint>,
     explore_navigation: Option<SolutionPackExploreNavigation>,
     extension_layout: Option<SolutionPackExtensionLayout>,
+    lexicon: Option<Vec<catalog_lexicon::Entry>>,
     configuration_templates: BTreeMap<String, Value>,
     presentation_assets: BTreeMap<String, ValidatedPresentationAsset>,
     sample_data: Option<ValidatedSampleData>,
@@ -565,6 +583,7 @@ impl ValidatedSolutionPack {
         let blueprints = validate_content(&manifest, &files)?;
         let explore_navigation = validate_explore_navigation(&manifest, &files, &blueprints)?;
         let extension_layout = validate_extension_layout(&manifest, &files)?;
+        let lexicon = validate_lexicon(&manifest, &files)?;
         validate_blueprint_extension_layouts(&manifest, &blueprints)?;
         let configuration_templates = validate_configuration_templates(&manifest, &files)?;
         let presentation_assets = validate_presentation_assets(&manifest, &files)?;
@@ -579,6 +598,7 @@ impl ValidatedSolutionPack {
             blueprints,
             explore_navigation,
             extension_layout,
+            lexicon,
             configuration_templates,
             presentation_assets,
             sample_data,
@@ -611,6 +631,11 @@ impl ValidatedSolutionPack {
 
     pub fn extension_layout(&self) -> Option<&SolutionPackExtensionLayout> {
         self.extension_layout.as_ref()
+    }
+
+    /// Validated, normalized lexicon entries across all languages.
+    pub fn lexicon(&self) -> Option<&[catalog_lexicon::Entry]> {
+        self.lexicon.as_deref()
     }
 
     pub fn configuration_template(&self, key: &str) -> Option<&Value> {
@@ -857,7 +882,7 @@ fn validate_resource(kind: &str, resource: &SolutionPackResource) -> Result<(), 
             ) | (
                 "workspace/extension-layout",
                 "workspace/extension-layout.json"
-            )
+            ) | ("workspace/lexicon", "workspace/lexicon.json")
         );
         if !fixed_pair {
             return invalid("workspace setting must use a supported fixed workspace key and path");
@@ -1820,6 +1845,73 @@ fn validate_explore_navigation(
         }
     }
     Ok(Some(navigation))
+}
+
+fn validate_lexicon(
+    manifest: &SolutionPackManifest,
+    files: &BTreeMap<String, Vec<u8>>,
+) -> Result<Option<Vec<catalog_lexicon::Entry>>, SolutionPackError> {
+    let Some(resource) = manifest
+        .resources
+        .workspace_settings
+        .iter()
+        .find(|resource| resource.key == "workspace/lexicon")
+    else {
+        return Ok(None);
+    };
+    let lexicon: SolutionPackLexicon =
+        serde_json::from_slice(&files[&resource.path]).map_err(|_| {
+            SolutionPackError::Invalid("workspace lexicon is not valid strict JSON".into())
+        })?;
+    if lexicon.format_version != SOLUTION_PACK_RESOURCE_FORMAT_VERSION {
+        return invalid(format!(
+            "workspace lexicon has unsupported format_version {}",
+            lexicon.format_version
+        ));
+    }
+    if lexicon.kind != "lexicon" {
+        return invalid("workspace lexicon kind must be 'lexicon'");
+    }
+    if lexicon.languages.is_empty() {
+        return invalid("workspace lexicon must contain at least one language");
+    }
+    let mut languages = HashSet::new();
+    let mut entries = Vec::new();
+    for language in lexicon.languages {
+        let file = catalog_lexicon::LexiconFile {
+            format_version: catalog_lexicon::LEXICON_FILE_FORMAT_VERSION,
+            language: language.language,
+            entries: language.entries,
+        };
+        let canonical = catalog_lexicon::canonical_language(&file.language).ok_or_else(|| {
+            SolutionPackError::Invalid(format!(
+                "workspace lexicon language '{}' is unsupported",
+                file.language
+            ))
+        })?;
+        if !languages.insert(canonical.clone()) {
+            return invalid(format!(
+                "workspace lexicon language '{canonical}' is duplicated"
+            ));
+        }
+        if file.entries.is_empty() {
+            return invalid(format!(
+                "workspace lexicon language '{canonical}' must contain at least one entry"
+            ));
+        }
+        entries.extend(file.into_entries().map_err(|error| {
+            SolutionPackError::Invalid(format!(
+                "workspace lexicon language '{canonical}' is invalid: {error}"
+            ))
+        })?);
+        if entries.len() > catalog_lexicon::MAX_FILE_ENTRIES {
+            return invalid(format!(
+                "workspace lexicon must contain at most {} entries",
+                catalog_lexicon::MAX_FILE_ENTRIES
+            ));
+        }
+    }
+    Ok(Some(entries))
 }
 
 fn validate_extension_layout(
@@ -3562,6 +3654,20 @@ pub fn build_solution_pack_plan(
             },
         );
     }
+    if pack.lexicon().is_some() {
+        mappings_by_key.insert(
+            "workspace/lexicon".to_owned(),
+            PlannedMapping {
+                resource_kind: "workspace_setting",
+                logical_key: "workspace/lexicon".to_owned(),
+                target_id: workspace.workspace_id,
+                target_code: "lexicon".to_owned(),
+                target_version: None,
+                mapping_kind: "workspace",
+                snapshot: serde_json::json!({"setting": "lexicon"}),
+            },
+        );
+    }
     if pack.extension_layout().is_some() {
         mappings_by_key.insert(
             "workspace/extension-layout".to_owned(),
@@ -4021,6 +4127,35 @@ pub fn build_solution_pack_plan(
                 "entries": evidence,
             }),
             normalized_payload,
+            preconditions: serde_json::json!([]),
+        });
+    }
+
+    if let Some(entries) = pack.lexicon() {
+        let resource = manifest
+            .resources
+            .workspace_settings
+            .iter()
+            .find(|resource| resource.key == "workspace/lexicon")
+            .expect("validated lexicon has a manifest resource");
+        // Lexicon entries never conflict: apply adds missing entries, updates
+        // ones a pack supplied, and keeps entries the workspace wrote.
+        let languages: BTreeSet<&str> = entries
+            .iter()
+            .map(|entry| entry.language.as_str())
+            .collect();
+        actions.push(PlannedAction {
+            resource_kind: "workspace_setting",
+            logical_key: resource.key.clone(),
+            action: "append",
+            reason_code: "workspace_entries_preserved",
+            summary: serde_json::json!({
+                "setting": "lexicon",
+                "required": resource.required,
+                "languages": languages,
+                "entry_count": entries.len(),
+            }),
+            normalized_payload: Some(serde_json::json!({"entries": entries})),
             preconditions: serde_json::json!([]),
         });
     }
@@ -4523,6 +4658,20 @@ target_blueprint = "blueprints/product"
         }]);
         let mut files = valid_files();
         files.push(("workspace/explore-navigation.json", EXPLORE_NAVIGATION));
+        archive(&manifest, &files)
+    }
+
+    const LEXICON: &[u8] = br#"{"format_version":1,"kind":"lexicon","languages":[{"language":"pl","entries":[{"key":"Product","plural_category":"one","text":"Produkt"},{"key":"Order","context":"sorting","text":"Kolejno\u015b\u0107"}]},{"language":"en","entries":[{"key":"Product","plural_category":"other","text":"Products"}]}]}"#;
+
+    fn archive_with_lexicon(lexicon: &[u8]) -> Vec<u8> {
+        let mut manifest = manifest_value();
+        manifest["resources"]["workspace_settings"] = json!([resource(
+            "workspace/lexicon",
+            "workspace/lexicon.json",
+            lexicon
+        )]);
+        let mut files = valid_files();
+        files.push(("workspace/lexicon.json", lexicon));
         archive(&manifest, &files)
     }
 
@@ -5455,6 +5604,71 @@ hidden = ["acme.shop:a_action"]
     }
 
     #[test]
+    fn validates_lexicon_and_plans_an_idempotent_append() {
+        let pack = ValidatedSolutionPack::from_tar_zst(&archive_with_lexicon(LEXICON)).unwrap();
+        let entries = pack.lexicon().unwrap();
+        assert_eq!(entries.len(), 3);
+        assert_eq!(entries[1].context.as_deref(), Some("sorting"));
+        let plan = build_solution_pack_plan(
+            &pack,
+            "ecom",
+            BlueprintPublication::Publish,
+            &PlanningWorkspaceSnapshot {
+                workspace_id: uuid::Uuid::nil(),
+                physical_codes: BTreeSet::from(["default".to_owned()]),
+                existing_blueprints: BTreeMap::new(),
+                existing_presentation_assets: BTreeMap::new(),
+                installed_extensions: BTreeMap::new(),
+                explore_navigation: Vec::new(),
+                explore_navigation_valid: true,
+                extension_layout: serde_json::json!({"version":1,"outlets":{}}),
+                extension_layout_valid: true,
+                role_codes: BTreeSet::new(),
+                published_entity_codes: BTreeSet::new(),
+            },
+        )
+        .unwrap();
+        assert!(plan.ready);
+        let action = plan
+            .actions
+            .iter()
+            .find(|action| action.logical_key == "workspace/lexicon")
+            .unwrap();
+        assert_eq!(action.action, "append");
+        assert_eq!(action.summary["languages"], json!(["en", "pl"]));
+        assert_eq!(action.summary["entry_count"], 3);
+        assert_eq!(
+            action.normalized_payload.as_ref().unwrap()["entries"][0]["key"],
+            "Product"
+        );
+
+        for (invalid, expected) in [
+            (
+                br#"{"format_version":1,"kind":"lexicon","languages":[]}"#.as_slice(),
+                "at least one language",
+            ),
+            (
+                br#"{"format_version":1,"kind":"lexicon","languages":[{"language":"xx","entries":[{"key":"A","text":"B"}]}]}"#.as_slice(),
+                "unsupported",
+            ),
+            (
+                br#"{"format_version":1,"kind":"lexicon","languages":[{"language":"pl","entries":[{"key":"A","text":"B"}]},{"language":"PL","entries":[{"key":"A","text":"B"}]}]}"#.as_slice(),
+                "duplicated",
+            ),
+            (
+                br#"{"format_version":1,"kind":"lexicon","languages":[{"language":"en","entries":[{"key":"A","plural_category":"few","text":"B"}]}]}"#.as_slice(),
+                "plural category",
+            ),
+            (
+                br#"{"format_version":1,"kind":"lexicon","languages":[{"language":"en","entries":[{"key":"A","text":"B","unknown":1}]}]}"#.as_slice(),
+                "not valid strict JSON",
+            ),
+        ] {
+            assert_invalid(&archive_with_lexicon(invalid), expected);
+        }
+    }
+
+    #[test]
     fn planner_blocks_required_navigation_and_skips_optional_unmet_navigation() {
         for (required, expected) in [(true, "blocked"), (false, "skip")] {
             let pack =
@@ -5919,6 +6133,30 @@ hidden = ["acme.shop:a_action"]
         unknown_navigation["unknown"] = json!(true);
         assert!(
             !catalog_validation::validate_json_schema(&navigation_schema, &unknown_navigation)
+                .unwrap()
+                .is_empty()
+        );
+
+        let lexicon_schema: Value = serde_json::from_str(include_str!(
+            "../../../contracts/solution-pack-lexicon-v1.schema.json"
+        ))
+        .unwrap();
+        catalog_validation::validate_json_schema_definition(&lexicon_schema).unwrap();
+        let lexicon: Value = serde_json::from_slice(LEXICON).unwrap();
+        assert!(
+            catalog_validation::validate_json_schema(&lexicon_schema, &lexicon)
+                .unwrap()
+                .is_empty()
+        );
+        let mut with_lexicon = manifest_value();
+        with_lexicon["resources"]["workspace_settings"] = json!([{
+            "key": "workspace/lexicon",
+            "path": "workspace/lexicon.json",
+            "required": false,
+            "sha256": "0".repeat(64),
+        }]);
+        assert!(
+            catalog_validation::validate_json_schema(&schema, &with_lexicon)
                 .unwrap()
                 .is_empty()
         );

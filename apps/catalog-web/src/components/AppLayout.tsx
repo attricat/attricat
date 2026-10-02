@@ -18,6 +18,7 @@ import { pageTitle } from '../app/pageTitle';
 import { returnToStorageKey } from '../app/storageKeys';
 import { currentSession, logout } from '../features/auth/api';
 import { authQueryKeys } from '../features/auth/queryKeys';
+import { useWorkspaceLexicon } from '../features/lexicon/lexicon';
 import { useSessionCacheBoundary } from '../features/auth/useSessionCacheBoundary';
 import { DesktopNavigation } from './DesktopNavigation';
 import { MobileNavigation } from './MobileNavigation';
@@ -59,6 +60,7 @@ export const AppLayout = () => {
     queryFn: currentSession,
     retry: false,
   });
+  useWorkspaceLexicon(session.data?.workspace_id);
   const sessionBoundary = useSessionCacheBoundary(
     session.data,
     session.isSuccess,

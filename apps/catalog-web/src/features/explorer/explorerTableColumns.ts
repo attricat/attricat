@@ -7,6 +7,7 @@ import {
   explorerColumnIds,
   relationshipPathSeparator,
 } from './constants';
+import { lexiconText } from '../lexicon/lexicon';
 
 export type ExplorerTableColumn = {
   field: string;
@@ -68,7 +69,9 @@ export const buildExplorerTableColumns = (
       !relationshipSortAvailable;
     return {
       ...column,
-      label: column.label ?? defaultLabel(column.field),
+      label: column.label
+        ? lexiconText(column.label)
+        : defaultLabel(column.field),
       relationshipSortBlocked,
       sortable: configuredSortable && !relationshipSortBlocked,
     };

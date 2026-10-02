@@ -1,6 +1,7 @@
 import { Box, Tab, Tabs } from '@mui/material';
 import { useId, useState, type ReactNode } from 'react';
 import type { ViewNode } from '../../entities/api';
+import { lexiconText } from '../../lexicon/lexicon';
 
 export const ViewTabs = ({
   tabs,
@@ -23,7 +24,7 @@ export const ViewTabs = ({
             aria-controls={`${tabId}-tabpanel-${index}`}
             id={`${tabId}-tab-${index}`}
             key={tab.label}
-            label={tab.label}
+            label={lexiconText(tab.label)}
           />
         ))}
       </Tabs>

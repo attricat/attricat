@@ -74,7 +74,7 @@
         },
         "workspace_settings": {
           "type": "array",
-          "maxItems": 2,
+          "maxItems": 3,
           "items": {
             "oneOf": [
               {
@@ -82,6 +82,9 @@
               },
               {
                 "$ref": "#/$defs/extensionLayoutResource"
+              },
+              {
+                "$ref": "#/$defs/lexiconResource"
               }
             ]
           },
@@ -96,6 +99,13 @@
             {
               "contains": {
                 "$ref": "#/$defs/extensionLayoutResource"
+              },
+              "minContains": 0,
+              "maxContains": 1
+            },
+            {
+              "contains": {
+                "$ref": "#/$defs/lexiconResource"
               },
               "minContains": 0,
               "maxContains": 1
@@ -275,6 +285,30 @@
         },
         "path": {
           "const": "workspace/explore-navigation.json"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "sha256": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "lexiconResource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "path",
+        "required",
+        "sha256"
+      ],
+      "properties": {
+        "key": {
+          "const": "workspace/lexicon"
+        },
+        "path": {
+          "const": "workspace/lexicon.json"
         },
         "required": {
           "type": "boolean"

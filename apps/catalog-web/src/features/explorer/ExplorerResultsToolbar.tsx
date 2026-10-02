@@ -2,11 +2,14 @@ import { Box, Button, IconButton, Tooltip, Typography } from '@mui/material';
 import { Columns3CogIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { EntityItem } from '../entities/api';
+import { lexiconCountNoun } from '../lexicon/lexicon';
 import { maximumAgentSelection } from './agentSelection';
 import { ExplorerSelectionActionsMenu } from './ExplorerSelectionActionsMenu';
 import { ExplorerSelectionSummary } from './ExplorerSelectionSummary';
 
 type Props = {
+  /** Authored blueprint name; a `{{…}}` reference with plural forms names the count. */
+  blueprintName: string;
   itemCount: number;
   totalCount: number | null;
   totalCountCapped: boolean;
@@ -21,6 +24,7 @@ type Props = {
 };
 
 export const ExplorerResultsToolbar = ({
+  blueprintName,
   itemCount,
   totalCount,
   totalCountCapped,
@@ -34,6 +38,17 @@ export const ExplorerResultsToolbar = ({
   onOpenColumnPreferences,
 }: Props) => {
   const { t } = useTranslation();
+  const resultCount = (count: number, capped: boolean) => {
+    const noun = lexiconCountNoun(blueprintName, count);
+    if (noun)
+      return t(capped ? 'explorer.entityCountCapped' : 'explorer.entityCount', {
+        count,
+        noun,
+      });
+    return t(capped ? 'explorer.resultCountCapped' : 'explorer.resultCount', {
+      count,
+    });
+  };
   return (
     <Box
       sx={{
@@ -56,10 +71,8 @@ export const ExplorerResultsToolbar = ({
       >
         <Typography>
           {totalCount === null
-            ? t('explorer.resultCount', { count: itemCount })
-            : totalCountCapped
-              ? t('explorer.resultCountCapped', { count: totalCount })
-              : t('explorer.resultCount', { count: totalCount })}
+            ? resultCount(itemCount, false)
+            : resultCount(totalCount, totalCountCapped)}
         </Typography>
         {selectionMode && (
           <ExplorerSelectionSummary

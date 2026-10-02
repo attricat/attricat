@@ -27,6 +27,7 @@ import { Route as ManageAuditLogRouteImport } from './routes/manage/audit-log'
 import { Route as ManageBackgroundProcessingRouteImport } from './routes/manage/background-processing'
 import { Route as ManageDataHealthRouteImport } from './routes/manage/data-health'
 import { Route as ManageExportsRouteImport } from './routes/manage/exports'
+import { Route as ManageLexiconRouteImport } from './routes/manage/lexicon'
 import { Route as ManageSystemHealthRouteImport } from './routes/manage/system-health'
 import { Route as PasswordResetIndexRouteImport } from './routes/password-reset/index'
 import { Route as PasswordResetConfirmRouteImport } from './routes/password-reset/confirm'
@@ -158,6 +159,11 @@ const ManageDataHealthRoute = ManageDataHealthRouteImport.update({
 const ManageExportsRoute = ManageExportsRouteImport.update({
   id: '/manage/exports',
   path: '/manage/exports',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ManageLexiconRoute = ManageLexiconRouteImport.update({
+  id: '/manage/lexicon',
+  path: '/manage/lexicon',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ManageSystemHealthRoute = ManageSystemHealthRouteImport.update({
@@ -400,6 +406,7 @@ export interface FileRoutesByFullPath {
   '/manage/background-processing': typeof ManageBackgroundProcessingRoute
   '/manage/data-health': typeof ManageDataHealthRoute
   '/manage/exports': typeof ManageExportsRoute
+  '/manage/lexicon': typeof ManageLexiconRoute
   '/manage/system-health': typeof ManageSystemHealthRoute
   '/password-reset/confirm': typeof PasswordResetConfirmRoute
   '/agents/': typeof AgentsIndexRoute
@@ -458,6 +465,7 @@ export interface FileRoutesByTo {
   '/manage/background-processing': typeof ManageBackgroundProcessingRoute
   '/manage/data-health': typeof ManageDataHealthRoute
   '/manage/exports': typeof ManageExportsRoute
+  '/manage/lexicon': typeof ManageLexiconRoute
   '/manage/system-health': typeof ManageSystemHealthRoute
   '/password-reset/confirm': typeof PasswordResetConfirmRoute
   '/agents': typeof AgentsIndexRoute
@@ -518,6 +526,7 @@ export interface FileRoutesById {
   '/manage/background-processing': typeof ManageBackgroundProcessingRoute
   '/manage/data-health': typeof ManageDataHealthRoute
   '/manage/exports': typeof ManageExportsRoute
+  '/manage/lexicon': typeof ManageLexiconRoute
   '/manage/system-health': typeof ManageSystemHealthRoute
   '/password-reset/confirm': typeof PasswordResetConfirmRoute
   '/agents/': typeof AgentsIndexRoute
@@ -581,6 +590,7 @@ export interface FileRouteTypes {
     | '/manage/background-processing'
     | '/manage/data-health'
     | '/manage/exports'
+    | '/manage/lexicon'
     | '/manage/system-health'
     | '/password-reset/confirm'
     | '/agents/'
@@ -639,6 +649,7 @@ export interface FileRouteTypes {
     | '/manage/background-processing'
     | '/manage/data-health'
     | '/manage/exports'
+    | '/manage/lexicon'
     | '/manage/system-health'
     | '/password-reset/confirm'
     | '/agents'
@@ -698,6 +709,7 @@ export interface FileRouteTypes {
     | '/manage/background-processing'
     | '/manage/data-health'
     | '/manage/exports'
+    | '/manage/lexicon'
     | '/manage/system-health'
     | '/password-reset/confirm'
     | '/agents/'
@@ -759,6 +771,7 @@ export interface RootRouteChildren {
   ManageBackgroundProcessingRoute: typeof ManageBackgroundProcessingRoute
   ManageDataHealthRoute: typeof ManageDataHealthRoute
   ManageExportsRoute: typeof ManageExportsRoute
+  ManageLexiconRoute: typeof ManageLexiconRoute
   ManageSystemHealthRoute: typeof ManageSystemHealthRoute
   PasswordResetConfirmRoute: typeof PasswordResetConfirmRoute
   AgentsIndexRoute: typeof AgentsIndexRoute
@@ -920,6 +933,13 @@ declare module '@tanstack/react-router' {
       path: '/manage/exports'
       fullPath: '/manage/exports'
       preLoaderRoute: typeof ManageExportsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/manage/lexicon': {
+      id: '/manage/lexicon'
+      path: '/manage/lexicon'
+      fullPath: '/manage/lexicon'
+      preLoaderRoute: typeof ManageLexiconRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/manage/system-health': {
@@ -1305,6 +1325,7 @@ const rootRouteChildren: RootRouteChildren = {
   ManageBackgroundProcessingRoute: ManageBackgroundProcessingRoute,
   ManageDataHealthRoute: ManageDataHealthRoute,
   ManageExportsRoute: ManageExportsRoute,
+  ManageLexiconRoute: ManageLexiconRoute,
   ManageSystemHealthRoute: ManageSystemHealthRoute,
   PasswordResetConfirmRoute: PasswordResetConfirmRoute,
   AgentsIndexRoute: AgentsIndexRoute,

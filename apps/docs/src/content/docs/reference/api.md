@@ -147,6 +147,19 @@ Downloads return `409 file_processing` until the file is `ready`.
 
 State is at most 32 KiB and uses the Explorer URL keys: `blueprint`, `version`, `allVersions`, `query`, `context`, `locked`, `sort`, `attributeFilters`, and `relationshipFacets`.
 
+### Translations
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/lexicon/entries` | List entries, optionally for one `language` (`entities.read`). |
+| `PUT` | `/lexicon/entries` | Create or replace an entry: `key`, optional `context`, `language`, optional `plural_category` (default `other`), and `text` (`blueprints.write`). |
+| `DELETE` | `/lexicon/entries` | Delete the entry identified by the `key`, `context`, `language`, and `plural_category` query parameters (`blueprints.write`). |
+| `GET` | `/lexicon/export` | Export one `language` as an import file (`blueprints.read`). |
+| `POST` | `/lexicon/import` | Import a file for one language; `mode=replace` also deletes entries missing from it (`blueprints.write`). |
+| `GET` | `/lexicon/report` | Untranslated references, missing plural categories, and orphaned entries for comma-separated `languages` (`blueprints.read`). |
+
+See [Translate labels](/builders/translations/).
+
 ### Rules and workflows
 
 | Method | Path | Description |

@@ -23,6 +23,7 @@ import {
 } from './constants';
 import { ExplorerQueryInput } from './ExplorerQueryInput';
 import type { ExplorerSearch } from './search';
+import { lexiconText } from '../lexicon/lexicon';
 
 type SearchFormValues = {
   blueprint: string;
@@ -153,7 +154,7 @@ export const ExplorerSearchForm = ({
                   <MenuItem key={blueprint.code} value={blueprint.code}>
                     {t('explorer.blueprintOption', {
                       code: blueprint.code,
-                      name: blueprint.name,
+                      name: lexiconText(blueprint.name),
                     })}
                   </MenuItem>
                 ))}

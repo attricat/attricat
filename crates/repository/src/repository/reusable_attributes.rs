@@ -42,7 +42,8 @@ struct ReusableAttributeDefinition {
     /// Attribute identifier, using ASCII letters, numbers, hyphens, and underscores.
     #[schemars(regex(pattern = CODE_PATTERN))]
     code: String,
-    /// Human-readable attribute name.
+    /// Human-readable attribute name. `{{…}}` references resolve from the
+    /// workspace lexicon.
     #[schemars(length(min = 1))]
     name: String,
     /// Stored value type.
@@ -147,6 +148,11 @@ fn parse_definition(
             "invalid context policy or blank name".to_owned(),
         ));
     }
+    catalog_lexicon::parse(&definition.name).map_err(|error| {
+        RepositoryError::InvalidReusableAttributeDefinition(format!(
+            "name has an invalid lexicon reference: {error}"
+        ))
+    })?;
     if let Some(schema) = toml_value_to_json(definition.value_schema.clone())? {
         catalog_validation::validate_json_schema_definition(&schema)
             .map_err(RepositoryError::InvalidReusableAttributeDefinition)?;
