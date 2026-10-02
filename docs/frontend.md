@@ -94,7 +94,7 @@ light and dark modes.
 ## Bundle size
 
 - Run `pnpm --dir apps/catalog-web inspect:bundle` when changing dependencies
-  or imports that affect the client bundle. It enforces a 300 KiB gzip budget
+  or imports that affect the client bundle. It enforces a 320 KiB gzip budget
   for JavaScript synchronously loaded by `index.html`; keep new code behind
   route or component boundaries when it is not needed at application startup.
 
