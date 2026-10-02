@@ -109,6 +109,11 @@ export default defineConfig({
               translations: polish('Widoki i układy'),
             },
             {
+              label: 'Translate labels',
+              slug: 'builders/translations',
+              translations: polish('Tłumaczenie etykiet'),
+            },
+            {
               label: 'Validation',
               slug: 'builders/validation',
               translations: polish('Walidacja'),

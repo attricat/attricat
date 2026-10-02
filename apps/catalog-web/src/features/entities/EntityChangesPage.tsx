@@ -12,6 +12,7 @@ import { EntityToolbar } from './components/EntityToolbar';
 import { getEntityChanges, getEntityForm } from './api';
 import type { EntityAuditChange } from './api';
 import { entityQueryKeys } from './queryKeys';
+import { lexiconText } from '../lexicon/lexicon';
 
 type EventChanges = [EntityAuditChange, ...EntityAuditChange[]];
 
@@ -60,7 +61,10 @@ export const EntityChangesPage = ({ entityId }: { entityId: string }) => {
       </EntityToolbar>
       <EntitySchemaSubheader
         entityId={entityId}
-        name={entityForm.data?.blueprint.blueprint.name}
+        name={
+          entityForm.data &&
+          lexiconText(entityForm.data.blueprint.blueprint.name)
+        }
       />
       {changes.isPending && (
         <Typography sx={{ py: 3 }}>{t('entities.loadingChanges')}</Typography>

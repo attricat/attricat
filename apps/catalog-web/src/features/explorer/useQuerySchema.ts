@@ -9,6 +9,7 @@ import {
 import { entityQueryKeys } from '../entities/queryKeys';
 import type { QuerySchema } from './queryLanguage';
 import { queryTargetCodes } from './querySuggestions';
+import { lexiconText, useLexiconRevision } from '../lexicon/lexicon';
 
 const targetQueryKey = (code: string) =>
   entityQueryKeys.blueprintByCode(code, undefined);
@@ -64,10 +65,17 @@ export const useQuerySchema = (
     if (result.data) targets.set(codes[index], result.data.attributes);
   });
   const schema: QuerySchema | undefined = base && { ...base, targets };
+  const lexiconRevision = useLexiconRevision();
   const blueprintNames = useMemo(
     () =>
-      new Map(blueprints.map((blueprint) => [blueprint.code, blueprint.name])),
-    [blueprints],
+      new Map(
+        blueprints.map((blueprint) => [
+          blueprint.code,
+          lexiconText(blueprint.name),
+        ]),
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- names re-resolve when the lexicon changes
+    [blueprints, lexiconRevision],
   );
   const targetsLoading = results.some((result) => result.isFetching);
   return { schema, blueprintNames, targetsLoading };

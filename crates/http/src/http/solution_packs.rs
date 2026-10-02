@@ -215,6 +215,13 @@ pub(super) async fn inspect(
                                 .entries
                                 .len(),
                         )
+                    } else if resource.key == "workspace/lexicon" {
+                        (
+                            "lexicon",
+                            pack.lexicon()
+                                .expect("validated workspace setting is available")
+                                .len(),
+                        )
                     } else {
                         (
                             "extension_layout",

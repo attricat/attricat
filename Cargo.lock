@@ -907,6 +907,7 @@ dependencies = [
 name = "catalog-blueprint"
 version = "0.1.0"
 dependencies = [
+ "catalog-lexicon",
  "catalog-rules",
  "catalog-validation",
  "schemars",
@@ -1011,6 +1012,7 @@ dependencies = [
  "catalog-domain",
  "catalog-extension-manifest",
  "catalog-extension-runtime",
+ "catalog-lexicon",
  "catalog-repository",
  "catalog-rules",
  "catalog-solution-pack",
@@ -1046,6 +1048,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "catalog-lexicon"
+version = "0.1.0"
+dependencies = [
+ "schemars",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+]
+
+[[package]]
 name = "catalog-repository"
 version = "0.1.0"
 dependencies = [
@@ -1057,6 +1069,7 @@ dependencies = [
  "catalog-domain",
  "catalog-events",
  "catalog-extension-manifest",
+ "catalog-lexicon",
  "catalog-rules",
  "catalog-solution-pack",
  "catalog-storage",
@@ -1103,6 +1116,7 @@ dependencies = [
  "base64 0.22.1",
  "catalog-blueprint",
  "catalog-extension-manifest",
+ "catalog-lexicon",
  "catalog-validation",
  "chrono",
  "chrono-tz",

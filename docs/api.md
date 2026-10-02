@@ -325,6 +325,33 @@ custom one-hop cell renderers. Blueprint responses expose
 whether every hop is single-valued; the Explorer uses that metadata for filter
 controls and sortable headers.
 
+## Lexicon
+
+The workspace lexicon translates `{{key}}` / `{{key|context}}` references in
+catalog labels (see [translated labels](blueprints.md#translated-labels)).
+
+| Method | Route | Description |
+| --- | --- | --- |
+| `GET` | `/lexicon/entries?language=` | List entries, optionally for one language (`entities.read`; the web app loads it into its `lexicon` i18next namespace). |
+| `PUT` | `/lexicon/entries` | Upsert `{"key","context"?,"language","plural_category"?,"text"}` (`blueprints.write`). Takes over a solution-pack entry. |
+| `DELETE` | `/lexicon/entries?key=&context=&language=&plural_category=` | Delete one entry; `404` when absent (`blueprints.write`). |
+| `GET` | `/lexicon/export?language=` | One language as an import file (`blueprints.read`). |
+| `POST` | `/lexicon/import?mode=merge\|replace` | Import a file (`contracts/lexicon-v1.schema.json`, up to 10,000 entries); returns `created`, `updated`, `unchanged`, `deleted` (`blueprints.write`). |
+| `GET` | `/lexicon/report?languages=pl,de` | Coverage report (`blueprints.read`). |
+
+Keys and contexts are trimmed and whitespace-collapsed, and must not contain
+braces, `|`, or control characters. Languages are BCP 47 tags whose primary
+language has known CLDR plural rules; tags are canonicalized (`pt-br` →
+`pt-BR`). `plural_category` defaults to `other` and must be used by the
+language. Entries return `key`, `context` (`null` for none), `language`,
+`plural_category`, `text`, `source` (`workspace` or `solution_pack`),
+`solution_pack_id`, and `updated_at`.
+
+The report returns `reference_count`, per-language `translated_count`,
+`untranslated` references (never for `en`), and `missing_plural_categories`
+(blueprint names and any entry with plural forms), plus `orphaned` keys no
+non-deleted blueprint revision or reusable attribute name references.
+
 ## Saved views and share links
 
 All routes require an authenticated workspace principal with `entities.read`.

@@ -55,6 +55,21 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     {
         return Some(read(TargetKind::EntityId));
     }
+    // Every catalog reader needs translations to render labels; editing them
+    // is part of maintaining the catalog model.
+    if path == "/lexicon/entries" && method == Method::GET {
+        return Some(read(TargetKind::None));
+    }
+    if path.starts_with("/lexicon/") {
+        return Some(Policy {
+            permission: if method == Method::GET {
+                "blueprints.read"
+            } else {
+                "blueprints.write"
+            },
+            target: TargetKind::None,
+        });
+    }
     if path == "/saved-views"
         || path == "/saved-views/{id}"
         || path == "/view-state-links"

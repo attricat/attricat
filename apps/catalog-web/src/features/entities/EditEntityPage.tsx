@@ -26,6 +26,7 @@ import {
   useEntityContextSelection,
   useResolvedEntityPreview,
 } from './useEntityContexts';
+import { lexiconText } from '../lexicon/lexicon';
 
 export const EditEntityPage = ({ entityId }: { entityId: string }) => {
   const { t } = useTranslation();
@@ -83,7 +84,7 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
             <EntityBlueprintHeaderActions
               blueprint={{
                 id: entityForm.data.entity.blueprint_id,
-                name: entityForm.data.blueprint.blueprint.name,
+                name: lexiconText(entityForm.data.blueprint.blueprint.name),
               }}
               isSample={entityForm.data.entity.is_sample}
             />
@@ -110,7 +111,10 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
         saving={update.isPending}
         schemaOutdated={schemaOutdated}
       />
-      <EntitySchemaSubheader entityId={entityId} name={blueprint?.name} />
+      <EntitySchemaSubheader
+        entityId={entityId}
+        name={blueprint && lexiconText(blueprint.name)}
+      />
       {entityForm.isPending && (
         <Typography sx={{ mt: 4 }}>{t('entities.loadingEntity')}</Typography>
       )}

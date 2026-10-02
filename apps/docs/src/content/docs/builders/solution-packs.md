@@ -3,7 +3,7 @@ title: Install and manage solution packs
 description: Inspect, plan, apply, and operate existing solution packs safely.
 ---
 
-A solution pack is a versioned `.tar.zst` archive supplied by a publisher. It sets up a workspace for a use case with blueprints, navigation, extension layouts, presentation assets, guidance, and optional sample data.
+A solution pack is a versioned `.tar.zst` archive supplied by a publisher. It sets up a workspace for a use case with blueprints, navigation, extension layouts, label translations, presentation assets, guidance, and optional sample data.
 
 After applying a pack, users work with its resources through normal Attricat features. There is no pack service to keep running, and packs do not own, synchronize, or remove those resources later.
 
@@ -42,7 +42,7 @@ Planning saves an immutable dry run without changing catalog resources. Review r
 | --- | --- |
 | `create` | Create a blueprint, asset, or selected sample entity. |
 | `map` | Reuse an explicitly selected compatible resource. |
-| `append` | Add navigation or extension-layout entries. |
+| `append` | Add navigation, extension-layout, or translation entries. |
 | `satisfied` | The requested setting already exists exactly. |
 | `skip` | Leave an optional unavailable item out. |
 | `conflict` | Existing workspace state prevents the operation. |
@@ -117,6 +117,10 @@ acli solution-pack applications abandon <application-id>
 ```
 
 Abandoning an application removes staged inputs. Previously created entities and ordinary audit/event history remain unchanged. Later releases do not reset live sample values or restore removed sample markers. There is no dataset reset or automatic cleanup command.
+
+## Translations
+
+A pack can ship [label translations](/builders/translations/), shown as the `workspace/lexicon` setting during inspection and as an `append` action in the plan. Applying the pack adds missing entries and updates entries a pack supplied earlier. Entries written in the workspace, before or after installation, are never overwritten, and editing a pack-supplied entry makes it a workspace entry. Translations never cause conflicts.
 
 ## Limits and removal
 

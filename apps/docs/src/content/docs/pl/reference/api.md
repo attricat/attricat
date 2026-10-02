@@ -147,6 +147,19 @@ Pobieranie zwraca `409 file_processing`, dopóki plik nie ma stanu `ready`.
 
 Stan ma maksymalnie 32 KiB i używa kluczy adresu URL przeglądarki encji: `blueprint`, `version`, `allVersions`, `query`, `context`, `locked`, `sort`, `attributeFilters` i `relationshipFacets`.
 
+### Tłumaczenia
+
+| Metoda | Ścieżka | Opis |
+| --- | --- | --- |
+| `GET` | `/lexicon/entries` | Lista wpisów, opcjonalnie dla jednego języka `language` (`entities.read`). |
+| `PUT` | `/lexicon/entries` | Utworzenie lub zastąpienie wpisu: `key`, opcjonalny `context`, `language`, opcjonalna `plural_category` (domyślnie `other`) i `text` (`blueprints.write`). |
+| `DELETE` | `/lexicon/entries` | Usunięcie wpisu wskazanego parametrami `key`, `context`, `language` i `plural_category` (`blueprints.write`). |
+| `GET` | `/lexicon/export` | Eksport jednego języka `language` jako pliku importu (`blueprints.read`). |
+| `POST` | `/lexicon/import` | Import pliku dla jednego języka; `mode=replace` usuwa też wpisy, których nie ma w pliku (`blueprints.write`). |
+| `GET` | `/lexicon/report` | Nieprzetłumaczone odwołania, brakujące kategorie liczby mnogiej i osierocone wpisy dla języków `languages` rozdzielonych przecinkami (`blueprints.read`). |
+
+Zobacz [Tłumaczenie etykiet](/pl/builders/translations/).
+
 ### Reguły i przepływy pracy
 
 | Metoda | Ścieżka | Opis |

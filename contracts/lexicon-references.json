@@ -1,0 +1,48 @@
+{
+  "description": "Conformance cases for lexicon references in catalog text. Each case gives the input and either the parsed segments or the error code. Run by crates/lexicon and apps/catalog-web.",
+  "cases": [
+    { "input": "", "segments": [] },
+    { "input": "Plain text", "segments": [{ "literal": "Plain text" }] },
+    { "input": "{{Product}}", "segments": [{ "key": "Product" }] },
+    {
+      "input": "{{  Products   in\tthis category }}",
+      "segments": [{ "key": "Products in this category" }]
+    },
+    {
+      "input": "{{Order|purchase}}",
+      "segments": [{ "key": "Order", "context": "purchase" }]
+    },
+    {
+      "input": "{{ Order | sorting  order }}",
+      "segments": [{ "key": "Order", "context": "sorting order" }]
+    },
+    {
+      "input": "SKU: {{Price}} ({{Net}})",
+      "segments": [
+        { "literal": "SKU: " },
+        { "key": "Price" },
+        { "literal": " (" },
+        { "key": "Net" },
+        { "literal": ")" }
+      ]
+    },
+    { "input": "\\{{literal}}", "segments": [{ "literal": "{{literal}}" }] },
+    {
+      "input": "a\\b \\{{x}} {{Y}}",
+      "segments": [{ "literal": "a\\b {{x}} " }, { "key": "Y" }]
+    },
+    { "input": "closing }} only", "segments": [{ "literal": "closing }} only" }] },
+    { "input": "{single}", "segments": [{ "literal": "{single}" }] },
+    { "input": "Zażółć {{Gęślą}}", "segments": [{ "literal": "Zażółć " }, { "key": "Gęślą" }] },
+    { "input": "{{Product", "error": "unclosed" },
+    { "input": "{{Product}} and {{Price", "error": "unclosed" },
+    { "input": "{{}}", "error": "empty_key" },
+    { "input": "{{   }}", "error": "empty_key" },
+    { "input": "{{|ctx}}", "error": "empty_key" },
+    { "input": "{{Order|}}", "error": "empty_context" },
+    { "input": "{{Order| }}", "error": "empty_context" },
+    { "input": "{{a|b|c}}", "error": "multiple_contexts" },
+    { "input": "{{a {{b}}", "error": "brace" },
+    { "input": "{{{a}}}", "error": "brace" }
+  ]
+}

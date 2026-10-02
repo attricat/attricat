@@ -94,7 +94,7 @@ pub struct ComponentReference {
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ViewTab {
-    /// Tab label.
+    /// Tab label. `{{…}}` references resolve from the workspace lexicon.
     pub label: String,
     /// Blocks rendered in the tab.
     pub children: Vec<ViewNode>,
@@ -103,7 +103,7 @@ pub struct ViewTab {
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ViewSection {
-    /// Section heading.
+    /// Section heading. `{{…}}` references resolve from the workspace lexicon.
     pub label: String,
     /// Blocks rendered in the section.
     pub children: Vec<ViewNode>,
@@ -217,7 +217,8 @@ pub struct TableColumn {
     /// A local scalar field or up to three relationship hops ending in a scalar field.
     #[schemars(extend("x-attricat-reference" = "attribute_path"))]
     pub field: String,
-    /// Column heading. Defaults to the attribute name.
+    /// Column heading. Defaults to the attribute name. `{{…}}` references
+    /// resolve from the workspace lexicon.
     #[serde(default)]
     pub label: Option<String>,
     /// Cell renderer, such as `catalog.table_image`.
@@ -312,7 +313,8 @@ pub enum ViewNode {
     },
     /// Entities that reference this entity, opened in a paginated dialog.
     IncomingRelationshipList {
-        /// Button and dialog label.
+        /// Button and dialog label. `{{…}}` references resolve from the
+        /// workspace lexicon.
         label: String,
         /// Source blueprint relationship fields that point at this entity.
         relationships: Vec<IncomingRelationship>,

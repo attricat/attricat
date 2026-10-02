@@ -30,6 +30,7 @@ import type { ExplorerSearch } from './search';
 import { useExplorerData } from './useExplorerData';
 import { useSavedSearchActions } from '../saved-views/useSavedSearchActions';
 import { useExplorerSearchActions } from './useExplorerSearchActions';
+import { lexiconText } from '../lexicon/lexicon';
 
 type Props = {
   search: ExplorerSearch;
@@ -86,7 +87,9 @@ export const Explorer = ({ search: urlSearch, savedView }: Props) => {
     search,
   );
   const lockedBlueprintName =
-    selectedBlueprint.data?.blueprint.name ?? search.blueprint;
+    (selectedBlueprint.data &&
+      lexiconText(selectedBlueprint.data.blueprint.name)) ??
+    search.blueprint;
   const loading =
     Boolean(search.blueprint) &&
     !blueprintMissing &&

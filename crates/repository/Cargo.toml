@@ -15,6 +15,7 @@ catalog-blueprint = { path = "../blueprint" }
 catalog-domain = { path = "../domain" }
 catalog-events = { path = "../events" }
 catalog-extension-manifest = { path = "../extension-manifest" }
+catalog-lexicon = { path = "../lexicon" }
 catalog-solution-pack = { path = "../solution-pack" }
 catalog-rules = { path = "../rules" }
 catalog-storage = { path = "../storage" }

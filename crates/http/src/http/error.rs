@@ -406,6 +406,7 @@ impl From<RepositoryError> for ApiError {
             }
             RepositoryError::TokenPermissionsUnavailable => Self::forbidden(),
             RepositoryError::InvalidReusableAttributeCode
+            | RepositoryError::InvalidLexiconEntry(_)
             | RepositoryError::InvalidReusableAttributeDefinition(_)
             | RepositoryError::ReusableAttributeNotPublished
             | RepositoryError::InvalidPreview

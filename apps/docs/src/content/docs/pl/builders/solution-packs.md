@@ -3,7 +3,7 @@ title: Instalacja i obsługa pakietów rozwiązań
 description: Bezpieczne sprawdzanie, planowanie, stosowanie i obsługa istniejących pakietów rozwiązań.
 ---
 
-Pakiet rozwiązania to wersjonowane archiwum `.tar.zst` dostarczone przez wydawcę. Przygotowuje obszar roboczy do konkretnego zastosowania: może dostarczać Schematy, nawigację, układ rozszerzeń, zasoby graficzne, wskazówki i opcjonalne dane przykładowe.
+Pakiet rozwiązania to wersjonowane archiwum `.tar.zst` dostarczone przez wydawcę. Przygotowuje obszar roboczy do konkretnego zastosowania: może dostarczać Schematy, nawigację, układ rozszerzeń, tłumaczenia etykiet, zasoby graficzne, wskazówki i opcjonalne dane przykładowe.
 
 Po zastosowaniu pakietu użytkownicy pracują z jego zasobami przez zwykłe funkcje Attricat. Nie trzeba utrzymywać działającej usługi pakietu. Pakiet nie jest właścicielem zasobów, nie synchronizuje ich ani nie usuwa ich później.
 
@@ -42,7 +42,7 @@ Planowanie zapisuje niezmienny plan próbny bez zmieniania zasobów katalogu. Sp
 | --- | --- |
 | `create` | Utworzenie Schematu, zasobu graficznego lub wybranej encji przykładowej. |
 | `map` | Ponowne użycie jawnie wskazanego zgodnego zasobu. |
-| `append` | Dodanie wpisów nawigacji lub układu rozszerzeń. |
+| `append` | Dodanie wpisów nawigacji, układu rozszerzeń lub tłumaczeń. |
 | `satisfied` | Żądane ustawienie już istnieje w dokładnie tej postaci. |
 | `skip` | Pominięcie niedostępnego elementu opcjonalnego. |
 | `conflict` | Obecny stan obszaru roboczego uniemożliwia operację. |
@@ -117,6 +117,10 @@ acli solution-pack applications abandon <application-id>
 ```
 
 Po porzuceniu serwer usuwa tymczasowe dane wejściowe. Wcześniej utworzone encje i zwykła historia audytu oraz zdarzeń pozostają bez zmian. Późniejsze wydania nie resetują bieżących wartości ani nie przywracają usuniętych oznaczeń danych przykładowych. Nie ma polecenia resetowania zestawu ani automatycznego sprzątania.
+
+## Tłumaczenia
+
+Pakiet może zawierać [tłumaczenia etykiet](/pl/builders/translations/), widoczne podczas sprawdzania jako ustawienie `workspace/lexicon`, a w planie jako akcja `append`. Zastosowanie pakietu dodaje brakujące wpisy i aktualizuje wpisy dostarczone wcześniej przez pakiet. Wpisy zapisane w obszarze roboczym, przed instalacją lub po niej, nigdy nie są nadpisywane, a edycja wpisu dostarczonego przez pakiet czyni go wpisem obszaru roboczego. Tłumaczenia nigdy nie powodują konfliktów.
 
 ## Ograniczenia i usuwanie
 

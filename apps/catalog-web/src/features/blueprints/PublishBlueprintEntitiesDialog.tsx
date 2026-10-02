@@ -15,6 +15,7 @@ import { listPublicationChannels } from '../exports/api';
 import { exportQueryKeys } from '../exports/queryKeys';
 import { allPublicationChannels } from './constants';
 import type { Blueprint } from './schemas';
+import { lexiconText } from '../lexicon/lexicon';
 
 export const PublishBlueprintEntitiesDialog = ({
   blueprint,
@@ -44,7 +45,7 @@ export const PublishBlueprintEntitiesDialog = ({
       <DialogContent>
         <DialogContentText>
           {t('blueprints.publishEntitiesDescription', {
-            name: blueprint.name,
+            name: lexiconText(blueprint.name),
             version: blueprint.version,
           })}
         </DialogContentText>

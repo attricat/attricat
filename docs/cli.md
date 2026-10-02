@@ -202,6 +202,31 @@ acli file download-original <file-id> --output original.bin [--range 'bytes=0-10
 acli file download-variant <file-id> <kind> --output preview.webp [--range 'bytes=0-1023']
 ```
 
+## Translations
+
+`acli lexicon` manages the workspace lexicon used by `{{…}}` references in
+catalog labels (see [translated labels](blueprints.md#translated-labels)):
+
+```sh
+acli lexicon list [--language pl]
+acli lexicon set --key Product --language pl --text Produkt [--context <context>] [--plural-category one]
+acli lexicon delete --key Product --language pl [--context <context>] [--plural-category one]
+acli lexicon export --language pl > pl.json
+acli lexicon import --file pl.json [--replace]
+acli lexicon report [--language pl --language de]
+```
+
+`--plural-category` defaults to `other` and must be a CLDR category the
+language uses. `export` prints an import file (`format_version`, `language`,
+and `entries` with `key`, optional `context`, optional `plural_category`, and
+`text`; see `contracts/lexicon-v1.schema.json`). `import` accepts the same
+format as JSON, or as TOML when the file ends in `.toml`. It upserts entries
+and reports `created`, `updated`, `unchanged`, and `deleted` counts;
+`--replace` also deletes the language's entries missing from the file.
+`report` defaults to `en` plus every language with entries. Reads need
+`entities.read` (`list`) or `blueprints.read` (`export`, `report`); changes
+need `blueprints.write`.
+
 ## Saved searches
 
 `acli saved-view list [--query <text>]`, `acli saved-view get <id>`, `acli saved-view create --name <name> --state <json-or-file> [--visibility private|workspace] [--description <text>]`, `acli saved-view update <id> --name <name> --state <json-or-file>`, `acli saved-view delete <id>`, and `acli saved-view link --state <json-or-file>` operate on Explorer saved views. The state must contain at least a blueprint code, for example:

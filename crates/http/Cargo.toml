@@ -20,6 +20,7 @@ catalog-repository = { path = "../repository" }
 catalog-solution-pack = { path = "../solution-pack" }
 catalog-rules = { path = "../rules" }
 catalog-storage = { path = "../storage" }
+catalog-lexicon = { path = "../lexicon" }
 catalog-validation = { path = "../validation" }
 catalog-workflow = { path = "../workflow" }
 chrono.workspace = true

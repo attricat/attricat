@@ -26,6 +26,7 @@ import {
 } from '../views/components/registry';
 import { AttributeValue } from '../views/components/values/AttributeValue';
 import type { SandboxValues } from './sandboxValues';
+import { lexiconText } from '../lexicon/lexicon';
 
 const TableViewPreview = ({
   attributes,
@@ -64,7 +65,7 @@ const TableViewPreview = ({
           <TableRow>
             {visibleFields.map(({ field, label, attribute }) => (
               <TableCell key={field}>
-                {label ?? attributeLabel(attribute)}
+                {label ? lexiconText(label) : attributeLabel(attribute)}
               </TableCell>
             ))}
           </TableRow>

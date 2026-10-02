@@ -706,6 +706,8 @@
     "resultCount_one": "{{count}} result",
     "resultCount_other": "{{count}} results",
     "resultCountCapped": "{{count}}+ results",
+    "entityCount": "{{count}} {{noun}}",
+    "entityCountCapped": "{{count}}+ {{noun}}",
     "noMatchingEntities": "No entities matched this search.",
     "selectEntities": "Select entities",
     "exitSelection": "Exit selection",

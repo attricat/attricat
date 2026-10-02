@@ -37,6 +37,7 @@ import {
 } from '../constants';
 import { ValueField, type ResolvedValue } from './ValueField';
 import { ViewTabs } from './ViewTabs';
+import { lexiconText } from '../../lexicon/lexicon';
 
 type Props = {
   view?: ViewDefinition;
@@ -146,7 +147,7 @@ export const EntityView = ({
           {node.sections.map((section) => (
             <Accordion key={section.label}>
               <AccordionSummary expandIcon={<ChevronDownIcon />}>
-                <Typography>{section.label}</Typography>
+                <Typography>{lexiconText(section.label)}</Typography>
               </AccordionSummary>
               <AccordionDetails>
                 {renderNodes(section.children)}
@@ -167,13 +168,20 @@ export const EntityView = ({
       if (!entityId)
         return (
           <Typography color="text.secondary" key={key}>
-            {t('views.availableOnPreviews', { label: node.label })}
+            {t('views.availableOnPreviews', {
+              label: lexiconText(node.label),
+            })}
           </Typography>
         );
       const Renderer =
         resolveIncomingRelationshipRenderer(node.component) ??
         IncomingRelationshipListDisplay;
-      return createElement(Renderer, { entityId, key, node });
+      // Registered renderers receive the label already resolved.
+      return createElement(Renderer, {
+        entityId,
+        key,
+        node: { ...node, label: lexiconText(node.label) },
+      });
     }
     if (
       node.type === viewBlockTypes.field ||

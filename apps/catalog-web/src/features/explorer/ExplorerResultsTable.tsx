@@ -37,6 +37,7 @@ import { useExplorerColumnPreferences } from './useExplorerColumnPreferences';
 import type { ExplorerSelection } from './useExplorerSelection';
 import { VirtualizedExplorerTable } from './VirtualizedExplorerTable';
 import { useTimeZone } from '../../time/useInstantFormat';
+import { lexiconText } from '../lexicon/lexicon';
 
 type Props = {
   blueprint: BlueprintWithAttributes;
@@ -176,6 +177,7 @@ export const ExplorerResultsTable = ({
         </Alert>
       )}
       <ExplorerResultsToolbar
+        blueprintName={blueprint.blueprint.name}
         itemCount={items.length}
         totalCount={totalCount}
         totalCountCapped={totalCountCapped}
@@ -249,7 +251,7 @@ export const ExplorerResultsTable = ({
       )}
       {agentSelection && (
         <SendSelectedToAgentDialog
-          blueprintName={blueprint.blueprint.name}
+          blueprintName={lexiconText(blueprint.blueprint.name)}
           entities={agentSelection}
           onClose={() => setAgentSelection(null)}
           onSuccess={() => {

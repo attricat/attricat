@@ -5975,3 +5975,135 @@ async fn failed_step_is_durable_and_retry_resumes_without_duplicate_completed_re
     );
     server.abort();
 }
+
+fn archive_with_lexicon() -> Vec<u8> {
+    let lexicon = serde_json::to_vec(&json!({
+        "format_version": 1,
+        "kind": "lexicon",
+        "languages": [
+            {"language": "pl", "entries": [
+                {"key": "Product", "plural_category": "one", "text": "Produkt"},
+                {"key": "Price", "text": "Cena"},
+            ]},
+        ],
+    }))
+    .unwrap();
+    let manifest = serde_json::to_vec(&json!({
+        "manifest_version": 1,
+        "id": "attricat.lexicon",
+        "name": "Lexicon",
+        "version": "1.0.0",
+        "description": "Polish labels",
+        "catalog": {"host_api": "^1.0"},
+        "resources": {
+            "workspace_settings": [{
+                "key": "workspace/lexicon",
+                "path": "workspace/lexicon.json",
+                "required": false,
+                "sha256": digest(&lexicon)
+            }]
+        }
+    }))
+    .unwrap();
+    let mut tar_bytes = Vec::new();
+    {
+        let mut tar = tar::Builder::new(&mut tar_bytes);
+        append_file(&mut tar, "solution-pack.json", &manifest);
+        append_file(&mut tar, "workspace/lexicon.json", &lexicon);
+        tar.finish().unwrap();
+    }
+    zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn apply_adds_pack_lexicon_entries_without_overriding_workspace_entries(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let entries_url = format!("{base_url}/lexicon/entries");
+    let overridden = client
+        .put(&entries_url)
+        .json(
+            &json!({"key": "Product", "language": "pl", "plural_category": "one", "text": "Towar"}),
+        )
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(overridden.status(), StatusCode::OK);
+
+    let inspected = inspect(&client, &base_url, archive_with_lexicon()).await;
+    assert_eq!(inspected.status(), StatusCode::OK);
+    let inspected = inspected.json::<Value>().await.unwrap();
+    assert_eq!(
+        inspected["resources"]["workspace_settings"][0]["kind"],
+        "lexicon"
+    );
+    assert_eq!(
+        inspected["resources"]["workspace_settings"][0]["entry_count"],
+        2
+    );
+
+    let plan = create_plan(&client, &base_url, archive_with_lexicon(), "lex").await;
+    assert_eq!(plan.status(), StatusCode::CREATED);
+    let plan = plan.json::<Value>().await.unwrap();
+    assert_eq!(plan["ready"], true);
+    let action = plan["actions"].as_array().unwrap().last().unwrap();
+    assert_eq!(action["action"], "append");
+    assert_eq!(action["summary"]["languages"], json!(["pl"]));
+
+    let applied = apply_plan(&client, &base_url, plan["id"].as_str().unwrap()).await;
+    assert_eq!(applied.status(), StatusCode::OK);
+    let application = applied.json::<Value>().await.unwrap();
+    assert_eq!(application["state"], "completed");
+    let step = application["steps"].as_array().unwrap().last().unwrap();
+    assert_eq!(step["result_snapshot"]["setting"], "lexicon");
+    assert_eq!(step["result_snapshot"]["written_count"], 1);
+
+    let listed: Value = client
+        .get(&entries_url)
+        .query(&[("language", "pl")])
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let summary: Vec<_> = listed
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|entry| {
+            (
+                entry["key"].as_str().unwrap().to_owned(),
+                entry["text"].as_str().unwrap().to_owned(),
+                entry["source"].as_str().unwrap().to_owned(),
+                entry["solution_pack_id"].clone(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        summary,
+        [
+            (
+                "Price".to_owned(),
+                "Cena".to_owned(),
+                "solution_pack".to_owned(),
+                json!("attricat.lexicon")
+            ),
+            (
+                "Product".to_owned(),
+                "Towar".to_owned(),
+                "workspace".to_owned(),
+                Value::Null
+            ),
+        ]
+    );
+
+    let repeated = apply_plan(&client, &base_url, plan["id"].as_str().unwrap()).await;
+    assert_eq!(repeated.status(), StatusCode::OK);
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM lexicon_entries")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 2);
+    server.abort();
+}

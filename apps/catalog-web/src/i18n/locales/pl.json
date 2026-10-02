@@ -717,6 +717,8 @@
     "resultCount_few": "{{count}} wyniki",
     "resultCount_many": "{{count}} wyników",
     "resultCountCapped": "{{count}}+ wyników",
+    "entityCount": "{{count}} {{noun}}",
+    "entityCountCapped": "{{count}}+ {{noun}}",
     "resultCount_other": "{{count}} wyniku",
     "noMatchingEntities": "Żadna encja nie pasuje do tego wyszukiwania.",
     "selectEntities": "Wybierz encje",

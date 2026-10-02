@@ -59,7 +59,7 @@
       ]
     },
     "name": {
-      "description": "Human-readable attribute name.",
+      "description": "Human-readable attribute name. `{{…}}` references resolve from the\nworkspace lexicon.",
       "minLength": 1,
       "type": "string"
     },

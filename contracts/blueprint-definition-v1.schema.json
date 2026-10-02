@@ -309,7 +309,7 @@
           ]
         },
         "name": {
-          "description": "Human-readable label shown in forms, filters, and table headers.\nDefaults to the humanized `code`. Attributes selected with `from` use\nthe mixin's name and cannot set their own.",
+          "description": "Human-readable label shown in forms, filters, and table headers.\nDefaults to the humanized `code`. Attributes selected with `from` use\nthe mixin's name and cannot set their own. `{{…}}` references resolve\nfrom the workspace lexicon.",
           "minLength": 1,
           "type": [
             "string",
@@ -619,7 +619,7 @@
         },
         "label": {
           "default": null,
-          "description": "Column heading. Defaults to the attribute name.",
+          "description": "Column heading. Defaults to the attribute name. `{{…}}` references\nresolve from the workspace lexicon.",
           "type": [
             "string",
             "null"
@@ -1272,7 +1272,7 @@
               "description": "Registered component that renders this block."
             },
             "label": {
-              "description": "Button and dialog label.",
+              "description": "Button and dialog label. `{{…}}` references resolve from the\nworkspace lexicon.",
               "type": "string"
             },
             "page_size": {
@@ -1314,7 +1314,7 @@
           "type": "array"
         },
         "label": {
-          "description": "Section heading.",
+          "description": "Section heading. `{{…}}` references resolve from the workspace lexicon.",
           "type": "string"
         }
       },
@@ -1335,7 +1335,7 @@
           "type": "array"
         },
         "label": {
-          "description": "Tab label.",
+          "description": "Tab label. `{{…}}` references resolve from the workspace lexicon.",
           "type": "string"
         }
       },
@@ -1403,7 +1403,7 @@
       "$ref": "#/$defs/BlueprintKind"
     },
     "name": {
-      "description": "Human-readable blueprint name.",
+      "description": "Human-readable blueprint name. `{{…}}` references resolve from the\nworkspace lexicon.",
       "minLength": 1,
       "type": "string"
     },

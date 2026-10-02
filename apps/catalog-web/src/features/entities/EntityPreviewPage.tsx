@@ -35,6 +35,7 @@ import {
 } from './useEntityContexts';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
+import { lexiconText } from '../lexicon/lexicon';
 
 const EntityCommentsPanel = lazy(() =>
   import('../entity-comments/EntityCommentsPanel').then((module) => ({
@@ -203,7 +204,7 @@ export const EntityPreviewPage = ({
       )}
       <EntitySchemaSubheader
         entityId={entityId}
-        name={blueprint.data?.blueprint.name}
+        name={blueprint.data && lexiconText(blueprint.data.blueprint.name)}
       />
       {contexts.isPending && (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>

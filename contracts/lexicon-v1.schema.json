@@ -1,0 +1,78 @@
+{
+  "$defs": {
+    "LexiconFileEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "context": {
+          "description": "Disambiguation context referenced as `{{key|context}}`.",
+          "maxLength": 100,
+          "minLength": 1,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "key": {
+          "description": "English source text referenced as `{{key}}`.",
+          "maxLength": 200,
+          "minLength": 1,
+          "type": "string"
+        },
+        "plural_category": {
+          "description": "CLDR plural category. Defaults to `other`, used for text without a count.",
+          "enum": [
+            "zero",
+            "one",
+            "two",
+            "few",
+            "many",
+            "other"
+          ],
+          "type": "string"
+        },
+        "text": {
+          "description": "Displayed text. It is rendered literally.",
+          "maxLength": 1000,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "text"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "The exchange format for one language, used by lexicon import and export\n(as JSON or TOML). Solution-pack lexicon files reuse its entry shape.",
+  "properties": {
+    "entries": {
+      "description": "Translations for the language.",
+      "items": {
+        "$ref": "#/$defs/LexiconFileEntry"
+      },
+      "maxItems": 10000,
+      "type": "array"
+    },
+    "format_version": {
+      "const": 1,
+      "description": "Lexicon file format version. Only `1` is supported.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "language": {
+      "description": "BCP 47 language tag of every entry, such as `pl` or `pt-BR`.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "format_version",
+    "language",
+    "entries"
+  ],
+  "title": "Attricat lexicon v1",
+  "type": "object"
+}

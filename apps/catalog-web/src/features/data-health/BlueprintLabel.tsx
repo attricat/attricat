@@ -1,5 +1,6 @@
 import { Chip, Stack, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import { lexiconText } from '../lexicon/lexicon';
 
 export const BlueprintLabel = ({
   code,
@@ -17,7 +18,7 @@ export const BlueprintLabel = ({
   return (
     <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
       <Typography variant="body2">
-        {name} ({code}) v{currentVersion}
+        {lexiconText(name)} ({code}) v{currentVersion}
       </Typography>
       {outdatedEntities > 0 && (
         <Chip

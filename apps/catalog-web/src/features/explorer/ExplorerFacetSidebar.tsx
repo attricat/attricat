@@ -15,6 +15,7 @@ import type {
 } from './relationshipFilterTypes';
 import type { AttributeFilterRequest } from './attributeFilterValues';
 import type { AttributeFilter } from './search';
+import { lexiconText } from '../lexicon/lexicon';
 
 type Props = {
   blueprint: string;
@@ -77,8 +78,10 @@ export const ExplorerFacetSidebar = ({
   const { t } = useTranslation();
   const [relationshipToOpen, setRelationshipToOpen] =
     useState<RelationshipFilterAttribute>();
-  const blueprintName = (code: string) =>
-    blueprints.find((item) => item.code === code)?.name ?? code;
+  const blueprintName = (code: string) => {
+    const name = blueprints.find((item) => item.code === code)?.name;
+    return name === undefined ? code : lexiconText(name);
+  };
 
   return (
     <Paper
@@ -108,7 +111,7 @@ export const ExplorerFacetSidebar = ({
             <MenuItem key={item.code} value={item.code}>
               {t('explorer.blueprintOption', {
                 code: item.code,
-                name: item.name,
+                name: lexiconText(item.name),
               })}
             </MenuItem>
           ))}

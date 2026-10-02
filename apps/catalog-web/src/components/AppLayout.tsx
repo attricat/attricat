@@ -18,6 +18,7 @@ import { pageTitle } from '../app/pageTitle';
 import { returnToStorageKey } from '../app/storageKeys';
 import { currentSession, logout } from '../features/auth/api';
 import { authQueryKeys } from '../features/auth/queryKeys';
+import { useWorkspaceLexicon } from '../features/lexicon/lexicon';
 import { DesktopNavigation } from './DesktopNavigation';
 import { MobileNavigation } from './MobileNavigation';
 import { MobileNavigationPanelProvider } from './MobileNavigationPanel';
@@ -54,6 +55,7 @@ export const AppLayout = () => {
     queryFn: currentSession,
     retry: false,
   });
+  useWorkspaceLexicon(session.data?.workspace_id);
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
   const [signOutError, setSignOutError] = useState(false);
