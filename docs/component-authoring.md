@@ -19,7 +19,7 @@ Markdown) share `apps/catalog-web/src/features/views/controls`:
 | --- | --- |
 | `color.ts`, `email.ts`, `phone.ts`, `url.ts` | Pure value policies (parsing, link targets) and form validators. |
 | `TextControl.tsx` | `TextControlEditor` (single-line input) and `LinkedTextValue` (text that links when its policy allows). |
-| `editors.tsx`, `values.tsx` | One editor and one renderer per control. |
+| `editors.tsx`, `values.tsx` | One editor and one renderer per control, plus the status editor and status chip. |
 | `definitions.ts` | The registered display/edit definitions, built with `stringDisplay` and `stringEdit`. |
 
 A new string control usually needs a policy function, a few lines in
@@ -111,10 +111,13 @@ detail view.
 
 `EntityForm` owns form state. An edit component may supply a `valueEditor`
 that receives `ValueEditorProps` (attribute, string value, disabled, required,
-error, helper text and `onChange`); the entity form and the blueprint sandbox
-use it when the component supports the attribute's value type
-(`resolveValueEditor`). Without one, the form's built-in input is used, as for
-`catalog.field_edit`.
+error, helper text and `onChange`).
+
+`ScalarAttributeEditor` (`features/entities/components`) picks the editor for
+a scalar attribute in both the entity form and the blueprint preview sandbox:
+a status annotation first, then the view's configured `valueEditor` when it
+supports the attribute's value type (`resolveValueEditor`), then the built-in
+input for the type, as for `catalog.field_edit`.
 
 Two optional fields add form behavior:
 

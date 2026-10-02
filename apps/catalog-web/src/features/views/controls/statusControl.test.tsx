@@ -4,9 +4,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ThemeProvider } from '@mui/material/styles';
 import { makeTheme } from '../../../app/theme';
 import '../../../i18n';
-import { StatusAttributeEditor } from './StatusAttributeEditor';
-import { StatusValue } from '../../views/components/values/StatusValue';
-import type { StatusConfiguration } from '../status';
+import type { StatusConfiguration } from '../../entities/status';
+import { StatusEditor } from './editors';
+import { StatusValue } from './values';
+
+const attribute = { code: 'Status', value_type: 'string' as const };
 
 const config: StatusConfiguration = {
   version: 1,
@@ -43,9 +45,9 @@ describe('status presentation and input', () => {
   it('uses the saved baseline rather than the unsaved selection', () => {
     const onChange = vi.fn();
     render(
-      <StatusAttributeEditor
+      <StatusEditor
         config={config}
-        label="Status"
+        attribute={attribute}
         value="live"
         baseline="draft"
         inheritedValue={null}
@@ -65,9 +67,9 @@ describe('status presentation and input', () => {
   it('disables keyboard and pointer mutation when readonly', () => {
     const onChange = vi.fn();
     render(
-      <StatusAttributeEditor
+      <StatusEditor
         config={config}
-        label="Status"
+        attribute={attribute}
         value="draft"
         baseline="draft"
         inheritedValue={null}

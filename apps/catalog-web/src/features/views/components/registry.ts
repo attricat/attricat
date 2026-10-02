@@ -35,6 +35,10 @@ export type RegisteredViewComponent = (typeof viewComponents)[number];
 
 const componentKey = (id: string, version: number) => `${id}@${version}`;
 
+/** A blueprint component reference, or nothing when none is configured. */
+type ComponentSelector =
+  Pick<ComponentReference, 'id' | 'version'> | null | undefined;
+
 export const viewComponentRegistry = new Map<string, RegisteredViewComponent>(
   viewComponents.map((component) => [
     componentKey(component.id, component.version),
@@ -42,20 +46,18 @@ export const viewComponentRegistry = new Map<string, RegisteredViewComponent>(
   ]),
 );
 
-export const resolveViewComponent = (
-  component: Pick<ComponentReference, 'id' | 'version'> | null | undefined,
-) =>
+export const resolveViewComponent = (component: ComponentSelector) =>
   component
     ? viewComponentRegistry.get(componentKey(component.id, component.version))
     : undefined;
 
 export const resolveValueRenderer = (
-  component: Pick<ComponentReference, 'id' | 'version'> | null | undefined,
+  component: ComponentSelector,
 ): ValueRenderer | undefined => resolveViewComponent(component)?.valueRenderer;
 
 /** A field's configured edit component, if it supports the attribute's value type. */
 export const resolveValueEditor = (
-  component: Pick<ComponentReference, 'id' | 'version'> | null | undefined,
+  component: ComponentSelector,
   attribute: Pick<Attribute, 'value_type'>,
 ): RegisteredViewComponent | undefined => {
   const definition = resolveViewComponent(component);
@@ -66,11 +68,11 @@ export const resolveValueEditor = (
 };
 
 export const resolveHeadingRenderer = (
-  component: Pick<ComponentReference, 'id' | 'version'> | null | undefined,
+  component: ComponentSelector,
 ): HeadingRenderer | undefined =>
   resolveViewComponent(component)?.headingRenderer;
 
 export const resolveIncomingRelationshipRenderer = (
-  component: Pick<ComponentReference, 'id' | 'version'> | null | undefined,
+  component: ComponentSelector,
 ): IncomingRelationshipRenderer | undefined =>
   resolveViewComponent(component)?.incomingRelationshipRenderer;

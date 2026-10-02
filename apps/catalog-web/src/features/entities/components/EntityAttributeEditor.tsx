@@ -1,23 +1,15 @@
-import { MenuItem, TextField, Tooltip, useTheme } from '@mui/material';
+import { Tooltip, useTheme } from '@mui/material';
 import { InfoIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { Attribute, ComponentReference } from '../api';
-import { resolveValueEditor } from '../../views/components/registry';
 import type { FileMetadata } from '../../files/schemas';
-import { attributeLabel } from '../entityDisplay';
 import { attributeValueTypes } from '../valueTypes';
-import {
-  booleanFieldValues,
-  JSON_EDITOR_MIN_ROWS,
-  JSON_VALUE_PLACEHOLDER,
-  TIME_VALUE_PLACEHOLDER,
-} from '../constants';
 import { FileAttributeEditor } from '../../files/FileAttributeEditor';
 import { RelationshipField } from './RelationshipField';
 import { smallIconSize } from '../../../components/iconSizes';
-import { statusConfiguration } from '../status';
-import { StatusAttributeEditor } from './StatusAttributeEditor';
+import { ScalarAttributeEditor } from './ScalarAttributeEditor';
 
+/** Form editor for one attribute in the current context. */
 export const EntityAttributeEditor = ({
   attribute,
   component,
@@ -54,142 +46,49 @@ export const EntityAttributeEditor = ({
   showMigrationBadge: boolean;
   value: string;
 }) => {
-  const { t } = useTranslation();
-  const providerUnavailable = attribute.extension_type?.available === false;
-  const effectiveDisabled = disabled || providerUnavailable;
-  const migrationBadge = showMigrationBadge ? (
-    <MigrationBadge message={migrationReviewMessage} />
-  ) : null;
-  const status = statusConfiguration(attribute);
-  if (status)
-    return (
-      <>
-        {migrationBadge}
-        <StatusAttributeEditor
-          config={status}
-          label={attributeLabel(attribute)}
-          value={value}
-          baseline={statusBaseline}
-          inheritedValue={inheritedStatus}
-          disabled={effectiveDisabled}
-          error={error}
-          helperText={helperText}
-          onChange={onChange}
-        />
-      </>
-    );
-  const Editor = resolveValueEditor(component, attribute)?.valueEditor;
-  if (Editor)
-    return (
-      <>
-        {migrationBadge}
-        <Editor
-          attribute={attribute}
-          value={value}
-          disabled={effectiveDisabled}
-          error={error}
-          required={required}
-          helperText={helperText}
-          onChange={onChange}
-        />
-      </>
-    );
-  if (attribute.value_type === attributeValueTypes.relationship)
-    return (
-      <>
-        {migrationBadge}
-        <RelationshipField
-          attribute={attribute}
-          disabled={effectiveDisabled}
-          error={error}
-          helperText={helperText}
-          onChange={onChange}
-          value={value}
-        />
-      </>
-    );
-  if (attribute.value_type === attributeValueTypes.file)
-    return (
-      <>
-        {migrationBadge}
-        <FileAttributeEditor
-          attribute={attribute}
-          contextId={contextId}
-          disabled={effectiveDisabled}
-          entityId={entityId}
-          files={files}
-          error={error}
-          helperText={helperText}
-          onEntityUpdated={onEntityUpdated}
-        />
-      </>
-    );
-  if (attribute.value_type === attributeValueTypes.boolean)
-    return (
-      <>
-        {migrationBadge}
-        <TextField
-          fullWidth
-          disabled={effectiveDisabled}
-          error={Boolean(error)}
-          helperText={error ?? helperText}
-          select
-          label={attributeLabel(attribute)}
-          onChange={(event) => onChange(event.target.value)}
-          value={value}
-        >
-          <MenuItem value="">{t('entities.notSet')}</MenuItem>
-          <MenuItem value={booleanFieldValues.true}>
-            {t('entities.true')}
-          </MenuItem>
-          <MenuItem value={booleanFieldValues.false}>
-            {t('entities.false')}
-          </MenuItem>
-        </TextField>
-      </>
+  const effectiveDisabled =
+    disabled || attribute.extension_type?.available === false;
+  const editor =
+    attribute.value_type === attributeValueTypes.relationship ? (
+      <RelationshipField
+        attribute={attribute}
+        disabled={effectiveDisabled}
+        error={error}
+        helperText={helperText}
+        onChange={onChange}
+        value={value}
+      />
+    ) : attribute.value_type === attributeValueTypes.file ? (
+      <FileAttributeEditor
+        attribute={attribute}
+        contextId={contextId}
+        disabled={effectiveDisabled}
+        entityId={entityId}
+        files={files}
+        error={error}
+        helperText={helperText}
+        onEntityUpdated={onEntityUpdated}
+      />
+    ) : (
+      <ScalarAttributeEditor
+        attribute={attribute}
+        component={component}
+        statusBaseline={statusBaseline}
+        inheritedStatus={inheritedStatus}
+        value={value}
+        disabled={effectiveDisabled}
+        required={required}
+        error={error}
+        helperText={helperText}
+        onChange={onChange}
+      />
     );
   return (
     <>
-      {migrationBadge}
-      <TextField
-        fullWidth
-        disabled={effectiveDisabled}
-        error={Boolean(error)}
-        helperText={error ?? helperText}
-        label={attributeLabel(attribute)}
-        onChange={(event) => onChange(event.target.value)}
-        multiline={attribute.value_type === attributeValueTypes.json}
-        minRows={
-          attribute.value_type === attributeValueTypes.json
-            ? JSON_EDITOR_MIN_ROWS
-            : undefined
-        }
-        placeholder={
-          attribute.value_type === attributeValueTypes.time
-            ? TIME_VALUE_PLACEHOLDER
-            : attribute.value_type === attributeValueTypes.json
-              ? JSON_VALUE_PLACEHOLDER
-              : undefined
-        }
-        slotProps={{
-          htmlInput: {
-            inputMode:
-              attribute.value_type === attributeValueTypes.number ||
-              attribute.value_type === attributeValueTypes.integer
-                ? 'decimal'
-                : undefined,
-          },
-        }}
-        type={
-          attribute.value_type === attributeValueTypes.date
-            ? 'date'
-            : attribute.value_type === attributeValueTypes.number ||
-                attribute.value_type === attributeValueTypes.integer
-              ? 'number'
-              : undefined
-        }
-        value={value}
-      />
+      {showMigrationBadge && (
+        <MigrationBadge message={migrationReviewMessage} />
+      )}
+      {editor}
     </>
   );
 };

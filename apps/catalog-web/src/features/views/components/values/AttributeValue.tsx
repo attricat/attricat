@@ -9,7 +9,7 @@ import { AttributeValueText } from './AttributeValueText';
 import { formatAttributeValue } from './formatAttributeValue';
 import { attributeValueTypes } from '../../../entities/valueTypes';
 import { statusConfiguration } from '../../../entities/status';
-import { StatusValue } from './StatusValue';
+import { StatusValue } from '../../controls/values';
 
 type RelationshipValue = {
   items?: { id: string; display?: string }[];

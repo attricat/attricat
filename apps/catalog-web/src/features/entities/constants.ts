@@ -66,8 +66,12 @@ export const booleanFieldValues = {
   false: 'false',
 } as const;
 
-export const TIME_VALUE_PLACEHOLDER = '09:30:00 America/New_York';
-export const JSON_VALUE_PLACEHOLDER = '{\n  "key": "value"\n}';
+/** Example formats for scalar types whose built-in input is plain text. */
+export const scalarValuePlaceholders: Partial<Record<string, string>> = {
+  datetime: '2026-08-19T12:00:00Z',
+  time: '09:30:00 America/New_York',
+  json: '{\n  "key": "value"\n}',
+};
 export const JSON_EDITOR_MIN_ROWS = 4;
 
 /** Number of contexts shown as tabs before the remainder moves to a menu. */
