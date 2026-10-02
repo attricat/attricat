@@ -378,6 +378,7 @@ pub struct FilePolicy {
 #[derive(Clone, Debug, PartialEq)]
 pub struct LocalAttributeDeclaration {
     pub code: String,
+    pub name: Option<String>,
     pub value_type: String,
     pub value_schema: Option<serde_json::Value>,
     /// An unresolved `provider:type@range` reference. The API resolver pins it
@@ -416,6 +417,8 @@ pub struct ResolvedInclude {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct EffectiveAttribute {
     pub code: String,
+    /// Human-readable label; clients fall back to the humanized code.
+    pub name: Option<String>,
     pub value_type: String,
     pub value_schema: Option<serde_json::Value>,
     /// Host-pinned extension type metadata. It is declarative so persisted

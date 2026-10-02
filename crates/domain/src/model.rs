@@ -40,6 +40,8 @@ pub struct Attribute {
     pub blueprint_id: Uuid,
     pub blueprint_version: i64,
     pub code: String,
+    /// Human-readable label; clients fall back to the humanized code.
+    pub name: Option<String>,
     pub value_type: String,
     pub value_schema: Option<Value>,
     /// Immutable provider/type/release metadata for extension-defined types.

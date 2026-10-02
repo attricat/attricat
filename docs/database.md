@@ -161,6 +161,10 @@ they are never independently authored or edited.
 - `(blueprint_id, blueprint_version, code)` is unique.
 - `position` is the effective attribute position declared in the consuming
   blueprint TOML.
+- `name` is the optional human-readable label from the attribute TOML, or from
+  the mixin attribute for `from` selections. It is presentation-only: a blank
+  value is rejected, `NULL` means clients humanize `code`, and changing it does
+  not affect entity migration compatibility.
 - `value_type` is one of `string`, `number`, `integer`, `boolean`, `date`,
   `datetime`, `time`, `relationship`, or `file`. Scalar types map to native
   PostgreSQL columns; `relationship` and `file` have dedicated reference

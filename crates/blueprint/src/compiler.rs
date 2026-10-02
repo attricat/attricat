@@ -37,6 +37,7 @@ pub fn compile(
     for (position, declaration) in definition.attributes.iter().enumerate() {
         let (
             code,
+            name,
             value_type,
             value_schema,
             extension_type,
@@ -52,6 +53,7 @@ pub fn compile(
         ) = match declaration {
             AttributeDeclaration::Local(local) => (
                 local.code.clone(),
+                local.name.clone(),
                 local.value_type.clone(),
                 local.value_schema.clone(),
                 local.extension_type.as_ref().map(|reference| {
@@ -88,6 +90,7 @@ pub fn compile(
                     })?;
                 (
                     code.clone(),
+                    attribute.name.clone(),
                     attribute.value_type.clone(),
                     attribute.value_schema.clone(),
                     attribute.extension_type.clone(),
@@ -105,6 +108,7 @@ pub fn compile(
         };
         attributes.push(EffectiveAttribute {
             code,
+            name,
             value_type,
             value_schema,
             extension_type,

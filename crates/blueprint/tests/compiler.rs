@@ -39,6 +39,7 @@ from = "seo.meta_title"
             attributes: vec![
                 EffectiveAttribute {
                     code: "meta_title".to_owned(),
+                    name: Some("SEO title".to_owned()),
                     value_type: "string".to_owned(),
                     value_schema: None,
                     extension_type: None,
@@ -55,6 +56,7 @@ from = "seo.meta_title"
                 },
                 EffectiveAttribute {
                     code: "meta_description".to_owned(),
+                    name: None,
                     value_type: "string".to_owned(),
                     value_schema: None,
                     extension_type: None,
@@ -77,12 +79,92 @@ from = "seo.meta_title"
 
     assert_eq!(compiled.attributes.len(), 2);
     assert_eq!(compiled.attributes[0].code, "title");
+    assert_eq!(compiled.attributes[0].name, None);
     assert_eq!(compiled.attributes[0].context_fallback, "default");
     assert_eq!(compiled.attributes[0].context_editable, "all");
     assert_eq!(compiled.attributes[0].position, 0);
     assert_eq!(compiled.attributes[1].code, "meta_title");
+    assert_eq!(compiled.attributes[1].name.as_deref(), Some("SEO title"));
     assert_eq!(compiled.attributes[1].position, 1);
     assert_eq!(compiled.raw_definition_hash, raw_hash(source));
+}
+
+#[test]
+fn compiles_optional_attribute_names() {
+    let source = r#"
+format_version = 1
+code = "product"
+name = "Product"
+kind = "entity"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["product_family"]
+
+[[attributes]]
+code = "product_family"
+name = "Family"
+value_type = "string"
+
+[[attributes]]
+code = "rating"
+name = "Rating"
+extension_type = "acme:stars@^1"
+
+[[attributes]]
+code = "sku"
+value_type = "string"
+"#;
+    let compiled = compile(parse(source).unwrap(), &[], source).unwrap();
+    let names: Vec<_> = compiled
+        .attributes
+        .iter()
+        .map(|attribute| attribute.name.as_deref())
+        .collect();
+    assert_eq!(names, [Some("Family"), Some("Rating"), None]);
+}
+
+#[test]
+fn rejects_blank_attribute_names() {
+    let source = r#"
+format_version = 1
+code = "product"
+name = "Product"
+kind = "entity"
+
+[[attributes]]
+code = "title"
+name = "  "
+value_type = "string"
+"#;
+    assert!(matches!(
+        parse(source),
+        Err(BlueprintError::EmptyField("attribute name"))
+    ));
+}
+
+#[test]
+fn rejects_names_on_selected_attributes() {
+    let source = r#"
+format_version = 1
+code = "product"
+name = "Product"
+kind = "entity"
+
+[[includes]]
+alias = "seo"
+code = "seo"
+version = 1
+
+[[attributes]]
+code = "meta_title"
+name = "Title"
+from = "seo.meta_title"
+"#;
+    assert!(matches!(
+        parse(source),
+        Err(BlueprintError::InvalidAttributeDeclaration(code)) if code == "meta_title"
+    ));
 }
 
 #[test]

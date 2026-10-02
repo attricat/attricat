@@ -105,6 +105,7 @@ domain_row!(Attribute {
     blueprint_id,
     blueprint_version,
     code,
+    name,
     value_type,
     value_schema,
     extension_type,

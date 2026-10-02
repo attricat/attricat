@@ -13,6 +13,7 @@ import type {
   ComponentReference,
   ViewDefinition,
 } from '../entities/api';
+import { attributeLabel } from '../entities/entityDisplay';
 import { viewBlockTypes } from '../entities/schemas';
 import { EntityView } from '../views/components/EntityView';
 import {
@@ -25,8 +26,6 @@ import {
 } from '../views/components/registry';
 import { AttributeValue } from '../views/components/values/AttributeValue';
 import type { SandboxValues } from './sandboxValues';
-
-const fieldLabel = (field: string) => field.replaceAll('_', ' ');
 
 const TableViewPreview = ({
   attributes,
@@ -63,8 +62,10 @@ const TableViewPreview = ({
       <Table size="small">
         <TableHead>
           <TableRow>
-            {visibleFields.map(({ field, label }) => (
-              <TableCell key={field}>{label ?? fieldLabel(field)}</TableCell>
+            {visibleFields.map(({ field, label, attribute }) => (
+              <TableCell key={field}>
+                {label ?? attributeLabel(attribute)}
+              </TableCell>
             ))}
           </TableRow>
         </TableHead>

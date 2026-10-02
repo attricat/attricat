@@ -56,6 +56,18 @@ value_type = "string"
 readonly = true
 ```
 
+Set `name` to give an attribute a human-readable label. The web app shows it in
+forms, previews, Explorer filters and facets, and as the default table column
+heading. Without it, the app humanizes the code (`product_family` becomes
+"product family"). Blank names are rejected.
+
+```toml
+[[attributes]]
+code = "product_family"
+name = "Family"
+value_type = "string"
+```
+
 Blank contextual string fields remove their override instead of storing an empty
 string. Missing contextual values resolve according to `context_fallback`.
 
@@ -165,6 +177,9 @@ version = 2
 code = "meta_title"
 from = "seo.meta_title"
 ```
+
+A selected attribute keeps the mixin attribute's `name` and cannot declare its
+own.
 
 ## Dropdown Options
 
