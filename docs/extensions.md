@@ -1119,8 +1119,12 @@ run by ID. Run history includes `schedule_id` and `outputs_expired`
 without exposing input or secrets.
 
 When available, the sibling checkout at `../../attricat-extension-example`
-contains packaged reference extensions. `dist/reference-documents.tar.zst`
-(`attricat.reference-documents`) exercises selection-aware actions: grant all of
+contains the packaged `attricat-extension-example` formula component using the
+released `catalog:host@1.1.0` ABI and sandboxed client contributions. It
+responds to `entity.updated.v1` by writing a calculated numeric attribute.
+
+The same checkout's `just pack` also writes `dist/reference-documents.tar.zst`
+(`attricat.reference-documents`), which exercises selection-aware actions: grant all of
 its permissions and enable it, then use **Generate document** from an entity
 preview, an Explorer row, or an Explorer selection. It renders PDFs (separate,
 ZIP, or combined) in the 1.5 operation world, writes a `report.json` with
