@@ -11,7 +11,7 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { QueryErrorNotice } from '../../components/QueryErrorNotice';
 import { UserAvatar } from '../../components/UserAvatar';
@@ -42,10 +42,18 @@ const CommentItem = ({
   const { t } = useTranslation();
   const [editing, setEditing] = useState<EntityComment | null>(null);
   const editButton = useRef<HTMLButtonElement>(null);
+  const restoreFocus = useRef(false);
+  // Closing can follow an async save, when the Edit button may not be
+  // rendered by the next frame; focus it once the editor has unmounted.
   const close = () => {
+    restoreFocus.current = true;
     setEditing(null);
-    requestAnimationFrame(() => editButton.current?.focus());
   };
+  useEffect(() => {
+    if (editing || !restoreFocus.current) return;
+    restoreFocus.current = false;
+    editButton.current?.focus();
+  }, [editing]);
   return (
     <Box component="li" sx={{ py: 2, borderBottom: 1, borderColor: 'divider' }}>
       <Stack
