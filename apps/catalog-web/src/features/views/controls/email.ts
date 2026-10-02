@@ -27,4 +27,4 @@ export const emailHref = (value: unknown): string | undefined =>
 export const validateEmail = (value: string) =>
   !value.trim() || isEmailAddress(value.trim())
     ? undefined
-    : i18n.t('entities.invalidEmail');
+    : i18n.t('views.emailInvalid');

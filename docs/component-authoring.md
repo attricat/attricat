@@ -99,9 +99,11 @@ type ValueRenderer = ComponentType<{
 }>;
 ```
 
-A built-in table renderer that needs specialized search data should have a
-focused Explorer cell component instead; for example, `catalog.table_image@1`
-renders the hydrated metadata for a direct image-only single-file attribute.
+Table renderers receive the search projection rather than a fetched entity:
+`catalog.table_image@1`, for example, renders the file metadata hydrated into
+the projection for a direct image-only single-file attribute. Use
+`NotSetValue` for absent values and `EachValue` when a column can project
+several values.
 
 `headingRenderer` is reserved for a stack component that renders the entity
 page heading. It receives attributes, resolved values, the entity ID, and the

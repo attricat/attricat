@@ -1,14 +1,13 @@
 import { createElement } from 'react';
 import { Typography } from '@mui/material';
-import { useTranslation } from 'react-i18next';
 import type { Attribute, EntityItem } from '../entities/api';
 import type { ExtensionContribution } from '../extensions/api';
 import { resolveValueRenderer } from '../views/components/registry';
 import { AttributeValue } from '../views/components/values/AttributeValue';
+import { NotSetValue } from '../views/components/values/NotSetValue';
 import {
   explorerExtensionContextVersion,
   relationshipPathSeparator,
-  tableImageRendererId,
 } from './constants';
 import {
   isRelationshipPath,
@@ -16,7 +15,6 @@ import {
   type ExplorerTableColumn,
 } from './explorerTableColumns';
 import { ExtensionTableCell } from './ExtensionTableCell';
-import { ImageTableCell } from './ImageTableCell';
 import { explorerTableCellContextSchema } from './schemas';
 
 const formatProjectedValue = (value: unknown) =>
@@ -28,19 +26,16 @@ const formatProjectedValue = (value: unknown) =>
  * relation or incompatible value is not an excuse to fetch a row (or to break
  * virtualized rendering).
  */
-const RelatedPathValue = ({ value }: { value: unknown }) => {
-  const { t } = useTranslation();
-  const missing = value === null || value === undefined;
-  return (
-    <Typography color={missing ? 'text.secondary' : undefined} variant="body2">
-      {missing
-        ? t('views.notSet')
-        : Array.isArray(value)
-          ? value.map(formatProjectedValue).join(', ')
-          : formatProjectedValue(value)}
+const RelatedPathValue = ({ value }: { value: unknown }) =>
+  value === null || value === undefined ? (
+    <NotSetValue />
+  ) : (
+    <Typography variant="body2">
+      {Array.isArray(value)
+        ? value.map(formatProjectedValue).join(', ')
+        : formatProjectedValue(value)}
     </Typography>
   );
-};
 
 type Props = {
   attribute: Attribute;
@@ -68,8 +63,6 @@ export const ConfiguredColumnCell = ({
   ) : (
     <AttributeValue attribute={attribute} compact value={primaryValue} />
   );
-  if (renderer?.id === tableImageRendererId)
-    return <ImageTableCell value={primaryValue} />;
   const Renderer = resolveValueRenderer(renderer);
   if (Renderer)
     return createElement(Renderer, {

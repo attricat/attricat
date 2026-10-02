@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import '../../i18n';
-import { ImageTableCell } from './ImageTableCell';
+import '../../../../i18n';
+import { TableImageValue } from './TableImageValue';
 
 const fileId = '11111111-1111-4111-8111-111111111111';
 
@@ -27,9 +27,9 @@ const image = (status: 'ready' | 'failed') => [
   },
 ];
 
-describe('ImageTableCell', () => {
+describe('TableImageValue', () => {
   it('uses the thumbnail download URL for a ready image', () => {
-    const { container } = render(<ImageTableCell value={image('ready')[0]} />);
+    const { container } = render(<TableImageValue value={image('ready')[0]} />);
 
     expect(container.querySelector('img')?.getAttribute('src')).toBe(
       `/api/files/${fileId}/variants/thumbnail/download`,
@@ -37,13 +37,13 @@ describe('ImageTableCell', () => {
   });
 
   it('shows the normal unset state when no file is assigned', () => {
-    render(<ImageTableCell value={[]} />);
+    render(<TableImageValue value={[]} />);
 
     expect(screen.getByText('Not set')).toBeTruthy();
   });
 
   it('shows the unavailable status for a failed image', () => {
-    render(<ImageTableCell value={image('failed')} />);
+    render(<TableImageValue value={image('failed')} />);
 
     expect(screen.getByText('Thumbnail unavailable')).toBeTruthy();
   });

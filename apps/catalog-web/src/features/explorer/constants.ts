@@ -72,7 +72,6 @@ export const explorerExtensionOutlets = {
 export const explorerTableCellCapability = 'client.explorer_table_cell';
 export const embeddedExtensionKind = 'embedded';
 export const catalogRendererPrefix = 'catalog.';
-export const tableImageRendererId = 'catalog.table_image';
 export const extensionCellStartTimeout = 1_500;
 // `flexRender` is only called for virtual rows. This bounded allocator keeps a
 // pathological blueprint from turning one Explorer viewport into hundreds of
@@ -103,7 +102,6 @@ export const agentEntityListMaxHeight = 140;
 export const selectedEntityListMaxHeight = 360;
 export const selectedEntityListWidth = 360;
 export const agentInstructionsRows = 3;
-export const imageCellSize = 48;
 export const pendingVersionPlaceholder = '…';
 export const emptyValuePlaceholder = '—';
 export const loadMoreRowKey = 'load-more';

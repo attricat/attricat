@@ -16,4 +16,4 @@ export const safeUrl = (value: unknown): string | undefined => {
 };
 
 export const validateUrl = (value: string) =>
-  !value || safeUrl(value) ? undefined : i18n.t('views.invalidUrl');
+  !value || safeUrl(value) ? undefined : i18n.t('views.urlInvalid');

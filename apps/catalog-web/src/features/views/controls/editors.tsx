@@ -78,7 +78,7 @@ export const PhoneEditor = (props: ValueEditorProps) => {
       {...props}
       type="tel"
       leftToRight
-      defaultHelperText={t('entities.phoneHelp')}
+      defaultHelperText={t('views.phoneHelp')}
     />
   );
 };
