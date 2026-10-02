@@ -50,19 +50,6 @@ export type BlueprintVersionMetadataTab =
 /** Name of the blueprint view used for entity forms. */
 export const editViewName = 'edit';
 
-/** Example values shown as placeholders in the view preview sandbox. */
-export const sandboxInputPlaceholders = {
-  date: 'YYYY-MM-DD',
-  datetime: '2026-08-19T12:00:00Z',
-  time: '14:30:00 America/New_York',
-} as const;
-
-export const sandboxBooleanValues = {
-  unset: '',
-  true: 'true',
-  false: 'false',
-} as const;
-
 /** Displayed for values that are absent, such as an empty removal policy. */
 export const emptyValuePlaceholder = '—';
 

@@ -19,6 +19,26 @@ const attribute = (
   ...overrides,
 });
 
+/** A blueprint whose edit view shows one field with a configured component. */
+const withEditComponent = (
+  code: string,
+  componentId: string,
+  overrides: Partial<Attribute> = {},
+) => {
+  const result = blueprint([attribute(code, overrides)]);
+  result.blueprint.views.edit = {
+    type: 'stack',
+    children: [
+      {
+        type: 'field',
+        field: code,
+        component: { id: componentId, version: 1, props: {} },
+      },
+    ],
+  };
+  return result;
+};
+
 const blueprint = (attributes: Attribute[]): BlueprintWithAttributes => ({
   blueprint: {
     id: '123e4567-e89b-12d3-a456-426614174000',
@@ -79,67 +99,51 @@ const draftProps = (contextId: string) => ({
 const titleBox = () =>
   screen.getByRole('textbox', { hidden: true, name: 'title' });
 
-it('selects URL editors, blocks invalid programmatic values, saves and clears URLs', async () => {
-  const definition = blueprint([attribute('website')]);
-  definition.blueprint.views.edit = {
-    type: 'stack',
-    children: [
-      {
-        type: 'field',
-        field: 'website',
-        component: { id: 'catalog.url_edit', version: 1, props: {} },
-      },
-    ],
-  };
-  const { onSubmit, ref } = renderForm({ blueprint: definition });
-  const input = screen.getByRole('textbox', { name: 'website' });
-  expect(input.getAttribute('type')).toBe('url');
-  fireEvent.change(input, { target: { value: 'javascript:alert(1)' } });
-  fireEvent.submit(input.closest('form')!);
-  await waitFor(() => expect(input.getAttribute('aria-invalid')).toBe('true'));
-  expect(onSubmit).not.toHaveBeenCalled();
-  fireEvent.change(input, { target: { value: 'https://example.com/a?b=1' } });
-  fireEvent.submit(input.closest('form')!);
-  await waitFor(() =>
-    expect(onSubmit).toHaveBeenCalledWith(
-      expect.objectContaining({
-        values: [
-          expect.objectContaining({ value: 'https://example.com/a?b=1' }),
-        ],
-      }),
-    ),
-  );
-  expect(ref.current?.getDraftValues().website).toBe(
-    'https://example.com/a?b=1',
-  );
-  onSubmit.mockClear();
-  fireEvent.change(input, { target: { value: '' } });
-  fireEvent.submit(input.closest('form')!);
-  await waitFor(() =>
-    expect(onSubmit).toHaveBeenCalledWith(
-      expect.objectContaining({ values: [] }),
-    ),
-  );
-});
-
 afterEach(() => {
   sessionStorage.clear();
 });
 
 describe('EntityForm', () => {
+  it('selects URL editors, blocks invalid programmatic values, saves and clears URLs', async () => {
+    const { onSubmit, ref } = renderForm({
+      blueprint: withEditComponent('website', 'catalog.url_edit'),
+    });
+    const input = screen.getByRole('textbox', { name: 'website' });
+    expect(input.getAttribute('type')).toBe('url');
+    fireEvent.change(input, { target: { value: 'javascript:alert(1)' } });
+    fireEvent.submit(input.closest('form')!);
+    await waitFor(() =>
+      expect(input.getAttribute('aria-invalid')).toBe('true'),
+    );
+    expect(onSubmit).not.toHaveBeenCalled();
+    fireEvent.change(input, { target: { value: 'https://example.com/a?b=1' } });
+    fireEvent.submit(input.closest('form')!);
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          values: [
+            expect.objectContaining({ value: 'https://example.com/a?b=1' }),
+          ],
+        }),
+      ),
+    );
+    expect(ref.current?.getDraftValues().website).toBe(
+      'https://example.com/a?b=1',
+    );
+    onSubmit.mockClear();
+    fireEvent.change(input, { target: { value: '' } });
+    fireEvent.submit(input.closest('form')!);
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({ values: [] }),
+      ),
+    );
+  });
+
   it('dispatches the configured Markdown editor and submits unchanged source', async () => {
-    const definition = blueprint([attribute('description')]);
-    definition.blueprint.views.edit = {
-      type: 'stack',
-      children: [
-        {
-          type: 'field',
-          field: 'description',
-          component: { id: 'catalog.markdown_edit', version: 1, props: {} },
-        },
-      ],
-    };
-    const { onSubmit } = renderForm({ blueprint: definition });
+    const { onSubmit } = renderForm({
+      blueprint: withEditComponent('description', 'catalog.markdown_edit'),
+    });
     const source = '    code\n\n**Hello**  \nworld\n';
     fireEvent.change(screen.getByRole('textbox', { name: 'description' }), {
       target: { value: source },
@@ -153,20 +157,8 @@ describe('EntityForm', () => {
     );
   });
 
-  const emailBlueprint = (overrides: Partial<Attribute> = {}) => {
-    const result = blueprint([attribute('contact', overrides)]);
-    result.blueprint.views.edit = {
-      type: 'stack',
-      children: [
-        {
-          type: 'field',
-          field: 'contact',
-          component: { id: 'catalog.email_edit', version: 1, props: {} },
-        },
-      ],
-    };
-    return result;
-  };
+  const emailBlueprint = (overrides: Partial<Attribute> = {}) =>
+    withEditComponent('contact', 'catalog.email_edit', overrides);
 
   it('validates configured email input and preserves case and plus tags on save', async () => {
     const { onSubmit } = renderForm({ blueprint: emailBlueprint() });

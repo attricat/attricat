@@ -1,4 +1,7 @@
-import type { ViewComponentDefinition } from './componentTypes';
+import {
+  scalarValueTypes,
+  type ViewComponentDefinition,
+} from './componentTypes';
 import { VIEW_COMPONENT_IDS, VIEW_COMPONENT_VERSION } from '../constants';
 
 export const tableDisplayComponent = {
@@ -6,14 +9,6 @@ export const tableDisplayComponent = {
   version: VIEW_COMPONENT_VERSION,
   capabilities: ['display'],
   placements: ['table'],
-  value_types: [
-    'string',
-    'number',
-    'integer',
-    'boolean',
-    'date',
-    'datetime',
-    'time',
-  ],
+  value_types: scalarValueTypes,
   allowed_props: [],
 } satisfies ViewComponentDefinition;

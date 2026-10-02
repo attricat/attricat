@@ -45,6 +45,17 @@ export type IncomingRelationshipRenderer = ComponentType<{
   node: Extract<ViewNode, { type: 'incoming_relationship_list' }>;
 }>;
 
+/** Value types the generic field and table components display and edit. */
+export const scalarValueTypes = [
+  'string',
+  'number',
+  'integer',
+  'boolean',
+  'date',
+  'datetime',
+  'time',
+] as const satisfies readonly Attribute['value_type'][];
+
 export type ViewComponentDefinition = {
   id: string;
   version: number;

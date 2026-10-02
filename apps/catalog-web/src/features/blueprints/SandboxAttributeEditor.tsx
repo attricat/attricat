@@ -1,21 +1,15 @@
-import { Button, MenuItem, TextField } from '@mui/material';
+import { Button, TextField } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import type { Attribute, ComponentReference } from '../entities/api';
-import { resolveValueEditor } from '../views/components/registry';
+import { ScalarAttributeEditor } from '../entities/components/ScalarAttributeEditor';
+import { attributeLabel } from '../entities/entityDisplay';
 import { attributeValueTypes } from '../entities/valueTypes';
-import { sandboxBooleanValues, sandboxInputPlaceholders } from './constants';
 
-const inputPlaceholder = (attribute: Attribute) => {
-  if (attribute.value_type === attributeValueTypes.date)
-    return sandboxInputPlaceholders.date;
-  if (attribute.value_type === attributeValueTypes.datetime)
-    return sandboxInputPlaceholders.datetime;
-  if (attribute.value_type === attributeValueTypes.time)
-    return sandboxInputPlaceholders.time;
-  return undefined;
-};
-
-/** Unsaved input for one attribute in the blueprint view preview sandbox. */
+/**
+ * Unsaved input for one attribute in the blueprint view preview sandbox. Scalar
+ * attributes use the same editors as the entity form; relationships and files
+ * need a saved entity, so the sandbox only shows where they would appear.
+ */
 export const SandboxAttributeEditor = ({
   attribute,
   component,
@@ -28,63 +22,28 @@ export const SandboxAttributeEditor = ({
   value: string;
 }) => {
   const { t } = useTranslation();
-
-  const Editor = resolveValueEditor(component, attribute)?.valueEditor;
-  if (Editor)
-    return (
-      <Editor
-        attribute={attribute}
-        value={value}
-        onChange={onChange}
-        disabled={
-          attribute.readonly === true ||
-          attribute.extension_type?.available === false
-        }
-      />
-    );
-
   if (attribute.value_type === attributeValueTypes.relationship)
     return (
       <TextField
         disabled
         fullWidth
         helperText={t('blueprints.relationshipSandboxUnavailable')}
-        label={attribute.code}
+        label={attributeLabel(attribute)}
         value=""
       />
     );
-
-  if (attribute.value_type === attributeValueTypes.boolean)
-    return (
-      <TextField
-        fullWidth
-        label={attribute.code}
-        onChange={(event) => onChange(event.target.value)}
-        select
-        value={value}
-      >
-        <MenuItem value={sandboxBooleanValues.unset}>
-          {t('blueprints.notSet')}
-        </MenuItem>
-        <MenuItem value={sandboxBooleanValues.true}>
-          {t('blueprints.true')}
-        </MenuItem>
-        <MenuItem value={sandboxBooleanValues.false}>
-          {t('blueprints.false')}
-        </MenuItem>
-      </TextField>
-    );
-
   if (attribute.value_type === attributeValueTypes.file)
     return <Button>{t('blueprints.chooseOrDropFiles')}</Button>;
-
   return (
-    <TextField
-      fullWidth
-      label={attribute.code}
-      onChange={(event) => onChange(event.target.value)}
-      placeholder={inputPlaceholder(attribute)}
+    <ScalarAttributeEditor
+      attribute={attribute}
+      component={component}
       value={value}
+      onChange={onChange}
+      disabled={
+        attribute.readonly === true ||
+        attribute.extension_type?.available === false
+      }
     />
   );
 };
