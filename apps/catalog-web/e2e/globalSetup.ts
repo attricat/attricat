@@ -1,7 +1,7 @@
 import { PostgreSqlContainer } from '@testcontainers/postgresql';
 import { chromium, type BrowserContext } from '@playwright/test';
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
-import { readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   e2eApiPort,
@@ -25,14 +25,45 @@ const resetEmail = 'reset@example.test';
 const resetPassword = 'e2e-only-reset-password';
 const storageStatePath = new URL('.auth.json', import.meta.url).pathname;
 
-const packageExampleExtension = () => {
-  const exampleRoot = resolve(
-    process.env.ATTRICAT_EXTENSION_EXAMPLE_DIR ??
-      `${workspaceRoot}/../../attricat-extension-example`,
+const exampleExtensionId = 'attricat-extension-example';
+
+/** True when `dir` is a checkout of the formula example extension. */
+const isExampleExtension = (dir: string) => {
+  try {
+    const manifest = JSON.parse(
+      readFileSync(resolve(dir, 'manifest.json'), 'utf8'),
+    );
+    return manifest?.catalog?.id === exampleExtensionId;
+  } catch {
+    return false;
+  }
+};
+
+// The sibling checkout is two levels above the main checkout and three above
+// a worktree under `tasks/`; other repositories may share the directory name.
+const exampleExtensionRoot = () => {
+  if (process.env.ATTRICAT_EXTENSION_EXAMPLE_DIR)
+    return resolve(process.env.ATTRICAT_EXTENSION_EXAMPLE_DIR);
+  const candidates = ['../..', '../../..'].map((up) =>
+    resolve(workspaceRoot, up, exampleExtensionId),
   );
+  const root = candidates.find(isExampleExtension);
+  if (!root)
+    throw new Error(
+      `No ${exampleExtensionId} checkout found at ${candidates.join(' or ')}; set ATTRICAT_EXTENSION_EXAMPLE_DIR`,
+    );
+  return root;
+};
+
+const packageExampleExtension = () => {
+  const exampleRoot = exampleExtensionRoot();
   execFileSync('just', ['pack'], { cwd: exampleRoot, stdio: 'inherit' });
+  // `just pack` also builds other reference extensions into the same folder.
   const archive = readdirSync(resolve(exampleRoot, 'dist'))
-    .filter((name) => name.endsWith('.tar.zst'))
+    .filter(
+      (name) =>
+        name.startsWith(`${exampleExtensionId}-`) && name.endsWith('.tar.zst'),
+    )
     .map((name) => ({
       path: resolve(exampleRoot, 'dist', name),
       modified: statSync(resolve(exampleRoot, 'dist', name)).mtimeMs,
