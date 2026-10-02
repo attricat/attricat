@@ -394,7 +394,7 @@ impl CatalogRepository {
                ORDER BY a.position, av.context_id, r.position"#,
         )
         .bind(entity_id)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .fetch_all(&self.pool)
         .await?;
         let mut values: Vec<FormAttributeValue> = Vec::new();
@@ -492,7 +492,7 @@ impl CatalogRepository {
                  AND a.blueprint_id = $3 AND a.blueprint_version = $4"#,
         )
         .bind(entity_id)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .bind(blueprint_id)
         .bind(blueprint_version)
         .fetch_all(&mut **transaction)
@@ -554,7 +554,7 @@ impl CatalogRepository {
                   AND (av.relationship_target_entity_id IS NULL OR av.active)"#,
         )
         .bind(entity_id)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .fetch_all(&self.pool)
         .await?;
         rows.into_iter()
@@ -604,7 +604,7 @@ impl CatalogRepository {
                 AND (h.relationship_target_entity_id IS NULL OR h.active)"#,
         )
         .bind(entity_id)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .bind(snapshot_at)
         .fetch_all(&self.pool)
         .await?;

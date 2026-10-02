@@ -240,20 +240,22 @@ pub(super) async fn upload(
             }
             uploads.push((format!("files/{}", Uuid::new_v4()), mime.to_owned()));
         }
-        let mut written_keys = Vec::new();
+        reserve_upload_keys(
+            &state,
+            &repository,
+            uploads.iter().map(|(key, _)| key.clone()).collect(),
+        )
+        .await?;
         for (file, (key, mime)) in staged.iter().zip(&uploads) {
-            // Multipart chunks are streamed to a private temporary file; handlers
-            // never call Field::bytes or collect the multipart request.
+            // Stream from disk; the durable intent owns cleanup on cancellation.
             if let Err(error) = state
                 .object_store
                 .put_file(key, &file.path, Some(mime))
                 .await
             {
-                delete_objects(&state, &written_keys).await;
                 cleanup(&staged).await;
                 return Err(storage_error(error));
             }
-            written_keys.push(key.clone());
         }
         let records = staged
             .iter()
@@ -278,10 +280,7 @@ pub(super) async fn upload(
                 invalidate_data_health(&state, &repository);
                 Ok((StatusCode::CREATED, Json(result)))
             }
-            Err(error) => {
-                delete_objects(&state, &written_keys).await;
-                Err(error.into())
-            }
+            Err(error) => Err(error.into()),
         }
     }
     .instrument(span)
@@ -397,18 +396,21 @@ pub(super) async fn upload_conversation(
         }
         uploads.push((format!("files/{}", Uuid::new_v4()), mime.to_owned()));
     }
-    let mut written_keys = Vec::new();
+    reserve_upload_keys(
+        &state,
+        &repository,
+        uploads.iter().map(|(key, _)| key.clone()).collect(),
+    )
+    .await?;
     for (file, (key, mime)) in staged.iter().zip(&uploads) {
         if let Err(error) = state
             .object_store
             .put_file(key, &file.path, Some(mime))
             .await
         {
-            delete_objects(&state, &written_keys).await;
             cleanup(&staged).await;
             return Err(storage_error(error));
         }
-        written_keys.push(key.clone());
     }
     let records = staged
         .iter()
@@ -435,10 +437,7 @@ pub(super) async fn upload_conversation(
                 Json(serde_json::json!({ "files": files })),
             ))
         }
-        Err(error) => {
-            delete_objects(&state, &written_keys).await;
-            Err(error.into())
-        }
+        Err(error) => Err(error.into()),
     }
 }
 
@@ -489,6 +488,7 @@ pub(super) async fn upload_avatar(
         .filter(|mime| declared_mime_matches(file.declared_mime.as_deref(), mime))
         .ok_or_else(ApiError::unsupported_media_type)?;
     let key = format!("files/{}", Uuid::new_v4());
+    reserve_upload_keys(&state, &repository, vec![key.clone()]).await?;
     state
         .object_store
         .put_file(&key, &file.path, Some(mime))
@@ -513,10 +513,7 @@ pub(super) async fn upload_avatar(
             invalidate_data_health(&state, &repository);
             Ok((StatusCode::CREATED, Json(avatar)))
         }
-        Err(error) => {
-            delete_objects(&state, &[key]).await;
-            Err(error.into())
-        }
+        Err(error) => Err(error.into()),
     }
 }
 
@@ -934,10 +931,20 @@ async fn cleanup(files: &[StagedFile]) {
         let _ = fs::remove_file(&file.path).await;
     }
 }
-async fn delete_objects(state: &AppState, keys: &[String]) {
-    for key in keys {
-        let _ = state.object_store.delete(key).await;
-    }
+async fn reserve_upload_keys(
+    state: &AppState,
+    repository: &CatalogRepository,
+    keys: Vec<String>,
+) -> Result<(), ApiError> {
+    // A full request deadline plus an hour permits late completion at the S3
+    // boundary without racing cleanup. Cancellation needs no async destructor.
+    let grace = chrono::Duration::from_std(state.request_timeout)
+        .ok()
+        .and_then(|duration| duration.checked_add(&chrono::Duration::hours(1)))
+        .and_then(|duration| chrono::Utc::now().checked_add_signed(duration))
+        .ok_or_else(|| ApiError::internal("upload deadline is invalid"))?;
+    repository.begin_file_uploads(&keys, grace).await?;
+    Ok(())
 }
 fn storage_error(error: ObjectStoreError) -> ApiError {
     tracing::error!(error = %error, "object storage operation failed");

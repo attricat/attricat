@@ -151,7 +151,7 @@ impl CatalogRepository {
                 "INSERT INTO attribute_values (id, workspace_id, entity_id, attribute_id, context_id, active) VALUES ($1, $2, $3, $4, $5, true) RETURNING id",
             )
             .bind(Uuid::new_v4())
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(self.workspace_id.0)
             .bind(entity_id)
             .bind(attribute_id)
             .bind(context_id)
@@ -164,7 +164,7 @@ impl CatalogRepository {
                 "INSERT INTO attribute_values (id, workspace_id, entity_id, attribute_id, context_id, active) VALUES ($1, $2, $3, $4, $5, true) RETURNING id",
             )
             .bind(Uuid::new_v4())
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(self.workspace_id.0)
             .bind(entity_id)
             .bind(attribute_id)
             .bind(context_id)
@@ -176,9 +176,11 @@ impl CatalogRepository {
         } else {
             0
         };
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let mut result = Vec::with_capacity(files.len());
         for (offset, file) in files.into_iter().enumerate() {
+            self.finish_file_upload(&mut transaction, &file.object_key)
+                .await?;
             let id = Uuid::new_v4();
             let status = "queued".to_owned();
             sqlx::query(
@@ -230,7 +232,7 @@ impl CatalogRepository {
         expected_file_ids: &[Uuid],
         file_ids: &[Uuid],
     ) -> Result<DateTime<Utc>, RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let mut transaction = self.pool.begin().await?;
         let entity = self.lock_entity(&mut transaction, entity_id).await?;
         let (attribute_id, policy, context_editable) = self
@@ -318,7 +320,7 @@ impl CatalogRepository {
         context_id: Option<Uuid>,
         file_id: Uuid,
     ) -> Result<FileMetadata, RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let mut transaction = self.pool.begin().await?;
         let entity = self.lock_entity(&mut transaction, entity_id).await?;
         let (attribute_id, policy, context_editable) = self
@@ -426,7 +428,7 @@ impl CatalogRepository {
         uploaded_by_user_id: Uuid,
         files: Vec<NewUploadedFile>,
     ) -> Result<Vec<UploadedFile>, RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let mut transaction = self.pool.begin().await?;
         let exists: bool = sqlx::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM conversations WHERE id = $1 AND workspace_id = $2 AND archived_at IS NULL)",
@@ -440,6 +442,8 @@ impl CatalogRepository {
         }
         let mut result = Vec::with_capacity(files.len());
         for file in files {
+            self.finish_file_upload(&mut transaction, &file.object_key)
+                .await?;
             let id = Uuid::new_v4();
             let status = "queued".to_owned();
             sqlx::query(
@@ -484,7 +488,7 @@ impl CatalogRepository {
         &self,
         file_id: Uuid,
     ) -> Result<Vec<FileReadTarget>, RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         Ok(sqlx::query_as::<_, FileReadTarget>(
             "SELECT DISTINCT e.id AS entity_id, e.blueprint_id FROM attribute_file_references r JOIN attribute_values v ON v.id = r.attribute_value_id AND v.workspace_id = r.workspace_id JOIN entities e ON e.id = v.entity_id AND e.workspace_id = v.workspace_id JOIN blueprints b ON b.id = e.blueprint_id AND b.version = e.blueprint_version AND b.workspace_id = e.workspace_id WHERE r.file_id = $1 AND r.workspace_id = $2 AND v.active AND e.deleted_at IS NULL AND b.deleted_at IS NULL",
         )
@@ -497,7 +501,7 @@ impl CatalogRepository {
     /// Reads client-safe metadata. Object keys and original filenames remain
     /// repository internals and are never serialized from this method.
     pub async fn file_metadata(&self, file_id: Uuid) -> Result<FileMetadata, RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let row = sqlx::query_as::<_, (Uuid, String, String, i64, String, String)>(
             "SELECT id, display_filename, mime_type, byte_size, sha256, status FROM files WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL",
         )
@@ -523,7 +527,7 @@ impl CatalogRepository {
         file_id: Uuid,
         variant_kind: Option<&str>,
     ) -> Result<FileObject, RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let row = match variant_kind {
             Some(kind) => sqlx::query_as::<_, FileObject>(
                 "SELECT v.mime_type, v.byte_size, ''::TEXT AS display_filename, v.object_key, f.status FROM file_variants v JOIN files f ON f.id = v.file_id AND f.workspace_id = v.workspace_id WHERE v.file_id = $1 AND v.workspace_id = $2 AND v.kind = $3 AND f.deleted_at IS NULL",
@@ -545,7 +549,7 @@ impl CatalogRepository {
             "SELECT id, value_type, file_policy, context_editable, readonly FROM attributes WHERE code = $1 AND ((blueprint_id = $2 AND blueprint_version = $3) OR entity_id = $4) AND workspace_id = $5 AND deleted_at IS NULL",
         )
         .bind(attribute_code).bind(entity.blueprint_id).bind(entity.blueprint_version).bind(entity.id)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .fetch_optional(&mut **transaction).await?
         .ok_or(RepositoryError::AttributeNotApplicable)?;
         if row.1 != "file" {
@@ -566,7 +570,7 @@ impl CatalogRepository {
         transaction: &mut Transaction<'_, Postgres>,
         context_id: Option<Uuid>,
     ) -> Result<Uuid, RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let context_id = match context_id {
             Some(id) => id,
             None => sqlx::query_scalar(

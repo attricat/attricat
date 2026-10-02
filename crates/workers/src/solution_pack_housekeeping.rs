@@ -2,14 +2,14 @@ use std::time::Duration;
 
 use tokio::sync::watch;
 
-use catalog_repository::repository::CatalogRepository;
+use catalog_repository::repository::SystemRepository;
 
 /// The documented purge bound is one hour after plan expiry or the application
 /// resumability deadline. The first tick runs immediately at process startup.
 const HOUSEKEEPING_INTERVAL: Duration = Duration::from_secs(60 * 60);
 
 pub fn start(
-    repository: CatalogRepository,
+    repository: SystemRepository,
     mut shutdown: watch::Receiver<()>,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
@@ -24,7 +24,7 @@ pub fn start(
     })
 }
 
-pub(crate) async fn run_once(repository: &CatalogRepository) {
+pub(crate) async fn run_once(repository: &SystemRepository) {
     let workspaces = match repository.solution_pack_housekeeping_workspaces().await {
         Ok(workspaces) => workspaces,
         Err(error) => {

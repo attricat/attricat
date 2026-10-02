@@ -98,7 +98,10 @@ async fn rule_task_lease_loss_and_crash_after_page_are_fenced(pool: PgPool) {
     let entity = create_entity(&client, &base_url, &blueprint).await;
     let entity_id = entity["id"].as_str().unwrap().parse().unwrap();
     let run_id = manual_run(&base_url, rule_id, Some(entity_id), "lease-loss").await;
-    let repository = CatalogRepository::system(pool.clone());
+    let repository = CatalogRepository::new(
+        pool.clone(),
+        support::BOOTSTRAP_WORKSPACE_ID.parse().unwrap(),
+    );
 
     // Run creation and task production are one transaction; no worker is
     // running in this test before this assertion.
@@ -188,7 +191,10 @@ async fn checkpoint_failure_on_final_attempt_dead_letters_rule_run_and_replays_g
         "checkpoint-final-failure",
     )
     .await;
-    let repository = CatalogRepository::system(pool.clone());
+    let repository = CatalogRepository::new(
+        pool.clone(),
+        support::BOOTSTRAP_WORKSPACE_ID.parse().unwrap(),
+    );
 
     // This constraint is a test-only database failure injection at the page
     // checkpoint; the run and task terminal transition must still commit.
@@ -265,7 +271,10 @@ async fn rule_page_continuation_yields_without_failure_budget(pool: PgPool) {
     sqlx::query("INSERT INTO entities(id,workspace_id,blueprint_id,blueprint_version,projections) SELECT gen_random_uuid(),$1,$2,$3,'{}'::jsonb FROM generate_series(1,500)")
         .bind(workspace).bind(blueprint_id).bind(blueprint_version).execute(&pool).await.unwrap();
     let run_id = manual_run(&base_url, rule_id, None, "continuation").await;
-    let repository = CatalogRepository::system(pool.clone());
+    let repository = CatalogRepository::new(
+        pool.clone(),
+        support::BOOTSTRAP_WORKSPACE_ID.parse().unwrap(),
+    );
     let handler = rule_runtime::task_handler(repository.clone());
     let first_task = repository
         .claim_task("page-worker", Duration::from_secs(30))

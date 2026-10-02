@@ -69,7 +69,7 @@ impl CatalogRepository {
         let contexts = sqlx::query_as::<_, (Uuid, String, Option<Uuid>)>(
             "SELECT id, code, parent_id FROM attribute_contexts WHERE workspace_id = $1",
         )
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .fetch_all(&mut **transaction)
         .await?;
         let after = Self::build_preview_projection(transaction, entity.id).await?;

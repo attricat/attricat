@@ -14,31 +14,10 @@ struct PublicationMutation<'a> {
 }
 
 impl CatalogRepository {
-    /// Installs publication permissions in application code, preserving the
-    /// declarative-only migration contract. Owners and administrators receive
-    /// publication authority; editors deliberately do not.
-    pub async fn ensure_entity_publication_permissions(&self) -> Result<(), RepositoryError> {
-        let mut tx = self.pool.begin().await?;
-        sqlx::query("INSERT INTO permissions (code, description) VALUES ('entities.publish', 'Publish catalog entities to channel contexts') ON CONFLICT (code) DO NOTHING")
-            .execute(&mut *tx)
-            .await?;
-        for role_id in [
-            Uuid::from_u128(0x00000000000040008000000000000101),
-            Uuid::from_u128(0x00000000000040008000000000000102),
-        ] {
-            sqlx::query("INSERT INTO role_permissions (role_id, permission_code) VALUES ($1, 'entities.publish') ON CONFLICT DO NOTHING")
-                .bind(role_id)
-                .execute(&mut *tx)
-                .await?;
-        }
-        tx.commit().await?;
-        Ok(())
-    }
-
     pub async fn list_publication_channels(
         &self,
     ) -> Result<Vec<PublicationChannel>, RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         Ok(sqlx::query_as::<_, Db<PublicationChannel>>(
             "SELECT c.context_id, a.code AS context_code, c.enabled FROM publication_channels c JOIN attribute_contexts a ON a.workspace_id = c.workspace_id AND a.id = c.context_id WHERE c.workspace_id = $1 ORDER BY a.code",
         )
@@ -53,7 +32,7 @@ impl CatalogRepository {
         context_id: Uuid,
         enabled: bool,
     ) -> Result<PublicationChannel, RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
         let context = sqlx::query_as::<_, Db<AttributeContext>>(
             "SELECT id, code, data, parent_id FROM attribute_contexts WHERE workspace_id = $1 AND id = $2",
@@ -82,7 +61,7 @@ impl CatalogRepository {
         if self.get_entity(entity_id).await?.is_none() {
             return Err(RepositoryError::NotFound("entity"));
         }
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         Ok(sqlx::query_as::<_, Db<EntityPublicationStatus>>(
             "SELECT c.context_id, a.code AS context_code, CASE WHEN p.published_at IS NULL THEN 'not_published' ELSE 'published' END AS status, p.published_at, p.published_by_user_id FROM publication_channels c JOIN attribute_contexts a ON a.workspace_id = c.workspace_id AND a.id = c.context_id LEFT JOIN entity_channel_publications p ON p.workspace_id = c.workspace_id AND p.entity_id = $2 AND p.context_id = c.context_id WHERE c.workspace_id = $1 AND c.enabled ORDER BY a.code",
         )
@@ -122,7 +101,7 @@ impl CatalogRepository {
         &self,
         entity_id: Uuid,
     ) -> Result<Vec<EntityPublicationStatus>, RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
         self.lock_entity(&mut tx, entity_id).await?;
         let channels: Vec<Uuid> = sqlx::query_scalar(
@@ -163,7 +142,7 @@ impl CatalogRepository {
         blueprint_version: i64,
         context_id: Option<Uuid>,
     ) -> Result<BlueprintEntityPublicationSummary, RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
         let blueprint_exists: bool = sqlx::query_scalar(
             "SELECT EXISTS (SELECT 1 FROM blueprints WHERE workspace_id = $1 AND id = $2 AND version = $3 AND kind = 'entity' AND deleted_at IS NULL)",
@@ -250,7 +229,7 @@ impl CatalogRepository {
         entity_id: Uuid,
         context_id: Uuid,
     ) -> Result<(), RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
         self.lock_entity(&mut tx, entity_id).await?;
         let updated = sqlx::query("UPDATE entity_channel_publications SET published_at = NULL, published_by_user_id = NULL WHERE workspace_id = $1 AND entity_id = $2 AND context_id = $3 AND published_at IS NOT NULL")
@@ -287,7 +266,7 @@ impl CatalogRepository {
                 .await?;
             return Ok(None);
         };
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let definition: Option<String> = sqlx::query_scalar(
             "SELECT b.definition FROM entities e JOIN blueprints b ON b.workspace_id = e.workspace_id AND b.id = e.blueprint_id AND b.version = e.blueprint_version WHERE e.workspace_id = $1 AND e.id = $2 AND e.deleted_at IS NULL",
         )
@@ -328,7 +307,7 @@ impl CatalogRepository {
         entity_id: Uuid,
         reason: &str,
     ) -> Result<(), RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let contexts: Vec<Uuid> = sqlx::query_scalar(
             "UPDATE entity_channel_publications SET published_at = NULL, published_by_user_id = NULL WHERE workspace_id = $1 AND entity_id = $2 AND published_at IS NOT NULL RETURNING context_id",
         )
@@ -358,7 +337,7 @@ impl CatalogRepository {
         tx: &mut Transaction<'_, Postgres>,
         context_id: Uuid,
     ) -> Result<(), RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let entities: Vec<Uuid> = sqlx::query_scalar(
             "UPDATE entity_channel_publications SET published_at = NULL, published_by_user_id = NULL WHERE workspace_id = $1 AND context_id = $2 AND published_at IS NOT NULL RETURNING entity_id",
         )
@@ -389,7 +368,7 @@ impl CatalogRepository {
         entity_id: Uuid,
         context_id: Uuid,
     ) -> Result<EntityPublicationStatus, RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let channel = sqlx::query_as::<_, Db<PublicationChannel>>(
             "SELECT c.context_id, a.code AS context_code, c.enabled FROM publication_channels c JOIN attribute_contexts a ON a.workspace_id = c.workspace_id AND a.id = c.context_id WHERE c.workspace_id = $1 AND c.context_id = $2 FOR UPDATE",
         )
@@ -461,5 +440,28 @@ impl CatalogRepository {
             })
             .expect("publication event serializable"),
         )
+    }
+}
+
+impl<S: super::RepositoryScope> CatalogRepository<S> {
+    /// Installs publication permissions in application code, preserving the
+    /// declarative-only migration contract. Owners and administrators receive
+    /// publication authority; editors deliberately do not.
+    pub async fn ensure_entity_publication_permissions(&self) -> Result<(), RepositoryError> {
+        let mut tx = self.pool.begin().await?;
+        sqlx::query("INSERT INTO permissions (code, description) VALUES ('entities.publish', 'Publish catalog entities to channel contexts') ON CONFLICT (code) DO NOTHING")
+            .execute(&mut *tx)
+            .await?;
+        for role_id in [
+            Uuid::from_u128(0x00000000000040008000000000000101),
+            Uuid::from_u128(0x00000000000040008000000000000102),
+        ] {
+            sqlx::query("INSERT INTO role_permissions (role_id, permission_code) VALUES ($1, 'entities.publish') ON CONFLICT DO NOTHING")
+                .bind(role_id)
+                .execute(&mut *tx)
+                .await?;
+        }
+        tx.commit().await?;
+        Ok(())
     }
 }

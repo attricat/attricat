@@ -929,7 +929,8 @@ async fn agent_run_timeout_is_durably_failed_without_provider_details(pool: PgPo
         .for_workspace(workspace_id)
         .await
         .unwrap();
-    let task_repository = CatalogRepository::system(pool);
+    let task_repository =
+        CatalogRepository::new(pool, support::BOOTSTRAP_WORKSPACE_ID.parse().unwrap());
     let handler = agent_worker::AgentTaskHandler::new(
         task_repository.clone(),
         config.clone(),
@@ -1815,7 +1816,10 @@ async fn agent_message_requires_a_configured_provider(pool: PgPool) {
 async fn startup_recovery_only_interrupts_expired_agent_tasks(pool: PgPool) {
     use api::task_queue::{TaskInsert, TaskKind};
 
-    let repository = CatalogRepository::system(pool.clone());
+    let repository = CatalogRepository::new(
+        pool.clone(),
+        support::BOOTSTRAP_WORKSPACE_ID.parse().unwrap(),
+    );
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
     let conversation_id = Uuid::new_v4();
     sqlx::query("INSERT INTO conversations (id, workspace_id, title) VALUES ($1, $2, 'recovery')")

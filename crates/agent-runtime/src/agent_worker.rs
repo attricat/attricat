@@ -5,7 +5,7 @@ use crate::{
     agent_provider::OpenAiCompatibleClient,
     agent_runner,
     agents::AgentProviderConfig,
-    repository::{CatalogRepository, ClaimedTask},
+    repository::{ClaimedTask, SystemRepository},
     storage::ObjectStore,
     task_queue::TaskKind,
     task_worker::{TaskHandler, TaskHandlerError, TaskOutcome},
@@ -14,19 +14,19 @@ use crate::{
 /// Shared-queue handler. Provider work is deliberately terminal on every
 /// error: an uncertain provider request is never retried by the task runtime.
 pub struct AgentTaskHandler {
-    repository: CatalogRepository,
+    repository: SystemRepository,
     config: AgentProviderConfig,
     object_store: Arc<dyn ObjectStore>,
 }
 
 impl AgentTaskHandler {
     pub fn new(
-        repository: CatalogRepository,
+        repository: impl Into<SystemRepository>,
         config: AgentProviderConfig,
         object_store: Arc<dyn ObjectStore>,
     ) -> Self {
         Self {
-            repository,
+            repository: repository.into(),
             config,
             object_store,
         }

@@ -8,14 +8,6 @@ use crate::model::{
 };
 
 impl CatalogRepository {
-    /// Performs a bounded, side-effect-free database dependency probe for the
-    /// API readiness endpoint. This is intentionally separate from liveness:
-    /// a live process with an unavailable database must not receive traffic.
-    pub async fn readiness(&self) -> Result<(), RepositoryError> {
-        sqlx::query("SELECT 1").execute(&self.pool).await?;
-        Ok(())
-    }
-
     pub async fn data_health_summary(
         &self,
         stale_after_days: i64,
@@ -33,7 +25,7 @@ impl CatalogRepository {
                     (SELECT count(*) FROM attribute_values av JOIN entities target ON target.id = av.relationship_target_entity_id AND target.workspace_id = $2 WHERE av.workspace_id = $2 AND av.active AND av.relationship_target_entity_id IS NOT NULL AND target.deleted_at IS NOT NULL) AS deleted_relationship_targets"#,
         )
         .bind(stale_after_days)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .fetch_one(&self.pool)
         .await?
         .into_domain())
@@ -52,7 +44,7 @@ impl CatalogRepository {
             FROM current_blueprints b LEFT JOIN entities e ON e.workspace_id = $2 AND e.blueprint_id = b.id AND e.deleted_at IS NULL
             GROUP BY b.id, b.code, b.name, b.version ORDER BY outdated_entities DESC, stale_entities DESC, b.code"#)
             .bind(stale_after_days)
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(self.workspace_id.0)
             .fetch_all(&self.pool).await?
         .into_domain())
     }
@@ -62,14 +54,14 @@ impl CatalogRepository {
                 SELECT CASE WHEN updated_at >= now() - interval '30 days' THEN '0-29 days' WHEN updated_at >= now() - interval '90 days' THEN '30-89 days' WHEN updated_at >= now() - interval '180 days' THEN '90-179 days' ELSE '180+ days' END AS label
                 FROM entities WHERE workspace_id = $1 AND deleted_at IS NULL
             ) bands GROUP BY label ORDER BY CASE label WHEN '0-29 days' THEN 1 WHEN '30-89 days' THEN 2 WHEN '90-179 days' THEN 3 ELSE 4 END"#)
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(self.workspace_id.0)
             .fetch_all(&self.pool).await?
         .into_domain())
     }
 
     pub async fn data_health_contexts(&self) -> Result<Vec<ContextHealth>, RepositoryError> {
         Ok(query_as::<_, Db<ContextHealth>>(r#"SELECT c.code, count(DISTINCT av.entity_id)::bigint AS direct_entities, count(av.id)::bigint AS direct_values FROM attribute_contexts c LEFT JOIN attribute_values av ON av.workspace_id = $1 AND av.context_id = c.id AND av.active WHERE c.workspace_id = $1 GROUP BY c.id, c.code ORDER BY direct_values DESC, c.code"#)
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(self.workspace_id.0)
             .fetch_all(&self.pool).await?
         .into_domain())
     }
@@ -86,7 +78,7 @@ impl CatalogRepository {
             ), direct_satisfied AS (SELECT entity_id, context_id, count(*)::bigint AS attributes FROM current_values GROUP BY entity_id, context_id), active_entities AS (
                 SELECT e.id AS entity_id, e.blueprint_id, e.blueprint_version, current_blueprints.code, current_blueprints.name, current_blueprints.version AS current_version FROM entities e JOIN blueprints b ON b.workspace_id = $1 AND b.id = e.blueprint_id AND b.version = e.blueprint_version JOIN current_blueprints ON current_blueprints.id = e.blueprint_id WHERE e.workspace_id = $1 AND e.deleted_at IS NULL AND b.kind = 'entity' AND b.deleted_at IS NULL
             ) SELECT e.code, e.name, e.current_version, count(*)::bigint AS active_entities, count(*) FILTER (WHERE e.blueprint_version <> e.current_version)::bigint AS outdated_entities, count(*) FILTER (WHERE COALESCE(direct_satisfied.attributes, 0) = COALESCE(required_counts.required_attributes, 0))::bigint AS default_complete_entities FROM active_entities e CROSS JOIN default_context LEFT JOIN required_counts ON required_counts.blueprint_id = e.blueprint_id AND required_counts.blueprint_version = e.blueprint_version LEFT JOIN direct_satisfied ON direct_satisfied.entity_id = e.entity_id AND direct_satisfied.context_id = default_context.id GROUP BY e.blueprint_id, e.code, e.name, e.current_version ORDER BY default_complete_entities ASC, e.code"#)
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(self.workspace_id.0)
             .fetch_all(&self.pool).await?
         .into_domain())
     }
@@ -95,7 +87,7 @@ impl CatalogRepository {
         &self,
     ) -> Result<Vec<RelationshipHealth>, RepositoryError> {
         Ok(query_as::<_, Db<RelationshipHealth>>(r#"SELECT a.code AS attribute_code, b.code AS source_blueprint, count(*)::bigint AS active_edges, count(*) FILTER (WHERE target.deleted_at IS NOT NULL)::bigint AS deleted_targets FROM attribute_values av JOIN attributes a ON a.workspace_id = $1 AND a.id = av.attribute_id JOIN blueprints b ON b.workspace_id = $1 AND b.id = a.blueprint_id AND b.version = a.blueprint_version JOIN entities target ON target.workspace_id = $1 AND target.id = av.relationship_target_entity_id WHERE av.workspace_id = $1 AND av.active AND av.relationship_target_entity_id IS NOT NULL GROUP BY a.code, b.code ORDER BY deleted_targets DESC, active_edges DESC, b.code, a.code LIMIT 50"#)
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(self.workspace_id.0)
             .fetch_all(&self.pool).await?
         .into_domain())
     }
@@ -104,5 +96,15 @@ impl CatalogRepository {
         // PostgreSQL relation sizes are database-wide. Do not disclose shared physical
         // storage metrics from a workspace-scoped endpoint.
         Ok(Vec::new())
+    }
+}
+
+impl<S: super::RepositoryScope> CatalogRepository<S> {
+    /// Performs a bounded, side-effect-free database dependency probe for the
+    /// API readiness endpoint. This is intentionally separate from liveness:
+    /// a live process with an unavailable database must not receive traffic.
+    pub async fn readiness(&self) -> Result<(), RepositoryError> {
+        sqlx::query("SELECT 1").execute(&self.pool).await?;
+        Ok(())
     }
 }

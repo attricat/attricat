@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::{
     domain_events::DomainEvent,
-    repository::{CatalogRepository, RepositoryError},
+    repository::{CatalogRepository, RepositoryError, SystemRepository},
 };
 
 #[derive(Clone, Debug)]
@@ -171,11 +171,12 @@ impl EventHandler for ComputedFieldHandler {
 }
 
 pub fn start(
-    repository: CatalogRepository,
+    repository: impl Into<SystemRepository>,
     registry: EventHandlerRegistry,
     config: DispatcherConfig,
     shutdown: tokio::sync::watch::Receiver<()>,
 ) -> Vec<tokio::task::JoinHandle<()>> {
+    let repository = repository.into();
     registry.handlers.into_iter().map(|handler| {
         let repository = repository.clone();
         let config = config.clone();
@@ -202,7 +203,7 @@ pub fn start(
 }
 
 async fn dispatch_handler(
-    repository: &CatalogRepository,
+    repository: &SystemRepository,
     handler: &dyn EventHandler,
     config: &DispatcherConfig,
 ) -> Result<(), RepositoryError> {

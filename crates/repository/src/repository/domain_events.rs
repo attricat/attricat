@@ -183,7 +183,7 @@ impl EventPublisher for CatalogRepository {
         // high-water capture. This is a transaction-scoped lock, so an activation
         // boundary cannot overtake an event that has allocated a sequence but has
         // not committed yet.
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         lock_outbox_boundary(transaction, workspace_id).await?;
         Ok(sqlx::query_as::<_, DomainEvent>(
             r#"INSERT INTO domain_events (
@@ -210,16 +210,6 @@ impl EventPublisher for CatalogRepository {
 }
 
 impl CatalogRepository {
-    /// Registers a durable consumer after the current high-water mark, so a
-    /// newly installed internal handler receives future events only.
-    pub async fn active_workspace_ids(&self) -> Result<Vec<Uuid>, RepositoryError> {
-        Ok(
-            sqlx::query_scalar("SELECT id FROM workspaces WHERE deleted_at IS NULL")
-                .fetch_all(&self.pool)
-                .await?,
-        )
-    }
-
     /// Idempotently registers a consumer. The INSERT's watermark is evaluated
     /// at registration time; replicas racing to register retain the same
     /// durable consumer rather than replaying historical events.
@@ -228,7 +218,7 @@ impl CatalogRepository {
         name: &str,
         _event_types: &[&str],
     ) -> Result<EventConsumer, RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         // Polling existing consumers should not acquire the boundary lock or
         // update their row on every dispatcher iteration.
         if let Some(consumer) = sqlx::query_as::<_, EventConsumer>(
@@ -259,7 +249,7 @@ impl CatalogRepository {
         &self,
         name: &str,
     ) -> Result<EventConsumer, RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let mut transaction = self.pool.begin().await?;
         lock_outbox_boundary(&mut transaction, workspace_id).await?;
         let watermark = sqlx::query_scalar::<_, i64>(
@@ -290,7 +280,7 @@ impl CatalogRepository {
         consumer_name: &str,
         event_types: &[T],
     ) -> Result<(), RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let event_types: Vec<String> = event_types
             .iter()
             .map(|value| value.as_ref().to_owned())
@@ -422,7 +412,7 @@ impl CatalogRepository {
         lease_owner: &str,
         lease_duration: Duration,
     ) -> Result<Option<EventDelivery>, RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let event_types: Vec<String> = event_types
             .iter()
             .map(|value| (*value).to_owned())
@@ -551,14 +541,14 @@ impl CatalogRepository {
     pub async fn list_failed_event_deliveries(
         &self,
     ) -> Result<Vec<FailedEventDelivery>, RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         Ok(sqlx::query_as("SELECT d.consumer_id, d.event_id, c.name AS consumer_name, e.event_type, COALESCE(t.attempts, d.attempts) AS attempts, COALESCE(t.failed_at, d.failed_at) AS failed_at, COALESCE(t.last_error_message, d.last_error) AS last_error FROM event_deliveries d JOIN event_consumers c ON c.id = d.consumer_id JOIN domain_events e ON e.id = d.event_id LEFT JOIN tasks t ON t.id = d.task_id WHERE c.workspace_id = $1 AND (d.status = 'dead_letter' OR t.status = 'dead_letter') ORDER BY COALESCE(t.failed_at, d.failed_at) DESC NULLS LAST")
             .bind(workspace_id).fetch_all(&self.pool).await?)
     }
 
     /// Counts deliveries by state for dispatcher queue-health metrics.
     pub async fn event_delivery_health(&self) -> Result<Vec<(String, i64)>, RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         Ok(sqlx::query_as("SELECT CASE t.status WHEN 'queued' THEN 'pending' WHEN 'leased' THEN 'leased' WHEN 'succeeded' THEN 'completed' WHEN 'dead_letter' THEN 'dead_letter' ELSE d.status END AS status, count(*) FROM event_deliveries d JOIN event_consumers c ON c.id = d.consumer_id LEFT JOIN tasks t ON t.id = d.task_id WHERE c.workspace_id = $1 GROUP BY CASE t.status WHEN 'queued' THEN 'pending' WHEN 'leased' THEN 'leased' WHEN 'succeeded' THEN 'completed' WHEN 'dead_letter' THEN 'dead_letter' ELSE d.status END")
             .bind(workspace_id)
             .fetch_all(&self.pool)
@@ -571,7 +561,7 @@ impl CatalogRepository {
         consumer_id: Uuid,
         event_id: Uuid,
     ) -> Result<bool, RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let mut transaction = self.pool.begin().await?;
         let delivery: Option<(Option<Uuid>,)> = sqlx::query_as("SELECT d.task_id FROM event_deliveries d JOIN event_consumers c ON c.id = d.consumer_id LEFT JOIN tasks t ON t.id = d.task_id WHERE d.consumer_id = $1 AND d.event_id = $2 AND c.workspace_id = $3 AND (d.status = 'dead_letter' OR t.status = 'dead_letter') FOR UPDATE OF d")
             .bind(consumer_id).bind(event_id).bind(workspace_id).fetch_optional(&mut *transaction).await?;
@@ -593,5 +583,17 @@ impl CatalogRepository {
             .bind(consumer_id).bind(event_id).bind(next_task_id).execute(&mut *transaction).await?;
         transaction.commit().await?;
         Ok(true)
+    }
+}
+
+impl<S: super::RepositoryScope> CatalogRepository<S> {
+    /// Registers a durable consumer after the current high-water mark, so a
+    /// newly installed internal handler receives future events only.
+    pub async fn active_workspace_ids(&self) -> Result<Vec<Uuid>, RepositoryError> {
+        Ok(
+            sqlx::query_scalar("SELECT id FROM workspaces WHERE deleted_at IS NULL")
+                .fetch_all(&self.pool)
+                .await?,
+        )
     }
 }

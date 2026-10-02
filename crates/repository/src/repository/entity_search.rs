@@ -175,7 +175,7 @@ impl CatalogRepository {
         .bind(cursor)
         .bind(blueprint_code)
         .bind(limit + 1)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .fetch_all(&self.pool)
         .await?;
         let mut items: Vec<_> = rows.into_iter().map(entity_preview).collect();
@@ -242,7 +242,7 @@ impl CatalogRepository {
         .bind(cursor_created_at)
         .bind(cursor_id)
         .bind(limit + 1)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .fetch_all(&self.pool)
         .await?;
         let mut items: Vec<_> = rows.into_iter().map(incoming_relationship_item).collect();
@@ -319,7 +319,7 @@ impl CatalogRepository {
             .bind(blueprint_version)
             .bind(&filter.relationship_path)
             .bind(&filter.selected_target_ids)
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(self.workspace_id.0)
             .fetch_all(&self.pool)
             .await?
             .into_iter()
@@ -435,7 +435,7 @@ impl CatalogRepository {
             .bind(&filter.value_type)
             .bind(&filter.operator)
             .bind(&filter.value)
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(self.workspace_id.0)
             .fetch_all(&self.pool)
             .await?
             .into_iter()
@@ -500,7 +500,7 @@ impl CatalogRepository {
         )
         .bind(blueprint_id).bind(blueprint_version).bind(&filter.leaf_field)
         .bind(&filter.value_type).bind(&filter.operator).bind(&filter.value)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .fetch_all(&self.pool).await?.into_iter().collect())
     }
 
@@ -650,7 +650,7 @@ impl CatalogRepository {
         )
         .bind(blueprint_id)
         .bind(blueprint_version)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .bind(matching_entity_ids)
         .bind((!system_tags.is_empty()).then_some(system_tags))
         .bind(outdated)
@@ -834,7 +834,7 @@ impl CatalogRepository {
             .bind(&sort.leaf_field)
             .bind(sort.value_type.as_str())
             .bind(limit + 1)
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(self.workspace_id.0)
             .fetch_all(&self.pool)
             .await?;
         let mut rows = rows;
@@ -924,7 +924,7 @@ impl CatalogRepository {
             .bind(cursor_version)
             .bind(cursor.map(|cursor| cursor.id))
             .bind(limit + 1)
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID));
+            .bind(self.workspace_id.0);
         let mut rows = if sort.field == "publication_status" {
             query
                 .bind(sort.publication_context_id)
@@ -969,7 +969,7 @@ impl CatalogRepository {
         let column_type = native_sort_cast(&sort.value_type)?;
         let comparison = if sort.descending { "<" } else { ">" };
         let direction = if sort.descending { "DESC" } else { "ASC" };
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let default_context_id = sqlx::query_scalar::<_, Uuid>(
             "SELECT id FROM attribute_contexts WHERE workspace_id = $1 AND code = 'default'",
         )
@@ -1164,7 +1164,7 @@ impl CatalogRepository {
                 )
                 .bind(&roots)
                 .bind(parts[0])
-                .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+                .bind(self.workspace_id.0)
                 .fetch_all(&self.pool)
                 .await?;
                 for (entity_id, file) in files {
@@ -1188,7 +1188,7 @@ impl CatalogRepository {
                 )
                 .bind(&roots)
                 .bind(parts[0])
-                .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+                .bind(self.workspace_id.0)
                 .bind(expected_leaf_type)
                 .fetch_all(&self.pool)
                 .await?
@@ -1245,7 +1245,7 @@ impl CatalogRepository {
                 )
                 .bind(current_ids)
                 .bind(relationship)
-                .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+                .bind(self.workspace_id.0)
                 .fetch_all(&self.pool)
                 .await?;
                 let mut targets: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
@@ -1289,7 +1289,7 @@ impl CatalogRepository {
             .bind(leaf_ids)
             .bind(leaf)
             .bind(expected_leaf_type)
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(self.workspace_id.0)
             .fetch_all(&self.pool)
             .await?;
             let leaves: HashMap<_, _> = leaves
@@ -1781,7 +1781,7 @@ impl CatalogRepository {
             let ids = sqlx::query_scalar::<_, Uuid>("SELECT id FROM entities WHERE blueprint_id = $1 AND ($2::bigint IS NULL OR blueprint_version = $2) AND workspace_id = $3 AND deleted_at IS NULL")
                 .bind(selected.blueprint.id)
                 .bind(selected_version)
-                .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+                .bind(self.workspace_id.0)
                 .fetch_all(&self.pool)
                 .await?;
             return Ok(ResolvedSearch {
@@ -2003,7 +2003,7 @@ impl CatalogRepository {
             return Ok(());
         }
         let count: i64 = sqlx::query_scalar("SELECT COUNT(DISTINCT code) FROM blueprints WHERE lower(name) = lower($1) AND status = 'published' AND workspace_id = $2 AND deleted_at IS NULL")
-            .bind(name).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).fetch_one(&self.pool).await?;
+            .bind(name).bind(self.workspace_id.0).fetch_one(&self.pool).await?;
         if count > 1 {
             return Err(RepositoryError::InvalidBlueprintDefinition(format!(
                 "blueprint name '{}' is ambiguous; use its code",
@@ -2058,7 +2058,7 @@ impl CatalogRepository {
             )
             .bind(ids)
             .bind(match_blueprint)
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(self.workspace_id.0)
             .fetch_all(&self.pool)
             .await?
             .into_iter()
@@ -2129,7 +2129,7 @@ impl CatalogRepository {
                     .and_then(|fields| fields.get(fields.len() - depth))
                     .or_else(|| direct_field.as_ref().filter(|v| !v.is_empty())),
             )
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(self.workspace_id.0)
             .fetch_all(&self.pool)
             .await?;
             for (source, field, target) in edges {
@@ -2169,7 +2169,7 @@ impl CatalogRepository {
             .bind(selected.blueprint.id)
             .bind(selected_version)
             .bind(ids.keys().copied().collect::<Vec<_>>())
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(self.workspace_id.0)
             .fetch_all(&self.pool)
             .await?;
         Ok(selected_ids
@@ -2228,7 +2228,7 @@ impl CatalogRepository {
             .bind(match_blueprint)
             .bind(attribute)
             .bind(pattern)
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(self.workspace_id.0)
             .fetch_all(&self.pool)
             .await?;
         Ok(rows
@@ -2282,7 +2282,7 @@ impl CatalogRepository {
         };
         let rows = sqlx::query_as::<_, (Uuid, String)>(sql)
             .bind(pattern)
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(self.workspace_id.0)
             .bind(budget.remaining_matches_plus_one()? as i64)
             .fetch_all(&mut *transaction)
             .await
@@ -2325,7 +2325,7 @@ impl CatalogRepository {
                 ORDER BY source.id, a.code, av.relationship_target_entity_id LIMIT $3"#,
             )
             .bind(&level)
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(self.workspace_id.0)
             .bind(budget.remaining_edges_plus_one()? as i64)
             .fetch_all(&mut *transaction)
             .await
@@ -2371,7 +2371,7 @@ impl CatalogRepository {
             "SELECT id FROM entities WHERE blueprint_id = $1 AND ($2::bigint IS NULL OR blueprint_version = $2) AND deleted_at IS NULL AND id = ANY($3) AND workspace_id = $4",
         )
         .bind(selected.blueprint.id).bind(selected_version).bind(ids)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .fetch_all(&mut *transaction).await.map_err(global_search_error)?;
         transaction.commit().await.map_err(global_search_error)?;
         metrics::histogram!("catalog_global_relationship_search_matches")

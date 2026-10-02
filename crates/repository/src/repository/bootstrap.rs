@@ -6,7 +6,7 @@ use super::{CatalogRepository, RepositoryError};
 
 const OWNER_ROLE_ID: Uuid = Uuid::from_u128(0x00000000000040008000000000000101);
 
-impl CatalogRepository {
+impl<S: super::RepositoryScope> CatalogRepository<S> {
     /// Applies deployment-provided metadata to the workspace selected for bootstrap.
     pub async fn configure_bootstrap_workspace(
         &self,

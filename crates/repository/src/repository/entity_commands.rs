@@ -338,7 +338,7 @@ impl CatalogRepository {
             .bind(entity_id)
             .bind(system_tags)
             .bind(system_metadata)
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(self.workspace_id.0)
             .execute(&mut *transaction)
             .await?;
         }
@@ -388,7 +388,7 @@ impl CatalogRepository {
         action: &catalog_workflow::Action,
         event: &crate::domain_events::DomainEvent,
     ) -> Result<super::WorkflowActionResult, RepositoryError> {
-        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let ws = self.workspace_id.0;
         let mut transaction = self.pool.begin().await?;
         // Every path that changes workflow state takes this lock before a run
         // lock. Keeping that order aligned with disable avoids a run/lifecycle
@@ -597,7 +597,7 @@ impl CatalogRepository {
                ORDER BY e.occurred_at DESC, c.id DESC"#,
         )
         .bind(entity_id)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .fetch_all(&self.pool)
         .await?
         .into_domain())
@@ -629,7 +629,7 @@ impl CatalogRepository {
                LIMIT $3 OFFSET $4"#,
         )
         .bind(entity_id)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .bind(limit + 1)
         .bind(offset)
         .fetch_all(&self.pool)
@@ -646,7 +646,7 @@ impl CatalogRepository {
                WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL"#,
         )
         .bind(entity_id)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .fetch_optional(&self.pool)
         .await?
         .into_domain())
@@ -661,7 +661,7 @@ impl CatalogRepository {
         sqlx::query(
             "DELETE FROM entity_channel_publications WHERE workspace_id = $1 AND entity_id = $2",
         )
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .bind(entity_id)
         .execute(&mut *transaction)
         .await?;
@@ -669,7 +669,7 @@ impl CatalogRepository {
             "UPDATE entities SET deleted_at = now(), updated_at = now() WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL",
         )
         .bind(entity_id)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .execute(&mut *transaction)
         .await?;
         if result.rows_affected() == 0 {
@@ -717,7 +717,7 @@ impl CatalogRepository {
                FOR UPDATE"#,
         )
         .bind(entity_id)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .fetch_optional(&mut *transaction)
         .await?
         .into_domain()
@@ -747,7 +747,7 @@ impl CatalogRepository {
         )
         .bind(entity_id)
         .bind(preview)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .execute(&mut *transaction)
         .await?;
 
@@ -1103,7 +1103,7 @@ impl CatalogRepository {
                     relationship_target_entity_id, context_id, active, created_at"#,
         )
         .bind(Uuid::new_v4())
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .bind(entity.id)
         .bind(attribute_id)
         .bind(context_id)
@@ -1159,7 +1159,7 @@ impl CatalogRepository {
         transaction: &mut Transaction<'_, Postgres>,
         context_id: Option<Uuid>,
     ) -> Result<Option<Uuid>, RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let context_id = match context_id {
             Some(context_id) => context_id,
             None => sqlx::query_scalar::<_, Uuid>(
@@ -1194,7 +1194,7 @@ impl CatalogRepository {
                 "SELECT EXISTS (SELECT 1 FROM attribute_contexts WHERE id = $1 AND workspace_id = $2 AND code = 'default')",
             )
             .bind(context_id.ok_or(RepositoryError::InvalidContext)?)
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(self.workspace_id.0)
             .fetch_one(&mut **transaction)
             .await?;
             if !is_default {
@@ -1214,7 +1214,7 @@ impl CatalogRepository {
                FROM entities WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL FOR UPDATE"#,
         )
         .bind(entity_id)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .fetch_optional(&mut **transaction)
         .await?
         .into_domain()
@@ -1238,7 +1238,7 @@ impl CatalogRepository {
                 RETURNING id, blueprint_id, blueprint_version, projections, system_tags, system_metadata, ('attricat.sample'=ANY(system_tags)) AS is_sample, created_at, updated_at, deleted_at"#,
         )
         .bind(entity_id)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .bind(empty_projections())
         .bind(system_tags)
         .bind(system_metadata)
@@ -1273,7 +1273,7 @@ impl CatalogRepository {
         let contexts = sqlx::query_as::<_, Db<AttributeContext>>(
             "SELECT id, code, data, parent_id FROM attribute_contexts WHERE workspace_id = $1 ORDER BY code",
         )
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .fetch_all(&mut **transaction)
         .await?;
         let context_by_id: std::collections::HashMap<_, _> = contexts
@@ -1400,7 +1400,7 @@ impl CatalogRepository {
                WHERE e.id = $1 AND e.workspace_id = $2 AND e.deleted_at IS NULL"#,
         )
         .bind(target_entity_id)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .fetch_optional(&mut **transaction)
         .await?
         .ok_or(RepositoryError::NotFound("relationship target entity"))?;
@@ -1443,10 +1443,7 @@ impl CatalogRepository {
         // entity rows, cardinality validation, or relationship mutations. A
         // single canonical key avoids opposite-order deadlocks across payloads
         // that claim more than one target while keeping workspaces independent.
-        let lock_key = format!(
-            "relationship-cardinality:{}",
-            self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)
-        );
+        let lock_key = format!("relationship-cardinality:{}", self.workspace_id.0);
         sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
             .bind(lock_key)
             .execute(&mut **transaction)
@@ -1476,7 +1473,7 @@ impl CatalogRepository {
             )
             .bind(entity.blueprint_id)
             .bind(attribute_code)
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(self.workspace_id.0)
             .fetch_one(&mut **transaction)
             .await?
         };
@@ -1534,7 +1531,7 @@ impl CatalogRepository {
             .bind(context_id)
             .bind(target_entity_id)
             .bind(entity.id)
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(self.workspace_id.0)
             .bind(attribute_id)
             .fetch_optional(&mut **transaction)
             .await?
@@ -1621,7 +1618,7 @@ impl CatalogRepository {
                VALUES ($1, $2, $3, $4, $5, $6, $7)
                RETURNING id, entity_id, attribute_id, 'null'::jsonb AS value, relationship_target_entity_id, context_id, active, created_at"#,
         )
-        .bind(Uuid::new_v4()).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).bind(entity_id).bind(attribute_id).bind(context_id)
+        .bind(Uuid::new_v4()).bind(self.workspace_id.0).bind(entity_id).bind(attribute_id).bind(context_id)
         .bind(target_entity_id).bind(active).fetch_one(&mut **transaction).await?
         .into_domain())
     }
@@ -1653,7 +1650,7 @@ impl CatalogRepository {
                ORDER BY a.code, c.code, av.relationship_target_entity_id"#,
         )
         .bind(entity_id)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .fetch_all(&mut **transaction)
         .await
         .map_err(Into::into)
@@ -1775,7 +1772,7 @@ impl CatalogRepository {
         .bind(attribute_id)
         .bind(context_id)
         .bind(relationship_target_entity_id)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .fetch_optional(&mut **transaction)
         .await
         .map(IntoDomain::into_domain)
@@ -1789,7 +1786,7 @@ impl CatalogRepository {
     ) -> Result<(), RepositoryError> {
         sqlx::query("UPDATE entities SET updated_at = now() WHERE id = $1 AND workspace_id = $2")
             .bind(entity_id)
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(self.workspace_id.0)
             .execute(&mut **transaction)
             .await?;
         Ok(())
@@ -1864,7 +1861,7 @@ impl CatalogRepository {
         let key = extension_intent_key(&intent).to_owned();
         let serialized = serde_json::to_vec(&intent).expect("extension intent serializes");
         let input_hash = format!("{:x}", sha2::Sha256::digest(serialized));
-        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let ws = self.workspace_id.0;
         let mut transaction = self.pool.begin().await?;
         if !dry_run {
             let existing: Option<(String, Value)> = sqlx::query_as("SELECT input_hash,outcome FROM extension_catalog_batch_intents WHERE workspace_id=$1 AND extension_id=$2 AND batch_key=$3 AND intent_key=$4 FOR UPDATE")
@@ -2052,7 +2049,7 @@ impl CatalogRepository {
                         "upsert lookup value must be 1-512 bytes".into(),
                     ));
                 }
-                let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+                let workspace_id = self.workspace_id.0;
                 // There is no global uniqueness constraint for arbitrary blueprint
                 // attributes. Serialize this declared business key so concurrent
                 // absent-key upserts cannot both take the create branch.
@@ -2163,7 +2160,7 @@ impl CatalogRepository {
         self.ensure_task_fence(transaction).await?;
         if let Some(audit_event_id) = self.write_audit_event(transaction).await? {
             for change in changes {
-                sqlx::query("INSERT INTO audit_event_changes (id,audit_event_id,workspace_id,entity_id,attribute_id,attribute_code,context_id,context_code,change_kind,before_value,after_value) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)").bind(Uuid::new_v4()).bind(audit_event_id).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).bind(change.entity_id).bind(change.attribute_id).bind(change.attribute_code).bind(change.context_id).bind(change.context_code).bind(change.change_kind).bind(change.before_value).bind(change.after_value).execute(&mut **transaction).await?;
+                sqlx::query("INSERT INTO audit_event_changes (id,audit_event_id,workspace_id,entity_id,attribute_id,attribute_code,context_id,context_code,change_kind,before_value,after_value) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)").bind(Uuid::new_v4()).bind(audit_event_id).bind(self.workspace_id.0).bind(change.entity_id).bind(change.attribute_id).bind(change.attribute_code).bind(change.context_id).bind(change.context_code).bind(change.change_kind).bind(change.before_value).bind(change.after_value).execute(&mut **transaction).await?;
             }
         }
         self.enqueue_event(transaction, event).await.map(|_| ())

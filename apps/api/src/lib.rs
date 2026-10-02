@@ -30,7 +30,7 @@ pub use catalog_repository::{
 pub use catalog_solution_pack::{solution_pack_sample_data, solution_packs};
 pub use catalog_storage as storage;
 pub use catalog_workers::{
-    blueprint_migration_worker, event_dispatcher, file_worker, rule_runtime,
+    blueprint_migration_worker, event_dispatcher, file_worker, maintenance, rule_runtime,
     solution_pack_housekeeping, task_worker, workflow_runtime,
 };
 

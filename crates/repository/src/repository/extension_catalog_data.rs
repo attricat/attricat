@@ -155,9 +155,7 @@ impl CatalogRepository {
                 "catalog page limit must be 1-{MAX_EXTENSION_CATALOG_PAGE_SIZE}"
             )));
         }
-        let workspace_id = self.workspace_id.ok_or_else(|| {
-            RepositoryError::InvalidExtension("extension catalog reads require a workspace".into())
-        })?;
+        let workspace_id = self.workspace_id.0;
         let cursor = request
             .cursor
             .as_deref()
@@ -266,11 +264,7 @@ impl CatalogRepository {
                 "catalog change limit must be 1-{MAX_EXTENSION_CATALOG_PAGE_SIZE}"
             )));
         }
-        let workspace_id = self.workspace_id.ok_or_else(|| {
-            RepositoryError::InvalidExtension(
-                "extension catalog changes require a workspace".into(),
-            )
-        })?;
+        let workspace_id = self.workspace_id.0;
         let cursor = cursor
             .as_deref()
             .map(decode_extension_change_cursor)
@@ -335,9 +329,7 @@ impl CatalogRepository {
                 "lookup value must be 1-512 bytes".into(),
             ));
         }
-        let workspace_id = self.workspace_id.ok_or_else(|| {
-            RepositoryError::InvalidExtension("extension lookup requires a workspace".into())
-        })?;
+        let workspace_id = self.workspace_id.0;
         Ok(sqlx::query_as::<_, Db<Entity>>(
             "SELECT e.id,e.blueprint_id,e.blueprint_version,e.projections,e.system_tags,e.system_metadata,('attricat.sample'=ANY(e.system_tags)) AS is_sample,e.created_at,e.updated_at,e.deleted_at \
              FROM entities e JOIN attribute_values v ON v.entity_id=e.id AND v.workspace_id=e.workspace_id AND v.active \

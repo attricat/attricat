@@ -140,29 +140,12 @@ pub enum ApprovalDecision {
 }
 
 impl CatalogRepository {
-    /// System permissions are application data, not migration behavior. Keep
-    /// this idempotent bootstrap explicit so SQL migrations remain declarative.
-    pub async fn ensure_agent_permissions(&self) -> Result<(), RepositoryError> {
-        let mut tx = self.pool.begin().await?;
-        sqlx::query("INSERT INTO permissions (code, description) VALUES ('agents.run', 'Create, inspect, and decide conversational agent runs') ON CONFLICT (code) DO NOTHING")
-            .execute(&mut *tx).await?;
-        for role_id in [
-            Uuid::from_u128(0x00000000000040008000000000000101),
-            Uuid::from_u128(0x00000000000040008000000000000102),
-        ] {
-            sqlx::query("INSERT INTO role_permissions (role_id, permission_code) VALUES ($1, 'agents.run') ON CONFLICT DO NOTHING")
-                .bind(role_id).execute(&mut *tx).await?;
-        }
-        tx.commit().await?;
-        Ok(())
-    }
-
     pub async fn create_conversation(
         &self,
         created_by_user_id: Option<Uuid>,
         title: &str,
     ) -> Result<Conversation, RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         Ok(sqlx::query_as("INSERT INTO conversations (id, workspace_id, created_by_user_id, title, title_source) VALUES ($1, $2, $3, $4, 'pending') RETURNING id, workspace_id, created_by_user_id, title, title_source, entity_id, context_id, created_at, updated_at, archived_at")
             .bind(Uuid::new_v4()).bind(workspace_id).bind(created_by_user_id).bind(title)
             .fetch_one(&self.pool).await?)
@@ -175,7 +158,7 @@ impl CatalogRepository {
         entity_id: Uuid,
         context_id: Option<Uuid>,
     ) -> Result<Conversation, RepositoryError> {
-        let workspace = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace = self.workspace_id.0;
         Ok(sqlx::query_as("INSERT INTO conversations (id, workspace_id, created_by_user_id, title, entity_id, context_id, title_source) VALUES ($1, $2, $3, $4, $5, $6, 'pending') RETURNING id, workspace_id, created_by_user_id, title, title_source, entity_id, context_id, created_at, updated_at, archived_at")
             .bind(Uuid::new_v4()).bind(workspace).bind(actor).bind(title).bind(entity_id).bind(context_id)
             .fetch_one(&self.pool).await?)
@@ -191,7 +174,7 @@ impl CatalogRepository {
             return Ok(());
         }
         let authorized: i64 = sqlx::query_scalar("SELECT count(*) FROM files WHERE workspace_id = $1 AND id = ANY($2) AND conversation_upload_conversation_id = $3 AND conversation_upload_user_id = $4 AND deleted_at IS NULL AND (attachment_expires_at > now() OR EXISTS (SELECT 1 FROM conversation_message_attachments a JOIN conversation_messages m ON m.id = a.message_id WHERE a.file_id = files.id AND a.workspace_id = files.workspace_id AND m.conversation_id = $3))")
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(self.workspace_id.0)
             .bind(ids).bind(conversation_id).bind(actor).fetch_one(&self.pool).await?;
         if authorized as usize != ids.len() {
             return Err(RepositoryError::NotFound("file"));
@@ -203,7 +186,7 @@ impl CatalogRepository {
         &self,
         conversation_id: Uuid,
     ) -> Result<Vec<ConversationMessage>, RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let rows: Vec<ConversationMessageRow> = sqlx::query_as("SELECT m.id, m.conversation_id, m.run_id, m.sequence, m.role, m.content, m.created_at FROM conversation_messages m JOIN conversations c ON c.id = m.conversation_id WHERE m.conversation_id = $1 AND c.workspace_id = $2 ORDER BY m.sequence")
             .bind(conversation_id).bind(workspace_id).fetch_all(&self.pool).await?;
         let mut messages: Vec<ConversationMessage> = rows.into_iter().map(Into::into).collect();
@@ -282,7 +265,7 @@ impl CatalogRepository {
             "SELECT id FROM conversations WHERE id = $1 AND workspace_id = $2 FOR UPDATE",
         )
         .bind(conversation_id)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .fetch_optional(&mut **tx)
         .await?;
         if found.is_none() {
@@ -295,7 +278,7 @@ impl CatalogRepository {
             .fetch_one(&mut **tx).await?;
         let message: ConversationMessage = row.into();
         if !attachment_ids.is_empty() {
-            let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+            let workspace_id = self.workspace_id.0;
             let files: Vec<Uuid> = sqlx::query_scalar("SELECT id FROM files WHERE workspace_id = $1 AND deleted_at IS NULL AND id = ANY($2) FOR UPDATE")
                 .bind(workspace_id).bind(attachment_ids).fetch_all(&mut **tx).await?;
             if files.len() != attachment_ids.len() {
@@ -332,7 +315,7 @@ impl CatalogRepository {
     ) -> Result<AgentRun, RepositoryError> {
         let mut tx = self.pool.begin().await?;
         if !attachment_ids.is_empty() {
-            let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+            let workspace_id = self.workspace_id.0;
             // Only files uploaded by this user for this conversation may enter
             // a provider-visible run. Lock them through the attachment insert
             // so retention and concurrent submissions cannot change ownership.
@@ -390,7 +373,7 @@ impl CatalogRepository {
         provider_base_url: &str,
         model: &str,
     ) -> Result<AgentRun, RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let run: AgentRun = sqlx::query_as("INSERT INTO agent_runs (id, workspace_id, conversation_id, origin, status, provider_base_url, model, initiated_by_user_id) SELECT $1, $2, $3, 'interactive', 'queued', $4, $5, $6 WHERE EXISTS (SELECT 1 FROM conversations WHERE id = $3 AND workspace_id = $2) RETURNING id, conversation_id, origin, status, provider_base_url, model, started_at, finished_at, error_code, error_message, created_at")
             .bind(Uuid::new_v4()).bind(workspace_id).bind(conversation_id).bind(provider_base_url).bind(model).bind(actor)
             .fetch_optional(&mut **tx).await?.ok_or(RepositoryError::NotFound("conversation"))?;
@@ -422,7 +405,7 @@ impl CatalogRepository {
         let mut tx = self.pool.begin().await?;
         self.ensure_task_fence(&mut tx).await?;
         let current: AgentRun = sqlx::query_as("SELECT id, conversation_id, origin, status, provider_base_url, model, started_at, finished_at, error_code, error_message, created_at FROM agent_runs WHERE id = $1 AND workspace_id = $2 FOR UPDATE")
-            .bind(run_id).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).fetch_optional(&mut *tx).await?.ok_or(RepositoryError::NotFound("agent run"))?;
+            .bind(run_id).bind(self.workspace_id.0).fetch_optional(&mut *tx).await?.ok_or(RepositoryError::NotFound("agent run"))?;
         let valid = matches!(
             (current.status.as_str(), next_status),
             ("queued", "running" | "cancelled")
@@ -464,7 +447,7 @@ impl CatalogRepository {
         &self,
         run_id: Uuid,
     ) -> Result<Option<AgentRun>, RepositoryError> {
-        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
         self.ensure_task_fence(&mut tx).await?;
         let current: AgentRun = sqlx::query_as("SELECT id, conversation_id, origin, status, provider_base_url, model, started_at, finished_at, error_code, error_message, created_at FROM agent_runs WHERE id = $1 AND workspace_id = $2 FOR UPDATE")
@@ -499,6 +482,319 @@ impl CatalogRepository {
             .bind(Uuid::new_v4()).bind(run_id).bind(sequence).execute(&mut *tx).await?;
         tx.commit().await?;
         Ok(Some(run))
+    }
+
+    pub async fn agent_run_initiator(&self, run_id: Uuid) -> Result<(Uuid, Uuid), RepositoryError> {
+        sqlx::query_as("SELECT initiated_by_user_id, workspace_id FROM agent_runs WHERE id = $1 AND workspace_id = $2")
+            .bind(run_id).bind(self.workspace_id.0)
+            .fetch_optional(&self.pool).await?
+            .and_then(|(actor, workspace): (Option<Uuid>, Uuid)| actor.map(|actor| (actor, workspace)))
+            .ok_or(RepositoryError::InvalidAgentState("agent run has no initiating user"))
+    }
+
+    pub async fn get_agent_run(&self, run_id: Uuid) -> Result<AgentRun, RepositoryError> {
+        sqlx::query_as("SELECT id, conversation_id, origin, status, provider_base_url, model, started_at, finished_at, error_code, error_message, created_at FROM agent_runs WHERE id = $1 AND workspace_id = $2")
+            .bind(run_id).bind(self.workspace_id.0).fetch_optional(&self.pool).await?.ok_or(RepositoryError::NotFound("agent run"))
+    }
+
+    pub async fn decided_agent_tool_calls(
+        &self,
+        run_id: Uuid,
+    ) -> Result<Vec<AgentToolCall>, RepositoryError> {
+        Ok(sqlx::query_as("SELECT call.id, call.run_id, call.sequence, call.provider_call_id, call.tool_name, call.arguments, call.change_summary, call.result, call.error, call.state, call.decided_by_user_id, call.decided_at, call.created_at, call.completed_at FROM agent_tool_calls call JOIN agent_runs run ON run.id = call.run_id WHERE call.run_id = $1 AND run.workspace_id = $2 AND call.state IN ('approved', 'rejected') AND call.completed_at IS NULL ORDER BY call.sequence")
+            .bind(run_id).bind(self.workspace_id.0).fetch_all(&self.pool).await?)
+    }
+
+    /// Whether this run still has mutations awaiting a human decision.
+    pub async fn has_pending_agent_tool_calls(
+        &self,
+        run_id: Uuid,
+    ) -> Result<bool, RepositoryError> {
+        Ok(sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM agent_tool_calls call JOIN agent_runs run ON run.id = call.run_id WHERE call.run_id = $1 AND run.workspace_id = $2 AND call.state = 'pending_approval')")
+            .bind(run_id)
+            .bind(self.workspace_id.0)
+            .fetch_one(&self.pool)
+            .await?)
+    }
+
+    pub async fn create_agent_tool_call(
+        &self,
+        run_id: Uuid,
+        provider_call_id: Option<&str>,
+        tool_name: &str,
+        arguments: Value,
+        change_summary: Option<&str>,
+        state: &str,
+    ) -> Result<AgentToolCall, RepositoryError> {
+        if !matches!(
+            state,
+            "pending_approval" | "approved" | "rejected" | "completed" | "failed"
+        ) {
+            return Err(RepositoryError::InvalidAgentState(
+                "invalid tool call state",
+            ));
+        }
+        let mut tx = self.pool.begin().await?;
+        self.ensure_task_fence(&mut tx).await?;
+        let exists = sqlx::query_scalar::<_, Uuid>(
+            "SELECT id FROM agent_runs WHERE id = $1 AND workspace_id = $2 FOR UPDATE",
+        )
+        .bind(run_id)
+        .bind(self.workspace_id.0)
+        .fetch_optional(&mut *tx)
+        .await?;
+        if exists.is_none() {
+            return Err(RepositoryError::NotFound("agent run"));
+        }
+        let sequence: i64 = sqlx::query_scalar(
+            "SELECT COALESCE(MAX(sequence) + 1, 0) FROM agent_tool_calls WHERE run_id = $1",
+        )
+        .bind(run_id)
+        .fetch_one(&mut *tx)
+        .await?;
+        // Every newly proposed or automatically executed call starts undecided.
+        // Only `decide_tool_call` may set an approval decision and timestamp.
+        let call = sqlx::query_as("INSERT INTO agent_tool_calls (id, run_id, sequence, provider_call_id, tool_name, arguments, change_summary, state) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, run_id, sequence, provider_call_id, tool_name, arguments, change_summary, result, error, state, decided_by_user_id, decided_at, created_at, completed_at")
+            .bind(Uuid::new_v4()).bind(run_id).bind(sequence).bind(provider_call_id).bind(tool_name).bind(arguments).bind(change_summary).bind(state).fetch_one(&mut *tx).await?;
+        tx.commit().await?;
+        Ok(call)
+    }
+
+    pub async fn complete_agent_tool_call(
+        &self,
+        tool_call_id: Uuid,
+        result: Result<Value, Value>,
+    ) -> Result<AgentToolCall, RepositoryError> {
+        let (result, error, state) = match result {
+            Ok(value) => (Some(value), None, "completed"),
+            Err(value) => (None, Some(value), "failed"),
+        };
+        let mut tx = self.pool.begin().await?;
+        self.ensure_task_fence(&mut tx).await?;
+        let call = sqlx::query_as("UPDATE agent_tool_calls call SET result = $3, error = $4, state = CASE WHEN call.state = 'rejected' THEN 'rejected' ELSE $5 END, completed_at = now() FROM agent_runs run WHERE call.id = $1 AND call.run_id = run.id AND run.workspace_id = $2 AND call.state IN ('approved', 'pending_approval', 'rejected') RETURNING call.id, call.run_id, call.sequence, call.provider_call_id, call.tool_name, call.arguments, call.change_summary, call.result, call.error, call.state, call.decided_by_user_id, call.decided_at, call.created_at, call.completed_at")
+            .bind(tool_call_id).bind(self.workspace_id.0).bind(result).bind(error).bind(state).fetch_optional(&mut *tx).await?.ok_or(RepositoryError::InvalidAgentState("tool call cannot be completed"))?;
+        tx.commit().await?;
+        Ok(call)
+    }
+
+    pub async fn append_run_event(
+        &self,
+        run_id: Uuid,
+        event_type: &str,
+        payload: Value,
+    ) -> Result<AgentRunEvent, RepositoryError> {
+        let mut tx = self.pool.begin().await?;
+        self.ensure_task_fence(&mut tx).await?;
+        let exists = sqlx::query_scalar::<_, Uuid>(
+            "SELECT id FROM agent_runs WHERE id = $1 AND workspace_id = $2 FOR UPDATE",
+        )
+        .bind(run_id)
+        .bind(self.workspace_id.0)
+        .fetch_optional(&mut *tx)
+        .await?;
+        if exists.is_none() {
+            return Err(RepositoryError::NotFound("agent run"));
+        }
+        let sequence: i64 = sqlx::query_scalar(
+            "SELECT COALESCE(MAX(sequence) + 1, 0) FROM agent_run_events WHERE run_id = $1",
+        )
+        .bind(run_id)
+        .fetch_one(&mut *tx)
+        .await?;
+        let event = sqlx::query_as("INSERT INTO agent_run_events (id, run_id, sequence, event_type, payload) VALUES ($1, $2, $3, $4, $5) RETURNING id, run_id, sequence, event_type, payload, created_at")
+            .bind(Uuid::new_v4()).bind(run_id).bind(sequence).bind(event_type).bind(payload).fetch_one(&mut *tx).await?;
+        tx.commit().await?;
+        Ok(event)
+    }
+
+    /// Makes an approval decision exactly once. The run transition and durable
+    /// event share one transaction, so a restart cannot observe a decision
+    /// without its replayable status evidence.
+    pub async fn decide_tool_call(
+        &self,
+        tool_call_id: Uuid,
+        actor: Uuid,
+        decision: ApprovalDecision,
+    ) -> Result<AgentToolCall, RepositoryError> {
+        let mut tx = self.pool.begin().await?;
+        let call: AgentToolCall = sqlx::query_as("SELECT id, run_id, sequence, provider_call_id, tool_name, arguments, change_summary, result, error, state, decided_by_user_id, decided_at, created_at, completed_at FROM agent_tool_calls WHERE id = $1 AND EXISTS (SELECT 1 FROM agent_runs run WHERE run.id = agent_tool_calls.run_id AND run.workspace_id = $2) FOR UPDATE")
+            .bind(tool_call_id).bind(self.workspace_id.0).fetch_optional(&mut *tx).await?.ok_or(RepositoryError::NotFound("agent tool call"))?;
+        if call.state != "pending_approval" {
+            return Err(RepositoryError::ApprovalAlreadyDecided);
+        }
+        let state = match decision {
+            ApprovalDecision::Approve => "approved",
+            ApprovalDecision::Reject => "rejected",
+        };
+        let call: AgentToolCall = sqlx::query_as("UPDATE agent_tool_calls SET state = $2, decided_by_user_id = $3, decided_at = now() WHERE id = $1 RETURNING id, run_id, sequence, provider_call_id, tool_name, arguments, change_summary, result, error, state, decided_by_user_id, decided_at, created_at, completed_at")
+            .bind(tool_call_id).bind(state).bind(actor).fetch_one(&mut *tx).await?;
+        sqlx::query("UPDATE agent_runs SET status = 'queued' WHERE id = $1 AND status = 'awaiting_approval'").bind(call.run_id).execute(&mut *tx).await?;
+        let sequence: i64 = sqlx::query_scalar(
+            "SELECT COALESCE(MAX(sequence) + 1, 0) FROM agent_run_events WHERE run_id = $1",
+        )
+        .bind(call.run_id)
+        .fetch_one(&mut *tx)
+        .await?;
+        sqlx::query("INSERT INTO agent_run_events (id, run_id, sequence, event_type, payload) VALUES ($1, $2, $3, 'status', $4)")
+            .bind(Uuid::new_v4()).bind(call.run_id).bind(sequence).bind(serde_json::json!({"tool_call_id": tool_call_id, "decision": state})).execute(&mut *tx).await?;
+        let generation: i32 = sqlx::query_scalar("SELECT COALESCE(MAX(generation) + 1, 0) FROM tasks WHERE workspace_id = $1 AND kind = 'agent_run.v1' AND subject_id = $2")
+            .bind(self.workspace_id.0).bind(call.run_id).fetch_one(&mut *tx).await?;
+        self.enqueue_task(
+            &mut tx,
+            crate::task_queue::TaskInsert {
+                workspace_id: self.workspace_id.0,
+                kind: crate::task_queue::TaskKind::AgentRunV1,
+                subject_id: call.run_id,
+                generation,
+                payload: serde_json::json!({"agent_run_id": call.run_id.to_string()}),
+                correlation_id: None,
+                causation_id: None,
+            },
+        )
+        .await?;
+        tx.commit().await?;
+        Ok(call)
+    }
+}
+
+impl CatalogRepository {
+    pub async fn list_conversations(&self) -> Result<Vec<Conversation>, RepositoryError> {
+        Ok(sqlx::query_as("SELECT id, workspace_id, created_by_user_id, title, title_source, entity_id, context_id, created_at, updated_at, archived_at FROM conversations WHERE workspace_id = $1 AND archived_at IS NULL ORDER BY updated_at DESC")
+            .bind(self.workspace_id.0).fetch_all(&self.pool).await?)
+    }
+
+    pub async fn search_conversations(
+        &self,
+        query: &str,
+        before: Option<(DateTime<Utc>, Uuid)>,
+        limit: i64,
+    ) -> Result<Vec<Conversation>, RepositoryError> {
+        let (before_date, before_id) =
+            before.map_or((None, None), |(date, id)| (Some(date), Some(id)));
+        Ok(sqlx::query_as("SELECT c.id, c.workspace_id, c.created_by_user_id, c.title, c.title_source, c.entity_id, c.context_id, c.created_at, c.updated_at, c.archived_at FROM conversations c WHERE c.workspace_id = $1 AND c.archived_at IS NULL AND ($2 = '' OR position(lower($2) in lower(c.title)) > 0 OR EXISTS (SELECT 1 FROM conversation_messages m WHERE m.conversation_id = c.id AND m.role = 'user' AND position(lower($2) in lower(m.content::text)) > 0)) AND ($3::timestamptz IS NULL OR (c.updated_at, c.id) < ($3, $4)) ORDER BY c.updated_at DESC, c.id DESC LIMIT $5")
+            .bind(self.workspace_id.0)
+            .bind(query).bind(before_date).bind(before_id).bind(limit)
+            .fetch_all(&self.pool).await?)
+    }
+
+    pub async fn get_conversation(
+        &self,
+        conversation_id: Uuid,
+    ) -> Result<Conversation, RepositoryError> {
+        sqlx::query_as("SELECT id, workspace_id, created_by_user_id, title, title_source, entity_id, context_id, created_at, updated_at, archived_at FROM conversations WHERE id = $1 AND workspace_id = $2 AND archived_at IS NULL")
+            .bind(conversation_id).bind(self.workspace_id.0).fetch_optional(&self.pool).await?
+            .ok_or(RepositoryError::NotFound("conversation"))
+    }
+
+    pub async fn update_conversation_title(
+        &self,
+        conversation_id: Uuid,
+        title: &str,
+    ) -> Result<Conversation, RepositoryError> {
+        sqlx::query_as("UPDATE conversations SET title = $3, title_source = 'manual', updated_at = now() WHERE id = $1 AND workspace_id = $2 AND archived_at IS NULL RETURNING id, workspace_id, created_by_user_id, title, title_source, entity_id, context_id, created_at, updated_at, archived_at")
+            .bind(conversation_id).bind(self.workspace_id.0).bind(title).fetch_optional(&self.pool).await?
+            .ok_or(RepositoryError::NotFound("conversation"))
+    }
+
+    /// Only rename conversations that have never been named by a person or
+    /// by another completed generation. Concurrent runs cannot overwrite one another.
+    pub async fn set_generated_conversation_title(
+        &self,
+        conversation_id: Uuid,
+        title: &str,
+    ) -> Result<bool, RepositoryError> {
+        let result = sqlx::query("UPDATE conversations SET title = $3, title_source = 'generated', updated_at = now() WHERE id = $1 AND workspace_id = $2 AND archived_at IS NULL AND title_source = 'pending'")
+            .bind(conversation_id)
+            .bind(self.workspace_id.0)
+            .bind(title)
+            .execute(&self.pool).await?;
+        Ok(result.rows_affected() == 1)
+    }
+
+    /// Conversations are retained for run/message audit history, but hidden
+    /// from ordinary list/read calls after deletion.
+    pub async fn archive_conversation(&self, conversation_id: Uuid) -> Result<(), RepositoryError> {
+        let result = sqlx::query("UPDATE conversations SET archived_at = now(), updated_at = now() WHERE id = $1 AND workspace_id = $2 AND archived_at IS NULL")
+            .bind(conversation_id).bind(self.workspace_id.0).execute(&self.pool).await?;
+        if result.rows_affected() == 0 {
+            return Err(RepositoryError::NotFound("conversation"));
+        }
+        Ok(())
+    }
+
+    pub async fn agent_runs_for_conversation(
+        &self,
+        conversation_id: Uuid,
+    ) -> Result<Vec<AgentRun>, RepositoryError> {
+        Ok(sqlx::query_as("SELECT r.id, r.conversation_id, r.origin, r.status, r.provider_base_url, r.model, r.started_at, r.finished_at, r.error_code, r.error_message, r.created_at FROM agent_runs r JOIN conversations c ON c.id = r.conversation_id WHERE r.conversation_id = $1 AND c.workspace_id = $2 ORDER BY r.created_at DESC")
+            .bind(conversation_id).bind(self.workspace_id.0).fetch_all(&self.pool).await?)
+    }
+
+    pub async fn get_agent_tool_call(&self, id: Uuid) -> Result<AgentToolCall, RepositoryError> {
+        sqlx::query_as("SELECT call.id, call.run_id, call.sequence, call.provider_call_id, call.tool_name, call.arguments, call.change_summary, call.result, call.error, call.state, call.decided_by_user_id, call.decided_at, call.created_at, call.completed_at FROM agent_tool_calls call JOIN agent_runs run ON run.id = call.run_id WHERE call.id = $1 AND run.workspace_id = $2")
+            .bind(id).bind(self.workspace_id.0)
+            .fetch_optional(&self.pool).await?
+            .ok_or(RepositoryError::NotFound("agent tool call"))
+    }
+
+    pub async fn pending_agent_tool_calls(
+        &self,
+        conversation_id: Option<Uuid>,
+    ) -> Result<Vec<AgentToolCall>, RepositoryError> {
+        Ok(sqlx::query_as("SELECT call.id, call.run_id, call.sequence, call.provider_call_id, call.tool_name, call.arguments, call.change_summary, call.result, call.error, call.state, call.decided_by_user_id, call.decided_at, call.created_at, call.completed_at FROM agent_tool_calls call JOIN agent_runs run ON run.id = call.run_id WHERE run.workspace_id = $1 AND call.state = 'pending_approval' AND ($2::uuid IS NULL OR run.conversation_id = $2) ORDER BY call.created_at")
+            .bind(self.workspace_id.0).bind(conversation_id).fetch_all(&self.pool).await?)
+    }
+
+    /// Maps each run to the entity of its live (unarchived) conversation.
+    /// Runs whose conversation is missing or archived are absent.
+    pub async fn run_conversation_entities(
+        &self,
+        run_ids: &[Uuid],
+    ) -> Result<std::collections::HashMap<Uuid, Option<Uuid>>, RepositoryError> {
+        let rows: Vec<(Uuid, Option<Uuid>)> = sqlx::query_as("SELECT run.id, conversation.entity_id FROM agent_runs run JOIN conversations conversation ON conversation.id = run.conversation_id AND conversation.workspace_id = run.workspace_id WHERE run.id = ANY($1) AND run.workspace_id = $2 AND conversation.archived_at IS NULL")
+            .bind(run_ids).bind(self.workspace_id.0).fetch_all(&self.pool).await?;
+        Ok(rows.into_iter().collect())
+    }
+
+    /// One bounded replay page; callers continue from the last sequence.
+    pub async fn agent_run_events_after(
+        &self,
+        run_id: Uuid,
+        after: i64,
+    ) -> Result<Vec<AgentRunEvent>, RepositoryError> {
+        Ok(sqlx::query_as("SELECT event.id, event.run_id, event.sequence, event.event_type, event.payload, event.created_at FROM agent_run_events event JOIN agent_runs run ON run.id = event.run_id WHERE event.run_id = $1 AND run.workspace_id = $2 AND event.sequence > $3 ORDER BY event.sequence LIMIT 128")
+            .bind(run_id).bind(self.workspace_id.0).bind(after).fetch_all(&self.pool).await?)
+    }
+}
+
+impl CatalogRepository {
+    pub async fn agent_event_sequence(
+        &self,
+        run_id: Uuid,
+        event_id: Uuid,
+    ) -> Result<i64, RepositoryError> {
+        sqlx::query_scalar("SELECT event.sequence FROM agent_run_events event JOIN agent_runs run ON run.id = event.run_id WHERE event.id = $1 AND event.run_id = $2 AND run.workspace_id = $3")
+            .bind(event_id).bind(run_id).bind(self.workspace_id.0).fetch_optional(&self.pool).await?
+            .ok_or(RepositoryError::NotFound("agent run event"))
+    }
+}
+
+impl<S: super::RepositoryScope> CatalogRepository<S> {
+    /// System permissions are application data, not migration behavior. Keep
+    /// this idempotent bootstrap explicit so SQL migrations remain declarative.
+    pub async fn ensure_agent_permissions(&self) -> Result<(), RepositoryError> {
+        let mut tx = self.pool.begin().await?;
+        sqlx::query("INSERT INTO permissions (code, description) VALUES ('agents.run', 'Create, inspect, and decide conversational agent runs') ON CONFLICT (code) DO NOTHING")
+            .execute(&mut *tx).await?;
+        for role_id in [
+            Uuid::from_u128(0x00000000000040008000000000000101),
+            Uuid::from_u128(0x00000000000040008000000000000102),
+        ] {
+            sqlx::query("INSERT INTO role_permissions (role_id, permission_code) VALUES ($1, 'agents.run') ON CONFLICT DO NOTHING")
+                .bind(role_id).execute(&mut *tx).await?;
+        }
+        tx.commit().await?;
+        Ok(())
     }
 
     /// Startup recovery only acquires runs whose latest shared task lease has
@@ -541,298 +837,5 @@ impl CatalogRepository {
             tx.commit().await?;
         }
         Ok(())
-    }
-
-    pub async fn agent_run_initiator(&self, run_id: Uuid) -> Result<(Uuid, Uuid), RepositoryError> {
-        sqlx::query_as("SELECT initiated_by_user_id, workspace_id FROM agent_runs WHERE id = $1 AND workspace_id = $2")
-            .bind(run_id).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
-            .fetch_optional(&self.pool).await?
-            .and_then(|(actor, workspace): (Option<Uuid>, Uuid)| actor.map(|actor| (actor, workspace)))
-            .ok_or(RepositoryError::InvalidAgentState("agent run has no initiating user"))
-    }
-
-    pub async fn get_agent_run(&self, run_id: Uuid) -> Result<AgentRun, RepositoryError> {
-        sqlx::query_as("SELECT id, conversation_id, origin, status, provider_base_url, model, started_at, finished_at, error_code, error_message, created_at FROM agent_runs WHERE id = $1 AND workspace_id = $2")
-            .bind(run_id).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).fetch_optional(&self.pool).await?.ok_or(RepositoryError::NotFound("agent run"))
-    }
-
-    pub async fn decided_agent_tool_calls(
-        &self,
-        run_id: Uuid,
-    ) -> Result<Vec<AgentToolCall>, RepositoryError> {
-        Ok(sqlx::query_as("SELECT call.id, call.run_id, call.sequence, call.provider_call_id, call.tool_name, call.arguments, call.change_summary, call.result, call.error, call.state, call.decided_by_user_id, call.decided_at, call.created_at, call.completed_at FROM agent_tool_calls call JOIN agent_runs run ON run.id = call.run_id WHERE call.run_id = $1 AND run.workspace_id = $2 AND call.state IN ('approved', 'rejected') AND call.completed_at IS NULL ORDER BY call.sequence")
-            .bind(run_id).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).fetch_all(&self.pool).await?)
-    }
-
-    /// Whether this run still has mutations awaiting a human decision.
-    pub async fn has_pending_agent_tool_calls(
-        &self,
-        run_id: Uuid,
-    ) -> Result<bool, RepositoryError> {
-        Ok(sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM agent_tool_calls call JOIN agent_runs run ON run.id = call.run_id WHERE call.run_id = $1 AND run.workspace_id = $2 AND call.state = 'pending_approval')")
-            .bind(run_id)
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
-            .fetch_one(&self.pool)
-            .await?)
-    }
-
-    pub async fn create_agent_tool_call(
-        &self,
-        run_id: Uuid,
-        provider_call_id: Option<&str>,
-        tool_name: &str,
-        arguments: Value,
-        change_summary: Option<&str>,
-        state: &str,
-    ) -> Result<AgentToolCall, RepositoryError> {
-        if !matches!(
-            state,
-            "pending_approval" | "approved" | "rejected" | "completed" | "failed"
-        ) {
-            return Err(RepositoryError::InvalidAgentState(
-                "invalid tool call state",
-            ));
-        }
-        let mut tx = self.pool.begin().await?;
-        self.ensure_task_fence(&mut tx).await?;
-        let exists = sqlx::query_scalar::<_, Uuid>(
-            "SELECT id FROM agent_runs WHERE id = $1 AND workspace_id = $2 FOR UPDATE",
-        )
-        .bind(run_id)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
-        .fetch_optional(&mut *tx)
-        .await?;
-        if exists.is_none() {
-            return Err(RepositoryError::NotFound("agent run"));
-        }
-        let sequence: i64 = sqlx::query_scalar(
-            "SELECT COALESCE(MAX(sequence) + 1, 0) FROM agent_tool_calls WHERE run_id = $1",
-        )
-        .bind(run_id)
-        .fetch_one(&mut *tx)
-        .await?;
-        // Every newly proposed or automatically executed call starts undecided.
-        // Only `decide_tool_call` may set an approval decision and timestamp.
-        let call = sqlx::query_as("INSERT INTO agent_tool_calls (id, run_id, sequence, provider_call_id, tool_name, arguments, change_summary, state) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, run_id, sequence, provider_call_id, tool_name, arguments, change_summary, result, error, state, decided_by_user_id, decided_at, created_at, completed_at")
-            .bind(Uuid::new_v4()).bind(run_id).bind(sequence).bind(provider_call_id).bind(tool_name).bind(arguments).bind(change_summary).bind(state).fetch_one(&mut *tx).await?;
-        tx.commit().await?;
-        Ok(call)
-    }
-
-    pub async fn complete_agent_tool_call(
-        &self,
-        tool_call_id: Uuid,
-        result: Result<Value, Value>,
-    ) -> Result<AgentToolCall, RepositoryError> {
-        let (result, error, state) = match result {
-            Ok(value) => (Some(value), None, "completed"),
-            Err(value) => (None, Some(value), "failed"),
-        };
-        let mut tx = self.pool.begin().await?;
-        self.ensure_task_fence(&mut tx).await?;
-        let call = sqlx::query_as("UPDATE agent_tool_calls call SET result = $3, error = $4, state = CASE WHEN call.state = 'rejected' THEN 'rejected' ELSE $5 END, completed_at = now() FROM agent_runs run WHERE call.id = $1 AND call.run_id = run.id AND run.workspace_id = $2 AND call.state IN ('approved', 'pending_approval', 'rejected') RETURNING call.id, call.run_id, call.sequence, call.provider_call_id, call.tool_name, call.arguments, call.change_summary, call.result, call.error, call.state, call.decided_by_user_id, call.decided_at, call.created_at, call.completed_at")
-            .bind(tool_call_id).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).bind(result).bind(error).bind(state).fetch_optional(&mut *tx).await?.ok_or(RepositoryError::InvalidAgentState("tool call cannot be completed"))?;
-        tx.commit().await?;
-        Ok(call)
-    }
-
-    pub async fn append_run_event(
-        &self,
-        run_id: Uuid,
-        event_type: &str,
-        payload: Value,
-    ) -> Result<AgentRunEvent, RepositoryError> {
-        let mut tx = self.pool.begin().await?;
-        self.ensure_task_fence(&mut tx).await?;
-        let exists = sqlx::query_scalar::<_, Uuid>(
-            "SELECT id FROM agent_runs WHERE id = $1 AND workspace_id = $2 FOR UPDATE",
-        )
-        .bind(run_id)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
-        .fetch_optional(&mut *tx)
-        .await?;
-        if exists.is_none() {
-            return Err(RepositoryError::NotFound("agent run"));
-        }
-        let sequence: i64 = sqlx::query_scalar(
-            "SELECT COALESCE(MAX(sequence) + 1, 0) FROM agent_run_events WHERE run_id = $1",
-        )
-        .bind(run_id)
-        .fetch_one(&mut *tx)
-        .await?;
-        let event = sqlx::query_as("INSERT INTO agent_run_events (id, run_id, sequence, event_type, payload) VALUES ($1, $2, $3, $4, $5) RETURNING id, run_id, sequence, event_type, payload, created_at")
-            .bind(Uuid::new_v4()).bind(run_id).bind(sequence).bind(event_type).bind(payload).fetch_one(&mut *tx).await?;
-        tx.commit().await?;
-        Ok(event)
-    }
-
-    /// Makes an approval decision exactly once. The run transition and durable
-    /// event share one transaction, so a restart cannot observe a decision
-    /// without its replayable status evidence.
-    pub async fn decide_tool_call(
-        &self,
-        tool_call_id: Uuid,
-        actor: Uuid,
-        decision: ApprovalDecision,
-    ) -> Result<AgentToolCall, RepositoryError> {
-        let mut tx = self.pool.begin().await?;
-        let call: AgentToolCall = sqlx::query_as("SELECT id, run_id, sequence, provider_call_id, tool_name, arguments, change_summary, result, error, state, decided_by_user_id, decided_at, created_at, completed_at FROM agent_tool_calls WHERE id = $1 AND EXISTS (SELECT 1 FROM agent_runs run WHERE run.id = agent_tool_calls.run_id AND run.workspace_id = $2) FOR UPDATE")
-            .bind(tool_call_id).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).fetch_optional(&mut *tx).await?.ok_or(RepositoryError::NotFound("agent tool call"))?;
-        if call.state != "pending_approval" {
-            return Err(RepositoryError::ApprovalAlreadyDecided);
-        }
-        let state = match decision {
-            ApprovalDecision::Approve => "approved",
-            ApprovalDecision::Reject => "rejected",
-        };
-        let call: AgentToolCall = sqlx::query_as("UPDATE agent_tool_calls SET state = $2, decided_by_user_id = $3, decided_at = now() WHERE id = $1 RETURNING id, run_id, sequence, provider_call_id, tool_name, arguments, change_summary, result, error, state, decided_by_user_id, decided_at, created_at, completed_at")
-            .bind(tool_call_id).bind(state).bind(actor).fetch_one(&mut *tx).await?;
-        sqlx::query("UPDATE agent_runs SET status = 'queued' WHERE id = $1 AND status = 'awaiting_approval'").bind(call.run_id).execute(&mut *tx).await?;
-        let sequence: i64 = sqlx::query_scalar(
-            "SELECT COALESCE(MAX(sequence) + 1, 0) FROM agent_run_events WHERE run_id = $1",
-        )
-        .bind(call.run_id)
-        .fetch_one(&mut *tx)
-        .await?;
-        sqlx::query("INSERT INTO agent_run_events (id, run_id, sequence, event_type, payload) VALUES ($1, $2, $3, 'status', $4)")
-            .bind(Uuid::new_v4()).bind(call.run_id).bind(sequence).bind(serde_json::json!({"tool_call_id": tool_call_id, "decision": state})).execute(&mut *tx).await?;
-        let generation: i32 = sqlx::query_scalar("SELECT COALESCE(MAX(generation) + 1, 0) FROM tasks WHERE workspace_id = $1 AND kind = 'agent_run.v1' AND subject_id = $2")
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).bind(call.run_id).fetch_one(&mut *tx).await?;
-        self.enqueue_task(
-            &mut tx,
-            crate::task_queue::TaskInsert {
-                workspace_id: self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID),
-                kind: crate::task_queue::TaskKind::AgentRunV1,
-                subject_id: call.run_id,
-                generation,
-                payload: serde_json::json!({"agent_run_id": call.run_id.to_string()}),
-                correlation_id: None,
-                causation_id: None,
-            },
-        )
-        .await?;
-        tx.commit().await?;
-        Ok(call)
-    }
-}
-
-impl CatalogRepository {
-    pub async fn list_conversations(&self) -> Result<Vec<Conversation>, RepositoryError> {
-        Ok(sqlx::query_as("SELECT id, workspace_id, created_by_user_id, title, title_source, entity_id, context_id, created_at, updated_at, archived_at FROM conversations WHERE workspace_id = $1 AND archived_at IS NULL ORDER BY updated_at DESC")
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).fetch_all(&self.pool).await?)
-    }
-
-    pub async fn search_conversations(
-        &self,
-        query: &str,
-        before: Option<(DateTime<Utc>, Uuid)>,
-        limit: i64,
-    ) -> Result<Vec<Conversation>, RepositoryError> {
-        let (before_date, before_id) =
-            before.map_or((None, None), |(date, id)| (Some(date), Some(id)));
-        Ok(sqlx::query_as("SELECT c.id, c.workspace_id, c.created_by_user_id, c.title, c.title_source, c.entity_id, c.context_id, c.created_at, c.updated_at, c.archived_at FROM conversations c WHERE c.workspace_id = $1 AND c.archived_at IS NULL AND ($2 = '' OR position(lower($2) in lower(c.title)) > 0 OR EXISTS (SELECT 1 FROM conversation_messages m WHERE m.conversation_id = c.id AND m.role = 'user' AND position(lower($2) in lower(m.content::text)) > 0)) AND ($3::timestamptz IS NULL OR (c.updated_at, c.id) < ($3, $4)) ORDER BY c.updated_at DESC, c.id DESC LIMIT $5")
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
-            .bind(query).bind(before_date).bind(before_id).bind(limit)
-            .fetch_all(&self.pool).await?)
-    }
-
-    pub async fn get_conversation(
-        &self,
-        conversation_id: Uuid,
-    ) -> Result<Conversation, RepositoryError> {
-        sqlx::query_as("SELECT id, workspace_id, created_by_user_id, title, title_source, entity_id, context_id, created_at, updated_at, archived_at FROM conversations WHERE id = $1 AND workspace_id = $2 AND archived_at IS NULL")
-            .bind(conversation_id).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).fetch_optional(&self.pool).await?
-            .ok_or(RepositoryError::NotFound("conversation"))
-    }
-
-    pub async fn update_conversation_title(
-        &self,
-        conversation_id: Uuid,
-        title: &str,
-    ) -> Result<Conversation, RepositoryError> {
-        sqlx::query_as("UPDATE conversations SET title = $3, title_source = 'manual', updated_at = now() WHERE id = $1 AND workspace_id = $2 AND archived_at IS NULL RETURNING id, workspace_id, created_by_user_id, title, title_source, entity_id, context_id, created_at, updated_at, archived_at")
-            .bind(conversation_id).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).bind(title).fetch_optional(&self.pool).await?
-            .ok_or(RepositoryError::NotFound("conversation"))
-    }
-
-    /// Only rename conversations that have never been named by a person or
-    /// by another completed generation. Concurrent runs cannot overwrite one another.
-    pub async fn set_generated_conversation_title(
-        &self,
-        conversation_id: Uuid,
-        title: &str,
-    ) -> Result<bool, RepositoryError> {
-        let result = sqlx::query("UPDATE conversations SET title = $3, title_source = 'generated', updated_at = now() WHERE id = $1 AND workspace_id = $2 AND archived_at IS NULL AND title_source = 'pending'")
-            .bind(conversation_id)
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
-            .bind(title)
-            .execute(&self.pool).await?;
-        Ok(result.rows_affected() == 1)
-    }
-
-    /// Conversations are retained for run/message audit history, but hidden
-    /// from ordinary list/read calls after deletion.
-    pub async fn archive_conversation(&self, conversation_id: Uuid) -> Result<(), RepositoryError> {
-        let result = sqlx::query("UPDATE conversations SET archived_at = now(), updated_at = now() WHERE id = $1 AND workspace_id = $2 AND archived_at IS NULL")
-            .bind(conversation_id).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).execute(&self.pool).await?;
-        if result.rows_affected() == 0 {
-            return Err(RepositoryError::NotFound("conversation"));
-        }
-        Ok(())
-    }
-
-    pub async fn agent_runs_for_conversation(
-        &self,
-        conversation_id: Uuid,
-    ) -> Result<Vec<AgentRun>, RepositoryError> {
-        Ok(sqlx::query_as("SELECT r.id, r.conversation_id, r.origin, r.status, r.provider_base_url, r.model, r.started_at, r.finished_at, r.error_code, r.error_message, r.created_at FROM agent_runs r JOIN conversations c ON c.id = r.conversation_id WHERE r.conversation_id = $1 AND c.workspace_id = $2 ORDER BY r.created_at DESC")
-            .bind(conversation_id).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).fetch_all(&self.pool).await?)
-    }
-
-    pub async fn get_agent_tool_call(&self, id: Uuid) -> Result<AgentToolCall, RepositoryError> {
-        sqlx::query_as("SELECT call.id, call.run_id, call.sequence, call.provider_call_id, call.tool_name, call.arguments, call.change_summary, call.result, call.error, call.state, call.decided_by_user_id, call.decided_at, call.created_at, call.completed_at FROM agent_tool_calls call JOIN agent_runs run ON run.id = call.run_id WHERE call.id = $1 AND run.workspace_id = $2")
-            .bind(id).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
-            .fetch_optional(&self.pool).await?
-            .ok_or(RepositoryError::NotFound("agent tool call"))
-    }
-
-    pub async fn pending_agent_tool_calls(
-        &self,
-        conversation_id: Option<Uuid>,
-    ) -> Result<Vec<AgentToolCall>, RepositoryError> {
-        Ok(sqlx::query_as("SELECT call.id, call.run_id, call.sequence, call.provider_call_id, call.tool_name, call.arguments, call.change_summary, call.result, call.error, call.state, call.decided_by_user_id, call.decided_at, call.created_at, call.completed_at FROM agent_tool_calls call JOIN agent_runs run ON run.id = call.run_id WHERE run.workspace_id = $1 AND call.state = 'pending_approval' AND ($2::uuid IS NULL OR run.conversation_id = $2) ORDER BY call.created_at")
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).bind(conversation_id).fetch_all(&self.pool).await?)
-    }
-
-    /// Maps each run to the entity of its live (unarchived) conversation.
-    /// Runs whose conversation is missing or archived are absent.
-    pub async fn run_conversation_entities(
-        &self,
-        run_ids: &[Uuid],
-    ) -> Result<std::collections::HashMap<Uuid, Option<Uuid>>, RepositoryError> {
-        let rows: Vec<(Uuid, Option<Uuid>)> = sqlx::query_as("SELECT run.id, conversation.entity_id FROM agent_runs run JOIN conversations conversation ON conversation.id = run.conversation_id AND conversation.workspace_id = run.workspace_id WHERE run.id = ANY($1) AND run.workspace_id = $2 AND conversation.archived_at IS NULL")
-            .bind(run_ids).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).fetch_all(&self.pool).await?;
-        Ok(rows.into_iter().collect())
-    }
-
-    pub async fn agent_run_events_after(
-        &self,
-        run_id: Uuid,
-        after: i64,
-    ) -> Result<Vec<AgentRunEvent>, RepositoryError> {
-        Ok(sqlx::query_as("SELECT event.id, event.run_id, event.sequence, event.event_type, event.payload, event.created_at FROM agent_run_events event JOIN agent_runs run ON run.id = event.run_id WHERE event.run_id = $1 AND run.workspace_id = $2 AND event.sequence > $3 ORDER BY event.sequence")
-            .bind(run_id).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).bind(after).fetch_all(&self.pool).await?)
-    }
-}
-
-impl CatalogRepository {
-    pub async fn agent_event_sequence(
-        &self,
-        run_id: Uuid,
-        event_id: Uuid,
-    ) -> Result<i64, RepositoryError> {
-        sqlx::query_scalar("SELECT event.sequence FROM agent_run_events event JOIN agent_runs run ON run.id = event.run_id WHERE event.id = $1 AND event.run_id = $2 AND run.workspace_id = $3")
-            .bind(event_id).bind(run_id).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).fetch_optional(&self.pool).await?
-            .ok_or(RepositoryError::NotFound("agent run event"))
     }
 }

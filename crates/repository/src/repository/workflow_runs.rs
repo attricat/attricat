@@ -124,7 +124,7 @@ impl CatalogRepository {
         {
             return Ok(0);
         }
-        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
         let rows: Vec<(Uuid, i64, Value)> = sqlx::query_as("SELECT w.id, w.version, w.compiled_plan FROM workflows w JOIN workflow_lifecycles l ON l.workflow_id=w.id AND l.workspace_id=w.workspace_id WHERE w.workspace_id=$1 AND w.status='published' AND l.enabled_version=w.version AND $2 > COALESCE(l.activation_sequence, 0) FOR SHARE OF l")
             .bind(ws).bind(event.sequence).fetch_all(&mut *tx).await?;
@@ -181,7 +181,7 @@ impl CatalogRepository {
         &self,
         task: &ClaimedTask,
     ) -> Result<ClaimedWorkflowRun, RepositoryError> {
-        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let ws = self.workspace_id.0;
         if task.kind != TaskKind::WorkflowRunV1 || task.workspace_id != ws {
             return Err(RepositoryError::InvalidWorkflowDefinition(
                 "workflow task workspace or kind mismatch".into(),
@@ -200,7 +200,7 @@ impl CatalogRepository {
         &self,
         task: &ClaimedTask,
     ) -> Result<(), RepositoryError> {
-        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
         let fenced = self.for_workflow_task(task);
         fenced.ensure_task_fence(&mut tx).await?;
@@ -215,7 +215,7 @@ impl CatalogRepository {
         task: &ClaimedTask,
         error: &str,
     ) -> Result<(), RepositoryError> {
-        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
         let fenced = self.for_workflow_task(task);
         fenced.ensure_task_fence(&mut tx).await?;
@@ -238,12 +238,12 @@ impl CatalogRepository {
     }
 
     pub async fn list_workflow_runs(&self) -> Result<Vec<WorkflowRun>, RepositoryError> {
-        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let ws = self.workspace_id.0;
         Ok(sqlx::query_as("SELECT id,workflow_id,workflow_version,trigger_event_id,trigger_sequence,source,status,attempts,failed_at,completed_at,last_error,created_at,cancelled_at,root_trigger_event_id,causal_depth FROM workflow_runs WHERE workspace_id=$1 ORDER BY created_at DESC").bind(ws).fetch_all(&self.pool).await?)
     }
 
     pub async fn get_workflow_run(&self, id: Uuid) -> Result<Option<WorkflowRun>, RepositoryError> {
-        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let ws = self.workspace_id.0;
         sqlx::query_as("SELECT id,workflow_id,workflow_version,trigger_event_id,trigger_sequence,source,status,attempts,failed_at,completed_at,last_error,created_at,cancelled_at,root_trigger_event_id,causal_depth FROM workflow_runs WHERE workspace_id=$1 AND id=$2")
             .bind(ws).bind(id).fetch_optional(&self.pool).await.map_err(Into::into)
     }
@@ -253,7 +253,7 @@ impl CatalogRepository {
         limit: i64,
         offset: i64,
     ) -> Result<(Vec<WorkflowRun>, bool), RepositoryError> {
-        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let ws = self.workspace_id.0;
         let mut rows = sqlx::query_as("SELECT id,workflow_id,workflow_version,trigger_event_id,trigger_sequence,source,status,attempts,failed_at,completed_at,last_error,created_at,cancelled_at,root_trigger_event_id,causal_depth FROM workflow_runs WHERE workspace_id=$1 ORDER BY created_at DESC,id DESC LIMIT $2 OFFSET $3")
             .bind(ws).bind(limit + 1).bind(offset).fetch_all(&self.pool).await?;
         let has_more = rows.len() as i64 > limit;
@@ -273,7 +273,7 @@ impl CatalogRepository {
                 "manual idempotency_key must be 1-128 ASCII bytes".into(),
             ));
         }
-        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
         let row: Option<(i64, Value)> = sqlx::query_as("SELECT w.version,w.compiled_plan FROM workflows w JOIN workflow_lifecycles l ON l.workflow_id=w.id AND l.workspace_id=w.workspace_id WHERE w.workspace_id=$1 AND w.id=$2 AND w.status='published' AND l.enabled_version=w.version FOR SHARE OF l").bind(ws).bind(workflow_id).fetch_optional(&mut *tx).await?;
         let Some((version, plan)) = row else {
@@ -316,7 +316,7 @@ impl CatalogRepository {
     /// the existing no-overlap semantics.
     pub async fn schedule_workflow_runs(&self) -> Result<u64, RepositoryError> {
         use chrono::Duration as ChronoDuration;
-        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let ws = self.workspace_id.0;
         let now = Utc::now();
         let mut tx = self.pool.begin().await?;
         let mut created = 0;
@@ -402,7 +402,7 @@ impl CatalogRepository {
     /// started in this binary, so normalizing stale leases is safe and keeps a
     /// restart from stranding work created before the cutover.
     pub async fn backfill_workflow_tasks(&self) -> Result<u64, RepositoryError> {
-        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
         sqlx::query("UPDATE workflow_runs SET status='pending',lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND status='leased'").bind(ws).execute(&mut *tx).await?;
         let rows: Vec<(Uuid, Option<Uuid>, Option<Uuid>)> = sqlx::query_as("SELECT id,trigger_event_id,trigger_event_id FROM workflow_runs WHERE workspace_id=$1 AND status='pending' FOR UPDATE").bind(ws).fetch_all(&mut *tx).await?;
@@ -416,7 +416,7 @@ impl CatalogRepository {
     }
 
     pub async fn replay_workflow_run(&self, id: Uuid) -> Result<bool, RepositoryError> {
-        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
         let updated = sqlx::query("UPDATE workflow_runs SET status='pending',attempts=0,failed_at=NULL,last_error=NULL,replayed_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='dead_letter'").bind(id).bind(ws).execute(&mut *tx).await?.rows_affected();
         if updated == 0 {

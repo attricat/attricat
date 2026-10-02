@@ -78,23 +78,11 @@ impl CatalogRepository {
         Ok(())
     }
 
-    pub async fn ensure_rule_permissions(&self) -> Result<(), RepositoryError> {
-        let mut tx = self.pool.begin().await?;
-        sqlx::query("INSERT INTO permissions(code,description) VALUES ('rules.read','Read workspace data quality rules and findings'),('rules.manage','Create and operate workspace data quality rules') ON CONFLICT(code) DO NOTHING").execute(&mut *tx).await?;
-        for role_id in [
-            Uuid::from_u128(0x00000000000040008000000000000101),
-            Uuid::from_u128(0x00000000000040008000000000000102),
-        ] {
-            sqlx::query("INSERT INTO role_permissions(role_id,permission_code) SELECT $1,code FROM permissions WHERE code IN ('rules.read','rules.manage') ON CONFLICT DO NOTHING").bind(role_id).execute(&mut *tx).await?;
-        }
-        tx.commit().await?;
-        Ok(())
-    }
     pub async fn list_rules(
         &self,
         blueprint_id: Option<Uuid>,
     ) -> Result<Vec<Rule>, RepositoryError> {
-        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let ws = self.workspace_id.0;
         let query = format!(
             "SELECT {RULE_FIELDS} FROM rules r JOIN rule_lifecycles l ON l.rule_id=r.id WHERE r.workspace_id=$1 AND ($2::uuid IS NULL OR r.blueprint_id=$2) ORDER BY r.created_at DESC,r.version DESC"
         );
@@ -110,7 +98,7 @@ impl CatalogRepository {
         id: Uuid,
         version: i64,
     ) -> Result<Option<Rule>, RepositoryError> {
-        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let ws = self.workspace_id.0;
         let q = format!(
             "SELECT {RULE_FIELDS} FROM rules r JOIN rule_lifecycles l ON l.rule_id=r.id WHERE r.workspace_id=$1 AND r.id=$2 AND r.version=$3"
         );
@@ -126,7 +114,7 @@ impl CatalogRepository {
     pub async fn create_rule(&self, input: CreateRule) -> Result<Rule, RepositoryError> {
         let compiled = catalog_rules::compile(&input.definition)
             .map_err(|e| RepositoryError::InvalidRuleDefinition(e.to_string()))?;
-        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
         let valid_blueprint:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM blueprints WHERE id=$1 AND version=$2 AND workspace_id=$3 AND status='published' AND deleted_at IS NULL)").bind(input.blueprint_id).bind(input.blueprint_version).bind(ws).fetch_one(&mut *tx).await?;
         if !valid_blueprint {
@@ -179,7 +167,7 @@ impl CatalogRepository {
     ) -> Result<Rule, RepositoryError> {
         let compiled = catalog_rules::compile(&input.definition)
             .map_err(|e| RepositoryError::InvalidRuleDefinition(e.to_string()))?;
-        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
         let previous: Option<(i64, String, Uuid, i64, Option<Uuid>)> = sqlx::query_as("SELECT version,code,blueprint_id,blueprint_version,context_id FROM rules WHERE workspace_id=$1 AND id=$2 ORDER BY version DESC LIMIT 1 FOR UPDATE").bind(ws).bind(id).fetch_optional(&mut *tx).await?;
         let Some((version, code, blueprint_id, blueprint_version, context_id)) = previous else {
@@ -203,7 +191,7 @@ impl CatalogRepository {
             .ok_or(RepositoryError::NotFound("rule"))
     }
     pub async fn get_rule(&self, id: Uuid) -> Result<Option<Rule>, RepositoryError> {
-        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let ws = self.workspace_id.0;
         let q = format!(
             "SELECT {RULE_FIELDS} FROM rules r JOIN rule_lifecycles l ON l.rule_id=r.id WHERE r.workspace_id=$1 AND r.id=$2 ORDER BY r.version DESC LIMIT 1"
         );
@@ -215,7 +203,7 @@ impl CatalogRepository {
             .into_domain())
     }
     pub async fn publish_rule(&self, id: Uuid, version: i64) -> Result<Rule, RepositoryError> {
-        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
         if sqlx::query("UPDATE rules SET status='published',published_at=COALESCE(published_at,now()) WHERE workspace_id=$1 AND id=$2 AND version=$3").bind(ws).bind(id).bind(version).execute(&mut *tx).await?.rows_affected()==0{return Err(RepositoryError::NotFound("rule revision"));}
         self.commit_mutation(tx).await?;
@@ -224,7 +212,7 @@ impl CatalogRepository {
             .ok_or(RepositoryError::NotFound("rule"))
     }
     pub async fn enable_rule(&self, id: Uuid, version: i64) -> Result<Rule, RepositoryError> {
-        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
         let exists:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM rules WHERE workspace_id=$1 AND id=$2 AND version=$3 AND status='published')").bind(ws).bind(id).bind(version).fetch_one(&mut *tx).await?;
         if !exists {
@@ -259,7 +247,7 @@ impl CatalogRepository {
             .ok_or(RepositoryError::NotFound("rule"))
     }
     pub async fn disable_rule(&self, id: Uuid) -> Result<Rule, RepositoryError> {
-        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
         if sqlx::query("UPDATE rule_lifecycles SET enabled_version=NULL,disabled_at=now(),updated_at=now() WHERE workspace_id=$1 AND rule_id=$2").bind(ws).bind(id).execute(&mut *tx).await?.rows_affected()==0{return Err(RepositoryError::NotFound("rule"));}
         sqlx::query("UPDATE rule_runs SET status='cancelled',cancelled_at=clock_timestamp(),lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND rule_id=$2 AND status IN ('pending','leased')").bind(ws).bind(id).execute(&mut *tx).await?;
@@ -289,7 +277,7 @@ impl CatalogRepository {
                 "manual idempotency_key must be 1-128 ASCII bytes".into(),
             ));
         }
-        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
         let version: Option<i64> = sqlx::query_scalar(
             "SELECT r.version FROM rules r JOIN rule_lifecycles l ON l.rule_id=r.id AND l.workspace_id=r.workspace_id WHERE r.workspace_id=$1 AND r.id=$2 AND r.status='published' AND l.enabled_version=r.version FOR SHARE OF l",
@@ -322,7 +310,7 @@ impl CatalogRepository {
         if event.aggregate_kind != "entity" || event.source_name.starts_with("rule:") {
             return Ok(0);
         }
-        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
         let rows: Vec<(Uuid, i64, serde_json::Value)> = sqlx::query_as("SELECT r.id,r.version,r.compiled_plan FROM rules r JOIN rule_lifecycles l ON l.rule_id=r.id AND l.workspace_id=r.workspace_id JOIN entities e ON e.id=$3 AND e.workspace_id=r.workspace_id AND e.blueprint_id=r.blueprint_id AND e.blueprint_version=r.blueprint_version AND e.deleted_at IS NULL WHERE r.workspace_id=$1 AND r.status='published' AND l.enabled_version=r.version AND $2 > COALESCE(l.activation_sequence,0) FOR SHARE OF l").bind(ws).bind(event.sequence).bind(event.aggregate_id).fetch_all(&mut *tx).await?;
         let mut inserted = 0;
@@ -350,7 +338,7 @@ impl CatalogRepository {
     /// Materialize due cron occurrences as durable runs. The occurrence timestamp is the
     /// idempotency key, while schedule state is the only timer/cursor held by the system.
     pub async fn schedule_rule_runs(&self) -> Result<u64, RepositoryError> {
-        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let ws = self.workspace_id.0;
         let now = Utc::now();
         let mut tx = self.pool.begin().await?;
         let rows: Vec<(Uuid, i64, serde_json::Value)> = sqlx::query_as("SELECT r.id,r.version,r.compiled_plan FROM rules r JOIN rule_lifecycles l ON l.rule_id=r.id AND l.workspace_id=r.workspace_id WHERE r.workspace_id=$1 AND r.status='published' AND l.enabled_version=r.version FOR SHARE OF l").bind(ws).fetch_all(&mut *tx).await?;
@@ -396,14 +384,14 @@ impl CatalogRepository {
         Ok(created)
     }
     pub async fn list_rule_runs(&self) -> Result<Vec<RuleRun>, RepositoryError> {
-        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let ws = self.workspace_id.0;
         Ok(sqlx::query_as::<_, Db<RuleRun>>("SELECT id,rule_id,rule_version,source,dry_run,scope_entity_id,status,candidate_cursor,candidates_evaluated,findings_created,findings_resolved,attempts,last_error,completed_at,created_at FROM rule_runs WHERE workspace_id=$1 ORDER BY created_at DESC").bind(ws).fetch_all(&self.pool).await?.into_domain())
     }
     pub async fn list_rule_findings(
         &self,
         entity_id: Option<Uuid>,
     ) -> Result<Vec<RuleFinding>, RepositoryError> {
-        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let ws = self.workspace_id.0;
         Ok(sqlx::query_as::<_, Db<RuleFinding>>("SELECT id,rule_id,rule_version,entity_id,context_id,severity,message,evidence,state,acknowledged_at,resolved_at,created_at,updated_at FROM rule_findings WHERE workspace_id=$1 AND ($2::uuid IS NULL OR entity_id=$2) ORDER BY updated_at DESC").bind(ws).bind(entity_id).fetch_all(&self.pool).await?.into_domain())
     }
     pub async fn rule_runs_page(
@@ -412,7 +400,7 @@ impl CatalogRepository {
         limit: i64,
         offset: i64,
     ) -> Result<(Vec<RuleRun>, bool), RepositoryError> {
-        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let ws = self.workspace_id.0;
         let mut rows = sqlx::query_as::<_, Db<RuleRun>>("SELECT id,rule_id,rule_version,source,dry_run,scope_entity_id,status,candidate_cursor,candidates_evaluated,findings_created,findings_resolved,attempts,last_error,completed_at,created_at FROM rule_runs WHERE workspace_id=$1 AND ($2::uuid IS NULL OR rule_id=$2) ORDER BY created_at DESC,id DESC LIMIT $3 OFFSET $4")
             .bind(ws).bind(rule_id).bind(limit + 1).bind(offset).fetch_all(&self.pool).await?;
         let has_more = rows.len() as i64 > limit;
@@ -426,7 +414,7 @@ impl CatalogRepository {
         limit: i64,
         offset: i64,
     ) -> Result<(Vec<RuleFinding>, bool), RepositoryError> {
-        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let ws = self.workspace_id.0;
         let mut rows = sqlx::query_as::<_, Db<RuleFinding>>("SELECT id,rule_id,rule_version,entity_id,context_id,severity,message,evidence,state,acknowledged_at,resolved_at,created_at,updated_at FROM rule_findings WHERE workspace_id=$1 AND ($2::uuid IS NULL OR entity_id=$2) ORDER BY updated_at DESC,id DESC LIMIT $3 OFFSET $4")
             .bind(ws).bind(entity_id).bind(limit + 1).bind(offset).fetch_all(&self.pool).await?;
         let has_more = rows.len() as i64 > limit;
@@ -435,7 +423,7 @@ impl CatalogRepository {
     }
 
     pub async fn acknowledge_rule_finding(&self, id: Uuid) -> Result<RuleFinding, RepositoryError> {
-        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let ws = self.workspace_id.0;
         let actor = self
             .audit_context
             .as_ref()
@@ -466,7 +454,7 @@ impl CatalogRepository {
         &self,
         task: &super::ClaimedTask,
     ) -> Result<Option<ClaimedRuleRun>, RepositoryError> {
-        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let ws = self.workspace_id.0;
         if task.kind != TaskKind::RuleRunV1 || task.workspace_id != ws {
             return Err(RepositoryError::InvalidRuleDefinition(
                 "rule task workspace or kind mismatch".into(),
@@ -523,7 +511,7 @@ impl CatalogRepository {
         &self,
         task: &super::ClaimedTask,
     ) -> Result<bool, RepositoryError> {
-        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let ws = self.workspace_id.0;
         if task.kind != TaskKind::RuleRunV1 || task.workspace_id != ws {
             return Err(RepositoryError::InvalidRuleDefinition(
                 "rule task workspace or kind mismatch".into(),
@@ -550,7 +538,7 @@ impl CatalogRepository {
         next_cursor: Option<Uuid>,
         done: bool,
     ) -> Result<bool, RepositoryError> {
-        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
         let fenced = self.for_rule_task(task);
         fenced.ensure_task_fence(&mut tx).await?;
@@ -600,7 +588,7 @@ impl CatalogRepository {
         task: &super::ClaimedTask,
         error: &str,
     ) -> Result<bool, RepositoryError> {
-        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let ws = self.workspace_id.0;
         let terminal = task.failures + 1 >= task.max_failures;
         let mut tx = self.pool.begin().await?;
         let fenced = self.for_rule_task(task);
@@ -627,7 +615,7 @@ impl CatalogRepository {
     /// claimer is started with this binary, so normalising its stale leases is
     /// safe and avoids stranding work after deployment or restart.
     pub async fn backfill_rule_tasks(&self) -> Result<u64, RepositoryError> {
-        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
         sqlx::query("UPDATE rule_runs rr SET status='pending',lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE rr.workspace_id=$1 AND rr.status='leased' AND NOT EXISTS (SELECT 1 FROM tasks t WHERE t.workspace_id=rr.workspace_id AND t.kind='rule_run.v1' AND t.subject_id=rr.id AND t.status='leased' AND t.lease_until>clock_timestamp())")
             .bind(ws).execute(&mut *tx).await?;
@@ -649,7 +637,7 @@ impl CatalogRepository {
     /// Replays a dead-lettered rule run through a fresh task generation while
     /// keeping finding idempotency and the candidate cursor durable.
     pub async fn replay_rule_run(&self, id: Uuid) -> Result<bool, RepositoryError> {
-        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
         if sqlx::query("UPDATE rule_runs SET status='pending',last_error=NULL,completed_at=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='dead_letter'")
             .bind(id).bind(ws).execute(&mut *tx).await?.rows_affected() == 0 {
@@ -661,5 +649,20 @@ impl CatalogRepository {
         self.replay_task(&mut tx, task_id).await?;
         tx.commit().await?;
         Ok(true)
+    }
+}
+
+impl<S: super::RepositoryScope> CatalogRepository<S> {
+    pub async fn ensure_rule_permissions(&self) -> Result<(), RepositoryError> {
+        let mut tx = self.pool.begin().await?;
+        sqlx::query("INSERT INTO permissions(code,description) VALUES ('rules.read','Read workspace data quality rules and findings'),('rules.manage','Create and operate workspace data quality rules') ON CONFLICT(code) DO NOTHING").execute(&mut *tx).await?;
+        for role_id in [
+            Uuid::from_u128(0x00000000000040008000000000000101),
+            Uuid::from_u128(0x00000000000040008000000000000102),
+        ] {
+            sqlx::query("INSERT INTO role_permissions(role_id,permission_code) SELECT $1,code FROM permissions WHERE code IN ('rules.read','rules.manage') ON CONFLICT DO NOTHING").bind(role_id).execute(&mut *tx).await?;
+        }
+        tx.commit().await?;
+        Ok(())
     }
 }

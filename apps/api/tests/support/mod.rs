@@ -188,8 +188,53 @@ async fn start_server_with_auth_mode_and_store_with_devtools(
     mail_delivery: Arc<dyn MailDelivery>,
     devtools_enabled: bool,
 ) -> (String, JoinHandle<()>) {
+    start_configured_server(
+        pool,
+        data_health_cache_ttl_seconds,
+        allow_trusted_headers,
+        object_store,
+        file_access_policy,
+        mail_delivery,
+        devtools_enabled,
+        |_| {},
+    )
+    .await
+}
+
+pub async fn start_server_with_config(
+    pool: PgPool,
+    configure: impl FnOnce(&mut AppState),
+) -> (String, JoinHandle<()>) {
+    start_configured_server(
+        pool,
+        0,
+        true,
+        Arc::new(FakeObjectStore::available()),
+        Arc::new(AllowFileAccess),
+        Arc::new(TestMailDelivery::default()),
+        false,
+        configure,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn start_configured_server(
+    pool: PgPool,
+    data_health_cache_ttl_seconds: u64,
+    allow_trusted_headers: bool,
+    object_store: Arc<dyn ObjectStore>,
+    file_access_policy: Arc<dyn FileAccessPolicy>,
+    mail_delivery: Arc<dyn MailDelivery>,
+    devtools_enabled: bool,
+    configure: impl FnOnce(&mut AppState),
+) -> (String, JoinHandle<()>) {
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
     let owner_id = BOOTSTRAP_OWNER_ID.parse::<Uuid>().unwrap();
+    let system = CatalogRepository::system(pool.clone());
+    for workspace in system.active_workspace_ids().await.unwrap() {
+        system.initialize_workspace(workspace).await.unwrap();
+    }
     let membership_id = Uuid::from_u128(0x00000000000040008000000000000202);
     sqlx::query("INSERT INTO users (id, email) VALUES ($1, 'api-test-owner@example.test') ON CONFLICT (id) DO NOTHING")
         .bind(owner_id)
@@ -244,7 +289,7 @@ async fn start_server_with_auth_mode_and_store_with_devtools(
         .unwrap();
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address: SocketAddr = listener.local_addr().unwrap();
-    let router = router(AppState {
+    let mut state = AppState {
         repository: CatalogRepository::system(pool.clone()),
         agent_provider: None,
         registry: Arc::new(GitHubRegistry::new().unwrap()),
@@ -276,6 +321,8 @@ async fn start_server_with_auth_mode_and_store_with_devtools(
         allow_trusted_headers,
         request_permits: Arc::new(tokio::sync::Semaphore::new(256)),
         request_timeout: std::time::Duration::from_secs(30),
+        stream_control: Default::default(),
+        readiness_permits: Arc::new(tokio::sync::Semaphore::new(2)),
         default_body_limit: 2 * 1024 * 1024,
         devtools_enabled,
         build_info: BuildInfo {
@@ -283,7 +330,9 @@ async fn start_server_with_auth_mode_and_store_with_devtools(
             branch: env!("ATTRICAT_BUILD_BRANCH"),
             commit: env!("ATTRICAT_BUILD_COMMIT"),
         },
-    });
+    };
+    configure(&mut state);
+    let router = router(state);
     let server = tokio::spawn(async move {
         axum::serve(listener, router).await.unwrap();
     });

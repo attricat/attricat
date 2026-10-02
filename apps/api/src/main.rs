@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, sync::Arc, time::Instant};
+use std::{net::SocketAddr, sync::Arc};
 
 use api::{
     MIGRATOR, agent_worker,
@@ -17,8 +17,9 @@ use api::{
     extension_registry::{DEFAULT_OFFICIAL_REGISTRY, GitHubRegistry, GitHubRepository},
     extension_runtime::{self, ExtensionRuntime, ExtensionRuntimeConfig},
     file_access::AllowFileAccess,
-    http::{AppState, BuildInfo, router},
+    http::{AppState, BuildInfo, StreamControl, router},
     mail::SmtpMailDelivery,
+    maintenance,
     repository::{CatalogRepository, ValueHistoryRetentionDays},
     rule_runtime, solution_pack_housekeeping,
     storage::{ObjectStore, S3ObjectStore, StorageConfig},
@@ -35,8 +36,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     dotenvy::dotenv().ok();
     init_tracing("attricat-api")?;
     let metrics = init_metrics()?;
-    // Validate before opening a maintenance connection, so destructive cleanup
-    // can never receive a zero or negative retention interval.
+    // Validate before serving requests; periodic retention only accepts a
+    // strictly positive interval.
     let history_retention_days = std::env::var("ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS")
         .unwrap_or_else(|_| "90".to_owned())
         .parse::<ValueHistoryRetentionDays>()
@@ -110,9 +111,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     if bootstrap_owner_email.is_empty() || !bootstrap_owner_email.contains('@') {
         return Err("CATALOG_BOOTSTRAP_OWNER_EMAIL must be a valid email address".into());
     }
-    // Migration and retention maintenance need DDL privileges. Request-serving
-    // connections are deliberately created only after that work is complete
-    // and switch to the non-owner role provisioned by the tenancy migration.
+    // Complete migrations and bootstrap before creating serving pools.
+    // Tenant isolation is enforced by explicit repository scope/predicates;
+    // no mutable per-connection role or workspace state is used.
     let maintenance_pool = PgPoolOptions::new()
         .max_connections(MAINTENANCE_POOL_CONNECTIONS)
         .connect(&database_url)
@@ -148,6 +149,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .ensure_rule_permissions()
         .await?;
     let bootstrap_repository = CatalogRepository::system(maintenance_pool.clone());
+    // Repair pre-existing workspaces once at startup; scope derivation and
+    // request reads never provision data or acquire an extra connection.
+    for id in bootstrap_repository.active_workspace_ids().await? {
+        bootstrap_repository.initialize_workspace(id).await?;
+    }
     // The identity/membership migration consumes this durable bootstrap owner
     // record to create the initial owner grant. It is set only by deployment
     // configuration, never by a catalog request.
@@ -193,41 +199,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         bootstrap_repository
             .ensure_bootstrap_local_password(&email, password)
             .await?;
-    }
-    let cleanup_started = Instant::now();
-    match CatalogRepository::system(maintenance_pool.clone())
-        .purge_value_history(history_retention_days)
-        .await
-    {
-        Ok(deleted_entries) => {
-            let elapsed_seconds = cleanup_started.elapsed().as_secs_f64();
-            metrics::counter!("catalog_value_history_cleanup_total", "outcome" => "success")
-                .increment(1);
-            metrics::counter!("catalog_value_history_entries_purged_total")
-                .increment(deleted_entries);
-            metrics::histogram!("catalog_value_history_cleanup_duration_seconds")
-                .record(elapsed_seconds);
-            tracing::info!(
-                retention_days = history_retention_days.get(),
-                deleted_entries,
-                elapsed_seconds,
-                "attribute value history cleanup completed"
-            );
-        }
-        Err(error) => {
-            let elapsed_seconds = cleanup_started.elapsed().as_secs_f64();
-            metrics::counter!("catalog_value_history_cleanup_total", "outcome" => "failed")
-                .increment(1);
-            metrics::histogram!("catalog_value_history_cleanup_duration_seconds")
-                .record(elapsed_seconds);
-            tracing::error!(
-                retention_days = history_retention_days.get(),
-                elapsed_seconds,
-                error = %error,
-                "attribute value history cleanup failed; refusing to report successful startup maintenance"
-            );
-            return Err(format!("attribute value history cleanup failed: {error}").into());
-        }
     }
     maintenance_pool.close().await;
 
@@ -319,6 +290,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .await?;
 
     let (shutdown_sender, shutdown_receiver) = tokio::sync::watch::channel(());
+    let maintenance_worker = maintenance::start(
+        task_repository.clone(),
+        object_store.clone(),
+        history_retention_days,
+        shutdown_receiver.clone(),
+    );
     let solution_pack_housekeeping =
         solution_pack_housekeeping::start(task_repository.clone(), shutdown_receiver.clone());
     let task_worker_config = TaskWorkerConfig::from_env()
@@ -354,6 +331,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let rule_worker =
         rule_runtime::start_schedule_coordinator(workflow_repository, shutdown_receiver);
 
+    let stream_control = StreamControl::new(
+        positive_env("HTTP_MAX_EVENT_STREAMS", 128)?,
+        positive_env("HTTP_MAX_EVENT_STREAMS_PER_PRINCIPAL", 4)?,
+        std::time::Duration::from_secs(
+            positive_env("HTTP_EVENT_STREAM_LIFETIME_SECONDS", 900)? as u64
+        ),
+    );
     let listener = tokio::net::TcpListener::bind(bind_addr).await?;
     tracing::info!(address = %listener.local_addr()?, "API listening");
     axum::serve(
@@ -398,6 +382,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 "HTTP_REQUEST_TIMEOUT_SECONDS",
                 DEFAULT_HTTP_REQUEST_TIMEOUT_SECONDS,
             )? as u64),
+            stream_control: stream_control.clone(),
+            readiness_permits: Arc::new(Semaphore::new(2)),
             default_body_limit: positive_env(
                 "HTTP_DEFAULT_BODY_BYTES",
                 DEFAULT_HTTP_DEFAULT_BODY_BYTES,
@@ -413,6 +399,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     .with_graceful_shutdown(async move {
         shutdown_signal().await;
         tracing::info!("shutdown signal received");
+        stream_control.shutdown();
         let _ = shutdown_sender.send(());
     })
     .await?;
@@ -424,6 +411,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     extension_event_delivery_coordinator.await?;
     task_worker.await??;
     solution_pack_housekeeping.await?;
+    maintenance_worker.await?;
     request_pool.close().await;
     task_pool.close().await;
 

@@ -27,7 +27,7 @@ pub struct WorkspaceGrantTarget {
 
 const OWNER_ROLE_ID: Uuid = Uuid::from_u128(0x00000000000040008000000000000101);
 
-impl CatalogRepository {
+impl<S: super::RepositoryScope> CatalogRepository<S> {
     async fn require_permission(
         &self,
         actor_id: Uuid,
@@ -73,26 +73,24 @@ impl CatalogRepository {
         Ok(())
     }
 
-    async fn roles_delegable(
+    pub(super) async fn roles_delegable(
         &self,
         actor_id: Uuid,
         workspace_id: Uuid,
         role_id: Uuid,
     ) -> Result<bool, RepositoryError> {
-        let permissions: Vec<String> =
-            sqlx::query_scalar("SELECT permission_code FROM role_permissions WHERE role_id = $1")
-                .bind(role_id)
-                .fetch_all(&self.pool)
-                .await?;
-        for permission in permissions {
-            if !self
-                .is_authorized(actor_id, workspace_id, &permission, None, None)
-                .await?
-            {
-                return Ok(false);
-            }
-        }
-        Ok(true)
+        let mut connection = self.pool.acquire().await?;
+        Self::roles_delegable_on(&mut connection, actor_id, workspace_id, role_id).await
+    }
+
+    pub(super) async fn roles_delegable_on(
+        connection: &mut sqlx::PgConnection,
+        actor_id: Uuid,
+        workspace_id: Uuid,
+        role_id: Uuid,
+    ) -> Result<bool, RepositoryError> {
+        Ok(sqlx::query_scalar("SELECT NOT EXISTS (SELECT 1 FROM role_permissions requested WHERE requested.role_id = $3 AND NOT EXISTS (SELECT 1 FROM workspace_memberships m JOIN users u ON u.id=m.user_id JOIN workspaces w ON w.id=m.workspace_id JOIN role_grants g ON g.membership_id=m.id AND g.workspace_id=m.workspace_id JOIN role_permissions granted ON granted.role_id=g.role_id WHERE m.user_id=$1 AND m.workspace_id=$2 AND m.state='active' AND u.state='active' AND w.deleted_at IS NULL AND g.scope_type='workspace' AND g.scope_target_id=$2 AND granted.permission_code=requested.permission_code))")
+            .bind(actor_id).bind(workspace_id).bind(role_id).fetch_one(connection).await?)
     }
 
     async fn workspace_role(
@@ -301,10 +299,14 @@ impl CatalogRepository {
             self.commit_mutation(tx).await?;
             return Ok(());
         };
-        if !self.workspace_role(workspace_id, replacement).await?
-            || !self
-                .roles_delegable(actor_id, workspace_id, replacement)
-                .await?
+        let valid: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM roles WHERE id=$1 AND (is_system OR workspace_id=$2))",
+        )
+        .bind(replacement)
+        .bind(workspace_id)
+        .fetch_one(&mut *tx)
+        .await?;
+        if !valid || !Self::roles_delegable_on(&mut tx, actor_id, workspace_id, replacement).await?
         {
             return Err(RepositoryError::NotFound("replacement role"));
         }

@@ -30,7 +30,7 @@ impl CatalogRepository {
         &self,
         blueprint_id: Uuid,
     ) -> Result<Vec<BlueprintMigrationBatchStatus>, RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         Ok(sqlx::query_as::<_, Db<BlueprintMigrationBatchStatus>>(
             r#"WITH stats AS (
                    SELECT m.batch_id,
@@ -96,7 +96,7 @@ impl CatalogRepository {
         target_version: i64,
         removal_disposition: Option<&str>,
     ) -> Result<BlueprintMigrationBatch, RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         if let Some(existing) = sqlx::query_as::<_, Db<BlueprintMigrationBatch>>(
             "SELECT id, blueprint_id, target_version, status, removal_policy, created_at, started_at, completed_at FROM blueprint_migration_batches WHERE workspace_id = $1 AND blueprint_id = $2 AND target_version = $3 AND status IN ('queued', 'running')",
         )
@@ -228,7 +228,7 @@ impl CatalogRepository {
         target_version: i64,
         removed_attribute_codes: &[String],
     ) -> Result<BlueprintMigrationImpact, RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let eligible_entities = sqlx::query_scalar::<_, i64>(
             "SELECT count(*) FROM entities WHERE workspace_id = $1 AND blueprint_id = $2 AND blueprint_version < $3 AND deleted_at IS NULL",
         )
@@ -259,35 +259,6 @@ impl CatalogRepository {
         })
     }
 
-    /// Transitional reconciliation for batches committed by an API version
-    /// before task delivery owned this kind. It is safe to run repeatedly and
-    /// is deliberately not a process-local execution/recovery loop.
-    pub async fn backfill_safe_blueprint_migration_tasks(&self) -> Result<(), RepositoryError> {
-        let batches = sqlx::query_as::<_, (Uuid, Uuid)>(
-            "SELECT workspace_id, id FROM blueprint_migration_batches WHERE status IN ('queued', 'running')",
-        )
-        .fetch_all(&self.pool)
-        .await?;
-        let mut transaction = self.pool.begin().await?;
-        for (workspace_id, batch_id) in batches {
-            self.enqueue_task(
-                &mut transaction,
-                TaskInsert {
-                    workspace_id,
-                    kind: TaskKind::BlueprintMigrationBatchV1,
-                    subject_id: batch_id,
-                    generation: 0,
-                    payload: json!({"batch_id": batch_id.to_string()}),
-                    correlation_id: None,
-                    causation_id: None,
-                },
-            )
-            .await?;
-        }
-        transaction.commit().await?;
-        Ok(())
-    }
-
     /// Runs a batch under the shared task lease. Each entity is reserved before
     /// preview/migration, making `(batch_id, entity_id)` its durable retry
     /// identity. Every progress checkpoint commits through the task fence.
@@ -297,7 +268,7 @@ impl CatalogRepository {
         page_size: usize,
         concurrency: usize,
     ) -> Result<(), RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let mut transaction = self.pool.begin().await?;
         let batch = sqlx::query_as::<_, Db<BlueprintMigrationBatch>>(
             "UPDATE blueprint_migration_batches SET status = 'running', started_at = COALESCE(started_at, now()) WHERE id = $1 AND workspace_id = $2 AND status IN ('queued', 'running') RETURNING id, blueprint_id, target_version, status, removal_policy, created_at, started_at, completed_at",
@@ -508,7 +479,7 @@ impl CatalogRepository {
         &self,
         batch_id: Uuid,
     ) -> Result<(), RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let mut transaction = self.pool.begin().await?;
         sqlx::query(
             "UPDATE blueprint_migration_batches SET status = 'failed', completed_at = now() WHERE id = $1 AND workspace_id = $2 AND status IN ('queued', 'running')",
@@ -525,7 +496,7 @@ impl CatalogRepository {
         batch: &BlueprintMigrationBatch,
         entity_id: Uuid,
     ) -> Result<BatchMigration, RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let mut transaction = self.pool.begin().await?;
         let inserted = sqlx::query_as::<_, BatchMigration>(
             "INSERT INTO entity_blueprint_migrations (id, batch_id, workspace_id, entity_id, blueprint_id, source_version, target_version, status, issues, task_owned) SELECT $1, $2, $3, e.id, $4, e.blueprint_version, $5, 'pending', '[]'::jsonb, true FROM entities e WHERE e.id = $6 AND e.workspace_id = $3 ON CONFLICT (batch_id, entity_id) WHERE batch_id IS NOT NULL AND task_owned DO NOTHING RETURNING id, status",
@@ -554,7 +525,7 @@ impl CatalogRepository {
     }
 
     async fn begin_batch_migration(&self, migration_id: Uuid) -> Result<(), RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let mut transaction = self.pool.begin().await?;
         sqlx::query(
             "UPDATE entity_blueprint_migrations SET status = 'migrating', started_at = COALESCE(started_at, now()) WHERE id = $1 AND workspace_id = $2 AND status IN ('ready', 'migrating')",
@@ -571,7 +542,7 @@ impl CatalogRepository {
         migration_id: Uuid,
         message: &str,
     ) -> Result<(), RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let mut transaction = self.pool.begin().await?;
         sqlx::query(
             "UPDATE entity_blueprint_migrations SET status = 'failed', issues = $2, completed_at = now() WHERE id = $1 AND workspace_id = $3 AND status IN ('pending', 'ready', 'migrating')",
@@ -642,6 +613,37 @@ fn safe_automatic_migration(
         }
     }
     Some(removed)
+}
+
+impl<S: super::RepositoryScope> CatalogRepository<S> {
+    /// Transitional reconciliation for batches committed by an API version
+    /// before task delivery owned this kind. It is safe to run repeatedly and
+    /// is deliberately not a process-local execution/recovery loop.
+    pub async fn backfill_safe_blueprint_migration_tasks(&self) -> Result<(), RepositoryError> {
+        let batches = sqlx::query_as::<_, (Uuid, Uuid)>(
+            "SELECT workspace_id, id FROM blueprint_migration_batches WHERE status IN ('queued', 'running')",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        let mut transaction = self.pool.begin().await?;
+        for (workspace_id, batch_id) in batches {
+            self.enqueue_task(
+                &mut transaction,
+                TaskInsert {
+                    workspace_id,
+                    kind: TaskKind::BlueprintMigrationBatchV1,
+                    subject_id: batch_id,
+                    generation: 0,
+                    payload: json!({"batch_id": batch_id.to_string()}),
+                    correlation_id: None,
+                    causation_id: None,
+                },
+            )
+            .await?;
+        }
+        transaction.commit().await?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]

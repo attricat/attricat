@@ -14,7 +14,10 @@ async fn insert_event(pool: &PgPool, event_type: &str, correlation_id: Uuid) -> 
 
 #[sqlx::test(migrations = "./migrations")]
 async fn event_delivery_materialization_is_atomic_filtered_and_deduplicated(pool: PgPool) {
-    let repository = CatalogRepository::system(pool.clone());
+    let repository = CatalogRepository::new(
+        pool.clone(),
+        Uuid::from_u128(0x00000000000040008000000000000002),
+    );
     repository
         .ensure_event_consumer("catalog.extensions.wasm", &[CONTEXT_CREATED_V1])
         .await
@@ -87,7 +90,10 @@ async fn event_delivery_materialization_is_atomic_filtered_and_deduplicated(pool
 
 #[sqlx::test(migrations = "./migrations")]
 async fn materialization_is_idempotent_across_coordinator_restart(pool: PgPool) {
-    let repository = CatalogRepository::system(pool.clone());
+    let repository = CatalogRepository::new(
+        pool.clone(),
+        Uuid::from_u128(0x00000000000040008000000000000002),
+    );
     repository
         .ensure_event_consumer("catalog.extensions.wasm", &[CONTEXT_CREATED_V1])
         .await
@@ -100,7 +106,10 @@ async fn materialization_is_idempotent_across_coordinator_restart(pool: PgPool) 
 
     // A replacement coordinator gets a fresh repository handle but must retain
     // the durable consumer, receipt, and task instead of delivering twice.
-    let restarted = CatalogRepository::system(pool.clone());
+    let restarted = CatalogRepository::new(
+        pool.clone(),
+        Uuid::from_u128(0x00000000000040008000000000000002),
+    );
     restarted
         .ensure_event_consumer("catalog.extensions.wasm", &[CONTEXT_CREATED_V1])
         .await
@@ -134,7 +143,10 @@ async fn materialization_is_idempotent_across_coordinator_restart(pool: PgPool) 
 
 #[sqlx::test(migrations = "./migrations")]
 async fn newly_eligible_plugin_event_is_backfilled_after_watermark_advanced(pool: PgPool) {
-    let repository = CatalogRepository::system(pool.clone());
+    let repository = CatalogRepository::new(
+        pool.clone(),
+        Uuid::from_u128(0x00000000000040008000000000000002),
+    );
     repository
         .ensure_event_consumer("catalog.extensions.wasm", &[CONTEXT_CREATED_V1])
         .await
@@ -183,7 +195,10 @@ async fn newly_eligible_plugin_event_is_backfilled_after_watermark_advanced(pool
 
 #[sqlx::test(migrations = "./migrations")]
 async fn expired_event_task_lease_rejects_stale_receipts_and_redelivers(pool: PgPool) {
-    let repository = CatalogRepository::system(pool.clone());
+    let repository = CatalogRepository::new(
+        pool.clone(),
+        Uuid::from_u128(0x00000000000040008000000000000002),
+    );
     repository
         .ensure_event_consumer("catalog.extensions.wasm", &[CONTEXT_CREATED_V1])
         .await

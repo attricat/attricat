@@ -43,7 +43,7 @@ impl CatalogRepository {
         let default_context_id = sqlx::query_scalar::<_, Uuid>(
             "SELECT id FROM attribute_contexts WHERE workspace_id = $1 AND code = 'default'",
         )
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .fetch_one(&self.pool)
         .await?;
         let target_attributes: HashMap<_, _> = target
@@ -233,7 +233,7 @@ impl CatalogRepository {
             Some(migration_id) => (migration_id, true),
             None => (Uuid::new_v4(), false),
         };
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let mut transaction = self.pool.begin().await?;
         if reserved_for_batch {
             let updated = sqlx::query(
@@ -320,7 +320,7 @@ impl CatalogRepository {
                )"#,
         )
         .bind(entity_id)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .fetch_one(&mut *transaction)
         .await?;
         if input_has_relationships || blueprint_has_relationships {
@@ -343,7 +343,7 @@ impl CatalogRepository {
             "SELECT entity_id, source_version, target_version, status FROM entity_blueprint_migrations WHERE id = $1 AND workspace_id = $2 FOR UPDATE",
         )
         .bind(input.migration_id)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .fetch_optional(&mut *transaction)
         .await?
         .ok_or(RepositoryError::MigrationNotApplicable)?;
@@ -354,13 +354,13 @@ impl CatalogRepository {
             "SELECT version FROM blueprints WHERE id = $1 AND workspace_id = $2 AND status = 'published' AND deleted_at IS NULL ORDER BY version DESC LIMIT 1",
         )
         .bind(entity.blueprint_id)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .fetch_one(&mut *transaction)
         .await?;
         if target_version != input.expected_target_version || target_version != migration.2 {
             sqlx::query("UPDATE entity_blueprint_migrations SET status = 'superseded', completed_at = now() WHERE id = $1 AND workspace_id = $2")
                 .bind(input.migration_id)
-                .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+                .bind(self.workspace_id.0)
                 .execute(&mut *transaction)
                 .await?;
             self.commit_mutation(transaction).await?;
@@ -619,7 +619,7 @@ impl CatalogRepository {
             )
             .bind(input.migration_id)
             .bind(migration_input)
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(self.workspace_id.0)
             .execute(&mut *transaction)
             .await?;
             self.commit_mutation(transaction).await?;
@@ -637,7 +637,7 @@ impl CatalogRepository {
             )
             .bind(target_attribute_id)
             .bind(entity.id)
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(self.workspace_id.0)
             .bind(&value_ids)
             .execute(&mut *transaction)
             .await?
@@ -650,7 +650,7 @@ impl CatalogRepository {
         )
         .bind(entity.id)
         .bind(target_version)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .fetch_one(&mut *transaction)
         .await?;
         let replaced_count = input.values.len() as u64
@@ -693,7 +693,7 @@ impl CatalogRepository {
         )
         .bind(input.migration_id)
         .bind(migration_input)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .execute(&mut *transaction)
         .await?;
         self.commit_mutation_with_event(
@@ -783,7 +783,7 @@ impl CatalogRepository {
                 SELECT (SELECT count(*) FROM stored), (SELECT count(*) FROM copied_references)"#,
         )
         .bind(entity_id)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .bind(value_ids)
         .fetch_one(&mut **transaction)
         .await?;

@@ -153,7 +153,10 @@ default_value = "untitled"
         .await
         .unwrap();
     let run_id: Uuid = run["id"].as_str().unwrap().parse().unwrap();
-    let repository = CatalogRepository::system(pool.clone());
+    let repository = CatalogRepository::new(
+        pool.clone(),
+        support::BOOTSTRAP_WORKSPACE_ID.parse().unwrap(),
+    );
 
     // This constraint fails only the post-action completion update. The
     // terminal fallback must atomically dead-letter its run and envelope.
@@ -305,7 +308,10 @@ default_value = "untitled"
         .error_for_status()
         .unwrap();
 
-    let repository = CatalogRepository::system(pool.clone());
+    let repository = CatalogRepository::new(
+        pool.clone(),
+        support::BOOTSTRAP_WORKSPACE_ID.parse().unwrap(),
+    );
     let (shutdown_tx, shutdown_rx) = watch::channel(());
     let dispatcher = event_dispatcher::start(
         repository.clone(),
@@ -388,7 +394,10 @@ default_value = "untitled"
 async fn workflow_outbox_dispatcher_and_worker_are_idempotent_and_disable_safe(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
-    let repository = CatalogRepository::system(pool.clone());
+    let repository = CatalogRepository::new(
+        pool.clone(),
+        support::BOOTSTRAP_WORKSPACE_ID.parse().unwrap(),
+    );
     let (shutdown_tx, shutdown_rx) = watch::channel(());
     let dispatcher = event_dispatcher::start(
         repository.clone(),

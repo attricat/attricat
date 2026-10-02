@@ -94,7 +94,10 @@ image_only = true
 #[sqlx::test]
 #[ignore = "benchmark; run explicitly with a controlled PostgreSQL instance"]
 async fn preserved_value_workloads_report_writes_and_throughput(pool: PgPool) {
-    let repository = CatalogRepository::system(pool.clone());
+    let repository = CatalogRepository::new(
+        pool.clone(),
+        Uuid::from_u128(0x00000000000040008000000000000002),
+    );
     let target_blueprint = repository
         .create_blueprint(CreateBlueprint {
             definition: r#"format_version = 1

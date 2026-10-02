@@ -1378,7 +1378,7 @@ impl CatalogRepository {
         Ok(())
     }
     pub(crate) fn extension_workspace(&self) -> Uuid {
-        self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)
+        self.workspace_id.0
     }
 
     /// Prevent lifecycle changes that would leave another enabled installation

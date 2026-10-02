@@ -62,11 +62,13 @@ mod reusable_attributes;
 mod roles;
 mod rules;
 mod saved_views;
+mod scope;
 mod sessions;
 mod solution_packs;
 mod status;
 mod tasks;
 mod tokens;
+mod upload_intents;
 mod values;
 mod workflow_runs;
 mod workflows;
@@ -125,6 +127,7 @@ pub use solution_packs::{
 };
 pub use tasks::{BackgroundProcessingStatus, ClaimedTask, TaskError, TaskSummary};
 pub use tokens::PersonalApiToken;
+pub use upload_intents::AbandonedUpload;
 pub use workflow_runs::WorkflowRun;
 pub use workflow_runs::{ClaimedWorkflowRun, WorkflowActionResult};
 pub use workspace_navigation::{ExploreNavigationEntry, ExploreNavigationItem};
@@ -140,17 +143,53 @@ pub struct UserAccount {
 #[derive(Clone)]
 /// The stable catalog persistence facade. Feature modules add inherent methods
 /// here so HTTP handlers and other callers do not depend on storage internals.
-pub struct CatalogRepository {
+pub struct CatalogRepository<S = WorkspaceScope> {
     pub(crate) pool: PgPool,
-    // A repository is scoped by explicit SQL predicates, rather than database
-    // connection state. The optional system scope is only for bootstrap,
-    // authentication/session lookup, and task claiming; request and task
-    // handlers must derive a workspace-scoped clone before catalog access.
-    workspace_id: Option<Uuid>,
+    workspace_id: S,
     audit_context: Option<AuditContext>,
     event_context: Option<EventCommandContext>,
     task_fence: Option<TaskFence>,
     extension_id: Option<String>,
+}
+
+/// Workspace data methods exist only on this scope; it cannot be absent.
+#[derive(Clone, Copy)]
+pub struct WorkspaceScope(Uuid);
+
+/// Authentication, bootstrap and queue coordination have no implicit tenant.
+#[derive(Clone, Copy)]
+pub struct SystemScope;
+
+/// A process-level repository has no implicit workspace and cannot read
+/// workspace data until explicitly scoped.
+///
+/// ```compile_fail
+/// # use catalog_repository::repository::CatalogRepository;
+/// # async fn example(pool: sqlx::PgPool) {
+/// CatalogRepository::system(pool).list_contexts().await;
+/// # }
+/// ```
+pub type SystemRepository = CatalogRepository<SystemScope>;
+
+mod scope_sealed {
+    pub trait Sealed {}
+}
+impl scope_sealed::Sealed for WorkspaceScope {}
+impl scope_sealed::Sealed for SystemScope {}
+
+pub trait RepositoryScope: scope_sealed::Sealed + Clone + Send + Sync {
+    #[doc(hidden)]
+    fn audit_workspace(&self) -> Option<Uuid>;
+}
+impl RepositoryScope for WorkspaceScope {
+    fn audit_workspace(&self) -> Option<Uuid> {
+        Some(self.0)
+    }
+}
+impl RepositoryScope for SystemScope {
+    fn audit_workspace(&self) -> Option<Uuid> {
+        None
+    }
 }
 
 #[derive(Clone)]
@@ -448,17 +487,13 @@ pub(super) async fn workspace_resource_code_matches(
 }
 
 impl CatalogRepository {
+    #[cfg(test)]
     const DEFAULT_WORKSPACE_ID: Uuid = Uuid::from_u128(0x00000000000040008000000000000002);
-
-    pub fn pool_for_runtime(&self) -> PgPool {
-        self.pool.clone()
-    }
 
     /// Returns the workspace carried by a task/runtime repository.
     /// Runtime catalog work must never fall back to the bootstrap workspace.
     pub fn workspace_id_for_runtime(&self) -> Uuid {
-        self.workspace_id
-            .expect("runtime catalog work requires an explicit workspace scope")
+        self.workspace_id.0
     }
 
     /// Creates a repository that is scoped to a workspace at construction.
@@ -467,7 +502,7 @@ impl CatalogRepository {
     pub fn new(pool: PgPool, workspace_id: Uuid) -> Self {
         Self {
             pool,
-            workspace_id: Some(workspace_id),
+            workspace_id: WorkspaceScope(workspace_id),
             audit_context: None,
             event_context: None,
             task_fence: None,
@@ -480,32 +515,15 @@ impl CatalogRepository {
     /// This is reserved for bootstrap, authentication/session lookup, and task
     /// queue claiming. It must not be placed in a request extension or passed
     /// to a task handler that accesses workspace-owned data.
-    pub fn system(pool: PgPool) -> Self {
-        Self {
+    pub fn system(pool: PgPool) -> SystemRepository {
+        CatalogRepository {
             pool,
-            workspace_id: None,
+            workspace_id: SystemScope,
             audit_context: None,
             event_context: None,
             task_fence: None,
             extension_id: None,
         }
-    }
-
-    /// Derives a catalog repository that is explicitly scoped to `workspace_id`.
-    ///
-    /// All scopes share this repository's already-bounded pool. Workspace
-    /// isolation is implemented by the repository's SQL predicates, not by
-    /// mutable per-connection state or a per-workspace connection pool.
-    pub async fn for_workspace(&self, workspace_id: Uuid) -> Result<Self, RepositoryError> {
-        self.ensure_default_context(workspace_id).await?;
-        Ok(Self {
-            pool: self.pool.clone(),
-            workspace_id: Some(workspace_id),
-            audit_context: self.audit_context.clone(),
-            event_context: self.event_context.clone(),
-            task_fence: self.task_fence.clone(),
-            extension_id: self.extension_id.clone(),
-        })
     }
 
     pub fn for_event_handler(
@@ -751,121 +769,9 @@ fn add_initiating_actor_metadata(metadata: &mut Value, audit: Option<&AuditConte
 }
 
 impl CatalogRepository {
-    async fn ensure_default_context(&self, workspace_id: Uuid) -> Result<(), RepositoryError> {
-        sqlx::query(
-            r#"INSERT INTO attribute_contexts (id, workspace_id, code, data, parent_id)
-               SELECT $1, id, 'default', '{}'::jsonb, NULL
-               FROM workspaces
-               WHERE id = $2 AND deleted_at IS NULL
-               ON CONFLICT (workspace_id, code) DO NOTHING"#,
-        )
-        .bind(Uuid::new_v4())
-        .bind(workspace_id)
-        .execute(&self.pool)
-        .await?;
-        Ok(())
-    }
-
-    /// Removes only history older than a validated positive retention interval.
-    pub async fn purge_value_history(
-        &self,
-        retention_days: ValueHistoryRetentionDays,
-    ) -> Result<u64, RepositoryError> {
-        Ok(sqlx::query(
-            "DELETE FROM attribute_value_history WHERE archived_at < now() - ($1 * interval '1 day')",
-        )
-        .bind(retention_days.get())
-        .execute(&self.pool)
-        .await?
-        .rows_affected())
-    }
-
     pub fn with_audit_context(mut self, audit_context: AuditContext) -> Self {
         self.audit_context = Some(audit_context);
         self
-    }
-
-    /// Inserts the request audit row before committing a mutation. An audit
-    /// insertion error aborts the surrounding transaction, so success cannot
-    /// be returned without durable audit evidence.
-    async fn write_audit_event(
-        &self,
-        transaction: &mut Transaction<'_, Postgres>,
-    ) -> Result<Option<Uuid>, RepositoryError> {
-        self.write_audit_event_with_publication_metadata(transaction, None)
-            .await
-    }
-
-    pub(crate) async fn write_audit_event_with_publication_metadata(
-        &self,
-        transaction: &mut Transaction<'_, Postgres>,
-        publication_metadata: Option<Value>,
-    ) -> Result<Option<Uuid>, RepositoryError> {
-        let Some(audit) = &self.audit_context else {
-            return Ok(None);
-        };
-        let event_id = Uuid::new_v4();
-        let agent = audit.agent.as_ref();
-        let mut metadata = audit.metadata.clone();
-        if let Some(publication_metadata) = publication_metadata {
-            let metadata = metadata
-                .as_object_mut()
-                .expect("audit metadata is an object");
-            metadata.insert("publication".to_owned(), publication_metadata);
-        }
-        sqlx::query(
-            "INSERT INTO audit_events (id, workspace_id, actor_user_id, actor_token_id, request_id, correlation_id, action, authorization_scope, target, outcome, metadata, executor_type, agent_run_id, agent_conversation_id, agent_tool_call_id, agent_tool_name, approval_decision, approved_by_user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'success', $10, $11, $12, $13, $14, $15, $16, $17)",
-        )
-        .bind(event_id)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
-        .bind(audit.actor_user_id)
-        .bind(audit.actor_token_id)
-        .bind(audit.request_id)
-        .bind(audit.correlation_id)
-        .bind(&audit.action)
-        .bind(&audit.authorization_scope)
-        .bind(&audit.target)
-        .bind(metadata)
-        .bind(if agent.is_some() { "agent" } else { "human" })
-        .bind(agent.map(|agent| agent.run_id))
-        .bind(agent.map(|agent| agent.conversation_id))
-        .bind(agent.map(|agent| agent.tool_call_id))
-        .bind(agent.map(|agent| &agent.tool_name))
-        .bind(agent.and_then(|agent| agent.approval_decision.as_deref()))
-        .bind(agent.and_then(|agent| agent.approved_by_user_id))
-        .execute(&mut **transaction)
-        .await?;
-        Ok(Some(event_id))
-    }
-
-    pub(crate) async fn ensure_task_fence(
-        &self,
-        transaction: &mut Transaction<'_, Postgres>,
-    ) -> Result<(), RepositoryError> {
-        let Some(fence) = &self.task_fence else {
-            return Ok(());
-        };
-        // Locking the current envelope makes this check a fence for every
-        // subsequent domain write in this transaction. A reclaimer cannot
-        // replace the token until this transaction commits or rolls back.
-        let valid: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM tasks t WHERE t.id = $1 AND t.status = 'leased' AND t.lease_owner = $2 AND t.lease_token = $3 AND t.lease_until > now() FOR KEY SHARE OF t)")
-            .bind(fence.task_id).bind(&fence.lease_owner).bind(fence.lease_token)
-            .fetch_one(&mut **transaction).await?;
-        if valid {
-            Ok(())
-        } else {
-            Err(RepositoryError::Task(TaskError::LeaseLost))
-        }
-    }
-
-    pub(crate) async fn commit_mutation(
-        &self,
-        mut transaction: Transaction<'_, Postgres>,
-    ) -> Result<(), RepositoryError> {
-        self.ensure_task_fence(&mut transaction).await?;
-        self.write_audit_event(&mut transaction).await?;
-        transaction.commit().await?;
-        Ok(())
     }
 
     /// Commits a catalog mutation, its audit evidence, and an outbox event as
@@ -1051,7 +957,7 @@ impl CatalogRepository {
                 sqlx::query("INSERT INTO audit_event_changes (id, audit_event_id, workspace_id, entity_id, attribute_id, attribute_code, context_id, context_code, change_kind, before_value, after_value) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)")
                     .bind(Uuid::new_v4())
                     .bind(audit_event_id)
-                    .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+                    .bind(self.workspace_id.0)
                     .bind(change.entity_id)
                     .bind(change.attribute_id)
                     .bind(change.attribute_code)
@@ -1066,16 +972,6 @@ impl CatalogRepository {
         }
         self.enqueue_event(transaction, event).await?;
         Ok(())
-    }
-
-    /// Returns only the authenticated principal's account fields. Callers must
-    /// derive `user_id` from authentication rather than accepting it from a request.
-    pub async fn user_account(&self, user_id: Uuid) -> Result<UserAccount, RepositoryError> {
-        sqlx::query_as("SELECT display_name, email, time_zone FROM users WHERE id = $1")
-            .bind(user_id)
-            .fetch_one(&self.pool)
-            .await
-            .map_err(RepositoryError::from)
     }
 
     /// Replaces the authenticated principal's display preferences. Callers
@@ -1118,6 +1014,172 @@ impl CatalogRepository {
             return Err(RepositoryError::NotFound("user"));
         }
         self.commit_mutation(transaction).await
+    }
+}
+
+pub fn validate_code(value: &str) -> Result<(), RepositoryError> {
+    if is_valid_code(value) {
+        Ok(())
+    } else {
+        Err(RepositoryError::InvalidCode)
+    }
+}
+
+/// Reusable attributes are the only attribute selectors containing a colon;
+/// both parts retain the catalog code grammar so local and reusable names
+/// cannot collide accidentally.
+pub fn validate_attribute_selector_code(value: &str) -> Result<(), RepositoryError> {
+    if is_valid_code(value)
+        || value
+            .split_once(':')
+            .is_some_and(|(namespace, code)| is_valid_code(namespace) && is_valid_code(code))
+    {
+        Ok(())
+    } else {
+        Err(RepositoryError::InvalidCode)
+    }
+}
+
+pub fn missing_required_fields(message: &str, target_codes: &HashSet<&str>) -> Vec<String> {
+    let mut fields = HashSet::new();
+    for delimiter in ['"', '\''] {
+        for (index, value) in message.split(delimiter).enumerate() {
+            if index % 2 == 1 && target_codes.contains(value) {
+                fields.insert(value.to_owned());
+            }
+        }
+    }
+    fields.into_iter().collect()
+}
+
+impl<S: RepositoryScope> CatalogRepository<S> {
+    /// Explicit provisioning/repair boundary, never part of a catalog read.
+    pub async fn initialize_workspace(&self, workspace_id: Uuid) -> Result<(), RepositoryError> {
+        sqlx::query(
+            r#"INSERT INTO attribute_contexts (id, workspace_id, code, data, parent_id)
+               SELECT $1, id, 'default', '{}'::jsonb, NULL
+               FROM workspaces
+               WHERE id = $2 AND deleted_at IS NULL
+               ON CONFLICT (workspace_id, code) DO NOTHING"#,
+        )
+        .bind(Uuid::new_v4())
+        .bind(workspace_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    /// One bounded retention transaction. Concurrent maintenance processes
+    /// skip each other's rows; readers and startup never wait for a full purge.
+    pub async fn purge_value_history_batch(
+        &self,
+        retention_days: ValueHistoryRetentionDays,
+    ) -> Result<u64, RepositoryError> {
+        let mut tx = self.pool.begin().await?;
+        sqlx::query("SET LOCAL statement_timeout = '2s'")
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("SET LOCAL lock_timeout = '1s'")
+            .execute(&mut *tx)
+            .await?;
+        let deleted = sqlx::query(
+            "WITH expired AS (SELECT workspace_id, id, archived_at FROM attribute_value_history WHERE archived_at < now() - ($1 * interval '1 day') ORDER BY archived_at, id LIMIT 1000 FOR UPDATE SKIP LOCKED) DELETE FROM attribute_value_history h USING expired e WHERE h.workspace_id = e.workspace_id AND h.id = e.id AND h.archived_at = e.archived_at",
+        ).bind(retention_days.get()).execute(&mut *tx).await?.rows_affected();
+        tx.commit().await?;
+        Ok(deleted)
+    }
+
+    /// Inserts the request audit row before committing a mutation. An audit
+    /// insertion error aborts the surrounding transaction, so success cannot
+    /// be returned without durable audit evidence.
+    async fn write_audit_event(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+    ) -> Result<Option<Uuid>, RepositoryError> {
+        self.write_audit_event_with_publication_metadata(transaction, None)
+            .await
+    }
+
+    pub(crate) async fn write_audit_event_with_publication_metadata(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        publication_metadata: Option<Value>,
+    ) -> Result<Option<Uuid>, RepositoryError> {
+        let Some(audit) = &self.audit_context else {
+            return Ok(None);
+        };
+        let event_id = Uuid::new_v4();
+        let agent = audit.agent.as_ref();
+        let mut metadata = audit.metadata.clone();
+        if let Some(publication_metadata) = publication_metadata {
+            let metadata = metadata
+                .as_object_mut()
+                .expect("audit metadata is an object");
+            metadata.insert("publication".to_owned(), publication_metadata);
+        }
+        sqlx::query(
+            "INSERT INTO audit_events (id, workspace_id, actor_user_id, actor_token_id, request_id, correlation_id, action, authorization_scope, target, outcome, metadata, executor_type, agent_run_id, agent_conversation_id, agent_tool_call_id, agent_tool_name, approval_decision, approved_by_user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'success', $10, $11, $12, $13, $14, $15, $16, $17)",
+        )
+        .bind(event_id)
+        .bind(self.workspace_id.audit_workspace().ok_or(RepositoryError::NotFound("audit workspace"))?)
+        .bind(audit.actor_user_id)
+        .bind(audit.actor_token_id)
+        .bind(audit.request_id)
+        .bind(audit.correlation_id)
+        .bind(&audit.action)
+        .bind(&audit.authorization_scope)
+        .bind(&audit.target)
+        .bind(metadata)
+        .bind(if agent.is_some() { "agent" } else { "human" })
+        .bind(agent.map(|agent| agent.run_id))
+        .bind(agent.map(|agent| agent.conversation_id))
+        .bind(agent.map(|agent| agent.tool_call_id))
+        .bind(agent.map(|agent| &agent.tool_name))
+        .bind(agent.and_then(|agent| agent.approval_decision.as_deref()))
+        .bind(agent.and_then(|agent| agent.approved_by_user_id))
+        .execute(&mut **transaction)
+        .await?;
+        Ok(Some(event_id))
+    }
+
+    pub(crate) async fn ensure_task_fence(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+    ) -> Result<(), RepositoryError> {
+        let Some(fence) = &self.task_fence else {
+            return Ok(());
+        };
+        // Locking the current envelope makes this check a fence for every
+        // subsequent domain write in this transaction. A reclaimer cannot
+        // replace the token until this transaction commits or rolls back.
+        let valid: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM tasks t WHERE t.id = $1 AND t.status = 'leased' AND t.lease_owner = $2 AND t.lease_token = $3 AND t.lease_until > now() FOR KEY SHARE OF t)")
+            .bind(fence.task_id).bind(&fence.lease_owner).bind(fence.lease_token)
+            .fetch_one(&mut **transaction).await?;
+        if valid {
+            Ok(())
+        } else {
+            Err(RepositoryError::Task(TaskError::LeaseLost))
+        }
+    }
+
+    pub(crate) async fn commit_mutation(
+        &self,
+        mut transaction: Transaction<'_, Postgres>,
+    ) -> Result<(), RepositoryError> {
+        self.ensure_task_fence(&mut transaction).await?;
+        self.write_audit_event(&mut transaction).await?;
+        transaction.commit().await?;
+        Ok(())
+    }
+
+    /// Returns only the authenticated principal's account fields. Callers must
+    /// derive `user_id` from authentication rather than accepting it from a request.
+    pub async fn user_account(&self, user_id: Uuid) -> Result<UserAccount, RepositoryError> {
+        sqlx::query_as("SELECT display_name, email, time_zone FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(RepositoryError::from)
     }
 
     pub async fn is_active_user(&self, user_id: Uuid) -> Result<bool, RepositoryError> {
@@ -1200,7 +1262,29 @@ impl CatalogRepository {
         target_id: Option<Uuid>,
         target_code: Option<&str>,
     ) -> Result<bool, RepositoryError> {
-        // Resolve grant scope in the application-owned repository query.  A
+        let mut connection = self.pool.acquire().await?;
+        Self::is_authorized_on(
+            &mut connection,
+            user_id,
+            workspace_id,
+            permission,
+            target_id,
+            target_code,
+        )
+        .await
+    }
+
+    /// Transaction-owning callers must reuse their connection rather than
+    /// acquiring a second pool slot while holding the first.
+    async fn is_authorized_on(
+        connection: &mut sqlx::PgConnection,
+        user_id: Uuid,
+        workspace_id: Uuid,
+        permission: &str,
+        target_id: Option<Uuid>,
+        target_code: Option<&str>,
+    ) -> Result<bool, RepositoryError> {
+        // Resolve grant scope in the application-owned repository query. A
         // non-workspace grant can only authorize the requested tenant target.
         Ok(sqlx::query_scalar(
             "WITH RECURSIVE grants AS (SELECT g.scope_type, g.scope_target_id FROM workspace_memberships m JOIN users u ON u.id = m.user_id JOIN workspaces w ON w.id = m.workspace_id JOIN role_grants g ON g.membership_id = m.id AND g.workspace_id = m.workspace_id JOIN role_permissions rp ON rp.role_id = g.role_id WHERE m.user_id = $1 AND m.workspace_id = $2 AND m.state = 'active' AND u.state = 'active' AND w.deleted_at IS NULL AND rp.permission_code = $3), target AS (SELECT 'blueprint'::text kind, id FROM blueprints WHERE workspace_id = $2 AND (id = $4 OR code = $5) UNION ALL SELECT 'entity', id FROM entities WHERE workspace_id = $2 AND id = $4 UNION ALL SELECT 'context', id FROM attribute_contexts WHERE workspace_id = $2 AND (id = $4 OR code = $5)), ancestors AS (SELECT c.id, c.parent_id FROM attribute_contexts c JOIN target t ON t.kind = 'context' AND t.id = c.id UNION ALL SELECT p.id, p.parent_id FROM attribute_contexts p JOIN ancestors a ON a.parent_id = p.id WHERE p.workspace_id = $2) SELECT EXISTS (SELECT 1 FROM grants g WHERE (g.scope_type = 'workspace' AND g.scope_target_id = $2) OR (($4 IS NOT NULL OR $5 IS NOT NULL) AND ((g.scope_type = 'blueprint_family' AND EXISTS (SELECT 1 FROM target WHERE kind = 'blueprint' AND id = g.scope_target_id)) OR (g.scope_type = 'entity' AND EXISTS (SELECT 1 FROM target WHERE kind = 'entity' AND id = g.scope_target_id)) OR (g.scope_type = 'blueprint_family' AND EXISTS (SELECT 1 FROM entities e JOIN target t ON t.kind = 'entity' AND t.id = e.id WHERE e.workspace_id = $2 AND e.blueprint_id = g.scope_target_id)) OR (g.scope_type = 'context_subtree' AND EXISTS (SELECT 1 FROM ancestors WHERE id = g.scope_target_id)) OR ($5 = '__context_list__' AND g.scope_type = 'context_subtree'))))",
@@ -1210,44 +1294,9 @@ impl CatalogRepository {
         .bind(permission)
         .bind(target_id)
         .bind(target_code)
-        .fetch_one(&self.pool)
+        .fetch_one(connection)
         .await?)
     }
-}
-
-pub fn validate_code(value: &str) -> Result<(), RepositoryError> {
-    if is_valid_code(value) {
-        Ok(())
-    } else {
-        Err(RepositoryError::InvalidCode)
-    }
-}
-
-/// Reusable attributes are the only attribute selectors containing a colon;
-/// both parts retain the catalog code grammar so local and reusable names
-/// cannot collide accidentally.
-pub fn validate_attribute_selector_code(value: &str) -> Result<(), RepositoryError> {
-    if is_valid_code(value)
-        || value
-            .split_once(':')
-            .is_some_and(|(namespace, code)| is_valid_code(namespace) && is_valid_code(code))
-    {
-        Ok(())
-    } else {
-        Err(RepositoryError::InvalidCode)
-    }
-}
-
-pub fn missing_required_fields(message: &str, target_codes: &HashSet<&str>) -> Vec<String> {
-    let mut fields = HashSet::new();
-    for delimiter in ['"', '\''] {
-        for (index, value) in message.split(delimiter).enumerate() {
-            if index % 2 == 1 && target_codes.contains(value) {
-                fields.insert(value.to_owned());
-            }
-        }
-    }
-    fields.into_iter().collect()
 }
 
 #[cfg(test)]
@@ -1302,6 +1351,10 @@ mod tests {
             }),
             payload: serde_json::json!({}),
         };
+        let repository = repository
+            .for_workspace(trigger.workspace_id)
+            .await
+            .unwrap();
         let event = repository
             .for_event_handler(&trigger, "catalog.computed_fields")
             .core_event(

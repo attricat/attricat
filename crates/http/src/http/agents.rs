@@ -9,6 +9,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use tokio_stream::StreamExt;
 use uuid::Uuid;
 
 use super::{
@@ -455,6 +456,7 @@ fn stream_failed() -> Event {
 /// Streams durable events in sequence order. Event ids are database UUIDs, so a
 /// reconnecting client can use Last-Event-ID without relying on process memory.
 pub(super) async fn stream_events(
+    State(state): State<AppState>,
     AuthenticatedPrincipal(user, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace): ActiveWorkspace,
     ScopedRepository(repository): ScopedRepository,
@@ -480,10 +482,35 @@ pub(super) async fn stream_events(
         }
         None => -1,
     };
+    let permit = state
+        .stream_control
+        .acquire(workspace, user)
+        .ok_or_else(|| ApiError::service_unavailable("too many active event streams"))?;
+    let mut shutdown = state.stream_control.subscribe();
+    let lifetime = state.stream_control.lifetime();
     let events = stream! {
         let mut sequence = after;
+        let mut draining = false;
         loop {
             match repository.agent_run_events_after(run_id, sequence).await {
+                Ok(events) if events.is_empty() => {
+                    if draining { break; }
+                    match repository.get_agent_run(run_id).await {
+                        Ok(run) if matches!(run.status.as_str(), "completed" | "failed" | "cancelled" | "skipped") => {
+                            // Completion and its terminal event commit atomically.
+                            // Re-read after observing completion to close the race
+                            // between the preceding event read and status read.
+                            draining = true;
+                            continue;
+                        }
+                        Ok(_) => tokio::time::sleep(std::time::Duration::from_millis(250)).await,
+                        Err(error) => {
+                            tracing::error!(%error, %run_id, "agent run event stream failed");
+                            yield Ok(stream_failed());
+                            break;
+                        }
+                    }
+                }
                 Ok(events) => for event in events {
                     sequence = event.sequence;
                     let frame = Event::default()
@@ -498,7 +525,10 @@ pub(super) async fn stream_events(
                             created_at: event.created_at,
                         });
                     match frame {
-                        Ok(frame) => yield Ok(frame),
+                        Ok(frame) => {
+                            yield Ok(frame);
+                            if event.event_type == "terminal" { return; }
+                        },
                         Err(error) => {
                             tracing::error!(%error, %run_id, "agent run event could not be encoded");
                             yield Ok(stream_failed());
@@ -512,16 +542,26 @@ pub(super) async fn stream_events(
                     break;
                 }
             }
-            match repository.get_agent_run(run_id).await {
-                Ok(run) if matches!(run.status.as_str(), "completed" | "failed" | "cancelled" | "skipped") => break,
-                Ok(_) => tokio::time::sleep(std::time::Duration::from_millis(250)).await,
-                Err(error) => {
-                    tracing::error!(%error, %run_id, "agent run event stream failed");
-                    yield Ok(stream_failed());
-                    break;
+        }
+    };
+    let bounded = stream! {
+        // Captured by the body, not the handler future. A slow client,
+        // disconnect, deadline or shutdown all release this same permit.
+        let _permit = permit;
+        tokio::pin!(events);
+        let deadline = tokio::time::sleep(lifetime);
+        tokio::pin!(deadline);
+        loop {
+            tokio::select! {
+                biased;
+                _ = async { let _ = shutdown.wait_for(|stopping| *stopping).await; } => break,
+                _ = &mut deadline => break,
+                event = events.next() => match event {
+                    Some(event) => yield event,
+                    None => break,
                 }
             }
         }
     };
-    Ok(Sse::new(events).keep_alive(KeepAlive::default()))
+    Ok(Sse::new(bounded).keep_alive(KeepAlive::default()))
 }

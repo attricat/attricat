@@ -33,7 +33,7 @@ impl CatalogRepository {
                ORDER BY id, version DESC"#,
         )
         .bind(include_drafts)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .fetch_all(&self.pool)
         .await?
         .into_domain())
@@ -48,7 +48,7 @@ impl CatalogRepository {
                WHERE deleted_at IS NULL AND workspace_id = $1
                ORDER BY id, version DESC"#,
         )
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .fetch_all(&self.pool)
         .await?
         .into_domain())
@@ -65,7 +65,7 @@ impl CatalogRepository {
                ORDER BY version DESC"#,
         )
         .bind(blueprint_id)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .fetch_all(&self.pool)
         .await?
         .into_domain())
@@ -97,16 +97,12 @@ impl CatalogRepository {
         blueprint_id: Uuid,
         input: CreateBlueprint,
     ) -> Result<BlueprintWithAttributes, RepositoryError> {
-        let compiled = compile_definition(
-            transaction,
-            self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID),
-            &input.definition,
-        )
-        .await?;
+        let compiled =
+            compile_definition(transaction, self.workspace_id.0, &input.definition).await?;
         // Serialize all blueprint/context writers for one workspace code. The
         // shared logical namespace is required by solution-pack mappings and
         // also prevents ordinary creates from racing an applying plan.
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         super::lock_workspace_resource_code(transaction, workspace_id, &compiled.code).await?;
         if !super::workspace_resource_code_matches(transaction, workspace_id, &compiled.code)
             .await?
@@ -134,17 +130,13 @@ impl CatalogRepository {
             "SELECT version, code FROM blueprints WHERE id = $1 AND workspace_id = $2 ORDER BY version DESC LIMIT 1 FOR UPDATE",
         )
         .bind(blueprint_id)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .fetch_optional(&mut *transaction)
         .await?
         .ok_or(RepositoryError::NotFound("blueprint"))?;
 
-        let compiled = compile_definition(
-            &mut transaction,
-            self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID),
-            &input.definition,
-        )
-        .await?;
+        let compiled =
+            compile_definition(&mut transaction, self.workspace_id.0, &input.definition).await?;
         if latest.code.as_deref() != Some(compiled.code.as_str()) {
             return Err(RepositoryError::InvalidBlueprintDefinition(
                 "blueprint code cannot change across revisions".to_owned(),
@@ -194,7 +186,7 @@ impl CatalogRepository {
                RETURNING id, code, name, kind, version, includes, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash"#,
         )
         .bind(blueprint_id)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .bind(compiled.code)
         .bind(compiled.name)
         .bind(compiled.kind.as_str())
@@ -212,18 +204,18 @@ impl CatalogRepository {
         // blueprint/code; each blueprint revision contributes an immutable rule revision.
         for rule in &compiled.rules {
             let existing: Option<(Uuid, i64)> = sqlx::query_as("SELECT id, max(version) FROM rules WHERE workspace_id=$1 AND blueprint_id=$2 AND code=$3 GROUP BY id")
-                .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).bind(blueprint_id).bind(&rule.code).fetch_optional(&mut **transaction).await?;
+                .bind(self.workspace_id.0).bind(blueprint_id).bind(&rule.code).fetch_optional(&mut **transaction).await?;
             let (rule_id, rule_version) = existing
                 .map(|(id, version)| (id, version + 1))
                 .unwrap_or_else(|| (Uuid::new_v4(), 1));
             let plan = serde_json::to_value(rule)
                 .map_err(|error| RepositoryError::InvalidRuleDefinition(error.to_string()))?;
             sqlx::query("INSERT INTO rules(id,workspace_id,blueprint_id,blueprint_version,code,name,version,definition,definition_hash,compiled_plan) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)")
-                .bind(rule_id).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).bind(blueprint_id).bind(version).bind(&rule.code).bind(&rule.name).bind(rule_version).bind(toml::to_string(rule).map_err(|error| RepositoryError::InvalidRuleDefinition(error.to_string()))?).bind(&rule.raw_definition_hash).bind(plan).execute(&mut **transaction).await?;
+                .bind(rule_id).bind(self.workspace_id.0).bind(blueprint_id).bind(version).bind(&rule.code).bind(&rule.name).bind(rule_version).bind(toml::to_string(rule).map_err(|error| RepositoryError::InvalidRuleDefinition(error.to_string()))?).bind(&rule.raw_definition_hash).bind(plan).execute(&mut **transaction).await?;
             if existing.is_none() {
                 sqlx::query("INSERT INTO rule_lifecycles(rule_id,workspace_id) VALUES($1,$2)")
                     .bind(rule_id)
-                    .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+                    .bind(self.workspace_id.0)
                     .execute(&mut **transaction)
                     .await?;
             }
@@ -239,7 +231,7 @@ impl CatalogRepository {
                        RETURNING id, blueprint_id, blueprint_version, code, name, value_type, value_schema, extension_type, default_value, file_policy, target_blueprint_code, cardinality, target_cardinality, tags, context_fallback, context_editable, readonly, position, created_at, updated_at, deleted_at"#,
                 )
                 .bind(Uuid::new_v4())
-                .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+                .bind(self.workspace_id.0)
                 .bind(blueprint_id)
                 .bind(version)
                 .bind(attribute.code)
@@ -282,7 +274,7 @@ impl CatalogRepository {
                LIMIT 1"#,
         )
         .bind(blueprint_id)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .fetch_optional(&self.pool)
         .await?
         .into_domain();
@@ -302,7 +294,7 @@ impl CatalogRepository {
         )
         .bind(blueprint_id)
         .bind(version)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .fetch_optional(&self.pool)
         .await?
         .into_domain();
@@ -323,7 +315,7 @@ impl CatalogRepository {
                LIMIT 1"#,
         )
         .bind(code)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .fetch_optional(&self.pool)
         .await?
         .into_domain();
@@ -344,7 +336,7 @@ impl CatalogRepository {
                LIMIT 1"#,
         )
         .bind(code)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .fetch_optional(&self.pool)
         .await?
         .into_domain();
@@ -364,7 +356,7 @@ impl CatalogRepository {
         )
         .bind(code)
         .bind(version)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .fetch_optional(&self.pool)
         .await?
         .into_domain();
@@ -385,7 +377,7 @@ impl CatalogRepository {
         )
         .bind(code)
         .bind(version)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .fetch_optional(&self.pool)
         .await?
         .into_domain();
@@ -406,7 +398,7 @@ impl CatalogRepository {
         )
         .bind(blueprint_id)
         .bind(version)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .fetch_optional(&mut *transaction)
         .await?
         .into_domain()
@@ -416,7 +408,7 @@ impl CatalogRepository {
             // is saved, so repeat resolution at the publication boundary.
             let compiled = crate::blueprint_resolver::compile_definition(
                 &mut transaction,
-                self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID),
+                self.workspace_id.0,
                 &blueprint.definition,
             )
             .await?;
@@ -438,7 +430,7 @@ impl CatalogRepository {
                 .bind(blueprint_id)
                 .bind(version)
                 .bind(&attribute.code)
-                .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+                .bind(self.workspace_id.0)
                 .execute(&mut *transaction)
                 .await?;
             }
@@ -463,7 +455,7 @@ impl CatalogRepository {
                    )"#,
             )
             .bind(&blueprint.includes)
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(self.workspace_id.0)
             .fetch_one(&mut *transaction)
             .await?;
             if !includes_published {
@@ -474,7 +466,7 @@ impl CatalogRepository {
             )
             .bind(blueprint_id)
             .bind(version)
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(self.workspace_id.0)
             .execute(&mut *transaction)
             .await?;
             self.sync_blueprint_connector_jobs(
@@ -485,7 +477,7 @@ impl CatalogRepository {
             )
             .await?;
             sqlx::query("UPDATE rules SET status='published',published_at=COALESCE(published_at,now()) WHERE workspace_id=$1 AND blueprint_id=$2 AND blueprint_version=$3")
-                .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).bind(blueprint_id).bind(version).execute(&mut *transaction).await?;
+                .bind(self.workspace_id.0).bind(blueprint_id).bind(version).execute(&mut *transaction).await?;
             self.commit_mutation_with_event(
                 transaction,
                 blueprint_event(self, BLUEPRINT_PUBLISHED_V1, &blueprint),
@@ -513,18 +505,13 @@ impl CatalogRepository {
         )
         .bind(blueprint_id)
         .bind(version)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .fetch_optional(&mut **transaction)
         .await?
         .into_domain()
         .ok_or(RepositoryError::NotFound("blueprint version"))?;
         if blueprint.status == "draft" {
-            compile_definition(
-                transaction,
-                self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID),
-                &blueprint.definition,
-            )
-            .await?;
+            compile_definition(transaction, self.workspace_id.0, &blueprint.definition).await?;
             self.validate_publication_roles(transaction, &blueprint.definition)
                 .await?;
             self.validate_publication_extension_layout(&blueprint.definition)
@@ -542,7 +529,7 @@ impl CatalogRepository {
                              AND included.deleted_at IS NULL))"#,
             )
             .bind(&blueprint.includes)
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(self.workspace_id.0)
             .fetch_one(&mut **transaction)
             .await?;
             if !includes_published {
@@ -555,7 +542,7 @@ impl CatalogRepository {
             )
             .bind(blueprint_id)
             .bind(version)
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(self.workspace_id.0)
             .fetch_one(&mut **transaction)
             .await?
             .into_domain();
@@ -622,7 +609,7 @@ impl CatalogRepository {
         if publication.retain_on_edit_roles.is_empty() {
             return Ok(());
         }
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let known_roles: i64 = sqlx::query_scalar(
             "SELECT count(*) FROM roles WHERE code = ANY($1) AND (is_system OR workspace_id = $2)",
         )
@@ -651,7 +638,7 @@ impl CatalogRepository {
         )
         .bind(blueprint_id)
         .bind(blueprint_version)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .fetch_all(&self.pool)
         .await?
         .into_domain())
@@ -715,7 +702,7 @@ impl CatalogRepository {
                           AND a.code = $3 AND a.deleted_at IS NULL
                         ORDER BY b.version DESC LIMIT 1"#,
                 )
-                .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+                .bind(self.workspace_id.0)
                 .bind(target)
                 .bind(field)
                 .fetch_optional(&self.pool)
@@ -754,7 +741,7 @@ impl CatalogRepository {
                 let enabled_manifests = sqlx::query_as::<_, (String, Value)>(
                     "SELECT i.extension_id, r.manifest FROM extension_installations i JOIN installed_extension_releases r ON r.id = i.installed_release_id JOIN workspaces w ON w.id = i.workspace_id WHERE i.workspace_id = $1 AND i.state = 'enabled' AND w.extensions_enabled",
                 )
-                .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+                .bind(self.workspace_id.0)
                 .fetch_all(&self.pool)
                 .await?;
                 for attribute in &mut attributes {

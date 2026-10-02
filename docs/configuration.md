@@ -37,9 +37,12 @@ or inaccessible configured bucket.
 | `DATA_HEALTH_CACHE_TTL_SECONDS` | `300` | API | Data-health response cache lifetime. |
 | `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE` | `50` | API | Maximum page size for incoming-relationship browsing. |
 | `RELATIONSHIP_FACET_MAX_NODES` | `100` | API | Maximum relationship nodes considered while building Explorer facets. |
-| `ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS` | `90` | API | Number of days of attribute-value history retained during API startup; must be a positive signed 64-bit integer. Invalid values stop startup before cleanup; a cleanup failure also stops startup rather than being reported as successful maintenance. |
-| `HTTP_REQUEST_TIMEOUT_SECONDS` | `30` | API | Positive wall-clock limit for a request after routing. Timed-out requests return `408`. |
-| `HTTP_MAX_CONCURRENT_REQUESTS` | `256` | API | Positive process-local in-flight request cap. Excess requests return `503` rather than waiting unboundedly. |
+| `ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS` | `90` | API | Number of days of attribute-value history retained; must be a positive signed 64-bit integer. Invalid values stop startup. A periodic worker deletes at most 1,000 rows per transaction, with a 10-second sweep budget every minute. Failures are logged and retried without blocking startup. |
+| `HTTP_REQUEST_TIMEOUT_SECONDS` | `30` | API | Positive wall-clock limit through response creation. Timed-out requests return `503` with code `request_timeout`; mutations must not be blindly replayed. |
+| `HTTP_MAX_CONCURRENT_REQUESTS` | `256` | API | Positive process-local in-flight handler cap. Excess requests return `503`. Health probes have independent admission; event-stream bodies have separate limits. |
+| `HTTP_MAX_EVENT_STREAMS` | `128` | API | Positive process-local cap held for each SSE response body's lifetime. |
+| `HTTP_MAX_EVENT_STREAMS_PER_PRINCIPAL` | `4` | API | Positive concurrent SSE cap per workspace/user, shared across that user's tokens and sessions. |
+| `HTTP_EVENT_STREAM_LIFETIME_SECONDS` | `900` | API | Positive maximum SSE lifetime. Clients reconnect using `Last-Event-ID`; shutdown also closes streams. |
 | `HTTP_DEFAULT_BODY_BYTES` | `2097152` | API | Positive default body limit. Streaming upload routes explicitly disable it and enforce their file-specific limits. |
 | `EVENT_DISPATCHER_LEASE_SECONDS` | `30` | API | Positive lease duration for one event-handler attempt. A shorter lease raises duplicate-delivery risk. |
 | `EVENT_DISPATCHER_RETRY_INITIAL_SECONDS` | `1` | API | Positive initial failed-delivery retry delay. |

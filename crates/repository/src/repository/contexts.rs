@@ -47,7 +47,7 @@ impl CatalogRepository {
         if !input.data.is_object() {
             return Err(RepositoryError::InvalidContextData);
         }
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         super::lock_workspace_resource_code(transaction, workspace_id, &input.code).await?;
         if !super::workspace_resource_code_matches(transaction, workspace_id, &input.code)
             .await?
@@ -98,7 +98,7 @@ impl CatalogRepository {
             "SELECT id, code, data, parent_id FROM attribute_contexts WHERE code = $1 AND workspace_id = $2",
         )
         .bind(code)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .fetch_optional(&self.pool)
         .await?
         .into_domain())
@@ -108,7 +108,7 @@ impl CatalogRepository {
         Ok(query_as::<_, Db<AttributeContext>>(
             "SELECT id, code, data, parent_id FROM attribute_contexts WHERE workspace_id = $1 ORDER BY code",
         )
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .fetch_all(&self.pool)
         .await?
         .into_domain())
@@ -164,7 +164,7 @@ impl CatalogRepository {
             "SELECT code FROM attribute_contexts WHERE id = $1 AND workspace_id = $2",
         )
         .bind(id)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .fetch_optional(&mut *transaction)
         .await?
         .ok_or(RepositoryError::NotFound("context"))?;
@@ -175,7 +175,7 @@ impl CatalogRepository {
             "SELECT EXISTS (SELECT 1 FROM attribute_contexts WHERE id = $1 AND workspace_id = $2)",
         )
         .bind(input.parent_id)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .fetch_one(&mut *transaction)
         .await?;
         if !parent_exists {
@@ -187,11 +187,11 @@ impl CatalogRepository {
             ) UPDATE attribute_contexts SET parent_id = $2, data = $3
               WHERE id = $1 AND workspace_id = $4 AND $2 NOT IN (SELECT id FROM descendants)
               RETURNING id, code, data, parent_id"#)
-            .bind(id).bind(input.parent_id).bind(input.data).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).fetch_optional(&mut *transaction).await?
+            .bind(id).bind(input.parent_id).bind(input.data).bind(self.workspace_id.0).fetch_optional(&mut *transaction).await?
             .ok_or(RepositoryError::ContextCycle)?
             .into_domain();
         let entities = query_as::<_, Db<Entity>>("SELECT id, blueprint_id, blueprint_version, projections, system_tags, system_metadata, ('attricat.sample'=ANY(system_tags)) AS is_sample, created_at, updated_at, deleted_at FROM entities WHERE workspace_id = $1 AND deleted_at IS NULL")
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(self.workspace_id.0)
             .fetch_all(&mut *transaction).await?
             .into_domain();
         for entity in &entities {
@@ -201,7 +201,7 @@ impl CatalogRepository {
         let affected_contexts: Vec<Uuid> = sqlx::query_scalar(
             "WITH RECURSIVE descendants AS (SELECT id FROM attribute_contexts WHERE workspace_id = $1 AND id = $2 UNION ALL SELECT child.id FROM attribute_contexts child JOIN descendants parent ON child.parent_id = parent.id WHERE child.workspace_id = $1) SELECT id FROM descendants",
         )
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .bind(result.id)
         .fetch_all(&mut *transaction)
         .await?;
@@ -222,7 +222,7 @@ impl CatalogRepository {
             "SELECT id, code, data, parent_id FROM attribute_contexts WHERE id = $1 AND workspace_id = $2",
         )
         .bind(id)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .fetch_optional(&self.pool)
         .await?
         .ok_or(RepositoryError::NotFound("context"))?;
@@ -233,17 +233,17 @@ impl CatalogRepository {
         sqlx::query(
             "DELETE FROM entity_channel_publications WHERE workspace_id = $1 AND context_id = $2",
         )
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .bind(id)
         .execute(&mut *transaction)
         .await?;
         sqlx::query("DELETE FROM publication_channels WHERE workspace_id = $1 AND context_id = $2")
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(self.workspace_id.0)
             .bind(id)
             .execute(&mut *transaction)
             .await?;
         let result = sqlx::query("DELETE FROM attribute_contexts c WHERE c.id = $1 AND c.workspace_id = $2 AND NOT EXISTS (SELECT 1 FROM attribute_contexts child WHERE child.parent_id = c.id AND child.workspace_id = c.workspace_id) AND NOT EXISTS (SELECT 1 FROM attribute_values value WHERE value.context_id = c.id AND value.workspace_id = c.workspace_id)")
-            .bind(id).bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID)).execute(&mut *transaction).await?;
+            .bind(id).bind(self.workspace_id.0).execute(&mut *transaction).await?;
         if result.rows_affected() == 0 {
             return Err(RepositoryError::ContextInUse);
         }
@@ -263,7 +263,7 @@ impl CatalogRepository {
             "SELECT id, code, data, parent_id FROM attribute_contexts WHERE id = $1 AND workspace_id = $2",
         )
         .bind(id)
-        .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+        .bind(self.workspace_id.0)
         .fetch_optional(&self.pool)
         .await?
         .into_domain())

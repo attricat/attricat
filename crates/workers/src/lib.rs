@@ -8,6 +8,7 @@ pub use catalog_storage as storage;
 pub mod blueprint_migration_worker;
 pub mod event_dispatcher;
 pub mod file_worker;
+pub mod maintenance;
 pub mod rule_runtime;
 pub mod solution_pack_housekeeping;
 pub mod task_worker;

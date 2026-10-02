@@ -87,7 +87,10 @@ async fn batch_with_two_old_entities(
 
 #[sqlx::test]
 async fn safe_batch_uses_the_nearest_published_ancestor_when_drafts_intervene(pool: PgPool) {
-    let repository = CatalogRepository::system(pool);
+    let repository = CatalogRepository::new(
+        pool,
+        uuid::Uuid::from_u128(0x00000000000040008000000000000002),
+    );
     let source = repository
         .create_blueprint(CreateBlueprint {
             definition: DEFINITION.to_owned(),
@@ -139,7 +142,10 @@ async fn safe_batch_uses_the_nearest_published_ancestor_when_drafts_intervene(po
 
 #[sqlx::test]
 async fn safe_batch_rejects_an_unsafe_older_source_revision(pool: PgPool) {
-    let repository = CatalogRepository::system(pool.clone());
+    let repository = CatalogRepository::new(
+        pool.clone(),
+        uuid::Uuid::from_u128(0x00000000000040008000000000000002),
+    );
     let source = repository
         .create_blueprint(CreateBlueprint {
             definition: format!(
@@ -218,7 +224,10 @@ async fn safe_batch_rejects_an_unsafe_older_source_revision(pool: PgPool) {
 
 #[sqlx::test]
 async fn safe_batch_task_is_transactional_and_migrates_each_entity_once(pool: PgPool) {
-    let repository = CatalogRepository::system(pool.clone());
+    let repository = CatalogRepository::new(
+        pool.clone(),
+        uuid::Uuid::from_u128(0x00000000000040008000000000000002),
+    );
     let (batch_id, version_one_entity, version_two_entity) =
         batch_with_two_old_entities(&repository, &pool).await;
     sqlx::query("UPDATE entities SET created_at = '2026-01-01 00:00:00+00' WHERE id IN ($1, $2)")
@@ -286,7 +295,10 @@ async fn safe_batch_task_is_transactional_and_migrates_each_entity_once(pool: Pg
 
 #[sqlx::test]
 async fn safe_batch_processes_multiple_scalar_candidates_in_one_concurrent_page(pool: PgPool) {
-    let repository = CatalogRepository::system(pool.clone());
+    let repository = CatalogRepository::new(
+        pool.clone(),
+        uuid::Uuid::from_u128(0x00000000000040008000000000000002),
+    );
     let (batch_id, version_one_entity, version_two_entity) =
         batch_with_two_old_entities(&repository, &pool).await;
     let task = repository
@@ -328,7 +340,10 @@ async fn safe_batch_processes_multiple_scalar_candidates_in_one_concurrent_page(
 
 #[sqlx::test]
 async fn batch_restart_from_newest_edge_finds_entity_inserted_between_pages(pool: PgPool) {
-    let repository = CatalogRepository::system(pool.clone());
+    let repository = CatalogRepository::new(
+        pool.clone(),
+        uuid::Uuid::from_u128(0x00000000000040008000000000000002),
+    );
     let (batch_id, _, _) = batch_with_two_old_entities(&repository, &pool).await;
     let newest_entity: uuid::Uuid = sqlx::query_scalar(
         "SELECT id FROM entities WHERE blueprint_version < 3 ORDER BY created_at DESC, id DESC LIMIT 1",
@@ -423,7 +438,10 @@ async fn batch_restart_from_newest_edge_finds_entity_inserted_between_pages(pool
 
 #[sqlx::test]
 async fn expired_batch_task_cannot_checkpoint_and_reclaim_reuses_migration_rows(pool: PgPool) {
-    let repository = CatalogRepository::system(pool.clone());
+    let repository = CatalogRepository::new(
+        pool.clone(),
+        uuid::Uuid::from_u128(0x00000000000040008000000000000002),
+    );
     let (batch_id, _, _) = batch_with_two_old_entities(&repository, &pool).await;
     let first = repository
         .claim_task("worker-a", std::time::Duration::from_secs(30))
@@ -487,7 +505,10 @@ async fn expired_batch_task_cannot_checkpoint_and_reclaim_reuses_migration_rows(
 
 #[sqlx::test]
 async fn safe_batch_archives_explicitly_approved_removed_values(pool: PgPool) {
-    let repository = CatalogRepository::system(pool.clone());
+    let repository = CatalogRepository::new(
+        pool.clone(),
+        uuid::Uuid::from_u128(0x00000000000040008000000000000002),
+    );
     let source = repository
         .create_blueprint(CreateBlueprint {
             definition: format!(

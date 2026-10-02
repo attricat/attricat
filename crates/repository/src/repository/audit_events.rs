@@ -56,33 +56,11 @@ pub struct AuditEventPage {
 }
 
 impl CatalogRepository {
-    /// Installs the audit-read permission in application code so database
-    /// migrations remain declarative. Owners and administrators receive it.
-    pub async fn ensure_audit_permissions(&self) -> Result<(), RepositoryError> {
-        let mut tx = self.pool.begin().await?;
-        sqlx::query("INSERT INTO permissions (code, description) VALUES ('audit.read', 'Read workspace audit events') ON CONFLICT (code) DO NOTHING")
-            .execute(&mut *tx)
-            .await?;
-        for role_id in [
-            Uuid::from_u128(0x00000000000040008000000000000101),
-            Uuid::from_u128(0x00000000000040008000000000000102),
-        ] {
-            sqlx::query("INSERT INTO role_permissions (role_id, permission_code) VALUES ($1, 'audit.read') ON CONFLICT DO NOTHING")
-                .bind(role_id)
-                .execute(&mut *tx)
-                .await?;
-        }
-        tx.commit().await?;
-        Ok(())
-    }
-
     pub async fn list_audit_events(
         &self,
         filter: AuditEventFilter,
     ) -> Result<AuditEventPage, RepositoryError> {
-        let workspace_id = self
-            .workspace_id
-            .ok_or(RepositoryError::NotFound("workspace"))?;
+        let workspace_id = self.workspace_id.0;
         let category = filter
             .action_category
             .as_deref()
@@ -123,5 +101,27 @@ impl CatalogRepository {
             limit: filter.limit,
             offset: filter.offset,
         })
+    }
+}
+
+impl<S: super::RepositoryScope> CatalogRepository<S> {
+    /// Installs the audit-read permission in application code so database
+    /// migrations remain declarative. Owners and administrators receive it.
+    pub async fn ensure_audit_permissions(&self) -> Result<(), RepositoryError> {
+        let mut tx = self.pool.begin().await?;
+        sqlx::query("INSERT INTO permissions (code, description) VALUES ('audit.read', 'Read workspace audit events') ON CONFLICT (code) DO NOTHING")
+            .execute(&mut *tx)
+            .await?;
+        for role_id in [
+            Uuid::from_u128(0x00000000000040008000000000000101),
+            Uuid::from_u128(0x00000000000040008000000000000102),
+        ] {
+            sqlx::query("INSERT INTO role_permissions (role_id, permission_code) VALUES ($1, 'audit.read') ON CONFLICT DO NOTHING")
+                .bind(role_id)
+                .execute(&mut *tx)
+                .await?;
+        }
+        tx.commit().await?;
+        Ok(())
     }
 }

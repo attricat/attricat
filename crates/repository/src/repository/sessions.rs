@@ -26,7 +26,7 @@ pub struct DiscoveredWorkspace {
     pub login_identifier: String,
 }
 
-impl CatalogRepository {
+impl<S: super::RepositoryScope> CatalogRepository<S> {
     pub async fn discover_workspace(
         &self,
         login_identifier: &str,

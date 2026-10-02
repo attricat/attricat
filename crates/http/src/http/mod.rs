@@ -24,6 +24,7 @@ mod rules;
 mod saved_views;
 mod sessions;
 mod solution_packs;
+mod streams;
 mod system;
 mod tokens;
 mod workflows;
@@ -43,7 +44,7 @@ use crate::{
     extensions::MAX_EXTENSION_ARCHIVE_BYTES,
     file_access::FileAccessPolicy,
     mail::MailDelivery,
-    repository::CatalogRepository,
+    repository::SystemRepository,
     solution_packs::MAX_SOLUTION_PACK_ARCHIVE_BYTES,
     storage::ObjectStore,
     telemetry::{register_request_timing, unregister_request_timing},
@@ -67,7 +68,7 @@ use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct AppState {
-    pub repository: CatalogRepository,
+    pub repository: SystemRepository,
     pub agent_provider: Option<AgentProviderConfig>,
     pub registry: Arc<GitHubRegistry>,
     pub official_registry: GitHubRepository,
@@ -99,6 +100,9 @@ pub struct AppState {
     /// Bounds in-flight requests before expensive extractors or handlers run.
     pub request_permits: Arc<Semaphore>,
     pub request_timeout: Duration,
+    /// Separate admission for response bodies that outlive handler execution.
+    pub stream_control: StreamControl,
+    pub readiness_permits: Arc<Semaphore>,
     pub default_body_limit: usize,
     /// Enables sanitized development-only timing phases for the Explorer.
     pub devtools_enabled: bool,
@@ -106,6 +110,7 @@ pub struct AppState {
 }
 
 pub use self::data_health::DataHealthCache;
+pub use self::streams::StreamControl;
 pub use self::system::BuildInfo;
 
 const TIMING_PHASES: [&str; 4] = ["candidate", "page", "related", "serialize"];
@@ -353,12 +358,6 @@ pub fn router(state: AppState) -> Router {
             "/agent/tool-calls/{tool_call_id}/reject",
             post(agents::reject),
         )
-        // `/health` remains the compatibility liveness probe. Readiness is
-        // separate so load balancers withdraw an unhealthy dependency graph
-        // without restarting an otherwise live process.
-        .route("/health", get(data_health::liveness))
-        .route("/health/live", get(data_health::liveness))
-        .route("/health/ready", get(data_health::readiness))
         .route("/system/health", get(system::health))
         .route(
             "/extension-registries",
@@ -968,6 +967,15 @@ pub fn router(state: AppState) -> Router {
             state.clone(),
             request_limits,
         ))
+        // Probes do not compete with ordinary request admission. Readiness
+        // has its own bounded budget and dependency deadlines.
+        .merge(
+            Router::new()
+                .route("/health", get(data_health::liveness))
+                .route("/health/live", get(data_health::liveness))
+                .route("/health/ready", get(data_health::readiness))
+                .with_state(state.clone()),
+        )
         .layer(middleware::from_fn_with_state(state, server_timing));
 
     // Production images set WEB_DIST_DIR to the compiled Vite output. Keep the

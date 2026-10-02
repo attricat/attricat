@@ -43,13 +43,25 @@ pub(super) async fn liveness() -> Json<Value> {
 /// deliberately a generic 503 response: dependency topology and credentials
 /// are operational details, not public API data.
 pub(super) async fn readiness(State(state): State<AppState>) -> Response {
-    let database = state.repository.readiness().await;
-    let storage = state.object_store.readiness().await;
-    metrics::gauge!("catalog_database_ready").set(if database.is_ok() { 1.0 } else { 0.0 });
+    let Ok(_permit) = state.readiness_permits.try_acquire() else {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({ "status": "not_ready" })),
+        )
+            .into_response();
+    };
+    let deadline = Duration::from_secs(2);
+    let (database, storage) = tokio::join!(
+        tokio::time::timeout(deadline, state.repository.readiness()),
+        tokio::time::timeout(deadline, state.object_store.readiness()),
+    );
+    let database_ready = matches!(database, Ok(Ok(())));
+    let storage_ready = matches!(storage, Ok(Ok(())));
+    metrics::gauge!("catalog_database_ready").set(if database_ready { 1.0 } else { 0.0 });
     // Object-store readiness is also recorded at the storage boundary, but set
     // it here so every readiness response has a complete dependency snapshot.
-    metrics::gauge!("catalog_object_store_ready").set(if storage.is_ok() { 1.0 } else { 0.0 });
-    if database.is_ok() && storage.is_ok() {
+    metrics::gauge!("catalog_object_store_ready").set(if storage_ready { 1.0 } else { 0.0 });
+    if database_ready && storage_ready {
         (StatusCode::OK, Json(json!({ "status": "ready" }))).into_response()
     } else {
         (

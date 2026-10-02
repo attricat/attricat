@@ -51,7 +51,7 @@ pub struct CompletedWorkspaceOnboarding {
     pub workspace_id: Uuid,
 }
 
-impl CatalogRepository {
+impl<S: super::RepositoryScope> CatalogRepository<S> {
     pub async fn create_workspace_user(
         &self,
         actor_id: Uuid,
@@ -102,13 +102,17 @@ impl CatalogRepository {
         };
         if invitation_digest.len() != 32
             || expires_at <= Utc::now()
-            || !self
-                .scope_is_valid(workspace_id, role_id, &scope_type, scope_target_id)
-                .await?
-            || !self
-                .role_is_delegable(actor_id, workspace_id, role_id)
-                .await?
-            || (role_id == OWNER_ROLE_ID && !self.active_owner(actor_id, workspace_id).await?)
+            || !Self::scope_is_valid_on(
+                &mut tx,
+                workspace_id,
+                role_id,
+                &scope_type,
+                scope_target_id,
+            )
+            .await?
+            || !Self::roles_delegable_on(&mut tx, actor_id, workspace_id, role_id).await?
+            || (role_id == OWNER_ROLE_ID
+                && !Self::active_owner_on(&mut tx, actor_id, workspace_id).await?)
         {
             return Err(RepositoryError::InvitationInvalid);
         }
@@ -189,7 +193,15 @@ impl CatalogRepository {
         actor_id: Uuid,
         workspace_id: Uuid,
     ) -> Result<bool, RepositoryError> {
-        Ok(sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM workspace_memberships m JOIN role_grants g ON g.membership_id = m.id AND g.workspace_id = m.workspace_id WHERE m.user_id = $1 AND m.workspace_id = $2 AND m.state = 'active' AND g.role_id = $3 AND g.scope_type = 'workspace' AND g.scope_target_id = $2)").bind(actor_id).bind(workspace_id).bind(OWNER_ROLE_ID).fetch_one(&self.pool).await?)
+        let mut connection = self.pool.acquire().await?;
+        Self::active_owner_on(&mut connection, actor_id, workspace_id).await
+    }
+    async fn active_owner_on(
+        connection: &mut sqlx::PgConnection,
+        actor_id: Uuid,
+        workspace_id: Uuid,
+    ) -> Result<bool, RepositoryError> {
+        Ok(sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM workspace_memberships m JOIN role_grants g ON g.membership_id = m.id AND g.workspace_id = m.workspace_id WHERE m.user_id = $1 AND m.workspace_id = $2 AND m.state = 'active' AND g.role_id = $3 AND g.scope_type = 'workspace' AND g.scope_target_id = $2)").bind(actor_id).bind(workspace_id).bind(OWNER_ROLE_ID).fetch_one(connection).await?)
     }
     async fn scope_is_valid(
         &self,
@@ -198,15 +210,25 @@ impl CatalogRepository {
         scope_type: &str,
         target: Uuid,
     ) -> Result<bool, RepositoryError> {
-        let role_ok: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM roles WHERE id = $1 AND (is_system OR workspace_id = $2))").bind(role_id).bind(workspace_id).fetch_one(&self.pool).await?;
+        let mut connection = self.pool.acquire().await?;
+        Self::scope_is_valid_on(&mut connection, workspace_id, role_id, scope_type, target).await
+    }
+    async fn scope_is_valid_on(
+        connection: &mut sqlx::PgConnection,
+        workspace_id: Uuid,
+        role_id: Uuid,
+        scope_type: &str,
+        target: Uuid,
+    ) -> Result<bool, RepositoryError> {
+        let role_ok: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM roles WHERE id = $1 AND (is_system OR workspace_id = $2))").bind(role_id).bind(workspace_id).fetch_one(&mut *connection).await?;
         if !role_ok {
             return Ok(false);
         }
         let target_ok: bool = match scope_type {
             "workspace" => target == workspace_id,
-            "blueprint_family" => sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM blueprints WHERE id = $1 AND workspace_id = $2)").bind(target).bind(workspace_id).fetch_one(&self.pool).await?,
-            "entity" => sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM entities WHERE id = $1 AND workspace_id = $2)").bind(target).bind(workspace_id).fetch_one(&self.pool).await?,
-            "context_subtree" => sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM attribute_contexts WHERE id = $1 AND workspace_id = $2)").bind(target).bind(workspace_id).fetch_one(&self.pool).await?,
+            "blueprint_family" => sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM blueprints WHERE id = $1 AND workspace_id = $2)").bind(target).bind(workspace_id).fetch_one(&mut *connection).await?,
+            "entity" => sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM entities WHERE id = $1 AND workspace_id = $2)").bind(target).bind(workspace_id).fetch_one(&mut *connection).await?,
+            "context_subtree" => sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM attribute_contexts WHERE id = $1 AND workspace_id = $2)").bind(target).bind(workspace_id).fetch_one(&mut *connection).await?,
             _ => false,
         };
         Ok(target_ok
@@ -218,20 +240,7 @@ impl CatalogRepository {
         workspace_id: Uuid,
         role_id: Uuid,
     ) -> Result<bool, RepositoryError> {
-        let permissions: Vec<String> =
-            sqlx::query_scalar("SELECT permission_code FROM role_permissions WHERE role_id = $1")
-                .bind(role_id)
-                .fetch_all(&self.pool)
-                .await?;
-        for permission in permissions {
-            if !self
-                .is_authorized(actor_id, workspace_id, &permission, None, None)
-                .await?
-            {
-                return Ok(false);
-            }
-        }
-        Ok(true)
+        self.roles_delegable(actor_id, workspace_id, role_id).await
     }
     async fn revoke_user_access(
         &self,

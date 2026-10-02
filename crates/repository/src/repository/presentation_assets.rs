@@ -26,7 +26,7 @@ impl CatalogRepository {
         limit: i64,
         offset: i64,
     ) -> Result<Vec<PresentationAsset>, RepositoryError> {
-        let workspace_id = self.workspace_id.expect("workspace-scoped repository");
+        let workspace_id = self.workspace_id.0;
         Ok(sqlx::query_as::<_, PresentationAsset>(
             "SELECT id,purpose,media_type,byte_size,sha256,width,height,created_at,object_key FROM presentation_assets WHERE workspace_id=$1 ORDER BY created_at DESC,id DESC LIMIT $2 OFFSET $3",
         )
@@ -41,7 +41,7 @@ impl CatalogRepository {
         &self,
         id: Uuid,
     ) -> Result<PresentationAsset, RepositoryError> {
-        let workspace_id = self.workspace_id.expect("workspace-scoped repository");
+        let workspace_id = self.workspace_id.0;
         sqlx::query_as::<_, PresentationAsset>(
             "SELECT id,purpose,media_type,byte_size,sha256,width,height,created_at,object_key FROM presentation_assets WHERE workspace_id=$1 AND id=$2",
         )

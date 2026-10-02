@@ -9,9 +9,7 @@ use std::collections::HashSet;
 use uuid::Uuid;
 
 fn workspace(repository: &CatalogRepository) -> Uuid {
-    repository
-        .workspace_id
-        .unwrap_or(CatalogRepository::DEFAULT_WORKSPACE_ID)
+    repository.workspace_id.0
 }
 
 fn default_context_fallback() -> String {

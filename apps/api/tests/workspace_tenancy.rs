@@ -39,6 +39,10 @@ async fn workspace_scoped_repository_hides_other_workspace_catalog_rows(pool: Pg
     );
     assert_eq!(bootstrap.list_contexts().await.unwrap().len(), 1);
 
+    repository
+        .initialize_workspace(other_workspace)
+        .await
+        .unwrap();
     let other = repository.for_workspace(other_workspace).await.unwrap();
     assert_eq!(
         other
@@ -83,6 +87,10 @@ async fn workspace_scoped_blueprints_reject_foreign_ids_codes_versions_and_attri
         .bind(other_workspace).execute(&pool).await.unwrap();
     let repository = CatalogRepository::system(pool);
     let bootstrap = repository.for_workspace(bootstrap_workspace).await.unwrap();
+    repository
+        .initialize_workspace(other_workspace)
+        .await
+        .unwrap();
     let other = repository.for_workspace(other_workspace).await.unwrap();
     let definition = "format_version = 1\ncode = 'shared_code'\nname = 'Shared'\nkind = 'entity'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['title']\n\n[[attributes]]\ncode = 'title'\nvalue_type = 'string'";
     let other_blueprint = other
@@ -176,6 +184,10 @@ async fn workspace_scoped_entity_commands_reject_foreign_entity_ids(pool: PgPool
     assert!(bootstrap.get_entity(entity).await.unwrap().is_none());
     assert!(bootstrap.delete_entity(entity).await.is_err());
 
+    repository
+        .initialize_workspace(other_workspace)
+        .await
+        .unwrap();
     let other = repository.for_workspace(other_workspace).await.unwrap();
     assert_eq!(other.get_entity(entity).await.unwrap().unwrap().id, entity);
     other.delete_entity(entity).await.unwrap();
@@ -194,6 +206,10 @@ async fn current_values_hides_foreign_entity_values(pool: PgPool) {
         .unwrap();
     let repository = CatalogRepository::system(pool);
     let bootstrap = repository.for_workspace(bootstrap_workspace).await.unwrap();
+    repository
+        .initialize_workspace(other_workspace)
+        .await
+        .unwrap();
     let other = repository.for_workspace(other_workspace).await.unwrap();
     let blueprint = other
         .create_blueprint(CreateBlueprint {
@@ -244,6 +260,10 @@ async fn reachable_search_never_traverses_another_workspace(pool: PgPool) {
         .unwrap();
     let repository = CatalogRepository::system(pool);
     let bootstrap = repository.for_workspace(bootstrap_workspace).await.unwrap();
+    repository
+        .initialize_workspace(other_workspace)
+        .await
+        .unwrap();
     let other = repository.for_workspace(other_workspace).await.unwrap();
     let target_definition = "format_version = 1\ncode = 'shared_search_target'\nname = 'Shared target'\nkind = 'entity'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['name']\n\n[[attributes]]\ncode = 'name'\nvalue_type = 'string'";
     let source_definition = "format_version = 1\ncode = 'shared_search_source'\nname = 'Shared source'\nkind = 'entity'\n\n[views.dropdown_option]\ntype = 'dropdown_option'\nfields = ['name']\n\n[[attributes]]\ncode = 'name'\nvalue_type = 'string'\n\n[[attributes]]\ncode = 'target'\nvalue_type = 'relationship'\ntarget_blueprint = 'shared_search_target'";

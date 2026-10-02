@@ -179,5 +179,12 @@ replace them, so a token cannot exceed its owner’s grants or bypass scoped
 roles. Role grant and revoke requests require both `members.manage` and
 `roles.grant` in the token as well as the owner's live grants. When requested
 with a personal token, `/auth/session` reports capabilities restricted to that
-token's permissions. The CLI reads the bearer secret from `CATALOG_TOKEN` (or
-`--token`).
+token's permissions. When a PAT issues another PAT, the requested permissions
+must also be a subset of the issuing token's permissions. If the issuer expires,
+the new token must have an explicit expiry no later than its issuer. Revocation
+remains per-token; revoke separately issued tokens individually. User state is
+checked during credential validation, and authenticated session/profile routes
+also require an active workspace membership. `last_used_at` is updated at most
+once per minute rather than on every request.
+
+The CLI reads the bearer secret from `CATALOG_TOKEN` (or `--token`).

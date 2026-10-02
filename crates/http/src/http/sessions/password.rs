@@ -24,13 +24,25 @@ static TIMING_EQUALIZER: LazyLock<Option<PasswordHash>> =
     LazyLock::new(|| hash_password_blocking(&Password::new("timing-equalizer")).ok());
 
 async fn run<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) -> Result<T, ApiError> {
-    let _permit = PASSWORD_WORK
+    let permit = PASSWORD_WORK
         .acquire()
         .await
         .map_err(|_| ApiError::internal("password hashing is unavailable"))?;
-    tokio::task::spawn_blocking(work)
-        .await
-        .map_err(|_| ApiError::internal("password hashing failed"))
+    run_with_permit(permit, work).await
+}
+
+async fn run_with_permit<T: Send + 'static>(
+    permit: tokio::sync::SemaphorePermit<'static>,
+    work: impl FnOnce() -> T + Send + 'static,
+) -> Result<T, ApiError> {
+    tokio::task::spawn_blocking(move || {
+        // Dropping the request does not cancel spawn_blocking. Keep the permit
+        // on the blocking thread until its CPU/memory work actually ends.
+        let _permit = permit;
+        work()
+    })
+    .await
+    .map_err(|_| ApiError::internal("password hashing failed"))
 }
 
 pub(in super::super) async fn hash_password(password: String) -> Result<PasswordHash, ApiError> {
@@ -62,4 +74,30 @@ pub(super) async fn verify_password(
         }
     })
     .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn cancellation_keeps_the_permit_until_blocking_work_finishes() {
+        static PERMITS: Semaphore = Semaphore::const_new(1);
+        let permit = PERMITS.acquire().await.unwrap();
+        let (started, waiting) = tokio::sync::oneshot::channel();
+        let (release, blocked) = std::sync::mpsc::channel();
+        let work = tokio::spawn(run_with_permit(permit, move || {
+            started.send(()).unwrap();
+            blocked.recv().unwrap();
+        }));
+        waiting.await.unwrap();
+        work.abort();
+        assert!(work.await.unwrap_err().is_cancelled());
+        assert!(PERMITS.try_acquire().is_err());
+        release.send(()).unwrap();
+        let _permit = tokio::time::timeout(std::time::Duration::from_secs(2), PERMITS.acquire())
+            .await
+            .unwrap()
+            .unwrap();
+    }
 }

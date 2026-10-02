@@ -713,31 +713,11 @@ async fn load_prior_samples(
 }
 
 impl CatalogRepository {
-    /// Solution-pack permissions are bootstrapped in application code so the
-    /// database migration history remains declarative.
-    pub async fn ensure_solution_pack_permissions(&self) -> Result<(), RepositoryError> {
-        let mut tx = self.pool.begin().await?;
-        sqlx::query("INSERT INTO permissions (code, description) VALUES ('solution_packs.manage', 'Inspect and manage solution packs') ON CONFLICT (code) DO NOTHING")
-            .execute(&mut *tx)
-            .await?;
-        for role_id in [
-            Uuid::from_u128(0x00000000000040008000000000000101),
-            Uuid::from_u128(0x00000000000040008000000000000102),
-        ] {
-            sqlx::query("INSERT INTO role_permissions (role_id, permission_code) VALUES ($1, 'solution_packs.manage') ON CONFLICT DO NOTHING")
-                .bind(role_id)
-                .execute(&mut *tx)
-                .await?;
-        }
-        tx.commit().await?;
-        Ok(())
-    }
-
     async fn reconcile_solution_pack_asset_cleanup(
         &self,
         object_store: &dyn ObjectStore,
     ) -> Result<(), RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let reconciliation_started_at = Utc::now();
         for _ in 0..64 {
             let mut tx = self.pool.begin().await?;
@@ -812,7 +792,7 @@ impl CatalogRepository {
     }
 
     pub async fn cleanup_solution_pack_sample_staging(&self) -> Result<(), RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         loop {
             let mut tx = self.pool.begin().await?;
             set_solution_pack_transaction_timeouts(&mut tx).await?;
@@ -854,16 +834,6 @@ impl CatalogRepository {
         Ok(())
     }
 
-    pub async fn solution_pack_housekeeping_workspaces(
-        &self,
-    ) -> Result<Vec<Uuid>, RepositoryError> {
-        Ok(
-            sqlx::query_scalar("SELECT id FROM workspaces WHERE deleted_at IS NULL ORDER BY id")
-                .fetch_all(&self.pool)
-                .await?,
-        )
-    }
-
     pub async fn abandon_solution_pack_application(
         &self,
         application_id: Uuid,
@@ -880,7 +850,7 @@ impl CatalogRepository {
         application_id: Uuid,
         require_expired: bool,
     ) -> Result<bool, RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
         set_solution_pack_transaction_timeouts(&mut tx).await?;
         let application = sqlx::query_as::<_, (String, Uuid, Option<DateTime<Utc>>)>(
@@ -1002,7 +972,7 @@ impl CatalogRepository {
             .map_err(|error| RepositoryError::InvalidSolutionPackPlan(error.to_string()))?;
         validate_presentation_asset_mapping_requests(pack, requested_asset_mappings)
             .map_err(|error| RepositoryError::InvalidSolutionPackPlan(error.to_string()))?;
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
         sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
             .execute(&mut *tx)
@@ -2023,7 +1993,7 @@ impl CatalogRepository {
         &self,
         plan_id: Uuid,
     ) -> Result<Option<SolutionPackPlan>, RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let Some(mut plan) = sqlx::query_as::<_, SolutionPackPlan>(
             "SELECT id, workspace_id, source_kind, source_metadata, archive_sha256, manifest_version, pack_id, pack_name, pack_version, pack_description, host_api, prefix, blueprint_publication, prior_application_id, ready, sample_data_selected, sample_declaration_sha256, sample_entity_count, sample_automation_warning, readme_markdown, release_notes_markdown, setup_checklist, created_at, expires_at FROM solution_pack_plans WHERE workspace_id = $1 AND id = $2",
         )
@@ -2914,7 +2884,7 @@ impl CatalogRepository {
         tx: &mut Transaction<'_, Postgres>,
         plan_id: Uuid,
     ) -> Result<(), RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let mappings = sqlx::query_as::<_, SolutionPackPlanMapping>(
             "SELECT position,resource_kind,logical_key,target_id,target_code,target_version,mapping_kind,snapshot FROM solution_pack_plan_mappings WHERE workspace_id=$1 AND plan_id=$2 ORDER BY position",
         )
@@ -3287,7 +3257,7 @@ impl CatalogRepository {
         plan_id: Uuid,
     ) -> Result<Uuid, RepositoryError> {
         self.cleanup_solution_pack_sample_staging().await?;
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
         let plan = sqlx::query_as::<_, SolutionPackPlan>(
             "SELECT id, workspace_id, source_kind, source_metadata, archive_sha256, manifest_version, pack_id, pack_name, pack_version, pack_description, host_api, prefix, blueprint_publication, prior_application_id, ready, sample_data_selected, sample_declaration_sha256, sample_entity_count, sample_automation_warning, readme_markdown, release_notes_markdown, setup_checklist, created_at, expires_at FROM solution_pack_plans WHERE workspace_id = $1 AND id = $2 FOR UPDATE",
@@ -3488,7 +3458,7 @@ impl CatalogRepository {
         tx: &mut Transaction<'_, Postgres>,
         plan_id: Uuid,
     ) -> Result<(), RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let requirements = sqlx::query_as::<_, PrivatePlanExtensionRequirement>(
             "SELECT logical_key, extension_id, version_requirement, required, configuration_template_path, configuration_template_sha256, status, installed_release_id, installed_version, evaluation_template FROM solution_pack_plan_extension_requirements WHERE workspace_id=$1 AND plan_id=$2 AND required ORDER BY position",
         )
@@ -3569,7 +3539,7 @@ impl CatalogRepository {
         if contributions.is_empty() {
             return Ok(());
         }
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let extension_ids = contributions
             .iter()
             .filter_map(|entry| {
@@ -3624,7 +3594,7 @@ impl CatalogRepository {
         tx: &mut Transaction<'_, Postgres>,
         application_id: Uuid,
     ) -> Result<(), RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         self.revalidate_all_existing_blueprints(tx, application_id)
             .await?;
         let steps = sqlx::query_as::<_, RevalidationStep>(
@@ -3871,7 +3841,7 @@ impl CatalogRepository {
                 "existing-blueprint mapping and preconditions do not match".into(),
             ));
         }
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         // Lock every revision for the selected code. Ordinary revision creation
         // locks the latest row, and publication/deletion locks its target row,
         // so none can race this step after the exact evidence is checked.
@@ -3931,7 +3901,7 @@ impl CatalogRepository {
         tx: &mut Transaction<'_, Postgres>,
         application_id: Uuid,
     ) -> Result<(), RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let rows = sqlx::query_as::<_, (Uuid, String, Option<i64>, Value)>(
             "SELECT s.target_id,s.target_code,s.target_version,a.preconditions FROM solution_pack_application_steps s JOIN solution_pack_plan_actions a ON a.plan_id=s.plan_id AND a.position=s.position WHERE s.workspace_id=$1 AND s.application_id=$2 AND a.action='map' AND s.resource_kind='blueprint' ORDER BY s.target_code,s.target_id",
         )
@@ -3970,7 +3940,7 @@ impl CatalogRepository {
         attempted_position: &mut Option<i64>,
         object_store: &dyn ObjectStore,
     ) -> Result<bool, RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
         set_solution_pack_transaction_timeouts(&mut tx).await?;
         let (state, plan_id, resumable_until) = sqlx::query_as::<_, (String, Uuid, Option<DateTime<Utc>>)>(
@@ -4548,7 +4518,7 @@ impl CatalogRepository {
         tx: &mut Transaction<'_, Postgres>,
         step: &PendingApplicationStep,
     ) -> Result<(), RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         if step.resource_kind == "sample_entity" {
             let exists: bool = sqlx::query_scalar(
                 "SELECT EXISTS(SELECT 1 FROM entities WHERE workspace_id=$1 AND id=$2)",
@@ -4605,7 +4575,7 @@ impl CatalogRepository {
         attempted_position: Option<i64>,
         error: &RepositoryError,
     ) -> Result<bool, RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
         let (application_state, plan_id) = sqlx::query_as::<_, (String, Uuid)>(
             "SELECT state,plan_id FROM solution_pack_applications WHERE workspace_id=$1 AND id=$2 FOR UPDATE",
@@ -4681,7 +4651,7 @@ impl CatalogRepository {
         &self,
         application_id: Uuid,
     ) -> Result<Option<SolutionPackApplication>, RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
         sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
             .execute(&mut *tx)
@@ -4708,7 +4678,7 @@ impl CatalogRepository {
         &self,
         application_id: Uuid,
     ) -> Result<(), RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM solution_pack_check_runs WHERE workspace_id=$1 AND application_id=$2 AND trigger='post_apply')")
             .bind(workspace_id)
             .bind(application_id)
@@ -4735,7 +4705,7 @@ impl CatalogRepository {
         limit: i64,
         offset: i64,
     ) -> Result<Vec<SolutionPackCheckRunSummary>, RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let application_exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM solution_pack_applications WHERE workspace_id=$1 AND id=$2)")
             .bind(workspace_id).bind(application_id).fetch_one(&self.pool).await?;
         if !application_exists {
@@ -4750,7 +4720,7 @@ impl CatalogRepository {
         application_id: Uuid,
         run_id: Uuid,
     ) -> Result<Option<SolutionPackCheckRun>, RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let Some(summary) = sqlx::query_as::<_, SolutionPackCheckRunSummary>("SELECT id,application_id,request_id,correlation_id,trigger,total_count,passed_count,failed_count,started_at,completed_at FROM solution_pack_check_runs WHERE workspace_id=$1 AND application_id=$2 AND id=$3")
             .bind(workspace_id).bind(application_id).bind(run_id).fetch_optional(&self.pool).await? else {
             return Ok(None);
@@ -4765,7 +4735,7 @@ impl CatalogRepository {
         application_id: Uuid,
         trigger: &str,
     ) -> Result<SolutionPackCheckRun, RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
         let application = sqlx::query_as::<_, (Uuid, String)>("SELECT plan_id,state FROM solution_pack_applications WHERE workspace_id=$1 AND id=$2 FOR UPDATE")
             .bind(workspace_id).bind(application_id).fetch_optional(&mut *tx).await?
@@ -4878,7 +4848,7 @@ impl CatalogRepository {
         limit: i64,
         offset: i64,
     ) -> Result<Vec<SolutionPackApplicationSummary>, RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         Ok(sqlx::query_as::<_, SolutionPackApplicationSummary>(
             "SELECT id,plan_id,request_id,correlation_id,source_kind,source_metadata,archive_sha256,pack_id,pack_version,blueprint_publication,prior_application_id,state,diagnostic_code,diagnostic_message,started_at,updated_at,completed_at,resumable_until,abandoned_at FROM solution_pack_applications WHERE workspace_id=$1 ORDER BY started_at DESC,id DESC LIMIT $2 OFFSET $3",
         ).bind(workspace_id).bind(limit).bind(offset).fetch_all(&self.pool).await?)
@@ -5410,6 +5380,38 @@ fn solution_pack_mutation_error(error: RepositoryError) -> RepositoryError {
 
 fn bounded_diagnostic(message: &str) -> String {
     message.chars().take(1024).collect()
+}
+
+impl<S: super::RepositoryScope> CatalogRepository<S> {
+    /// Solution-pack permissions are bootstrapped in application code so the
+    /// database migration history remains declarative.
+    pub async fn ensure_solution_pack_permissions(&self) -> Result<(), RepositoryError> {
+        let mut tx = self.pool.begin().await?;
+        sqlx::query("INSERT INTO permissions (code, description) VALUES ('solution_packs.manage', 'Inspect and manage solution packs') ON CONFLICT (code) DO NOTHING")
+            .execute(&mut *tx)
+            .await?;
+        for role_id in [
+            Uuid::from_u128(0x00000000000040008000000000000101),
+            Uuid::from_u128(0x00000000000040008000000000000102),
+        ] {
+            sqlx::query("INSERT INTO role_permissions (role_id, permission_code) VALUES ($1, 'solution_packs.manage') ON CONFLICT DO NOTHING")
+                .bind(role_id)
+                .execute(&mut *tx)
+                .await?;
+        }
+        tx.commit().await?;
+        Ok(())
+    }
+
+    pub async fn solution_pack_housekeeping_workspaces(
+        &self,
+    ) -> Result<Vec<Uuid>, RepositoryError> {
+        Ok(
+            sqlx::query_scalar("SELECT id FROM workspaces WHERE deleted_at IS NULL ORDER BY id")
+                .fetch_all(&self.pool)
+                .await?,
+        )
+    }
 }
 
 #[cfg(test)]

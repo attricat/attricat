@@ -24,7 +24,7 @@ impl CatalogRepository {
         user_id: Uuid,
         file: NewUploadedFile,
     ) -> Result<OwnAvatar, RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let mut transaction = self.pool.begin().await?;
         let membership: Option<Uuid> = sqlx::query_scalar(
             "SELECT id FROM workspace_memberships WHERE workspace_id = $1 AND user_id = $2 AND state = 'active' FOR UPDATE",
@@ -34,6 +34,8 @@ impl CatalogRepository {
         .fetch_optional(&mut *transaction)
         .await?;
         let membership = membership.ok_or(RepositoryError::NotFound("membership"))?;
+        self.finish_file_upload(&mut transaction, &file.object_key)
+            .await?;
         let file_id = Uuid::new_v4();
         let status = "queued".to_owned();
         sqlx::query(
@@ -68,7 +70,7 @@ impl CatalogRepository {
     /// Removes the active member's avatar in this workspace. Removing an
     /// absent avatar succeeds so the request is idempotent.
     pub async fn clear_avatar(&self, user_id: Uuid) -> Result<(), RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let workspace_id = self.workspace_id.0;
         let mut transaction = self.pool.begin().await?;
         let updated = sqlx::query(
             "UPDATE workspace_memberships SET avatar_file_id = NULL, updated_at = clock_timestamp() WHERE workspace_id = $1 AND user_id = $2 AND state = 'active'",
@@ -83,6 +85,21 @@ impl CatalogRepository {
         self.commit_mutation(transaction).await
     }
 
+    /// True when the file is the current avatar of an active member of this
+    /// workspace. Any authenticated member may read such an avatar.
+    pub async fn is_member_avatar(&self, file_id: Uuid) -> Result<bool, RepositoryError> {
+        let workspace_id = self.workspace_id.0;
+        Ok(sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM workspace_memberships m JOIN files f ON f.workspace_id = m.workspace_id AND f.id = m.avatar_file_id WHERE m.workspace_id = $1 AND m.avatar_file_id = $2 AND m.state = 'active' AND f.purpose = 'avatar' AND f.deleted_at IS NULL)",
+        )
+        .bind(workspace_id)
+        .bind(file_id)
+        .fetch_one(&self.pool)
+        .await?)
+    }
+}
+
+impl<S: super::RepositoryScope> CatalogRepository<S> {
     /// Returns the member's own avatar in `workspace_id`, whatever its state.
     pub async fn own_avatar(
         &self,
@@ -95,19 +112,6 @@ impl CatalogRepository {
         .bind(workspace_id)
         .bind(user_id)
         .fetch_optional(&self.pool)
-        .await?)
-    }
-
-    /// True when the file is the current avatar of an active member of this
-    /// workspace. Any authenticated member may read such an avatar.
-    pub async fn is_member_avatar(&self, file_id: Uuid) -> Result<bool, RepositoryError> {
-        let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
-        Ok(sqlx::query_scalar(
-            "SELECT EXISTS (SELECT 1 FROM workspace_memberships m JOIN files f ON f.workspace_id = m.workspace_id AND f.id = m.avatar_file_id WHERE m.workspace_id = $1 AND m.avatar_file_id = $2 AND m.state = 'active' AND f.purpose = 'avatar' AND f.deleted_at IS NULL)",
-        )
-        .bind(workspace_id)
-        .bind(file_id)
-        .fetch_one(&self.pool)
         .await?)
     }
 }

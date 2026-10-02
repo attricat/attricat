@@ -144,7 +144,7 @@ impl TryFrom<ClaimedTaskRow> for ClaimedTask {
     }
 }
 
-impl CatalogRepository {
+impl<S: super::RepositoryScope> CatalogRepository<S> {
     /// Inserts a delivery envelope in the caller's domain transaction. A
     /// conflict means that exact subject generation was already committed.
     pub async fn enqueue_task(

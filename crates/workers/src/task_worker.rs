@@ -18,7 +18,7 @@ use tokio::{sync::watch, task::JoinSet, time};
 use uuid::Uuid;
 
 use crate::{
-    repository::{CatalogRepository, ClaimedTask, TaskError},
+    repository::{ClaimedTask, SystemRepository, TaskError},
     task_queue::TaskKind,
 };
 
@@ -118,16 +118,17 @@ impl TaskHandlerRegistry {
 }
 
 pub fn start(
-    repository: CatalogRepository,
+    repository: impl Into<SystemRepository>,
     registry: TaskHandlerRegistry,
     config: TaskWorkerConfig,
     shutdown: watch::Receiver<()>,
 ) -> tokio::task::JoinHandle<Result<(), TaskError>> {
+    let repository = repository.into();
     tokio::spawn(async move { run(repository, registry, config, shutdown).await })
 }
 
 async fn run(
-    repository: CatalogRepository,
+    repository: SystemRepository,
     registry: TaskHandlerRegistry,
     config: TaskWorkerConfig,
     mut shutdown: watch::Receiver<()>,
@@ -239,7 +240,7 @@ async fn run(
 }
 
 async fn record_queue_metrics(
-    repository: &CatalogRepository,
+    repository: &SystemRepository,
     kinds: &[TaskKind],
 ) -> Result<(), TaskError> {
     const STATUSES: [&str; 3] = ["queued", "leased", "dead_letter"];
@@ -291,7 +292,7 @@ fn bounded_error(code: &str, message: &str) -> (String, String) {
     (truncate_error(code, 128), truncate_error(message, 1024))
 }
 
-async fn execute(repository: CatalogRepository, handler: Arc<dyn TaskHandler>, task: ClaimedTask) {
+async fn execute(repository: SystemRepository, handler: Arc<dyn TaskHandler>, task: ClaimedTask) {
     let started = Instant::now();
     let kind = task.kind;
     gauge!("catalog_task_worker_tasks_in_flight", "kind" => kind.as_str()).increment(1.0);
@@ -411,7 +412,7 @@ mod tests {
             .acquire_timeout(Duration::from_millis(100))
             .connect_lazy("postgres://postgres@127.0.0.1:1/catalog")
             .unwrap();
-        let repository = CatalogRepository::system(pool);
+        let repository = crate::repository::CatalogRepository::system(pool);
         let registry = TaskHandlerRegistry::new(vec![Arc::new(Duplicate)]).unwrap();
         let (shutdown, receiver) = watch::channel(());
         let worker = start(

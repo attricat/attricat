@@ -4,7 +4,7 @@
 //! `task_worker`; this module deliberately has no local channel or lease.
 
 use crate::{
-    repository::{CatalogRepository, ClaimedTask},
+    repository::{ClaimedTask, SystemRepository},
     task_queue::TaskKind,
     task_worker::{TaskHandler, TaskHandlerError, TaskOutcome},
 };
@@ -63,20 +63,23 @@ fn bounded_config_value(
 }
 
 pub struct BlueprintMigrationBatchTaskHandler {
-    repository: CatalogRepository,
+    repository: SystemRepository,
     config: BlueprintMigrationBatchConfig,
 }
 
 impl BlueprintMigrationBatchTaskHandler {
-    pub fn new(repository: CatalogRepository) -> Self {
+    pub fn new(repository: impl Into<SystemRepository>) -> Self {
         Self::with_config(repository, BlueprintMigrationBatchConfig::default())
     }
 
     pub fn with_config(
-        repository: CatalogRepository,
+        repository: impl Into<SystemRepository>,
         config: BlueprintMigrationBatchConfig,
     ) -> Self {
-        Self { repository, config }
+        Self {
+            repository: repository.into(),
+            config,
+        }
     }
 }
 

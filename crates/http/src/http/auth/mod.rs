@@ -131,6 +131,9 @@ pub(super) async fn authorize(
             .and_then(|value| value.to_str().ok())
             .and_then(|value| value.parse().ok())
             .ok_or_else(ApiError::unauthenticated)?;
+        if !state.repository.is_active_user(user_id).await? {
+            return Err(ApiError::unauthenticated());
+        }
         (user_id, workspace_id, None, None)
     } else {
         let raw_session = cookie_value(
@@ -180,31 +183,33 @@ pub(super) async fn authorize(
     let accepting_invitation = matched == "/workspace/invitations/accept";
     if let Some(policy) = policy::policy(request.method(), matched) {
         let (target_id, target_code) = policy::target(path, policy.target);
-        if !state.repository.is_active_user(principal).await? {
-            return Err(ApiError::unauthenticated());
-        }
-        if !state
-            .repository
-            .is_active_principal(principal, workspace)
-            .await?
+        // File reads are authorized in their handlers after resolving active
+        // file-to-entity references. Other routes can authorize from the path.
+        let handler_authorized = matches!(
+            policy.target,
+            policy::TargetKind::FileRead | policy::TargetKind::WorkspaceNavigation
+        );
+        if handler_authorized
+            && !state
+                .repository
+                .is_active_principal(principal, workspace)
+                .await?
         {
             return Err(ApiError::forbidden());
         }
-        // File reads are authorized in their handlers after resolving active
-        // file-to-entity references. Other routes can authorize from the path.
-        if !matches!(
-            policy.target,
-            policy::TargetKind::FileRead | policy::TargetKind::WorkspaceNavigation
-        ) && !state
-            .repository
-            .is_authorized(
-                principal,
-                workspace,
-                policy.permission,
-                target_id,
-                target_code.as_deref(),
-            )
-            .await?
+        // Ordinary permission evaluation already checks the live user,
+        // membership and workspace; do not repeat those database round trips.
+        if !handler_authorized
+            && !state
+                .repository
+                .is_authorized(
+                    principal,
+                    workspace,
+                    policy.permission,
+                    target_id,
+                    target_code.as_deref(),
+                )
+                .await?
         {
             return Err(ApiError::forbidden());
         }
@@ -233,7 +238,23 @@ pub(super) async fn authorize(
                 return Err(ApiError::forbidden());
             }
         }
-    } else if !path.starts_with("/auth/") && !accepting_invitation {
+    } else if matches!(
+        matched,
+        "/auth/session"
+            | "/auth/preferences"
+            | "/auth/display-name"
+            | "/auth/avatar"
+            | "/auth/logout"
+            | "/auth/renew"
+    ) {
+        if !state
+            .repository
+            .is_active_principal(principal, workspace)
+            .await?
+        {
+            return Err(ApiError::forbidden());
+        }
+    } else if !accepting_invitation {
         return Err(ApiError::forbidden());
     }
 

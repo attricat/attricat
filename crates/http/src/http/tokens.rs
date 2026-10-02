@@ -58,7 +58,7 @@ impl From<PersonalApiToken> for TokenMetadata {
 pub(super) async fn create(
     State(_state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
-    AuthenticatedPrincipal(user_id, _): AuthenticatedPrincipal,
+    AuthenticatedPrincipal(user_id, issuer_token_id): AuthenticatedPrincipal,
     ActiveWorkspace(workspace_id): ActiveWorkspace,
     ApiJson(input): ApiJson<CreateTokenRequest>,
 ) -> Result<(StatusCode, Json<CreatedToken>), ApiError> {
@@ -76,6 +76,7 @@ pub(super) async fn create(
             &digest,
             &input.permissions,
             input.expires_at,
+            issuer_token_id,
         )
         .await?;
     let token = TokenMetadata {

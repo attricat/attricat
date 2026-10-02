@@ -7,25 +7,12 @@ use uuid::Uuid;
 const WORKFLOW_FIELDS: &str = "w.id, w.code, w.name, w.version, w.status, w.definition, w.definition_hash, w.compiled_plan, w.published_at, w.created_at, l.enabled_version, (w.compiled_plan @> '{\"triggers\":[{\"type\":\"manual\"}]}'::jsonb) AS manual_enabled";
 
 impl CatalogRepository {
-    /// Permissions are application data, leaving migrations declarative.
-    pub async fn ensure_workflow_permissions(&self) -> Result<(), RepositoryError> {
-        let mut tx = self.pool.begin().await?;
-        sqlx::query("INSERT INTO permissions (code, description) VALUES ('workflows.read', 'Read workspace workflows and revisions'), ('workflows.manage', 'Create and manage workspace workflows') ON CONFLICT (code) DO NOTHING").execute(&mut *tx).await?;
-        for role_id in [
-            Uuid::from_u128(0x00000000000040008000000000000101),
-            Uuid::from_u128(0x00000000000040008000000000000102),
-        ] {
-            sqlx::query("INSERT INTO role_permissions (role_id, permission_code) SELECT $1, code FROM permissions WHERE code IN ('workflows.read', 'workflows.manage') ON CONFLICT DO NOTHING").bind(role_id).execute(&mut *tx).await?;
-        }
-        tx.commit().await?;
-        Ok(())
-    }
     pub async fn list_workflows(&self) -> Result<Vec<Workflow>, RepositoryError> {
         let q = format!(
             "SELECT {WORKFLOW_FIELDS} FROM workflows w LEFT JOIN workflow_lifecycles l ON l.workflow_id=w.id WHERE w.workspace_id=$1 ORDER BY w.created_at DESC, w.version DESC"
         );
         Ok(sqlx::query_as::<_, Db<Workflow>>(&q)
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(self.workspace_id.0)
             .fetch_all(&self.pool)
             .await?
             .into_domain())
@@ -39,7 +26,7 @@ impl CatalogRepository {
         );
         Ok(sqlx::query_as::<_, Db<Workflow>>(&q)
             .bind(id)
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(self.workspace_id.0)
             .fetch_all(&self.pool)
             .await?
             .into_domain())
@@ -55,7 +42,7 @@ impl CatalogRepository {
         Ok(sqlx::query_as::<_, Db<Workflow>>(&q)
             .bind(id)
             .bind(version)
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(self.workspace_id.0)
             .fetch_optional(&self.pool)
             .await?
             .into_domain())
@@ -66,7 +53,7 @@ impl CatalogRepository {
         );
         Ok(sqlx::query_as::<_, Db<Workflow>>(&q)
             .bind(id)
-            .bind(self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID))
+            .bind(self.workspace_id.0)
             .fetch_optional(&self.pool)
             .await?
             .into_domain())
@@ -77,7 +64,7 @@ impl CatalogRepository {
     ) -> Result<Workflow, RepositoryError> {
         let compiled = catalog_workflow::compile(&input.definition)
             .map_err(|e| RepositoryError::InvalidWorkflowDefinition(e.to_string()))?;
-        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
         // A versioned primary key cannot express a unique workflow family code.
         // Serialize first revisions by workspace and code, as blueprint creation does.
@@ -116,7 +103,7 @@ impl CatalogRepository {
     ) -> Result<Workflow, RepositoryError> {
         let compiled = catalog_workflow::compile(&input.definition)
             .map_err(|e| RepositoryError::InvalidWorkflowDefinition(e.to_string()))?;
-        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
         let previous:Option<(i64,String)>=sqlx::query_as("SELECT version,code FROM workflows WHERE id=$1 AND workspace_id=$2 ORDER BY version DESC LIMIT 1 FOR UPDATE").bind(id).bind(ws).fetch_optional(&mut *tx).await?;
         let Some((version, code)) = previous else {
@@ -140,7 +127,7 @@ impl CatalogRepository {
         id: Uuid,
         version: i64,
     ) -> Result<Workflow, RepositoryError> {
-        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
         let affected=sqlx::query("UPDATE workflows SET status='published',published_at=COALESCE(published_at,now()) WHERE id=$1 AND version=$2 AND workspace_id=$3").bind(id).bind(version).bind(ws).execute(&mut *tx).await?;
         if affected.rows_affected() == 0 {
@@ -156,7 +143,7 @@ impl CatalogRepository {
         id: Uuid,
         version: i64,
     ) -> Result<Workflow, RepositoryError> {
-        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
         let published:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM workflows WHERE id=$1 AND version=$2 AND workspace_id=$3 AND status='published')").bind(id).bind(version).bind(ws).fetch_one(&mut *tx).await?;
         if !published {
@@ -204,7 +191,7 @@ impl CatalogRepository {
             .ok_or(RepositoryError::NotFound("workflow revision"))
     }
     pub async fn disable_workflow(&self, id: Uuid) -> Result<Workflow, RepositoryError> {
-        let ws = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
+        let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
         // This conflicts with fan-out's shared lock and action execution's
         // exclusive lifecycle check, making disable a durable execution fence.
@@ -233,5 +220,21 @@ impl CatalogRepository {
         self.get_workflow(id)
             .await?
             .ok_or(RepositoryError::NotFound("workflow"))
+    }
+}
+
+impl<S: super::RepositoryScope> CatalogRepository<S> {
+    /// Permissions are application data, leaving migrations declarative.
+    pub async fn ensure_workflow_permissions(&self) -> Result<(), RepositoryError> {
+        let mut tx = self.pool.begin().await?;
+        sqlx::query("INSERT INTO permissions (code, description) VALUES ('workflows.read', 'Read workspace workflows and revisions'), ('workflows.manage', 'Create and manage workspace workflows') ON CONFLICT (code) DO NOTHING").execute(&mut *tx).await?;
+        for role_id in [
+            Uuid::from_u128(0x00000000000040008000000000000101),
+            Uuid::from_u128(0x00000000000040008000000000000102),
+        ] {
+            sqlx::query("INSERT INTO role_permissions (role_id, permission_code) SELECT $1, code FROM permissions WHERE code IN ('workflows.read', 'workflows.manage') ON CONFLICT DO NOTHING").bind(role_id).execute(&mut *tx).await?;
+        }
+        tx.commit().await?;
+        Ok(())
     }
 }

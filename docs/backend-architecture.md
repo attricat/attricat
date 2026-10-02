@@ -39,6 +39,27 @@ No library crate may depend on `api`. `apps/api` alone owns process startup, dat
 
 The facade intentionally preserves historical paths such as `api::model`, `api::repository`, `api::solution_packs`, `api::agent_worker`, and `api::http`. New library code should import the owning crate directly. These re-exports can be removed only as a separately reviewed compatibility change.
 
+## Repository scopes and maintenance
+
+`CatalogRepository` carries a mandatory workspace scope. `SystemRepository`
+(`CatalogRepository<SystemScope>`) exposes authentication, explicit-scope identity
+operations, bootstrap, and process-level queue/maintenance operations, but cannot
+call workspace data methods. Derive a workspace repository from the authenticated
+workspace or claimed task before accessing catalog data. There is no fallback to
+the bootstrap workspace.
+
+`for_workspace` shares the bounded pool and performs no SQL. Provision default
+contexts explicitly with `initialize_workspace`; startup repairs existing active
+workspaces once, rather than attempting writes during every request. Transaction-owning
+helpers must reuse the caller's connection instead of acquiring another pool slot.
+
+History retention runs periodically in bounded transactions. File uploads commit
+durable object-key intents before S3 writes and consume them in the same
+transaction as file persistence. Unfinished intents become cleanup work after the
+request deadline plus one hour. Cleanup claims fence late finalization, retry
+failed S3 deletions, and survive cancellation and process restarts. Do not delete
+objects on an ambiguous database-commit error.
+
 ## Stable assets
 
 - SQL migrations remain under `apps/api/migrations`; `api::MIGRATOR` embeds that directory and SQLx CLI commands keep the same source path.

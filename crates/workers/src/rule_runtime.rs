@@ -3,7 +3,9 @@
 use crate::{
     domain_events::{ALL_EVENT_TYPES_V1, DomainEvent},
     event_dispatcher::{EventHandler, EventHandlerCommandContext},
-    repository::{CatalogRepository, ClaimedRuleRun, RepositoryError, RuleCandidateResult},
+    repository::{
+        CatalogRepository, ClaimedRuleRun, RepositoryError, RuleCandidateResult, SystemRepository,
+    },
     task_queue::TaskKind,
     task_worker::{TaskHandler, TaskHandlerError, TaskOutcome},
 };
@@ -46,11 +48,13 @@ pub fn add_to_registry(
 }
 
 pub struct RuleTaskHandler {
-    repository: CatalogRepository,
+    repository: SystemRepository,
 }
 
-pub fn task_handler(repository: CatalogRepository) -> Arc<dyn TaskHandler> {
-    Arc::new(RuleTaskHandler { repository })
+pub fn task_handler(repository: impl Into<SystemRepository>) -> Arc<dyn TaskHandler> {
+    Arc::new(RuleTaskHandler {
+        repository: repository.into(),
+    })
 }
 
 #[async_trait]
@@ -251,7 +255,7 @@ async fn predicate_failure(
 /// The only rule schedule coordinator. It never claims rule runs; task-worker
 /// instances are the sole execution claimers.
 pub fn start_schedule_coordinator(
-    repository: CatalogRepository,
+    repository: SystemRepository,
     mut shutdown: watch::Receiver<()>,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {

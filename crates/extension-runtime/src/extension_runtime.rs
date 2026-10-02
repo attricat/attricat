@@ -45,7 +45,7 @@ use crate::{
     repository::{
         CatalogRepository, ClaimedTask, DeliveryState, ExtensionCatalogBatch,
         ExtensionCatalogIntent, ExtensionCatalogPageRequest, ExtensionConfigurationScope,
-        ExtensionOperationArtifact, ExtensionRuntimeInstallation,
+        ExtensionOperationArtifact, ExtensionRuntimeInstallation, SystemRepository,
     },
     storage::{ObjectStore, ObjectStoreError, StoredObject},
     task_queue::TaskKind,
@@ -1621,13 +1621,13 @@ struct NetworkRequest {
 /// crash before that transaction repeats the batch, so operation components
 /// must make each batch idempotent using the durable checkpoint.
 pub struct ExtensionOperationTaskHandler {
-    repository: CatalogRepository,
+    repository: SystemRepository,
     runtime: ExtensionRuntime,
 }
 impl ExtensionOperationTaskHandler {
-    pub fn new(repository: CatalogRepository, runtime: ExtensionRuntime) -> Self {
+    pub fn new(repository: impl Into<SystemRepository>, runtime: ExtensionRuntime) -> Self {
         Self {
-            repository,
+            repository: repository.into(),
             runtime,
         }
     }
@@ -1805,14 +1805,14 @@ impl TaskHandler for ExtensionOperationTaskHandler {
 }
 
 pub struct WasmExtensionTaskHandler {
-    repository: CatalogRepository,
+    repository: SystemRepository,
     runtime: ExtensionRuntime,
 }
 
 impl WasmExtensionTaskHandler {
-    pub fn new(repository: CatalogRepository, runtime: ExtensionRuntime) -> Self {
+    pub fn new(repository: impl Into<SystemRepository>, runtime: ExtensionRuntime) -> Self {
         Self {
-            repository,
+            repository: repository.into(),
             runtime,
         }
     }
@@ -1948,7 +1948,7 @@ impl TaskHandler for WasmExtensionTaskHandler {
 /// and atomically creates delivery/task pairs for subsequently supported event
 /// versions; execution is exclusively owned by `WasmExtensionTaskHandler`.
 pub fn start_event_delivery_coordinator(
-    repository: CatalogRepository,
+    repository: SystemRepository,
     object_store: Arc<dyn ObjectStore>,
     mut shutdown: watch::Receiver<()>,
 ) -> tokio::task::JoinHandle<()> {

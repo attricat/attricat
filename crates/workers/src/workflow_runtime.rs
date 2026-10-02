@@ -3,7 +3,7 @@
 use crate::{
     domain_events::{ALL_EVENT_TYPES_V1, DomainEvent},
     event_dispatcher::{EventHandler, EventHandlerCommandContext},
-    repository::{CatalogRepository, ClaimedTask},
+    repository::{CatalogRepository, ClaimedTask, SystemRepository},
     task_queue::TaskKind,
     task_worker::{TaskHandler, TaskHandlerError, TaskOutcome},
 };
@@ -42,11 +42,13 @@ pub fn add_to_registry(
 }
 
 pub struct WorkflowTaskHandler {
-    repository: CatalogRepository,
+    repository: SystemRepository,
 }
 
-pub fn task_handler(repository: CatalogRepository) -> Arc<dyn TaskHandler> {
-    Arc::new(WorkflowTaskHandler { repository })
+pub fn task_handler(repository: impl Into<SystemRepository>) -> Arc<dyn TaskHandler> {
+    Arc::new(WorkflowTaskHandler {
+        repository: repository.into(),
+    })
 }
 
 #[async_trait]
@@ -132,7 +134,7 @@ fn task_error(error: crate::repository::RepositoryError) -> TaskHandlerError {
 /// The only workflow schedule coordinator. It never claims workflow runs;
 /// task-worker instances are the sole execution claimers.
 pub fn start_schedule_coordinator(
-    repository: CatalogRepository,
+    repository: SystemRepository,
     mut shutdown: watch::Receiver<()>,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
