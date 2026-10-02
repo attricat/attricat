@@ -41,5 +41,9 @@ export const updateFileReferencesSchema = z.object({
   file_ids: z.array(z.uuid()),
 });
 
+export const fileReferencesUpdateResultSchema = z.object({
+  entity_updated_at: z.string(),
+});
+
 export type FileMetadata = z.infer<typeof fileMetadataSchema>;
 export type FileUploadResult = z.infer<typeof fileUploadResultSchema>;

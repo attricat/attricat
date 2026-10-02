@@ -1,3 +1,5 @@
+import i18n from '../../../i18n';
+
 // A single ASCII dot-atom mailbox. No display names, recipient lists or URI headers.
 const emailPattern =
   /^[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)*[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/;
@@ -20,3 +22,9 @@ export const emailHref = (value: unknown): string | undefined =>
   typeof value === 'string' && isEmailAddress(value)
     ? `mailto:${encodeURIComponent(value).replace(/%40/g, '@')}`
     : undefined;
+
+/** Form validation: surrounding whitespace is trimmed before saving. */
+export const validateEmail = (value: string) =>
+  !value.trim() || isEmailAddress(value.trim())
+    ? undefined
+    : i18n.t('entities.invalidEmail');

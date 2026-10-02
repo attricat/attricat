@@ -228,7 +228,7 @@ renderer = { id = "catalog.table_image", version = 1 }
 | `columns` | tablica tabel | Definicje kolumn. Musi być niepusta, z unikalnymi wartościami `field`. |
 | `columns[].field` | ciąg znaków | Lokalny atrybut skalarny, lokalny atrybut plikowy ze zgodnym rendererem lub ścieżka o maksymalnie trzech krokach relacji zakończona atrybutem skalarnym, np. `family.product_type.name`. |
 | `columns[].label` | ciąg znaków | Nagłówek kolumny. Domyślnie nazwa atrybutu. |
-| `columns[].renderer` | odwołanie do komponentu | `catalog.table_image@1` lub renderer komórek z rozszerzenia. |
+| `columns[].renderer` | odwołanie do komponentu | `catalog.table_image@1`, komponent wyświetlania tekstu (`catalog.color_display@1`, `catalog.email_display@1`, `catalog.url_display@1` lub `catalog.phone_display@1`) albo renderer komórek z rozszerzenia. |
 | `fields` | tablica kodów atrybutów | Starszy skrót dla lokalnych kolumn skalarnych. Nie można go łączyć z `columns`. |
 | `component` | odwołanie do komponentu | Opcjonalny komponent tabeli. |
 
@@ -281,6 +281,18 @@ Wbudowane komponenty:
 | `catalog.table_display` | 1 | `table` | Skalarne | |
 | `catalog.table_edit` | 1 | `table` | Skalarne | |
 | `catalog.table_image` | 1 | `renderer` kolumny tabeli | `file` z `cardinality = "one"` i `image_only = true` | |
+| `catalog.color_display` | 1 | `field` (detail), `renderer` kolumny tabeli | `string` | |
+| `catalog.color_edit` | 1 | `field` (edit) | `string` | |
+| `catalog.email_display` | 1 | `field` (detail), `renderer` kolumny tabeli | `string` | |
+| `catalog.email_edit` | 1 | `field` (edit) | `string` | |
+| `catalog.url_display` | 1 | `field` (detail), `renderer` kolumny tabeli | `string` | |
+| `catalog.url_edit` | 1 | `field` (edit) | `string` | |
+| `catalog.phone_display` | 1 | `field` (detail), `renderer` kolumny tabeli | `string` | |
+| `catalog.phone_edit` | 1 | `field` (edit) | `string` | |
+| `catalog.markdown_display` | 1 | `field` (detail) | `string` | |
+| `catalog.markdown_edit` | 1 | `field` (edit) | `string` | |
+
+Działanie tych komponentów opisano w sekcji [Kontrolki pól](/pl/builders/views/#kontrolki-pól).
 
 Identyfikator i wersja renderera komórek z rozszerzenia muszą odpowiadać rendererowi zadeklarowanemu przez włączone rozszerzenie dla typu wartości kolumny.
 

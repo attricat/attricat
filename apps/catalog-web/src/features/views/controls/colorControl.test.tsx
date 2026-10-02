@@ -5,9 +5,9 @@ import { ThemeProvider } from '@mui/material';
 import { describe, expect, it, vi } from 'vitest';
 import '../../../i18n';
 import { makeTheme } from '../../../app/theme';
-import { ColorAttributeEditor } from '../../entities/components/ColorAttributeEditor';
-import { ColorValue } from './values/ColorValue';
-import { EntityView } from './EntityView';
+import { ColorEditor } from './editors';
+import { ColorValue } from './values';
+import { EntityView } from '../components/EntityView';
 import { BlueprintViewsPreview } from '../../blueprints/BlueprintViewsPreview';
 import { ConfiguredColumnCell } from '../../explorer/ConfiguredColumnCell';
 import type { EntityItem } from '../../entities/api';
@@ -51,7 +51,7 @@ describe('color components', () => {
     const Editor = () => {
       const [value, setValue] = useState('');
       return (
-        <ColorAttributeEditor
+        <ColorEditor
           attribute={attribute}
           value={value}
           onChange={setValue}
@@ -77,7 +77,7 @@ describe('color components', () => {
   it('blocks every input path when disabled', () => {
     const onChange = vi.fn();
     render(
-      <ColorAttributeEditor
+      <ColorEditor
         attribute={attribute}
         value="#ffffff"
         onChange={onChange}

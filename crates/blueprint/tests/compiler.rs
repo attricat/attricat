@@ -595,7 +595,10 @@ value_type = "string"
         source.replace("catalog.phone_edit", "catalog.phone_display"),
         source.replace("catalog.phone_display", "catalog.phone_edit"),
         source.replace("version = 1 }", "version = 2 }"),
-        source.replace("version = 1 }", "version = 1, props = { region = \"PL\" } }"),
+        source.replace(
+            "version = 1 }",
+            "version = 1, props = { region = \"PL\" } }",
+        ),
     ] {
         assert!(compile(parse(&invalid).unwrap(), &[], &invalid).is_err());
     }

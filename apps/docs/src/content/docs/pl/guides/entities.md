@@ -42,6 +42,12 @@ Pola plików przyjmują przesłane pliki po zapisaniu encji. Wybierz lub upuść
 
 Nowy plik przechodzi przez następujące stany: **Przesyłanie**, **W kolejce**, **Przetwarzanie** i **Gotowy**. Obrazy otrzymują miniaturę i wersję w rozmiarze do wyświetlania. Plik można pobrać, gdy jest gotowy. Jeśli przetwarzanie się nie powiedzie, plik pokazuje stan **Niepowodzenie**; administrator może ponowić próbę.
 
+Pola plików przyjmujące tylko obrazy wyświetlają galerię. Wybierz obraz, aby otworzyć większy podgląd z powiększaniem i przechodzeniem do poprzedniego lub następnego obrazu. W formularzu edycji możesz dodawać i usuwać obrazy oraz przesuwać je wcześniej lub później, jeśli kolejność plików atrybutu ma znaczenie. Usunięcie obrazu odłącza go od encji.
+
+## Komentarze
+
+Strona encji ma panel **Komentarze**. Każdy, kto może odczytać encję, może dodać komentarz w Markdownie; **Podgląd Markdown** pokazuje, jak będzie wyglądał. Możesz edytować tylko własne komentarze. Jeśli komentarz zmieni się, zanim zapiszesz edycję, zostanie ona odrzucona; odśwież komentarze i przywróć szkic, aby uzgodnić tekst.
+
 ## Dodatkowe atrybuty
 
 Niektóre encje potrzebują pola, którego nie ma ich schemat. Jeśli obszar roboczy ma opublikowane [atrybuty wielokrotnego użytku](/pl/builders/modeling/#wielokrotne-użycie-atrybutów), wybierz **Dodaj niestandardowy atrybut lub grupę atrybutów** w formularzu edycji, aby dołączyć atrybut lub całą grupę tylko do tej encji.

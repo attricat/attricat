@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { safeUrl } from './urlPolicy';
-import { urlEditComponent } from './components/urlComponents';
+import { safeUrl, validateUrl } from './url';
 
 describe('URL navigation policy', () => {
   it.each([
@@ -38,10 +37,8 @@ describe('URL navigation policy', () => {
     expect(safeUrl(value)).toBeUndefined();
   });
   it('validates configured URL edits while allowing optional clearing', () => {
-    expect(urlEditComponent.validateValue('')).toBeUndefined();
-    expect(
-      urlEditComponent.validateValue('https://example.com/a?q=1'),
-    ).toBeUndefined();
-    expect(urlEditComponent.validateValue('javascript:alert(1)')).toBeTruthy();
+    expect(validateUrl('')).toBeUndefined();
+    expect(validateUrl('https://example.com/a?q=1')).toBeUndefined();
+    expect(validateUrl('javascript:alert(1)')).toBeTruthy();
   });
 });

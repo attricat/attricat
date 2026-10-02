@@ -228,7 +228,7 @@ renderer = { id = "catalog.table_image", version = 1 }
 | `columns` | array of tables | Column definitions. Must be non-empty with unique `field` values. |
 | `columns[].field` | string | A local scalar attribute, a local file attribute with a compatible renderer, or a path of up to three relationship hops ending in a scalar attribute, such as `family.product_type.name`. |
 | `columns[].label` | string | Column header. Defaults to the attribute name. |
-| `columns[].renderer` | component reference | `catalog.table_image@1` or an extension cell renderer. |
+| `columns[].renderer` | component reference | `catalog.table_image@1`, a string display component (`catalog.color_display@1`, `catalog.email_display@1`, `catalog.url_display@1`, or `catalog.phone_display@1`), or an extension cell renderer. |
 | `fields` | array of attribute codes | Older shorthand for local scalar columns. Cannot be combined with `columns`. |
 | `component` | component reference | Optional table component. |
 
@@ -281,6 +281,18 @@ Built-in components:
 | `catalog.table_display` | 1 | `table` | Scalars | |
 | `catalog.table_edit` | 1 | `table` | Scalars | |
 | `catalog.table_image` | 1 | table column `renderer` | `file` with `cardinality = "one"` and `image_only = true` | |
+| `catalog.color_display` | 1 | `field` (detail), table column `renderer` | `string` | |
+| `catalog.color_edit` | 1 | `field` (edit) | `string` | |
+| `catalog.email_display` | 1 | `field` (detail), table column `renderer` | `string` | |
+| `catalog.email_edit` | 1 | `field` (edit) | `string` | |
+| `catalog.url_display` | 1 | `field` (detail), table column `renderer` | `string` | |
+| `catalog.url_edit` | 1 | `field` (edit) | `string` | |
+| `catalog.phone_display` | 1 | `field` (detail), table column `renderer` | `string` | |
+| `catalog.phone_edit` | 1 | `field` (edit) | `string` | |
+| `catalog.markdown_display` | 1 | `field` (detail) | `string` | |
+| `catalog.markdown_edit` | 1 | `field` (edit) | `string` | |
+
+See [Field controls](/builders/views/#field-controls) for how these behave.
 
 An extension cell renderer's ID and version must match a renderer declared by an enabled extension for the column's value type.
 

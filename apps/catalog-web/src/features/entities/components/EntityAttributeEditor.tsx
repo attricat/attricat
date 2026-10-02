@@ -2,7 +2,7 @@ import { MenuItem, TextField, Tooltip, useTheme } from '@mui/material';
 import { InfoIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { Attribute, ComponentReference } from '../api';
-import { resolveViewComponent } from '../../views/components/registry';
+import { resolveValueEditor } from '../../views/components/registry';
 import type { FileMetadata } from '../../files/schemas';
 import { attributeLabel } from '../entityDisplay';
 import { attributeValueTypes } from '../valueTypes';
@@ -32,6 +32,7 @@ export const EntityAttributeEditor = ({
   helperText,
   migrationReviewMessage,
   onChange,
+  onEntityUpdated,
   showMigrationBadge,
   value,
 }: {
@@ -48,6 +49,8 @@ export const EntityAttributeEditor = ({
   helperText?: string;
   migrationReviewMessage?: string;
   onChange: (value: string) => void;
+  /** Receives the entity version after a file change saved by this editor. */
+  onEntityUpdated?: (updatedAt: string) => void;
   showMigrationBadge: boolean;
   value: string;
 }) => {
@@ -75,10 +78,7 @@ export const EntityAttributeEditor = ({
         />
       </>
     );
-  const definition = resolveViewComponent(component);
-  const Editor = definition?.value_types.includes(attribute.value_type)
-    ? definition.valueEditor
-    : undefined;
+  const Editor = resolveValueEditor(component, attribute)?.valueEditor;
   if (Editor)
     return (
       <>
@@ -120,6 +120,7 @@ export const EntityAttributeEditor = ({
           files={files}
           error={error}
           helperText={helperText}
+          onEntityUpdated={onEntityUpdated}
         />
       </>
     );

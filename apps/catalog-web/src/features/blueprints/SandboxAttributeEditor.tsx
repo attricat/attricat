@@ -1,7 +1,7 @@
 import { Button, MenuItem, TextField } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import type { Attribute, ComponentReference } from '../entities/api';
-import { resolveViewComponent } from '../views/components/registry';
+import { resolveValueEditor } from '../views/components/registry';
 import { attributeValueTypes } from '../entities/valueTypes';
 import { sandboxBooleanValues, sandboxInputPlaceholders } from './constants';
 
@@ -29,10 +29,7 @@ export const SandboxAttributeEditor = ({
 }) => {
   const { t } = useTranslation();
 
-  const definition = resolveViewComponent(component);
-  const Editor = definition?.value_types.includes(attribute.value_type)
-    ? definition.valueEditor
-    : undefined;
+  const Editor = resolveValueEditor(component, attribute)?.valueEditor;
   if (Editor)
     return (
       <Editor

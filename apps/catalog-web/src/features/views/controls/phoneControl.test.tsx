@@ -4,8 +4,8 @@ import { afterEach, expect, it, vi } from 'vitest';
 import type { Attribute, ComponentReference } from '../../entities/api';
 import { EntityAttributeEditor } from '../../entities/components/EntityAttributeEditor';
 import { EntityFormAttributeEditor } from '../../entities/components/EntityFormAttributeEditor';
-import { EntityView } from './EntityView';
-import { PhoneValue } from './values/PhoneValue';
+import { EntityView } from '../components/EntityView';
+import { PhoneValue } from './values';
 
 const attribute: Attribute = { code: 'phone', value_type: 'string' };
 const component: ComponentReference = {

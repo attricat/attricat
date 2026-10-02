@@ -15,7 +15,7 @@ import { draftEditors } from '../drafts/constants';
 import { DraftRestoreDialog } from '../drafts/DraftRestoreDialog';
 import { useEditorDraft } from '../drafts/useEditorDraft';
 import { createComment, updateComment } from './api';
-import { CommentMarkdown } from './CommentMarkdown';
+import { MarkdownContent } from '../markdown/MarkdownContent';
 import { maxCommentLength } from './constants';
 import {
   commentDraftSchema,
@@ -116,7 +116,7 @@ export const CommentComposer = ({
             <Typography variant="subtitle2" sx={{ mb: 1 }}>
               {t('comments.preview')}
             </Typography>
-            <CommentMarkdown body={value.body} />
+            <MarkdownContent value={value.body} />
           </Box>
         )}
         {mutation.error && (

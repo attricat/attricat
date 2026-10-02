@@ -20,7 +20,7 @@ import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
 import { listComments } from './api';
 import { CommentComposer } from './CommentComposer';
-import { CommentMarkdown } from './CommentMarkdown';
+import { MarkdownContent } from '../markdown/MarkdownContent';
 import { commentQueryKeys } from './queryKeys';
 import type { CommentCursor, EntityComment } from './schemas';
 
@@ -91,7 +91,7 @@ const CommentItem = ({
           }}
         />
       ) : (
-        <CommentMarkdown body={comment.body} />
+        <MarkdownContent value={comment.body} />
       )}
     </Box>
   );

@@ -167,6 +167,42 @@ renderer = { id = "example.currency", version = 1, props = { currency = "USD" } 
 
 The renderer must be declared by an enabled extension for the column's value type. It runs in a sandboxed frame; see [Client contributions](/extensions/client/).
 
+## Field controls
+
+A `string` attribute is plain text by default. To show it as a color, email address, URL, phone number, or Markdown, name a display component on its detail field (or table column) and an edit component on its edit field:
+
+```toml
+[views.detail]
+type = "stack"
+children = [
+  { type = "field", field = "website", component = { id = "catalog.url_display", version = 1 } },
+  { type = "field", field = "description", component = { id = "catalog.markdown_display", version = 1 } },
+]
+
+[views.edit]
+type = "stack"
+children = [
+  { type = "field", field = "website", component = { id = "catalog.url_edit", version = 1 } },
+  { type = "field", field = "description", component = { id = "catalog.markdown_edit", version = 1 } },
+]
+
+[[views.table.columns]]
+field = "website"
+renderer = { id = "catalog.url_display", version = 1 }
+```
+
+| Control | Components | Behavior |
+| --- | --- | --- |
+| Color | `catalog.color_display`, `catalog.color_edit` | Six-digit hex (`#RRGGBB`), typed or picked with a color picker. Shown as a swatch next to the text. |
+| Email | `catalog.email_display`, `catalog.email_edit` | One plain ASCII address, such as `name+tag@example.com`. Shown as a `mailto:` link. |
+| URL | `catalog.url_display`, `catalog.url_edit` | Absolute `http://` or `https://` URLs only. Links open in a new tab. |
+| Phone | `catalog.phone_display`, `catalog.phone_edit` | Stored as typed. Numbers starting with `+` and a country code become `tel:` links; extensions can use `ext.` or `x`. |
+| Markdown | `catalog.markdown_display`, `catalog.markdown_edit` | CommonMark with **Write** and **Preview** tabs. Raw HTML is ignored, images show their alt text, and links are limited to HTTP(S), `mailto:`, relative paths, and fragments. Text is stored exactly as typed, including whitespace. Not available for table columns. |
+
+Values that do not fit the control, such as older data, are still shown, as plain text without a link or swatch. Fields without a component keep the standard text box.
+
+The edit controls validate only in the web form. To reject bad values from the API, CLI, and imports too, add a `value_schema` or `entity_schema`; see [Validation](/builders/validation/).
+
 ## Components
 
 Every block can name a component with `component = { id, version, props }`. The ID and version must match a registered component, the component must support the block and value type, and `props` may contain only the options it declares. The built-in components are listed in the [blueprint reference](/reference/blueprint/#component-references).

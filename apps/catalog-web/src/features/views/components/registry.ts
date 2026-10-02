@@ -1,11 +1,7 @@
-import { markdownDisplayComponent, markdownEditComponent } from './Markdown';
-import type { ComponentReference } from '../../entities/api';
-import { colorDisplayComponent, colorEditComponent } from './colorComponents';
-import { emailDisplayComponent, emailEditComponent } from './emailComponents';
-import { urlDisplayComponent, urlEditComponent } from './urlComponents';
+import type { Attribute, ComponentReference } from '../../entities/api';
+import { stringControlComponents } from '../controls/definitions';
 import { fieldDisplayComponent } from './FieldDisplay';
 import { fieldEditComponent } from './FieldEdit';
-import { phoneDisplayComponent, phoneEditComponent } from './phone';
 import { relationshipListDisplayComponent } from './RelationshipListDisplay';
 import { relationshipListEditComponent } from './RelationshipListEdit';
 import { incomingRelationshipListDisplayComponent } from './IncomingRelationshipListDisplay';
@@ -22,16 +18,7 @@ import type {
 } from './componentTypes';
 
 export const viewComponents: readonly ViewComponentDefinition[] = [
-  colorDisplayComponent,
-  colorEditComponent,
-  emailDisplayComponent,
-  emailEditComponent,
-  urlDisplayComponent,
-  urlEditComponent,
-  phoneDisplayComponent,
-  phoneEditComponent,
-  markdownDisplayComponent,
-  markdownEditComponent,
+  ...stringControlComponents,
   fieldDisplayComponent,
   fieldEditComponent,
   relationshipListDisplayComponent,
@@ -65,6 +52,18 @@ export const resolveViewComponent = (
 export const resolveValueRenderer = (
   component: Pick<ComponentReference, 'id' | 'version'> | null | undefined,
 ): ValueRenderer | undefined => resolveViewComponent(component)?.valueRenderer;
+
+/** A field's configured edit component, if it supports the attribute's value type. */
+export const resolveValueEditor = (
+  component: Pick<ComponentReference, 'id' | 'version'> | null | undefined,
+  attribute: Pick<Attribute, 'value_type'>,
+): RegisteredViewComponent | undefined => {
+  const definition = resolveViewComponent(component);
+  return definition?.valueEditor &&
+    definition.value_types.includes(attribute.value_type)
+    ? definition
+    : undefined;
+};
 
 export const resolveHeadingRenderer = (
   component: Pick<ComponentReference, 'id' | 'version'> | null | undefined,

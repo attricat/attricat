@@ -42,6 +42,12 @@ File fields accept uploads once the entity has been saved. Choose or drop files;
 
 A new file goes through these statuses: **Uploading**, **Queued**, **Processing**, and **Ready**. Images get a thumbnail and a display-sized version. A file can be downloaded once it is ready. If processing fails, the file shows **Failed**; an administrator can retry it.
 
+Image-only file fields show an image gallery. Select an image to open a larger preview with zoom and next/previous controls. On the edit form you can add and remove images, and move them earlier or later when the attribute's file order is meaningful. Removing an image detaches it from the entity.
+
+## Comments
+
+The entity page has a **Comments** panel. Anyone who can read the entity can add a comment, written in Markdown; **Preview Markdown** shows how it will look. You can edit only your own comments. If someone else's change reaches a comment before your edit is saved, the edit is rejected; reload the comments and restore your draft to reconcile it.
+
 ## Additional attributes
 
 Some entities need a field their blueprint does not have. If your workspace has published [reusable attributes](/builders/modeling/#reuse-attributes), choose **Add custom attribute or attribute group** on the edit form to attach one, or a whole group, to this entity only.

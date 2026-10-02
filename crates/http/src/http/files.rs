@@ -305,9 +305,9 @@ pub(super) async fn update_references(
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath((entity_id, attribute_code)): ApiPath<(Uuid, String)>,
     ApiJson(input): ApiJson<UpdateFileReferences>,
-) -> Result<StatusCode, ApiError> {
+) -> Result<Json<serde_json::Value>, ApiError> {
     authorize(&state, FileAccessOperation::UpdateReferences { entity_id }).await?;
-    repository
+    let entity_updated_at = repository
         .update_file_references(
             entity_id,
             &attribute_code,
@@ -317,7 +317,9 @@ pub(super) async fn update_references(
         )
         .await?;
     invalidate_data_health(&state, &repository);
-    Ok(StatusCode::NO_CONTENT)
+    Ok(Json(
+        serde_json::json!({ "entity_updated_at": entity_updated_at }),
+    ))
 }
 
 /// Stores standalone files for a conversation. It deliberately shares the

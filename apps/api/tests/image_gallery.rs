@@ -93,7 +93,7 @@ async fn gallery_references_are_ordered_conflict_checked_and_archived(pool: PgPo
             .await
             .unwrap()
             .status(),
-        StatusCode::NO_CONTENT
+        StatusCode::OK
     );
     let form: Value = client
         .get(format!("{base}/v1/entities/{entity_id}"))
@@ -121,7 +121,7 @@ async fn gallery_references_are_ordered_conflict_checked_and_archived(pool: PgPo
             .await
             .unwrap()
             .status(),
-        StatusCode::NO_CONTENT
+        StatusCode::OK
     );
     assert_eq!(
         store.object_count().await,
@@ -137,7 +137,7 @@ async fn gallery_references_are_ordered_conflict_checked_and_archived(pool: PgPo
     );
     assert_eq!(
         update(json!([a]), json!([])).send().await.unwrap().status(),
-        StatusCode::NO_CONTENT
+        StatusCode::OK
     );
     let form: Value = client
         .get(format!("{base}/v1/entities/{entity_id}"))
@@ -211,7 +211,7 @@ async fn unordered_gallery_allows_removal_but_not_reordering_or_foreign_referenc
             .await
             .unwrap()
             .status(),
-        StatusCode::NO_CONTENT
+        StatusCode::OK
     );
     server.abort();
 }
@@ -305,7 +305,7 @@ async fn gallery_edits_are_local_and_empty_values_stop_inheritance(pool: PgPool)
         .json()
         .await
         .unwrap();
-    assert_eq!(client.put(format!("{url}/references")).json(&json!({"context_id":context,"expected_file_ids":[local["files"][0]["id"]],"file_ids":[]})).send().await.unwrap().status(), StatusCode::NO_CONTENT);
+    assert_eq!(client.put(format!("{url}/references")).json(&json!({"context_id":context,"expected_file_ids":[local["files"][0]["id"]],"file_ids":[]})).send().await.unwrap().status(), StatusCode::OK);
     let cleared: Value = client
         .get(&resolved_url)
         .send()
@@ -387,6 +387,57 @@ async fn default_context_policy_blocks_reference_changes_in_children(pool: PgPoo
             .unwrap()
             .status(),
         StatusCode::UNPROCESSABLE_ENTITY
+    );
+    server.abort();
+}
+
+#[sqlx::test]
+async fn gallery_changes_return_the_version_an_open_form_saves_against(pool: PgPool) {
+    let store = Arc::new(FakeObjectStore::available());
+    let (base, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
+    let client = authenticated_client();
+    let bp = blueprint(&client, &base, "ordered = true").await;
+    let entity = create_entity(&client, &base, &bp).await;
+    let entity_id = entity["id"].as_str().unwrap();
+    let loaded_version = entity["updated_at"].clone();
+    let url = format!("{base}/entities/{entity_id}/file-attributes/photos");
+    let uploaded: Value = upload(&client, &url)
+        .await
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let file = uploaded["files"][0]["id"].clone();
+    let changed: Value = client
+        .put(format!("{url}/references"))
+        .json(
+            &json!({"context_id":uploaded["context_id"],"expected_file_ids":[file],"file_ids":[]}),
+        )
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let save = |version: &Value| {
+        client
+            .put(format!("{base}/v1/entities/{entity_id}"))
+            .json(&json!({"expected_updated_at":version,"values":[]}))
+    };
+    assert_eq!(
+        save(&loaded_version).send().await.unwrap().status(),
+        StatusCode::CONFLICT,
+        "the version loaded before the gallery change is stale"
+    );
+    let saved = save(&changed["entity_updated_at"]).send().await.unwrap();
+    assert_eq!(
+        saved.status(),
+        StatusCode::OK,
+        "{}",
+        saved.text().await.unwrap()
     );
     server.abort();
 }

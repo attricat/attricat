@@ -102,6 +102,23 @@ export const savedStatusValue = (
   return null;
 };
 
+/**
+ * The saved status a transition starts from (`current`) and the value inherited
+ * from parent contexts that applies when the local value is removed.
+ */
+export const savedStatusState = (
+  attribute: Attribute,
+  values: readonly FormAttributeValue[],
+  contextId: string | null,
+  parentContextIds: readonly string[],
+) => {
+  const parents = attribute.context_fallback === 'none' ? [] : parentContextIds;
+  return {
+    current: savedStatusValue(attribute, values, [contextId, ...parents]),
+    inherited: savedStatusValue(attribute, values, parents),
+  };
+};
+
 export const statusLabel = (
   attribute: Attribute,
   value: unknown,

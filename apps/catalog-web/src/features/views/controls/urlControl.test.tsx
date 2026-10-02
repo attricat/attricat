@@ -4,8 +4,14 @@ import { describe, expect, it, vi } from 'vitest';
 import { ThemeProvider } from '@mui/material';
 import { makeTheme } from '../../../app/theme';
 import '../../../i18n';
-import { UrlDisplay } from './UrlDisplay';
-import { UrlEditor } from './UrlEditor';
+import { UrlEditor } from './editors';
+import { UrlValue } from './values';
+
+const attribute = {
+  code: 'website',
+  name: 'Website',
+  value_type: 'string' as const,
+};
 
 describe('URL components', () => {
   it.each(['light', 'dark'] as const)(
@@ -20,7 +26,7 @@ describe('URL components', () => {
             onClick={rowClick}
             onKeyDown={rowClick}
           >
-            <UrlDisplay value="https://example.com/path" />
+            <UrlValue attribute={attribute} value="https://example.com/path" />
           </div>
         </ThemeProvider>,
       );
@@ -35,7 +41,8 @@ describe('URL components', () => {
   );
   it('keeps unsafe, empty, and multiple projected values readable', () => {
     render(
-      <UrlDisplay
+      <UrlValue
+        attribute={attribute}
         value={['javascript:alert(1)', null, 'https://example.com']}
       />,
     );
@@ -45,7 +52,12 @@ describe('URL components', () => {
   it('preserves input and exposes validation and disabled state', () => {
     const onChange = vi.fn();
     const { rerender } = render(
-      <UrlEditor label="Website" value="bad URL" onChange={onChange} />,
+      <UrlEditor
+        attribute={attribute}
+        value="bad URL"
+        onChange={onChange}
+        disabled={false}
+      />,
     );
     const input = screen.getByRole('textbox', { name: 'Website' });
     expect(input.getAttribute('aria-invalid')).toBe('true');
@@ -54,7 +66,7 @@ describe('URL components', () => {
     onChange.mockClear();
     rerender(
       <UrlEditor
-        label="Website"
+        attribute={attribute}
         value="https://example.com"
         onChange={onChange}
         disabled

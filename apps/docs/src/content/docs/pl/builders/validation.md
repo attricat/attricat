@@ -36,6 +36,39 @@ value_schema = '{"enum":["XS","S","M","L","XL"]}'
 
 Wartość, która nie przejdzie walidacji, zwraca `422 attribute_value_schema_mismatch`.
 
+## Statusy
+
+Status to atrybut `string`, którego `value_schema` ma `enum` ze stałymi kodami oraz adnotację `x-attricat-status`. Adnotacja nadaje każdemu kodowi etykietę, opcjonalny odcień koloru i opcjonalnie dozwolone przejścia między kodami:
+
+```toml
+[[attributes]]
+code = "status"
+value_type = "string"
+value_schema = '''{
+  "type": "string",
+  "enum": ["draft", "live", "retired"],
+  "x-attricat-status": {
+    "version": 1,
+    "options": [
+      { "code": "draft", "label": "Draft" },
+      { "code": "live", "label": "Live", "tone": "success" },
+      { "code": "retired", "label": "Retired" }
+    ],
+    "transitions": [
+      { "from": null, "to": "draft" },
+      { "from": "draft", "to": "live" },
+      { "from": "live", "to": "retired" }
+    ]
+  }
+}'''
+```
+
+- Każdy kod z `enum` musi mieć dokładnie jedną opcję, podaną w kolejności wyświetlania. Kody składają się z liter, cyfr, `_` i `-`; etykiety to zwykły tekst.
+- `tone` przyjmuje wartość `default`, `success`, `warning`, `error` lub `info`. Etykieta jest zawsze widoczna, więc kolor nigdy nie jest jedyną informacją.
+- Pomiń `transitions`, aby zezwolić na każdą zmianę. Z `transitions` dozwolone są tylko wymienione zmiany; pusta tablica nie zezwala na żadną. `null` oznacza „brak wartości”: przejście z `null` pozwala ustawić pierwszą wartość (także domyślną), a przejście do `null` pozwala ją wyczyścić. Pozostawienie tej samej wartości jest zawsze dozwolone.
+
+Aplikacja internetowa pokazuje status jako etykietę i edytuje go listą wyboru, w której niedozwolone opcje są wyłączone. Przejścia sprawdza serwer dla każdego zapisu, także z API, CLI, przepływów pracy, przywracania historii i migracji. Porównywane są wartości efektywne, więc wartość odziedziczona z kontekstu nadrzędnego jest punktem wyjścia. Niedozwolona zmiana zwraca `422 attribute_value_schema_mismatch`.
+
 ## Ogranicz całą encję
 
 `entity_schema` widzi encję jako jeden obiekt JSON. Używaj go dla reguł obejmujących więcej niż jeden atrybut:

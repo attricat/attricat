@@ -4,9 +4,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { ThemeProvider } from '@mui/material';
 import { makeTheme } from '../../../app/theme';
 import '../../../i18n';
-import { EmailInput } from './EmailInput';
-import { EmailValue } from './values/EmailValue';
-import { EntityView } from './EntityView';
+import { EmailEditor } from './editors';
+import { EmailValue } from './values';
+import { EntityView } from '../components/EntityView';
 import { BlueprintViewsPreview } from '../../blueprints/BlueprintViewsPreview';
 
 const emailDisplay = { id: 'catalog.email_display', version: 1, props: {} };
@@ -27,6 +27,7 @@ describe('email components', () => {
             onKeyDown={rowClick}
           >
             <EmailValue
+              attribute={attribute}
               value={['Name+tag@Example.com', 'not an email', null]}
             />
           </div>
@@ -62,14 +63,15 @@ describe('email components', () => {
   });
   it('labels the email input and connects actionable errors', () => {
     render(
-      <EmailInput
-        label="Contact"
+      <EmailEditor
+        attribute={attribute}
         value="invalid"
         onChange={vi.fn()}
+        disabled={false}
         required
       />,
     );
-    const input = screen.getByRole('textbox', { name: /Contact/ });
+    const input = screen.getByRole('textbox', { name: /contact/ });
     expect(input.getAttribute('type')).toBe('email');
     expect(input.getAttribute('aria-invalid')).toBe('true');
     expect(
@@ -81,8 +83,8 @@ describe('email components', () => {
   it('blocks even dispatched change events while disabled', () => {
     const onChange = vi.fn();
     render(
-      <EmailInput
-        label="Contact"
+      <EmailEditor
+        attribute={attribute}
         value="a@example.test"
         onChange={onChange}
         disabled

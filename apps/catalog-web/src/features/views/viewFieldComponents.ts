@@ -1,8 +1,10 @@
 import type {
+  Attribute,
   ComponentReference,
   ViewDefinition,
   ViewNode,
 } from '../entities/api';
+import { resolveValueEditor } from './components/registry';
 
 /** Retain configured field editors even when the form shows all attributes. */
 export const viewFieldComponents = (view?: ViewDefinition) => {
@@ -19,3 +21,18 @@ export const viewFieldComponents = (view?: ViewDefinition) => {
   if (view) visit(view);
   return result;
 };
+
+/** Edit components that apply to these attributes, keyed by attribute code. */
+export const viewFieldEditors = (
+  components: ReadonlyMap<string, ComponentReference>,
+  attributes: readonly Attribute[],
+) =>
+  new Map(
+    attributes.flatMap((attribute) => {
+      const editor = resolveValueEditor(
+        components.get(attribute.code),
+        attribute,
+      );
+      return editor ? [[attribute.code, editor] as const] : [];
+    }),
+  );

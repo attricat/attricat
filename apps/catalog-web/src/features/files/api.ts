@@ -1,9 +1,10 @@
 import { z } from 'zod';
-import { request, requestNoContent, requestUpload } from '../../api/request';
+import { request, requestUpload } from '../../api/request';
 import {
   conversationUploadResultSchema,
   fileMetadataSchema,
   fileUploadResultSchema,
+  fileReferencesUpdateResultSchema,
   updateFileReferencesSchema,
 } from './schemas';
 import { uploadFormFields } from './constants';
@@ -48,8 +49,9 @@ export const updateFileReferences = (
   attributeCode: string,
   input: z.infer<typeof updateFileReferencesSchema>,
 ) =>
-  requestNoContent(
+  request(
     `/api/entities/${encodeURIComponent(z.uuid().parse(entityId))}/file-attributes/${encodeURIComponent(attributeCode)}/references`,
+    fileReferencesUpdateResultSchema,
     {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },

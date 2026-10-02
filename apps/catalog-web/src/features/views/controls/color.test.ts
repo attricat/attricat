@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseColor } from './colorValue';
+import { parseColor } from './color';
 
 describe('parseColor', () => {
   it.each(['#000000', '#ffffff', '#12aBcD'])('accepts %s', (value) => {

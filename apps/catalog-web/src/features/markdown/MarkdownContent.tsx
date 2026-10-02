@@ -1,16 +1,20 @@
-import { Box } from '@mui/material';
+import { Box, Link } from '@mui/material';
 import ReactMarkdown from 'react-markdown';
 import { monoFontFamily } from '../../app/theme';
-
 import { markdownUrlTransform } from './markdownUrls';
 
+/**
+ * Catalog-authored Markdown (field values and comments). Raw HTML is skipped,
+ * images show their alt text instead of loading remote resources, and links
+ * pass through `markdownUrlTransform`.
+ */
 export const MarkdownContent = ({ value }: { value: string }) => (
   <Box
     sx={{
       minWidth: 0,
       overflowWrap: 'anywhere',
       typography: 'body2',
-      '& > :first-child': { mt: 0 },
+      '& > :first-of-type': { mt: 0 },
       '& > :last-child': { mb: 0 },
       '& a': { color: 'primary.main' },
       '& h2, & h3, & h4, & h5, & h6': {
@@ -37,6 +41,14 @@ export const MarkdownContent = ({ value }: { value: string }) => (
       skipHtml
       urlTransform={markdownUrlTransform}
       components={{
+        a: ({ href, children }) =>
+          href ? (
+            <Link href={href} rel="nofollow noreferrer noopener">
+              {children}
+            </Link>
+          ) : (
+            <>{children}</>
+          ),
         img: ({ alt }) => <span>{alt}</span>,
         h1: ({ children }) => <h2>{children}</h2>,
         h2: ({ children }) => <h3>{children}</h3>,

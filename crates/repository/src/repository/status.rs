@@ -2,7 +2,26 @@ use super::*;
 use catalog_validation::status::{STATUS_KEY, validate_status_transition};
 use chrono::Utc;
 
+/// A live status attribute: `(id, code, value_schema, context_fallback)`.
+type StatusAttribute = (Uuid, String, Value, String);
+
 impl CatalogRepository {
+    /// Status attributes of the entity's blueprint revision and its own additional attributes.
+    async fn status_attributes(
+        transaction: &mut Transaction<'_, Postgres>,
+        entity: &Entity,
+    ) -> Result<Vec<StatusAttribute>, RepositoryError> {
+        Ok(sqlx::query_as::<_, StatusAttribute>(
+            "SELECT id, code, value_schema, context_fallback FROM attributes WHERE ((blueprint_id = $1 AND blueprint_version = $2) OR entity_id = $3) AND deleted_at IS NULL AND value_schema ? $4",
+        )
+        .bind(entity.blueprint_id)
+        .bind(entity.blueprint_version)
+        .bind(entity.id)
+        .bind(STATUS_KEY)
+        .fetch_all(&mut **transaction)
+        .await?)
+    }
+
     pub(super) async fn has_status_writes(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
@@ -10,10 +29,8 @@ impl CatalogRepository {
         values: &[NewAttributeValue],
         removed: &[AttributeValueSelector],
     ) -> Result<bool, RepositoryError> {
-        let statuses = sqlx::query_as::<_, (Uuid, String)>("SELECT id, code FROM attributes WHERE ((blueprint_id = $1 AND blueprint_version = $2) OR entity_id = $3) AND deleted_at IS NULL AND value_schema ? 'x-attricat-status'")
-            .bind(entity.blueprint_id).bind(entity.blueprint_version).bind(entity.id)
-            .fetch_all(&mut **transaction).await?;
-        Ok(statuses.iter().any(|(id, code)| {
+        let statuses = Self::status_attributes(transaction, entity).await?;
+        Ok(statuses.iter().any(|(id, code, ..)| {
             removed.iter().any(|selector| &selector.attribute_code == code)
                 || values.iter().any(|value| matches!(value, NewAttributeValue::Scalar { attribute_id, attribute_code, .. } if attribute_id.as_ref() == Some(id) || attribute_code.as_ref() == Some(code)))
         }))
@@ -28,13 +45,12 @@ impl CatalogRepository {
         if expected_updated_at.is_some_and(|expected| expected != entity.updated_at) {
             return Err(RepositoryError::StaleEntity);
         }
-        if expected_updated_at.is_none() {
-            let has_status: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM attributes WHERE ((blueprint_id = $1 AND blueprint_version = $2) OR entity_id = $3) AND deleted_at IS NULL AND value_schema ? 'x-attricat-status')")
-                .bind(entity.blueprint_id).bind(entity.blueprint_version).bind(entity.id)
-                .fetch_one(&mut **transaction).await?;
-            if has_status {
-                return Err(RepositoryError::StatusPreconditionRequired);
-            }
+        if expected_updated_at.is_none()
+            && !Self::status_attributes(transaction, entity)
+                .await?
+                .is_empty()
+        {
+            return Err(RepositoryError::StatusPreconditionRequired);
         }
         Ok(())
     }
@@ -46,10 +62,7 @@ impl CatalogRepository {
         transaction: &mut Transaction<'_, Postgres>,
         entity: &Entity,
     ) -> Result<(), RepositoryError> {
-        let attributes = sqlx::query_as::<_, (String, Value, String)>(
-            "SELECT code, value_schema, context_fallback FROM attributes WHERE ((blueprint_id = $1 AND blueprint_version = $2) OR entity_id = $3) AND deleted_at IS NULL AND value_schema ? $4",
-        ).bind(entity.blueprint_id).bind(entity.blueprint_version).bind(entity.id).bind(STATUS_KEY)
-            .fetch_all(&mut **transaction).await?;
+        let attributes = Self::status_attributes(transaction, entity).await?;
         if attributes.is_empty() {
             return Ok(());
         }
@@ -61,7 +74,7 @@ impl CatalogRepository {
         .await?;
         let after = Self::build_preview_projection(transaction, entity.id).await?;
         let before = entity.projections.get("preview").unwrap_or(&Value::Null);
-        for (code, schema, fallback) in attributes {
+        for (_, code, schema, fallback) in attributes {
             for context in &contexts {
                 let mut path = vec![context.1.as_str()];
                 let mut parent = if fallback == "none" { None } else { context.2 };

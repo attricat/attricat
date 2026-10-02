@@ -1,11 +1,15 @@
 import { Stack, TextField } from '@mui/material';
 import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
-import { attributeLabel } from '../entityDisplay';
-import { COLOR_PICKER_SEED, parseColor } from '../../views/colorValue';
-import type { ValueEditorProps } from '../../views/components/componentTypes';
+import { attributeLabel } from '../../entities/entityDisplay';
+import { MarkdownEditor } from '../../markdown/MarkdownEditor';
+import type { ValueEditorProps } from '../components/componentTypes';
+import { COLOR_PICKER_SEED, parseColor, validateColor } from './color';
+import { validateEmail } from './email';
+import { TextControlEditor } from './TextControl';
+import { validateUrl } from './url';
 
-export const ColorAttributeEditor = ({
+export const ColorEditor = ({
   attribute,
   value,
   disabled,
@@ -16,12 +20,8 @@ export const ColorAttributeEditor = ({
 }: ValueEditorProps) => {
   const { t } = useTranslation();
   const id = useId();
-  const invalid = value !== '' && !parseColor(value);
   const message =
-    error ??
-    (invalid
-      ? t('views.colorInvalid')
-      : (helperText ?? t('views.colorFormat')));
+    error ?? validateColor(value) ?? helperText ?? t('views.colorFormat');
   const change = (next: string) => {
     if (!disabled) onChange(next);
   };
@@ -34,7 +34,7 @@ export const ColorAttributeEditor = ({
         label={attributeLabel(attribute)}
         value={value}
         disabled={disabled}
-        error={Boolean(error || invalid)}
+        error={Boolean(error ?? validateColor(value))}
         helperText={message}
         onChange={(event) => change(event.target.value)}
         slotProps={{ htmlInput: { spellCheck: false, autoCapitalize: 'none' } }}
@@ -59,3 +59,41 @@ export const ColorAttributeEditor = ({
     </Stack>
   );
 };
+
+export const EmailEditor = (props: ValueEditorProps) => (
+  <TextControlEditor {...props} type="email" validate={validateEmail} />
+);
+
+export const UrlEditor = (props: ValueEditorProps) => (
+  <TextControlEditor {...props} type="url" validate={validateUrl} />
+);
+
+export const PhoneEditor = (props: ValueEditorProps) => {
+  const { t } = useTranslation();
+  return (
+    <TextControlEditor
+      {...props}
+      type="tel"
+      leftToRight
+      defaultHelperText={t('entities.phoneHelp')}
+    />
+  );
+};
+
+export const MarkdownFieldEditor = ({
+  attribute,
+  value,
+  disabled,
+  error,
+  helperText,
+  onChange,
+}: ValueEditorProps) => (
+  <MarkdownEditor
+    label={attributeLabel(attribute)}
+    value={value}
+    disabled={disabled}
+    error={error}
+    helperText={helperText}
+    onChange={onChange}
+  />
+);

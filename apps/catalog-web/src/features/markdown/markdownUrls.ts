@@ -1,11 +1,10 @@
-/** Reject browser-normalized custom protocols and network-path references. */
+/**
+ * Allow HTTP(S), mailto, relative paths and fragments. Whitespace, control
+ * characters and backslashes are rejected outright because browsers strip or
+ * reinterpret them, which could turn a harmless-looking link into another
+ * scheme or a protocol-relative URL.
+ */
 export const markdownUrlTransform = (url: string): string => {
-  const normalized = Array.from(url)
-    .filter(
-      (character) =>
-        character.charCodeAt(0) > 32 && character.charCodeAt(0) !== 127,
-    )
-    .join('');
-  if (normalized.startsWith('//') || normalized.includes('\\')) return '';
-  return /^(?:https?:|[^:]*$)/i.test(normalized) ? url : '';
+  if (/[\s\p{Cc}\\]/u.test(url) || url.startsWith('//')) return '';
+  return /^(?:https?:|mailto:|[^:]*$)/i.test(url) ? url : '';
 };

@@ -132,38 +132,6 @@ field = "price"
 Every referenced field must be an effective attribute. `field` accepts scalar
 attributes; `relationship_list` accepts relationships only.
 
-## URL fields
-
-URLs remain string attributes. Opt in with `catalog.url_display@1` on a detail
-field or table column and `catalog.url_edit@1` on an edit field:
-
-```toml
-[[views.detail.children]]
-type = "field"
-field = "website"
-component = { id = "catalog.url_display", version = 1 }
-
-[[views.edit.children]]
-type = "field"
-field = "website"
-component = { id = "catalog.url_edit", version = 1 }
-
-[[views.table.columns]]
-field = "website"
-renderer = { id = "catalog.url_display", version = 1 }
-```
-
-These components accept string values and no props. Links open in a new tab
-without opener access or a referrer. Only absolute HTTP/HTTPS URLs without
-whitespace, control characters, backslashes or embedded credentials are active;
-invalid persisted values remain plain text. No destination is fetched for a
-preview. Optional inputs can be cleared; typed URLs are not silently rewritten.
-
-The editor validates input, but selecting a component does not impose an API
-constraint. Use the existing attribute/entity JSON Schema contracts when data
-must also be constrained outside the web editor. Ordinary string fields keep
-their existing behavior.
-
 ## Entity Heading
 
 The preview heading reuses a normal `stack` with the
@@ -202,11 +170,11 @@ component = { id = "catalog.field_edit", version = 1 }
 ```
 
 Component IDs use dot-delimited lowercase, underscore-separated segments. The frontend registry lives at
-`apps/catalog-web/src/features/views/components/registry.ts`; each registered
-component has its own module in that directory. A module exports its typed
-definition and, when it has one, its React renderer. `EntityView` resolves a
-blueprint reference through this registry and isolates field renderers with an
-error boundary.
+`apps/catalog-web/src/features/views/components/registry.ts`. Layout and
+relationship components have their own modules in that directory; the string
+field controls below live together in `apps/catalog-web/src/features/views/controls`.
+`EntityView` resolves a blueprint reference through this registry and isolates
+field renderers with an error boundary.
 
 The Rust blueprint compiler reads
 `contracts/view-components.json` to validate a
@@ -214,77 +182,93 @@ component's version, props, placement, value type, and required `display` or
 `edit` capability. Keep this contract synchronized with the TypeScript
 definition. `registry.test.ts` verifies that their metadata is identical.
 
-### Colors
+### String field controls
 
-Colors remain string attributes. Opt in per view with `catalog.color_display@1`
-for detail fields or table columns and `catalog.color_edit@1` for edit fields.
-Both accept only string attributes and have no props:
+These controls change how a `string` attribute is shown and edited. They are
+opt-in per view: unconfigured string fields keep the standard text input and
+plain-text display. None of them accepts props, and none changes what is
+stored.
+
+| Control | Display (detail field, table column) | Edit (edit field) |
+| --- | --- | --- |
+| Color | `catalog.color_display@1` | `catalog.color_edit@1` |
+| Email | `catalog.email_display@1` | `catalog.email_edit@1` |
+| URL | `catalog.url_display@1` | `catalog.url_edit@1` |
+| Phone | `catalog.phone_display@1` | `catalog.phone_edit@1` |
+| Markdown | `catalog.markdown_display@1` (detail field only) | `catalog.markdown_edit@1` |
 
 ```toml
 [views.detail]
 type = "stack"
-children = [{ type = "field", field = "hex", component = { id = "catalog.color_display", version = 1 } }]
+children = [{ type = "field", field = "website", component = { id = "catalog.url_display", version = 1 } }]
 
 [views.edit]
 type = "stack"
-children = [{ type = "field", field = "hex", component = { id = "catalog.color_edit", version = 1 } }]
+children = [{ type = "field", field = "website", component = { id = "catalog.url_edit", version = 1 } }]
 
 [views.table]
 type = "table"
-columns = [{ field = "hex", renderer = { id = "catalog.color_display", version = 1 } }]
+columns = [{ field = "website", renderer = { id = "catalog.url_display", version = 1 } }]
 ```
 
-The editor accepts opaque, six-digit hex (`#RRGGBB`, case-insensitive) through
-text or a native color picker. Clear the text to unset an optional value.
-Shorthand, alpha, named colors, and CSS expressions are not supported. The
-read-only renderer shows a swatch alongside the stored text; invalid legacy
-values remain visible as text without a swatch. Neither component changes
-unconfigured string fields or enforces color syntax on API/CLI writes. For
-API-wide enforcement, add an appropriate pattern to the existing blueprint
-`entity_schema` (and `required` if the value must be present).
+Shared behavior:
 
-### Email fields
+- The color, email and URL editors validate in the web form only, as the user
+  types and again on Save. Choosing a component does not constrain API, CLI or
+  agent writes; add an attribute `value_schema` or the blueprint
+  `entity_schema` for that.
+- Values are trimmed before saving, except Markdown, which is stored verbatim.
+  Clearing an optional value unsets it; required, readonly, context and draft
+  behavior is the same as for other fields.
+- Display controls never hide data. A stored value the control cannot use
+  (for example a malformed URL) is shown as plain text without a link or
+  swatch. Links do not trigger the surrounding table row.
 
-Use `catalog.email_display` version 1 for a string field in a detail view or
-as a table column's `renderer`; use `catalog.email_edit` version 1 for a field
-in an edit view. Neither component accepts props. Store the address as a string,
-not a `mailto:` URL, and set the attribute's
-`value_schema = '{"type":"string","format":"email"}'` to validate API writes too.
-Choosing an input component alone does not impose a server-side data constraint.
+#### Color
 
-The input supports a single ASCII dot-atom address (including plus tags),
-preserves case, and uses the normal form trimming, required-field, context and
-draft behavior. Internationalized addresses, quoted local parts, display names
-and recipient lists are not supported by this control. JSON Schema email format
-validation on the server may accept a broader set of addresses. Unsupported or
-malformed stored values remain visible as plain text; supported values link to
-the user's mail client. The component never sends mail or checks deliverability.
+The editor accepts opaque six-digit hex (`#RRGGBB`, case-insensitive) as text
+or through the native color picker. Shorthand, alpha, named colors and CSS
+expressions are rejected. The display shows a swatch next to the stored text.
+For API-wide enforcement add a pattern such as `^#[0-9A-Fa-f]{6}$`.
 
-### Phone numbers
+#### Email
 
-Phone components use ordinary `string` attributes, without changing stored text.
-Select `catalog.phone_display` (version 1) on a detail field or table column's
-`renderer`, and `catalog.phone_edit` (version 1) on an edit field. Neither accepts
-props. Unconfigured fields retain their standard string control.
+The editor accepts a single ASCII dot-atom address (plus tags allowed) and
+preserves case. Internationalized addresses, quoted local parts, display names
+and recipient lists are not supported. Valid values link to the user's mail
+client; nothing is sent or verified. Set
+`value_schema = '{"type":"string","format":"email"}'` to validate API writes
+too; the server's format check may accept a broader set of addresses.
 
-The editor supports typing, pasting and clearing numbers, including national
-numbers and extensions. The display preserves the original text. International
-numbers beginning with `+` can become `tel:` links; spaces, parentheses, periods
-and hyphens are removed only from the dial target. Numeric extensions prefixed
-with `ext.`, `ext` or `x` become `;ext=`. National, ambiguous or unsafe values stay
-plain text. No country is inferred, and a link does not verify reachability.
-Existing blueprint schema constraints remain authoritative for validation.
+#### URL
 
-For Markdown string attributes, select `catalog.markdown_display@1` in a
-field of a display view and `catalog.markdown_edit@1` in a field of an edit
-view (using the component reference's `id` and `version` fields). These
-components accept no props and do not apply to table columns. The editor
-provides Write and Preview tabs; both preview and display use CommonMark.
-Raw HTML is ignored, images show alt text without fetching the image, and
-links are limited to HTTP(S), relative paths, and fragments. Source text is
-stored as a string, preserving indentation and trailing spaces; whitespace-only
-input follows the existing unset-value behavior. Attribute JSON Schema
-constraints and existing edit permissions still apply.
+Only absolute HTTP/HTTPS URLs without whitespace, control characters,
+backslashes or embedded credentials are accepted and linked. Links open in a
+new tab without opener access or a referrer, and no destination is fetched for
+a preview. Typed URLs are not rewritten.
+
+#### Phone
+
+Any text can be typed, including national numbers and extensions; the display
+preserves it. Only international numbers starting with `+` become `tel:` links:
+spaces, parentheses, periods and hyphens are removed from the dial target, and
+a numeric extension after `ext.`, `ext` or `x` becomes `;ext=`. No country is
+inferred and reachability is not checked.
+
+#### Markdown
+
+The editor has Write and Preview tabs; preview and display render CommonMark.
+Raw HTML is ignored, images show their alt text without being fetched, and
+links are limited to HTTP(S), `mailto:`, relative paths and fragments. The
+source is stored exactly as typed, including indentation and trailing spaces;
+whitespace-only input counts as unset. Entity comments use the same renderer
+and link policy.
+
+### Status attributes
+
+Status is not a view component: it is configured on the attribute's
+`value_schema` and applies wherever the attribute appears. See
+[Status attributes](status-control.md).
 
 See [Component Authoring](component-authoring.md) for the implementation and
 verification workflow.

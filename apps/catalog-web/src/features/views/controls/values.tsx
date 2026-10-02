@@ -1,7 +1,12 @@
 import { Box, Stack, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import { parseColor } from '../../colorValue';
-import type { ValueRenderer } from '../componentTypes';
+import { MarkdownContent } from '../../markdown/MarkdownContent';
+import type { ValueRenderer } from '../components/componentTypes';
+import { parseColor } from './color';
+import { emailHref } from './email';
+import { phoneHref } from './phone';
+import { LinkedTextValue } from './TextControl';
+import { safeUrl } from './url';
 
 export const ColorValue: ValueRenderer = ({ value }) => {
   const { t } = useTranslation();
@@ -47,5 +52,49 @@ export const ColorValue: ValueRenderer = ({ value }) => {
         );
       })}
     </Stack>
+  );
+};
+
+export const EmailValue: ValueRenderer = ({ value }) => (
+  <LinkedTextValue value={value} href={emailHref} />
+);
+
+export const UrlValue: ValueRenderer = ({ value }) => {
+  const { t } = useTranslation();
+  return (
+    <LinkedTextValue
+      value={value}
+      href={safeUrl}
+      linkProps={(url) => ({
+        target: '_blank',
+        rel: 'noopener noreferrer',
+        'aria-label': t('views.urlOpenNewTab', { url }),
+      })}
+    />
+  );
+};
+
+export const PhoneValue: ValueRenderer = ({ value }) => {
+  const { t } = useTranslation();
+  return (
+    <LinkedTextValue
+      value={value}
+      href={phoneHref}
+      leftToRight
+      linkProps={(number) => ({
+        'aria-label': t('views.callPhone', { number }),
+      })}
+    />
+  );
+};
+
+export const MarkdownValue: ValueRenderer = ({ value }) => {
+  const { t } = useTranslation();
+  return typeof value === 'string' && value.trim() ? (
+    <MarkdownContent value={value} />
+  ) : (
+    <Typography color="text.secondary" variant="body2">
+      {t('views.notSet')}
+    </Typography>
   );
 };
