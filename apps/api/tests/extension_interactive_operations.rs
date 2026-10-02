@@ -125,6 +125,11 @@ fn archive(extension_id: &str, server: &[u8]) -> Vec<u8> {
             "request_schema": {"type": "object", "required": ["template"], "properties": {"template": {"type": "string"}}, "additionalProperties": false},
             "max_request_bytes": 1024, "max_checkpoint_bytes": 8192,
             "interactive": {"version": 1, "max_selection": 50}
+        }, {
+            "id": "summarize-again", "handler": "summarize",
+            "request_schema": {"type": "object", "required": ["template"], "properties": {"template": {"type": "string"}}, "additionalProperties": false},
+            "max_request_bytes": 1024, "max_checkpoint_bytes": 8192,
+            "interactive": {"version": 1, "max_selection": 50}
         }]},
         "ui": [
             {"id": "bulk", "version": 2, "kind": "action", "artifact": "client", "outlet": "explorer_bulk_action"},
@@ -350,6 +355,20 @@ async fn interactive_run_reads_its_selection_and_annotates_through_the_v15_world
         reused.json::<Value>().await.unwrap()["error"]["code"],
         "idempotency_key_reused"
     );
+    // The key names the request, not the operation.
+    let mut other_operation = start_body(release, "generate-1", blueprint, &[second, first]);
+    other_operation["operation_id"] = json!("summarize-again");
+    let reused = authenticated_client()
+        .post(&start_url)
+        .json(&other_operation)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(reused.status(), StatusCode::CONFLICT);
+    assert_eq!(
+        reused.json::<Value>().await.unwrap()["error"]["code"],
+        "idempotency_key_reused"
+    );
 
     let detail = authenticated_client()
         .get(format!("{base}/extension-runs/{run_id}"))
@@ -557,6 +576,18 @@ async fn interactive_runs_are_authorized_per_entity_and_fail_closed(pool: sqlx::
         .await
         .unwrap();
     assert_eq!(own.as_array().unwrap().len(), 1);
+    let cancelled_run = client_for(viewer)
+        .post(&start_url)
+        .json(&start_body(release, "viewer-2", blueprint, &[visible]))
+        .send()
+        .await
+        .unwrap()
+        .json::<Value>()
+        .await
+        .unwrap()["run_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
 
     // Initiator cancellation of queued work is immediately terminal.
     let cancelled = authenticated_client()
@@ -632,6 +663,43 @@ async fn interactive_runs_are_authorized_per_entity_and_fail_closed(pool: sqlx::
         .await
         .unwrap();
     assert_eq!(listed, json!([]));
+    // An initiator who is also an operator keeps operator access to the run.
+    let operator_role = Uuid::new_v4();
+    sqlx::query("INSERT INTO roles (id, code, workspace_id) VALUES ($1, 'run-operator', $2)")
+        .bind(operator_role)
+        .bind(workspace())
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO role_permissions (role_id, permission_code) VALUES ($1, 'extensions.manage')",
+    )
+    .bind(operator_role)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO role_grants (id, workspace_id, membership_id, role_id, scope_type, scope_target_id) SELECT $1, $2, id, $3, 'workspace', $2 FROM workspace_memberships WHERE user_id=$4")
+        .bind(Uuid::new_v4())
+        .bind(workspace())
+        .bind(operator_role)
+        .bind(viewer)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let as_operator = client_for(viewer)
+        .get(format!("{base}/extension-runs/{viewer_run}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(as_operator.status(), StatusCode::OK);
+
+    // A cancellation requested before the initiator was removed is still
+    // delivered rather than turned into an access failure.
+    sqlx::query("UPDATE extension_operation_runs SET cancellation_requested=true WHERE id=$1")
+        .bind(cancelled_run.parse::<Uuid>().unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
 
     // An initiator removed from the workspace fails the run closed.
     sqlx::query("UPDATE workspace_memberships SET state='inactive' WHERE user_id=$1")
@@ -647,6 +715,12 @@ async fn interactive_runs_are_authorized_per_entity_and_fail_closed(pool: sqlx::
         .unwrap();
     assert_eq!(run.status, "failed");
     assert_eq!(run.failure, Some("access_revoked"));
+    let cancelled = repository
+        .interactive_extension_run(cancelled_run.parse().unwrap())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(cancelled.status, "cancelled");
     let annotated: bool =
         sqlx::query_scalar("SELECT system_metadata ? $2 FROM entities WHERE id=$1")
             .bind(visible)

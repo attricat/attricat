@@ -89,18 +89,21 @@ async fn visible_run(
         .interactive_extension_run(run_id)
         .await?
         .ok_or_else(not_found)?;
-    if run.actor_user_id == Some(principal.0) {
+    let initiator = run.actor_user_id == Some(principal.0);
+    if initiator {
         // Frozen membership is not permission: the initiator must still be
         // able to read every member that may have contributed to the output.
-        return match repository
+        match repository
             .ensure_principal_may_read_run_selection(actor(principal), run_id)
             .await
         {
-            Ok(()) => Ok(run),
-            Err(RepositoryError::ActorNotAuthorized) => Err(ApiError::forbidden()),
-            Err(error) => Err(error.into()),
-        };
+            Ok(()) => return Ok(run),
+            Err(RepositoryError::ActorNotAuthorized) => {}
+            Err(error) => return Err(error.into()),
+        }
     }
+    // Operators keep access to every run, including their own after they
+    // lose read access to a member.
     let operator = state
         .repository
         .is_authorized(principal.0, workspace.0, "extensions.manage", None, None)
@@ -114,7 +117,11 @@ async fn visible_run(
             }
             None => true,
         };
-    if operator { Ok(run) } else { Err(not_found()) }
+    match (operator, initiator) {
+        (true, _) => Ok(run),
+        (false, true) => Err(ApiError::forbidden()),
+        (false, false) => Err(not_found()),
+    }
 }
 
 /// Starts an interactive operation from a selection-aware contribution.

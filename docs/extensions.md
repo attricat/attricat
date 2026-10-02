@@ -950,7 +950,10 @@ Inside the run:
   workspace member (and that a token-started run's token is still live). If
   not, the run fails closed with `initiator_access_revoked` instead of
   continuing under the installer's grants. An operator can replay the
-  dead-lettered run after access is restored.
+  dead-lettered run after access is restored. A cancellation requested
+  before access was lost is still delivered to the extension's `cancel`
+  export, whose host calls are checked against the initiator's current
+  access; the run then ends `cancelled`, or fails closed if `cancel` fails.
 
 Disable, quarantine, grant loss, and upgrade pause interactive runs exactly as
 they pause other release-pinned runs. Existing administrative operations,

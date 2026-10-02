@@ -428,7 +428,9 @@ The patch shape used by extensions and the repair route is:
 {"add_tags": ["generated"], "remove_tags": [], "set_metadata": {"last": {"run": "…"}}, "remove_metadata": [], "expected_revision": 3}
 ```
 
-Names are local (1–64 ASCII letters, digits, `.`, `_`, `-`), a patch has 1–32
+Names are local (1–64 ASCII letters, digits, `.`, `_`, `-`); an added tag must
+also fit the 128-byte system-tag limit once qualified as `<extension-id>:<tag>`.
+A patch has 1–32
 operations, and the same tag or key cannot appear in two operations. Setting a
 key replaces its whole value, so JSON `null` is a valid value. The optional
 `expected_revision` rejects stale writes with `409 annotation_revision_conflict`;

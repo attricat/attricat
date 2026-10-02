@@ -250,13 +250,14 @@ impl CatalogRepository {
                 "extension release changed; reopen the action".into(),
             ));
         }
+        // The key names one request whichever operation it targets; the
+        // digest (which covers the operation) detects a changed request.
         let existing: Option<(Uuid, Option<String>)> = sqlx::query_as(
-            "SELECT id, request_digest FROM extension_operation_runs WHERE workspace_id=$1 AND extension_id=$2 AND installed_release_id=$3 AND operation_id=$4 AND idempotency_key=$5",
+            "SELECT id, request_digest FROM extension_operation_runs WHERE workspace_id=$1 AND extension_id=$2 AND installed_release_id=$3 AND idempotency_key=$4 AND invocation='interactive'",
         )
         .bind(self.workspace_id.0)
         .bind(&input.extension_id)
         .bind(release)
-        .bind(&input.operation_id)
         .bind(&stored_key)
         .fetch_optional(&mut *transaction)
         .await?;
@@ -343,7 +344,7 @@ impl CatalogRepository {
         }
         let id = Uuid::new_v4();
         let inserted: Option<Uuid> = sqlx::query_scalar(
-            "INSERT INTO extension_operation_runs(id,workspace_id,extension_id,installed_release_id,abi_version,operation_id,actor_user_id,actor_token_id,configuration_snapshot,input,idempotency_key,invocation,contribution_id,selection_blueprint_id,selection_blueprint_version,selection_context_id,request_digest) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'interactive',$12,$13,$14,$15,$16) ON CONFLICT(workspace_id,extension_id,installed_release_id,operation_id,idempotency_key) DO NOTHING RETURNING id",
+            "INSERT INTO extension_operation_runs(id,workspace_id,extension_id,installed_release_id,abi_version,operation_id,actor_user_id,actor_token_id,configuration_snapshot,input,idempotency_key,invocation,contribution_id,selection_blueprint_id,selection_blueprint_version,selection_context_id,request_digest) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'interactive',$12,$13,$14,$15,$16) ON CONFLICT DO NOTHING RETURNING id",
         )
         .bind(id)
         .bind(self.workspace_id.0)
@@ -364,7 +365,8 @@ impl CatalogRepository {
         .fetch_optional(&mut *transaction)
         .await?;
         let Some(run_id) = inserted else {
-            // A concurrent identical submission won the unique key.
+            // A concurrent submission with the same key won the unique index;
+            // the retry returns its run or reports the key as reused.
             transaction.rollback().await?;
             return Box::pin(self.start_interactive_extension_operation(input)).await;
         };

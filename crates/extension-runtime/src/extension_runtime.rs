@@ -1685,6 +1685,23 @@ impl ExtensionOperationTaskHandler {
             runtime,
         }
     }
+
+    async fn fail_for_revoked_initiator(
+        &self,
+        repository: &CatalogRepository,
+        task: &ClaimedTask,
+    ) -> Result<TaskOutcome, TaskHandlerError> {
+        repository
+            .fail_extension_operation_for_revoked_initiator(task)
+            .await
+            .map_err(|error| TaskHandlerError {
+                code: "operation",
+                message: error.to_string(),
+            })?;
+        counter!("catalog_extension_operations_total", "outcome" => "initiator_revoked")
+            .increment(1);
+        Ok(TaskOutcome::DeadLettered)
+    }
 }
 #[async_trait]
 impl TaskHandler for ExtensionOperationTaskHandler {
@@ -1751,34 +1768,6 @@ impl TaskHandler for ExtensionOperationTaskHandler {
                 at: chrono::Utc::now() + chrono::Duration::seconds(30),
             });
         };
-        // An interactive run acts only while its initiator remains an active
-        // member; it never continues under the installer's grants alone.
-        if let Some(scope) = repository
-            .interactive_run_scope(run.id)
-            .await
-            .map_err(|error| TaskHandlerError {
-                code: "operation",
-                message: error.to_string(),
-            })?
-            && !repository
-                .interactive_actor_active(scope.actor)
-                .await
-                .map_err(|error| TaskHandlerError {
-                    code: "operation",
-                    message: error.to_string(),
-                })?
-        {
-            repository
-                .fail_extension_operation_for_revoked_initiator(&task)
-                .await
-                .map_err(|error| TaskHandlerError {
-                    code: "operation",
-                    message: error.to_string(),
-                })?;
-            counter!("catalog_extension_operations_total", "outcome" => "initiator_revoked")
-                .increment(1);
-            return Ok(TaskOutcome::DeadLettered);
-        }
         let cancellation_requested = repository
             .extension_operation_cancellation_requested(&task)
             .await
@@ -1786,6 +1775,30 @@ impl TaskHandler for ExtensionOperationTaskHandler {
                 code: "operation",
                 message: error.to_string(),
             })?;
+        // An interactive run acts only while its initiator remains an active
+        // member; it never continues under the installer's grants alone. A
+        // cancellation the initiator requested is still delivered so the
+        // extension can clean up; its host calls recheck access and fail.
+        let initiator_revoked =
+            match repository
+                .interactive_run_scope(run.id)
+                .await
+                .map_err(|error| TaskHandlerError {
+                    code: "operation",
+                    message: error.to_string(),
+                })? {
+                Some(scope) => !repository
+                    .interactive_actor_active(scope.actor)
+                    .await
+                    .map_err(|error| TaskHandlerError {
+                        code: "operation",
+                        message: error.to_string(),
+                    })?,
+                None => false,
+            };
+        if initiator_revoked && !cancellation_requested {
+            return self.fail_for_revoked_initiator(&repository, &task).await;
+        }
         let (checkpoint, progress, done) = match self
             .runtime
             .invoke_operation_batch(
@@ -1805,6 +1818,9 @@ impl TaskHandler for ExtensionOperationTaskHandler {
             .await
         {
             Ok(value) => value,
+            Err(_) if initiator_revoked => {
+                return self.fail_for_revoked_initiator(&repository, &task).await;
+            }
             Err(error) => {
                 repository
                     .fail_extension_operation_task(&task, &error.to_string())

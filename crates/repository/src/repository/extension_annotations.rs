@@ -96,6 +96,19 @@ fn tag_prefix(extension_id: &str) -> String {
 }
 
 impl ExtensionAnnotationPatch {
+    /// A local tag must still fit the stored system-tag limit once it is
+    /// qualified with the extension's namespace.
+    fn validate_qualified_tags(&self, extension_id: &str) -> Result<(), RepositoryError> {
+        let limit =
+            entity_commands::MAX_SYSTEM_TAG_BYTES.saturating_sub(tag_prefix(extension_id).len());
+        if let Some(tag) = self.add_tags.iter().find(|tag| tag.len() > limit) {
+            return Err(invalid(format!(
+                "local tag '{tag}' exceeds the {limit} bytes available after this extension's namespace prefix"
+            )));
+        }
+        Ok(())
+    }
+
     fn validate(&self, authority: AnnotationPatchAuthority) -> Result<(), RepositoryError> {
         let operations = self.add_tags.len()
             + self.remove_tags.len()
@@ -392,6 +405,7 @@ impl CatalogRepository {
         authority: AnnotationPatchAuthority,
     ) -> Result<i64, RepositoryError> {
         patch.validate(authority)?;
+        patch.validate_qualified_tags(extension_id)?;
         self.ensure_actor_may(&mut *transaction, "entities.read", entity_id)
             .await?;
         self.claim_annotation_namespace(transaction, extension_id, false)
@@ -681,6 +695,17 @@ mod tests {
                 .validate(AnnotationPatchAuthority::Operator)
                 .is_err()
         );
+    }
+
+    #[test]
+    fn qualified_tags_fit_the_system_tag_limit() {
+        let extension_id = "e".repeat(70);
+        let mut long = patch();
+        long.add_tags = vec!["t".repeat(60)];
+        assert!(long.validate(AnnotationPatchAuthority::Extension).is_ok());
+        assert!(long.validate_qualified_tags(&extension_id).is_err());
+        long.add_tags = vec!["t".repeat(57)];
+        assert!(long.validate_qualified_tags(&extension_id).is_ok());
     }
 
     #[test]

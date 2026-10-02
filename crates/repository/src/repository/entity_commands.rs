@@ -2285,11 +2285,14 @@ pub(super) fn validate_system_tag_update(
     )
 }
 
+/// Longest stored system tag, including an extension namespace prefix.
+pub(super) const MAX_SYSTEM_TAG_BYTES: usize = 128;
+
 pub(super) fn validate_system_tags(tags: &[String]) -> Result<(), RepositoryError> {
     if tags.len() > 100
-        || tags
-            .iter()
-            .any(|tag| tag.trim().is_empty() || tag.len() > 128 || tag == "attricat.sample")
+        || tags.iter().any(|tag| {
+            tag.trim().is_empty() || tag.len() > MAX_SYSTEM_TAG_BYTES || tag == "attricat.sample"
+        })
         || tags.iter().collect::<HashSet<_>>().len() != tags.len()
     {
         return Err(RepositoryError::InvalidSystemTags);
