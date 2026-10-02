@@ -124,6 +124,11 @@ enum Command {
         #[command(subcommand)]
         command: ExtensionOperationCommand,
     },
+    /// Your own interactive extension runs, started from extension actions.
+    ExtensionRun {
+        #[command(subcommand)]
+        command: ExtensionRunCommand,
+    },
     ExtensionSchedule {
         #[command(subcommand)]
         command: ExtensionScheduleCommand,
@@ -1057,6 +1062,21 @@ enum ExtensionCommand {
         #[arg(long)]
         body: String,
     },
+    /// Inventory an extension's annotation namespace, or adopt existing
+    /// annotations under its name with --adopt.
+    AnnotationNamespace {
+        extension_id: String,
+        #[arg(long)]
+        adopt: bool,
+    },
+    /// Operator repair or cleanup of one extension's annotations on an entity.
+    RepairAnnotations {
+        extension_id: String,
+        entity_id: Uuid,
+        /// Annotation patch JSON object or path to a JSON file.
+        #[arg(long)]
+        patch: String,
+    },
     Command {
         extension_id: String,
         contribution_id: String,
@@ -1066,6 +1086,29 @@ enum ExtensionCommand {
         command_id: String,
         #[arg(long)]
         payload: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum ExtensionRunCommand {
+    /// List your 50 most recent interactive runs.
+    List {
+        #[arg(long)]
+        extension_id: Option<String>,
+    },
+    /// Show status, outcome and downloadable outputs of one run.
+    Show {
+        run_id: Uuid,
+    },
+    Cancel {
+        run_id: Uuid,
+    },
+    /// Download an output of a completed run.
+    Download {
+        run_id: Uuid,
+        artifact_id: Uuid,
+        #[arg(long)]
+        output: PathBuf,
     },
 }
 
@@ -2028,6 +2071,7 @@ async fn run(cli: Cli) -> Result<String, CliError> {
         Command::ExtensionRegistry { command } => extension_registry_command(&client, &server, command).await,
         Command::Extension { command } => extension_command(&client, &server, command).await,
         Command::ExtensionOperation { command } => extension_operation_command(&client, &server, command).await,
+        Command::ExtensionRun { command } => extension_run_command(&client, &server, command).await,
         Command::ExtensionSchedule { command } => extension_schedule_command(&client, &server, command).await,
         Command::ConnectorJob { command } => connector_job_command(&client, &server, command).await,
         Command::SolutionPack { command } => {
@@ -2897,8 +2941,60 @@ async fn extension_command(
     ExtensionCommand::Quarantine { extension_id, diagnostic_code } => request(client,server,Method::POST,&format!("/extensions/{}/quarantine",segment(&extension_id)),Some(json!({"diagnostic_code":diagnostic_code}))).await,
     ExtensionCommand::Artifact { extension_id, contribution_id, output } => raw_download(client,server,&format!("/extensions/{}/{}/artifact",segment(&extension_id),segment(&contribution_id)),&output,None).await,
     ExtensionCommand::Storage { extension_id, contribution_id, release_id, body } => request(client,server,Method::POST,&format!("/extensions/{}/{}/storage/{}",segment(&extension_id),segment(&contribution_id),segment(release_id)),Some(json_input(&body,"--body")?)).await,
+    ExtensionCommand::AnnotationNamespace { extension_id, adopt } => request(client,server,if adopt { Method::POST } else { Method::GET },&format!("/extensions/{}/annotation-namespace",segment(&extension_id)),None).await,
+    ExtensionCommand::RepairAnnotations { extension_id, entity_id, patch } => request(client,server,Method::POST,&format!("/extensions/{}/annotation-namespace/entities/{entity_id}",segment(&extension_id)),Some(json_object_argument(&patch)?)).await,
     ExtensionCommand::Command { extension_id, contribution_id, release_id, command_id, payload } => request(client,server,Method::POST,&format!("/extensions/{}/{}/command",segment(&extension_id),segment(&contribution_id)),Some(json!({"release_id":release_id,"command_id":command_id,"payload":json_input(&payload,"--payload")?}))).await,
 }
+}
+
+async fn extension_run_command(
+    client: &Client,
+    server: &Url,
+    command: ExtensionRunCommand,
+) -> Result<String, CliError> {
+    match command {
+        ExtensionRunCommand::List { extension_id } => {
+            let path = match extension_id {
+                Some(id) => format!("/extension-runs?extension_id={}", segment(id)),
+                None => "/extension-runs".to_owned(),
+            };
+            request(client, server, Method::GET, &path, None).await
+        }
+        ExtensionRunCommand::Show { run_id } => {
+            request(
+                client,
+                server,
+                Method::GET,
+                &format!("/extension-runs/{run_id}"),
+                None,
+            )
+            .await
+        }
+        ExtensionRunCommand::Cancel { run_id } => {
+            request(
+                client,
+                server,
+                Method::POST,
+                &format!("/extension-runs/{run_id}/cancel"),
+                None,
+            )
+            .await
+        }
+        ExtensionRunCommand::Download {
+            run_id,
+            artifact_id,
+            output,
+        } => {
+            raw_download(
+                client,
+                server,
+                &format!("/extension-runs/{run_id}/artifacts/{artifact_id}/download"),
+                &output,
+                None,
+            )
+            .await
+        }
+    }
 }
 
 async fn extension_operation_command(
@@ -4881,6 +4977,54 @@ value = "Blue shirt"
             format!("entity_id={id}")
         );
         server.abort();
+    }
+
+    #[test]
+    fn extension_run_and_annotation_commands_validate_arguments() {
+        let id = "00000000-0000-4000-8000-000000000001";
+        for args in [
+            vec![
+                "acli",
+                "extension-run",
+                "list",
+                "--extension-id",
+                "acme.docs",
+            ],
+            vec!["acli", "extension-run", "show", id],
+            vec!["acli", "extension-run", "cancel", id],
+            vec![
+                "acli",
+                "extension-run",
+                "download",
+                id,
+                id,
+                "--output",
+                "out.pdf",
+            ],
+            vec![
+                "acli",
+                "extension",
+                "annotation-namespace",
+                "acme.docs",
+                "--adopt",
+            ],
+            vec![
+                "acli",
+                "extension",
+                "repair-annotations",
+                "acme.docs",
+                id,
+                "--patch",
+                "{}",
+            ],
+        ] {
+            assert!(Cli::try_parse_from(args.clone()).is_ok(), "{args:?}");
+        }
+        assert!(Cli::try_parse_from(["acli", "extension-run", "show", "not-a-uuid"]).is_err());
+        assert!(
+            Cli::try_parse_from(["acli", "extension", "repair-annotations", "acme.docs", id])
+                .is_err()
+        );
     }
 
     #[test]

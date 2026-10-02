@@ -13,6 +13,11 @@ export const maximumExtensionCommandIdLength = 128;
 export const maximumExtensionStorageListLimit = 100;
 export const supportedWorkspaceLayoutVersion = 1;
 export const supportedOutletContextVersion = 1;
+/** Selection-aware action contributions (contribution version 2) receive this context. */
+export const selectionActionContributionVersion = 2;
+export const selectionContextVersion = 2;
+/** Mirrors the host's initial interactive selection bound. */
+export const maximumActionSelection = 50;
 
 /** Host-owned insertion points an extension contribution may target. */
 export const extensionOutletNames = [
@@ -33,8 +38,22 @@ export const extensionOutletNames = [
   'file_panel',
   'audit_event_panel',
   'data_health_card',
+  'action_dialog',
 ] as const;
 export const navigationOutlet = 'navigation';
+/** The host-managed dialog opened by an extension's selection actions. */
+export const actionDialogOutlet = 'action_dialog';
+/** Outlets whose version 2 contributions receive a normalized selection. */
+export const selectionActionOutlets = [
+  'entity_action',
+  'explorer_row_action',
+  'explorer_bulk_action',
+] as const;
+export const selectionSources = {
+  entityPreview: 'entity_preview',
+  explorerRow: 'explorer_row',
+  explorerSelection: 'explorer_selection',
+} as const;
 
 export const contributionKinds = [
   'route',
@@ -42,6 +61,7 @@ export const contributionKinds = [
   'embedded',
   'action',
   'panel',
+  'dialog',
 ] as const;
 export const navigationGroups = ['promoted', 'grouped'] as const;
 export const promotedNavigationGroup = 'promoted';
@@ -81,7 +101,11 @@ export const releaseTagSeparator = '@';
 
 /** Capabilities a contribution must hold before the host brokers a request. */
 export const extensionCapabilities = {
+  actionDialog: 'client.action_dialog',
   catalogRead: 'catalog.read',
+  operationsCancel: 'client.operations.cancel',
+  operationsRead: 'client.operations.read',
+  operationsStart: 'client.operations.start',
   commands: 'client.commands',
   events: 'client.events',
   navigation: 'client.navigation',
@@ -109,11 +133,23 @@ export const extensionMessageTypes = {
 export const extensionBrokerMethods = {
   catalogRead: 'catalog.read',
   command: 'command',
+  dialogClose: 'dialog.close',
+  dialogOpen: 'dialog.open',
+  operationsCancel: 'operations.cancel',
+  operationsDownload: 'operations.download',
+  operationsGet: 'operations.get',
+  operationsList: 'operations.list',
+  operationsStart: 'operations.start',
   navigate: 'navigate',
   notify: 'notify',
   refresh: 'refresh',
 } as const;
 export const extensionStorageMethodPrefix = 'storage.';
+export const operationMethodPrefix = 'operations.';
+/** Mirrors the host's client idempotency-key bound for interactive runs. */
+export const maximumOperationIdempotencyKeyLength = 64;
+/** Visible ASCII only, matching the host's idempotency-key validation. */
+export const operationIdempotencyKeyPattern = /^[\x21-\x7e]+$/;
 export const extensionStorageOperations = [
   'get',
   'set',
@@ -134,6 +170,8 @@ export const extensionProtocolErrors = {
   catalogResponseTooLarge: 'Catalog response is too large',
   commandPayloadTooLarge: 'Command payload is too large',
   invalidStorageKey: 'Invalid storage key',
+  operationInputTooLarge: 'Operation input is too large',
+  selectionUnavailable: 'This contribution has no selection context',
   refreshDenied: 'Refresh denied',
   requestDenied: 'Request denied',
   storageRequestDenied: 'Storage request denied',

@@ -207,6 +207,7 @@ export const ExplorerResultsTable = ({
       {showExplorerActions && (
         <ExplorerExtensionActions
           blueprint={blueprint.blueprint}
+          contextId={publicationContextId}
           selectedItems={
             selection.selectionMode ? selection.selectedItems : null
           }

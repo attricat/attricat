@@ -177,6 +177,10 @@ impl CatalogRepository {
         self.ensure_task_fence(&mut tx).await?;
         let id: Option<Uuid> = sqlx::query_scalar("UPDATE extension_operation_output_staging SET artifact_id=COALESCE(artifact_id,$4) WHERE workspace_id=$1 AND operation_run_id=$2 AND name=$3 RETURNING artifact_id")
             .bind(self.extension_workspace()).bind(run).bind(name).bind(artifact).fetch_optional(&mut *tx).await?;
+        if let Some(id) = id {
+            sqlx::query("UPDATE extension_operation_artifacts SET output_name=COALESCE(output_name,$3) WHERE id=$1 AND workspace_id=$2")
+                .bind(id).bind(self.extension_workspace()).bind(name).execute(&mut *tx).await?;
+        }
         tx.commit().await?;
         id.ok_or_else(|| invalid("output staging disappeared"))
     }

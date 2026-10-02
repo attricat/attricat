@@ -6,7 +6,11 @@ import { useTranslation } from 'react-i18next';
 import { SettingsPage } from '../../components/CenteredPage';
 import { PageHeader } from '../../components/PageHeader';
 import { compactIconSize } from '../../components/iconSizes';
-import { PersonalTokenIcon, ProfileIcon } from '../../components/systemIcons';
+import {
+  ExtensionRunIcon,
+  PersonalTokenIcon,
+  ProfileIcon,
+} from '../../components/systemIcons';
 import { profileTabIds } from './constants';
 
 const profileTabs = [
@@ -15,6 +19,11 @@ const profileTabs = [
     icon: PersonalTokenIcon,
     label: 'profile.tokenList',
     to: '/profile/personal-access-tokens',
+  },
+  {
+    icon: ExtensionRunIcon,
+    label: 'profile.extensionRuns',
+    to: '/profile/extension-runs',
   },
 ] as const satisfies ReadonlyArray<{
   icon: LucideIcon;

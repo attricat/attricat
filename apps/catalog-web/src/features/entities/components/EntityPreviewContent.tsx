@@ -5,7 +5,10 @@ import {
   ExtensionOutlet,
   ExtensionPopoverOutlet,
 } from '../../extensions/ExtensionOutlet';
-import { supportedOutletContextVersion } from '../../extensions/constants';
+import {
+  selectionSources,
+  supportedOutletContextVersion,
+} from '../../extensions/constants';
 import { useExtensionRuntime } from '../../extensions/useExtensionRuntime';
 import { EntityView } from '../../views/components/EntityView';
 import { entityHeadingComponentId } from '../../views/components/blocks/EntityHeadingDefinition';
@@ -142,6 +145,13 @@ export const EntityPreviewContent = ({
           context={{ entity_id: entityId, context_id: contextId }}
           outlet="entity_action"
           runtimeScope={runtimeScope}
+          selection={{
+            source: selectionSources.entityPreview,
+            blueprintId: blueprint.blueprint.id,
+            blueprintVersion: blueprint.blueprint.version,
+            contextId: contextId ?? null,
+            entityIds: [entityId],
+          }}
         />
       </Box>
     </Box>

@@ -1,7 +1,10 @@
 import { Menu, MenuItem } from '@mui/material';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { EntityItem, EntityPublicationStatus } from '../entities/api';
+import { useActionDialogStore } from '../extensions/actionDialogStore';
 import { ExtensionPopoverOutlet } from '../extensions/ExtensionOutlet';
+import { selectionSources } from '../extensions/constants';
 import {
   explorerExtensionContextVersion,
   explorerExtensionOutlets,
@@ -46,6 +49,13 @@ export const EntityActionsMenu = ({
   unpublishing,
 }: Props) => {
   const { t } = useTranslation();
+  // A row action that opens the host dialog hands off to it; the dialog keeps
+  // its captured selection after this menu and its frames unmount.
+  const dialogKey = useActionDialogStore((state) => state.dialog?.key);
+  const [initialDialogKey] = useState(dialogKey);
+  useEffect(() => {
+    if (dialogKey !== undefined && dialogKey !== initialDialogKey) onClose();
+  }, [dialogKey, initialDialogKey, onClose]);
 
   return (
     <Menu
@@ -115,6 +125,13 @@ export const EntityActionsMenu = ({
         }}
         label={t('explorer.extensionActions')}
         outlet={explorerExtensionOutlets.rowAction}
+        selection={{
+          source: selectionSources.explorerRow,
+          blueprintId,
+          blueprintVersion: entity.blueprint_version,
+          contextId: publicationContextId ?? null,
+          entityIds: [entity.id],
+        }}
       />
     </Menu>
   );

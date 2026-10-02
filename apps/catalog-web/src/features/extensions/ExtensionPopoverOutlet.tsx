@@ -1,6 +1,10 @@
 import { IconButton, Popover, Stack, Tooltip } from '@mui/material';
 import { useState } from 'react';
 import { ExtensionIcon } from '../../components/systemIcons';
+import {
+  ActionSelectionContext,
+  type ActionSelection,
+} from './actionSelection';
 import type { ExtensionContribution, ExtensionRuntimeScope } from './api';
 import { extensionPopoverWidth } from './constants';
 import { ExtensionFrame } from './ExtensionFrame';
@@ -18,6 +22,7 @@ type ExtensionPopoverOutletProps = {
   label: string;
   outlet: OutletName;
   runtimeScope?: ExtensionRuntimeScope;
+  selection?: ActionSelection;
 };
 
 /** Mounts contributions off-screen and reveals a trigger once any renders content. */
@@ -26,6 +31,7 @@ export const ExtensionPopoverOutlet = ({
   label,
   outlet,
   runtimeScope,
+  selection,
 }: ExtensionPopoverOutletProps) => {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const [contentHeights, setContentHeights] = useState<Record<string, number>>(
@@ -33,7 +39,12 @@ export const ExtensionPopoverOutlet = ({
   );
   const contextKey = JSON.stringify(context);
   const runtime = useExtensionRuntime(runtimeScope);
-  const contributions = outletContributions(runtime.data, outlet, context);
+  const contributions = outletContributions(
+    runtime.data,
+    outlet,
+    context,
+    selection,
+  );
   const contentKey = (contribution: ExtensionContribution) =>
     `${contextKey}:${contributionKey(contribution)}`;
   const hasContent = contributions.some(
@@ -41,7 +52,7 @@ export const ExtensionPopoverOutlet = ({
   );
   if (!contributions.length) return null;
   return (
-    <>
+    <ActionSelectionContext value={selection ?? null}>
       {hasContent && (
         <Tooltip title={label}>
           <IconButton
@@ -84,6 +95,6 @@ export const ExtensionPopoverOutlet = ({
           ))}
         </Stack>
       </Popover>
-    </>
+    </ActionSelectionContext>
   );
 };

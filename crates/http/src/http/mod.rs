@@ -11,6 +11,7 @@ mod entity_reads;
 mod error;
 mod event_deliveries;
 mod extension_registries;
+mod extension_runs;
 mod extensions;
 mod extractors;
 mod files;
@@ -534,6 +535,29 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/extensions/{extension_id}/{contribution_id}/command",
             post(extensions::command),
+        )
+        .route(
+            "/extensions/{extension_id}/{contribution_id}/operations",
+            post(extension_runs::start),
+        )
+        .route(
+            "/extensions/{extension_id}/annotation-namespace",
+            get(extension_runs::annotation_namespace)
+                .post(extension_runs::adopt_annotation_namespace),
+        )
+        .route(
+            "/extensions/{extension_id}/annotation-namespace/entities/{entity_id}",
+            post(extension_runs::repair_annotations),
+        )
+        .route("/extension-runs", get(extension_runs::list))
+        .route("/extension-runs/{run_id}", get(extension_runs::detail))
+        .route(
+            "/extension-runs/{run_id}/cancel",
+            post(extension_runs::cancel),
+        )
+        .route(
+            "/extension-runs/{run_id}/artifacts/{artifact_id}/download",
+            get(extension_runs::download),
         )
         .route(
             "/extensions/{extension_id}/{contribution_id}/storage/{release_id}",

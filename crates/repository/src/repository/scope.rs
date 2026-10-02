@@ -18,6 +18,7 @@ impl<S: RepositoryScope> CatalogRepository<S> {
             event_context: self.event_context.clone(),
             task_fence: self.task_fence.clone(),
             extension_id: self.extension_id.clone(),
+            authorization_actor: self.authorization_actor,
         })
     }
 

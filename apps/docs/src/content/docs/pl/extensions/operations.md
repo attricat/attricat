@@ -60,6 +60,41 @@ Z `artifacts.write` komponent buduje pliki wyjściowe po kawałku:
 
 Limity wynoszą 1 GiB na plik wyjściowy, 2 GiB na przebieg i 8 GiB na obszar roboczy. Dane wyjściowe można pobrać po zakończeniu przebiegu i są przechowywane przez 30 dni.
 
+## Operacje interaktywne (API hosta 1.5)
+
+Dodaj `interactive` do operacji, aby zalogowani użytkownicy mogli ją uruchomić dla encji lub zaznaczenia z Twoich akcji w wersji 2:
+
+```json
+{"id": "generate", "handler": "generate", "request_schema": {"type": "object"}, "interactive": {"version": 1, "max_selection": 50}}
+```
+
+Wymaga to `client.operations.start` i zakresu `catalog.host_api` zgodnego z 1.5, ale nie z 1.4. Komponent używa świata `catalog:host@1.5.0` z `crates/extension-runtime/wit-interactive/`: to świat 1.4 z dodatkowym interfejsem `selection`.
+
+Przy starcie Catalog sprawdza, czy użytkownik może odczytać każdą zaznaczoną encję, i utrwala użytkownika, wydanie, dane wejściowe, kontekst oraz uporządkowane zaznaczenie. Następnie:
+
+- `selection.describe()` zwraca liczbę encji, wersję schematu i kontekst.
+- `selection.page(cursor, limit)` zwraca od 1 do 10 encji z zapisanymi wartościami rozwiązanymi w kontekście uruchomienia, Twoimi adnotacjami i `read_at`. Encje, których użytkownik nie może już odczytać, mają status `unavailable`, a usunięte `deleted`.
+- `catalog-data.read` i wywołania konektorowego interfejsu `catalog` są odrzucane. `catalog-data.batch` przyjmuje intencje `update`, `relationships` i `annotate` tylko dla zaznaczonych encji, sprawdzane względem bieżących uprawnień użytkownika.
+- Jeśli użytkownik opuści obszar roboczy, uruchomienie zatrzymuje się z bezpiecznym powodem zamiast działać dalej z uprawnieniami rozszerzenia.
+
+Pobierz z każdej encji to, czego potrzebujesz, raz i zapisz w punkcie kontrolnym, aby ponowiona paczka tworzyła te same bajty. Raportuj postęp jako `{"completed": n, "total": n, "outcome": {"succeeded": n, "failed": n, "skipped": n}}`; Catalog pokazuje te liczby niezależnie od statusu uruchomienia, więc uruchomienie może się zakończyć mimo niepowodzeń części encji.
+
+Użytkownicy widzą swoje uruchomienia w **Profil → Uruchomienia rozszerzeń**. Otworzyć, anulować lub pobrać wyniki uruchomienia mogą tylko osoba, która je rozpoczęła, i zarządzający rozszerzeniami; pobieranie wymaga też dostępu do odczytu każdej zaznaczonej encji.
+
+## Adnotacje encji
+
+Z `catalog.annotations.write` dodawaj do paczki intencje `annotate`, aby zapisać informacje o encji we własnej przestrzeni nazw: tagi `<extension-id>:<tag>` i obiekt w `system_metadata[<extension-id>]`.
+
+```json
+{"kind": "annotate", "intent_key": "doc-<run>-<entity>", "entity_id": "…",
+ "add_tags": ["document-generated"], "set_metadata": {"last_document": {"template_version": 2}},
+ "remove_tags": [], "remove_metadata": [], "expected_revision": null}
+```
+
+Podajesz tylko lokalne nazwy tagów i kluczy; Catalog dodaje przestrzeń nazw. Łatka zawiera od 1 do 32 operacji. Ustawienie klucza zastępuje jego wartość (`null` jest dozwolone). `expected_revision` odrzuca zapis, jeśli przestrzeń nazw zmieniła się od odczytu; ponowiony klucz intencji jest najpierw zgłaszany jako `already_applied`. Inni zapisujący, w tym użytkownicy edytujący encję, nie mogą zmienić Twojej przestrzeni nazw, a Twoje zapisy nie zmieniają `updated_at` encji.
+
+Jeśli encje mają już dane pod identyfikatorem Twojego rozszerzenia, operator musi przejąć przestrzeń nazw przed Twoim pierwszym zapisem. Nie zapisuj w adnotacjach podpisanych adresów URL ani sekretów i nie traktuj tagu jako dowodu, że plik nadal można pobrać: wyniki wygasają.
+
 ## Przesyłanie plików (API hosta 1.4)
 
 Z `network.request` i uprawnieniem hosta, które ustawia `max_transfer_bytes`, komponent może przenosić duże pliki przez HTTPS bez przekazywania bajtów przez JSON:

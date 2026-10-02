@@ -242,7 +242,11 @@ impl CatalogRepository {
         let range = semver::VersionReq::parse(&manifest.catalog.host_api).map_err(|_| {
             RepositoryError::InvalidExtension("invalid pinned host API range".into())
         })?;
-        let abi = if range.matches(&semver::Version::new(1, 4, 0))
+        let abi = if range.matches(&semver::Version::new(1, 5, 0))
+            && !range.matches(&semver::Version::new(1, 4, 0))
+        {
+            super::INTERACTIVE_OPERATION_ABI
+        } else if range.matches(&semver::Version::new(1, 4, 0))
             && !range.matches(&semver::Version::new(1, 3, 0))
         {
             "1.4.0"
@@ -401,7 +405,8 @@ impl CatalogRepository {
             configuration,
             input,
             checkpoint,
-            batch_key: if abi_version == "1.4.0" {
+            batch_key: if abi_version == "1.4.0" || abi_version == super::INTERACTIVE_OPERATION_ABI
+            {
                 format!("{}:{}", task.subject_id, batch_number)
             } else {
                 format!("{}:{}", idempotency_key, batch_number)

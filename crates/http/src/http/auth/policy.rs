@@ -14,6 +14,9 @@ pub(super) enum TargetKind {
     BlueprintCode,
     EntityId,
     FileRead,
+    /// Interactive extension runs: the handler authorizes every selected
+    /// entity, so entity- and blueprint-scoped grants work as for entity reads.
+    ExtensionRun,
     WorkspaceNavigation,
     ContextId,
     ContextCode,
@@ -123,6 +126,17 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
         return Some(Policy {
             permission: "extensions.manage",
             target: TargetKind::None,
+        });
+    }
+    // Interactive runs are user-scoped. Handlers additionally authorize every
+    // selected entity and restrict run access to the initiator or operators.
+    if path == "/extensions/{extension_id}/{contribution_id}/operations"
+        || path == "/extension-runs"
+        || path.starts_with("/extension-runs/")
+    {
+        return Some(Policy {
+            permission: "entities.read",
+            target: TargetKind::ExtensionRun,
         });
     }
     if path == "/extensions/{extension_id}/{contribution_id}/command" {
@@ -414,7 +428,9 @@ pub(super) fn target(path: &str, kind: TargetKind) -> (Option<Uuid>, Option<Stri
         TargetKind::None => (None, None),
         TargetKind::BlueprintId => (segments.get(1).and_then(|value| value.parse().ok()), None),
         TargetKind::BlueprintCode => (None, segments.get(2).map(|value| (*value).to_owned())),
-        TargetKind::FileRead | TargetKind::WorkspaceNavigation => (None, None),
+        TargetKind::FileRead | TargetKind::WorkspaceNavigation | TargetKind::ExtensionRun => {
+            (None, None)
+        }
         TargetKind::EntityId => {
             let index = if segments.first() == Some(&"v1") {
                 2
@@ -575,6 +591,43 @@ mod tests {
         }
         assert!(policy(&Method::POST, "/solution-packs/apply").is_none());
         assert!(policy(&Method::GET, "/solution-packs/future").is_none());
+    }
+
+    #[test]
+    fn interactive_runs_are_user_scoped_and_annotation_repair_is_managed() {
+        for (method, path) in [
+            (
+                Method::POST,
+                "/extensions/{extension_id}/{contribution_id}/operations",
+            ),
+            (Method::GET, "/extension-runs"),
+            (Method::GET, "/extension-runs/{run_id}"),
+            (Method::POST, "/extension-runs/{run_id}/cancel"),
+            (
+                Method::GET,
+                "/extension-runs/{run_id}/artifacts/{artifact_id}/download",
+            ),
+        ] {
+            assert_eq!(policy(&method, path).unwrap().permission, "entities.read");
+        }
+        assert_eq!(
+            policy(
+                &Method::GET,
+                "/extensions/{extension_id}/annotation-namespace"
+            )
+            .unwrap()
+            .permission,
+            "extensions.read"
+        );
+        for path in [
+            "/extensions/{extension_id}/annotation-namespace",
+            "/extensions/{extension_id}/annotation-namespace/entities/{entity_id}",
+        ] {
+            assert_eq!(
+                policy(&Method::POST, path).unwrap().permission,
+                "extensions.manage"
+            );
+        }
     }
 
     #[test]

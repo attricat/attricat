@@ -33,6 +33,7 @@ export const profileTabIds = {
 export const profileTabIndex = {
   account: 0,
   personalTokens: 1,
+  extensionRuns: 2,
 } as const;
 export const timeZonePickerMaxWidth = 480;
 /** How often the time zone preview clock advances. */

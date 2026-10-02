@@ -120,6 +120,7 @@ const sectionTitle = (t: TFunction, [section, ...rest]: Segments) => {
     case 'invitations':
       return t('workspace.invitations');
     case 'profile':
+      if (group === 'extension-runs') return t('profile.extensionRuns');
       if (group !== 'personal-access-tokens') return t('navigation.profile');
       return rest[1] === 'new'
         ? t('profile.createToken')

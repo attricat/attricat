@@ -947,7 +947,8 @@
     "revokeTokenTitle": "Revoke personal token?",
     "revokeTokenWarning": "Scripts and integrations using <strong>{{label}}</strong> will immediately lose access. This cannot be undone.",
     "revokeToken": "Revoke token",
-    "revokeFailed": "Could not revoke the token: {{message}}"
+    "revokeFailed": "Could not revoke the token: {{message}}",
+    "extensionRuns": "Extension runs"
   },
   "files": {
     "noImages": "No images attached.",
@@ -1087,7 +1088,15 @@
       "upgrade": "Upgrade",
       "quarantine": "Quarantine",
       "remove": "Remove"
-    }
+    },
+    "actionDialogTitle": "Extension action",
+    "actionDialogEntity": "Applies to this entity.",
+    "actionDialogSelection_one": "Applies to {{count}} selected entity.",
+    "actionDialogSelection_other": "Applies to {{count}} selected entities.",
+    "actionDialogSavedData": "Only saved data is used.",
+    "actionDialogUnsaved_one": "You have unsaved edits for {{count}} entity in this tab. Save them first to include them.",
+    "actionDialogUnsaved_other": "You have unsaved edits for {{count}} entities in this tab. Save them first to include them.",
+    "actionDialogOpenEditor": "Open editor"
   },
   "workspace": {
     "memberSummary": "{{email}} · {{state}}",
@@ -1431,5 +1440,49 @@
     "version": "API version",
     "branch": "Branch",
     "commit": "Commit"
+  },
+  "extensionRuns": {
+    "description": "Background work you started from extension actions. Runs continue after you close the action, and you can return here to follow them and download their results.",
+    "empty": "You have not started any extension runs yet.",
+    "loadFailed": "Extension runs could not be loaded.",
+    "viewRun": "View run",
+    "backToRuns": "All extension runs",
+    "started": "Extension run started. It continues in the background.",
+    "finished": "Extension run completed.",
+    "cancelledNotice": "Extension run cancelled.",
+    "failedNotice": "Extension run failed.",
+    "entityCount_one": "{{count}} entity",
+    "entityCount_other": "{{count}} entities",
+    "progressLabel": "Run progress",
+    "progress": "{{completed}} of {{total}} processed",
+    "outcome": {
+      "succeeded_one": "{{count}} succeeded",
+      "succeeded_other": "{{count}} succeeded",
+      "failed_one": "{{count}} failed",
+      "failed_other": "{{count}} failed",
+      "skipped_one": "{{count}} skipped",
+      "skipped_other": "{{count}} skipped"
+    },
+    "status": {
+      "queued": "Queued",
+      "running": "Running",
+      "cancelling": "Cancelling",
+      "cancelled": "Cancelled",
+      "completed": "Completed",
+      "failed": "Failed"
+    },
+    "failure": {
+      "access_revoked": "The run stopped because you no longer have access to this workspace.",
+      "extension_failed": "The extension could not finish this run."
+    },
+    "outputs": "Results",
+    "outputsAfterCompletion": "Results become available for download when the run completes.",
+    "outputsExpired": "These results have expired and can no longer be downloaded.",
+    "outputsAvailableUntil": "Available to download until <timestamp/>.",
+    "noOutputs": "This run produced no downloadable results.",
+    "unnamedOutput": "Result",
+    "download": "Download",
+    "cancel": "Cancel run",
+    "cancelFailed": "The run could not be cancelled."
   }
 }

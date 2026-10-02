@@ -132,8 +132,10 @@ The v1 capability catalogue is: `catalog.read`, `catalog.write`,
 `client.explorer_bulk_action`, `client.entity_header_action`,
 `client.entity_attribute_panel`, `client.blueprint_panel`,
 `client.blueprint_publish_check`, `client.file_panel`,
-`client.audit_event_panel`, `client.data_health_card`, `network.request`, and
-`webhooks.receive`.
+`client.audit_event_panel`, `client.data_health_card`, `client.action_dialog`,
+`client.operations.start`, `client.operations.read`,
+`client.operations.cancel`, `catalog.annotations.write`, `network.request`,
+and `webhooks.receive`.
 
 Required `permissions` and `host_permissions` must be granted before an
 extension can be enabled. Optional variants are independently grantable and
@@ -634,7 +636,9 @@ contextual actions—not an application-wide navigation tree.
   `client.explorer_row_action`) is the Explorer row overflow UI for one entity.
   Its strict context is `entity_id`, `blueprint_id`, `blueprint_version`, and
   `context_version: 1`; it deliberately does not include search state or entity
-  values.
+  values. A version 2 contribution receives the
+  [selection context](#selection-aware-actions-and-interactive-operations-host-api-15)
+  instead.
 - **`explorer_table_cell`** (`embedded`, requiring
   `client.explorer_table_cell`) mounts a sandboxed renderer for a configured
   scalar Explorer table column when the enabled release declares a matching
@@ -673,6 +677,19 @@ contextual actions—not an application-wide navigation tree.
   order; it contains no row values or search filters. Closing selection mode
   unmounts the frame. Selection is a UI hint, not an authorization grant:
   commands still require `client.commands` and server-side permission checks.
+  A version 2 contribution receives the selection context described below.
+
+- **`action_dialog`** (`dialog`, requiring `client.action_dialog`) is a
+  host-managed dialog opened only by the same extension's version 2 selection
+  actions through `catalog.dialog.open()`. It requires a `title`, which the host
+  renders. Its context is the opening action's selection context, captured when
+  it opens; later Explorer selection changes do not alter it. The dialog
+  outlives the menu, row, or selection toolbar that opened it and closes on
+  `catalog.dialog.close()`, its close controls, Escape pressed on the host, or
+navigation. Key presses inside the sandboxed frame never reach the host, so a
+dialog frame should call `catalog.dialog.close()` on Escape. Closing it
+  before starting a run creates nothing; closing it afterwards does not cancel
+  the run.
 
 - **`data_health_card`** (`panel`, requiring `client.data_health_card`)
   appears as a host-owned card below the Data Health summary cards, only when
@@ -769,6 +786,20 @@ passes that same object to `mount`. It may use only granted operations:
   current entity. It invalidates the host's entity-scoped views and awaits
   active refetches; it cannot select another entity or mutate server data.
   Call it after a successful command that changes the current entity.
+- `catalog.dialog.open()` requires `client.action_dialog` and a version 2
+  selection action; `catalog.dialog.close()` is available only inside the
+  `action_dialog` frame.
+- `catalog.operations.start({ operation_id, input, idempotency_key })` requires
+  `client.operations.start` and is available in version 2 selection actions and
+  the action dialog. The host supplies the frame's selection; the frame cannot
+  name entities, a workspace, a release, or a user. `idempotency_key` is 1–64
+  visible ASCII characters. It resolves to `{ run_id }`.
+- `catalog.operations.list()`, `catalog.operations.get({ run_id })`, and
+  `catalog.operations.download({ run_id, artifact_id })` require
+  `client.operations.read`; `catalog.operations.cancel({ run_id })` requires
+  `client.operations.cancel`. They see only the signed-in user's runs of the
+  calling extension. Downloads are started by the host; the frame never
+  receives a URL.
 - `catalog.storage.get/set/delete/list(...)` requires `storage.extension` and
   provides release-scoped extension storage. Storage requests and values are
   bounded; `set` and `delete` support an optional optimistic
@@ -837,6 +868,154 @@ fetch failures render host-owned warning alerts while the affected outlet has no
 runtime descriptor. Extension UI must provide its own localized
 text and accessible labels; the host owns the surrounding landmarks, focus,
 loading state, and failure announcements.
+
+## Selection-aware actions and interactive operations (host API 1.5)
+
+An extension can let a signed-in user process one entity from its preview or
+Explorer row, or up to 50 selected Explorer entities, as a durable background
+run. Core provides the action surfaces, authorization, the run, its artifacts,
+and annotations; templates, rendering, result reports and document history stay
+in the extension.
+
+### Selection context
+
+Contributions to `entity_action`, `explorer_row_action`, and
+`explorer_bulk_action` may declare `"version": 2`, which requires a
+`catalog.host_api` range compatible with 1.5 but not 1.4. Version 1
+contributions keep their released contexts. A version 2 contribution receives:
+
+```json
+{
+  "context_version": 2,
+  "selection_source": "explorer_selection",
+  "blueprint_id": "<uuid>",
+  "blueprint_version": 3,
+  "context_id": "<uuid or null>",
+  "entity_ids": ["<uuid>", "<uuid>"]
+}
+```
+
+Preview and row actions use a one-item `entity_ids`. `context_id` is the
+effective value-resolution context of the surface (the preview's selected
+context or the Explorer context), or `null` for the workspace default.
+Selections contain only saved entities from one blueprint revision in display
+order; the host never widens them to hidden rows or to all matching results.
+Generation reads saved data only: when a selected entity has unsaved editor
+changes in the tab, the host-owned dialog says so and offers the editor.
+
+### Interactive operations
+
+A `server.operations` entry exposes itself to these actions with:
+
+```json
+{"id": "generate", "handler": "generate", "request_schema": {"type": "object"}, "interactive": {"version": 1, "max_selection": 50}}
+```
+
+`max_selection` is 1–50. The release needs `client.operations.start`, and the
+operation runs in the `catalog:host@1.5.0` world at
+`crates/extension-runtime/wit-interactive/catalog-extension.wit`. That world is
+the released 1.4 connector world plus a `selection` interface and the
+`annotate` catalog intent; the 1.4 package is unchanged.
+
+Starting a run (through `catalog.operations.start` or
+`POST /extensions/{extension_id}/{contribution_id}/operations`) checks the
+enabled exact release, the contribution's capability, the declared operation,
+its request schema and byte limit, and that the caller can read every selected
+entity. One unreadable or mismatched entity rejects the whole selection. The
+host then freezes, in one transaction, the initiating user (and token, if any),
+release, operation, validated input, configuration snapshot, effective context,
+contribution, and ordered membership. Idempotency keys are scoped to the user;
+an identical retry returns the same run and a changed request with the same key
+is rejected.
+
+Inside the run:
+
+- `selection.describe()` returns the count, blueprint revision, and context.
+- `selection.page(cursor, limit)` returns 1–10 members with saved values
+  resolved in the run's context, the caller's own annotations
+  (`{tags, metadata, revision}`), `blueprint_id`, `blueprint_version`,
+  `updated_at`, and the page's `read_at`. Pages stay under the 64 KiB host
+  bound; a member that alone would exceed it is returned as `too_large`.
+  Members the initiator can no longer read are `unavailable`; deleted members
+  are `deleted`. Membership and access are separate: frozen membership never
+  grants access.
+- Generic `catalog-data.read` and the connector `catalog` calls are rejected.
+  `catalog-data.batch` accepts only `update`, `relationships`, and `annotate`
+  intents for members of the selection, and checks the initiator's current
+  grants for each intent (`entities.write` for values, `entities.read` for
+  annotations). Writes are audited as `catalog.extensions.operations.write`
+  with the initiator as actor and the extension as event source.
+- Before every batch the host checks that the initiator is still an active
+  workspace member (and that a token-started run's token is still live). If
+  not, the run fails closed with `initiator_access_revoked` instead of
+  continuing under the installer's grants. An operator can replay the
+  dead-lettered run after access is restored.
+
+Disable, quarantine, grant loss, and upgrade pause interactive runs exactly as
+they pause other release-pinned runs. Existing administrative operations,
+schedules, and connector jobs keep their separate contracts.
+
+### Runs, results, and retention
+
+Users follow their runs under **Profile → Extension runs**
+(`/profile/extension-runs`) and through `GET /extension-runs`. Execution
+status (`queued`, `running`, `cancelling`, `cancelled`, `completed`, `failed`)
+is separate from the extension's domain outcome: a completed run can report
+per-entity failures. Extensions report progress as a bounded object; the host
+displays the optional fields `completed`, `total`, and
+`outcome: {succeeded, failed, skipped}`. A fatal runtime failure still fails
+the run.
+
+Runs started in a tab are polled only while active and announced with a
+notification that links to the run, so users can close the dialog or leave the
+page. Only the initiator (while they can still read every selected entity) and
+`extensions.manage` operators can read, cancel, or download a run. Because a
+combined artifact may contain any member, losing access to one member denies
+every download of that run. Outputs are downloadable only after the run
+completes and for 30 days; history keeps the run but marks outputs expired.
+Finalized outputs carry the extension's output name as the download filename.
+
+## Extension-owned entity annotations
+
+With the `catalog.annotations.write` capability an extension can patch its own
+annotation namespace on an entity: tags named `<extension-id>:<tag>` and the
+object at `system_metadata[<extension-id>]`. Callers supply only local names; the
+host derives the namespace from the extension's provenance, so one extension can
+never write another's. The intent is available from 1.5 operation batches and
+from any `catalog.command.v1` batch (for example a client command) when the
+capability is granted; an annotation-only batch does not need `catalog.write`.
+
+```json
+{"kind": "annotate", "intent_key": "doc-<run>-<entity>", "entity_id": "<uuid>",
+ "add_tags": ["document-generated"], "remove_tags": [],
+ "set_metadata": {"last_document": {"template_version": 2}}, "remove_metadata": [],
+ "expected_revision": null}
+```
+
+Patches are bounded (1–32 operations, local names of 1–64 ASCII letters,
+digits, `.`, `_`, `-`), unambiguous (a tag or key appears once), and applied
+under the entity row lock against current state, so concurrent writers of
+other namespaces never lose changes. Setting a key replaces its whole value.
+`expected_revision` makes a write conditional; a retried intent key is
+recognized as `already_applied` before the revision is compared. Applied
+outcomes include `annotation_revision`. Each change is audited and emits
+`entity.annotations_changed.v1`; it does not change the entity's `updated_at`,
+so an extension's own bookkeeping never makes its output look stale. Do not
+store signed URLs or secret inputs in annotations, and do not treat a tag as
+proof that a download is available: resolve that through the run and artifact
+APIs.
+
+A namespace is claimed on the extension's first annotation write. If entities
+already carry data under that name, the write is rejected until an operator
+adopts it with `POST /extensions/{extension_id}/annotation-namespace`
+(inventory with `GET`); adoption never renames or deletes existing values. The
+names `attricat`, `attricat.sample`, `catalog`, `core`, and `system` cannot be
+claimed. Claims are kept across disable, upgrade, and removal, and annotations
+are preserved. Generic writes (entity create and `PUT`, duplicate, workflow
+annotation actions, and legacy extension `create`/`upsert` fields) cannot
+change a claimed namespace. Operators repair or clean up a namespace on one
+entity with `POST
+/extensions/{extension_id}/annotation-namespace/entities/{entity_id}`.
 
 ## Context-aware catalog APIs (host API 1.1)
 
@@ -940,9 +1119,14 @@ run by ID. Run history includes `schedule_id` and `outputs_expired`
 without exposing input or secrets.
 
 When available, the sibling checkout at `../../attricat-extension-example`
-contains the packaged `attricat-extension-example` formula component using the
-released `catalog:host@1.1.0` ABI and sandboxed client contributions. It
-responds to `entity.updated.v1` by writing a calculated numeric attribute.
+contains packaged reference extensions. `dist/reference-documents.tar.zst`
+(`attricat.reference-documents`) exercises selection-aware actions: grant all of
+its permissions and enable it, then use **Generate document** from an entity
+preview, an Explorer row, or an Explorer selection. It renders PDFs (separate,
+ZIP, or combined) in the 1.5 operation world, writes a `report.json` with
+per-entity results, and annotates entities whose output was finalized. An
+entity without values fails rendering on purpose, which exercises partial
+failures without failing the run.
 
 Run the real-host compatibility suite only against a worktree-local stack after
 creating an owner personal API token:

@@ -1,5 +1,9 @@
 import { Alert, Box, CircularProgress } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import {
+  ActionSelectionContext,
+  type ActionSelection,
+} from './actionSelection';
 import type { ExtensionRuntimeScope } from './api';
 import { extensionLoadingIndicatorSize } from './constants';
 import { ExtensionActionBarOutlet } from './ExtensionActionBarOutlet';
@@ -27,6 +31,8 @@ type Props = {
   onBrowseExtensions?: () => void;
   onNavigate?: () => void;
   runtimeScope?: ExtensionRuntimeScope;
+  /** Saved entities this action surface applies to (selection-aware outlets). */
+  selection?: ActionSelection;
 };
 
 /**
@@ -42,6 +48,7 @@ export const ExtensionOutlet = ({
   onBrowseExtensions,
   onNavigate,
   runtimeScope,
+  selection,
 }: Props) => {
   const { t } = useTranslation();
   const runtime = useExtensionRuntime(runtimeScope);
@@ -65,7 +72,12 @@ export const ExtensionOutlet = ({
         {t('extensions.contentLoadFailed')}
       </Alert>
     );
-  const contributions = outletContributions(runtime.data, outlet, context);
+  const contributions = outletContributions(
+    runtime.data,
+    outlet,
+    context,
+    selection,
+  );
   const policy = outletPolicies[outlet];
   switch (policy.kind) {
     case 'card':
@@ -78,11 +90,13 @@ export const ExtensionOutlet = ({
       );
     case 'actionBar':
       return (
-        <ExtensionActionBarOutlet
-          context={context}
-          contributions={contributions}
-          policy={policy}
-        />
+        <ActionSelectionContext value={selection ?? null}>
+          <ExtensionActionBarOutlet
+            context={context}
+            contributions={contributions}
+            policy={policy}
+          />
+        </ActionSelectionContext>
       );
     case 'navigation':
       return navigationDisplay === 'all' ? (

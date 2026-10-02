@@ -187,7 +187,9 @@ pub(super) async fn authorize(
         // file-to-entity references. Other routes can authorize from the path.
         let handler_authorized = matches!(
             policy.target,
-            policy::TargetKind::FileRead | policy::TargetKind::WorkspaceNavigation
+            policy::TargetKind::FileRead
+                | policy::TargetKind::WorkspaceNavigation
+                | policy::TargetKind::ExtensionRun
         );
         if handler_authorized
             && !state

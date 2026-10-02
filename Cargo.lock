@@ -1048,6 +1048,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "catalog-interactive-test-component"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "wit-bindgen",
+]
+
+[[package]]
 name = "catalog-lexicon"
 version = "0.1.0"
 dependencies = [

@@ -61,6 +61,7 @@ List capabilities in `permissions` or `optional_permissions`. Each one allows a 
 | `secrets.read` | Reading named workspace secrets at run time. |
 | `logging.write` | Writing log messages. |
 | `artifacts.read`, `artifacts.write` | Reading operation inputs and writing operation outputs. |
+| `catalog.annotations.write` | Writing this extension's own namespace of entity tags and metadata. See [Entity annotations](/extensions/operations/#entity-annotations). |
 | `network.request` | Making outbound HTTPS requests that match a granted host permission. |
 | `webhooks.receive` | Declaring inbound webhooks (not delivered yet). |
 
@@ -82,12 +83,15 @@ List capabilities in `permissions` or `optional_permissions`. Each one allows a 
 | `client.clipboard` | Writing text to the clipboard after a user action. |
 | `client.locale.read` | Reading the user's locale. |
 | `client.theme.read` | Accepted for compatibility. The theme is always available. |
+| `client.operations.start` | Starting the extension's interactive operations for the frame's selection. |
+| `client.operations.read` | Listing the user's runs of this extension, reading them, and downloading their outputs. |
+| `client.operations.cancel` | Cancelling the user's runs of this extension. |
 
 ### Client placement
 
 Each placement capability allows a contribution at one outlet. See [Client contributions](/extensions/client/#outlets).
 
-`client.blueprint_configuration`, `client.entity_decoration`, `client.entity_action`, `client.entity_header_action`, `client.entity_attribute_panel`, `client.explorer_row_action`, `client.explorer_table_cell`, `client.explorer_action`, `client.explorer_bulk_action`, `client.blueprint_detail_panel`, `client.blueprint_panel`, `client.blueprint_publish_check`, `client.file_panel`, `client.audit_event_panel`, `client.data_health_card`.
+`client.blueprint_configuration`, `client.entity_decoration`, `client.entity_action`, `client.entity_header_action`, `client.entity_attribute_panel`, `client.explorer_row_action`, `client.explorer_table_cell`, `client.explorer_action`, `client.explorer_bulk_action`, `client.blueprint_detail_panel`, `client.blueprint_panel`, `client.blueprint_publish_check`, `client.file_panel`, `client.audit_event_panel`, `client.data_health_card`, `client.action_dialog`.
 
 ## Host permissions
 
@@ -185,7 +189,7 @@ Exported event types must start with `plugin.<extension-id>.` and end in `.vN`. 
 | --- | --- | --- |
 | `event_handlers` | `id`, `event_types` (exact versioned types), `handler` | `events.subscribe` and a `server_wasm` artifact |
 | `commands` | `id`, `handler`, `request_schema`, `response_schema`, `max_request_bytes`, `max_response_bytes` (default 64 KiB) | `client.commands` |
-| `operations` | `id`, `handler`, `request_schema`, `max_request_bytes`, `max_checkpoint_bytes` (default and maximum 64 KiB) | host API 1.2 or later |
+| `operations` | `id`, `handler`, `request_schema`, `max_request_bytes`, `max_checkpoint_bytes` (default and maximum 64 KiB), optional `interactive: {"version": 1, "max_selection": 1–50}` | host API 1.2 or later; `interactive` needs `client.operations.start` and a range compatible with 1.5 but not 1.4 |
 | `webhooks` | `id`, `event_type`, `handler`, `methods` (`["POST"]`), `authentication`, `max_body_bytes` | `webhooks.receive`. Declared but not delivered yet. |
 
 ## UI contributions
@@ -206,8 +210,9 @@ Exported event types must start with `plugin.<extension-id>.` and end in `.vN`. 
 | `embedded` | `artifact`, `outlet` | A frame at `navigation`, `entity_preview_panel`, `blueprint_attribute_configuration`, `entity_attribute_decoration`, `entity_action`, or `explorer_table_cell`. |
 | `action` | `artifact`, `outlet` | A host-laid-out action at `explorer_row_action`, `explorer_action`, `explorer_bulk_action`, or `entity_header_action`. |
 | `panel` | `artifact`, `outlet` | A read-only host-laid-out panel at `blueprint_detail_panel`, `blueprint_panel`, `blueprint_publish_check`, `entity_attribute_panel`, `file_panel`, `audit_event_panel`, or `data_health_card`. |
+| `dialog` | `artifact`, `outlet`, `title` | The host-managed `action_dialog` opened by this extension's selection actions. |
 
-Each extension can use each outlet once.
+Each extension can use each outlet once. `entity_action`, `explorer_row_action`, and `explorer_bulk_action` accept `version` 1 or 2; version 2 receives the [selection context](/extensions/client/#selection-context) and needs a host API range compatible with 1.5 but not 1.4.
 
 ## Cell renderers
 
