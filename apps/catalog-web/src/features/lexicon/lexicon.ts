@@ -1,7 +1,7 @@
 import i18n, { type BackendModule, type TOptions } from 'i18next';
 import { useEffect, useSyncExternalStore } from 'react';
 import { listLexiconEntries } from './api';
-import { LEXICON_NAMESPACE } from './constants';
+import { LEXICON_MANAGEMENT_NAMESPACE, LEXICON_NAMESPACE } from './constants';
 import {
   isLexiconReference,
   parseLexiconText,
@@ -99,13 +99,23 @@ export const useLexiconRevision = () =>
 let lexiconWorkspaceId: string | null = null;
 
 /**
- * Loads the lexicon namespace from the signed-in workspace. Each read
+ * Loads the lexicon namespace from the signed-in workspace, and the lexicon
+ * management page's own strings. Each read
  * replaces the language's bundle so deleted entries disappear on reload.
  */
 export const lexiconBackend: BackendModule = {
   type: 'backend',
   init: () => undefined,
   read: (language, namespace, callback) => {
+    if (namespace === LEXICON_MANAGEMENT_NAMESPACE) {
+      // Kept out of the startup bundle; only the management page uses them.
+      import(`./locales/${language}.json`).then(
+        (strings: { default: Record<string, unknown> }) =>
+          callback(null, strings.default),
+        () => callback(null, {}),
+      );
+      return;
+    }
     const workspaceId = lexiconWorkspaceId;
     if (namespace !== LEXICON_NAMESPACE) {
       callback(null, {});
@@ -141,6 +151,10 @@ const loadLexicon = (workspaceId: string | null) => {
     ? i18n.reloadResources(undefined, [LEXICON_NAMESPACE])
     : i18n.loadNamespaces(LEXICON_NAMESPACE));
 };
+
+/** Reloads translations after they change, so labels update in place. */
+export const reloadLexicon = () =>
+  i18n.reloadResources(undefined, [LEXICON_NAMESPACE]);
 
 /** Keeps the lexicon namespace in step with the signed-in workspace. */
 export const useWorkspaceLexicon = (workspaceId: string | undefined) => {

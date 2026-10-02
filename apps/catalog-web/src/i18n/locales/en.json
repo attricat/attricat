@@ -18,7 +18,10 @@
     "reload": "Reload comments and keep draft",
     "conflict": "This comment changed elsewhere. Reload comments, then choose Edit and Restore draft to reconcile your text with the latest version."
   },
-  "markdown": { "write": "Write", "preview": "Preview" },
+  "markdown": {
+    "write": "Write",
+    "preview": "Preview"
+  },
   "language": {
     "label": "Language",
     "english": "English",
@@ -90,6 +93,7 @@
     "darkMode": "Dark mode",
     "lightMode": "Light mode",
     "reusableAttributes": "Reusable attributes",
+    "lexicon": "Translations",
     "backgroundProcessing": "Background processing",
     "documentation": "Documentation",
     "systemHealth": "System health"
@@ -865,6 +869,7 @@
     "workflowsDescription": "Create and safely operate versioned workflow definitions.",
     "rulesDescription": "Author and operate catalog-owned data quality rules.",
     "reusableAttributesDescription": "Create reusable attribute definitions, revisions, and groups.",
+    "lexiconDescription": "Translate blueprint names, attribute names, and view labels into each user's language.",
     "backgroundProcessingDescription": "Monitor queued, running, and failed API background tasks.",
     "systemHealthDescription": "Check which build of Attricat is running."
   },

@@ -391,7 +391,8 @@ or English, the app keeps its generic wording. When an entry has plural forms,
 countless lookups use its `one` form. Entries without plural forms use
 `other`.
 
-Manage entries with `acli lexicon` ([CLI](cli.md#translations), [API](api.md#lexicon))
+Manage entries on the web app's **Manage → Translations** page or with
+`acli lexicon` ([CLI](cli.md#translations), [API](api.md#lexicon))
 and use `acli lexicon report` to find untranslated references, missing plural
 categories (blueprint names always need them), and orphaned entries no
 non-deleted blueprint revision or reusable attribute references.

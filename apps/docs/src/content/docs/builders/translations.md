@@ -55,6 +55,10 @@ Saving a blueprint fails if a translated label contains a malformed reference: a
 
 Translations are workspace data. Anyone who can read the catalog loads them; changing them requires `blueprints.write`.
 
+In the web app, open **Manage → Translations** and choose a language. The page lists the labels that still need a translation in that language, including missing plural forms, each with a button that opens the translation form with the key already filled in. Below it, every entry for the language is shown with its source; entries no blueprint uses any more are marked **Unused**. You can add, edit, and delete entries there, and import or export a whole language. Changes apply across the app immediately.
+
+The same operations are available from the CLI:
+
 ```sh
 acli lexicon set --key Product --language pl --text Produkt
 acli lexicon set --key Order --context purchase --language pl --text Zamówienie

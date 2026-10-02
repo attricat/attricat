@@ -55,6 +55,10 @@ Zapisanie schematu kończy się błędem, jeśli tłumaczona etykieta zawiera ni
 
 Tłumaczenia to dane obszaru roboczego. Wczytuje je każdy, kto może czytać katalog; ich zmiana wymaga uprawnienia `blueprints.write`.
 
+W aplikacji internetowej otwórz **Zarządzanie → Tłumaczenia** i wybierz język. Strona pokazuje etykiety, które nadal wymagają tłumaczenia na ten język, w tym brakujące formy liczby mnogiej, a przy każdej z nich przycisk otwierający formularz tłumaczenia z wypełnionym kluczem. Poniżej widać wszystkie wpisy w danym języku wraz ze źródłem; wpisy, których nie używa już żaden schemat, są oznaczone jako **Nieużywane**. Możesz tam dodawać, edytować i usuwać wpisy oraz importować i eksportować cały język. Zmiany od razu obowiązują w całej aplikacji.
+
+Te same operacje są dostępne w CLI:
+
 ```sh
 acli lexicon set --key Product --language pl --text Produkt
 acli lexicon set --key Order --context purchase --language pl --text Zamówienie
