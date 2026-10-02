@@ -220,6 +220,14 @@ impl CatalogRepository {
         &self,
         input: StartInteractiveOperation,
     ) -> Result<Uuid, RepositoryError> {
+        self.start_interactive_operation_attempt(input, false).await
+    }
+
+    async fn start_interactive_operation_attempt(
+        &self,
+        input: StartInteractiveOperation,
+        retried: bool,
+    ) -> Result<Uuid, RepositoryError> {
         if input.idempotency_key.is_empty()
             || input.idempotency_key.len() > MAX_CLIENT_IDEMPOTENCY_BYTES
             || !input.idempotency_key.bytes().all(|c| c.is_ascii_graphic())
@@ -365,10 +373,15 @@ impl CatalogRepository {
         .fetch_optional(&mut *transaction)
         .await?;
         let Some(run_id) = inserted else {
-            // A concurrent submission with the same key won the unique index;
-            // the retry returns its run or reports the key as reused.
+            // A concurrent submission with the same key won a unique index;
+            // one retry returns its run or reports the key as reused. If the
+            // key is still taken, it collides with a non-interactive run
+            // (administrative keys are free-form), which no lookup here sees.
             transaction.rollback().await?;
-            return Box::pin(self.start_interactive_extension_operation(input)).await;
+            if retried {
+                return Err(RepositoryError::IdempotencyKeyReused);
+            }
+            return Box::pin(self.start_interactive_operation_attempt(input, true)).await;
         };
         for (position, entity_id) in input.entity_ids.iter().enumerate() {
             sqlx::query(

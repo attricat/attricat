@@ -8,7 +8,7 @@ use api::{
     model::{CreateAttributeContext, CreateBlueprint, NewAttributeValue},
     repository::{
         CatalogRepository, ExtensionCatalogBatch, ExtensionCatalogIntent,
-        ExtensionCatalogIntentStatus, RepositoryError,
+        ExtensionCatalogIntentStatus, RepositoryError, StartExtensionOperation,
     },
     storage::FakeObjectStore,
     task_worker::{TaskHandler, TaskOutcome},
@@ -16,7 +16,8 @@ use api::{
 use catalog_domain::task_queue::TaskKind;
 use reqwest::{Client, StatusCode};
 use support::{
-    BOOTSTRAP_WORKSPACE_ID, Value, authenticated_client, json, start_server_with_object_store,
+    BOOTSTRAP_OWNER_ID, BOOTSTRAP_WORKSPACE_ID, Value, authenticated_client, json,
+    start_server_with_object_store,
 };
 use uuid::Uuid;
 
@@ -367,6 +368,37 @@ async fn interactive_run_reads_its_selection_and_annotates_through_the_v15_world
     assert_eq!(reused.status(), StatusCode::CONFLICT);
     assert_eq!(
         reused.json::<Value>().await.unwrap()["error"]["code"],
+        "idempotency_key_reused"
+    );
+    // Administrative keys are free-form, so one can equal a stored interactive
+    // key. The collision is reported instead of retried forever.
+    repository
+        .start_extension_operation(StartExtensionOperation {
+            extension_id: EXTENSION.into(),
+            expected_release_id: release,
+            operation_id: "summarize".into(),
+            input: json!({"template": "summary"}),
+            source_reference: json!({}),
+            destination_reference: json!({}),
+            idempotency_key: format!("interactive:{BOOTSTRAP_OWNER_ID}:collide"),
+            schedule_id: None,
+            configuration_snapshot: None,
+        })
+        .await
+        .unwrap();
+    let collided = tokio::time::timeout(
+        Duration::from_secs(30),
+        authenticated_client()
+            .post(&start_url)
+            .json(&start_body(release, "collide", blueprint, &[first]))
+            .send(),
+    )
+    .await
+    .expect("colliding start must not retry forever")
+    .unwrap();
+    assert_eq!(collided.status(), StatusCode::CONFLICT);
+    assert_eq!(
+        collided.json::<Value>().await.unwrap()["error"]["code"],
         "idempotency_key_reused"
     );
 
