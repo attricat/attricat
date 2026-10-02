@@ -261,6 +261,7 @@
     "requiredAttributeValue": "A value is required for the target schema.",
     "invalidRelationshipValue": "Enter comma-separated entity UUIDs.",
     "invalidAttributeValue": "Enter a value that meets this field's requirements.",
+    "otherRequiredAttributes": "Other required attributes",
     "additionalAttributes": "Additional attributes",
     "selectAdditionalAttribute": "Select an attribute",
     "attributeGroup": "Attribute group",

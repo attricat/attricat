@@ -261,6 +261,7 @@
     "requiredAttributeValue": "Wartość jest wymagana przez docelowy schemat.",
     "invalidRelationshipValue": "Wprowadź identyfikatory UUID encji rozdzielone przecinkami.",
     "invalidAttributeValue": "Wprowadź wartość zgodną z wymaganiami pola.",
+    "otherRequiredAttributes": "Pozostałe wymagane atrybuty",
     "additionalAttributes": "Dodatkowe atrybuty",
     "selectAdditionalAttribute": "Wybierz atrybut",
     "attributeGroup": "Grupa atrybutów",

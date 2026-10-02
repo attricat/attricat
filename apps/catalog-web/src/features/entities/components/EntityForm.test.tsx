@@ -499,6 +499,31 @@ describe('EntityForm', () => {
     expect(await screen.findByText(/source has changed/)).toBeTruthy();
   });
 
+  it('renders required attributes the edit view omits so they can be saved', async () => {
+    const result = blueprint([
+      attribute('title'),
+      attribute('sku'),
+      attribute('notes'),
+    ]);
+    result.blueprint.entity_schema = {
+      type: 'object',
+      required: ['title', 'sku'],
+    };
+    result.blueprint.views.edit = {
+      type: 'stack',
+      children: [{ type: 'field', field: 'title' }],
+    };
+    const { onSubmit } = renderForm({ blueprint: result });
+    expect(screen.getByText('Other required attributes')).toBeTruthy();
+    expect(screen.queryByRole('textbox', { name: 'notes' })).toBeNull();
+    fireEvent.change(titleBox(), { target: { value: 'Shirt' } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'sku' }), {
+      target: { value: 'SKU-1' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledOnce());
+  });
+
   it('persists edited fields without file or readonly attributes', async () => {
     renderForm({
       blueprint: blueprint([
