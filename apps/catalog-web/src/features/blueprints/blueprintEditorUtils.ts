@@ -1,81 +1,21 @@
 import type { Monaco } from '@monaco-editor/react';
+import basicDefinition from './templates/basic.toml?raw';
+import productDefinition from './templates/product.toml?raw';
+import seoDefinition from './templates/seo.toml?raw';
 
 export const blueprintTemplates = [
   {
-    definition: `format_version = 1
-code = "new_blueprint"
-name = "New blueprint"
-kind = "entity"
-
-# Optional: edits by these workspace roles retain channel publication.
-# [publication]
-# retain_on_edit_roles = ["catalog_manager"]
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name"]
-
-[[attributes]]
-code = "name"
-value_type = "string"
-`,
+    definition: basicDefinition,
     descriptionKey: 'blueprints.basicEntityDescription',
     labelKey: 'blueprints.basicEntity',
   },
   {
-    definition: `format_version = 1
-code = "product"
-name = "Product"
-kind = "entity"
-
-[views.dropdown_option]
-type = "dropdown_option"
-fields = ["name", "sku"]
-separator = " / "
-
-[[attributes]]
-code = "name"
-value_type = "string"
-
-[[attributes]]
-code = "sku"
-value_type = "string"
-
-[[attributes]]
-code = "price"
-value_type = "number"
-
-[[attributes]]
-code = "description"
-value_type = "string"
-
-[[attributes]]
-code = "product_images"
-value_type = "file"
-cardinality = "many"
-allowed_mime_groups = ["image"]
-allowed_extensions = ["jpg", "jpeg", "png", "webp"]
-max_bytes = 10485760
-purposes = ["product_image"]
-image_only = true
-`,
+    definition: productDefinition,
     descriptionKey: 'blueprints.productDescription',
     labelKey: 'blueprints.product',
   },
   {
-    definition: `format_version = 1
-code = "seo"
-name = "SEO"
-kind = "mixin"
-
-[[attributes]]
-code = "meta_title"
-value_type = "string"
-
-[[attributes]]
-code = "meta_description"
-value_type = "string"
-`,
+    definition: seoDefinition,
     descriptionKey: 'blueprints.seoMixinDescription',
     labelKey: 'blueprints.seoMixin',
   },
