@@ -98,12 +98,16 @@ export const PasswordLoginPage = ({ identifier }: { identifier: string }) => {
     onSubmit: ({ value }) =>
       submit(async () => {
         try {
-          await login(identifier, value.email, value.password);
-          await queryClient.invalidateQueries({
-            queryKey: authQueryKeys.session(),
-          });
-          const returnTo = sessionStorage.getItem(returnToStorageKey);
-          sessionStorage.removeItem(returnToStorageKey);
+          const session = await login(identifier, value.email, value.password);
+          queryClient.clear();
+          queryClient.setQueryData(authQueryKeys.session(), session);
+          let returnTo: string | null = null;
+          try {
+            returnTo = sessionStorage.getItem(returnToStorageKey);
+            sessionStorage.removeItem(returnToStorageKey);
+          } catch {
+            // Signing in also works when browser storage is unavailable.
+          }
           await navigate({
             to:
               returnTo?.startsWith('/') && !returnTo.startsWith('//')

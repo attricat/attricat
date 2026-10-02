@@ -1,12 +1,18 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Box } from '@mui/material';
-import { decideApproval, listApprovals, listMessages, listRuns } from './api';
+import { decideApproval } from './api';
 import { smartFillEntityForm } from '../entities/api';
-import { conversationPollIntervalMs, thinkingRunStatuses } from './constants';
+import { thinkingRunStatuses } from './constants';
 import { ConversationComposer } from './ConversationComposer';
 import { ConversationTranscript } from './ConversationTranscript';
-import { agentQueryKeys } from './queryKeys';
+import {
+  conversationApprovalsOptions,
+  conversationMessagesOptions,
+  conversationRunsOptions,
+  conversationPollInterval,
+  invalidateConversation,
+} from './queryOptions';
 import { useConversationLiveUpdates } from './useConversationLiveUpdates';
 
 export type DraftContext = {
@@ -26,29 +32,32 @@ export const ConversationPanel = ({
 }) => {
   const client = useQueryClient();
   const [isSending, setIsSending] = useState(false);
-  const messages = useQuery({
-    queryKey: agentQueryKeys.messages(conversationId),
-    queryFn: () => listMessages(conversationId),
-    refetchInterval: conversationPollIntervalMs,
-  });
   const runs = useQuery({
-    queryKey: agentQueryKeys.runs(conversationId),
-    queryFn: () => listRuns(conversationId),
-    refetchInterval: conversationPollIntervalMs,
+    ...conversationRunsOptions(conversationId),
+    // Discover newly started runs even when the existing stream is healthy.
+    refetchInterval: (query) =>
+      conversationPollInterval(query.state.data, false, isSending),
+  });
+  const live = useConversationLiveUpdates(conversationId, runs.data);
+  const interval = conversationPollInterval(
+    runs.data,
+    live.connected,
+    isSending,
+  );
+  const messages = useQuery({
+    ...conversationMessagesOptions(conversationId),
+    refetchInterval: interval,
   });
   const approvals = useQuery({
-    queryKey: agentQueryKeys.approvals(conversationId),
-    queryFn: () => listApprovals(conversationId),
-    refetchInterval: conversationPollIntervalMs,
+    ...conversationApprovalsOptions(conversationId),
+    refetchInterval: interval,
   });
-  const invalidate = () =>
-    void client.invalidateQueries({ queryKey: agentQueryKeys.all() });
+  const invalidate = () => void invalidateConversation(client, conversationId);
   const decide = useMutation({
     mutationFn: ({ id, approved }: { id: string; approved: boolean }) =>
       decideApproval(id, approved),
     onSuccess: invalidate,
   });
-  const streamError = useConversationLiveUpdates(runs.data);
   return (
     <Box
       sx={{
@@ -63,7 +72,7 @@ export const ConversationPanel = ({
           {(messages.error ?? runs.error ?? approvals.error)?.message}
         </Alert>
       )}
-      {streamError && <Alert severity="info">{streamError}</Alert>}
+      {live.error && <Alert severity="info">{live.error}</Alert>}
       <Box sx={{ flexGrow: 1, overflowY: 'auto' }}>
         <ConversationTranscript
           approvals={approvals.data}

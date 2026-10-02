@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { Alert, Box, Typography } from '@mui/material';
 import { useState } from 'react';
@@ -18,9 +18,11 @@ import {
   requiredMigrationAttributes,
 } from './migrationReview';
 import { entityQueryKeys } from './queryKeys';
+import { invalidateEntity } from './invalidateEntity';
 
 export const MigrateEntityPage = ({ entityId }: { entityId: string }) => {
   const { t } = useTranslation();
+  const client = useQueryClient();
   const navigate = useNavigate({ from: '/entities/$entityId/migrate' });
   const [discardAttributes, setDiscardAttributes] = useState<string[]>([]);
   const preview = useQuery({
@@ -81,7 +83,8 @@ export const MigrateEntityPage = ({ entityId }: { entityId: string }) => {
         discard_attributes: discardAttributes,
       });
     },
-    onSuccess: (entity) => {
+    onSuccess: async (entity) => {
+      await invalidateEntity(client, entity.id);
       void navigate({
         to: '/entities/$entityId',
         params: { entityId: entity.id },

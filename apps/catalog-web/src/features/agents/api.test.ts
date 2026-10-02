@@ -20,6 +20,25 @@ vi.stubGlobal('fetch', fetchMock);
 afterEach(() => fetchMock.mockReset());
 
 describe('agent API client', () => {
+  it.each([getConversation, listMessages, listRuns, listApprovals])(
+    'forwards cancellation to conversation reads (%#)',
+    async (read) => {
+      const controller = new AbortController();
+      fetchMock.mockImplementation(
+        (_path, init: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            init.signal?.addEventListener('abort', () =>
+              reject(new DOMException('Aborted', 'AbortError')),
+            );
+          }),
+      );
+      const result = read(id, controller.signal);
+      controller.abort();
+      await expect(result).rejects.toMatchObject({ name: 'AbortError' });
+      expect(fetchMock.mock.calls[0][1].signal).toBe(controller.signal);
+    },
+  );
+
   it('sends conversations and messages with credentials and CSRF protection', async () => {
     fetchMock
       .mockResolvedValueOnce({

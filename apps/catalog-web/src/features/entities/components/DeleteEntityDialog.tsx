@@ -10,7 +10,7 @@ import {
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { deleteEntity } from '../api';
-import { entityQueryKeys } from '../queryKeys';
+import { removeEntity } from '../invalidateEntity';
 
 export const DeleteEntityDialog = ({
   entityId,
@@ -26,7 +26,7 @@ export const DeleteEntityDialog = ({
   const deletion = useMutation({
     mutationFn: () => deleteEntity(entityId),
     onSuccess: () => {
-      void client.invalidateQueries({ queryKey: entityQueryKeys.searches() });
+      void removeEntity(client, entityId);
       onDeleted();
     },
   });

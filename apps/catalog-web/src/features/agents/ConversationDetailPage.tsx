@@ -6,9 +6,8 @@ import { useTranslation } from 'react-i18next';
 import { useResourcePageTitle } from '../../app/useResourcePageTitle';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
-import { getConversation } from './api';
+import { conversationOptions } from './queryOptions';
 import { conversationMinHeight, titlePollIntervalMs } from './constants';
-import { agentQueryKeys } from './queryKeys';
 import { ConversationPanel } from './ConversationPanel';
 import { isTitlePending } from './titlePolling';
 import { RenameConversationDialog } from './RenameConversationDialog';
@@ -22,8 +21,7 @@ export const ConversationDetailPage = ({
   const { t } = useTranslation();
   const [renameOpen, setRenameOpen] = useState(false);
   const conversation = useQuery({
-    queryKey: agentQueryKeys.conversation(conversationId),
-    queryFn: () => getConversation(conversationId),
+    ...conversationOptions(conversationId),
     refetchInterval: (query) =>
       query.state.data && isTitlePending(query.state.data)
         ? titlePollIntervalMs
@@ -63,12 +61,16 @@ export const ConversationDetailPage = ({
         )}
         {renameOpen && conversation.data && (
           <RenameConversationDialog
+            key={conversationId}
             conversationId={conversationId}
             initialTitle={conversation.data.title}
             onClose={() => setRenameOpen(false)}
           />
         )}
-        <ConversationPanel conversationId={conversationId} />
+        <ConversationPanel
+          key={conversationId}
+          conversationId={conversationId}
+        />
       </Box>
     </PageContainer>
   );

@@ -18,7 +18,7 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      testIgnore: 'navigation.spec.ts',
+      testIgnore: ['navigation.spec.ts', 'frontend-runtime.spec.ts'],
       use: { ...devices['Desktop Chrome'] },
     },
     {

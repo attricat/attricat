@@ -61,7 +61,7 @@ const renderForm = (
     defaultOptions: { queries: { staleTime: Infinity } },
   });
   client.setQueryData(authQueryKeys.session(), session);
-  render(
+  const tree = (nextProps = props) => (
     <QueryClientProvider client={client}>
       <EntityForm
         blueprint={blueprint([])}
@@ -70,11 +70,17 @@ const renderForm = (
         onSubmit={onSubmit}
         ref={ref}
         submitLabel="Save"
-        {...props}
+        {...nextProps}
       />
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
-  return { ref, onSubmit };
+  const view = render(tree());
+  return {
+    ref,
+    onSubmit,
+    rerenderForm: (next: typeof props) =>
+      view.rerender(tree({ ...props, ...next })),
+  };
 };
 
 const session = { user_id: 'user-1', workspace_id: 'workspace-1' };
@@ -104,6 +110,41 @@ afterEach(() => {
 });
 
 describe('EntityForm', () => {
+  it.each([false, true])(
+    'preserves the values/version baseline across refetches (edited: %s)',
+    async (edited) => {
+      const originalVersion = '2026-01-01T00:00:00Z';
+      const { onSubmit, rerenderForm } = renderForm({
+        blueprint: blueprint([attribute('title')]),
+        expectedUpdatedAt: originalVersion,
+        initialValues: { title: 'Original' },
+      });
+      if (edited)
+        fireEvent.change(titleBox(), { target: { value: 'My edit' } });
+      rerenderForm({
+        expectedUpdatedAt: '2026-01-02T00:00:00Z',
+        initialValues: { title: 'Someone else changed it' },
+      });
+      expect(titleBox()).toHaveProperty(
+        'value',
+        edited ? 'My edit' : 'Original',
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() =>
+        expect(onSubmit).toHaveBeenCalledWith(
+          expect.objectContaining({
+            expected_updated_at: originalVersion,
+            values: [
+              expect.objectContaining({
+                value: edited ? 'My edit' : 'Original',
+              }),
+            ],
+          }),
+        ),
+      );
+    },
+  );
+
   it('selects URL editors, blocks invalid programmatic values, saves and clears URLs', async () => {
     const { onSubmit, ref } = renderForm({
       blueprint: withEditComponent('website', 'catalog.url_edit'),

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import type { Attribute } from '../entities/api';
-import { entityQueryKeys } from '../entities/queryKeys';
+import { invalidateEntity } from '../entities/invalidateEntity';
 import { uploadFiles, updateFileReferences } from './api';
 import { fileCardinalities } from './constants';
 import { acceptsFile, pendingFileId } from './fileAcceptance';
@@ -62,16 +62,7 @@ export const usePendingFileUploads = (options: Options) => {
     Boolean(current.current.entityId);
   const refresh = async () => {
     if (!entityId) return;
-    await Promise.all(
-      [
-        entityQueryKeys.form(entityId),
-        entityQueryKeys.preview(entityId),
-        entityQueryKeys.resolvedPreviews(entityId),
-        entityQueryKeys.changes(entityId),
-        entityQueryKeys.publication(entityId),
-        entityQueryKeys.searches(),
-      ].map((queryKey) => client.invalidateQueries({ queryKey })),
-    );
+    await invalidateEntity(client, entityId);
   };
   const add = (candidates: FileList | File[]) => {
     if (!canUpload || !canQueueFile || lock.current || !permitted()) return;

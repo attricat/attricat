@@ -29,6 +29,7 @@ import {
   FALLBACK_BLUEPRINT_VERSION,
 } from './constants';
 import { entityQueryKeys } from './queryKeys';
+import { invalidateEntitySearches } from './invalidateEntity';
 import {
   useEntityContextSelection,
   useResolvedEntityPreview,
@@ -66,7 +67,7 @@ export const EntityPreviewPage = ({
   const duplicate = useMutation({
     mutationFn: () => duplicateEntity(entityId),
     onSuccess: (entity) => {
-      void client.invalidateQueries({ queryKey: entityQueryKeys.searches() });
+      void invalidateEntitySearches(client);
       void navigate({
         params: { entityId: entity.id },
         to: '/entities/$entityId/edit',

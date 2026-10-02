@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { Alert, Button, Typography } from '@mui/material';
 import { useRef, useState } from 'react';
@@ -22,6 +22,7 @@ import { PageHeader } from '../../components/PageHeader';
 import { valuesForForm } from './entityForm';
 import { statusParentContexts } from './status';
 import { entityQueryKeys } from './queryKeys';
+import { invalidateEntity } from './invalidateEntity';
 import {
   useEntityContextSelection,
   useResolvedEntityPreview,
@@ -29,6 +30,7 @@ import {
 
 export const EditEntityPage = ({ entityId }: { entityId: string }) => {
   const { t } = useTranslation();
+  const client = useQueryClient();
   const navigate = useNavigate({ from: '/entities/$entityId/edit' });
   const [agentOpen, setAgentOpen] = useState(false);
   const entityFormRef = useRef<EntityFormHandle>(null);
@@ -41,13 +43,15 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
   };
   const entityForm = useQuery({
     queryKey: entityQueryKeys.form(entityId),
-    queryFn: () => getEntityForm(entityId),
+    queryFn: ({ signal }) => getEntityForm(entityId, signal),
+    refetchOnMount: 'always',
   });
   const update = useMutation({
     mutationFn: (input: Parameters<typeof updateEntity>[1]) =>
       updateEntity(entityId, input),
-    onSuccess: (entity) => {
+    onSuccess: async (entity) => {
       entityFormRef.current?.clearDraft();
+      await invalidateEntity(client, entity.id);
       void navigate({
         to: '/entities/$entityId',
         params: { entityId: entity.id },
@@ -56,7 +60,7 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
   });
   const reusable = useReusableAttributeAttachment(entityId, () => {
     setReusableDialogOpen(false);
-    void entityForm.refetch();
+    void invalidateEntity(client, entityId);
   });
   const blueprintId = entityForm.data?.entity.blueprint_id;
   const currentBlueprint = useQuery({
@@ -74,6 +78,9 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
         (entityForm.data.entity.blueprint_version ?? Infinity)
       : undefined;
   const error = entityForm.error ?? update.error ?? reusable.error;
+  // A cached snapshot is useful for headings, but must not become the editor's
+  // concurrency baseline before the opening refresh has completed.
+  const editorReady = entityForm.isFetchedAfterMount;
 
   return (
     <PageContainer>
@@ -111,7 +118,7 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
         schemaOutdated={schemaOutdated}
       />
       <EntitySchemaSubheader entityId={entityId} name={blueprint?.name} />
-      {entityForm.isPending && (
+      {(entityForm.isPending || (!editorReady && entityForm.isFetching)) && (
         <Typography sx={{ mt: 4 }}>{t('entities.loadingEntity')}</Typography>
       )}
       {error && (
@@ -124,7 +131,7 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
           {resolvedPreview.error.message}
         </Alert>
       )}
-      {entityForm.data && (
+      {entityForm.data && editorReady && (
         <>
           <ReusableAttributeAttachDialog
             attachAttributeDisabled={

@@ -1,11 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  getEntityPublications,
   publishEntity,
   publishEntityAllChannels,
   unpublishEntity,
 } from '../api';
-import { entityQueryKeys } from '../queryKeys';
+import { entityPublicationOptions } from '../queryOptions';
+import { invalidateEntityPublications } from '../invalidateEntity';
 
 /** Loads an entity's channel publications and exposes publishing actions. */
 export const useEntityPublications = (
@@ -13,14 +13,9 @@ export const useEntityPublications = (
   contextId: string | null,
 ) => {
   const client = useQueryClient();
-  const publications = useQuery({
-    queryKey: entityQueryKeys.publication(entityId),
-    queryFn: () => getEntityPublications(entityId),
-  });
+  const publications = useQuery(entityPublicationOptions(entityId));
   const invalidatePublications = () =>
-    client.invalidateQueries({
-      queryKey: entityQueryKeys.publication(entityId),
-    });
+    invalidateEntityPublications(client, entityId);
   const publish = useMutation({
     mutationFn: (targetContextId: string) =>
       publishEntity(entityId, targetContextId),
