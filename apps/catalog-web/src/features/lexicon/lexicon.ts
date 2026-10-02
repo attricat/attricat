@@ -96,6 +96,10 @@ export const useLexiconRevision = () =>
     () => lexiconRevision,
   );
 
+/** Namespaces served by {@link lexiconBackend} rather than the app locales. */
+export const isLexiconNamespace = (namespace: string) =>
+  namespace === LEXICON_NAMESPACE || namespace === LEXICON_MANAGEMENT_NAMESPACE;
+
 let lexiconWorkspaceId: string | null = null;
 
 /**

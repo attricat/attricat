@@ -28,8 +28,12 @@ export const searchConversations = (query: string, cursor?: string) => {
     conversationSearchPageSchema,
   );
 };
-export const getConversation = (id: string) =>
-  request(`/api/agent/conversations/${uuidPathParam(id)}`, conversationSchema);
+export const getConversation = (id: string, signal?: AbortSignal) =>
+  request(
+    `/api/agent/conversations/${uuidPathParam(id)}`,
+    conversationSchema,
+    signal === undefined ? undefined : { signal },
+  );
 export const updateConversationTitle = (id: string, title: string) =>
   request(
     `/api/agent/conversations/${uuidPathParam(id)}`,
@@ -45,15 +49,17 @@ export const createConversation = (
     conversationCreateResponseSchema,
     json('POST', { title, ...entity }),
   );
-export const listMessages = (id: string) =>
+export const listMessages = (id: string, signal?: AbortSignal) =>
   request(
     `/api/agent/conversations/${uuidPathParam(id)}/messages`,
     z.array(messageSchema),
+    signal === undefined ? undefined : { signal },
   );
-export const listRuns = (id: string) =>
+export const listRuns = (id: string, signal?: AbortSignal) =>
   request(
     `/api/agent/conversations/${uuidPathParam(id)}/runs`,
     z.array(runSchema),
+    signal === undefined ? undefined : { signal },
   );
 export const sendMessage = (
   id: string,
@@ -65,10 +71,11 @@ export const sendMessage = (
     runResponseSchema,
     json('POST', { content, attachment_ids: attachmentIds }),
   );
-export const listApprovals = (conversationId?: string) =>
+export const listApprovals = (conversationId?: string, signal?: AbortSignal) =>
   request(
     `/api/agent/approvals${conversationId ? `?conversation_id=${queryParam(conversationId)}` : ''}`,
     z.array(toolCallSchema),
+    signal === undefined ? undefined : { signal },
   );
 export const decideApproval = (id: string, approved: boolean) =>
   request(

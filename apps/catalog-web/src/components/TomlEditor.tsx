@@ -1,3 +1,4 @@
+import './monacoRuntime';
 import { Editor } from '@monaco-editor/react';
 import { Box } from '@mui/material';
 import type { ComponentProps } from 'react';

@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { discoverWorkspace, login } from './api';
 import { PasswordLoginPage, WorkspaceLoginPage } from './LoginPage';
+import { authQueryKeys } from './queryKeys';
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ children }: { children: React.ReactNode }) => (
@@ -25,6 +26,28 @@ const submitTwice = (name: string) => {
 
 describe('login forms', () => {
   afterEach(() => vi.clearAllMocks());
+
+  it('replaces the previous identity cache after login', async () => {
+    const session = {
+      user_id: 'user-b',
+      workspace_id: 'workspace-b',
+    } as Awaited<ReturnType<typeof login>>;
+    vi.mocked(login).mockResolvedValue(session);
+    const client = new QueryClient();
+    client.setQueryData(['protected'], 'previous account');
+    render(
+      <QueryClientProvider client={client}>
+        <PasswordLoginPage identifier="default.local" />
+      </QueryClientProvider>,
+    );
+    fireEvent.submit(
+      screen.getByRole('button', { name: 'Sign in' }).closest('form')!,
+    );
+    await waitFor(() =>
+      expect(client.getQueryData(authQueryKeys.session())).toEqual(session),
+    );
+    expect(client.getQueryData(['protected'])).toBeUndefined();
+  });
 
   it('submits only one workspace discovery and locks its input while pending', async () => {
     vi.mocked(discoverWorkspace).mockImplementation(

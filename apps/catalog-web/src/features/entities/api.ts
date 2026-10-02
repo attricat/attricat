@@ -161,11 +161,12 @@ export const getEntityChanges = (id: string, offset: number) =>
       next_offset: z.number().int().nonnegative().nullable(),
     }),
   );
-export const getEntityForm = (id: string) => {
+export const getEntityForm = (id: string, signal?: AbortSignal) => {
   const entityId = uuidSchema.parse(id);
   return request(
     `/api/v1/entities/${encodeURIComponent(entityId)}`,
     entityFormResponseSchema,
+    signal === undefined ? undefined : { signal },
   );
 };
 export const getIncomingRelationships = (
@@ -239,10 +240,11 @@ export const updateEntity = (
   );
 };
 
-export const getEntityPublications = (id: string) =>
+export const getEntityPublications = (id: string, signal?: AbortSignal) =>
   request(
     `/api/v1/entities/${encodeURIComponent(uuidSchema.parse(id))}/publications`,
     z.array(entityPublicationStatusSchema),
+    signal === undefined ? undefined : { signal },
   );
 export const publishEntity = (id: string, contextId: string) =>
   request(

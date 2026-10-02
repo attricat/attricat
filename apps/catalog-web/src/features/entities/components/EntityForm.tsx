@@ -141,8 +141,16 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
     ref,
   ) => {
     const { t } = useTranslation();
+    // A versioned editing session keeps values and its concurrency token from
+    // the same snapshot. Refetches must not silently rebase unsaved edits.
+    const [baseline] = useState({
+      fields: initialValues,
+      values: existingValues,
+    });
+    const initialFields =
+      expectedUpdatedAt === undefined ? initialValues : baseline.fields;
     const [savedVersion, setSavedVersion] = useState(expectedUpdatedAt);
-    const [savedValues] = useState(existingValues);
+    const savedValues = baseline.values;
     const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
     const [formError, setFormError] = useState<string>();
     const editView = blueprint?.blueprint.views.edit;
@@ -192,10 +200,10 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
     const form = useForm({
       defaultValues: {
         blueprintCode: blueprint?.blueprint.code ?? '',
-        fields: initialValues,
+        fields: initialFields,
       },
       onSubmit: ({ value }) => {
-        if (disabled) return;
+        if (disabled || isLoadingBlueprint) return;
         if (!blueprint) {
           onLoadBlueprint?.(value.blueprintCode);
           return;
@@ -220,7 +228,7 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
             contextId,
           ),
           remove_values: removedFormValues(
-            existingValues,
+            savedValues,
             editableAttributes,
             value.fields,
             contextId,
@@ -240,7 +248,7 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
       [draftCodes, fields],
     );
     const initialDraftFields = JSON.stringify(
-      pickDraftFields(initialValues, draftCodes.split(draftFieldSeparator)),
+      pickDraftFields(initialFields, draftCodes.split(draftFieldSeparator)),
     );
     const draft = useEditorDraft({
       dirty: JSON.stringify(draftFields) !== initialDraftFields,

@@ -1,3 +1,4 @@
+import '../../components/monacoRuntime';
 import { DiffEditor } from '@monaco-editor/react';
 import { Box, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';

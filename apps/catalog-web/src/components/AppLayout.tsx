@@ -19,6 +19,7 @@ import { returnToStorageKey } from '../app/storageKeys';
 import { currentSession, logout } from '../features/auth/api';
 import { authQueryKeys } from '../features/auth/queryKeys';
 import { useWorkspaceLexicon } from '../features/lexicon/lexicon';
+import { useSessionCacheBoundary } from '../features/auth/useSessionCacheBoundary';
 import { DesktopNavigation } from './DesktopNavigation';
 import { MobileNavigation } from './MobileNavigation';
 import { MobileNavigationPanelProvider } from './MobileNavigationPanel';
@@ -32,10 +33,14 @@ const signOutErrorMaxWidth = 480;
 // location before navigation replaces it.
 const RememberReturnLocation = () => {
   useEffect(() => {
-    sessionStorage.setItem(
-      returnToStorageKey,
-      `${window.location.pathname}${window.location.search}${window.location.hash}`,
-    );
+    try {
+      sessionStorage.setItem(
+        returnToStorageKey,
+        `${window.location.pathname}${window.location.search}${window.location.hash}`,
+      );
+    } catch {
+      // Storage restrictions must not prevent signing in.
+    }
   }, []);
   return null;
 };
@@ -56,6 +61,10 @@ export const AppLayout = () => {
     retry: false,
   });
   useWorkspaceLexicon(session.data?.workspace_id);
+  const sessionBoundary = useSessionCacheBoundary(
+    session.data,
+    session.isSuccess,
+  );
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
   const [signOutError, setSignOutError] = useState(false);
@@ -87,7 +96,7 @@ export const AppLayout = () => {
     pathname === publicRoutes.onboarding
   )
     return <Outlet />;
-  if (session.isPending)
+  if (session.isPending || (session.isSuccess && !sessionBoundary.ready))
     return (
       <Box
         aria-label={t('app.loading')}
@@ -123,7 +132,7 @@ export const AppLayout = () => {
     );
 
   return (
-    <MobileNavigationPanelProvider>
+    <MobileNavigationPanelProvider key={sessionBoundary.identity}>
       <Box sx={{ display: 'flex', minHeight: '100dvh' }}>
         {signOutError && (
           <Box

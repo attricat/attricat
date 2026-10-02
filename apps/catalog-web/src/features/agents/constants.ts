@@ -31,6 +31,9 @@ export const pendingTitleSource = 'pending';
 export const titlePollIntervalMs = 3_000;
 export const titlePendingTimeoutMs = 5 * 60_000;
 export const conversationPollIntervalMs = 10_000;
+export const conversationReconcileIntervalMs = 30_000;
+export const conversationIdlePollIntervalMs = 60_000;
+export const conversationEventBatchDelayMs = 250;
 
 export const maximumTitleLength = 72;
 export const maximumTitleBytes = 512;

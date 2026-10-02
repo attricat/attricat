@@ -2,44 +2,83 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import { agentRunEventsUrl } from './api';
-import { activeRunStatuses, runUpdateEvents } from './constants';
-import { agentQueryKeys } from './queryKeys';
+import {
+  activeRunStatuses,
+  conversationEventBatchDelayMs,
+  runUpdateEvents,
+} from './constants';
+import { invalidateConversation } from './queryOptions';
 import type { AgentRun } from './schemas';
 
-export const useConversationLiveUpdates = (runs: AgentRun[] | undefined) => {
+export const useConversationLiveUpdates = (
+  conversationId: string,
+  runs: AgentRun[] | undefined,
+) => {
   const { t } = useTranslation();
-  const queryClient = useQueryClient();
-  const [streamError, setStreamError] = useState<string | null>(null);
-  // Polling produces new run arrays even when the active subscriptions have
-  // not changed. Depend on their IDs instead of reconnecting on every poll.
+  const client = useQueryClient();
   const activeRunIds = (runs ?? [])
     .filter((run) => activeRunStatuses.includes(run.status))
     .map((run) => run.id)
     .sort()
     .join(',');
+  const subscriptionKey = `${conversationId}:${activeRunIds}`;
+  const [connection, setConnection] = useState<{
+    key: string;
+    connected: boolean;
+    failed: boolean;
+  }>();
 
   useEffect(() => {
-    const sources = activeRunIds
-      ? activeRunIds.split(',').map((id) => {
-          const source = new EventSource(agentRunEventsUrl(id));
-          const update = () => {
-            setStreamError(null);
-            void queryClient.invalidateQueries({
-              queryKey: agentQueryKeys.all(),
-            });
-          };
+    if (!activeRunIds || typeof EventSource === 'undefined') return;
+    const ids = activeRunIds.split(',');
+    const open = new Set<string>();
+    let disposed = false;
+    let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+    const report = (failed: boolean) => {
+      if (!disposed)
+        setConnection({
+          key: subscriptionKey,
+          connected: open.size === ids.length,
+          failed,
+        });
+    };
+    const scheduleRefresh = () => {
+      if (disposed || refreshTimer !== undefined) return;
+      refreshTimer = setTimeout(() => {
+        refreshTimer = undefined;
+        void invalidateConversation(client, conversationId);
+      }, conversationEventBatchDelayMs);
+    };
+    const sources = ids.map((id) => {
+      const source = new EventSource(agentRunEventsUrl(id));
+      source.onopen = () => {
+        open.add(id);
+        report(false);
+        // Reconcile anything missed while disconnected.
+        scheduleRefresh();
+      };
+      runUpdateEvents.forEach((type) =>
+        source.addEventListener(type, scheduleRefresh),
+      );
+      source.onerror = () => {
+        open.delete(id);
+        report(true);
+      };
+      return source;
+    });
+    return () => {
+      disposed = true;
+      clearTimeout(refreshTimer);
+      sources.forEach((source) => source.close());
+    };
+  }, [activeRunIds, client, conversationId, subscriptionKey]);
 
-          runUpdateEvents.forEach((type) =>
-            source.addEventListener(type, update),
-          );
-          source.onerror = () =>
-            setStreamError(t('agents.liveUpdatesDisconnected'));
-          return source;
-        })
-      : [];
-
-    return () => sources.forEach((source) => source.close());
-  }, [activeRunIds, queryClient, t]);
-
-  return activeRunIds ? streamError : null;
+  const current = connection?.key === subscriptionKey ? connection : undefined;
+  return {
+    connected: Boolean(activeRunIds && current?.connected),
+    error:
+      activeRunIds && current?.failed
+        ? t('agents.liveUpdatesDisconnected')
+        : null,
+  };
 };

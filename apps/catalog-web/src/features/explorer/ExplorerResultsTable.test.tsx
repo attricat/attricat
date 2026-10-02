@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ComponentProps } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { ToastProvider } from '../../components/ToastProvider';
 import type { BlueprintWithAttributes, EntityItem } from '../entities/api';
@@ -12,6 +12,11 @@ import { ExplorerResultsTable } from './ExplorerResultsTable';
 import { useExplorerSelection } from './useExplorerSelection';
 
 const navigate = vi.fn();
+const virtualWindow = vi.hoisted(() => ({ start: 0, size: Infinity }));
+beforeEach(() => {
+  virtualWindow.start = 0;
+  virtualWindow.size = Infinity;
+});
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ children }: { children: React.ReactNode }) => (
     <span>{children}</span>
@@ -22,19 +27,26 @@ vi.mock('@tanstack/react-virtual', () => ({
   useVirtualizer: ({ count }: { count: number }) => ({
     getTotalSize: () => count * 53,
     getVirtualItems: () =>
-      Array.from({ length: count }, (_, index) => ({
-        end: (index + 1) * 53,
-        index,
-        key: index,
-        size: 53,
-        start: index * 53,
-      })),
+      Array.from(
+        { length: Math.min(virtualWindow.size, count - virtualWindow.start) },
+        (_, offset) => {
+          const index = virtualWindow.start + offset;
+          return {
+            end: (index + 1) * 53,
+            index,
+            key: index,
+            size: 53,
+            start: index * 53,
+          };
+        },
+      ),
     measureElement: vi.fn(),
   }),
 }));
 vi.mock('../entities/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../entities/api')>()),
   deleteEntity: vi.fn(),
+  getEntityPublications: vi.fn().mockResolvedValue([]),
 }));
 vi.mock('../extensions/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../extensions/api')>()),
@@ -54,7 +66,7 @@ vi.mock('../agents/api', () => ({
 }));
 
 import { createConversation, sendMessage } from '../agents/api';
-import { deleteEntity } from '../entities/api';
+import { deleteEntity, getEntityPublications } from '../entities/api';
 
 const blueprint = {
   blueprint: {
@@ -112,6 +124,7 @@ const renderTable = (
   showExplorerActions = true,
   tableKey = 'initial',
   onSaveSelectionAsSearch = vi.fn(),
+  publicationContextId?: string,
 ) => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
@@ -136,7 +149,7 @@ const renderTable = (
           onSortChange={onSortChange}
           sort={sort}
           publicationContextCode="default"
-          publicationContextId={undefined}
+          publicationContextId={publicationContextId}
           publicationSortAvailable={publicationSortAvailable}
           showExplorerActions={showExplorerActions}
           totalCount={tableItems.length}
@@ -148,12 +161,61 @@ const renderTable = (
   const view = render(tree(items, tableKey));
   return {
     ...view,
+    queryClient,
     search: (nextItems: EntityItem[], key: string) =>
       view.rerender(tree(nextItems, key)),
   };
 };
 
 describe('ExplorerResultsTable', () => {
+  it('bounds publication requests to virtual rows and reuses fresh results when scrolling back', async () => {
+    vi.mocked(getEntityPublications).mockResolvedValue([]);
+    virtualWindow.size = 5;
+    const items = Array.from({ length: 1000 }, (_, index) => ({
+      ...item,
+      id: `123e4567-e89b-12d3-a456-${String(index).padStart(12, '0')}`,
+    }));
+    const view = renderTable(
+      items,
+      false,
+      vi.fn(),
+      undefined,
+      true,
+      false,
+      'initial',
+      vi.fn(),
+      'context',
+    );
+    await waitFor(() => expect(getEntityPublications).toHaveBeenCalledTimes(5));
+    expect(
+      vi.mocked(getEntityPublications).mock.calls.map(([id]) => id),
+    ).toEqual(items.slice(0, 5).map(({ id }) => id));
+    expect(vi.mocked(getEntityPublications).mock.calls[0][1]).toBeInstanceOf(
+      AbortSignal,
+    );
+    await waitFor(() => expect(view.queryClient.isFetching()).toBe(0));
+    await userEvent.setup().click(
+      screen.getByRole('button', {
+        name: `Entity actions for ${items[0].id}`,
+      }),
+    );
+    virtualWindow.start = 200;
+    view.search(items, 'initial');
+    await waitFor(() =>
+      expect(getEntityPublications).toHaveBeenCalledTimes(10),
+    );
+    await waitFor(() => expect(view.queryClient.isFetching()).toBe(0));
+    expect(screen.getByRole('menu')).toBeTruthy();
+    virtualWindow.start = 0;
+    view.search(items, 'initial');
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole('row', { hidden: true }).length,
+      ).toBeGreaterThan(1),
+    );
+    expect(getEntityPublications).toHaveBeenCalledTimes(10);
+  });
+
   it('offers revision-scoped Explorer actions only for single-version results', () => {
     outletMount.mockClear();
     renderTable([item], false, vi.fn(), undefined, true, false);

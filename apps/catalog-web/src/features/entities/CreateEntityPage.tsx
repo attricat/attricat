@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
@@ -10,6 +10,7 @@ import { createEntity, getBlueprintByCode } from './api';
 import { EntityForm, type EntityFormHandle } from './components/EntityForm';
 import { EntityPage } from './components/EntityPage';
 import { entityQueryKeys } from './queryKeys';
+import { invalidateEntitySearches } from './invalidateEntity';
 import { attributeValueKinds } from './valueTypes';
 
 export const CreateEntityPage = ({
@@ -18,6 +19,7 @@ export const CreateEntityPage = ({
   search: { blueprint?: string; locked?: boolean };
 }) => {
   const { t } = useTranslation();
+  const client = useQueryClient();
   const navigate = useNavigate({ from: '/entities/new' });
   const entityFormRef = useRef<EntityFormHandle>(null);
   // The chosen blueprint lives in the URL so a refresh reloads the same form
@@ -71,6 +73,7 @@ export const CreateEntityPage = ({
     },
     onSuccess: (entity) => {
       entityFormRef.current?.clearDraft();
+      void invalidateEntitySearches(client);
       void navigate({
         to: '/entities/$entityId',
         params: { entityId: entity.id },

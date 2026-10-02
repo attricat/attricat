@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { forwardRef } from 'react';
 import { describe, expect, it, vi } from 'vitest';
@@ -11,7 +17,9 @@ import {
   getCurrentBlueprint,
   getEntityForm,
   getResolvedEntityPreview,
+  updateEntity,
 } from './api';
+import { entityQueryKeys } from './queryKeys';
 import { EditEntityPage } from './EditEntityPage';
 
 vi.mock('@tanstack/react-router', () => ({
@@ -50,10 +58,38 @@ vi.mock('./components/EntityAgentDrawer', () => ({
 }));
 vi.mock('./components/EntityForm', () => ({
   EntityForm: forwardRef(
-    ({ contextPicker }: { contextPicker: React.ReactNode }, ref) => {
-      if (typeof ref === 'function') ref({ applySmartFillValues });
-      else if (ref) ref.current = { applySmartFillValues };
-      return <div>{contextPicker}</div>;
+    (
+      {
+        contextPicker,
+        expectedUpdatedAt,
+        onSubmit,
+      }: {
+        contextPicker: React.ReactNode;
+        expectedUpdatedAt: string;
+        onSubmit: (input: unknown) => void;
+      },
+      ref,
+    ) => {
+      const handle = { applySmartFillValues, clearDraft: vi.fn() };
+      if (typeof ref === 'function') ref(handle);
+      else if (ref) ref.current = handle;
+      return (
+        <div>
+          {contextPicker}
+          <button
+            onClick={() =>
+              onSubmit({
+                expected_updated_at: expectedUpdatedAt,
+                values: [],
+                relationships: [],
+                remove_values: [],
+              })
+            }
+          >
+            Save {expectedUpdatedAt}
+          </button>
+        </div>
+      );
     },
   ),
 }));
@@ -78,10 +114,11 @@ const blueprint = {
 };
 
 describe('EditEntityPage', () => {
-  const renderPage = () => {
-    const queryClient = new QueryClient({
+  const renderPage = (
+    queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
-    });
+    }),
+  ) => {
     return render(
       <QueryClientProvider client={queryClient}>
         <ToastProvider>
@@ -90,6 +127,62 @@ describe('EditEntityPage', () => {
       </QueryClientProvider>,
     );
   };
+
+  it('waits for an opening refresh and refreshes its cache after saving', async () => {
+    const entityId = '123e4567-e89b-12d3-a456-426614174001';
+    const response = (updated_at: string) =>
+      ({
+        blueprint,
+        entity: {
+          id: entityId,
+          blueprint_id: blueprint.blueprint.id,
+          blueprint_version: 1,
+          updated_at,
+          is_sample: false,
+        },
+        context: {},
+        reusable_attributes: [],
+        reusable_values: [],
+        values: [],
+      }) as unknown as Awaited<ReturnType<typeof getEntityForm>>;
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    client.setQueryData(entityQueryKeys.form(entityId), response('old'));
+    let finish!: (value: Awaited<ReturnType<typeof getEntityForm>>) => void;
+    vi.mocked(getEntityForm).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    vi.mocked(getCurrentBlueprint).mockResolvedValue(blueprint as never);
+    vi.mocked(listContexts).mockResolvedValue([]);
+    const view = renderPage(client);
+    expect(screen.queryByRole('button', { name: 'Save old' })).toBeNull();
+    await act(async () => {
+      finish(response('fresh'));
+    });
+    await screen.findByRole('button', { name: 'Save fresh' });
+    vi.mocked(updateEntity).mockResolvedValue({ id: entityId } as never);
+    vi.mocked(getEntityForm).mockResolvedValue(response('saved'));
+    fireEvent.click(screen.getByRole('button', { name: 'Save fresh' }));
+    await waitFor(() =>
+      expect(client.getQueryData(entityQueryKeys.form(entityId))).toEqual(
+        response('saved'),
+      ),
+    );
+    view.unmount();
+    renderPage(client);
+    fireEvent.click(await screen.findByRole('button', { name: 'Save saved' }));
+    await waitFor(() =>
+      expect(updateEntity).toHaveBeenLastCalledWith(
+        entityId,
+        expect.objectContaining({ expected_updated_at: 'saved' }),
+      ),
+    );
+    expect(screen.queryByRole('button', { name: 'Save old' })).toBeNull();
+  });
 
   it('shows the localized Sample badge for a sample entity', async () => {
     vi.mocked(getEntityForm).mockResolvedValue({

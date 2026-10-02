@@ -12,6 +12,7 @@ import { extensionQueryKeys } from '../extensions/queryKeys';
 import {
   estimatedResultRowHeight,
   maximumExplorerCellFrames,
+  loadMoreRowKey,
   resultRowOverscan,
 } from './constants';
 import { EntityActionsMenu } from './EntityActionsMenu';
@@ -97,8 +98,34 @@ export const ExplorerResultsTable = ({
     position: ActionMenuPosition;
   } | null>(null);
   const [columnPreferencesOpen, setColumnPreferencesOpen] = useState(false);
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+  // Virtualize data subscriptions as well as DOM rows. The core row model is
+  // one-to-one with items; server-side sorting already determines their order.
+  // eslint-disable-next-line react-hooks/incompatible-library
+  const rowVirtualizer = useVirtualizer({
+    count: items.length + (hasNextPage ? 1 : 0),
+    estimateSize: () => estimatedResultRowHeight,
+    getItemKey: (index) => items[index]?.id ?? loadMoreRowKey,
+    getScrollElement: () => tableContainerRef.current,
+    measureElement: (element) => element?.getBoundingClientRect().height,
+    overscan: resultRowOverscan,
+  });
+  const virtualRows = rowVirtualizer.getVirtualItems();
+  const publicationItems = new Map(
+    virtualRows.flatMap(({ index }) =>
+      items[index] ? [[items[index].id, items[index]] as const] : [],
+    ),
+  );
+  const activeActionEntity = actionMenu
+    ? items.find((item) => item.id === actionMenu.entityId)
+    : undefined;
+  if (activeActionEntity)
+    publicationItems.set(activeActionEntity.id, activeActionEntity);
   const { duplicate, error, publicationsByEntityId, publish, unpublish } =
-    useEntityPublicationActions(items, publicationContextId);
+    useEntityPublicationActions(
+      [...publicationItems.values()],
+      publicationContextId,
+    );
   const tableColumns = buildExplorerTableColumns(
     blueprint,
     relationshipSortAvailable,
@@ -148,26 +175,11 @@ export const ExplorerResultsTable = ({
     data: items,
     columns,
     getCoreRowModel: getCoreRowModel(),
+    getRowId: (entity) => entity.id,
   });
-  const rows = table.getRowModel().rows;
-  const tableContainerRef = useRef<HTMLDivElement>(null);
-  // TanStack Virtual owns imperative scroll measurements and is intentionally
-  // excluded from React Compiler memoization.
-  // eslint-disable-next-line react-hooks/incompatible-library
-  const rowVirtualizer = useVirtualizer({
-    count: rows.length + (hasNextPage ? 1 : 0),
-    estimateSize: () => estimatedResultRowHeight,
-    getScrollElement: () => tableContainerRef.current,
-    measureElement: (element) => element?.getBoundingClientRect().height,
-    overscan: resultRowOverscan,
-  });
-  const virtualRows = rowVirtualizer.getVirtualItems();
   const paddingTop = virtualRows[0]?.start ?? 0;
   const paddingBottom =
     rowVirtualizer.getTotalSize() - (virtualRows.at(-1)?.end ?? 0);
-  const activeActionEntity = actionMenu
-    ? items.find((item) => item.id === actionMenu.entityId)
-    : undefined;
 
   return (
     <Paper component="section">

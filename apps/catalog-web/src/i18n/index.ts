@@ -1,26 +1,36 @@
-import i18n from 'i18next';
+import i18n, { type BackendModule } from 'i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
 import { initReactI18next } from 'react-i18next';
-import { lexiconBackend } from '../features/lexicon/lexicon';
-import en from './locales/en.json';
-import pl from './locales/pl.json';
+import {
+  isLexiconNamespace,
+  lexiconBackend,
+} from '../features/lexicon/lexicon';
+import { localeBackend } from './localeBackend';
 
 export const supportedLanguages = ['en', 'pl'] as const;
 export type SupportedLanguage = (typeof supportedLanguages)[number];
 export const defaultLanguage: SupportedLanguage = 'en';
 const languageStorageKey = 'catalog.language';
 
-void i18n
+// i18next takes one backend: app strings load per language, workspace
+// lexicon namespaces come from the lexicon backend.
+const backend: BackendModule = {
+  type: 'backend',
+  init: () => undefined,
+  read: (language, namespace, callback) =>
+    (isLexiconNamespace(namespace) ? lexiconBackend : localeBackend).read(
+      language,
+      namespace,
+      callback,
+    ),
+};
+
+export const i18nReady = i18n
+  .use(backend)
   .use(LanguageDetector)
-  .use(lexiconBackend)
   .use(initReactI18next)
   .init({
-    resources: {
-      en: { translation: en },
-      pl: { translation: pl },
-    },
-    // App strings are bundled; the backend only loads the workspace lexicon.
-    partialBundledLanguages: true,
+    load: 'languageOnly',
     fallbackLng: defaultLanguage,
     supportedLngs: supportedLanguages,
     interpolation: { escapeValue: false },

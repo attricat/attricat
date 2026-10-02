@@ -3,15 +3,19 @@ import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
   duplicateEntity,
-  getEntityPublications,
   publishEntity,
   unpublishEntity,
   type EntityItem,
   type EntityPublicationStatus,
 } from '../entities/api';
 import { entityQueryKeys } from '../entities/queryKeys';
+import { entityPublicationOptions } from '../entities/queryOptions';
+import {
+  invalidateEntityPublications,
+  invalidateEntitySearches,
+} from '../entities/invalidateEntity';
 
-/** Loads row publication state and exposes the row-level entity mutations. */
+/** Observe only visible rows (plus an open action menu), never all loaded pages. */
 export const useEntityPublicationActions = (
   items: EntityItem[],
   publicationContextId: string | undefined,
@@ -21,8 +25,7 @@ export const useEntityPublicationActions = (
   const navigate = useNavigate();
   const publicationQueries = useQueries({
     queries: items.map((entity) => ({
-      queryKey: entityQueryKeys.publication(entity.id),
-      queryFn: () => getEntityPublications(entity.id),
+      ...entityPublicationOptions(entity.id),
       enabled: Boolean(publicationContextId),
     })),
   });
@@ -53,9 +56,7 @@ export const useEntityPublicationActions = (
       ],
     );
   const invalidatePublication = (entityId: string) =>
-    queryClient.invalidateQueries({
-      queryKey: entityQueryKeys.publication(entityId),
-    });
+    invalidateEntityPublications(queryClient, entityId);
   const publish = useMutation({
     mutationFn: (entityId: string) =>
       publishEntity(entityId, requirePublicationContext()),
@@ -72,9 +73,7 @@ export const useEntityPublicationActions = (
   const duplicate = useMutation({
     mutationFn: (entityId: string) => duplicateEntity(entityId),
     onSuccess: (entity) => {
-      void queryClient.invalidateQueries({
-        queryKey: entityQueryKeys.searches(),
-      });
+      void invalidateEntitySearches(queryClient);
       void navigate({
         params: { entityId: entity.id },
         to: '/entities/$entityId/edit',

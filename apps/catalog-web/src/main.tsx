@@ -6,7 +6,7 @@ import {
 import { createRoot } from 'react-dom/client';
 import { AppProviders } from './app/AppProviders';
 import { toast } from './components/toast';
-import i18n from './i18n';
+import i18n, { i18nReady } from './i18n';
 import { router } from './app/router';
 
 const queryClient = new QueryClient({
@@ -24,8 +24,11 @@ declare module '@tanstack/react-router' {
   }
 }
 
-createRoot(document.getElementById('root')!).render(
-  <QueryClientProvider client={queryClient}>
-    <AppProviders />
-  </QueryClientProvider>,
-);
+// Do not render untranslated keys while the selected locale chunk loads.
+void i18nReady.then(() => {
+  createRoot(document.getElementById('root')!).render(
+    <QueryClientProvider client={queryClient}>
+      <AppProviders />
+    </QueryClientProvider>,
+  );
+});
