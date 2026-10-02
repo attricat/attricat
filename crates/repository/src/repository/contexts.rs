@@ -230,6 +230,25 @@ impl CatalogRepository {
             return Err(RepositoryError::DefaultContextProtected);
         }
         let mut transaction = self.pool.begin().await?;
+        // Lock first so the active-run check below sees every run that
+        // started against this context; run creation holds a share lock.
+        sqlx::query(
+            "SELECT id FROM attribute_contexts WHERE id = $1 AND workspace_id = $2 FOR UPDATE",
+        )
+        .bind(id)
+        .bind(self.workspace_id.0)
+        .execute(&mut *transaction)
+        .await?;
+        let read_by_active_run: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM extension_operation_runs WHERE workspace_id = $1 AND selection_context_id = $2 AND status IN ('pending','leased'))",
+        )
+        .bind(self.workspace_id.0)
+        .bind(id)
+        .fetch_one(&mut *transaction)
+        .await?;
+        if read_by_active_run {
+            return Err(RepositoryError::ContextInUse);
+        }
         sqlx::query(
             "DELETE FROM entity_channel_publications WHERE workspace_id = $1 AND context_id = $2",
         )

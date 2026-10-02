@@ -90,7 +90,7 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `GET` | `/rule-runs`, `/rule-findings` | Read run diagnostics and active/resolved findings (`rules.read`). |
 | `POST` | `/extensions/{extension_id}/{contribution_id}/command` | Validate a bounded, manifest-declared client-mediated extension command against the enabled exact release and grants (`entities.write`). |
 | `POST` | `/extensions/{extension_id}/{contribution_id}/operations` | Start an interactive extension operation from a selection-aware contribution for the signed-in user. The body is `{release_id, operation_id, input, idempotency_key, selection: {blueprint_id, blueprint_version, context_id, entity_ids}}`; every entity must be saved, belong to the one revision, and be readable by the caller, otherwise the whole request is rejected. A retried identical request returns the same `run_id`; reusing the key with different input or selection returns `409 idempotency_key_reused`. |
-| `GET` | `/extension-runs` | List the signed-in user's 50 most recent interactive extension runs, optionally filtered by `extension_id`. Inputs, configuration and checkpoints are never returned. |
+| `GET` | `/extension-runs` | List the signed-in user's 50 most recent interactive extension runs, optionally filtered by `extension_id`. Runs with a selected entity the user can no longer read are omitted. Inputs, configuration and checkpoints are never returned. |
 | `GET`; `POST` | `/extension-runs/{run_id}`; `/extension-runs/{run_id}/cancel` | Read or cancel (`204`) one interactive run. Available to the initiator while they can still read every selected entity, and to `extensions.manage` operators; other users receive `404`. |
 | `GET` | `/extension-runs/{run_id}/artifacts/{artifact_id}/download` | Download a finalized output of a completed, unexpired interactive run, with the same access rule as the run. Outputs are attachments named by the extension and expire 30 days after completion. |
 | `GET`, `POST` | `/extensions/{extension_id}/annotation-namespace` | Inventory an extension's annotation namespace, or explicitly adopt pre-existing annotations under that name for an installed extension (`extensions.read` / `extensions.manage`). |
@@ -145,7 +145,7 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `GET` | `/blueprints/by-code/{code}/versions/{version}` | Read an exact revision by code. |
 | `GET`, `POST` | `/contexts` | List or create contexts. |
 | `GET` | `/contexts/{code}` | Read a context. |
-| `PUT`, `DELETE` | `/contexts/id/{id}` | Update or delete a context. |
+| `PUT`, `DELETE` | `/contexts/id/{id}` | Update or delete a context. Deletion is rejected while the context has values, child contexts, or a pending or running interactive extension run. |
 | `GET` | `/entities` | Browse relationship targets. |
 | `GET`, `DELETE` | `/entities/{id}` | Read or soft-delete an entity. |
 | `GET` | `/entities/{id}/preview` | Read direct contextual preview values. |
@@ -433,7 +433,10 @@ operations, and the same tag or key cannot appear in two operations. Setting a
 key replaces its whole value, so JSON `null` is a valid value. The optional
 `expected_revision` rejects stale writes with `409 annotation_revision_conflict`;
 the namespace revision starts at 0 and increases with every changing patch.
-Each change is audited and emits `entity.annotations_changed.v1`.
+Each change is audited and emits `entity.annotations_changed.v1`. The repair
+route may also remove legacy tags and keys that do not follow the local-name
+rules, and replaces a namespace value that is not an object; the replaced value
+is kept in the audit event.
 
 ## File uploads and downloads
 

@@ -355,7 +355,7 @@ pub enum RepositoryError {
     DefaultContextProtected,
     #[error("a context cannot be its own descendant")]
     ContextCycle,
-    #[error("a context with descendants or active values cannot be deleted")]
+    #[error("a context with descendants, active values or active extension runs cannot be deleted")]
     ContextInUse,
     #[error("attribute can only be edited in the default context")]
     DefaultContextOnly,

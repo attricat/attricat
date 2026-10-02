@@ -13,6 +13,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeftIcon, DownloadIcon } from 'lucide-react';
 import { Trans, useTranslation } from 'react-i18next';
+import { ApiRequestError } from '../../api/request';
 import { RouterButton } from '../../components/RouterLink';
 import { Timestamp } from '../../time/Timestamp';
 import { formatBytes } from '../data-health/dataHealthFormat';
@@ -99,11 +100,18 @@ export const ExtensionRunDetailPage = ({ runId }: { runId: string }) => {
   const run = useQuery({
     queryKey: extensionRunQueryKeys.detail(runId),
     queryFn: () => getExtensionRun(runId),
-    refetchInterval: (query) =>
-      query.state.data &&
-      !activeExtensionRunStatuses.includes(query.state.data.status)
+    refetchInterval: (query) => {
+      const { data, error } = query.state;
+      // A 4xx (missing run or revoked access) will not change by polling.
+      const clientError =
+        error instanceof ApiRequestError &&
+        error.status >= 400 &&
+        error.status < 500;
+      return clientError ||
+        (data && !activeExtensionRunStatuses.includes(data.status))
         ? false
-        : extensionRunPollMilliseconds,
+        : extensionRunPollMilliseconds;
+    },
   });
   const cancel = useMutation({
     mutationFn: () => cancelExtensionRun(runId),

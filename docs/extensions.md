@@ -924,7 +924,8 @@ its request schema and byte limit, and that the caller can read every selected
 entity. One unreadable or mismatched entity rejects the whole selection. The
 host then freezes, in one transaction, the initiating user (and token, if any),
 release, operation, validated input, configuration snapshot, effective context,
-contribution, and ordered membership. Idempotency keys are scoped to the user;
+contribution, and ordered membership. A context cannot be deleted while a
+pending or running run reads from it. Idempotency keys are scoped to the user;
 an identical retry returns the same run and a changed request with the same key
 is rejected.
 

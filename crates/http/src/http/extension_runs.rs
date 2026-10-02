@@ -189,7 +189,8 @@ pub(super) async fn start(
     Ok((StatusCode::ACCEPTED, Json(json!({ "run_id": run_id }))))
 }
 
-/// The signed-in user's own recent interactive runs.
+/// The signed-in user's own recent interactive runs whose selection they can
+/// still read in full.
 pub(super) async fn list(
     ScopedRepository(repository): ScopedRepository,
     principal: AuthenticatedPrincipal,
@@ -197,7 +198,7 @@ pub(super) async fn list(
 ) -> Result<Json<Vec<InteractiveRun>>, ApiError> {
     Ok(Json(
         repository
-            .interactive_extension_runs(principal.0, query.extension_id.as_deref())
+            .interactive_extension_runs(actor(principal), query.extension_id.as_deref())
             .await?,
     ))
 }

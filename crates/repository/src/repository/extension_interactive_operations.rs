@@ -5,6 +5,8 @@
 //! authorization grant: the initiator's current access is checked again by
 //! every selection read, catalog write and artifact download.
 
+use std::collections::HashSet;
+
 use chrono::{DateTime, Duration, Utc};
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -306,14 +308,16 @@ impl CatalogRepository {
             ));
         }
         if let Some(context_id) = input.context_id {
-            let exists: bool = sqlx::query_scalar(
-                "SELECT EXISTS (SELECT 1 FROM attribute_contexts WHERE id=$1 AND workspace_id=$2)",
+            // The share lock serializes with `delete_context`, which refuses
+            // to delete a context that an active run reads from.
+            let exists: Option<Uuid> = sqlx::query_scalar(
+                "SELECT id FROM attribute_contexts WHERE id=$1 AND workspace_id=$2 FOR SHARE",
             )
             .bind(context_id)
             .bind(self.workspace_id.0)
-            .fetch_one(&mut *transaction)
+            .fetch_optional(&mut *transaction)
             .await?;
-            if !exists {
+            if exists.is_none() {
                 return Err(RepositoryError::InvalidContext);
             }
         }
@@ -397,21 +401,64 @@ impl CatalogRepository {
     }
 
     /// The initiator's recent interactive runs, newest first.
+    /// The actor's recent runs whose whole selection they can still read;
+    /// like the detail view, a run with any unreadable member is hidden.
     pub async fn interactive_extension_runs(
         &self,
-        actor_user_id: Uuid,
+        actor: AuthorizationActor,
         extension_id: Option<&str>,
     ) -> Result<Vec<InteractiveRun>, RepositoryError> {
         let rows: Vec<InteractiveRunRow> = sqlx::query_as(&format!(
             "SELECT {RUN_COLUMNS} FROM extension_operation_runs r WHERE r.workspace_id=$1 AND r.invocation='interactive' AND r.actor_user_id=$2 AND ($3::text IS NULL OR r.extension_id=$3) ORDER BY r.created_at DESC, r.id DESC LIMIT $4"
         ))
         .bind(self.workspace_id.0)
-        .bind(actor_user_id)
+        .bind(actor.user_id)
         .bind(extension_id)
         .bind(MAX_USER_RUNS)
         .fetch_all(&self.pool)
         .await?;
-        Ok(rows.into_iter().map(Into::into).collect())
+        if rows.is_empty() {
+            return Ok(Vec::new());
+        }
+        if let Some(token_id) = actor.token_id
+            && !self
+                .personal_api_token_permits(token_id, "entities.read")
+                .await?
+        {
+            return Ok(Vec::new());
+        }
+        let run_ids: Vec<Uuid> = rows.iter().map(|row| row.id).collect();
+        let members: Vec<(Uuid, Uuid)> = sqlx::query_as(
+            "SELECT operation_run_id, entity_id FROM extension_operation_run_entities WHERE workspace_id=$1 AND operation_run_id = ANY($2)",
+        )
+        .bind(self.workspace_id.0)
+        .bind(&run_ids)
+        .fetch_all(&self.pool)
+        .await?;
+        let entity_ids: Vec<Uuid> = members
+            .iter()
+            .map(|(_, entity_id)| *entity_id)
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect();
+        let readable = self
+            .authorized_entity_ids(
+                actor.user_id,
+                self.workspace_id.0,
+                "entities.read",
+                &entity_ids,
+            )
+            .await?;
+        let hidden: HashSet<Uuid> = members
+            .iter()
+            .filter(|(_, entity_id)| !readable.contains(entity_id))
+            .map(|(run_id, _)| *run_id)
+            .collect();
+        Ok(rows
+            .into_iter()
+            .filter(|row| !hidden.contains(&row.id))
+            .map(Into::into)
+            .collect())
     }
 
     pub async fn interactive_extension_run(
@@ -619,11 +666,15 @@ impl CatalogRepository {
             .skip(start)
             .take(limit as usize)
         {
-            let item = if self
+            let readable = match self
                 .ensure_principal_may(&mut connection, scope.actor, "entities.read", *entity_id)
                 .await
-                .is_err()
             {
+                Ok(()) => true,
+                Err(RepositoryError::ActorNotAuthorized) => false,
+                Err(error) => return Err(error),
+            };
+            let item = if !readable {
                 json!({"position": position, "entity_id": entity_id, "status": "unavailable"})
             } else {
                 match (

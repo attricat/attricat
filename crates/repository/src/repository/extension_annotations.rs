@@ -21,6 +21,10 @@ use crate::domain_events::ENTITY_ANNOTATIONS_CHANGED_V1;
 /// Maximum add/remove/set/delete operations in one patch.
 pub const MAX_ANNOTATION_PATCH_OPERATIONS: usize = 32;
 const MAX_LOCAL_NAME_BYTES: usize = 64;
+/// Upper bound for a legacy name an operator removes. Legacy data predates
+/// local-name validation, so removals only need to name something that could
+/// be stored at all.
+const MAX_LEGACY_NAME_BYTES: usize = 1024;
 const TAG_SEPARATOR: char = ':';
 /// Core-owned names that no extension may claim as an annotation namespace.
 /// Core tags never contain `:`, so they cannot collide with extension tags;
@@ -66,6 +70,15 @@ pub struct ExtensionAnnotationNamespace {
     pub annotated_entities: i64,
 }
 
+/// Who is applying a patch. Extensions may only write well-formed local
+/// names; operators may additionally remove malformed legacy names and replace
+/// a namespace value that is not an object, which nothing else can repair.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum AnnotationPatchAuthority {
+    Extension,
+    Operator,
+}
+
 fn invalid(message: impl Into<String>) -> RepositoryError {
     RepositoryError::InvalidAnnotationPatch(message.into())
 }
@@ -83,7 +96,7 @@ fn tag_prefix(extension_id: &str) -> String {
 }
 
 impl ExtensionAnnotationPatch {
-    fn validate(&self) -> Result<(), RepositoryError> {
+    fn validate(&self, authority: AnnotationPatchAuthority) -> Result<(), RepositoryError> {
         let operations = self.add_tags.len()
             + self.remove_tags.len()
             + self.set_metadata.len()
@@ -96,13 +109,19 @@ impl ExtensionAnnotationPatch {
         if self.expected_revision.is_some_and(|revision| revision < 0) {
             return Err(invalid("expected_revision must not be negative"));
         }
-        let names = self
-            .add_tags
-            .iter()
-            .chain(&self.remove_tags)
-            .chain(self.set_metadata.keys())
-            .chain(&self.remove_metadata);
-        if let Some(name) = names.into_iter().find(|name| !valid_local_name(name)) {
+        let mut written = self.add_tags.iter().chain(self.set_metadata.keys());
+        let mut removed = self.remove_tags.iter().chain(&self.remove_metadata);
+        let malformed = match authority {
+            AnnotationPatchAuthority::Extension => {
+                written.chain(removed).find(|name| !valid_local_name(name))
+            }
+            AnnotationPatchAuthority::Operator => {
+                written.find(|name| !valid_local_name(name)).or_else(|| {
+                    removed.find(|name| name.is_empty() || name.len() > MAX_LEGACY_NAME_BYTES)
+                })
+            }
+        };
+        if let Some(name) = malformed {
             return Err(invalid(format!(
                 "local tag or key '{name}' must be 1-{MAX_LOCAL_NAME_BYTES} ASCII letters, numbers, '.', '_' or '-'"
             )));
@@ -370,8 +389,9 @@ impl CatalogRepository {
         extension_id: &str,
         entity_id: Uuid,
         patch: &ExtensionAnnotationPatch,
+        authority: AnnotationPatchAuthority,
     ) -> Result<i64, RepositoryError> {
-        patch.validate()?;
+        patch.validate(authority)?;
         self.ensure_actor_may(&mut *transaction, "entities.read", entity_id)
             .await?;
         self.claim_annotation_namespace(transaction, extension_id, false)
@@ -419,9 +439,15 @@ impl CatalogRepository {
             .as_object()
             .cloned()
             .ok_or(RepositoryError::InvalidSystemMetadata)?;
+        let mut replaced_value = None;
         let mut namespace = match metadata.remove(extension_id) {
             None => Map::new(),
             Some(Value::Object(namespace)) => namespace,
+            Some(value) if authority == AnnotationPatchAuthority::Operator => {
+                // The audit summary keeps the discarded legacy value.
+                replaced_value = Some(value);
+                Map::new()
+            }
             Some(_) => {
                 return Err(invalid(
                     "the namespace metadata value is not an object; an operator must repair it",
@@ -449,6 +475,7 @@ impl CatalogRepository {
             && removed_tags.is_empty()
             && set_keys.is_empty()
             && removed_keys.is_empty()
+            && replaced_value.is_none()
         {
             return Ok(revision);
         }
@@ -475,7 +502,7 @@ impl CatalogRepository {
         .bind(next_revision)
         .execute(&mut **transaction)
         .await?;
-        let summary = json!({
+        let mut summary = json!({
             "extension_id": extension_id,
             "revision": next_revision,
             "tags_added": added_tags,
@@ -483,6 +510,9 @@ impl CatalogRepository {
             "metadata_keys_set": set_keys,
             "metadata_keys_removed": removed_keys,
         });
+        if let Some(value) = replaced_value {
+            summary["replaced_namespace_value"] = value;
+        }
         let mut audited = self.clone();
         if let Some(audit) = audited.audit_context.as_mut()
             && let Some(metadata) = audit.metadata.as_object_mut()
@@ -501,8 +531,9 @@ impl CatalogRepository {
     }
 
     /// Applies an operator repair or cleanup patch to one extension namespace.
-    /// It uses the same validation, revision, audit and outbox path as the
-    /// extension, but is authorized by the operator's own request.
+    /// It uses the same revision, audit and outbox path as the extension, but
+    /// is authorized by the operator's own request and may remove malformed
+    /// legacy tags and keys or replace a non-object namespace value.
     pub async fn repair_extension_annotations(
         &self,
         extension_id: &str,
@@ -520,8 +551,14 @@ impl CatalogRepository {
         if !claimed {
             return Err(RepositoryError::NotFound("claimed annotation namespace"));
         }
-        self.apply_extension_annotation_patch(&mut transaction, extension_id, entity_id, &patch)
-            .await?;
+        self.apply_extension_annotation_patch(
+            &mut transaction,
+            extension_id,
+            entity_id,
+            &patch,
+            AnnotationPatchAuthority::Operator,
+        )
+        .await?;
         transaction.commit().await?;
         self.extension_annotations(extension_id, entity_id)
             .await?
@@ -561,33 +598,89 @@ mod tests {
 
     #[test]
     fn patches_are_bounded_and_unambiguous() {
-        assert!(patch().validate().is_ok());
-        assert!(ExtensionAnnotationPatch::default().validate().is_err());
+        assert!(
+            patch()
+                .validate(AnnotationPatchAuthority::Extension)
+                .is_ok()
+        );
+        assert!(
+            ExtensionAnnotationPatch::default()
+                .validate(AnnotationPatchAuthority::Extension)
+                .is_err()
+        );
         let mut contradictory = patch();
         contradictory.remove_tags = vec!["generated".into()];
-        assert!(contradictory.validate().is_err());
+        assert!(
+            contradictory
+                .validate(AnnotationPatchAuthority::Extension)
+                .is_err()
+        );
         let set_and_remove = ExtensionAnnotationPatch {
             set_metadata: [("last".to_owned(), Value::Null)].into(),
             remove_metadata: vec!["last".into()],
             ..Default::default()
         };
-        assert!(set_and_remove.validate().is_err());
+        assert!(
+            set_and_remove
+                .validate(AnnotationPatchAuthority::Extension)
+                .is_err()
+        );
         let mut qualified = patch();
         qualified.add_tags = vec!["other:generated".into()];
-        assert!(qualified.validate().is_err());
+        assert!(
+            qualified
+                .validate(AnnotationPatchAuthority::Extension)
+                .is_err()
+        );
         let mut repeated = patch();
         repeated.add_tags.push("generated".into());
-        assert!(repeated.validate().is_err());
+        assert!(
+            repeated
+                .validate(AnnotationPatchAuthority::Extension)
+                .is_err()
+        );
         let oversized = ExtensionAnnotationPatch {
             add_tags: (0..=MAX_ANNOTATION_PATCH_OPERATIONS)
                 .map(|index| format!("tag-{index}"))
                 .collect(),
             ..Default::default()
         };
-        assert!(oversized.validate().is_err());
+        assert!(
+            oversized
+                .validate(AnnotationPatchAuthority::Extension)
+                .is_err()
+        );
         let mut negative = patch();
         negative.expected_revision = Some(-1);
-        assert!(negative.validate().is_err());
+        assert!(
+            negative
+                .validate(AnnotationPatchAuthority::Extension)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn operators_may_remove_malformed_legacy_names() {
+        let legacy = ExtensionAnnotationPatch {
+            remove_tags: vec!["Old Tag".into()],
+            remove_metadata: vec!["x".repeat(MAX_LOCAL_NAME_BYTES + 1)],
+            ..Default::default()
+        };
+        assert!(
+            legacy
+                .validate(AnnotationPatchAuthority::Extension)
+                .is_err()
+        );
+        assert!(legacy.validate(AnnotationPatchAuthority::Operator).is_ok());
+        let malformed_write = ExtensionAnnotationPatch {
+            add_tags: vec!["Old Tag".into()],
+            ..Default::default()
+        };
+        assert!(
+            malformed_write
+                .validate(AnnotationPatchAuthority::Operator)
+                .is_err()
+        );
     }
 
     #[test]
@@ -596,7 +689,7 @@ mod tests {
             set_metadata: [("cleared".to_owned(), Value::Null)].into(),
             ..Default::default()
         };
-        assert!(value.validate().is_ok());
+        assert!(value.validate(AnnotationPatchAuthority::Extension).is_ok());
     }
 
     #[test]

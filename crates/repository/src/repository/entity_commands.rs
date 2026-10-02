@@ -1932,6 +1932,7 @@ impl CatalogRepository {
                         remove_metadata,
                         expected_revision,
                     },
+                    super::extension_annotations::AnnotationPatchAuthority::Extension,
                 )
                 .await
                 .map(|revision| (entity_id, Some(revision))),

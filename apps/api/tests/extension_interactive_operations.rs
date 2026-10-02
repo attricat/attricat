@@ -5,10 +5,10 @@ use std::{io::Cursor, path::PathBuf, process::Command, sync::Arc, time::Duration
 use api::{
     extension_installer::ExtensionInstaller,
     extension_runtime::{ExtensionOperationTaskHandler, ExtensionRuntime, ExtensionRuntimeConfig},
-    model::{CreateBlueprint, NewAttributeValue},
+    model::{CreateAttributeContext, CreateBlueprint, NewAttributeValue},
     repository::{
         CatalogRepository, ExtensionCatalogBatch, ExtensionCatalogIntent,
-        ExtensionCatalogIntentStatus,
+        ExtensionCatalogIntentStatus, RepositoryError,
     },
     storage::FakeObjectStore,
     task_worker::{TaskHandler, TaskOutcome},
@@ -576,6 +576,41 @@ async fn interactive_runs_are_authorized_per_entity_and_fail_closed(pool: sqlx::
     assert_eq!(detail["status"], "cancelled");
     assert_eq!(detail["can_cancel"], false);
 
+    // A context cannot be deleted while an active run reads from it.
+    let context = repository
+        .create_context(CreateAttributeContext {
+            code: "run_context".into(),
+            data: json!({}),
+            parent_id: None,
+        })
+        .await
+        .unwrap();
+    let mut body = start_body(release, "owner-context", blueprint, &[hidden]);
+    body["selection"]["context_id"] = json!(context.id);
+    let context_run = authenticated_client()
+        .post(&start_url)
+        .json(&body)
+        .send()
+        .await
+        .unwrap()
+        .json::<Value>()
+        .await
+        .unwrap()["run_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert!(matches!(
+        repository.delete_context(context.id).await,
+        Err(RepositoryError::ContextInUse)
+    ));
+    let cancelled = authenticated_client()
+        .post(format!("{base}/extension-runs/{context_run}/cancel"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(cancelled.status(), StatusCode::NO_CONTENT);
+    repository.delete_context(context.id).await.unwrap();
+
     // Frozen membership is not permission: losing the entity grant hides the run.
     sqlx::query("DELETE FROM role_grants WHERE id=$1")
         .bind(grant)
@@ -588,6 +623,15 @@ async fn interactive_runs_are_authorized_per_entity_and_fail_closed(pool: sqlx::
         .await
         .unwrap();
     assert_eq!(revoked.status(), StatusCode::FORBIDDEN);
+    let listed = client_for(viewer)
+        .get(format!("{base}/extension-runs"))
+        .send()
+        .await
+        .unwrap()
+        .json::<Value>()
+        .await
+        .unwrap();
+    assert_eq!(listed, json!([]));
 
     // An initiator removed from the workspace fails the run closed.
     sqlx::query("UPDATE workspace_memberships SET state='inactive' WHERE user_id=$1")
@@ -802,7 +846,7 @@ async fn legacy_annotations_require_explicit_namespace_adoption(pool: sqlx::PgPo
             blueprint.0,
             blueprint.1,
             vec![],
-            vec![format!("{EXTENSION}:old")],
+            vec![format!("{EXTENSION}:old"), format!("{EXTENSION}:Old Tag")],
             json!({EXTENSION: "not an object"}),
         )
         .await
@@ -853,7 +897,38 @@ async fn legacy_annotations_require_explicit_namespace_adoption(pool: sqlx::PgPo
         .fetch_one(&pool)
         .await
         .unwrap();
-    assert_eq!(tags, vec![format!("{EXTENSION}:old")]);
+    assert_eq!(
+        tags,
+        vec![format!("{EXTENSION}:old"), format!("{EXTENSION}:Old Tag")]
+    );
+    // Operator repair can remove malformed legacy tags and replace the
+    // non-object value, after which the extension can write again.
+    let repaired = authenticated_client()
+        .post(format!(
+            "{base}/extensions/{EXTENSION}/annotation-namespace/entities/{legacy}"
+        ))
+        .json(&json!({"remove_tags": ["Old Tag"], "set_metadata": {"migrated": true}}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(repaired.status(), StatusCode::OK);
+    assert_eq!(
+        repaired.json::<Value>().await.unwrap(),
+        json!({"tags": ["old"], "metadata": {"migrated": true}, "revision": 1})
+    );
+    let audited: Value = sqlx::query_scalar(
+        "SELECT metadata->'annotations'->'replaced_namespace_value' FROM audit_events WHERE metadata->'annotations'->>'extension_id'=$1",
+    )
+    .bind(EXTENSION)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(audited, json!("not an object"));
+    let accepted = extension
+        .execute_extension_catalog_batch(batch("l3", vec![annotate("l3", legacy, Some(1))]))
+        .await
+        .unwrap();
+    assert_eq!(accepted[0].status, ExtensionCatalogIntentStatus::Applied);
     // Reserved Core names can never be claimed.
     let reserved = repository
         .for_extension("attricat.sample")
