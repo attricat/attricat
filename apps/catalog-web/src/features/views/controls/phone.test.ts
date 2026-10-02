@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { phoneHref } from './phoneNumber';
+import { phoneHref } from './phone';
 
 describe('phoneHref', () => {
   it.each([

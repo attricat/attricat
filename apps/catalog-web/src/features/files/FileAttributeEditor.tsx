@@ -20,6 +20,7 @@ type FileAttributeEditorProps = {
   files: FileMetadata[];
   error?: string;
   helperText?: string;
+  onEntityUpdated?: (updatedAt: string) => void;
 };
 
 const FileAttributeEditorContent = (props: FileAttributeEditorProps) => {

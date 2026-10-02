@@ -36,6 +36,39 @@ value_schema = '{"enum":["XS","S","M","L","XL"]}'
 
 A value that fails returns `422 attribute_value_schema_mismatch`.
 
+## Statuses
+
+A status is a `string` attribute whose `value_schema` has an `enum` of stable codes plus an `x-attricat-status` annotation. The annotation gives each code a label, an optional color tone, and optionally the transitions allowed between them:
+
+```toml
+[[attributes]]
+code = "status"
+value_type = "string"
+value_schema = '''{
+  "type": "string",
+  "enum": ["draft", "live", "retired"],
+  "x-attricat-status": {
+    "version": 1,
+    "options": [
+      { "code": "draft", "label": "Draft" },
+      { "code": "live", "label": "Live", "tone": "success" },
+      { "code": "retired", "label": "Retired" }
+    ],
+    "transitions": [
+      { "from": null, "to": "draft" },
+      { "from": "draft", "to": "live" },
+      { "from": "live", "to": "retired" }
+    ]
+  }
+}'''
+```
+
+- Every `enum` code needs exactly one option, listed in display order. Codes use letters, digits, `_`, and `-`; labels are plain text.
+- `tone` is `default`, `success`, `warning`, `error`, or `info`. The label is always shown, so color is never the only signal.
+- Omit `transitions` to allow any change. With `transitions`, only the listed changes are allowed; an empty array allows none. `null` means "no value": an edge from `null` allows setting the first value (including defaults), and an edge to `null` allows clearing it. Keeping the same value is always allowed.
+
+The web app shows a status as a labeled chip and edits it with a select that disables forbidden choices. Transitions are checked by the server for every writer, including the API, CLI, workflows, history restores, and migrations. They compare effective values, so a value inherited from a parent context counts as the starting point. A forbidden change returns `422 attribute_value_schema_mismatch`.
+
 ## Constrain the whole entity
 
 `entity_schema` sees the entity as one JSON object. Use it for rules that involve more than one attribute:

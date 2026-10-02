@@ -1,6 +1,7 @@
 use super::*;
 use crate::constants::CONVERSATION_ATTACHMENT_LIFETIME_SECONDS;
 use crate::persistence_rows::{Db, IntoDomain};
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use sqlx::Transaction;
 
@@ -219,6 +220,8 @@ impl CatalogRepository {
     /// Removes or reorders existing references only. The expected ordered list
     /// is a compare-and-swap guard against concurrent uploads and edits. Archived
     /// references preserve history; this never deletes shared file objects.
+    /// Returns the entity's new `updated_at`, so an open edit form can adopt
+    /// its own change instead of treating it as a concurrent edit.
     pub async fn update_file_references(
         &self,
         entity_id: Uuid,
@@ -226,7 +229,7 @@ impl CatalogRepository {
         context_id: Option<Uuid>,
         expected_file_ids: &[Uuid],
         file_ids: &[Uuid],
-    ) -> Result<(), RepositoryError> {
+    ) -> Result<DateTime<Utc>, RepositoryError> {
         let workspace_id = self.workspace_id.unwrap_or(Self::DEFAULT_WORKSPACE_ID);
         let mut transaction = self.pool.begin().await?;
         let entity = self.lock_entity(&mut transaction, entity_id).await?;
@@ -266,7 +269,7 @@ impl CatalogRepository {
         }
         if current == file_ids {
             transaction.commit().await?;
-            return Ok(());
+            return Ok(entity.updated_at);
         }
         self.archive_current_value(
             &mut transaction,
@@ -287,11 +290,13 @@ impl CatalogRepository {
                 .bind(value_id).bind(workspace_id).bind(file_id).bind(position as i32)
                 .execute(&mut *transaction).await?;
         }
-        sqlx::query("UPDATE entities SET updated_at = now() WHERE id = $1 AND workspace_id = $2")
-            .bind(entity_id)
-            .bind(workspace_id)
-            .execute(&mut *transaction)
-            .await?;
+        let updated_at: DateTime<Utc> = sqlx::query_scalar(
+            "UPDATE entities SET updated_at = now() WHERE id = $1 AND workspace_id = $2 RETURNING updated_at",
+        )
+        .bind(entity_id)
+        .bind(workspace_id)
+        .fetch_one(&mut *transaction)
+        .await?;
         let retained_role = self
             .reconcile_entity_publication(&mut transaction, entity_id, "entity_changed")
             .await?;
@@ -301,7 +306,7 @@ impl CatalogRepository {
         )
         .await?;
         transaction.commit().await?;
-        Ok(())
+        Ok(updated_at)
     }
 
     /// Links an existing workspace file to a file attribute without copying

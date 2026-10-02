@@ -7,7 +7,7 @@ import {
   valuesForForm,
 } from './entityForm';
 import type { Attribute } from './api';
-import { urlEditComponent } from '../views/components/urlComponents';
+import { urlEditComponent } from '../views/controls/definitions';
 
 const attributes = [
   { code: 'title', value_type: 'string' },
@@ -32,7 +32,7 @@ describe('entity form values', () => {
         required,
         undefined,
         undefined,
-        new Map([['title', urlEditComponent.validateValue]]),
+        new Map([['title', urlEditComponent]]),
       );
     expect(validate('javascript:alert(1)').fieldErrors.title).toBeTruthy();
     expect(validate('https://example.com/a?q=1').fieldErrors).toEqual({});

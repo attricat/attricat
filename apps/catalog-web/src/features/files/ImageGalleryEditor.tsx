@@ -10,9 +10,30 @@ import {
   Tooltip,
 } from '@mui/material';
 import { ArrowLeftIcon, ArrowRightIcon, Trash2Icon } from 'lucide-react';
-import { useId, useState } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ImageGallery, type GalleryFile } from './ImageGallery';
+
+const GalleryAction = ({
+  label,
+  disabled,
+  onClick,
+  children,
+}: {
+  label: string;
+  disabled: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) => (
+  <Tooltip title={label}>
+    {/* Disabled buttons emit no events; the span keeps the tooltip working. */}
+    <span>
+      <IconButton aria-label={label} disabled={disabled} onClick={onClick}>
+        {children}
+      </IconButton>
+    </span>
+  </Tooltip>
+);
 
 export const ImageGalleryEditor = ({
   files,
@@ -44,55 +65,31 @@ export const ImageGalleryEditor = ({
           <Stack direction="row">
             {ordered && (
               <>
-                <Tooltip
-                  title={t('files.moveEarlier', { filename: file.filename })}
+                <GalleryAction
+                  label={t('files.moveEarlier', { filename: file.filename })}
+                  disabled={disabled || index === 0}
+                  onClick={() => move(index, -1)}
                 >
-                  <span>
-                    <IconButton
-                      aria-label={t('files.moveEarlier', {
-                        filename: file.filename,
-                      })}
-                      disabled={disabled || index === 0}
-                      onClick={() => move(index, -1)}
-                    >
-                      <ArrowLeftIcon />
-                    </IconButton>
-                  </span>
-                </Tooltip>
-                <Tooltip
-                  title={t('files.moveLater', { filename: file.filename })}
+                  <ArrowLeftIcon />
+                </GalleryAction>
+                <GalleryAction
+                  label={t('files.moveLater', { filename: file.filename })}
+                  disabled={disabled || index === files.length - 1}
+                  onClick={() => move(index, 1)}
                 >
-                  <span>
-                    <IconButton
-                      aria-label={t('files.moveLater', {
-                        filename: file.filename,
-                      })}
-                      disabled={disabled || index === files.length - 1}
-                      onClick={() => move(index, 1)}
-                    >
-                      <ArrowRightIcon />
-                    </IconButton>
-                  </span>
-                </Tooltip>
+                  <ArrowRightIcon />
+                </GalleryAction>
               </>
             )}
-            <Tooltip
-              title={t('files.removeImage', { filename: file.filename })}
+            <GalleryAction
+              label={t('files.removeImage', { filename: file.filename })}
+              disabled={disabled}
+              onClick={() => {
+                if (!disabled) setRemoveId(file.id);
+              }}
             >
-              <span>
-                <IconButton
-                  aria-label={t('files.removeImage', {
-                    filename: file.filename,
-                  })}
-                  disabled={disabled}
-                  onClick={() => {
-                    if (!disabled) setRemoveId(file.id);
-                  }}
-                >
-                  <Trash2Icon />
-                </IconButton>
-              </span>
-            </Tooltip>
+              <Trash2Icon />
+            </GalleryAction>
           </Stack>
         )}
       />

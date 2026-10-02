@@ -19,8 +19,10 @@ import {
   type RemovedAttributeValue,
   type ResolvedFormValues,
 } from '../entityFormAttributes';
-import { viewFieldComponents } from '../../views/viewFieldComponents';
-import { resolveViewComponent } from '../../views/components/registry';
+import {
+  viewFieldComponents,
+  viewFieldEditors,
+} from '../../views/viewFieldComponents';
 import { EntityView } from '../../views/components/EntityView';
 import { draftEditors, type DraftEditor } from '../../drafts/constants';
 import { DraftRestoreDialog } from '../../drafts/DraftRestoreDialog';
@@ -37,7 +39,7 @@ import { useTranslation } from 'react-i18next';
 import { attributeValueTypes } from '../valueTypes';
 import { EntityBlueprintSelect } from './EntityBlueprintSelect';
 import {
-  savedStatusValue,
+  savedStatusState,
   statusConfiguration,
   statusTransitionAllowed,
 } from '../status';
@@ -139,30 +141,12 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
     ref,
   ) => {
     const { t } = useTranslation();
-    const [savedVersion] = useState(expectedUpdatedAt);
+    const [savedVersion, setSavedVersion] = useState(expectedUpdatedAt);
     const [savedValues] = useState(existingValues);
     const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
     const [formError, setFormError] = useState<string>();
     const editView = blueprint?.blueprint.views.edit;
     const fieldComponents = viewFieldComponents(editView);
-    const fieldValidators = new Map(
-      [...fieldComponents].flatMap(([code, component]) => {
-        const definition = resolveViewComponent(component);
-        const attribute = blueprint?.attributes.find(
-          (item) => item.code === code,
-        );
-        return definition?.validateValue &&
-          attribute &&
-          definition.value_types.includes(attribute.value_type)
-          ? [[code, definition.validateValue] as const]
-          : [];
-      }),
-    );
-    const preservedWhitespaceFields = new Set(
-      [...fieldComponents].flatMap(([code, component]) =>
-        resolveViewComponent(component)?.preservesWhitespace ? [code] : [],
-      ),
-    );
     const editableAttributes = editableFormAttributes(
       blueprint ? [...blueprint.attributes, ...reusableAttributes] : [],
       {
@@ -173,6 +157,7 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
         ),
       },
     );
+    const fieldEditors = viewFieldEditors(fieldComponents, editableAttributes);
     const validateFields = (fields: Record<string, string>) => {
       if (!blueprint) return { fieldErrors: {} };
       const validation = validateEntityForm(
@@ -183,22 +168,19 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
           ? blueprint.blueprint.entity_schema
           : undefined,
         undefined,
-        fieldValidators,
-        preservedWhitespaceFields,
+        fieldEditors,
       );
       for (const attribute of editableAttributes) {
         const config = statusConfiguration(attribute);
         if (!config) continue;
-        const parents =
-          attribute.context_fallback === 'none' ? [] : statusParentContextIds;
-        const before = savedStatusValue(attribute, savedValues, [
+        const saved = savedStatusState(
+          attribute,
+          savedValues,
           contextId,
-          ...parents,
-        ]);
-        const after =
-          fields[attribute.code] ||
-          savedStatusValue(attribute, savedValues, parents);
-        if (!statusTransitionAllowed(config, before, after))
+          statusParentContextIds,
+        );
+        const after = fields[attribute.code] || saved.inherited;
+        if (!statusTransitionAllowed(config, saved.current, after))
           validation.fieldErrors[attribute.code] = t(
             'entities.statusTransitionDenied',
           );
@@ -230,7 +212,7 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
             editableAttributes,
             value.fields,
             contextId,
-            preservedWhitespaceFields,
+            fieldEditors,
           ),
           relationships: relationshipTargetsForForm(
             editableAttributes,
@@ -305,6 +287,10 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
       highlightedAttributes,
       migrationReviewMessages,
       resolvedValues,
+      // Gallery edits save immediately; adopt the version they produce so the
+      // stale-entity check on Save does not mistake them for someone else's.
+      onEntityUpdated: (updatedAt: string) =>
+        setSavedVersion((version) => (version ? updatedAt : version)),
     };
 
     return (

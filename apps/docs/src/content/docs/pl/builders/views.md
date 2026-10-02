@@ -167,6 +167,42 @@ renderer = { id = "example.currency", version = 1, props = { currency = "USD" } 
 
 Renderer musi być zadeklarowany przez włączone rozszerzenie dla typu wartości kolumny. Działa w odizolowanej ramce; zobacz [Kontrybucje klienckie](/pl/extensions/client/).
 
+## Kontrolki pól
+
+Atrybut `string` jest domyślnie zwykłym tekstem. Aby pokazać go jako kolor, adres e-mail, URL, numer telefonu lub Markdown, wskaż komponent wyświetlania w jego polu szczegółów (lub kolumnie tabeli) i komponent edycji w polu edycji:
+
+```toml
+[views.detail]
+type = "stack"
+children = [
+  { type = "field", field = "website", component = { id = "catalog.url_display", version = 1 } },
+  { type = "field", field = "description", component = { id = "catalog.markdown_display", version = 1 } },
+]
+
+[views.edit]
+type = "stack"
+children = [
+  { type = "field", field = "website", component = { id = "catalog.url_edit", version = 1 } },
+  { type = "field", field = "description", component = { id = "catalog.markdown_edit", version = 1 } },
+]
+
+[[views.table.columns]]
+field = "website"
+renderer = { id = "catalog.url_display", version = 1 }
+```
+
+| Kontrolka | Komponenty | Działanie |
+| --- | --- | --- |
+| Kolor | `catalog.color_display`, `catalog.color_edit` | Sześciocyfrowy kod szesnastkowy (`#RRGGBB`), wpisany lub wybrany w próbniku kolorów. Wyświetlany jako próbka obok tekstu. |
+| E-mail | `catalog.email_display`, `catalog.email_edit` | Jeden zwykły adres ASCII, np. `name+tag@example.com`. Wyświetlany jako link `mailto:`. |
+| URL | `catalog.url_display`, `catalog.url_edit` | Tylko bezwzględne adresy `http://` lub `https://`. Linki otwierają się w nowej karcie. |
+| Telefon | `catalog.phone_display`, `catalog.phone_edit` | Zapisywany tak, jak go wpisano. Numery zaczynające się od `+` i numeru kierunkowego kraju stają się linkami `tel:`; numer wewnętrzny można poprzedzić `ext.` lub `x`. |
+| Markdown | `catalog.markdown_display`, `catalog.markdown_edit` | CommonMark z kartami **Edytuj** i **Podgląd**. Surowy HTML jest pomijany, obrazy pokazują tekst alternatywny, a linki są ograniczone do HTTP(S), `mailto:`, ścieżek względnych i fragmentów. Tekst jest zapisywany dokładnie tak, jak go wpisano, łącznie z białymi znakami. Niedostępny w kolumnach tabeli. |
+
+Wartości, które nie pasują do kontrolki, np. starsze dane, nadal są widoczne jako zwykły tekst bez linku i próbki. Pola bez komponentu zachowują standardowe pole tekstowe.
+
+Kontrolki edycji walidują wartości tylko w formularzu aplikacji. Aby odrzucać błędne wartości również z API, CLI i importów, dodaj `value_schema` lub `entity_schema`; zobacz [Walidacja](/pl/builders/validation/).
+
 ## Komponenty
 
 Każdy blok może wskazać komponent przez `component = { id, version, props }`. Identyfikator i wersja muszą odpowiadać zarejestrowanemu komponentowi, komponent musi obsługiwać dany blok i typ wartości, a `props` może zawierać tylko zadeklarowane przez niego opcje. Wbudowane komponenty są wymienione w [dokumentacji schematu](/pl/reference/blueprint/#odwołania-do-komponentów).

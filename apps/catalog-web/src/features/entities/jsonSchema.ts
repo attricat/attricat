@@ -1,6 +1,6 @@
 import Ajv, { type ErrorObject } from 'ajv';
 import i18n from '../../i18n';
-import { isEmailAddress } from '../views/email';
+import { isEmailAddress } from '../views/controls/email';
 import type { JsonSchema } from './schemas';
 
 const ajv = new Ajv({ strict: false });

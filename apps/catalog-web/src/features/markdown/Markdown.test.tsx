@@ -34,6 +34,8 @@ describe('Markdown', () => {
       '//evil.example',
       'java\nscript:alert(1)',
       '\\evil.example',
+      '/\\tracker.test',
+      'https://example.com/a b',
     ]) {
       expect(markdownUrlTransform(url)).toBe('');
     }
@@ -42,6 +44,7 @@ describe('Markdown', () => {
       'http://example.com',
       '/entities',
       '#section',
+      'mailto:team@example.com',
     ]) {
       expect(markdownUrlTransform(url)).toBe(url);
     }
@@ -50,10 +53,10 @@ describe('Markdown', () => {
         value={'[bad](javascript:alert) [good](https://example.com)'}
       />,
     );
-    expect(screen.getByText('bad').getAttribute('href')).toBe('');
-    expect(
-      screen.getByRole('link', { name: 'good' }).getAttribute('href'),
-    ).toBe('https://example.com');
+    expect(screen.getByText('bad').closest('a')).toBeNull();
+    const good = screen.getByRole('link', { name: 'good' });
+    expect(good.getAttribute('href')).toBe('https://example.com');
+    expect(good.getAttribute('rel')).toBe('nofollow noreferrer noopener');
   });
 
   it('previews the source and keeps the disabled input unchanged', () => {

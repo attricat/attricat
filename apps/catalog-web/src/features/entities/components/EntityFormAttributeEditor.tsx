@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { savedStatusValue } from '../status';
+import { savedStatusState } from '../status';
 import type { Attribute, ComponentReference, FormAttributeValue } from '../api';
 import {
   filesForAttribute,
@@ -24,6 +24,7 @@ export type EntityFormAttributeEditorContext = {
   highlightedAttributes: readonly string[];
   migrationReviewMessages: Readonly<Record<string, string>>;
   resolvedValues: ResolvedFormValues;
+  onEntityUpdated?: (updatedAt: string) => void;
 };
 
 type Props = EntityFormAttributeEditorContext & {
@@ -50,6 +51,7 @@ export const EntityFormAttributeEditor = ({
   highlightedAttributes,
   migrationReviewMessages,
   onChange,
+  onEntityUpdated,
   resolvedValues,
   value,
 }: Props) => {
@@ -65,6 +67,12 @@ export const EntityFormAttributeEditor = ({
     defaultContextId,
   );
   const readonly = attribute.readonly === true;
+  const savedStatus = savedStatusState(
+    attribute,
+    statusSavedValues,
+    contextId,
+    statusParentContextIds,
+  );
 
   const inheritedHelperText = () => {
     if (!inherited) return undefined;
@@ -94,23 +102,15 @@ export const EntityFormAttributeEditor = ({
         required={required}
         contextId={contextId}
         disabled={disabled || readonly || defaultOnly}
-        statusBaseline={savedStatusValue(attribute, statusSavedValues, [
-          contextId,
-          ...(attribute.context_fallback === 'none'
-            ? []
-            : statusParentContextIds),
-        ])}
-        inheritedStatus={savedStatusValue(
-          attribute,
-          statusSavedValues,
-          attribute.context_fallback === 'none' ? [] : statusParentContextIds,
-        )}
+        statusBaseline={savedStatus.current}
+        inheritedStatus={savedStatus.inherited}
         entityId={entityId}
         files={filesForAttribute(existingValues, attribute.code, contextId)}
         error={fieldErrors[attribute.code]}
         helperText={helperText}
         migrationReviewMessage={migrationReviewMessages[attribute.code]}
         onChange={onChange}
+        onEntityUpdated={onEntityUpdated}
         showMigrationBadge={highlightedAttributes.includes(attribute.code)}
         value={value}
       />

@@ -21,6 +21,8 @@ type Options = {
   disabled: boolean;
   entityId?: string;
   files: FileMetadata[];
+  /** Called with the entity version produced by this editor's own change. */
+  onEntityUpdated?: (updatedAt: string) => void;
 };
 
 /** Files save separately from scalar form values. Never persist file inputs in drafts. */
@@ -140,11 +142,12 @@ export const usePendingFileUploads = (options: Options) => {
     setBusy(true);
     setErrors([]);
     try {
-      await updateFileReferences(entityId!, attribute.code, {
+      const result = await updateFileReferences(entityId!, attribute.code, {
         context_id: contextId,
         expected_file_ids: uploaded.map((file) => file.id),
         file_ids: fileIds,
       });
+      current.current.onEntityUpdated?.(result.entity_updated_at);
       if (active.current)
         setSaved({
           source: current.current.files,

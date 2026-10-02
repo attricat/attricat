@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { emailHref, isEmailAddress } from './email';
-import { emailEditComponent } from './components/emailComponents';
-import { validatesJsonSchema } from '../entities/jsonSchema';
+import { emailHref, isEmailAddress, validateEmail } from './email';
+import { validatesJsonSchema } from '../../entities/jsonSchema';
 
 const valid = [
   'Name+tag@Example.com',
@@ -54,12 +53,8 @@ describe('email values', () => {
     expect(emailHref({ email: 'a@example.test' })).toBeUndefined();
   });
   it('validates configured email edits after trimming', () => {
-    expect(emailEditComponent.validateValue('')).toBeUndefined();
-    expect(
-      emailEditComponent.validateValue(' Name+tag@Example.com '),
-    ).toBeUndefined();
-    expect(emailEditComponent.validateValue('not an email')).toMatch(
-      /single email address/,
-    );
+    expect(validateEmail('')).toBeUndefined();
+    expect(validateEmail(' Name+tag@Example.com ')).toBeUndefined();
+    expect(validateEmail('not an email')).toMatch(/single email address/);
   });
 });
