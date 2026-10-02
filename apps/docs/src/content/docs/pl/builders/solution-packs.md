@@ -12,7 +12,7 @@ Po zastosowaniu pakietu użytkownicy pracują z jego zasobami przez zwykłe funk
 - Pobierz archiwum od zaufanego wydawcy i przeczytaj informacje o wydaniu. Attricat nie pobiera pakietów ani zawartości repozytoriów.
 - Zaloguj się przez CLI do odpowiedniego obszaru roboczego. Obsługa pakietów wymaga `solution_packs.manage`, domyślnie dostępnego właścicielom i administratorom.
 - Nieznane pakiety testuj w jednorazowym obszarze roboczym, szczególnie z danymi przykładowymi.
-- Wymaganymi rozszerzeniami zarządzaj w [zwykły sposób](/pl/builders/extensions/). Pakiet nigdy nie instaluje, nie konfiguruje, nie włącza ani nie usuwa rozszerzeń i nie nadaje im uprawnień.
+- Pakiet może zainstalować wymagane rozszerzenia z oficjalnego rejestru rozszerzeń Attricat. Zastosowanie pakietu instaluje je, konfiguruje, nadaje im uprawnienia i włącza je bez osobnego zatwierdzania. Zobacz [Rozszerzenia](#rozszerzenia).
 
 Jeśli archiwum zostanie odrzucone, poproś wydawcę o zgodne wydanie zamiast samodzielnie je edytować lub przepakowywać.
 
@@ -32,7 +32,7 @@ acli solution-pack plan --file pack.tar.zst \
 acli solution-pack plan show <plan-id>
 ```
 
-Planowanie zapisuje niezmienny plan próbny bez zmieniania zasobów katalogu. Sprawdź gotowość, akcje, konflikty i wymagania dotyczące rozszerzeń.
+Planowanie zapisuje niezmienny plan próbny bez zmieniania zasobów katalogu. Sprawdź gotowość, akcje, konflikty i wymagania dotyczące rozszerzeń. Wymaganie ze statusem `install` wskazuje oficjalne wydanie, które zostanie zainstalowane, oraz uprawnienia, które otrzyma.
 
 - `--prefix` tworzy kody nowych Schematów, takie jak `example_product`. Użyj od 1 do 32 małych liter, cyfr lub podkreśleń; zacznij literą i nie kończ podkreśleniem.
 - `--blueprint-publication` przyjmuje `draft` lub `publish`. Nawigacja i dane przykładowe mogą wymagać opublikowanych Schematów, więc wybór `draft` może zablokować taki pakiet.
@@ -70,7 +70,15 @@ acli solution-pack plan --file pack.tar.zst --prefix example \
   --map-asset assets/brand-logo=<asset-id>
 ```
 
-Istniejące zasoby musisz wskazać jawnie; Attricat nie nadpisuje ich po cichu. Jeśli wymaganie dotyczące rozszerzenia nie jest spełnione, rozwiąż problem przez standardowe zarządzanie rozszerzeniami i utwórz nowy plan. Zgodna, wyłączona instalacja może spełniać wymaganie; administrator musi osobno zatwierdzić uprawnienia i włączenie.
+Istniejące zasoby musisz wskazać jawnie; Attricat nie nadpisuje ich po cichu. Jeśli wymaganie dotyczące rozszerzenia jest zablokowane, rozwiąż problem przez standardowe zarządzanie rozszerzeniami i utwórz nowy plan.
+
+### Rozszerzenia
+
+Gdy wymagane rozszerzenie nie jest zainstalowane, planowanie wybiera najnowsze wydanie z zakresu wersji pakietu z oficjalnego rejestru Attricat. Rejestry dodane w obszarze roboczym nie są używane. Planowanie wymaga dostępu do oficjalnego rejestru, ale niczego nie instaluje.
+
+Zastosowanie planu instaluje dokładnie to wydanie przed pozostałymi krokami. Konfiguruje je zgodnie z pakietem, nadaje uprawnienia wymagane przez wydanie i włącza je. Każda zmiana trafia do historii cyklu życia rozszerzenia i do dziennika audytu. Jeśli wydanie zmieniło się od przejrzenia planu, zastosowanie zostaje przerwane; utwórz nowy plan.
+
+Pakiety nie zmieniają istniejących instalacji. Zgodna instalacja spełnia wymaganie niezależnie od tego, czy jest włączona. Niezgodna wersja, instalacja w kwarantannie lub inna konfiguracja blokuje plan; pakiet nigdy nie aktualizuje ani nie rekonfiguruje zainstalowanego rozszerzenia. Rozszerzenia zainstalowane przez pakiet są zwykłymi instalacjami, którymi zarządzasz, które wyłączasz lub usuwasz jak zwykle.
 
 ## 4. Zastosuj i zweryfikuj
 
@@ -124,6 +132,6 @@ Pakiet może zawierać [tłumaczenia etykiet](/pl/builders/translations/), widoc
 
 ## Ograniczenia i usuwanie
 
-Pakiety nie mogą tworzyć kontekstów ani kanałów eksportu, zmieniać członkostwa lub uprawnień, uruchamiać wykonywalnych instalatorów, automatycznie rozwiązywać zależności od innych pakietów ani aktualizować istniejących Schematów.
+Pakiety nie mogą tworzyć kontekstów ani kanałów eksportu, zmieniać członkostwa lub ról, instalować rozszerzeń spoza oficjalnego rejestru, aktualizować zainstalowanych rozszerzeń, uruchamiać wykonywalnych instalatorów, automatycznie rozwiązywać zależności od innych pakietów ani aktualizować istniejących Schematów.
 
 Nie ma odinstalowania ani wycofania całego pakietu. Administratorzy mogą edytować lub usuwać pojedyncze zasoby zwykłymi operacjami, z uwzględnieniem autoryzacji, zależności, publikacji i zasad przechowywania. Przed usunięciem sprawdź dane biznesowe; zasoby wskazane w historii zastosowania mogą być współdzielone lub zmodyfikowane.

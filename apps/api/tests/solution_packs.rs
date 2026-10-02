@@ -4,8 +4,11 @@ use std::{collections::BTreeSet, io::Cursor};
 
 use api::{
     account::{Password, hash_password},
+    extension_installer::ExtensionInstaller,
+    extensions::ExtensionPackage,
     repository::CatalogRepository,
     solution_packs::MAX_SOLUTION_PACK_INSPECTION_RESPONSE_BYTES,
+    storage::FakeObjectStore,
 };
 use reqwest::header::SET_COOKIE;
 use sha2::{Digest, Sha256};
@@ -6105,5 +6108,437 @@ async fn apply_adds_pack_lexicon_entries_without_overriding_workspace_entries(po
         .await
         .unwrap();
     assert_eq!(count, 2);
+    server.abort();
+}
+
+fn official_extension_archive(extension_id: &str, version: &str, description: &str) -> Vec<u8> {
+    let manifest = serde_json::to_vec(&json!({
+        "manifest_version": 1,
+        "name": "Official extension",
+        "version": version,
+        "description": description,
+        "icons": {"48": "icon.png"},
+        "catalog": {"id": extension_id, "host_api": "^1.0"},
+        "permissions": ["network.request"],
+        "host_permissions": [{
+            "id": "api-read",
+            "matches": ["https://api.acme.example/v1/*"],
+            "methods": ["GET"]
+        }],
+        "artifacts": [
+            {"id": "server", "kind": "server_wasm", "path": "server.wasm"},
+            {"id": "client", "kind": "client_component", "path": "client.js"}
+        ],
+        "configuration": {
+            "version": 1,
+            "schema": {"type": "object", "properties": {"endpoint": {"type": "string"}}, "additionalProperties": false}
+        },
+        "ui": [{
+            "id": "nav",
+            "version": 1,
+            "kind": "embedded",
+            "artifact": "client",
+            "outlet": "navigation"
+        }]
+    }))
+    .unwrap();
+    let mut tar_bytes = Vec::new();
+    {
+        let mut tar = tar::Builder::new(&mut tar_bytes);
+        append_file(&mut tar, "manifest.json", &manifest);
+        append_file(&mut tar, "server.wasm", b"server bytes");
+        append_file(&mut tar, "client.js", b"export default {}");
+        tar.finish().unwrap();
+    }
+    zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
+}
+
+async fn start_server_with_official_extensions(
+    pool: PgPool,
+) -> (
+    String,
+    JoinHandle<()>,
+    std::sync::Arc<FakeOfficialExtensions>,
+) {
+    let official = std::sync::Arc::new(FakeOfficialExtensions::default());
+    let releases = official.clone();
+    let (base_url, server) = start_server_with_config(pool, move |state| {
+        state.official_extension_releases = releases;
+    })
+    .await;
+    (base_url, server, official)
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn pack_installs_configures_grants_and_enables_an_official_extension(pool: PgPool) {
+    let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
+    let (base_url, server, official) = start_server_with_official_extensions(pool.clone()).await;
+    for version in ["2.0.0", "2.2.0", "3.0.0"] {
+        official.publish(
+            "acme.shopify",
+            &format!("v{version}"),
+            official_extension_archive("acme.shopify", version, "official release"),
+        );
+    }
+    let client = authenticated_client();
+
+    let response = create_plan(
+        &client,
+        &base_url,
+        archive_with_extension_requirement(true),
+        "official",
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let plan_text = response.text().await.unwrap();
+    assert!(!plan_text.contains("TEMPLATE_VALUE_SENTINEL"));
+    let plan: Value = serde_json::from_str(&plan_text).unwrap();
+    assert_eq!(plan["ready"], true);
+    let requirement = &plan["extension_requirements"][0];
+    assert_eq!(requirement["status"], "install");
+    assert_eq!(requirement["reason_code"], "install");
+    assert_eq!(requirement["installed_release_id"], Value::Null);
+    assert_eq!(requirement["install"]["version"], "2.2.0");
+    assert_eq!(requirement["install"]["tag_name"], "v2.2.0");
+    assert_eq!(
+        requirement["install"]["repository"],
+        "github:attricat/acme.shopify"
+    );
+    assert_eq!(
+        requirement["install"]["grants"],
+        json!([
+            {"kind": "capability", "id": "network.request"},
+            {"kind": "host_permission", "id": "api-read"}
+        ])
+    );
+    let shown = client
+        .get(format!(
+            "{base_url}/solution-packs/plans/{}",
+            plan["id"].as_str().unwrap()
+        ))
+        .send()
+        .await
+        .unwrap()
+        .json::<Value>()
+        .await
+        .unwrap();
+    assert_eq!(
+        shown["extension_requirements"][0]["install"],
+        requirement["install"]
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM extension_installations WHERE workspace_id=$1"
+        )
+        .bind(workspace_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        0,
+        "planning does not install"
+    );
+
+    let applied = apply_plan(&client, &base_url, plan["id"].as_str().unwrap()).await;
+    assert_eq!(applied.status(), StatusCode::OK);
+    assert_eq!(applied.json::<Value>().await.unwrap()["state"], "completed");
+    let planned_release_id: Uuid = sqlx::query_scalar(
+        "SELECT installed_release_id FROM solution_pack_plan_extension_releases WHERE plan_id=$1",
+    )
+    .bind(plan["id"].as_str().unwrap().parse::<Uuid>().unwrap())
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let (release_id, state, configuration, version, source): (Uuid, String, Value, String, String) =
+        sqlx::query_as("SELECT i.installed_release_id,i.state,i.configuration,r.version,r.source FROM extension_installations i JOIN installed_extension_releases r ON r.id=i.installed_release_id WHERE i.workspace_id=$1 AND i.extension_id='acme.shopify'")
+            .bind(workspace_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(release_id, planned_release_id);
+    assert_eq!(state, "enabled");
+    assert_eq!(
+        configuration,
+        json!({"endpoint": "TEMPLATE_VALUE_SENTINEL"})
+    );
+    assert_eq!(version, "2.2.0");
+    assert_eq!(source, "github:attricat/acme.shopify@v2.2.0");
+    let grants: Vec<(String, String)> = sqlx::query_as("SELECT g.grant_kind,g.grant_id FROM extension_grants g JOIN extension_installations i ON i.id=g.installation_id WHERE i.workspace_id=$1 ORDER BY g.grant_kind")
+        .bind(workspace_id)
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        grants,
+        vec![
+            ("capability".to_owned(), "network.request".to_owned()),
+            ("host_permission".to_owned(), "api-read".to_owned()),
+        ]
+    );
+    let lifecycle = || async {
+        sqlx::query_scalar::<_, String>("SELECT operation FROM extension_lifecycle_records WHERE workspace_id=$1 AND extension_id='acme.shopify' ORDER BY created_at, operation")
+            .bind(workspace_id)
+            .fetch_all(&pool)
+            .await
+            .unwrap()
+    };
+    let operations = lifecycle().await;
+    assert_eq!(operations.len(), 5);
+    for operation in ["install", "configure", "grant", "enable"] {
+        assert!(
+            operations.iter().any(|item| item == operation),
+            "{operation}"
+        );
+    }
+
+    // Re-applying a completed plan never touches the extension again, even
+    // after an operator disables it.
+    let disabled = client
+        .post(format!("{base_url}/extensions/acme.shopify/disable"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(disabled.status(), StatusCode::OK);
+    let repeated = apply_plan(&client, &base_url, plan["id"].as_str().unwrap()).await;
+    assert_eq!(repeated.status(), StatusCode::OK);
+    assert_eq!(
+        sqlx::query_scalar::<_, String>(
+            "SELECT state FROM extension_installations WHERE workspace_id=$1 AND extension_id='acme.shopify'"
+        )
+        .bind(workspace_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        "disabled"
+    );
+    assert_eq!(lifecycle().await.len(), 6);
+
+    // Once installed, a later plan evaluates the installation normally.
+    let later = create_plan(
+        &client,
+        &base_url,
+        archive_with_extension_requirement(true),
+        "officiallater",
+    )
+    .await
+    .json::<Value>()
+    .await
+    .unwrap();
+    assert_eq!(later["extension_requirements"][0]["status"], "satisfied");
+    assert_eq!(later["extension_requirements"][0]["install"], Value::Null);
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn interrupted_official_extension_install_resumes_without_reinstalling(pool: PgPool) {
+    let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
+    let (base_url, server, official) = start_server_with_official_extensions(pool.clone()).await;
+    official.publish(
+        "acme.shopify",
+        "v2.2.0",
+        official_extension_archive("acme.shopify", "2.2.0", "official release"),
+    );
+    let client = authenticated_client();
+    let plan = create_plan(
+        &client,
+        &base_url,
+        archive_with_extension_requirement(true),
+        "resume",
+    )
+    .await
+    .json::<Value>()
+    .await
+    .unwrap();
+    // A previous attempt installed the planned release and stopped before
+    // configuring, granting, or enabling it.
+    let planned_release_id: Uuid = sqlx::query_scalar(
+        "SELECT installed_release_id FROM solution_pack_plan_extension_releases WHERE plan_id=$1",
+    )
+    .bind(plan["id"].as_str().unwrap().parse::<Uuid>().unwrap())
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let repository = CatalogRepository::system(pool.clone())
+        .for_workspace(workspace_id)
+        .await
+        .unwrap();
+    ExtensionInstaller::new(
+        repository,
+        std::sync::Arc::new(FakeObjectStore::available()),
+    )
+    .install_package_as(
+        "github:attricat/acme.shopify@v2.2.0",
+        ExtensionPackage::from_tar_zst(&official_extension_archive(
+            "acme.shopify",
+            "2.2.0",
+            "official release",
+        ))
+        .unwrap(),
+        planned_release_id,
+    )
+    .await
+    .unwrap();
+
+    let applied = apply_plan(&client, &base_url, plan["id"].as_str().unwrap()).await;
+    assert_eq!(applied.status(), StatusCode::OK);
+    let operations = sqlx::query_scalar::<_, String>("SELECT operation FROM extension_lifecycle_records WHERE workspace_id=$1 AND extension_id='acme.shopify'")
+        .bind(workspace_id)
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        operations.iter().filter(|item| *item == "install").count(),
+        1
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, String>(
+            "SELECT state FROM extension_installations WHERE workspace_id=$1 AND extension_id='acme.shopify'"
+        )
+        .bind(workspace_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        "enabled"
+    );
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn official_release_changed_after_review_is_refused(pool: PgPool) {
+    let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
+    let (base_url, server, official) = start_server_with_official_extensions(pool.clone()).await;
+    official.publish(
+        "acme.shopify",
+        "v2.2.0",
+        official_extension_archive("acme.shopify", "2.2.0", "reviewed release"),
+    );
+    let client = authenticated_client();
+    let plan = create_plan(
+        &client,
+        &base_url,
+        archive_with_extension_requirement(true),
+        "changed",
+    )
+    .await
+    .json::<Value>()
+    .await
+    .unwrap();
+    assert_eq!(plan["ready"], true);
+    official.replace_archive(
+        "acme.shopify",
+        "v2.2.0",
+        official_extension_archive("acme.shopify", "2.2.0", "re-uploaded release"),
+    );
+
+    let response = apply_plan(&client, &base_url, plan["id"].as_str().unwrap()).await;
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    assert_eq!(
+        response.json::<Value>().await.unwrap()["error"]["code"],
+        "solution_pack_plan_stale"
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM extension_installations WHERE workspace_id=$1"
+        )
+        .bind(workspace_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        0
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM blueprints WHERE workspace_id=$1 AND code='changed_product'"
+        )
+        .bind(workspace_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        0
+    );
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn official_extension_resolution_reports_registry_and_release_failures(pool: PgPool) {
+    let (base_url, server, official) = start_server_with_official_extensions(pool.clone()).await;
+    let client = authenticated_client();
+
+    official.set_unavailable(true);
+    let unavailable = create_plan(
+        &client,
+        &base_url,
+        archive_with_extension_requirement(true),
+        "unavailable",
+    )
+    .await;
+    assert_eq!(unavailable.status(), StatusCode::SERVICE_UNAVAILABLE);
+    official.set_unavailable(false);
+
+    // A release must be the extension the pack requires.
+    official.publish(
+        "acme.shopify",
+        "v2.2.0",
+        official_extension_archive("acme.other", "2.2.0", "mislabelled release"),
+    );
+    let mislabelled = create_plan(
+        &client,
+        &base_url,
+        archive_with_extension_requirement(true),
+        "mislabelled",
+    )
+    .await;
+    assert_eq!(mislabelled.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(
+        mislabelled.json::<Value>().await.unwrap()["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("acme.other")
+    );
+    server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn installed_official_extension_satisfies_the_packs_extension_layout(pool: PgPool) {
+    let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
+    let (base_url, server, official) = start_server_with_official_extensions(pool.clone()).await;
+    official.publish(
+        "acme.layout",
+        "v1.0.0",
+        official_extension_archive("acme.layout", "1.0.0", "layout release"),
+    );
+    let client = authenticated_client();
+    let plan = create_plan(
+        &client,
+        &base_url,
+        archive_with_extension_layout(),
+        "layout",
+    )
+    .await
+    .json::<Value>()
+    .await
+    .unwrap();
+    assert_eq!(plan["ready"], true, "{plan}");
+    assert_eq!(plan["extension_requirements"][0]["status"], "install");
+
+    let applied = apply_plan(&client, &base_url, plan["id"].as_str().unwrap()).await;
+    assert_eq!(applied.status(), StatusCode::OK);
+    assert_eq!(applied.json::<Value>().await.unwrap()["state"], "completed");
+    let layout: Value =
+        sqlx::query_scalar("SELECT settings->'extension_layout' FROM workspaces WHERE id=$1")
+            .bind(workspace_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(layout.to_string().contains("acme.layout:nav"), "{layout}");
+    assert_eq!(
+        sqlx::query_scalar::<_, String>(
+            "SELECT state FROM extension_installations WHERE workspace_id=$1 AND extension_id='acme.layout'"
+        )
+        .bind(workspace_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        "enabled"
+    );
     server.abort();
 }

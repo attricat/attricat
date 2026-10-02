@@ -219,13 +219,19 @@ plan is ready.
 The response is at most 1 MiB. It contains safe source/digest metadata,
 optional prior-application identity, ordered release-change evidence, mapping
 and action summaries, extension requirement outcomes, reasons, preconditions,
-readiness, and a fixed 24-hour expiry. It never includes blueprint definitions,
+readiness, and a fixed 24-hour expiry. A requirement with status `install` also
+carries `install`: the official release's `version`, `repository`, `tag_name`,
+and the `grants` apply will give it. Planning returns `503` when the official
+extension registry is unreachable and `422` when a release in range is not the
+required extension or does not accept the pack's configuration template. It never includes blueprint definitions,
 normalized resource payloads, configuration templates or installed values,
 archive paths, staged bytes, or object keys. See [solution-pack operation](solution-packs.md#apply-and-verify)
 for apply-time behavior.
 
 `POST /solution-packs/plans/{plan-id}/apply` starts only a ready, unexpired plan,
-or resumes its existing application after plan expiry. Before each step the
+or resumes its existing application after plan expiry. It first installs,
+configures, grants, and enables the plan's pinned official extension releases,
+and returns `409 solution_pack_plan_stale` if a release changed since review. Before each step the
 server rechecks target absence or exact mapped-blueprint revision, hash, and
 published state. Blocked, stale, or expired-before-start plans return `409`;
 inconsistent persisted plan evidence returns `422 invalid_input`. Concurrent or

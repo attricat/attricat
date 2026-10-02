@@ -113,7 +113,8 @@ pub use extension_storage::{
 };
 pub use extensions::{
     ClientExtensionContribution, ExtensionGrant, ExtensionInstallation, ExtensionLifecycleRecord,
-    ExtensionRuntimeInstallation, ExtensionState, InstalledExtension,
+    ExtensionRuntimeInstallation, ExtensionState, InstalledExtension, extension_manifest_sha256,
+    required_extension_grants,
 };
 pub use files::{FileObject, FilePolicy, FileUploadResult, NewUploadedFile};
 pub use members::{WorkspaceInvitation, WorkspaceMember};
@@ -122,8 +123,9 @@ pub use roles::{Permission, WorkspaceGrantTarget, WorkspaceRole};
 pub use rules::{ClaimedRuleRun, RuleCandidateResult};
 pub use solution_packs::SolutionPackCheckResult;
 pub use solution_packs::{
-    CreateSolutionPackPlanRequest, SolutionPackApplication, SolutionPackApplicationSummary,
-    SolutionPackCheckRun, SolutionPackCheckRunSummary, SolutionPackPlan,
+    CreateSolutionPackPlanRequest, PlannedExtensionInstall, SolutionPackApplication,
+    SolutionPackApplicationSummary, SolutionPackCheckRun, SolutionPackCheckRunSummary,
+    SolutionPackPlan,
 };
 pub use tasks::{BackgroundProcessingStatus, ClaimedTask, TaskError, TaskSummary};
 pub use tokens::PersonalApiToken;

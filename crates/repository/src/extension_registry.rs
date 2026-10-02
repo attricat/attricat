@@ -296,6 +296,19 @@ impl GitHubRegistry {
             releases,
         })
     }
+    /// Lists the installable releases of an index-authorized extension without
+    /// loading its README.
+    pub async fn extension_releases(
+        &self,
+        extension: &DiscoveredExtension,
+    ) -> Result<Vec<DiscoveredRelease>, RegistryError> {
+        let repository = extension
+            .repository
+            .strip_prefix("github:")
+            .ok_or(RegistryError::InvalidResponse)?
+            .parse::<GitHubRepository>()?;
+        self.releases(&repository).await
+    }
     /// Downloads only an asset that was returned by this registry's trusted
     /// release resolution. Callers never provide a URL, preventing this API
     /// from becoming an outbound fetch proxy.

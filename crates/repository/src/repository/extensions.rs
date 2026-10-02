@@ -21,6 +21,44 @@ fn event_contract_grant_id(provider: &str, contract: &str) -> String {
     format!("{provider}:{contract}")
 }
 
+/// Every `(grant_kind, grant_id)` a release needs before it can be enabled.
+/// Optional permissions are excluded.
+pub fn required_extension_grants(manifest: &Manifest) -> Vec<(&'static str, String)> {
+    manifest
+        .permissions
+        .iter()
+        .map(|id| ("capability", id.clone()))
+        .chain(
+            manifest
+                .host_permissions
+                .iter()
+                .map(|permission| ("host_permission", permission.id.clone())),
+        )
+        .chain(
+            manifest
+                .event_contracts
+                .exports
+                .iter()
+                .map(|contract| ("event_publish", contract.id.clone())),
+        )
+        .chain(manifest.event_contracts.consumes.iter().map(|contract| {
+            (
+                "event_subscribe",
+                event_contract_grant_id(&contract.provider, &contract.contract),
+            )
+        }))
+        .collect()
+}
+
+/// Digest recorded as `installed_extension_releases.manifest_sha256`.
+pub fn extension_manifest_sha256(manifest: &Manifest) -> Result<String, RepositoryError> {
+    let serialized = serde_json::to_value(manifest)
+        .map_err(|error| RepositoryError::InvalidExtension(error.to_string()))?;
+    let bytes = serde_json::to_vec(&serialized)
+        .map_err(|error| RepositoryError::InvalidExtension(error.to_string()))?;
+    Ok(format!("{:x}", Sha256::digest(bytes)))
+}
+
 /// Configuration is data only: outlet names and stable contribution keys. It
 /// deliberately cannot contain selectors, component names, or placement rules.
 pub(crate) fn validate_workspace_extension_layout(layout: &Value) -> Result<(), RepositoryError> {
@@ -1447,9 +1485,7 @@ impl CatalogRepository {
     ) -> Result<(), RepositoryError> {
         let serialized = serde_json::to_value(manifest)
             .map_err(|error| RepositoryError::InvalidExtension(error.to_string()))?;
-        let bytes = serde_json::to_vec(&serialized)
-            .map_err(|error| RepositoryError::InvalidExtension(error.to_string()))?;
-        let digest = format!("{:x}", Sha256::digest(bytes));
+        let digest = extension_manifest_sha256(manifest)?;
         sqlx::query("INSERT INTO installed_extension_releases (id, workspace_id, extension_id, version, manifest, manifest_sha256, source) VALUES ($1, $2, $3, $4, $5, $6, $7)")
             .bind(installed_release_id).bind(self.extension_workspace()).bind(&manifest.catalog.id).bind(&manifest.version).bind(serialized).bind(digest).bind(source).execute(&mut **transaction).await?;
         Ok(())
