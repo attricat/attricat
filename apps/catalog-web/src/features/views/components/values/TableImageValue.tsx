@@ -1,12 +1,11 @@
-import { Typography } from '@mui/material';
-import { useTranslation } from 'react-i18next';
-import { fileDownloadUrl } from '../files/api';
-import { ThumbnailPreview } from '../files/FileThumbnail';
-import { fileMetadataSchema } from '../files/schemas';
-import { imageCellSize } from './constants';
+import { fileDownloadUrl } from '../../../files/api';
+import { ThumbnailPreview } from '../../../files/FileThumbnail';
+import { fileMetadataSchema } from '../../../files/schemas';
+import { TABLE_IMAGE_SIZE } from '../../constants';
+import { NotSetValue } from './NotSetValue';
 
-export const ImageTableCell = ({ value }: { value: unknown }) => {
-  const { t } = useTranslation();
+/** Thumbnail for `catalog.table_image@1`: the first file of an image-only attribute. */
+export const TableImageValue = ({ value }: { value: unknown }) => {
   const singleFile = fileMetadataSchema.safeParse(value);
   const files = fileMetadataSchema.array().safeParse(value);
   const file = singleFile.success
@@ -15,12 +14,7 @@ export const ImageTableCell = ({ value }: { value: unknown }) => {
       ? files.data[0]
       : undefined;
 
-  if (!file)
-    return (
-      <Typography color="text.secondary" variant="body2">
-        {t('views.notSet')}
-      </Typography>
-    );
+  if (!file) return <NotSetValue />;
 
   const thumbnail = file.variants.find(
     (variant) => variant.kind === 'thumbnail',
@@ -28,7 +22,7 @@ export const ImageTableCell = ({ value }: { value: unknown }) => {
   return (
     <ThumbnailPreview
       filename={file.filename}
-      size={imageCellSize}
+      size={TABLE_IMAGE_SIZE}
       source={
         file.status === 'ready'
           ? fileDownloadUrl(file.id, thumbnail?.kind)

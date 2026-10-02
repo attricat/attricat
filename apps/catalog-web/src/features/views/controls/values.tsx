@@ -3,58 +3,44 @@ import { useTranslation } from 'react-i18next';
 import type { StatusConfiguration } from '../../entities/status';
 import { MarkdownContent } from '../../markdown/MarkdownContent';
 import type { ValueRenderer } from '../components/componentTypes';
+import { NotSetValue } from '../components/values/NotSetValue';
 import { parseColor } from './color';
+import { EachValue } from './EachValue';
 import { emailHref } from './email';
 import { phoneHref } from './phone';
 import { LinkedTextValue } from './TextControl';
 import { safeUrl } from './url';
 
-export const ColorValue: ValueRenderer = ({ value }) => {
-  const { t } = useTranslation();
-  const values = Array.isArray(value) && value.length ? value : [value];
-  return (
-    <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
-      {values.map((item, index) => {
-        const color = parseColor(item);
-        const missing =
-          item == null || item === '' || (Array.isArray(item) && !item.length);
-        return (
-          <Stack
-            key={index}
-            direction="row"
-            spacing={1}
-            sx={{ alignItems: 'center' }}
-          >
-            {color && (
-              <Box
-                aria-hidden="true"
-                sx={{
-                  bgcolor: color,
-                  border: 1,
-                  borderColor: 'divider',
-                  width: 20,
-                  height: 20,
-                  flexShrink: 0,
-                }}
-              />
-            )}
-            <Typography
-              variant="body2"
-              color={missing ? 'text.secondary' : undefined}
-              sx={{ overflowWrap: 'anywhere' }}
-            >
-              {missing
-                ? t('views.notSet')
-                : typeof item === 'object'
-                  ? JSON.stringify(item)
-                  : String(item)}
-            </Typography>
-          </Stack>
-        );
-      })}
-    </Stack>
-  );
-};
+/** Opaque hex colors show a swatch beside the stored text. */
+export const ColorValue: ValueRenderer = ({ value }) => (
+  <EachValue
+    value={value}
+    direction="row"
+    renderItem={(item) => {
+      const color = parseColor(item);
+      return (
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+          {color && (
+            <Box
+              aria-hidden="true"
+              sx={{
+                bgcolor: color,
+                border: 1,
+                borderColor: 'divider',
+                width: 20,
+                height: 20,
+                flexShrink: 0,
+              }}
+            />
+          )}
+          <Typography variant="body2" sx={{ overflowWrap: 'anywhere' }}>
+            {typeof item === 'object' ? JSON.stringify(item) : String(item)}
+          </Typography>
+        </Stack>
+      );
+    }}
+  />
+);
 
 export const EmailValue: ValueRenderer = ({ value }) => (
   <LinkedTextValue value={value} href={emailHref} />
@@ -89,16 +75,12 @@ export const PhoneValue: ValueRenderer = ({ value }) => {
   );
 };
 
-export const MarkdownValue: ValueRenderer = ({ value }) => {
-  const { t } = useTranslation();
-  return typeof value === 'string' && value.trim() ? (
+export const MarkdownValue: ValueRenderer = ({ value }) =>
+  typeof value === 'string' && value.trim() ? (
     <MarkdownContent value={value} />
   ) : (
-    <Typography color="text.secondary" variant="body2">
-      {t('views.notSet')}
-    </Typography>
+    <NotSetValue />
   );
-};
 
 /** A status code as its labelled chip; unknown codes stay visible. */
 export const StatusValue = ({
@@ -109,12 +91,7 @@ export const StatusValue = ({
   value: unknown;
 }) => {
   const { t } = useTranslation();
-  if (value === null || value === undefined)
-    return (
-      <Typography color="text.secondary" variant="body2">
-        {t('views.notSet')}
-      </Typography>
-    );
+  if (value === null || value === undefined) return <NotSetValue />;
   const option = config.options.find((item) => item.code === value);
   const label = option?.label ?? String(value);
   return (

@@ -227,7 +227,6 @@
     "never": "Nigdy"
   },
   "entities": {
-    "phoneHelp": "Dodaj + i numer kierunkowy kraju, aby umożliwić połączenie. Numer wewnętrzny można poprzedzić ext. lub x.",
     "createEntity": "Utwórz encję",
     "editEntity": "Edytuj encję",
     "duplicateEntity": "Duplikuj encję",
@@ -257,7 +256,6 @@
     "commaSeparatedUuids": "Identyfikatory UUID encji rozdzielone przecinkami",
     "requiredAttributeValue": "Wartość jest wymagana przez docelowy schemat.",
     "invalidRelationshipValue": "Wprowadź identyfikatory UUID encji rozdzielone przecinkami.",
-    "invalidEmail": "Wprowadź jeden adres e-mail, na przykład imie@example.com.",
     "invalidAttributeValue": "Wprowadź wartość zgodną z wymaganiami pola.",
     "additionalAttributes": "Dodatkowe atrybuty",
     "selectAdditionalAttribute": "Wybierz atrybut",
@@ -1199,11 +1197,13 @@
     "acceptInvitation": "Zaakceptuj zaproszenie"
   },
   "views": {
+    "emailInvalid": "Wprowadź jeden adres e-mail, na przykład imie@example.com.",
+    "phoneHelp": "Dodaj + i numer kierunkowy kraju, aby umożliwić połączenie. Numer wewnętrzny można poprzedzić ext. lub x.",
+    "urlInvalid": "Wpisz pełny adres HTTP lub HTTPS bez spacji i danych logowania.",
     "colorInvalid": "Wpisz sześciocyfrowy kolor szesnastkowy, np. #1a2b3c.",
     "colorFormat": "Sześciocyfrowy kolor szesnastkowy (#RRGGBB). Usuń tekst, aby wyczyścić wartość.",
     "colorPicker": "Wybierz kolor",
     "colorPickerFor": "Wybierz kolor dla {{attribute}}",
-    "invalidUrl": "Wpisz pełny adres HTTP lub HTTPS bez spacji i danych logowania.",
     "urlOpenNewTab": "{{url}} (otwiera się w nowej karcie)",
     "callPhone": "Zadzwoń pod {{number}}",
     "availableOnPreviews": "{{label}} jest dostępne w podglądach encji.",

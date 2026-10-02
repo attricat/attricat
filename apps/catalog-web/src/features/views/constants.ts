@@ -26,6 +26,7 @@ export const HIERARCHY_PARENT_FIELD_PROP = 'parent_field';
 export const ROOT_NODE_KEY = 'root';
 export const VIEW_COMPONENT_LOG_LABEL = 'view component';
 export const FILE_THUMBNAIL_SIZE = 64;
+export const TABLE_IMAGE_SIZE = 48;
 export const VIEW_SECTION_PADDING = 2.5;
 export const VIEW_LAYOUT_SPACING = 2;
 export const VIEW_GRID_COLUMNS = {
