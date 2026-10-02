@@ -80,12 +80,13 @@ Your photo belongs to the current workspace: set one in each workspace you use. 
 
 ## Personal API tokens
 
-Scripts, the CLI, and integrations authenticate with personal API tokens. Create one under **Profile → Personal access tokens**, or with `acli token create`.
+Scripts, the CLI, and integrations authenticate with personal API tokens. Create one under **Profile → Personal API tokens**, or with `acli token create`.
 
 - A token has a label, an optional expiry, and an explicit list of permissions. It can never do more than its owner: if the owner loses a permission, the token loses it too.
 - The token secret starts with `cat_pat_` and is shown once. Store it in a secret manager.
 - Send it as `Authorization: Bearer cat_pat_…`. The token decides the workspace; no header or parameter selects one.
-- Revoke tokens you no longer need. The token list shows when each was last used.
+- A token can create another token only with a subset of its own permissions. If the creating token expires, the new one must expire no later.
+- Revoke tokens you no longer need. Revoking a token does not revoke tokens it created; revoke each one. The token list shows when each was last used, to within a minute.
 
 Creating tokens needs `tokens.manage`.
 

@@ -91,11 +91,13 @@ Link nigdy nie nadaje dostępu. Osoba, która go otwiera, musi być członkiem o
 
 ## Działania na wielu encjach
 
-**Wybierz encje** włącza tryb zaznaczania. Zaznacz do 50 wczytanych encji, aby:
+**Wybierz encje** włącza tryb zaznaczania. Możesz zaznaczyć do 50 encji. Zaznaczenie zostaje po zmianie zapytania, sortowania lub filtrów, więc możesz zebrać encje z kilku wyszukiwań tego samego schematu. Kliknij **Wybrano N encji**, aby przejrzeć listę i usunąć z niej encje.
 
-- wysłać je do [rozmowy z agentem](/pl/guides/agents/) wraz z instrukcjami;
-- zapisać je jako nowe zapisane wyszukiwanie obejmujące dokładnie te encje (**Utwórz zapisane wyszukiwanie**);
-- uruchomić działania zbiorcze udostępniane przez zainstalowane rozszerzenia.
+Menu **Akcje** działa na zaznaczeniu:
+
+- **Wyślij do rozmowy z agentem** wysyła encje do [rozmowy z agentem](/pl/guides/agents/) wraz z instrukcjami.
+- **Utwórz zapisane wyszukiwanie** zapisuje wyszukiwanie obejmujące dokładnie te encje.
+- Zainstalowane rozszerzenia mogą dodać własne działania zbiorcze.
 
 ## Otwieranie encji
 

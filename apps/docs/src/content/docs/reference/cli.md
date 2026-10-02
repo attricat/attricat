@@ -27,7 +27,7 @@ Credentials are only sent over HTTPS, or to a loopback address for local develop
 
 ## Authenticate
 
-**With a token** (recommended for automation). Create a personal API token in the web app under **Profile → Personal access tokens**, then:
+**With a token** (recommended for automation). Create a personal API token in the web app under **Profile → Personal API tokens**, then:
 
 ```sh
 export CATALOG_TOKEN=cat_pat_…

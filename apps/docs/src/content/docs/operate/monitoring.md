@@ -52,7 +52,8 @@ Useful series:
 | `catalog_event_deliveries_total{outcome}` | `dead_letter` increases. |
 | `catalog_extension_operation_runs`, `catalog_extension_operation_oldest_age_seconds` | Stuck extension operations. |
 | `catalog_file_uploads_total`, `catalog_file_downloads_total`, `catalog_object_store_operations_total` | Error outcomes. |
-| `catalog_value_history_cleanup_total{outcome}` | `failed`. |
+| `catalog_value_history_cleanup_total{outcome}` | `failed`. Repeated `budget_exhausted` means each 10-second run ends with old history still left to delete. |
+| `catalog_upload_cleanup_total{outcome}` | `failed`. Failed deletions of abandoned uploads are retried. |
 
 Suggested alerts: page when a readiness gauge is zero for two intervals, when any dead-letter or failed count is above zero, or when failure counters increase. Warn when the oldest queued item is older than five minutes for ten minutes, or a queue grows for fifteen minutes. Alert if metrics disappear for two scrape intervals. Tune thresholds to your import and export volume.
 

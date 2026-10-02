@@ -91,11 +91,13 @@ A link never grants access. The person opening it needs to be a member of the wo
 
 ## Act on several entities
 
-**Select entities** turns on selection mode. Select up to 50 loaded entities to:
+**Select entities** turns on selection mode. You can select up to 50 entities. The selection stays when you change the query, sort, or filters, so you can collect entities from several searches of the same blueprint. Click **N selected** to review the list and remove entities from it.
 
-- send them to an [agent conversation](/guides/agents/) with instructions;
-- save them as a new saved search that matches exactly these entities (**Create saved search**);
-- run bulk actions provided by installed extensions.
+The **Actions** menu works on the selection:
+
+- **Send to agent conversation** sends the entities to an [agent conversation](/guides/agents/) with instructions.
+- **Create saved search** saves a search that matches exactly these entities.
+- Installed extensions can add their own bulk actions.
 
 ## Open an entity
 

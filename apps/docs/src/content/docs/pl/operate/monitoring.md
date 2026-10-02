@@ -52,7 +52,8 @@ Przydatne serie:
 | `catalog_event_deliveries_total{outcome}` | Wzrosty `dead_letter`. |
 | `catalog_extension_operation_runs`, `catalog_extension_operation_oldest_age_seconds` | Zablokowane operacje rozszerzeń. |
 | `catalog_file_uploads_total`, `catalog_file_downloads_total`, `catalog_object_store_operations_total` | Wyniki z błędem. |
-| `catalog_value_history_cleanup_total{outcome}` | `failed`. |
+| `catalog_value_history_cleanup_total{outcome}` | `failed`. Powtarzające się `budget_exhausted` oznacza, że każdy 10-sekundowy przebieg kończy się, zanim usunie całą starą historię. |
+| `catalog_upload_cleanup_total{outcome}` | `failed`. Nieudane usunięcia porzuconych przesłanych plików są ponawiane. |
 
 Sugerowane alerty: powiadamiaj dyżurnego, gdy wskaźnik gotowości wynosi zero przez dwa interwały, gdy liczba martwych wiadomości lub nieudanych zadań jest większa od zera albo gdy rosną liczniki niepowodzeń. Ostrzegaj, gdy najstarszy element w kolejce jest starszy niż pięć minut przez dziesięć minut lub gdy kolejka rośnie przez piętnaście minut. Alarmuj, jeśli metryki znikną na dwa interwały pobierania. Dostosuj progi do wolumenu importów i eksportów.
 

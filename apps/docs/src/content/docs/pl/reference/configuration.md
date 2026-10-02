@@ -80,8 +80,11 @@ Czas trwania sesji (osiem godzin), limit prób logowania (pięć niepowodzeń na
 
 | Zmienna | Domyślnie | Opis |
 | --- | --- | --- |
-| `HTTP_REQUEST_TIMEOUT_SECONDS` | `30` | Limit czasu rzeczywistego dla jednego żądania. Żądanie, które go przekroczy, zwraca `408`. |
-| `HTTP_MAX_CONCURRENT_REQUESTS` | `256` | Maksymalna liczba jednocześnie obsługiwanych żądań na proces API. Nadmiarowe żądania natychmiast otrzymują `503` zamiast czekać w kolejce. |
+| `HTTP_REQUEST_TIMEOUT_SECONDS` | `30` | Limit czasu rzeczywistego dla jednego żądania. Żądanie, które go przekroczy, zwraca `503` z kodem `request_timeout`. Zapis mógł się jednak wykonać, więc sprawdź to przed ponowieniem. |
+| `HTTP_MAX_CONCURRENT_REQUESTS` | `256` | Maksymalna liczba jednocześnie obsługiwanych żądań na proces API. Nadmiarowe żądania natychmiast otrzymują `503` zamiast czekać w kolejce. Kontrole stanu i otwarte strumienie zdarzeń mają osobne limity. |
+| `HTTP_MAX_EVENT_STREAMS` | `128` | Maksymalna liczba otwartych strumieni zdarzeń na proces API. |
+| `HTTP_MAX_EVENT_STREAMS_PER_PRINCIPAL` | `4` | Maksymalna liczba otwartych strumieni zdarzeń jednego użytkownika w obszarze roboczym, łącznie dla wszystkich jego sesji i tokenów. |
+| `HTTP_EVENT_STREAM_LIFETIME_SECONDS` | `900` | Najdłuższy czas otwarcia strumienia zdarzeń. Potem API go zamyka, a klient łączy się ponownie z `Last-Event-ID`. |
 | `HTTP_DEFAULT_BODY_BYTES` | `2097152` (2 MiB) | Domyślny limit treści żądania. Trasy przesyłania używają zamiast niego limitów plików opisanych poniżej. |
 
 ## Zachowanie i limity katalogu
@@ -94,7 +97,7 @@ Czas trwania sesji (osiem godzin), limit prób logowania (pięć niepowodzeń na
 | `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE` | `50` | Największy rozmiar strony list relacji przychodzących. Ogranicza `page_size` w blokach widoku `incoming_relationship_list`. |
 | `RELATIONSHIP_FACET_MAX_NODES` | `100` | Maksymalna liczba węzłów zwracanych na stronę faset relacji w przeglądarce encji. |
 | `DATA_HEALTH_CACHE_TTL_SECONDS` | `300` | Jak długo buforowane są odpowiedzi stanu danych. `0` wyłącza bufor. |
-| `ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS` | `90` | Liczba dni przechowywania historii wartości atrybutów. Starsza historia jest usuwana przy starcie API. Jeśli czyszczenie się nie powiedzie, start się nie powiedzie. |
+| `ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS` | `90` | Liczba dni przechowywania historii wartości atrybutów. Co minutę API przez maksymalnie 10 sekund usuwa starszą historię, najwyżej 1000 wierszy na transakcję. Nieudane czyszczenie trafia do logu i jest ponawiane; nie zatrzymuje API. |
 | `BLUEPRINT_MIGRATION_PAGE_SIZE` | `100` | Liczba encji odczytywanych na stronę podczas migracji schematu w tle. Od 1 do 1000. |
 | `BLUEPRINT_MIGRATION_CONCURRENCY` | `4` | Liczba encji migrowanych jednocześnie w ramach jednej partii migracji. Od 1 do 64. |
 

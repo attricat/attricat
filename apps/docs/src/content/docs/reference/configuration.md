@@ -80,8 +80,11 @@ Session lifetime (eight hours), the login rate limit (five failures per workspac
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `HTTP_REQUEST_TIMEOUT_SECONDS` | `30` | Wall-clock limit for one request. A request that exceeds it returns `408`. |
-| `HTTP_MAX_CONCURRENT_REQUESTS` | `256` | Maximum requests in flight per API process. Extra requests get `503` immediately instead of queueing. |
+| `HTTP_REQUEST_TIMEOUT_SECONDS` | `30` | Wall-clock limit for one request. A request that exceeds it returns `503` with code `request_timeout`. The write may still have happened, so check before retrying it. |
+| `HTTP_MAX_CONCURRENT_REQUESTS` | `256` | Maximum requests in flight per API process. Extra requests get `503` immediately instead of queueing. Health checks and open event streams have their own limits. |
+| `HTTP_MAX_EVENT_STREAMS` | `128` | Maximum open event streams per API process. |
+| `HTTP_MAX_EVENT_STREAMS_PER_PRINCIPAL` | `4` | Maximum open event streams per user in a workspace, counted across all of that user's sessions and tokens. |
+| `HTTP_EVENT_STREAM_LIFETIME_SECONDS` | `900` | Longest an event stream stays open. The API then closes it, and clients reconnect with `Last-Event-ID`. |
 | `HTTP_DEFAULT_BODY_BYTES` | `2097152` (2 MiB) | Default request body limit. Upload routes use the file limits below instead. |
 
 ## Catalog behavior and limits
@@ -94,7 +97,7 @@ Session lifetime (eight hours), the login rate limit (five failures per workspac
 | `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE` | `50` | Largest page size for incoming-relationship lists. Caps `page_size` in `incoming_relationship_list` view blocks. |
 | `RELATIONSHIP_FACET_MAX_NODES` | `100` | Maximum nodes returned per page of an Explorer relationship facet. |
 | `DATA_HEALTH_CACHE_TTL_SECONDS` | `300` | How long data-health responses are cached. `0` disables the cache. |
-| `ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS` | `90` | Days of attribute-value history kept. Older history is removed at API startup. If cleanup fails, startup fails. |
+| `ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS` | `90` | Days of attribute-value history kept. Every minute the API spends up to 10 seconds deleting older history, at most 1,000 rows per transaction. A failed cleanup is logged and tried again; it does not stop the API. |
 | `BLUEPRINT_MIGRATION_PAGE_SIZE` | `100` | Entities read per page during a background blueprint migration. 1 to 1000. |
 | `BLUEPRINT_MIGRATION_CONCURRENCY` | `4` | Entities migrated at the same time within one migration batch. 1 to 64. |
 
