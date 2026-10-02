@@ -27,6 +27,7 @@ For local setup, migrations, and E2E testing, see [Getting Started](index.md#get
 | `AttributeValue`   | `attribute_values`   | The current canonical EAV fact.                             |
 | `SolutionPackPlan` | `solution_pack_plans` | Immutable, expiring workspace dry-run metadata.             |
 | `SolutionPackPlanExtensionRequirement` | `solution_pack_plan_extension_requirements` | Immutable extension compatibility/configuration-match evidence; private templates are never API-serialized. |
+| `PlannedExtensionInstall` | `solution_pack_plan_extension_releases` | Pinned official release, reserved installed-release ID, digests, configuration, and required grants for each `install` requirement. |
 | `SolutionPackApplication` | `solution_pack_applications` | Durable application identity, provenance, and bounded state. |
 | `SolutionPackApplicationStep` | `solution_pack_application_steps` | Ordered, resumable resource mutation evidence. |
 
@@ -101,9 +102,13 @@ full layout replacement, merge item-by-item, and retain only bounded count,
 outcome, and before/after digest evidence. A retry verifies completed targets
 and continues pending steps. Application records do
 not own resources and cannot uninstall a pack.
-Extension requirement evaluation is implemented, but extension installation,
-upgrade, configuration, grants, enablement, removal, and pack ownership remain
-outside solution-pack application. Generic settings beyond bounded Explore
+Before an application's steps run, apply installs, configures, grants, and
+enables each `install` requirement's pinned official release through the
+ordinary extension lifecycle, reusing the installed-release ID reserved at
+planning so reviewed contribution evidence stays exact. When a plan pins
+releases, the evidence digest also covers them. Upgrades, reconfiguration of
+existing installations, removal, and pack ownership remain outside
+solution-pack application. Generic settings beyond bounded Explore
 navigation and extension layout, and export, remain deferred. Optional
 sample-data persistence durably reserves the
 exact workspace ID, pack ID, pack SemVer, archive digest, and canonical sample

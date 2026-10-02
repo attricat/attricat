@@ -58,7 +58,18 @@ impl ExtensionInstaller {
         source: &str,
         package: ExtensionPackage,
     ) -> Result<ExtensionInstallation, ExtensionInstallError> {
-        let installed_release_id = Uuid::new_v4();
+        self.install_package_as(source, package, Uuid::new_v4())
+            .await
+    }
+
+    /// Installs a package under an installed-release ID the caller reserved,
+    /// such as one a reviewed solution-pack plan already references.
+    pub async fn install_package_as(
+        &self,
+        source: &str,
+        package: ExtensionPackage,
+        installed_release_id: Uuid,
+    ) -> Result<ExtensionInstallation, ExtensionInstallError> {
         let keys = self.stage_artifacts(&package, installed_release_id).await?;
         match self
             .repository

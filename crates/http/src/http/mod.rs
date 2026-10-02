@@ -45,6 +45,7 @@ use crate::{
     file_access::FileAccessPolicy,
     mail::MailDelivery,
     repository::SystemRepository,
+    solution_pack_extensions::OfficialExtensionReleases,
     solution_packs::MAX_SOLUTION_PACK_ARCHIVE_BYTES,
     storage::ObjectStore,
     telemetry::{register_request_timing, unregister_request_timing},
@@ -72,6 +73,8 @@ pub struct AppState {
     pub agent_provider: Option<AgentProviderConfig>,
     pub registry: Arc<GitHubRegistry>,
     pub official_registry: GitHubRepository,
+    /// Release source for extensions that solution packs install.
+    pub official_extension_releases: Arc<dyn OfficialExtensionReleases>,
     /// Storage is injected at startup so future file routes never construct a
     /// provider client from request data.
     pub object_store: Arc<dyn ObjectStore>,

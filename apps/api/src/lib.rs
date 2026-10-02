@@ -25,7 +25,7 @@ pub use catalog_extension_runtime as extension_runtime;
 pub use catalog_http::{http, mail, telemetry};
 pub use catalog_repository::{
     catalog_read_service, catalog_service, extension_installer, extension_registry, file_access,
-    repository,
+    repository, solution_pack_extensions,
 };
 pub use catalog_solution_pack::{solution_pack_sample_data, solution_packs};
 pub use catalog_storage as storage;

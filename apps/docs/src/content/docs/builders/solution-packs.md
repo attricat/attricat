@@ -12,7 +12,7 @@ After applying a pack, users work with its resources through normal Attricat fea
 - Obtain an archive from a trusted publisher and review its release notes. Attricat does not download packs or fetch repository URLs.
 - Authenticate the CLI to the intended workspace. Pack administration requires `solution_packs.manage`, available to owners and administrators by default.
 - Test unfamiliar packs in a disposable workspace, especially when selecting sample data.
-- Manage required extensions through the normal [extension workflow](/builders/extensions/). A pack never installs, configures, grants permissions to, enables, or removes extensions.
+- A pack may install the extensions it requires from the official Attricat extension registry. Applying it installs, configures, grants permissions to, and enables them without a separate approval. See [Extensions](#extensions).
 
 If an archive is rejected, ask its publisher for a compatible release rather than editing or repackaging it.
 
@@ -32,7 +32,7 @@ acli solution-pack plan --file pack.tar.zst \
 acli solution-pack plan show <plan-id>
 ```
 
-Planning saves an immutable dry run without changing catalog resources. Review readiness, actions, conflicts, and extension requirements.
+Planning saves an immutable dry run without changing catalog resources. Review readiness, actions, conflicts, and extension requirements. A requirement with status `install` lists the official release apply will install and the permissions it will grant.
 
 - `--prefix` produces new blueprint codes such as `example_product`. Use 1–32 lowercase letters, digits, or underscores, beginning with a letter and not ending with an underscore.
 - `--blueprint-publication` is `draft` or `publish`. Navigation and samples can require published blueprints, so selecting `draft` may block a pack that needs them.
@@ -70,7 +70,15 @@ acli solution-pack plan --file pack.tar.zst --prefix example \
   --map-asset assets/brand-logo=<asset-id>
 ```
 
-You must select existing resources explicitly; Attricat does not silently overwrite them. If an extension requirement is unmet, resolve it through extension administration and create a fresh plan. A compatible disabled installation can satisfy a requirement; operators must still approve grants and enablement separately.
+You must select existing resources explicitly; Attricat does not silently overwrite them. If an extension requirement is blocked, resolve it through extension administration and create a fresh plan.
+
+### Extensions
+
+When a required extension is not installed, planning selects the newest release in the pack's version range from the official Attricat registry. Registries added to the workspace are never used. Planning needs access to the official registry, but installs nothing.
+
+Apply installs that exact release before its other steps. It configures the release from the pack, grants the permissions the release requires, and enables it. Each change appears in the extension's lifecycle history and the audit log. If the release changed since you reviewed the plan, apply stops; create a new plan.
+
+Packs leave existing installations as they are. A compatible installation satisfies the requirement, enabled or not. An incompatible version, a quarantined installation, or different configuration blocks the plan; packs never upgrade or reconfigure an installed extension. Extensions installed by a pack are ordinary installations that you manage, disable, or remove as usual.
 
 ## 4. Apply and verify
 
@@ -124,6 +132,6 @@ A pack can ship [label translations](/builders/translations/), shown as the `wor
 
 ## Limits and removal
 
-Packs cannot create contexts or publication channels, change membership or grants, run executable installers, resolve prerequisite packs automatically, or update existing blueprints.
+Packs cannot create contexts or publication channels, change membership or role grants, install extensions from anywhere but the official registry, upgrade installed extensions, run executable installers, resolve prerequisite packs automatically, or update existing blueprints.
 
 There is no pack-level uninstall or rollback. Administrators may edit or remove individual resources through ordinary operations, subject to authorization, dependencies, publication, and retention rules. Review business data before deleting anything; resources referenced by application history may be shared or modified.

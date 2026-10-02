@@ -13,6 +13,7 @@ use crate::{
         valid_contribution_key,
     },
     model::{CreateBlueprint, NewAttributeValue},
+    solution_pack_extensions::ResolvedExtensionRelease,
     solution_pack_sample_data::{SampleEntity, explicit_fact_attribute_codes},
     solution_packs::{
         BlueprintMappingRequest, BlueprintPublication, ExistingBlueprintSnapshot,
@@ -40,6 +41,27 @@ pub struct CreateSolutionPackPlanRequest<'a> {
     pub asset_mappings: &'a [PresentationAssetMappingRequest],
     pub prior_application_id: Option<Uuid>,
     pub include_sample_data: bool,
+    /// Official releases of missing extensions, in dependency order, that the
+    /// plan may install. See [`crate::solution_pack_extensions`].
+    pub official_extensions: &'a [ResolvedExtensionRelease],
+}
+
+/// A pinned official release a reviewed plan installs before its steps run.
+#[derive(Clone, Debug, Serialize, sqlx::FromRow)]
+pub struct PlannedExtensionInstall {
+    pub logical_key: String,
+    pub extension_id: String,
+    pub version: String,
+    pub installed_release_id: Uuid,
+    pub repository: String,
+    pub release_id: i64,
+    pub tag_name: String,
+    pub asset_id: i64,
+    pub asset_name: String,
+    pub download_url: String,
+    pub archive_sha256: String,
+    pub manifest_sha256: String,
+    pub configuration: Value,
 }
 
 #[derive(Clone, Debug, Serialize, sqlx::FromRow)]
@@ -236,6 +258,14 @@ struct PlanEvidenceAssetObject {
 }
 
 #[derive(Serialize, sqlx::FromRow)]
+struct PlanEvidenceExtensionInstall {
+    position: i64,
+    #[sqlx(flatten)]
+    install: PlannedExtensionInstall,
+    required_grants: Value,
+}
+
+#[derive(Serialize, sqlx::FromRow)]
 struct PlanEvidenceExtensionRequirement {
     position: i64,
     logical_key: String,
@@ -277,6 +307,9 @@ pub struct SolutionPackPlanExtensionRequirement {
     pub installed_version: Option<String>,
     pub installed_state: Option<String>,
     pub configuration_matches: Option<bool>,
+    /// For an `install` requirement: the pinned official release and the
+    /// permissions apply grants to it.
+    pub install: Option<Value>,
 }
 
 #[derive(sqlx::FromRow)]
@@ -310,23 +343,8 @@ fn installed_extension_snapshot(
     // manifest. They can still satisfy the pre-existing version/configuration
     // requirement contract, but cannot prove a contribution declaration.
     let contributions = serde_json::from_value::<Manifest>(installed.manifest)
-        .ok()
-        .into_iter()
-        .flat_map(|manifest| manifest.ui)
-        .filter_map(|contribution| {
-            contribution.outlet.map(|outlet| {
-                let outlet = serde_json::to_value(outlet)
-                    .expect("UI outlet serialization cannot fail")
-                    .as_str()
-                    .expect("UI outlet serializes as a string")
-                    .to_owned();
-                (
-                    format!("{}:{}", installed.extension_id, contribution.id),
-                    outlet,
-                )
-            })
-        })
-        .collect();
+        .map(|manifest| manifest_contributions(&installed.extension_id, &manifest))
+        .unwrap_or_default();
     let policy_compatible =
         extension_policy::allows(&installed.extension_id, installed.installed_release_id);
     Ok((
@@ -338,8 +356,46 @@ fn installed_extension_snapshot(
             configuration: installed.configuration,
             policy_compatible,
             contributions,
+            pending_install: false,
         },
     ))
+}
+
+/// Planning view of an official release the plan would install.
+fn pending_extension_snapshot(release: &ResolvedExtensionRelease) -> InstalledExtensionSnapshot {
+    InstalledExtensionSnapshot {
+        installed_release_id: release.installed_release_id,
+        version: release.manifest.version.clone(),
+        state: "disabled".to_owned(),
+        configuration: release.configuration.clone(),
+        policy_compatible: extension_policy::allows(
+            &release.extension_id,
+            release.installed_release_id,
+        ),
+        contributions: manifest_contributions(&release.extension_id, &release.manifest),
+        pending_install: true,
+    }
+}
+
+/// Stable contribution keys mapped to their manifest-declared outlets.
+fn manifest_contributions(
+    extension_id: &str,
+    manifest: &Manifest,
+) -> std::collections::BTreeMap<String, String> {
+    manifest
+        .ui
+        .iter()
+        .filter_map(|contribution| {
+            contribution.outlet.as_ref().map(|outlet| {
+                let outlet = serde_json::to_value(outlet)
+                    .expect("UI outlet serialization cannot fail")
+                    .as_str()
+                    .expect("UI outlet serializes as a string")
+                    .to_owned();
+                (format!("{extension_id}:{}", contribution.id), outlet)
+            })
+        })
+        .collect()
 }
 
 async fn load_prior_application(
@@ -946,6 +1002,7 @@ impl CatalogRepository {
             asset_mappings: requested_asset_mappings,
             prior_application_id,
             include_sample_data,
+            official_extensions,
         } = request;
         if include_sample_data && pack.sample_data().is_none() {
             return Err(RepositoryError::InvalidSolutionPackPlan(
@@ -1329,7 +1386,8 @@ impl CatalogRepository {
             .iter()
             .map(|requirement| requirement.id.clone())
             .collect::<Vec<_>>();
-        let installed_extensions = if extension_ids.is_empty() {
+        let mut installed_extensions: std::collections::BTreeMap<_, _> = if extension_ids.is_empty()
+        {
             Default::default()
         } else {
             sqlx::query_as::<_, InstalledExtensionRow>(
@@ -1343,6 +1401,17 @@ impl CatalogRepository {
             .map(installed_extension_snapshot)
             .collect::<Result<_, _>>()?
         };
+        // An extension installed since resolution is evaluated as installed.
+        let official_extensions = official_extensions
+            .iter()
+            .filter(|release| !installed_extensions.contains_key(&release.extension_id))
+            .collect::<Vec<_>>();
+        for release in &official_extensions {
+            installed_extensions.insert(
+                release.extension_id.clone(),
+                pending_extension_snapshot(release),
+            );
+        }
         let mut draft = build_solution_pack_plan(
             pack,
             prefix,
@@ -1725,7 +1794,7 @@ impl CatalogRepository {
             })
             .collect::<Vec<_>>();
         let initial_ready = draft.ready && asset_creates.is_empty();
-        let plan = materialize_plan(
+        let mut plan = materialize_plan(
             (id, workspace_id),
             pack,
             prefix,
@@ -1738,6 +1807,14 @@ impl CatalogRepository {
             ),
             &draft,
         );
+        for requirement in &mut plan.extension_requirements {
+            if requirement.status == "install" {
+                requirement.install = official_extensions
+                    .iter()
+                    .find(|release| release.extension_id == requirement.extension_id)
+                    .map(|release| extension_install_summary(release));
+            }
+        }
         let response_size = serde_json::to_vec(&plan)
             .map_err(|error| RepositoryError::InvalidSolutionPackPlan(error.to_string()))?
             .len();
@@ -1854,6 +1931,7 @@ impl CatalogRepository {
             }
         }
         insert_plan_rows(&mut tx, workspace_id, id, &draft).await?;
+        insert_extension_installs(&mut tx, workspace_id, id, &draft, &official_extensions).await?;
         for mapping in &asset_creates {
             let asset = pack
                 .presentation_asset(&mapping.logical_key)
@@ -2020,7 +2098,7 @@ impl CatalogRepository {
         .await?;
         plan.conflicts = conflict_summaries(&plan.actions);
         plan.extension_requirements = sqlx::query_as::<_, SolutionPackPlanExtensionRequirement>(
-            "SELECT position, logical_key, extension_id, version_requirement, required, configuration_template_path, configuration_template_sha256, status, reason_code, installed_release_id, installed_version, installed_state, configuration_matches FROM solution_pack_plan_extension_requirements WHERE workspace_id = $1 AND plan_id = $2 ORDER BY position",
+            "SELECT r.position, r.logical_key, r.extension_id, r.version_requirement, r.required, r.configuration_template_path, r.configuration_template_sha256, r.status, r.reason_code, r.installed_release_id, r.installed_version, r.installed_state, r.configuration_matches, CASE WHEN i.plan_id IS NOT NULL THEN jsonb_build_object('version', i.version, 'repository', i.repository, 'tag_name', i.tag_name, 'grants', i.required_grants) END AS install FROM solution_pack_plan_extension_requirements r LEFT JOIN solution_pack_plan_extension_releases i ON i.plan_id = r.plan_id AND i.logical_key = r.logical_key WHERE r.workspace_id = $1 AND r.plan_id = $2 ORDER BY r.position",
         )
         .bind(workspace_id)
         .bind(plan_id)
@@ -2100,6 +2178,7 @@ fn materialize_plan(
                 installed_version: requirement.installed_version.clone(),
                 installed_state: requirement.installed_state.clone(),
                 configuration_matches: requirement.configuration_matches,
+                install: None,
             },
         )
         .collect();
@@ -2233,6 +2312,67 @@ async fn insert_plan_rows(
             .bind(&requirement.evaluation_template)
             .execute(&mut **tx)
             .await?;
+    }
+    Ok(())
+}
+
+/// The reviewable summary of an official release a plan installs.
+fn extension_install_summary(release: &ResolvedExtensionRelease) -> Value {
+    serde_json::json!({
+        "version": release.manifest.version,
+        "repository": release.release.source,
+        "tag_name": release.release.tag_name,
+        "grants": extension_install_grants(release),
+    })
+}
+
+fn extension_install_grants(release: &ResolvedExtensionRelease) -> Value {
+    super::required_extension_grants(&release.manifest)
+        .into_iter()
+        .map(|(kind, id)| serde_json::json!({"kind": kind, "id": id}))
+        .collect()
+}
+
+/// Pins the official release of every requirement the plan installs, in the
+/// dependency order apply installs them.
+async fn insert_extension_installs(
+    tx: &mut Transaction<'_, Postgres>,
+    workspace_id: Uuid,
+    plan_id: Uuid,
+    draft: &SolutionPackPlanDraft,
+    official_extensions: &[&ResolvedExtensionRelease],
+) -> Result<(), RepositoryError> {
+    let mut position = 0_i64;
+    for release in official_extensions {
+        let Some(requirement) = draft
+            .extension_requirements
+            .iter()
+            .find(|requirement| requirement.extension_id == release.extension_id)
+            .filter(|requirement| requirement.status == "install")
+        else {
+            continue;
+        };
+        sqlx::query("INSERT INTO solution_pack_plan_extension_releases (plan_id,workspace_id,position,logical_key,extension_id,version,installed_release_id,repository,release_id,tag_name,asset_id,asset_name,download_url,archive_sha256,manifest_sha256,configuration,required_grants) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)")
+            .bind(plan_id)
+            .bind(workspace_id)
+            .bind(position)
+            .bind(&requirement.logical_key)
+            .bind(&release.extension_id)
+            .bind(&release.manifest.version)
+            .bind(release.installed_release_id)
+            .bind(&release.release.source)
+            .bind(release.release.release_id as i64)
+            .bind(&release.release.tag_name)
+            .bind(release.release.asset.id as i64)
+            .bind(&release.release.asset.name)
+            .bind(&release.release.asset.download_url)
+            .bind(&release.archive_sha256)
+            .bind(&release.manifest_sha256)
+            .bind(&release.configuration)
+            .bind(extension_install_grants(release))
+            .execute(&mut **tx)
+            .await?;
+        position += 1;
     }
     Ok(())
 }
@@ -2416,14 +2556,27 @@ async fn plan_resource_evidence_sha256_v3(
     .bind(plan_id)
     .fetch_all(&mut **tx)
     .await?;
-    let encoded = serde_json::to_vec(&(
-        header,
-        release_changes,
-        mappings,
-        actions,
-        asset_objects,
-        extension_requirements,
-    ))
+    let installs = extension_install_evidence(tx, workspace_id, plan_id).await?;
+    let encoded = if installs.is_empty() {
+        serde_json::to_vec(&(
+            header,
+            release_changes,
+            mappings,
+            actions,
+            asset_objects,
+            extension_requirements,
+        ))
+    } else {
+        serde_json::to_vec(&(
+            header,
+            release_changes,
+            mappings,
+            actions,
+            asset_objects,
+            extension_requirements,
+            installs,
+        ))
+    }
     .map_err(|error| RepositoryError::InvalidSolutionPackPlan(error.to_string()))?;
     Ok(format!("{:x}", Sha256::digest(encoded)))
 }
@@ -2468,15 +2621,43 @@ async fn plan_resource_evidence_sha256_v2(
     .bind(plan_id)
     .fetch_all(&mut **tx)
     .await?;
-    let encoded = serde_json::to_vec(&(
-        header,
-        release_changes,
-        mappings,
-        actions,
-        extension_requirements,
-    ))
+    let installs = extension_install_evidence(tx, workspace_id, plan_id).await?;
+    let encoded = if installs.is_empty() {
+        serde_json::to_vec(&(
+            header,
+            release_changes,
+            mappings,
+            actions,
+            extension_requirements,
+        ))
+    } else {
+        serde_json::to_vec(&(
+            header,
+            release_changes,
+            mappings,
+            actions,
+            extension_requirements,
+            installs,
+        ))
+    }
     .map_err(|error| RepositoryError::InvalidSolutionPackPlan(error.to_string()))?;
     Ok(format!("{:x}", Sha256::digest(encoded)))
+}
+
+/// Pinned official releases are evidence only when a plan installs any, so
+/// digests of plans without them keep their original encoding.
+async fn extension_install_evidence(
+    tx: &mut Transaction<'_, Postgres>,
+    workspace_id: Uuid,
+    plan_id: Uuid,
+) -> Result<Vec<PlanEvidenceExtensionInstall>, RepositoryError> {
+    Ok(sqlx::query_as::<_, PlanEvidenceExtensionInstall>(
+        "SELECT position,logical_key,extension_id,version,installed_release_id,repository,release_id,tag_name,asset_id,asset_name,download_url,archive_sha256,manifest_sha256,configuration,required_grants FROM solution_pack_plan_extension_releases WHERE workspace_id=$1 AND plan_id=$2 ORDER BY position",
+    )
+    .bind(workspace_id)
+    .bind(plan_id)
+    .fetch_all(&mut **tx)
+    .await?)
 }
 
 async fn legacy_plan_resource_evidence_sha256(
@@ -2831,6 +3012,48 @@ async fn set_solution_pack_transaction_timeouts(
 }
 
 impl CatalogRepository {
+    /// Official releases a plan installs, in installation order. Returns none
+    /// once the plan's application has finished, so re-applying a completed
+    /// plan never re-enables an extension an operator disabled since.
+    pub async fn solution_pack_extension_installs(
+        &self,
+        plan_id: Uuid,
+    ) -> Result<Vec<PlannedExtensionInstall>, RepositoryError> {
+        let workspace_id = self.workspace_id.0;
+        let (ready, expires_at) = sqlx::query_as::<_, (bool, DateTime<Utc>)>(
+            "SELECT ready, expires_at FROM solution_pack_plans WHERE workspace_id=$1 AND id=$2",
+        )
+        .bind(workspace_id)
+        .bind(plan_id)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or(RepositoryError::NotFound("solution-pack plan"))?;
+        let application_state = sqlx::query_scalar::<_, String>(
+            "SELECT state FROM solution_pack_applications WHERE workspace_id=$1 AND plan_id=$2",
+        )
+        .bind(workspace_id)
+        .bind(plan_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        match application_state.as_deref() {
+            // Apply reports these states itself.
+            Some("completed" | "invalid" | "abandoned") => return Ok(Vec::new()),
+            Some(_) => {}
+            None if !ready => return Err(RepositoryError::SolutionPackPlanNotReady),
+            None if expires_at <= Utc::now() => {
+                return Err(RepositoryError::SolutionPackPlanExpired);
+            }
+            None => {}
+        }
+        Ok(sqlx::query_as::<_, PlannedExtensionInstall>(
+            "SELECT logical_key,extension_id,version,installed_release_id,repository,release_id,tag_name,asset_id,asset_name,download_url,archive_sha256,manifest_sha256,configuration FROM solution_pack_plan_extension_releases WHERE workspace_id=$1 AND plan_id=$2 ORDER BY position",
+        )
+        .bind(workspace_id)
+        .bind(plan_id)
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
     pub async fn apply_solution_pack_plan(
         &self,
         plan_id: Uuid,
@@ -3460,7 +3683,8 @@ impl CatalogRepository {
     ) -> Result<(), RepositoryError> {
         let workspace_id = self.workspace_id.0;
         let requirements = sqlx::query_as::<_, PrivatePlanExtensionRequirement>(
-            "SELECT logical_key, extension_id, version_requirement, required, configuration_template_path, configuration_template_sha256, status, installed_release_id, installed_version, evaluation_template FROM solution_pack_plan_extension_requirements WHERE workspace_id=$1 AND plan_id=$2 AND required ORDER BY position",
+            // An `install` requirement must now be satisfied by its pinned release.
+            "SELECT r.logical_key, r.extension_id, r.version_requirement, r.required, r.configuration_template_path, r.configuration_template_sha256, r.status, COALESCE(r.installed_release_id, i.installed_release_id) AS installed_release_id, COALESCE(r.installed_version, i.version) AS installed_version, r.evaluation_template FROM solution_pack_plan_extension_requirements r LEFT JOIN solution_pack_plan_extension_releases i ON i.plan_id=r.plan_id AND i.logical_key=r.logical_key WHERE r.workspace_id=$1 AND r.plan_id=$2 AND r.required ORDER BY r.position",
         )
         .bind(workspace_id)
         .bind(plan_id)
@@ -3484,7 +3708,8 @@ impl CatalogRepository {
         .map(installed_extension_snapshot)
         .collect::<Result<std::collections::BTreeMap<_, _>, _>>()?;
         for persisted in requirements {
-            if !persisted.required || persisted.status != "satisfied" {
+            if !persisted.required || !matches!(persisted.status.as_str(), "satisfied" | "install")
+            {
                 return Err(RepositoryError::InvalidSolutionPackPlan(
                     "invalid persisted required extension requirement".into(),
                 ));

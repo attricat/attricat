@@ -17,6 +17,9 @@ use crate::{
         CreateSolutionPackPlanRequest, SolutionPackApplication, SolutionPackApplicationSummary,
         SolutionPackCheckRun, SolutionPackCheckRunSummary, SolutionPackPlan,
     },
+    solution_pack_extensions::{
+        SolutionPackExtensionError, install_planned_extensions, resolve_official_extensions,
+    },
     solution_pack_sample_data::SAMPLE_AUTOMATION_WARNING,
     solution_packs::{
         BlueprintMappingRequest, BlueprintPublication, MAX_SOLUTION_PACK_ARCHIVE_BYTES,
@@ -314,6 +317,13 @@ pub(super) async fn create_plan(
         ));
     }
     let pack = unpack_solution_pack(archive).await?;
+    let official_extensions = resolve_official_extensions(
+        &repository,
+        state.official_extension_releases.as_ref(),
+        &pack,
+    )
+    .await
+    .map_err(extension_error)?;
     let plan = repository
         .create_solution_pack_plan(
             &pack,
@@ -324,6 +334,7 @@ pub(super) async fn create_plan(
                 asset_mappings: &asset_mappings,
                 prior_application_id: query.from_application,
                 include_sample_data: query.include_sample_data,
+                official_extensions: &official_extensions,
             },
             state.object_store.as_ref(),
         )
@@ -492,11 +503,36 @@ pub(super) async fn apply_plan(
     plan_id: Result<Path<Uuid>, PathRejection>,
 ) -> Result<Json<SolutionPackApplication>, ApiError> {
     let Path(plan_id) = plan_id.map_err(ApiError::from_path_rejection)?;
+    // Extensions come first: reviewed steps may reference their contributions.
+    install_planned_extensions(
+        &repository,
+        state.object_store.clone(),
+        state.official_extension_releases.as_ref(),
+        plan_id,
+    )
+    .await
+    .map_err(extension_error)?;
     let application = repository
         .apply_solution_pack_plan(plan_id, state.object_store.as_ref())
         .await?;
     ensure_application_response_size(&application)?;
     Ok(Json(application))
+}
+
+fn extension_error(error: SolutionPackExtensionError) -> ApiError {
+    match error {
+        SolutionPackExtensionError::RegistryUnavailable => {
+            ApiError::service_unavailable("the official extension registry is unavailable")
+        }
+        SolutionPackExtensionError::InvalidRelease { .. }
+        | SolutionPackExtensionError::UnmetDependency { .. }
+        | SolutionPackExtensionError::DependencyCycle => ApiError::invalid_input(error.to_string()),
+        SolutionPackExtensionError::ReleaseChanged(_) => {
+            crate::repository::RepositoryError::SolutionPackPlanStale.into()
+        }
+        SolutionPackExtensionError::Install(error) => super::extensions::install_error(error),
+        SolutionPackExtensionError::Repository(error) => error.into(),
+    }
 }
 
 #[derive(Deserialize)]

@@ -20,9 +20,10 @@ ownership, synchronize resources, or uninstall them later.
   [authentication](authentication.md).
 - Check the selected server and workspace before applying. Test unfamiliar
   packs in a disposable development workspace first, especially with samples.
-- Install required extensions separately using the normal
-  [extension administration workflow](extensions.md). A pack never installs,
-  configures, grants permissions to, enables, or removes an extension.
+- A pack may install the extensions it requires from the official Attricat
+  extension registry. Applying it installs, configures, grants, and enables
+  them without a separate approval; see [Extensions](#extensions). It never
+  removes, upgrades, or reconfigures an installed extension.
 
 Do not edit or repackage a supplied archive to work around validation errors.
 Ask its publisher for a compatible release.
@@ -59,6 +60,9 @@ selection.
 - Sample data is omitted unless you explicitly add `--include-sample-data`
   during planning. Review [sample-data safety](solution-pack-sample-data.md)
   before selecting it.
+
+Extension requirements have their own statuses: `satisfied`, `install` (apply
+installs the listed official release), `blocked`, or `skipped`.
 
 | Action | Meaning |
 | --- | --- |
@@ -99,10 +103,40 @@ acli solution-pack plan --file pack.tar.zst --prefix example \
   --map-asset assets/brand-logo=<asset-id>
 ```
 
-If an extension requirement is unmet, resolve it through normal extension
-administration and create a fresh plan. A compatible disabled extension can
-satisfy installation requirements; operators must still approve permissions and
-enablement separately. Attricat preserves unrelated settings.
+If an extension requirement is blocked, resolve it through normal extension
+administration and create a fresh plan. See [Extensions](#extensions).
+
+## Extensions
+
+Planning looks up every extension the pack requires that is not installed in
+the workspace. When the official Attricat registry offers a release in the
+pack's version range, the requirement's status is `install` and the plan shows
+the selected release (`install.version`, `install.repository`,
+`install.tag_name`) and the permissions apply will grant (`install.grants`).
+Workspace-added registries are never used. Planning therefore needs access to
+the official registry and fails with `503` while it is unreachable. Planning
+downloads and validates the release but installs nothing.
+
+Before its other steps, apply downloads that exact release again and installs
+it. It applies the pack's configuration, grants the release's required
+permissions, and enables it. Optional permissions are not granted. Each
+installation, configuration, grant, and enablement is recorded in the
+extension's lifecycle history and the audit log like a manual change. If the
+release changed since review, apply refuses it as `solution_pack_plan_stale`;
+create a new plan.
+
+A pack does not change extensions that are already installed:
+
+- A compatible installation satisfies the requirement as it is, enabled or not.
+- An incompatible version, a quarantined installation, or a configuration that
+  differs from the pack's template blocks a required extension. Resolve it
+  through [extension administration](extensions.md) and plan again; packs never
+  upgrade or reconfigure an installed extension.
+- Re-applying a completed plan does not re-enable an extension an operator
+  disabled afterwards.
+
+Extensions a pack installed are ordinary installations. Manage, disable, or
+remove them through normal extension administration.
 
 ## Apply and verify
 
@@ -175,8 +209,9 @@ entries afterwards with `acli lexicon` ([CLI](cli.md#translations)).
 
 ## Limits and removal
 
-Packs cannot create contexts or publication channels, alter membership or grants,
-run executable installers, resolve prerequisite packs automatically, or update
+Packs cannot create contexts or publication channels, alter membership or role
+grants, install extensions from anywhere but the official registry, upgrade
+installed extensions, run executable installers, resolve prerequisite packs automatically, or update
 existing blueprints. There is no generic settings replacement or continuing
 resource ownership.
 

@@ -3236,6 +3236,10 @@ pub struct InstalledExtensionSnapshot {
     pub policy_compatible: bool,
     /// Stable contribution key to its manifest-declared outlet.
     pub contributions: BTreeMap<String, String>,
+    /// An official-registry release that applying the plan will install,
+    /// configure, grant, and enable. Its `installed_release_id` is reserved for
+    /// that installation and `configuration` is the configuration it receives.
+    pub pending_install: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -3372,8 +3376,21 @@ pub fn evaluate_extension_requirement(
         Some(_) if configuration_matches != Some(true) => "configuration_mismatch",
         Some(_) => "satisfied",
     };
-    let status = if reason_code == "satisfied" {
-        "satisfied"
+    let pending_install = installed.is_some_and(|installed| installed.pending_install);
+    let reason_code = if pending_install && reason_code == "satisfied" {
+        "install"
+    } else {
+        reason_code
+    };
+    // A pending release is not installed yet, so it reports no installed state.
+    let installed = installed.filter(|installed| !installed.pending_install);
+    let configuration_matches = if pending_install {
+        None
+    } else {
+        configuration_matches
+    };
+    let status = if matches!(reason_code, "satisfied" | "install") {
+        reason_code
     } else if requirement.required {
         "blocked"
     } else {
@@ -5161,6 +5178,7 @@ target_blueprint = "blueprints/product"
             configuration: json!({}),
             policy_compatible: true,
             contributions: BTreeMap::from([("acme.shop:nav".to_owned(), "navigation".to_owned())]),
+            pending_install: false,
         };
         let workspace = |extension_layout| PlanningWorkspaceSnapshot {
             workspace_id: uuid::Uuid::nil(),
@@ -5400,6 +5418,7 @@ hidden = []
                                     configuration: json!({}),
                                     policy_compatible: true,
                                     contributions,
+                                    pending_install: false,
                                 },
                             )]),
                             explore_navigation: Vec::new(),
@@ -5841,6 +5860,7 @@ hidden = ["acme.shop:a_action"]
             configuration: json!({"endpoint":"https://example.test","unrelated_secret":"not exposed"}),
             policy_compatible: true,
             contributions: BTreeMap::new(),
+            pending_install: false,
         };
         let template = json!({"endpoint":"https://example.test"});
         let satisfied =
@@ -5892,6 +5912,42 @@ hidden = ["acme.shop:a_action"]
         let skipped = evaluate_extension_requirement(&optional, None, Some(&quarantined));
         assert_eq!(skipped.status, "skipped");
         assert_eq!(skipped.reason_code, "quarantined");
+    }
+
+    #[test]
+    fn pending_official_release_is_planned_as_an_install_without_installed_state() {
+        let requirement = SolutionPackExtensionRequirement {
+            key: "extensions/shopify".into(),
+            id: "acme.shopify".into(),
+            version: "^2.1".into(),
+            required: true,
+            configuration_template: None,
+        };
+        let pending = InstalledExtensionSnapshot {
+            installed_release_id: uuid::Uuid::from_u128(7),
+            version: "2.3.0".into(),
+            state: "disabled".into(),
+            configuration: json!({}),
+            policy_compatible: true,
+            contributions: BTreeMap::new(),
+            pending_install: true,
+        };
+        let planned = evaluate_extension_requirement(&requirement, None, Some(&pending));
+        assert_eq!(planned.status, "install");
+        assert_eq!(planned.reason_code, "install");
+        assert_eq!(planned.installed_release_id, None);
+        assert_eq!(planned.installed_version, None);
+        assert_eq!(planned.installed_state, None);
+        assert_eq!(planned.configuration_matches, None);
+
+        let denied = InstalledExtensionSnapshot {
+            policy_compatible: false,
+            ..pending
+        };
+        let blocked = evaluate_extension_requirement(&requirement, None, Some(&denied));
+        assert_eq!(blocked.status, "blocked");
+        assert_eq!(blocked.reason_code, "policy_incompatible");
+        assert_eq!(blocked.installed_release_id, None);
     }
 
     #[test]

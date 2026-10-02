@@ -356,7 +356,7 @@ async fn unpack_extension(archive: impl Into<Bytes>) -> Result<ExtensionPackage,
 
 /// Only package validation failures are the client's fault; storage and
 /// repository failures keep their own status and never expose internals.
-fn install_error(error: ExtensionInstallError) -> ApiError {
+pub(super) fn install_error(error: ExtensionInstallError) -> ApiError {
     match error {
         ExtensionInstallError::Package(_) => ApiError::invalid_input(error.to_string()),
         ExtensionInstallError::Storage(

@@ -5,12 +5,15 @@ use std::{net::SocketAddr, sync::Arc};
 use tokio::sync::Mutex;
 
 use api::{
-    extension_registry::{GitHubRegistry, GitHubRepository},
+    extension_registry::{
+        DiscoveredRelease, GitHubRegistry, GitHubRepository, RegistryError, ReleaseAsset,
+    },
     extension_runtime::{ExtensionRuntime, ExtensionRuntimeConfig},
     file_access::{AllowFileAccess, FileAccessPolicy},
     http::{AppState, BuildInfo, router},
     mail::{MailDelivery, MailError},
     repository::CatalogRepository,
+    solution_pack_extensions::OfficialExtensionReleases,
     storage::{FakeObjectStore, ObjectStore},
     telemetry::init_metrics,
 };
@@ -21,6 +24,88 @@ pub use serde_json::{Value, json};
 pub use sqlx::PgPool;
 pub use tokio::{net::TcpListener, task::JoinHandle};
 pub use uuid::Uuid;
+
+/// An in-memory official extension registry. It lists no extensions until a
+/// test publishes releases, so tests never reach GitHub.
+#[derive(Default)]
+pub struct FakeOfficialExtensions {
+    releases: std::sync::Mutex<Vec<(String, DiscoveredRelease, Vec<u8>)>>,
+    unavailable: std::sync::atomic::AtomicBool,
+}
+
+impl FakeOfficialExtensions {
+    pub fn publish(&self, extension_id: &str, tag_name: &str, archive: Vec<u8>) {
+        let mut releases = self.releases.lock().unwrap();
+        let id = releases.len() as u64 + 1;
+        releases.push((
+            extension_id.to_owned(),
+            DiscoveredRelease {
+                source: format!("github:attricat/{extension_id}"),
+                release_id: id,
+                tag_name: tag_name.to_owned(),
+                name: tag_name.to_owned(),
+                published_at: None,
+                asset: ReleaseAsset {
+                    id,
+                    name: format!("{extension_id}.tar.zst"),
+                    download_url: format!(
+                        "https://github.com/attricat/{extension_id}/releases/download/{tag_name}/{extension_id}.tar.zst"
+                    ),
+                },
+            },
+            archive,
+        ));
+    }
+
+    /// Replaces the asset behind an existing release, as a re-uploaded asset would.
+    pub fn replace_archive(&self, extension_id: &str, tag_name: &str, archive: Vec<u8>) {
+        let mut releases = self.releases.lock().unwrap();
+        let release = releases
+            .iter_mut()
+            .find(|(id, release, _)| id == extension_id && release.tag_name == tag_name)
+            .expect("published release");
+        release.2 = archive;
+    }
+
+    pub fn set_unavailable(&self, unavailable: bool) {
+        self.unavailable
+            .store(unavailable, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    fn check_available(&self) -> Result<(), RegistryError> {
+        if self.unavailable.load(std::sync::atomic::Ordering::SeqCst) {
+            Err(RegistryError::Unavailable)
+        } else {
+            Ok(())
+        }
+    }
+}
+
+#[async_trait]
+impl OfficialExtensionReleases for FakeOfficialExtensions {
+    async fn releases(&self, extension_id: &str) -> Result<Vec<DiscoveredRelease>, RegistryError> {
+        self.check_available()?;
+        Ok(self
+            .releases
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(id, _, _)| id == extension_id)
+            .map(|(_, release, _)| release.clone())
+            .collect())
+    }
+
+    async fn download(&self, release: &DiscoveredRelease) -> Result<Vec<u8>, RegistryError> {
+        self.check_available()?;
+        self.releases
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|(_, candidate, _)| candidate.release_id == release.release_id)
+            .map(|(_, _, archive)| archive.clone())
+            .ok_or(RegistryError::Unavailable)
+    }
+}
 
 #[derive(Default)]
 pub struct TestMailDelivery {
@@ -296,6 +381,7 @@ async fn start_configured_server(
         official_registry: "attricat/attricat-extensions"
             .parse::<GitHubRepository>()
             .unwrap(),
+        official_extension_releases: Arc::new(FakeOfficialExtensions::default()),
         extension_runtime: ExtensionRuntime::new(
             object_store.clone(),
             ExtensionRuntimeConfig::default(),

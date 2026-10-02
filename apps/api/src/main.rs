@@ -21,7 +21,11 @@ use api::{
     mail::SmtpMailDelivery,
     maintenance,
     repository::{CatalogRepository, ValueHistoryRetentionDays},
-    rule_runtime, solution_pack_housekeeping,
+    rule_runtime,
+    solution_pack_extensions::{
+        LocalExtensionReleases, OfficialExtensionRegistry, OfficialExtensionReleases,
+    },
+    solution_pack_housekeeping,
     storage::{ObjectStore, S3ObjectStore, StorageConfig},
     task_worker::{self, TaskHandlerRegistry, TaskWorkerConfig},
     telemetry::{init_metrics, init_tracing},
@@ -235,6 +239,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         GitHubRegistry::new()
             .map_err(|error| format!("cannot initialize extension registry: {error}"))?,
     );
+    // Development only: lets solution packs install locally built extensions.
+    let official_extension_releases: Arc<dyn OfficialExtensionReleases> =
+        match std::env::var("SOLUTION_PACK_LOCAL_EXTENSIONS_DIR") {
+            Ok(directory) if devtools_enabled => Arc::new(LocalExtensionReleases::new(directory)),
+            Ok(_) => {
+                return Err(
+                    "SOLUTION_PACK_LOCAL_EXTENSIONS_DIR requires CATALOG_DEVTOOLS=true".into(),
+                );
+            }
+            Err(_) => Arc::new(OfficialExtensionRegistry::new(
+                registry.clone(),
+                official_registry.clone(),
+            )),
+        };
     let password_reset_url = std::env::var("PASSWORD_RESET_URL")
         .unwrap_or_else(|_| "http://127.0.0.1:5173/password-reset/confirm".to_owned());
     let workspace_invitation_url = std::env::var("WORKSPACE_INVITATION_URL")
@@ -345,6 +363,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         router(AppState {
             repository: CatalogRepository::system(request_pool.clone()),
             agent_provider,
+            official_extension_releases,
             registry,
             official_registry,
             object_store,
