@@ -5,7 +5,7 @@ use std::{io::Cursor, path::PathBuf, process::Command, sync::Arc, time::Duration
 use api::{
     extension_installer::ExtensionInstaller,
     extension_runtime::{ExtensionOperationTaskHandler, ExtensionRuntime, ExtensionRuntimeConfig},
-    model::{CreateAttributeContext, CreateBlueprint, NewAttributeValue},
+    model::{CreateAttributeContext, CreateBlueprint, NewAttributeValue, RelationshipTargets},
     repository::{
         AuthorizationActor, CatalogRepository, ExtensionCatalogBatch, ExtensionCatalogIntent,
         ExtensionCatalogIntentStatus, InteractiveRunScope, RepositoryError,
@@ -621,6 +621,18 @@ async fn interactive_runs_are_authorized_per_entity_and_fail_closed(pool: sqlx::
         .as_str()
         .unwrap()
         .to_owned();
+    let stoppable_run = client_for(viewer)
+        .post(&start_url)
+        .json(&start_body(release, "viewer-3", blueprint, &[visible]))
+        .send()
+        .await
+        .unwrap()
+        .json::<Value>()
+        .await
+        .unwrap()["run_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
 
     // Initiator cancellation of queued work is immediately terminal.
     let cancelled = authenticated_client()
@@ -687,6 +699,13 @@ async fn interactive_runs_are_authorized_per_entity_and_fail_closed(pool: sqlx::
         .await
         .unwrap();
     assert_eq!(revoked.status(), StatusCode::FORBIDDEN);
+    // The initiator can still stop the run they can no longer inspect.
+    let stopped = client_for(viewer)
+        .post(format!("{base}/extension-runs/{stoppable_run}/cancel"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(stopped.status(), StatusCode::NO_CONTENT);
     let listed = client_for(viewer)
         .get(format!("{base}/extension-runs"))
         .send()
@@ -1216,4 +1235,88 @@ async fn selection_pages_hold_at_most_one_pool_connection(pool: sqlx::PgPool) {
         .map(|entity| entity["status"].as_str().unwrap())
         .collect();
     assert_eq!(statuses, ["available", "unavailable"]);
+}
+
+const LINKING_BLUEPRINT: &str = r#"
+format_version = 1
+code = "interactive_linking_item"
+name = "Interactive linking item"
+kind = "entity"
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["title"]
+[[attributes]]
+code = "title"
+value_type = "string"
+[[attributes]]
+code = "related"
+value_type = "relationship"
+target_blueprint = "interactive_other_item"
+cardinality = "many"
+target_cardinality = "many"
+"#;
+const EDITOR_ROLE: &str = "00000000-0000-4000-8000-000000000103";
+
+/// Adds a role grant scoped to one entity to an existing member.
+async fn grant_on_entity(pool: &sqlx::PgPool, user: Uuid, role: &str, entity_id: Uuid) {
+    sqlx::query("INSERT INTO role_grants (id, workspace_id, membership_id, role_id, scope_type, scope_target_id) SELECT $1, $2, id, $3::uuid, 'entity', $4 FROM workspace_memberships WHERE user_id=$5")
+        .bind(Uuid::new_v4())
+        .bind(workspace())
+        .bind(role)
+        .bind(entity_id)
+        .bind(user)
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn interactive_links_require_read_access_to_every_target(pool: sqlx::PgPool) {
+    let repository = CatalogRepository::system(pool.clone())
+        .for_workspace(workspace())
+        .await
+        .unwrap();
+    let store = Arc::new(FakeObjectStore::available());
+    install(&repository, store, b"server").await;
+    let targets = published_blueprint(&repository, OTHER_BLUEPRINT).await;
+    let linking = published_blueprint(&repository, LINKING_BLUEPRINT).await;
+    let source = entity(&repository, linking, "Source").await;
+    let readable = entity(&repository, targets, "Readable").await;
+    let hidden = entity(&repository, targets, "Hidden").await;
+    let (user, _) = entity_scoped_viewer(&pool, source).await;
+    grant_on_entity(&pool, user, EDITOR_ROLE, source).await;
+    grant_on_entity(&pool, user, VIEWER_ROLE, readable).await;
+    let scope = InteractiveRunScope {
+        actor: AuthorizationActor {
+            user_id: user,
+            token_id: None,
+        },
+        entity_ids: vec![source],
+        blueprint_id: linking.0,
+        blueprint_version: linking.1,
+        context_id: None,
+    };
+    let run = repository.for_interactive_run(EXTENSION, Uuid::new_v4(), &scope);
+    let link = |key: &str, target: Uuid| ExtensionCatalogIntent::Relationships {
+        intent_key: key.into(),
+        entity_id: source,
+        relationships: vec![RelationshipTargets {
+            attribute_id: None,
+            attribute_code: Some("related".into()),
+            context_id: None,
+            target_entity_ids: vec![target],
+        }],
+    };
+
+    // The initiator cannot read the target, even though the source is selected.
+    let denied = run
+        .execute_extension_catalog_batch(batch("link-1", vec![link("hidden", hidden)]))
+        .await
+        .unwrap();
+    assert_eq!(denied[0].status, ExtensionCatalogIntentStatus::Rejected);
+    let allowed = run
+        .execute_extension_catalog_batch(batch("link-2", vec![link("readable", readable)]))
+        .await
+        .unwrap();
+    assert_eq!(allowed[0].status, ExtensionCatalogIntentStatus::Applied);
 }

@@ -229,7 +229,17 @@ pub(super) async fn cancel(
     workspace: ActiveWorkspace,
     ApiPath(run_id): ApiPath<Uuid>,
 ) -> Result<StatusCode, ApiError> {
-    let run = visible_run(&state, &repository, principal, workspace, run_id).await?;
+    // The initiator may always stop their own run: cancelling reveals nothing
+    // about the selection, and a run continues for members still readable
+    // after the initiator loses access to one of them.
+    let own = repository
+        .interactive_extension_run(run_id)
+        .await?
+        .filter(|run| run.actor_user_id == Some(principal.0));
+    let run = match own {
+        Some(run) => run,
+        None => visible_run(&state, &repository, principal, workspace, run_id).await?,
+    };
     if !run.can_cancel {
         return Err(ApiError::conflict(
             "extension run can no longer be cancelled",

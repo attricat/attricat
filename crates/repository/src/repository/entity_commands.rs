@@ -2195,6 +2195,26 @@ impl CatalogRepository {
         }
         self.ensure_actor_may(transaction, "entities.write", entity_id)
             .await?;
+        // A run bound to a user may link only to entities that user can read,
+        // whether or not they are in the run's selection.
+        let targets: BTreeSet<Uuid> = values
+            .iter()
+            .filter_map(|value| match value {
+                NewAttributeValue::Relationship {
+                    target_entity_id, ..
+                } => Some(*target_entity_id),
+                NewAttributeValue::Scalar { .. } => None,
+            })
+            .chain(
+                relationships
+                    .iter()
+                    .flat_map(|set| set.target_entity_ids.iter().copied()),
+            )
+            .collect();
+        for target in targets {
+            self.ensure_actor_may(transaction, "entities.read", target)
+                .await?;
+        }
         let before = self.entity_audit_snapshot(transaction, entity_id).await?;
         let entity = self.lock_entity(transaction, entity_id).await?;
         // The legacy extension intent ABI has no caller-supplied version token.

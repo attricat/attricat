@@ -944,7 +944,8 @@ Inside the run:
   `catalog-data.batch` accepts only `update`, `relationships`, and `annotate`
   intents for members of the selection, and checks the initiator's current
   grants for each intent (`entities.write` for values, `entities.read` for
-  annotations). Writes are audited as `catalog.extensions.operations.write`
+  annotations, and `entities.read` on every entity a relationship links to,
+  selected or not). Writes are audited as `catalog.extensions.operations.write`
   with the initiator as actor and the extension as event source.
 - Before every batch the host checks that the initiator is still an active
   workspace member (and that a token-started run's token is still live). If
