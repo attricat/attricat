@@ -9,7 +9,6 @@ license = "AGPL-3.0-only"
 publish = false
 
 [workspace.dependencies]
-async-recursion = "1"
 async-stream = "0.3"
 async-trait = "0.1"
 aws-config = { version = "1", default-features = false, features = ["default-https-client", "rt-tokio"] }

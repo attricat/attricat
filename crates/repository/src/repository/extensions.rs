@@ -1578,7 +1578,6 @@ impl CatalogRepository {
             .validate_configuration(&installation.configuration)
             .map_err(|error| RepositoryError::InvalidExtension(error.to_string()))
     }
-    #[async_recursion::async_recursion]
     async fn dependencies_enabled(
         &self,
         workspace_id: Uuid,
@@ -1619,8 +1618,7 @@ impl CatalogRepository {
                     dependency.id
                 )));
             }
-            self.dependencies_enabled(workspace_id, &dependency.id, visiting)
-                .await?;
+            Box::pin(self.dependencies_enabled(workspace_id, &dependency.id, visiting)).await?;
         }
         for consumed in &manifest.event_contracts.consumes {
             let provider: Option<(String, Value)> = sqlx::query_as("SELECT i.state, r.manifest FROM extension_installations i JOIN installed_extension_releases r ON r.id = i.installed_release_id WHERE i.workspace_id = $1 AND i.extension_id = $2")
@@ -1664,8 +1662,7 @@ impl CatalogRepository {
                     consumed.provider, consumed.contract
                 )));
             }
-            self.dependencies_enabled(workspace_id, &consumed.provider, visiting)
-                .await?;
+            Box::pin(self.dependencies_enabled(workspace_id, &consumed.provider, visiting)).await?;
         }
         visiting.remove(extension_id);
         Ok(())

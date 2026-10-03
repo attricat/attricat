@@ -2,7 +2,6 @@ use super::values::{ProjectionNativeValueRow, native_value_json};
 use super::*;
 use crate::constants::DEFAULT_PREVIEW_RELATIONSHIP_ITEMS;
 use crate::persistence_rows::{Db, IntoDomain};
-use async_recursion::async_recursion;
 use std::collections::HashSet;
 use uuid::Uuid;
 
@@ -305,7 +304,6 @@ impl CatalogRepository {
         .map(Some)
     }
 
-    #[async_recursion]
     async fn build_preview(
         &self,
         entity_id: Uuid,
@@ -378,15 +376,14 @@ impl CatalogRepository {
                 continue;
             }
 
-            let target_preview = self
-                .build_preview(
-                    relationship.target_id,
-                    &relationship.target_projections,
-                    relationship_depth - 1,
-                    relationship_limit,
-                    path,
-                )
-                .await?;
+            let target_preview = Box::pin(self.build_preview(
+                relationship.target_id,
+                &relationship.target_projections,
+                relationship_depth - 1,
+                relationship_limit,
+                path,
+            ))
+            .await?;
             let mut target_values = target_preview
                 .get(&context_code)
                 .or_else(|| target_preview.get("default"))

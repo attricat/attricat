@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 
 use crate::extensions::Manifest;
-use async_recursion::async_recursion;
 use catalog_blueprint::{
     BlueprintKind, CompiledBlueprint, ResolvedInclude, ViewDefinition, compile, parse,
     validate_table_renderer,
@@ -25,7 +24,6 @@ pub(crate) async fn compile_definition(
     compile_source(transaction, workspace_id, source, &mut resolving).await
 }
 
-#[async_recursion]
 async fn compile_source(
     transaction: &mut Transaction<'_, Postgres>,
     workspace_id: Uuid,
@@ -69,12 +67,12 @@ async fn compile_source(
             )));
         }
 
-        let compiled_include = compile_source(
+        let compiled_include = Box::pin(compile_source(
             transaction,
             workspace_id,
             &included_source.definition,
             resolving,
-        )
+        ))
         .await?;
         resolving.remove(&(include.code.clone(), include.version));
         if compiled_include.kind != BlueprintKind::Mixin || compiled_include.code != include.code {
