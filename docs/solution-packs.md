@@ -1,9 +1,10 @@
 # Install and operate solution packs
 
 A solution pack is a versioned `.tar.zst` archive supplied by a publisher. It
-sets up ordinary workspace resources for a use case: blueprints, navigation,
-extension layouts, label translations, presentation assets, setup guidance, and
-optional samples.
+sets up ordinary workspace resources for a use case: blueprints, contexts and
+publication channels, rules, workflows, saved searches, navigation, extension
+layouts, label translations, presentation assets, setup guidance, and optional
+samples. A pack only provisions a new installation.
 
 After applying a pack, users work with its resources through normal Attricat
 features. There is no pack service to keep running, and packs do not retain
@@ -36,7 +37,9 @@ acli solution-pack inspect --file pack.tar.zst
 
 The server validates the archive and returns its identity, version, digest,
 resource summaries, extension requirements, guidance counts, and sample-data
-warnings. Inspection does not apply resources or persist the archive. Validation
+warnings. The `seeds` summary lists prerequisite packs, contexts and their
+publication channels, rules and workflows with whether each is installed
+enabled, and saved searches. Inspection does not apply resources or persist the archive. Validation
 alone does not mean the pack is suitable for your workspace.
 
 ## Create and review a plan
@@ -66,10 +69,10 @@ installs the listed official release), `blocked`, or `skipped`.
 
 | Action | Meaning |
 | --- | --- |
-| `create` | Create a new blueprint, asset, or selected sample entity. |
-| `map` | Reuse an explicitly selected compatible resource. |
+| `create` | Create a new blueprint, context, publication channel, rule, workflow, saved search, asset, or selected sample entity. |
+| `map` | Reuse an explicitly selected compatible resource, a selected context, or a resource a prerequisite pack installed. |
 | `append` | Add navigation, extension-layout, or translation entries. |
-| `satisfied` | The requested setting is already present exactly. |
+| `satisfied` | The requested setting or publication channel is already present exactly. |
 | `skip` | Leave an optional unavailable item out. |
 | `conflict` | Existing workspace state prevents the operation. |
 | `blocked` | A requirement is unmet or the requested change is unsupported. |
@@ -105,6 +108,73 @@ acli solution-pack plan --file pack.tar.zst --prefix example \
 
 If an extension requirement is blocked, resolve it through normal extension
 administration and create a fresh plan. See [Extensions](#extensions).
+
+## Contexts and publication channels
+
+A pack can declare contexts, for example for markets or languages, and mark some
+of them as publication channels. Each appears in the plan as a `context` action
+and, for a channel, a `publication_channel` action with key `channels/<code>`.
+
+By default, planning creates each context with the prefixed code
+`<prefix>_<code>` under its declared parent (or the workspace default context)
+and creates its channel. To use a context your workspace already has instead,
+map it explicitly:
+
+```sh
+acli context list
+acli solution-pack plan --file pack.tar.zst --prefix example \
+  --blueprint-publication publish \
+  --map-context contexts/poland=PL
+```
+
+A mapped context is used as it is; its data and parent are not changed. If the
+pack declares it as a channel, a matching channel is `satisfied`, a missing
+channel is created, and a channel whose enabled state differs is a
+`publication_channel_mismatch` conflict. Packs never change an existing channel.
+Apply rechecks mapped contexts and channels, so a later change makes the plan
+stale. Rules, saved searches, and sample values that use a pack context use the
+created or mapped workspace context.
+
+## Rules, workflows, and saved searches
+
+- **Rules** are created against the plan's created or mapped blueprint, in the
+  mapped context if they declare one, and published. The pack declares whether
+  each rule is enabled; disabled rules are installed published but not enabled.
+  A rule needs a published blueprint, so with `--blueprint-publication draft` a
+  rule for a newly created blueprint is `blueprint_not_published`. New rule
+  codes are `<prefix>_<code>` and conflict with an existing rule code.
+- **Workflows** are created with code `<prefix>_<code>`, published, and enabled
+  only if the pack declares so. Packs cannot seed schedule triggers, because a
+  schedule targets one workspace entity.
+- **Saved searches** are created as named Explore searches with **Workspace**
+  visibility, so they appear in every authorized member's saved searches. The
+  person who applies the plan owns them. Their blueprint, relationship and
+  context references use the plan's physical codes.
+
+Enabled rules and workflows react to later workspace activity, including sample
+entities created by the same application. Review them before applying. Once
+installed they are ordinary resources: disable, revise, or delete them through
+normal administration.
+
+## Prerequisite packs
+
+A pack can require other packs, for example a supplier-compliance pack that
+reuses the Supplier blueprint of a supplier-master pack. The plan shows each
+prerequisite as a `prerequisite` action:
+
+- `map` with `prerequisite_satisfied`: a completed application of the required
+  pack, with the newest version in the declared range, is reused.
+- `blocked` with `prerequisite_missing` or `prerequisite_incompatible` (the
+  summary lists the versions that are installed).
+
+Blueprints the pack declares as reused from a prerequisite are mapped to the
+blueprint that prerequisite's application created or reused, but only when the
+latest published revision matches the pack's definition exactly
+(`prerequisite_blueprint_match`). A changed, unpublished, or deleted blueprint is
+`prerequisite_blueprint_incompatible` or `prerequisite_blueprint_unavailable`;
+the plan never creates a copy. Reused blueprints cannot be mapped with `--map`.
+Attricat never installs prerequisites for you: apply the prerequisite pack
+first, then create a fresh plan.
 
 ## Extensions
 
@@ -162,7 +232,9 @@ track later user edits.
 
 Retry an interrupted or resumable failed application with the same plan ID.
 The server verifies completed steps and continues pending steps without
-duplicating resources. A started application can resume after the original plan expires,
+duplicating resources. Every created resource, including contexts, channels,
+rules, workflows, and saved searches, commits together with its step record. A
+started application can resume after the original plan expires,
 subject to its application-specific retention deadline.
 
 A stale plan cannot silently overwrite changed workspace state. Review the
@@ -188,6 +260,10 @@ combined with `--map` or `--map-asset`; Attricat does not search history or infe
 lineage automatically.
 
 - Unchanged exact published blueprint targets and unchanged assets can be reused.
+- Contexts the earlier application created or mapped are reused
+  (`unchanged_from_prior_application`). Rules, workflows, saved searches, and
+  channels it already created are skipped as `provided_by_prior_application`;
+  they are never updated or recreated.
 - New resources can be created.
 - Changed definitions are blocked as `update_not_supported`.
 - Removed resources are reported without deleting anything.
@@ -209,11 +285,11 @@ entries afterwards with `acli lexicon` ([CLI](cli.md#translations)).
 
 ## Limits and removal
 
-Packs cannot create contexts or publication channels, alter membership or role
-grants, install extensions from anywhere but the official registry, upgrade
-installed extensions, run executable installers, resolve prerequisite packs automatically, or update
-existing blueprints. There is no generic settings replacement or continuing
-resource ownership.
+Packs cannot alter membership or role grants, change existing contexts or
+channels, install extensions from anywhere but the official registry, upgrade
+installed extensions, run executable installers, install prerequisite packs, or
+update existing blueprints, rules, workflows, or saved searches. There is no
+generic settings replacement or continuing resource ownership.
 
 There is no pack-level uninstall or rollback command. Administrators may edit or
 remove individual resources through normal operations, subject to permissions,

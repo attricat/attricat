@@ -19,6 +19,18 @@ pub const MAX_SAMPLE_DATA_BYTES: usize = 1024 * 1024;
 pub const MAX_SAMPLE_ENTITIES: usize = 256;
 pub const MAX_SAMPLE_FACTS_PER_ENTITY: usize = 128;
 pub const MAX_SAMPLE_TOTAL_FACTS: usize = 4096;
+pub const MAX_SAMPLE_FILES: usize = 64;
+pub const MAX_SAMPLE_FILES_PER_VALUE: usize = 16;
+pub const MAX_SAMPLE_FILE_BYTES: usize = 8 * 1024 * 1024;
+const MAX_SAMPLE_FILENAME_BYTES: usize = 255;
+/// Media types a sample may bundle, with the filename extensions each accepts.
+pub const SAMPLE_FILE_MEDIA_TYPES: &[(&str, &[&str])] = &[
+    ("image/png", &["png"]),
+    ("image/jpeg", &["jpg", "jpeg"]),
+    ("image/webp", &["webp"]),
+    ("application/pdf", &["pdf"]),
+    ("text/plain", &["txt"]),
+];
 pub const SAMPLE_AUTOMATION_WARNING: &str = "Sample entities are ordinary workspace entities. Creating them emits ordinary audit records and entity.created.v1 events, may run enabled automation or extensions, and may cause external effects. Staging cleanup does not remove values retained by ordinary audit or event storage.";
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -37,6 +49,9 @@ pub struct SampleEntity {
     pub blueprint: String,
     pub facts: Vec<SampleFact>,
     pub relationships: Vec<SampleRelationship>,
+    /// Bundled files attached to file attributes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub files: Vec<SampleFileValue>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -44,6 +59,9 @@ pub struct SampleEntity {
 pub struct SampleFact {
     pub attribute: String,
     pub value: Value,
+    /// Pack context key; omitted for the workspace default context.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -51,11 +69,109 @@ pub struct SampleFact {
 pub struct SampleRelationship {
     pub attribute: String,
     pub targets: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct SampleFileValue {
+    pub attribute: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<String>,
+    pub files: Vec<SampleFile>,
+}
+
+/// A bundled file declared in the manifest's `sample_data.files`.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct SampleFile {
+    pub path: String,
+    pub filename: String,
+    pub media_type: String,
+}
+
+/// Archive paths of bundled sample files.
+pub fn valid_sample_file_path(path: &str) -> bool {
+    path.len() <= 512
+        && path
+            .strip_prefix("sample-data/files/")
+            .is_some_and(|suffix| {
+                !suffix.is_empty()
+                    && suffix.split('/').all(|component| {
+                        let mut bytes = component.bytes();
+                        bytes.next().is_some_and(|byte| {
+                            byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-')
+                        }) && bytes.all(|byte| {
+                            byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-')
+                        })
+                    })
+            })
+}
+
+/// Checks a bundled file's bytes against its declared media type. Sample
+/// files are not scanned for content; only their type is verified.
+pub fn validate_sample_file_bytes(media_type: &str, bytes: &[u8]) -> Result<(), String> {
+    if bytes.is_empty() || bytes.len() > MAX_SAMPLE_FILE_BYTES {
+        return Err("sample file must be non-empty and at most 8 MiB".into());
+    }
+    let matches = match media_type {
+        "image/png" => bytes.starts_with(b"\x89PNG\r\n\x1a\n"),
+        "image/jpeg" => bytes.starts_with(&[0xff, 0xd8, 0xff]),
+        "image/webp" => bytes.len() >= 12 && &bytes[..4] == b"RIFF" && &bytes[8..12] == b"WEBP",
+        "application/pdf" => bytes.starts_with(b"%PDF-"),
+        "text/plain" => std::str::from_utf8(bytes).is_ok_and(|text| !text.contains('\0')),
+        _ => false,
+    };
+    if matches {
+        Ok(())
+    } else {
+        Err(format!(
+            "sample file content does not match media type {media_type}"
+        ))
+    }
+}
+
+fn validate_sample_file(file: &SampleFile, declared_files: &BTreeSet<&str>) -> Result<(), String> {
+    if !declared_files.contains(file.path.as_str()) {
+        return Err(format!(
+            "sample file '{}' is not declared in the manifest",
+            file.path
+        ));
+    }
+    let extensions = SAMPLE_FILE_MEDIA_TYPES
+        .iter()
+        .find(|(media_type, _)| *media_type == file.media_type)
+        .map(|(_, extensions)| *extensions)
+        .ok_or_else(|| format!("sample file '{}' media type is unsupported", file.path))?;
+    // A plain stem keeps file names from carrying URLs, addresses, or paths;
+    // the stem is also checked with the ordinary sample-value matcher.
+    let name = &file.filename;
+    let valid = name.len() <= MAX_SAMPLE_FILENAME_BYTES
+        && name.rsplit_once('.').is_some_and(|(stem, extension)| {
+            !stem.is_empty()
+                && stem.trim() == stem
+                && stem.chars().all(|character| {
+                    character.is_alphanumeric() || matches!(character, ' ' | '-' | '_' | '(' | ')')
+                })
+                && extensions.contains(&extension.to_ascii_lowercase().as_str())
+        });
+    if !valid {
+        return Err(format!(
+            "sample file '{}' filename must be a plain name with a matching extension",
+            file.path
+        ));
+    }
+    let stem = name.rsplit_once('.').map_or("", |(stem, _)| stem);
+    prohibited_scalar("filename", stem)
 }
 
 #[derive(Clone, Debug)]
 pub struct ValidatedSampleData {
     pub declaration: SampleDataDeclaration,
+    /// Bundled files by archive path. Every reference to one path uses the
+    /// same filename and media type, so it becomes one ordinary file.
+    pub files: BTreeMap<String, SampleFile>,
     pub canonical_sha256: String,
     /// Entity indices in deterministic target-before-source order.
     pub target_first_order: Vec<usize>,
@@ -66,6 +182,8 @@ pub struct ValidatedSampleData {
 pub fn validate_sample_data(
     bytes: &[u8],
     declared_blueprints: &BTreeSet<&str>,
+    declared_contexts: &BTreeSet<&str>,
+    declared_files: &BTreeSet<&str>,
 ) -> Result<ValidatedSampleData, String> {
     if bytes.is_empty() || bytes.len() > MAX_SAMPLE_DATA_BYTES {
         return Err("sample-data file must be non-empty and at most 1 MiB".into());
@@ -85,6 +203,7 @@ pub fn validate_sample_data(
     }
 
     let mut keys = BTreeMap::new();
+    let mut files = BTreeMap::<String, SampleFile>::new();
     for (index, entity) in declaration.entities.iter().enumerate() {
         if !valid_sample_entity_key(&entity.key) {
             return Err(format!("sample entity key '{}' is invalid", entity.key));
@@ -98,16 +217,39 @@ pub fn validate_sample_data(
                 entity.key
             ));
         }
-        if entity.facts.len() + entity.relationships.len() > MAX_SAMPLE_FACTS_PER_ENTITY {
+        if entity.facts.len() + entity.relationships.len() + entity.files.len()
+            > MAX_SAMPLE_FACTS_PER_ENTITY
+        {
             return Err(format!(
                 "sample entity '{}' exceeds the fact limit",
+                entity.key
+            ));
+        }
+        let valid_context = |context: Option<&String>| {
+            context.is_none_or(|context| declared_contexts.contains(context.as_str()))
+        };
+        if !entity
+            .facts
+            .iter()
+            .all(|fact| valid_context(fact.context.as_ref()))
+            || !entity
+                .relationships
+                .iter()
+                .all(|relationship| valid_context(relationship.context.as_ref()))
+            || !entity
+                .files
+                .iter()
+                .all(|value| valid_context(value.context.as_ref()))
+        {
+            return Err(format!(
+                "sample entity '{}' references an undeclared context",
                 entity.key
             ));
         }
         let mut attributes = BTreeSet::new();
         for fact in &entity.facts {
             validate_attribute_reference(&entity.blueprint, &fact.attribute)?;
-            if !attributes.insert(fact.attribute.as_str()) {
+            if !attributes.insert((fact.attribute.as_str(), fact.context.as_deref())) {
                 return Err(format!(
                     "sample entity '{}' has duplicate attribute facts",
                     entity.key
@@ -132,7 +274,10 @@ pub fn validate_sample_data(
         }
         for relationship in &entity.relationships {
             validate_attribute_reference(&entity.blueprint, &relationship.attribute)?;
-            if !attributes.insert(relationship.attribute.as_str()) {
+            if !attributes.insert((
+                relationship.attribute.as_str(),
+                relationship.context.as_deref(),
+            )) {
                 return Err(format!(
                     "sample entity '{}' has duplicate attribute facts",
                     entity.key
@@ -160,6 +305,53 @@ pub fn validate_sample_data(
                 }
             }
         }
+        for value in &entity.files {
+            validate_attribute_reference(&entity.blueprint, &value.attribute)?;
+            if !attributes.insert((value.attribute.as_str(), value.context.as_deref())) {
+                return Err(format!(
+                    "sample entity '{}' has duplicate attribute facts",
+                    entity.key
+                ));
+            }
+            if value.files.is_empty() || value.files.len() > MAX_SAMPLE_FILES_PER_VALUE {
+                return Err(format!(
+                    "sample entity '{}' file values must list 1-{MAX_SAMPLE_FILES_PER_VALUE} files",
+                    entity.key
+                ));
+            }
+            let mut paths = BTreeSet::new();
+            for file in &value.files {
+                validate_sample_file(file, declared_files)?;
+                if !paths.insert(file.path.as_str()) {
+                    return Err(format!(
+                        "sample entity '{}' attaches a file twice to one value",
+                        entity.key
+                    ));
+                }
+                match files.get(file.path.as_str()) {
+                    Some(existing)
+                        if existing.media_type != file.media_type
+                            || existing.filename != file.filename =>
+                    {
+                        return Err(format!(
+                            "sample file '{}' is referenced with different filenames or media types",
+                            file.path
+                        ));
+                    }
+                    _ => {
+                        files.insert(file.path.clone(), file.clone());
+                    }
+                }
+            }
+        }
+    }
+    if let Some(unused) = declared_files
+        .iter()
+        .find(|path| !files.contains_key(**path))
+    {
+        return Err(format!(
+            "sample file '{unused}' is not attached by any sample entity"
+        ));
     }
 
     let scalar_fact_count = declaration
@@ -210,6 +402,7 @@ pub fn validate_sample_data(
     let canonical = serde_json::to_vec(&declaration).expect("sample declaration serializes");
     Ok(ValidatedSampleData {
         declaration,
+        files,
         canonical_sha256: format!("{:x}", Sha256::digest(canonical)),
         target_first_order,
         scalar_fact_count,
@@ -733,8 +926,13 @@ mod tests {
                 {"key":"sample-entities/target","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/name","value":"Sample target"}],"relationships":[]}
             ]
         });
-        let validated =
-            validate_sample_data(&serde_json::to_vec(&valid).unwrap(), &blueprints).unwrap();
+        let validated = validate_sample_data(
+            &serde_json::to_vec(&valid).unwrap(),
+            &blueprints,
+            &BTreeSet::new(),
+            &BTreeSet::new(),
+        )
+        .unwrap();
         assert_eq!(validated.target_first_order, vec![1, 0]);
 
         let mut cyclic = valid;
@@ -743,9 +941,14 @@ mod tests {
             "targets":["sample-entities/source"]
         }]);
         assert!(
-            validate_sample_data(&serde_json::to_vec(&cyclic).unwrap(), &blueprints)
-                .unwrap_err()
-                .contains("acyclic")
+            validate_sample_data(
+                &serde_json::to_vec(&cyclic).unwrap(),
+                &blueprints,
+                &BTreeSet::new(),
+                &BTreeSet::new()
+            )
+            .unwrap_err()
+            .contains("acyclic")
         );
     }
 
@@ -758,7 +961,13 @@ mod tests {
             "classification":"synthetic",
             "entities":[{"key":"sample-entities/a","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/available_at","value":{"time":"12:34:56","time_zone":"UTC"}}],"relationships":[]}]
         });
-        validate_sample_data(&serde_json::to_vec(&native_time).unwrap(), &blueprints).unwrap();
+        validate_sample_data(
+            &serde_json::to_vec(&native_time).unwrap(),
+            &blueprints,
+            &BTreeSet::new(),
+            &BTreeSet::new(),
+        )
+        .unwrap();
         for entity in [
             serde_json::json!({"key":"sample-entities/a","blueprint":"blueprints/product","facts":[],"relationships":[],"context":"default"}),
             serde_json::json!({"key":"sample-entities/a","blueprint":"blueprints/product","facts":[{"attribute":"blueprints/product/attributes/name","value":{"copied":true}}],"relationships":[]}),
@@ -766,7 +975,13 @@ mod tests {
         ] {
             let input = serde_json::json!({"format_version":1,"kind":"solution_pack_sample_data","classification":"synthetic","entities":[entity]});
             assert!(
-                validate_sample_data(&serde_json::to_vec(&input).unwrap(), &blueprints).is_err()
+                validate_sample_data(
+                    &serde_json::to_vec(&input).unwrap(),
+                    &blueprints,
+                    &BTreeSet::new(),
+                    &BTreeSet::new()
+                )
+                .is_err()
             );
         }
     }

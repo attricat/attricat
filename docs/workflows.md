@@ -48,3 +48,14 @@ Webhooks, network delivery, secrets, and external effects remain deferred **for 
 ## Operations
 
 The `catalog.workflows` outbox consumer only creates durable event runs. Workers lease runs, retry with bounded exponential delay, and dead-letter after five attempts. Each action inserts its `(run, action index)` idempotency key in the same transaction as entity locking, mutation, audit evidence, and outgoing outbox event. Disabling cancels queued and leased runs; every action rechecks this execution fence. `GET /workflow-runs` needs `workflows.read`; manual runs, replay, and lifecycle changes need the narrow `workflows.manage` permission.
+
+## Workflows installed by solution packs
+
+A [solution pack](solution-packs.md#rules-workflows-and-saved-searches) can
+declare workflows. Applying the pack creates each one through the ordinary
+creation path with code `<prefix>_<code>`, publishes revision 1, and enables it
+only when the pack declares it enabled; enabling records the same activation
+high-water boundary as `POST /workflows/{id}/versions/1/enable`, so only events
+after that point fan out. Seeded workflows cannot use schedule triggers, because
+`target_entity_id` names an entity of one workspace. After installation they are
+ordinary workflows; a pack never updates, re-enables, or removes them.
