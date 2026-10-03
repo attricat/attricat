@@ -54,6 +54,12 @@ pub enum BlueprintError {
     InvalidFilePolicy(String),
     #[error("relationship attribute '{0}' has an invalid cardinality")]
     InvalidRelationshipCardinality(String),
+    #[error("relationship attribute '{code}' has invalid target blueprints: {message}")]
+    InvalidTargetBlueprints { code: String, message: String },
+    #[error("relationship attribute '{code}' has an invalid hierarchy: {message}")]
+    InvalidRelationshipHierarchy { code: String, message: String },
+    #[error("unique key '{key}' is invalid: {message}")]
+    InvalidUniqueKey { key: String, message: String },
     #[error("{field} is not valid JSON Schema: {message}")]
     InvalidJsonSchema { field: String, message: String },
     #[error("only entity blueprints can define an entity schema")]

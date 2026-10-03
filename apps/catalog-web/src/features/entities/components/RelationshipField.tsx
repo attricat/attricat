@@ -4,6 +4,7 @@ import {
   Button,
   FormControl,
   List,
+  MenuItem,
   Stack,
   TextField,
   Typography,
@@ -14,7 +15,10 @@ import { RelationshipSelectorDialog } from '../../../components/RelationshipSele
 import { RelationshipPickerIcon } from '../../../components/systemIcons';
 import type { Attribute } from '../api';
 import { attributeCardinalities, RELATIONSHIP_ID_JOINER } from '../constants';
-import { relationshipIdsForField } from '../entityForm';
+import {
+  allowedTargetBlueprints,
+  relationshipIdsForField,
+} from '../entityForm';
 import { attributeLabel } from '../entityDisplay';
 import { RelationshipDraftSelection } from './RelationshipDraftSelection';
 import { RelationshipSelectionPills } from './RelationshipSelectionPills';
@@ -48,12 +52,18 @@ export const RelationshipField = ({
   const [draftIds, setDraftIds] = useState<string[]>([]);
   const [knownLabels, setKnownLabels] = useState<Record<string, string>>({});
   const pickerContentRoot = useRef<HTMLDivElement>(null);
-  const targetBlueprint = attribute.target_blueprint_code;
+  const allowedTargets = allowedTargetBlueprints(attribute);
+  const [activeTarget, setActiveTarget] = useState<string>();
+  // A relationship may allow several blueprints; the picker searches one at a time.
+  const targetBlueprint =
+    activeTarget && allowedTargets.includes(activeTarget)
+      ? activeTarget
+      : allowedTargets[0];
   const selectedIds = relationshipIdsForField(value);
   const isSingle = attribute.cardinality === attributeCardinalities.one;
   const selectorOpen = open && !disabled;
   const selectionLabels = useRelationshipSelectionLabels(
-    targetBlueprint,
+    allowedTargets,
     selectedIds,
   );
   const { isPreviewed, markPreviewed, openPreview, previewHref } =
@@ -174,10 +184,25 @@ export const RelationshipField = ({
           isSingle
             ? 'entities.selectOneRelationship'
             : 'entities.selectRelationships',
-          { blueprint: targetBlueprint },
+          { blueprint: allowedTargets.join(', ') },
         )}
       >
         <Stack ref={pickerContentRoot} spacing={2}>
+          {allowedTargets.length > 1 && (
+            <TextField
+              fullWidth
+              label={t('entities.relationshipTargetBlueprint')}
+              onChange={(event) => setActiveTarget(event.target.value)}
+              select
+              value={targetBlueprint}
+            >
+              {allowedTargets.map((code) => (
+                <MenuItem key={code} value={code}>
+                  {code}
+                </MenuItem>
+              ))}
+            </TextField>
+          )}
           <TextField
             fullWidth
             label={t('entities.searchRelationshipOptions')}

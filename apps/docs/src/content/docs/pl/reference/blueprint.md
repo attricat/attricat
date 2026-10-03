@@ -37,6 +37,7 @@ entity_schema = '''{ "type": "object", "required": ["title"] }'''
 | `entity_schema` | ciąg znaków (JSON) | Nie | JSON Schema dla całej encji. Tylko schematy encji. Zobacz [Walidacja](/pl/builders/validation/). |
 | `publication` | tabela | Nie | Zasady ponownego zatwierdzania publikacji. Zobacz [Publikacja](#publikacja). |
 | `rules` | tablica tabel | Nie | Reguły jakości danych należące do tego schematu. Zobacz [Reguły](/pl/builders/rules/). |
+| `unique_keys` | tablica tabel | Nie | Klucze biznesowe, których wartości muszą być unikalne. Tylko schematy encji. Zobacz [Klucze unikalne](#klucze-unikalne). |
 | `connector_jobs` | tablica tabel | Nie | Zaplanowane lub ręczne zadania importu i eksportu wykonywane przez rozszerzenie konektora. Tylko schematy encji. Zobacz [Zadania konektorów](#zadania-konektorów). |
 | `extensions` | tabela | Nie | Dowolne dane dla rozszerzeń, w przestrzeniach nazw `[extensions.<extension-id>]`. Kompilator rdzenia je ignoruje; rozszerzenia odczytują je z zapisanej definicji. |
 
@@ -94,10 +95,34 @@ cardinality = "one"
 | Klucz | Typ | Domyślnie | Opis |
 | --- | --- | --- | --- |
 | `target_blueprint` | kod | Dowolny schemat encji | Ogranicza cele do encji z tej rodziny schematów. |
+| `target_blueprints` | tablica kodów | Dowolny schemat encji | Ogranicza cele do encji z dowolnej z tych rodzin schematów. Nie można łączyć z `target_blueprint`; lista z jednym elementem działa tak samo jak `target_blueprint`. |
 | `cardinality` | `"one"`, `"many"` lub `"one_to_one"` | `"many"` | Z iloma celami jedna encja może być powiązana w jednym kontekście. `one_to_one` to skrót dla `cardinality = "one"` razem z `target_cardinality = "one"` i nie można go łączyć z `target_cardinality`. |
 | `target_cardinality` | `"one"` lub `"many"` | `"many"` | Ile encji może wskazywać ten sam cel przez ten atrybut w jednym kontekście. |
+| `acyclic` | wartość logiczna | `false` | Odrzuca powiązania, które utworzyłyby cykl przez ten atrybut. Wymaga `context_editable = "default"`, a cele muszą obejmować sam schemat. Zobacz [Hierarchie](#hierarchie). |
+| `tree` | wartość logiczna | `false` | Hierarchia acykliczna, w której każda encja ma co najwyżej jeden cel (rodzica). Oznacza `acyclic = true` i domyślnie ustawia `cardinality` na `"one"`; `cardinality = "many"` jest odrzucane. |
 
 `cardinality = "one"` daje pole jednokrotnego wyboru, którego opcje mogą być współdzielone, np. marka. Dodaj `target_cardinality = "one"` tylko dla wyłącznego powiązania, w którym każdy cel może zostać zajęty raz. Zapis naruszający którykolwiek limit zwraca `409 relationship_cardinality_conflict`.
+
+Zapis wiążący encję schematu niedozwolonego przez `target_blueprint` lub `target_blueprints` zwraca `422 relationship_target_type_mismatch`. Okno wyboru encji w aplikacji webowej oferuje tylko dozwolone schematy; gdy jest ich kilka, ma pole **Schemat celu**. Blok `incoming_relationship_list` w każdym z dozwolonych schematów docelowych może wyświetlać to pole.
+
+#### Hierarchie
+
+```toml
+[[attributes]]
+code = "parent"
+value_type = "relationship"
+target_blueprint = "location"
+tree = true
+context_editable = "default"
+```
+
+`acyclic` i `tree` chronią struktury odwołujące się do siebie, takie jak hierarchie lokalizacji czy zasobów, oraz łańcuchy poprzedników, np. wersja → poprzednia wersja.
+
+- Zapis, który zamknąłby cykl, zwraca `409 relationship_cycle`. `error.details.path` zawiera identyfikatory encji wzdłuż cyklu, zaczynając i kończąc na zapisywanej encji. Powiązanie encji z nią samą jest cyklem o długości jeden.
+- W drzewie (`tree`) nadanie encji drugiego celu zwraca `409 relationship_cardinality_conflict`.
+- Sprawdzenia uwzględniają powiązania ze wszystkich wersji schematu i działają w transakcji zapisu. Dwa równoczesne zapisy nie mogą każdy dodać połowy cyklu.
+- Hierarchia dotyczy całej rodziny schematów zgodnie z jej najnowszą opublikowaną wersją, także encji przypiętych do starszych wersji.
+- Publikacja wersji, która dodaje `acyclic` lub `tree`, najpierw sprawdza istniejące powiązania. Jeśli zawierają cykle albo drzewo ma encje z więcej niż jednym celem, publikacja kończy się błędem `409 relationship_hierarchy_violations`; `error.details` wymienia do 20 cykli i encji z nadmiarowymi celami. Popraw powiązania i opublikuj ponownie.
 
 Relacje nie mogą mieć `value_schema` ani `default_value`. Ograniczaj je zamiast tego przez `entity_schema`.
 
@@ -339,6 +364,40 @@ Nie przyznaje to żadnych uprawnień. Zobacz [Publikowanie](/pl/guides/publishin
 
 Tabele `[[rules]]` używają składni reguł opisanej w [Reguły](/pl/builders/rules/), bez `format_version`. Kody reguł muszą być unikalne w obrębie schematu, a predykaty `required` i `stale` muszą wskazywać atrybut schematu.
 
+## Klucze unikalne
+
+Klucz unikalny deklaruje identyfikator biznesowy, którego dwie encje z tej rodziny schematów nie mogą współdzielić, np. numer części, numer dokumentu albo kombinację, taką jak producent i numer części.
+
+```toml
+[[unique_keys]]
+code = "manufacturer_part"
+attributes = ["manufacturer", "part_number"]
+
+[[unique_keys]]
+code = "slug"
+attributes = ["slug"]
+scope = "context"
+case_sensitive = true
+```
+
+| Klucz | Typ | Domyślnie | Opis |
+| --- | --- | --- | --- |
+| `code` | kod | Wymagany | Unikalny w obrębie schematu. Podawany w błędach. |
+| `attributes` | tablica kodów atrybutów | Wymagany | Od jednego do ośmiu atrybutów, których łączne wartości muszą być unikalne. Każdy musi być wartością skalarną innego typu niż `json` albo relacją z `cardinality = "one"`. |
+| `scope` | `"workspace"` lub `"context"` | `"workspace"` | `workspace` porównuje wartości w kontekście domyślnym. `context` porównuje wartości wyświetlane w każdym kontekście, także dziedziczone, osobno dla każdego kontekstu. |
+| `case_sensitive` | wartość logiczna | `false` | Porównuje tekst dokładnie zamiast bez rozróżniania wielkości liter. |
+
+Jak porównywane są wartości:
+
+- Tekst jest przycinany, a każdy ciąg białych znaków zamieniany na jedną spację. Jeśli nie ustawiono `case_sensitive = true`, tekst jest też porównywany małymi literami, więc `ABC-1  Rev` i ` abc-1 rev` to ten sam klucz.
+- Liczby są porównywane według wartości (`1.50` równa się `1.5`), daty z czasem według chwili, a relacje według powiązanej encji.
+- Encja, która nie ma wartości (albo ma tylko pusty tekst) dla któregokolwiek atrybutu klucza, nie jest sprawdzana względem tego klucza. Jeśli każda encja musi mieć klucz, oznacz atrybuty jako wymagane w `entity_schema`.
+- Klucz obejmuje całą rodzinę schematów zgodnie z jej najnowszą opublikowaną wersją, także encje przypięte do starszych wersji. Atrybuty są dopasowywane według kodu.
+
+Zapis, który nadałby drugiej encji tę samą wartość klucza, zwraca `409 unique_key_conflict`. `error.details` zawiera `key`, kod kontekstu `context`, znormalizowane wartości `values` oraz `conflicting_entity_id` encji, która już je ma. Sprawdzenie odbywa się w bazie danych w transakcji zapisu, więc gdy dwie osoby zapisują tę samą wartość w tym samym momencie, udaje się dokładnie jeden zapis.
+
+Publikacja wersji, która dodaje lub zmienia klucze unikalne, najpierw sprawdza istniejące encje. Jeśli niektóre już współdzielą wartość, publikacja kończy się błędem `409 unique_key_duplicates`, a `error.details.duplicates` wymienia do 20 grup z kluczem, kontekstem, wartościami i identyfikatorami encji (`error.details.total` podaje liczbę wszystkich grup). Zmień lub usuń duplikaty i opublikuj ponownie.
+
 ## Zadania konektorów
 
 Zadania konektorów uruchamiają operację zainstalowanego rozszerzenia konektora, np. import lub eksport CSV, dla tego schematu.
@@ -375,5 +434,6 @@ Kilka reguł kompilacji, które łatwo przeoczyć:
 - Schemat encji bez `views.dropdown_option` jest odrzucany.
 - `entity_schema` w domieszce jest odrzucany.
 - `entity_schema` może wskazywać tylko atrybuty, które schemat posiada, w swoich kluczach najwyższego poziomu `required`, `properties`, `dependentRequired` i `dependentSchemas`.
-- `target_blueprint` w atrybucie innym niż relacja jest odrzucany.
+- `target_blueprint`, `target_blueprints`, `acyclic` i `tree` w atrybucie innym niż relacja są odrzucane.
+- `unique_keys` w domieszce, klucz wskazujący nieznany atrybut, atrybut `json`, plikowy lub relację z wieloma celami, a także klucz wymieniający atrybut dwa razy są odrzucane.
 - `from` musi mieć postać `alias.code`, gdzie `code` odpowiada kodowi samego atrybutu.

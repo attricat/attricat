@@ -17,6 +17,9 @@ pub(super) enum TargetKind {
     /// Interactive extension runs: the handler authorizes every selected
     /// entity, so entity- and blueprint-scoped grants work as for entity reads.
     ExtensionRun,
+    /// Entity batches: the handler authorizes every operation against its own
+    /// entity, so entity-scoped grants work as for single-entity writes.
+    EntityBatch,
     WorkspaceNavigation,
     ContextId,
     ContextCode,
@@ -410,6 +413,9 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     if path == "/v1/entities" {
         return Some(write(TargetKind::None));
     }
+    if path == "/v1/entities/batch" {
+        return Some(write(TargetKind::EntityBatch));
+    }
     if path == "/v1/entities/search"
         || path == "/v1/entities/facets/relationship-tree/children"
         || path == "/entities"
@@ -428,9 +434,10 @@ pub(super) fn target(path: &str, kind: TargetKind) -> (Option<Uuid>, Option<Stri
         TargetKind::None => (None, None),
         TargetKind::BlueprintId => (segments.get(1).and_then(|value| value.parse().ok()), None),
         TargetKind::BlueprintCode => (None, segments.get(2).map(|value| (*value).to_owned())),
-        TargetKind::FileRead | TargetKind::WorkspaceNavigation | TargetKind::ExtensionRun => {
-            (None, None)
-        }
+        TargetKind::FileRead
+        | TargetKind::WorkspaceNavigation
+        | TargetKind::ExtensionRun
+        | TargetKind::EntityBatch => (None, None),
         TargetKind::EntityId => {
             let index = if segments.first() == Some(&"v1") {
                 2
@@ -511,6 +518,17 @@ mod tests {
                 policy.target
             ),
             (Some(context_id), None)
+        );
+    }
+
+    #[test]
+    fn entity_batches_are_authorized_per_operation_by_their_handler() {
+        let batch = policy(&Method::POST, "/v1/entities/batch").unwrap();
+        assert_eq!(batch.permission, "entities.write");
+        assert!(matches!(batch.target, TargetKind::EntityBatch));
+        assert_eq!(
+            target("/v1/entities/batch", TargetKind::EntityBatch),
+            (None, None)
         );
     }
 

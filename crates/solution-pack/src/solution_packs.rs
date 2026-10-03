@@ -2572,6 +2572,14 @@ fn prepare_blueprint(
                     blueprint_codes,
                     Some(&mut dependencies),
                 )?;
+                rewrite_blueprint_reference_list(
+                    key,
+                    attribute,
+                    "target_blueprints",
+                    "relationship target",
+                    blueprint_codes,
+                    &mut dependencies,
+                )?;
             }
         }
     }
@@ -2719,6 +2727,38 @@ fn rewrite_blueprint_reference(
         dependencies.insert(logical_key.to_owned());
     }
     *reference = toml::Value::String((*code).to_owned());
+    Ok(())
+}
+
+fn rewrite_blueprint_reference_list(
+    owner_key: &str,
+    table: &mut toml::map::Map<String, toml::Value>,
+    field: &str,
+    label: &str,
+    blueprint_codes: &HashMap<&str, &str>,
+    dependencies: &mut BTreeSet<String>,
+) -> Result<(), SolutionPackError> {
+    let Some(references) = table.get_mut(field) else {
+        return Ok(());
+    };
+    let references = references.as_array_mut().ok_or_else(|| {
+        SolutionPackError::Invalid(format!(
+            "blueprint '{owner_key}' {label}s must be a list of logical keys"
+        ))
+    })?;
+    for reference in references {
+        let mut entry = toml::map::Map::new();
+        entry.insert(field.to_owned(), reference.clone());
+        rewrite_blueprint_reference(
+            owner_key,
+            &mut entry,
+            field,
+            label,
+            blueprint_codes,
+            Some(dependencies),
+        )?;
+        *reference = entry.remove(field).expect("rewritten reference");
+    }
     Ok(())
 }
 
@@ -3017,7 +3057,7 @@ fn validate_incoming_relationships_in_nodes(
                             relationship.field
                         ));
                     }
-                    if attribute.target_blueprint.as_deref() != Some(owner.code.as_str()) {
+                    if !attribute.target_blueprints.contains(&owner.code) {
                         return invalid(format!(
                             "blueprint '{owner_key}' incoming relationship source '{source_key}' field '{}' must target '{}'",
                             relationship.field, owner.code
@@ -4467,6 +4507,18 @@ fn normalized_blueprint_payload(
         for attribute in attributes {
             if let Some(attribute) = attribute.as_table_mut() {
                 normalize_reference(attribute, "target_blueprint", mappings);
+                if let Some(targets) = attribute
+                    .get_mut("target_blueprints")
+                    .and_then(toml::Value::as_array_mut)
+                {
+                    for target in targets {
+                        let key = target
+                            .as_str()
+                            .expect("validated reference is a string")
+                            .to_owned();
+                        *target = toml::Value::String(mappings[&key].target_code.clone());
+                    }
+                }
             }
         }
     }
@@ -6992,6 +7044,53 @@ value_type = "string"
             .unwrap();
         assert!(category_definition.contains("source_blueprint = \"ecom_product\""));
         assert!(category_definition.contains("target_blueprint = \"ecom_product\""));
+    }
+
+    #[test]
+    fn planner_rewrites_relationship_target_lists() {
+        let product = PRODUCT_BLUEPRINT.replace_ascii(
+            b"target_blueprint = \"blueprints/category\"",
+            b"target_blueprints = [\"blueprints/category\", \"blueprints/product\"]",
+        );
+        let mut manifest = manifest_value();
+        manifest["resources"]["blueprints"][0]["sha256"] = json!(digest(&product));
+        let mut files = valid_files();
+        files[0] = (files[0].0, &product);
+        let pack = ValidatedSolutionPack::from_tar_zst(&archive(&manifest, &files)).unwrap();
+        let plan = build_solution_pack_plan(
+            &pack,
+            "ecom",
+            BlueprintPublication::Publish,
+            &PlanningWorkspaceSnapshot {
+                workspace_id: uuid::Uuid::nil(),
+                physical_codes: BTreeSet::from(["default".to_owned()]),
+                existing_blueprints: BTreeMap::new(),
+                existing_presentation_assets: BTreeMap::new(),
+                installed_extensions: BTreeMap::new(),
+                explore_navigation: Vec::new(),
+                explore_navigation_valid: true,
+                extension_layout: serde_json::json!({"version":1,"outlets":{}}),
+                extension_layout_valid: true,
+                role_codes: BTreeSet::new(),
+                published_entity_codes: BTreeSet::new(),
+            },
+        )
+        .unwrap();
+        assert!(plan.ready);
+        let definition = plan
+            .actions
+            .iter()
+            .find(|action| action.logical_key == "blueprints/product")
+            .unwrap()
+            .normalized_payload
+            .as_ref()
+            .unwrap()["definition"]
+            .as_str()
+            .unwrap();
+        assert!(
+            definition.contains("target_blueprints = [\"ecom_category\", \"ecom_product\"]"),
+            "{definition}"
+        );
     }
 
     #[test]

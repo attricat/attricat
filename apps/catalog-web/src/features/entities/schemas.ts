@@ -247,8 +247,11 @@ export const attributeSchema = z
     name: z.string().nullish(),
     value_type: valueTypeSchema,
     target_blueprint_code: z.string().nullable().optional(),
+    /** Every allowed target blueprint; empty means any blueprint. */
+    target_blueprint_codes: z.array(z.string()).optional(),
     cardinality: z.enum(['one', 'many']).nullable().optional(),
     target_cardinality: z.enum(['one', 'many']).nullable().optional(),
+    hierarchy: z.enum(['acyclic', 'tree']).nullable().optional(),
     context_fallback: z.enum(['default', 'none']).optional(),
     context_editable: z.enum(['all', 'default']).optional(),
     readonly: z.boolean().optional(),

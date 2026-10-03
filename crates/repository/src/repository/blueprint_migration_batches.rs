@@ -602,7 +602,7 @@ fn safe_automatic_migration(
             || source_attribute.value_schema != target_attribute.value_schema
             || source_attribute.default_value != target_attribute.default_value
             || source_attribute.file_policy != target_attribute.file_policy
-            || source_attribute.target_blueprint_code != target_attribute.target_blueprint_code
+            || source_attribute.target_blueprint_codes != target_attribute.target_blueprint_codes
             || source_attribute.cardinality != target_attribute.cardinality
             || source_attribute.target_cardinality != target_attribute.target_cardinality
             || source_attribute.context_fallback != target_attribute.context_fallback

@@ -430,6 +430,13 @@ enum EntityCommand {
     Delete {
         entity_id: Uuid,
     },
+    /// Apply create, update and delete operations to several entities
+    /// atomically: all succeed or none do.
+    Batch {
+        /// JSON array of batch operations, or a file containing it.
+        #[arg(long)]
+        operations: String,
+    },
     List {
         #[arg(long)]
         blueprint: String,
@@ -1385,6 +1392,8 @@ enum CliError {
         status: u16,
         code: String,
         message: String,
+        /// The API's optional machine-readable `error.details`.
+        details: Option<Value>,
     },
     #[error("server returned invalid JSON")]
     InvalidResponse,
@@ -1414,7 +1423,14 @@ impl CliError {
                 status,
                 code,
                 message,
-            } => json!({ "error": { "code": code, "message": message, "status": status } }),
+                details,
+            } => {
+                let mut error = json!({ "code": code, "message": message, "status": status });
+                if let Some(details) = details {
+                    error["details"] = details.clone();
+                }
+                json!({ "error": error })
+            }
             Self::InvalidResponse => {
                 json!({ "error": { "code": "invalid_response", "message": self.to_string(), "status": null } })
             }
@@ -1896,6 +1912,16 @@ async fn run(cli: Cli) -> Result<String, CliError> {
                     Method::DELETE,
                     &format!("/entities/{}", segment(entity_id)),
                     None,
+                )
+                .await
+            }
+            EntityCommand::Batch { operations } => {
+                request(
+                    &client,
+                    &server,
+                    Method::POST,
+                    "/v1/entities/batch",
+                    Some(json!({ "operations": json_array_input(&operations, "--operations")? })),
                 )
                 .await
             }
@@ -3713,6 +3739,10 @@ fn api_error(status: reqwest::StatusCode, body: &str) -> Result<String, CliError
             .and_then(|body| body["error"]["code"].as_str())
             .unwrap_or("api_error")
             .to_owned(),
+        details: error
+            .as_ref()
+            .map(|body| body["error"]["details"].clone())
+            .filter(|details| !details.is_null()),
         message: error
             .as_ref()
             .and_then(|body| body["error"]["message"].as_str())
@@ -4345,6 +4375,10 @@ async fn request(
         status: status.as_u16(),
         code,
         message,
+        details: error
+            .as_ref()
+            .map(|body| body["error"]["details"].clone())
+            .filter(|details| !details.is_null()),
     })
 }
 
@@ -4802,9 +4836,21 @@ value = "Blue shirt"
             status: reqwest::StatusCode::UNPROCESSABLE_ENTITY.as_u16(),
             code: "invalid_input".to_owned(),
             message: "bad value".to_owned(),
+            details: None,
         };
         assert_eq!(error.exit_code(), 4);
         assert_eq!(error.json()["error"]["status"], 422);
+        assert!(error.json()["error"].get("details").is_none());
+        let conflict = CliError::Api {
+            status: reqwest::StatusCode::CONFLICT.as_u16(),
+            code: "unique_key_conflict".to_owned(),
+            message: "taken".to_owned(),
+            details: Some(json!({ "conflicting_entity_id": "e" })),
+        };
+        assert_eq!(
+            conflict.json()["error"]["details"]["conflicting_entity_id"],
+            "e"
+        );
     }
 
     #[test]
