@@ -472,6 +472,8 @@ impl CatalogRepository {
             .entity_audit_snapshot(&mut transaction, entity_id)
             .await?;
         let entity = self.lock_entity(&mut transaction, entity_id).await?;
+        self.ensure_entity_deletable(&mut transaction, &entity)
+            .await?;
         sqlx::query(
             "DELETE FROM entity_channel_publications WHERE workspace_id = $1 AND entity_id = $2",
         )
@@ -1070,6 +1072,7 @@ impl CatalogRepository {
         entity: &Entity,
     ) -> Result<(), RepositoryError> {
         self.validate_status_values(transaction, entity).await?;
+        self.apply_status_effects(transaction, entity).await?;
         let entity_schema = sqlx::query_scalar::<_, Option<Value>>(
             "SELECT entity_schema FROM blueprints WHERE id = $1 AND version = $2 AND deleted_at IS NULL",
         )

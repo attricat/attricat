@@ -69,6 +69,8 @@ value_schema = '''{
 
 Aplikacja internetowa pokazuje status jako etykietę i edytuje go listą wyboru, w której niedozwolone opcje są wyłączone. Przejścia sprawdza serwer dla każdego zapisu, także z API, CLI, przepływów pracy, przywracania historii i migracji. Porównywane są wartości efektywne, więc wartość odziedziczona z kontekstu nadrzędnego jest punktem wyjścia. Niedozwolona zmiana zwraca `422 attribute_value_schema_mismatch`.
 
+Status może też ograniczać, kto może wykonać poszczególne przejścia, blokować sfinalizowane rekordy i wiązać zatwierdzenia z przejrzaną treścią. Zobacz [Kontroluj cykl życia rekordu](/pl/builders/blueprints/#krok-10-kontroluj-cykl-życia-rekordu).
+
 ## Ogranicz całą encję
 
 `entity_schema` widzi encję jako jeden obiekt JSON. Używaj go dla reguł obejmujących więcej niż jeden atrybut:
