@@ -27,7 +27,7 @@ pub use catalog_repository::{
     catalog_read_service, catalog_service, extension_installer, extension_registry, file_access,
     repository, solution_pack_extensions,
 };
-pub use catalog_solution_pack::{solution_pack_sample_data, solution_packs};
+pub use catalog_solution_pack::{solution_pack_sample_data, solution_pack_seeds, solution_packs};
 pub use catalog_storage as storage;
 pub use catalog_workers::{
     blueprint_migration_worker, event_dispatcher, file_worker, maintenance, rule_runtime,

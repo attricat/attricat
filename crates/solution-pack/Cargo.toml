@@ -10,6 +10,8 @@ publish.workspace = true
 base64.workspace = true
 catalog-blueprint = { path = "../blueprint" }
 catalog-lexicon = { path = "../lexicon" }
+catalog-rules = { path = "../rules" }
+catalog-workflow = { path = "../workflow" }
 catalog-extension-manifest = { path = "../extension-manifest" }
 catalog-validation = { path = "../validation" }
 chrono.workspace = true
