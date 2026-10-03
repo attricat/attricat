@@ -1,7 +1,11 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import type { ExtensionContribution } from './api';
-import { extensionCapabilities, extensionProtocolErrors } from './constants';
+import {
+  extensionCapabilities,
+  extensionProtocolErrors,
+  selectionSources,
+} from './constants';
 import { entityQueryKeys } from '../entities/queryKeys';
 import { ruleQueryKeys } from '../rules/queryKeys';
 
@@ -13,6 +17,22 @@ const entityRefreshOutlets = new Set([
   'entity_preview_panel',
   'entity_attribute_decoration',
 ]);
+
+/**
+ * The entity a host-supplied context describes. A version 2 entity action
+ * receives a selection context instead, whose preview selection holds exactly
+ * that one entity; any other selection names no single current entity.
+ */
+const contextEntityId = (context: Record<string, unknown>) => {
+  if (context.entity_id !== undefined) return z.uuid().parse(context.entity_id);
+  if (
+    context.selection_source === selectionSources.entityPreview &&
+    Array.isArray(context.entity_ids) &&
+    context.entity_ids.length === 1
+  )
+    return z.uuid().parse(context.entity_ids[0]);
+  throw new Error(extensionProtocolErrors.refreshDenied);
+};
 
 /** Check the host-supplied outlet and context; never trust an entity ID from the frame. */
 export const refreshCurrentEntity = async (
@@ -28,8 +48,7 @@ export const refreshCurrentEntity = async (
   )
     throw new Error(extensionProtocolErrors.refreshDenied);
   refreshSchema.parse(payload);
-  const entityId = z.uuid().parse(context.entity_id);
-  await refreshEntity(client, entityId);
+  await refreshEntity(client, contextEntityId(context));
 };
 
 /** Refresh host-owned views of one entity without exposing cache keys to frames. */
