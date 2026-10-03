@@ -15,7 +15,10 @@ import { RelationshipSelectorDialog } from '../../../components/RelationshipSele
 import { RelationshipPickerIcon } from '../../../components/systemIcons';
 import type { Attribute } from '../api';
 import { attributeCardinalities, RELATIONSHIP_ID_JOINER } from '../constants';
-import { allowedTargetBlueprints, relationshipIdsForField } from '../entityForm';
+import {
+  allowedTargetBlueprints,
+  relationshipIdsForField,
+} from '../entityForm';
 import { attributeLabel } from '../entityDisplay';
 import { RelationshipDraftSelection } from './RelationshipDraftSelection';
 import { RelationshipSelectionPills } from './RelationshipSelectionPills';
