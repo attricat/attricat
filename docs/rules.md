@@ -50,3 +50,20 @@ The initial predicates are `required`, `stale`, `has_tag`, and `missing_tag`. Sc
 - `POST /rules/{rule_id}/run-now` with `{ "entity_id": "optional UUID", "dry_run": false, "idempotency_key": "..." }`
 - `GET /rule-runs`, `POST /rule-runs/{run_id}/replay`, `GET /rule-findings?entity_id=...`
 - `POST /rule-findings/{finding_id}/acknowledge`
+
+## Rules installed by solution packs
+
+A [solution pack](solution-packs.md#rules-workflows-and-saved-searches) can
+declare standalone rules for its own blueprints. Applying the pack creates each
+rule through the same path as `POST /rules`: the definition is compiled with the
+same parser, attached to the plan's created or mapped blueprint revision (and
+optional created or mapped context), and published. A rule the pack declares as
+enabled is then enabled exactly as `POST /rules/{rule_id}/versions/1/enable`
+would, recording the lifecycle activation boundary and schedule cursors in the
+same transaction. Other rules stay published but disabled.
+
+The pack's rule code becomes `<prefix>_<code>`, so a plan reports an existing
+rule code as a conflict instead of creating a second family. Rules embedded in a
+seeded blueprint's `[[rules]]` behave as for any blueprint: they are published
+with it and start disabled. After installation, seeded rules are ordinary rules;
+a pack never updates, re-enables, or removes them.

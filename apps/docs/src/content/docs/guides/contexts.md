@@ -71,6 +71,10 @@ Contexts are not languages by default. If yours represent locales, record that i
 
 Any context can be enabled as an export channel under **Manage → Exports**. Entities are then published to it separately. See [Publishing](/guides/publishing/).
 
+## Contexts from solution packs
+
+A [solution pack](/builders/solution-packs/#contexts-and-publication-channels) can create the contexts and publication channels it needs when you apply it, with codes that start with the pack's prefix. When you plan the pack, you can instead choose an existing context with `--map-context`; the pack then uses it as it is and never changes its data, parent, or channel. Contexts created by a pack are ordinary contexts that you can change, move, or delete like any other.
+
 ## Permissions
 
 `contexts.read` is needed to see contexts, and `contexts.write` to create, change, or delete them and to enable publication channels. A role grant can be limited to a context subtree: it then applies to that context and everything below it, but not to its parent or siblings.

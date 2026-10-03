@@ -85,6 +85,7 @@ Everything you set up in the Explorer is kept in the page URL, so reloading the 
 
 - **Save search** stores the search under a name. Choose **Private** to keep it to yourself, or **Workspace** to share it with every member who can read entities. Open saved searches from the **Saved searches** list.
 - Changing a saved search marks it as having unsaved changes. **Save changes** updates it; **Save search** saves a copy.
+- A [solution pack](/builders/solution-packs/#rules-workflows-and-saved-searches) can add ready-made **Workspace** searches, such as review queues. They appear in the same list, and the person who applied the pack owns them.
 - **Share search** copies a link. Long searches are stored as a snapshot and shared as a short link.
 
 A link never grants access. The person opening it needs to be a member of the workspace with permission to read entities, and sees only what their role allows.

@@ -71,6 +71,10 @@ Konteksty domyślnie nie są językami. Jeśli Twoje konteksty reprezentują ust
 
 Każdy kontekst można włączyć jako kanał eksportu w **Zarządzanie → Eksporty**. Encje są wtedy publikowane w nim osobno. Zobacz [Publikowanie](/pl/guides/publishing/).
 
+## Konteksty z pakietów rozwiązań
+
+[Pakiet rozwiązania](/pl/builders/solution-packs/#konteksty-i-kanały-publikacji) może podczas stosowania utworzyć potrzebne mu konteksty i kanały publikacji, z kodami zaczynającymi się od prefiksu pakietu. Podczas planowania możesz zamiast tego wskazać istniejący kontekst za pomocą `--map-context`; pakiet używa go wtedy bez zmian i nigdy nie zmienia jego metadanych, kontekstu nadrzędnego ani kanału. Konteksty utworzone przez pakiet są zwykłymi kontekstami, które możesz zmieniać, przenosić i usuwać jak każde inne.
+
 ## Uprawnienia
 
 Uprawnienie `contexts.read` jest potrzebne do wyświetlania kontekstów, a `contexts.write` do ich tworzenia, zmieniania lub usuwania oraz do włączania kanałów publikacji. Przyznanie roli można ograniczyć do poddrzewa kontekstów: obowiązuje ono wtedy w tym kontekście i we wszystkim pod nim, ale nie w kontekście nadrzędnym ani w kontekstach równorzędnych.

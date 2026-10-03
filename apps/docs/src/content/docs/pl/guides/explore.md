@@ -85,6 +85,7 @@ Wszystko, co ustawisz w Przeglądarce, jest przechowywane w adresie URL strony, 
 
 - **Zapisz wyszukiwanie** zapisuje wyszukiwanie pod nazwą. Wybierz **Prywatne**, aby zachować je dla siebie, albo **Obszar roboczy**, aby udostępnić je każdemu członkowi, który może odczytywać encje. Zapisane wyszukiwania otwierasz z listy **Zapisane wyszukiwania**.
 - Zmiana zapisanego wyszukiwania oznacza je jako mające niezapisane zmiany. **Zapisz zmiany** je aktualizuje, a **Zapisz wyszukiwanie** zapisuje kopię.
+- [Pakiet rozwiązania](/pl/builders/solution-packs/#reguły-przepływy-pracy-i-zapisane-wyszukiwania) może dodać gotowe wyszukiwania udostępnione całemu **Obszarowi roboczemu**, na przykład kolejki do przeglądu. Pojawiają się na tej samej liście, a ich właścicielem jest osoba, która zastosowała pakiet.
 - **Udostępnij wyszukiwanie** kopiuje link. Długie wyszukiwania są zapisywane jako migawka i udostępniane jako krótki link.
 
 Link nigdy nie nadaje dostępu. Osoba, która go otwiera, musi być członkiem obszaru roboczego z uprawnieniem do odczytu encji i widzi tylko to, na co pozwala jej rola.

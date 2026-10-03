@@ -202,9 +202,11 @@ HTTP endpoints.
 `POST /solution-packs/inspect` takes an `application/zstd` `.tar.zst` body (at
 most 32 MiB compressed). Its response is at most 512 KiB and contains safe
 manifest metadata, whole-archive SHA-256, blueprint keys, bounded setting
-summaries, normalized presentation-asset digests, and extension requirement
-summaries. Inspection never returns resource bytes, archive paths, or private
-object keys.
+summaries, normalized presentation-asset digests, extension requirement
+summaries, and a `seeds` summary of prerequisite packs, contexts with their
+publication channels, rules and workflows (with their declared enabled state),
+and saved searches. `sample_data.file_count` counts bundled sample files.
+Inspection never returns resource bytes, archive paths, or private object keys.
 
 `POST /solution-packs/plans` requires `prefix` and
 `blueprint_publication=draft|publish` query parameters. Optional
@@ -221,11 +223,20 @@ Without explicit maps, upload the archive as `application/zstd`, including
 when using `from_application`. For explicit reuse, send `multipart/form-data`
 with exactly one streamed `archive` part (`application/zstd`) and repeated
 `blueprint_map` JSON text parts such as
-`{"key":"blueprints/product","code":"shared_product"}` and/or `asset_map`
-parts such as `{"key":"assets/brand-logo","id":"<uuid>"}`. The 32 MiB
+`{"key":"blueprints/product","code":"shared_product"}`, `asset_map`
+parts such as `{"key":"assets/brand-logo","id":"<uuid>"}`, and/or
+`context_map` parts such as `{"key":"contexts/poland","code":"PL"}` selecting an
+existing context for a pack context. The 32 MiB
 compressed archive and structural limits still apply. The archive is not
 retained; asset-create actions privately stage normalized bytes before the
-plan is ready.
+plan is ready, and bundled sample files of a sample-selected plan are uploaded
+to ordinary file storage under upload intents before the plan is saved.
+
+Plans can also contain `prerequisite`, `context`, `publication_channel`,
+`rule`, `workflow`, and `saved_search` actions. Prerequisites are resolved
+against completed applications of the required pack in the workspace; they are
+never installed automatically. See
+[solution-pack operation](solution-packs.md#prerequisite-packs).
 
 The response is at most 1 MiB. It contains safe source/digest metadata,
 optional prior-application identity, ordered release-change evidence, mapping
