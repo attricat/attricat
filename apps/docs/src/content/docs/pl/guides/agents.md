@@ -29,7 +29,8 @@ Agent działa w Twoim imieniu. Widzi i zmienia tylko to, na co pozwala Twoja rol
 - wyświetlać podgląd migracji encji;
 - odczytywać stan danych, ustalenia reguł i uruchomienia przepływów pracy;
 - oglądać obrazy i odczytywać pliki tekstowe w obszarze roboczym;
-- odczytywać uruchomienia operacji rozszerzeń i zadania konektorów (z uprawnieniem `extensions.manage`).
+- odczytywać uruchomienia operacji rozszerzeń i zadania konektorów (z uprawnieniem `extensions.manage`);
+- wyjaśniać przejścia statusów encji, jej zatwierdzenia i blokady retencji.
 
 **Po Twoim zatwierdzeniu** może:
 
@@ -52,6 +53,14 @@ Gdy agent chce coś zmienić, rozmowa pokazuje **Wymagane zatwierdzenie** wraz z
 Decyzja jest ostateczna. Dwukrotne zatwierdzenie nigdy nie uruchamia zmiany dwa razy.
 
 Czytaj propozycje uważnie. Zastąpienie relacji ustawia pełną listę dla danego atrybutu i kontekstu; pusta lista usuwa każde powiązanie.
+
+## Rekordy kontrolowane
+
+Schematy mogą ograniczać, kto wykonuje przejście statusu, blokować sfinalizowane rekordy i wiązać zatwierdzenia z przejrzaną treścią. Agent przestrzega tych samych zasad co Ty:
+
+- Zmiana odrzucona przez te zasady kończy się błędem z jasnym powodem, np. zablokowanym rekordem lub przejściem, którego nie możesz wykonać. Agent wyjaśnia go zamiast ponawiać próbę i może pokazać, które przejścia możesz wykonać, kto musi działać i które przejście korygujące odblokowuje rekord.
+- Przy przejściu, które musi wykonać inna osoba niż autor wcześniejszego przejścia, za wykonującego uznaje się Ciebie, ponieważ zatwierdzona przez Ciebie zmiana działa w Twoim imieniu.
+- Jeśli proponowana edycja dotyczy zatwierdzonej treści, to gdy ją zaakceptujesz, zatwierdzenie rekordu zostanie unieważnione, a rekord w tej samej zmianie wróci do wcześniejszego statusu.
 
 ## Gdzie widać zmiany
 

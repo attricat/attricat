@@ -294,6 +294,78 @@ from = "seo.meta_description"
 
 An include pins an exact mixin revision. Publishing `seo` version 2 does not change `product` until you publish a new `product` revision that includes version 2.
 
+## Step 10: control a record's lifecycle
+
+A [status](/builders/validation/#statuses) can do more than restrict which transitions exist. For controlled documents, inspections, or assessments it can also decide who may make a transition, freeze the record once it is final, bind an approval to the exact content that was reviewed, and keep released files for a retention period:
+
+```toml
+[[attributes]]
+code = "status"
+value_type = "string"
+value_schema = '''{
+  "type": "string",
+  "enum": ["draft", "review", "approved", "released"],
+  "x-attricat-status": {
+    "version": 1,
+    "options": [
+      { "code": "draft", "label": "Draft" },
+      { "code": "review", "label": "In review" },
+      { "code": "approved", "label": "Approved",
+        "approval": { "covers": ["title", "procedure"], "void_to": "review" } },
+      { "code": "released", "label": "Released", "tone": "success",
+        "lock": "all", "retention_days": 3650 }
+    ],
+    "transitions": [
+      { "from": null, "to": "draft" },
+      { "from": "draft", "to": "review", "code": "submit" },
+      { "from": "review", "to": "approved", "code": "approve",
+        "roles": ["reviewer"], "separate_from": ["submit"] },
+      { "from": "approved", "to": "released", "code": "release",
+        "permission": "entities.publish" },
+      { "from": "released", "to": "draft", "code": "correct",
+        "roles": ["owner", "admin"] }
+    ]
+  }
+}'''
+```
+
+### Who may make a transition
+
+A transition can name requirements. The person saving must meet all of them, in addition to `entities.write`:
+
+- `permission`: a [permission](/reference/permissions/) they must hold for this entity, such as `entities.publish`.
+- `roles`: they must hold at least one of these roles (built-in or [custom](/operate/workspaces/#roles)), granted for the whole workspace, the blueprint, or this entity.
+- `separate_from`: separation of duties. They must not be the person who most recently made a transition with one of these `code`s on this entity, in this context. Above, whoever submitted a document cannot also approve it.
+
+Give a transition a `code` to name it in `separate_from` and in history. A refused transition returns `403 status_transition_forbidden` or `403 status_separation_of_duties`, and nothing is saved. The edit form disables the transitions you may not make and says why.
+
+The same checks apply to every writer: the API, the CLI, workflows (as the person whose change started the workflow), extensions, and agents (as the person who approved the change). A write with no identifiable person, such as a scheduled job, cannot make a restricted transition.
+
+### Lock finalized records
+
+`lock` on a status makes content read-only while the record has that status:
+
+- `"lock": "all"` freezes every attribute, relationship, and file except the status itself, and prevents deleting the entity.
+- `"lock": ["title", "procedure"]` freezes only those attributes.
+
+Locks are enforced on the server for every write path: the edit form, API, CLI, workflows, extensions, agents, value-history restores, file uploads and reorders, and migrations. A rejected write returns `409 record_locked`. The form shows locked fields as read-only with the reason.
+
+A status that declares a lock needs an explicit `transitions` list, so leaving it is always a named, restricted transition. To correct a released record, make the correction transition first (`released` → `draft` above, limited to owners and admins), and then edit. A correction must change only the status. Unlocking is recorded in the audit log as `entity.record.unlock`.
+
+Locks apply per context: a record released in one market can still be edited in another market where it is a draft, as long as the change does not reach the locked market through inheritance.
+
+### Bind approvals to the reviewed content
+
+`approval` on a status records an approval each time the record enters it: who approved it, when, and a SHA-256 digest of the covered content. `covers` is `"all"` or a list of attributes; covered relationships and files are part of the digest, files by their exact bytes.
+
+When covered content later changes, the approval is voided in the same save, and if the record is still in the approved status it moves to `void_to`. Above, editing the title of an approved document sends it back to review. Changes to attributes that are not covered keep the approval.
+
+Approvals and voids appear in the audit log (`entity.approval.record`, `entity.approval.void`) and in the **Record control** panel on the entity page.
+
+### Retain released files
+
+`retention_days` on a locked status places a retention hold on every file the locked attributes reference when the record enters that status. Held files are never removed from storage until the hold expires, even if a later correction detaches them. Holds are listed on the entity page and in the audit log. See [Retention holds](/operate/workspaces/#retention-holds).
+
 ## Revisions and existing entities
 
 Every entity remembers the exact blueprint revision it was created with. When you publish revision 2 of `product`, existing products stay on revision 1: their values and validation keep meaning what they meant when they were written.

@@ -29,7 +29,8 @@ The agent acts as you. It can only see and change what your role allows.
 - preview an entity migration;
 - read data health, rule findings, and workflow runs;
 - view images and read text files in the workspace;
-- read extension operation runs and connector jobs (with `extensions.manage`).
+- read extension operation runs and connector jobs (with `extensions.manage`);
+- explain an entity's status transitions, approvals, and retention holds.
 
 **With your approval** it can:
 
@@ -52,6 +53,14 @@ When the agent wants to change something, the conversation shows **Approval need
 A decision is final. Approving twice never runs a change twice.
 
 Read proposals carefully. Replacing relationships sets the complete list for that attribute and context; an empty list removes every link.
+
+## Controlled records
+
+Blueprints can restrict who makes a status transition, lock finalized records, and tie approvals to reviewed content. The agent follows the same rules as you:
+
+- A change the rules refuse fails with a clear reason, such as a locked record or a transition you are not permitted to make. The agent explains it rather than retrying, and can show which transitions you may make, who must act, and which correction transition unlocks the record.
+- A transition that must be made by a different person than an earlier one counts you as the person, because the change runs as you when you approve it.
+- If a proposed edit touches approved content, approving it voids the approval and returns the record to an earlier status in the same change.
 
 ## Where changes show up
 

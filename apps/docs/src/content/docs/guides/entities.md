@@ -23,6 +23,7 @@ The form tells you where each value comes from:
 - **Inherited from *X* context** means this context has no value and shows its ancestor's. Typing a value creates an override for this context only. Clearing an override brings the inherited value back.
 - **Managed in Default** means the attribute can only be edited in the default context.
 - **Managed by system actions** means the attribute is `readonly`: an integration, workflow, or agent maintains it.
+- **Locked while the record is *X*** means the record's status freezes this field. See [Controlled records](#controlled-records).
 
 Saving validates the whole entity in every context. If a change would make any context invalid, nothing is saved and the form points to the problem. See [Validation](/builders/validation/).
 
@@ -43,6 +44,17 @@ File fields accept uploads once the entity has been saved. Choose or drop files;
 A new file goes through these statuses: **Uploading**, **Queued**, **Processing**, and **Ready**. Images get a thumbnail and a display-sized version. A file can be downloaded once it is ready. If processing fails, the file shows **Failed**; an administrator can retry it.
 
 Image-only file fields show an image gallery. Select an image to open a larger preview with zoom and next/previous controls. On the edit form you can add and remove images, and move them earlier or later when the attribute's file order is meaningful. Removing an image detaches it from the entity.
+
+## Controlled records
+
+Some blueprints use statuses to control a record's lifecycle. Then:
+
+- The status select disables the transitions you may not make and says why: the transition needs a permission or role you do not have, or someone other than you must make it (for example, the person who submitted a document cannot approve it).
+- In a finalized status, such as *Released*, some or all fields are read-only, files cannot be added or removed, and the entity cannot be deleted. To correct the record, change its status with the correction transition the blueprint provides, save, and then edit. The correction is recorded in the audit log.
+- When a record is approved, the approval is tied to the exact content that was reviewed. Editing that content voids the approval, and the record returns to an earlier status in the same save.
+- Files of finalized records can be kept under a retention hold until a set date.
+
+The **Record control** panel on the entity page lists approvals, with who approved, when, and whether they are still valid, and the retention holds on the entity's files.
 
 ## Comments
 
@@ -80,7 +92,7 @@ If your workspace uses publication channels, the entity page shows its status pe
 
 ## Delete an entity
 
-**Delete entity** is available with the `entities.delete` permission, from the entity toolbar or the Explorer row menu. A deleted entity disappears from search, previews, and relationship pickers. Its history is kept.
+**Delete entity** is available with the `entities.delete` permission, from the entity toolbar or the Explorer row menu. A deleted entity disappears from search, previews, and relationship pickers. Its history is kept. A record in a locked status cannot be deleted.
 
 ## From the command line
 

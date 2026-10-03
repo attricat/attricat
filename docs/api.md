@@ -167,6 +167,11 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `GET`, `POST` | `/v1/entities/{id}/publications` | List channel publication status or publish to `{ "context_id": "…" }`. |
 | `POST` | `/v1/entities/{id}/publications/unpublish` | Unpublish from `{ "context_id": "…" }`. |
 | `POST` | `/v1/entities/{id}/publications/publish-all` | Publish atomically to every enabled channel. |
+| `GET` | `/v1/entities/{id}/status-transitions` | Declared status edges from the saved status in `?context_id=` and whether the caller may take each. See [status control](status-control.md#controlled-records). |
+| `GET` | `/v1/entities/{id}/approvals` | Approval decisions with content digests and void reasons. |
+| `GET` | `/v1/entities/{id}/retention-holds` | Retention holds on the entity's files. |
+| `GET`, `POST` | `/files/{id}/retention-holds` | List holds, or place an explicit hold (`files.hold`). |
+| `POST` | `/files/{id}/retention-holds/{hold_id}/release` | Release an explicit hold early (`files.hold`). |
 | `GET`, `PUT` | `/publication-channels`, `/publication-channels/{context_id}` | List enabled channel contexts or enable/disable one. |
 | `POST` | `/entities/{entity_id}/file-attributes/{attribute_code}/uploads` | Stream one or more multipart file parts to a file attribute. |
 | `GET` | `/files/{file_id}` | Read safe file metadata and generated variant metadata. |
