@@ -453,6 +453,7 @@ impl From<RepositoryError> for ApiError {
             | RepositoryError::InvalidSolutionPackPlan(_)
             | RepositoryError::ReservedContextCode
             | RepositoryError::InvalidCode
+            | RepositoryError::InvalidTeam(_)
             | RepositoryError::InvalidContextData
             | RepositoryError::InvalidContext
             | RepositoryError::DefaultContextProtected

@@ -62,6 +62,7 @@ import { Route as ManageWorkspaceInvitationsRouteImport } from './routes/manage/
 import { Route as ManageWorkspaceMembersRouteImport } from './routes/manage/workspace/members'
 import { Route as ManageWorkspaceNavigationRouteImport } from './routes/manage/workspace/navigation'
 import { Route as ManageWorkspaceRolesRouteImport } from './routes/manage/workspace/roles'
+import { Route as ManageWorkspaceTeamsRouteImport } from './routes/manage/workspace/teams'
 import { Route as ProfileExtensionRunsIndexRouteImport } from './routes/profile/extension-runs/index'
 import { Route as ProfileExtensionRunsRunIdRouteImport } from './routes/profile/extension-runs/$runId'
 import { Route as ProfilePersonalAccessTokensIndexRouteImport } from './routes/profile/personal-access-tokens/index'
@@ -350,6 +351,11 @@ const ManageWorkspaceRolesRoute = ManageWorkspaceRolesRouteImport.update({
   path: '/manage/workspace/roles',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ManageWorkspaceTeamsRoute = ManageWorkspaceTeamsRouteImport.update({
+  id: '/manage/workspace/teams',
+  path: '/manage/workspace/teams',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProfileExtensionRunsIndexRoute =
   ProfileExtensionRunsIndexRouteImport.update({
     id: '/extension-runs/',
@@ -451,6 +457,7 @@ export interface FileRoutesByFullPath {
   '/manage/workspace/members': typeof ManageWorkspaceMembersRoute
   '/manage/workspace/navigation': typeof ManageWorkspaceNavigationRoute
   '/manage/workspace/roles': typeof ManageWorkspaceRolesRoute
+  '/manage/workspace/teams': typeof ManageWorkspaceTeamsRoute
   '/profile/extension-runs/$runId': typeof ProfileExtensionRunsRunIdRoute
   '/profile/personal-access-tokens/new': typeof ProfilePersonalAccessTokensNewRoute
   '/entities/$entityId/': typeof EntitiesEntityIdIndexRoute
@@ -510,6 +517,7 @@ export interface FileRoutesByTo {
   '/manage/workspace/members': typeof ManageWorkspaceMembersRoute
   '/manage/workspace/navigation': typeof ManageWorkspaceNavigationRoute
   '/manage/workspace/roles': typeof ManageWorkspaceRolesRoute
+  '/manage/workspace/teams': typeof ManageWorkspaceTeamsRoute
   '/profile/extension-runs/$runId': typeof ProfileExtensionRunsRunIdRoute
   '/profile/personal-access-tokens/new': typeof ProfilePersonalAccessTokensNewRoute
   '/entities/$entityId': typeof EntitiesEntityIdIndexRoute
@@ -575,6 +583,7 @@ export interface FileRoutesById {
   '/manage/workspace/members': typeof ManageWorkspaceMembersRoute
   '/manage/workspace/navigation': typeof ManageWorkspaceNavigationRoute
   '/manage/workspace/roles': typeof ManageWorkspaceRolesRoute
+  '/manage/workspace/teams': typeof ManageWorkspaceTeamsRoute
   '/profile/extension-runs/$runId': typeof ProfileExtensionRunsRunIdRoute
   '/profile/personal-access-tokens/new': typeof ProfilePersonalAccessTokensNewRoute
   '/entities/$entityId/': typeof EntitiesEntityIdIndexRoute
@@ -641,6 +650,7 @@ export interface FileRouteTypes {
     | '/manage/workspace/members'
     | '/manage/workspace/navigation'
     | '/manage/workspace/roles'
+    | '/manage/workspace/teams'
     | '/profile/extension-runs/$runId'
     | '/profile/personal-access-tokens/new'
     | '/entities/$entityId/'
@@ -700,6 +710,7 @@ export interface FileRouteTypes {
     | '/manage/workspace/members'
     | '/manage/workspace/navigation'
     | '/manage/workspace/roles'
+    | '/manage/workspace/teams'
     | '/profile/extension-runs/$runId'
     | '/profile/personal-access-tokens/new'
     | '/entities/$entityId'
@@ -764,6 +775,7 @@ export interface FileRouteTypes {
     | '/manage/workspace/members'
     | '/manage/workspace/navigation'
     | '/manage/workspace/roles'
+    | '/manage/workspace/teams'
     | '/profile/extension-runs/$runId'
     | '/profile/personal-access-tokens/new'
     | '/entities/$entityId/'
@@ -823,6 +835,7 @@ export interface RootRouteChildren {
   ManageWorkspaceMembersRoute: typeof ManageWorkspaceMembersRoute
   ManageWorkspaceNavigationRoute: typeof ManageWorkspaceNavigationRoute
   ManageWorkspaceRolesRoute: typeof ManageWorkspaceRolesRoute
+  ManageWorkspaceTeamsRoute: typeof ManageWorkspaceTeamsRoute
   ManageBlueprintsIndexRoute: typeof ManageBlueprintsIndexRoute
   ManageContextsIndexRoute: typeof ManageContextsIndexRoute
   ManageExtensionsIndexRoute: typeof ManageExtensionsIndexRoute
@@ -1206,6 +1219,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ManageWorkspaceRolesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/manage/workspace/teams': {
+      id: '/manage/workspace/teams'
+      path: '/manage/workspace/teams'
+      fullPath: '/manage/workspace/teams'
+      preLoaderRoute: typeof ManageWorkspaceTeamsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/profile/extension-runs/': {
       id: '/profile/extension-runs/'
       path: '/extension-runs'
@@ -1398,6 +1418,7 @@ const rootRouteChildren: RootRouteChildren = {
   ManageWorkspaceMembersRoute: ManageWorkspaceMembersRoute,
   ManageWorkspaceNavigationRoute: ManageWorkspaceNavigationRoute,
   ManageWorkspaceRolesRoute: ManageWorkspaceRolesRoute,
+  ManageWorkspaceTeamsRoute: ManageWorkspaceTeamsRoute,
   ManageBlueprintsIndexRoute: ManageBlueprintsIndexRoute,
   ManageContextsIndexRoute: ManageContextsIndexRoute,
   ManageExtensionsIndexRoute: ManageExtensionsIndexRoute,

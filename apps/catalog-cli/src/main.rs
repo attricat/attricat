@@ -82,6 +82,13 @@ enum Command {
         #[command(subcommand)]
         command: EntityCommand,
     },
+    /// List workspace users and teams that assignment attributes can reference.
+    Directory,
+    /// Manage workspace teams (requires `members.manage`).
+    Team {
+        #[command(subcommand)]
+        command: TeamCommand,
+    },
     /// Manage workspace translations for `{{…}}` references in catalog labels.
     Lexicon {
         #[command(subcommand)]
@@ -181,6 +188,36 @@ struct LexiconIdentity {
     /// CLDR plural category: zero, one, two, few, many, or other.
     #[arg(long, default_value = "other")]
     plural_category: String,
+}
+
+#[derive(Subcommand)]
+enum TeamCommand {
+    /// List teams and their member user IDs.
+    List,
+    /// Create a team.
+    Create {
+        #[arg(long)]
+        code: String,
+        #[arg(long)]
+        name: String,
+        /// Member user ID; repeat for several.
+        #[arg(long = "member")]
+        members: Vec<Uuid>,
+    },
+    /// Rename a team and/or replace its members.
+    Update {
+        id: Uuid,
+        #[arg(long)]
+        name: Option<String>,
+        /// Member user ID; repeat for several. Replaces every member.
+        #[arg(long = "member")]
+        members: Vec<Uuid>,
+        /// Remove every member.
+        #[arg(long, conflicts_with = "members")]
+        clear_members: bool,
+    },
+    /// Delete a team. Existing assignments keep it and show it as deleted.
+    Delete { id: Uuid },
 }
 
 #[derive(Subcommand)]
@@ -1584,6 +1621,11 @@ async fn run(cli: Cli) -> Result<String, CliError> {
 
     match cli.command {
         Command::Health => request(&client, &server, Method::GET, "/health", None).await,
+        Command::Directory => request(&client, &server, Method::GET, "/directory", None).await,
+        Command::Team { command } => {
+            let (method, path, payload) = team_request(command);
+            request(&client, &server, method, &path, payload).await
+        }
         Command::Lexicon { command } => {
             let (method, path, payload) = lexicon_request(command)?;
             request(&client, &server, method, &path, payload).await
@@ -4112,6 +4154,41 @@ fn saved_view_payload(
     }))
 }
 
+fn team_request(command: TeamCommand) -> (Method, String, Option<Value>) {
+    match command {
+        TeamCommand::List => (Method::GET, "/workspace/teams".to_owned(), None),
+        TeamCommand::Create {
+            code,
+            name,
+            members,
+        } => (
+            Method::POST,
+            "/workspace/teams".to_owned(),
+            Some(json!({"code": code, "name": name, "member_user_ids": members})),
+        ),
+        TeamCommand::Update {
+            id,
+            name,
+            members,
+            clear_members,
+        } => {
+            let mut body = serde_json::Map::new();
+            if let Some(name) = name {
+                body.insert("name".into(), json!(name));
+            }
+            if clear_members || !members.is_empty() {
+                body.insert("member_user_ids".into(), json!(members));
+            }
+            (
+                Method::PATCH,
+                format!("/workspace/teams/{id}"),
+                Some(Value::Object(body)),
+            )
+        }
+        TeamCommand::Delete { id } => (Method::DELETE, format!("/workspace/teams/{id}"), None),
+    }
+}
+
 fn lexicon_request(command: LexiconCommand) -> Result<(Method, String, Option<Value>), CliError> {
     let identity_query = |identity: &LexiconIdentity| {
         let mut query = url::form_urlencoded::Serializer::new(String::new());
@@ -4412,6 +4489,50 @@ mod tests {
                 "--time-zone",
                 "UTC",
                 "--clear-time-zone"
+            ])
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn team_commands_build_requests() {
+        let parse = |args: &[&str]| match Cli::try_parse_from(args).unwrap().command {
+            Command::Team { command } => team_request(command),
+            _ => unreachable!(),
+        };
+        let member = "6a1f9a54-2d0c-4f3a-9a7e-1c2b3d4e5f60";
+        let team = "8c3f9a54-2d0c-4f3a-9a7e-1c2b3d4e5f62";
+        assert_eq!(
+            parse(&[
+                "acli", "team", "create", "--code", "qa", "--name", "QA", "--member", member
+            ]),
+            (
+                Method::POST,
+                "/workspace/teams".to_owned(),
+                Some(json!({"code": "qa", "name": "QA", "member_user_ids": [member]}))
+            )
+        );
+        assert_eq!(
+            parse(&["acli", "team", "update", team, "--name", "Quality"]),
+            (
+                Method::PATCH,
+                format!("/workspace/teams/{team}"),
+                Some(json!({"name": "Quality"}))
+            )
+        );
+        assert_eq!(
+            parse(&["acli", "team", "update", team, "--clear-members"]).2,
+            Some(json!({"member_user_ids": []}))
+        );
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "team",
+                "update",
+                team,
+                "--clear-members",
+                "--member",
+                member
             ])
             .is_err()
         );

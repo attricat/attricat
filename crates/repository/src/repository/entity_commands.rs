@@ -1285,6 +1285,7 @@ impl CatalogRepository {
         entity: &Entity,
     ) -> Result<(), RepositoryError> {
         self.validate_status_values(transaction, entity).await?;
+        self.validate_principal_values(transaction, entity).await?;
         let entity_schema = sqlx::query_scalar::<_, Option<Value>>(
             "SELECT entity_schema FROM blueprints WHERE id = $1 AND version = $2 AND deleted_at IS NULL",
         )

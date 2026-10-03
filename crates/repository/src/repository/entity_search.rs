@@ -49,6 +49,11 @@ pub struct EntityRelationshipFilter {
     pub selected_target_ids: Vec<Uuid>,
 }
 
+/// Internal string operator: `value` is a JSON array of strings, any of which
+/// may match exactly. Resolved from request-level shorthands such as `@me`;
+/// clients cannot send it.
+pub const SEARCH_FILTER_EQ_ANY: &str = "eq_any";
+
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct EntitySearchFilter {
     pub field: String,
@@ -397,6 +402,7 @@ impl CatalogRepository {
                     WHERE reached.depth = cardinality($3)
                       AND CASE
                           WHEN $5 = 'string' AND $6 = 'eq' THEN av.value_text = $7
+                          WHEN $5 = 'string' AND $6 = 'eq_any' THEN $7::jsonb ? av.value_text
                           WHEN $5 = 'string' AND $6 = 'contains' THEN strpos(lower(av.value_text), lower($7)) > 0
                           WHEN $5 = 'string' AND $6 = 'starts_with' THEN left(lower(av.value_text), char_length($7)) = lower($7)
                           WHEN $5 = 'number' AND $6 = 'eq' THEN av.value_number = $7::numeric
@@ -468,6 +474,7 @@ impl CatalogRepository {
                   AND av.context_id = (SELECT id FROM attribute_contexts WHERE workspace_id = $7 AND code = 'default')
                   AND CASE
                     WHEN $4 = 'string' AND $5 = 'eq' THEN av.value_text = $6
+                    WHEN $4 = 'string' AND $5 = 'eq_any' THEN $6::jsonb ? av.value_text
                     WHEN $4 = 'string' AND $5 = 'contains' THEN strpos(lower(av.value_text), lower($6)) > 0
                     WHEN $4 = 'string' AND $5 = 'starts_with' THEN left(lower(av.value_text), char_length($6)) = lower($6)
                     WHEN $4 = 'number' AND $5 = 'eq' THEN av.value_number = $6::numeric

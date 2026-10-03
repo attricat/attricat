@@ -167,6 +167,18 @@ workspace write takes over a pack entry; pack applies never update workspace
 entries. Key normalization, language and plural-category validation, and the
 override rule live in `catalog-lexicon` and the repository, not SQL.
 
+### `teams` and `team_members`
+
+Workspace teams that user-or-team assignment attributes reference as
+`team:<id>` ([blueprints](blueprints.md#user-or-team-assignments)). `code` is
+unique among non-deleted teams of a workspace (partial unique index); deleting
+sets `deleted_at` and removes the team's `team_members` rows, so existing
+assignments still resolve its name. `team_members` links a team to
+`workspace_memberships` through composite `(workspace_id, …)` foreign keys, so
+a team can only contain members of its own workspace. Limits, code validation
+and membership checks on assignment values live in the repository
+(`teams.rs`), not SQL.
+
 ### `attributes`
 
 Attributes are compiler-generated metadata for individual blueprint versions;

@@ -63,7 +63,7 @@ value_schema = '''{
 }'''
 ```
 
-- Każdy kod z `enum` musi mieć dokładnie jedną opcję, podaną w kolejności wyświetlania. Kody składają się z liter, cyfr, `_` i `-`; etykiety to zwykły tekst.
+- Każdy kod z `enum` musi mieć dokładnie jedną opcję, podaną w kolejności wyświetlania. Kody składają się z liter, cyfr, `_` i `-`. Etykiety to tekst, który można [przetłumaczyć](/pl/builders/translations/#etykiety-statusów) odwołaniami do leksykonu `{{…}}`.
 - `tone` przyjmuje wartość `default`, `success`, `warning`, `error` lub `info`. Etykieta jest zawsze widoczna, więc kolor nigdy nie jest jedyną informacją.
 - Pomiń `transitions`, aby zezwolić na każdą zmianę. Z `transitions` dozwolone są tylko wymienione zmiany; pusta tablica nie zezwala na żadną. `null` oznacza „brak wartości”: przejście z `null` pozwala ustawić pierwszą wartość (także domyślną), a przejście do `null` pozwala ją wyczyścić. Pozostawienie tej samej wartości jest zawsze dozwolone.
 

@@ -188,3 +188,10 @@ also require an active workspace membership. `last_used_at` is updated at most
 once per minute rather than on every request.
 
 The CLI reads the bearer secret from `CATALOG_TOKEN` (or `--token`).
+
+## Attribute visibility
+
+Authorization applies to whole entities: a person who can read an entity reads
+all of its attribute values, history included. See
+[Field-level read restrictions](field-level-read-restrictions.md) for the audit
+of every read surface and the design for restricted attributes.

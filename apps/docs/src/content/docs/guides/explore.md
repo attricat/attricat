@@ -45,6 +45,8 @@ Open **Search info** on a result to see why it matched, for example *red via 1 r
 | String | Equals, Contains, Starts with |
 | Number, integer, date, datetime, time | Equals, Greater than, Greater than or equal, Less than, Less than or equal |
 | Boolean | Equals |
+| Status | Equals, chosen from the status labels |
+| User or team | Equals a person or team, or **Assigned to me (or my teams)** |
 
 You can filter on an attribute of a related entity too, such as `brand.name`, through up to three relationships.
 

@@ -63,7 +63,7 @@ value_schema = '''{
 }'''
 ```
 
-- Every `enum` code needs exactly one option, listed in display order. Codes use letters, digits, `_`, and `-`; labels are plain text.
+- Every `enum` code needs exactly one option, listed in display order. Codes use letters, digits, `_`, and `-`. Labels are text, and can be [translated](/builders/translations/#status-labels) with `{{…}}` lexicon references.
 - `tone` is `default`, `success`, `warning`, `error`, or `info`. The label is always shown, so color is never the only signal.
 - Omit `transitions` to allow any change. With `transitions`, only the listed changes are allowed; an empty array allows none. `null` means "no value": an edge from `null` allows setting the first value (including defaults), and an edge to `null` allows clearing it. Keeping the same value is always allowed.
 
