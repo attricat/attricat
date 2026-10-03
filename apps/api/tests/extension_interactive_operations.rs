@@ -1044,3 +1044,63 @@ async fn legacy_annotations_require_explicit_namespace_adoption(pool: sqlx::PgPo
     assert_eq!(reserved[0].status, ExtensionCatalogIntentStatus::Rejected);
     server.abort();
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn generic_writes_serialize_with_namespace_claims(pool: sqlx::PgPool) {
+    let repository = CatalogRepository::system(pool.clone())
+        .for_workspace(workspace())
+        .await
+        .unwrap();
+    let blueprint = published_blueprint(&repository, DOCUMENT_BLUEPRINT).await;
+    let entity = entity(&repository, blueprint, "Race").await;
+    // Stand in for a first claim of `acme.race` that is still counting
+    // existing data under that name.
+    let mut claim = pool.begin().await.unwrap();
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+        .bind(format!(
+            "extension-annotation-namespace:{}:acme.race",
+            workspace()
+        ))
+        .execute(&mut *claim)
+        .await
+        .unwrap();
+
+    // Writes that do not touch the name are not held up.
+    tokio::time::timeout(
+        Duration::from_secs(10),
+        repository.update_entity_with_values(
+            entity,
+            vec![],
+            vec![],
+            vec![],
+            None,
+            Some(json!({"plain": true})),
+        ),
+    )
+    .await
+    .expect("an unrelated write must not wait for the claim")
+    .unwrap();
+
+    // A write of data under the name waits until the claim finishes.
+    let writer = repository.clone();
+    let touching = tokio::spawn(async move {
+        writer
+            .update_entity_with_values(
+                entity,
+                vec![],
+                vec![],
+                vec![],
+                None,
+                Some(json!({"plain": true, "acme.race": {"x": 1}})),
+            )
+            .await
+    });
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    assert!(!touching.is_finished());
+    claim.rollback().await.unwrap();
+    tokio::time::timeout(Duration::from_secs(10), touching)
+        .await
+        .expect("the write proceeds once the claim ends")
+        .unwrap()
+        .unwrap();
+}

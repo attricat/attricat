@@ -188,6 +188,32 @@ fn protected_slice(
     (protected_tags, protected_metadata)
 }
 
+/// Names whose namespace a write changes: top-level metadata keys whose value
+/// differs, and the `<name>:` prefix of every added or removed tag. Sorted, so
+/// writers lock them in one order.
+fn touched_namespaces(
+    before_tags: &[String],
+    before_metadata: &Value,
+    after_tags: &[String],
+    after_metadata: &Value,
+) -> BTreeSet<String> {
+    let empty = Map::new();
+    let before_object = before_metadata.as_object().unwrap_or(&empty);
+    let after_object = after_metadata.as_object().unwrap_or(&empty);
+    let keys = before_object
+        .keys()
+        .chain(after_object.keys())
+        .filter(|key| before_object.get(*key) != after_object.get(*key))
+        .cloned();
+    let before: BTreeSet<&String> = before_tags.iter().collect();
+    let after: BTreeSet<&String> = after_tags.iter().collect();
+    let prefixes = before
+        .symmetric_difference(&after)
+        .filter_map(|tag| tag.split_once(TAG_SEPARATOR))
+        .map(|(namespace, _)| namespace.to_owned());
+    keys.chain(prefixes).collect()
+}
+
 /// Reads an extension's local annotations from a stored entity.
 pub(crate) fn own_annotations(
     extension_id: &str,
@@ -223,6 +249,24 @@ impl CatalogRepository {
         .await?)
     }
 
+    /// Holds a namespace's claim lock until the transaction ends. Every writer
+    /// takes the entity row lock before any namespace lock, and namespace
+    /// locks in sorted order, so these locks cannot deadlock each other.
+    async fn lock_annotation_namespace(
+        &self,
+        connection: &mut sqlx::PgConnection,
+        extension_id: &str,
+    ) -> Result<(), RepositoryError> {
+        sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+            .bind(format!(
+                "extension-annotation-namespace:{}:{extension_id}",
+                self.workspace_id.0
+            ))
+            .execute(connection)
+            .await?;
+        Ok(())
+    }
+
     /// Rejects a generic write that would change any claimed namespace. Unrelated
     /// tags and metadata keys remain freely editable through their usual path.
     pub(crate) async fn ensure_annotation_namespaces_unchanged(
@@ -233,6 +277,13 @@ impl CatalogRepository {
         after_tags: &[String],
         after_metadata: &Value,
     ) -> Result<(), RepositoryError> {
+        // A first claim counts existing data under its name before claiming
+        // it. Locking every name this write touches serializes the two: the
+        // claim either sees this write's data or this write sees the claim.
+        for name in touched_namespaces(before_tags, before_metadata, after_tags, after_metadata) {
+            self.lock_annotation_namespace(&mut *connection, &name)
+                .await?;
+        }
         let namespaces = self.claimed_annotation_namespaces(connection).await?;
         if namespaces.is_empty() {
             return Ok(());
@@ -309,13 +360,9 @@ impl CatalogRepository {
             ));
         }
         // Serialize first claims for a namespace so the legacy scan and the
-        // claim cannot race another first writer or an adoption.
-        sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
-            .bind(format!(
-                "extension-annotation-namespace:{}:{extension_id}",
-                self.workspace_id.0
-            ))
-            .execute(&mut **transaction)
+        // claim cannot race another first writer, an adoption, or a generic
+        // write of data under the same name.
+        self.lock_annotation_namespace(&mut *transaction, extension_id)
             .await?;
         let claimed: bool = sqlx::query_scalar(
             "SELECT EXISTS (SELECT 1 FROM extension_annotation_namespaces WHERE workspace_id=$1 AND extension_id=$2)",
@@ -408,9 +455,11 @@ impl CatalogRepository {
         patch.validate_qualified_tags(extension_id)?;
         self.ensure_actor_may(&mut *transaction, "entities.read", entity_id)
             .await?;
+        // Row lock first, as on every generic entity write, then the claim's
+        // namespace lock.
+        let entity = self.lock_entity(transaction, entity_id).await?;
         self.claim_annotation_namespace(transaction, extension_id, false)
             .await?;
-        let entity = self.lock_entity(transaction, entity_id).await?;
         let revision: i64 = sqlx::query_scalar(
             "SELECT revision FROM entity_extension_annotation_revisions WHERE workspace_id=$1 AND entity_id=$2 AND extension_id=$3",
         )
@@ -734,6 +783,25 @@ mod tests {
         assert_eq!(
             protected_metadata.keys().collect::<Vec<_>>(),
             vec!["acme.docs"]
+        );
+    }
+
+    #[test]
+    fn touched_namespaces_cover_changed_keys_and_tag_prefixes() {
+        let touched = touched_namespaces(
+            &["acme.docs:old".into(), "plain".into(), "kept:x".into()],
+            &json!({"acme.docs": {"a": 1}, "same": true, "gone": 1}),
+            &[
+                "acme.docs:new".into(),
+                "plain".into(),
+                "kept:x".into(),
+                "other:y".into(),
+            ],
+            &json!({"acme.docs": {"a": 2}, "same": true, "added": 1}),
+        );
+        assert_eq!(
+            touched.into_iter().collect::<Vec<_>>(),
+            vec!["acme.docs", "added", "gone", "other"]
         );
     }
 
