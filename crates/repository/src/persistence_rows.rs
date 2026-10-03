@@ -202,7 +202,9 @@ domain_row!(AttributeValue {
 domain_row!(PublicationChannel {
     context_id,
     context_code,
-    enabled
+    enabled,
+    required_rule_codes,
+    require_valid_entity,
 });
 domain_row!(EntityPublicationStatus {
     context_id,

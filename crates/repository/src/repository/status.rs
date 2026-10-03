@@ -55,16 +55,16 @@ impl CatalogRepository {
         Ok(())
     }
 
-    /// Run once on the final transaction state, using the locked entity's saved
-    /// projection as the baseline. Inheritance is resolved on both sides.
-    pub(super) async fn validate_status_values(
+    /// Effective status values before and after the transaction for every
+    /// status attribute and context, resolved through the context chain.
+    async fn status_states(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         entity: &Entity,
-    ) -> Result<(), RepositoryError> {
+    ) -> Result<Vec<StatusChange>, RepositoryError> {
         let attributes = Self::status_attributes(transaction, entity).await?;
         if attributes.is_empty() {
-            return Ok(());
+            return Ok(Vec::new());
         }
         let contexts = sqlx::query_as::<_, (Uuid, String, Option<Uuid>)>(
             "SELECT id, code, parent_id FROM attribute_contexts WHERE workspace_id = $1",
@@ -74,6 +74,7 @@ impl CatalogRepository {
         .await?;
         let after = Self::build_preview_projection(transaction, entity.id).await?;
         let before = entity.projections.get("preview").unwrap_or(&Value::Null);
+        let mut states = Vec::new();
         for (_, code, schema, fallback) in attributes {
             for context in &contexts {
                 let mut path = vec![context.1.as_str()];
@@ -98,14 +99,69 @@ impl CatalogRepository {
                         .cloned()
                         .unwrap_or(Value::Null)
                 };
-                validate_status_transition(&schema, &effective(before), &effective(&after))
-                    .map_err(|message| RepositoryError::AttributeValueSchemaMismatch {
-                        attribute: code.clone(),
-                        instance_path: String::new(),
-                        message: format!("{message} (context: {})", context.1),
-                    })?;
+                states.push(StatusChange {
+                    attribute_code: code.clone(),
+                    schema: schema.clone(),
+                    context_id: context.0,
+                    context_code: context.1.clone(),
+                    before: effective(before),
+                    after: effective(&after),
+                });
             }
         }
+        Ok(states)
+    }
+
+    /// Status values that the transaction changes, per context.
+    pub(super) async fn status_changes(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        entity: &Entity,
+    ) -> Result<Vec<StatusChange>, RepositoryError> {
+        Ok(self
+            .status_states(transaction, entity)
+            .await?
+            .into_iter()
+            .filter(|state| state.before != state.after)
+            .collect())
+    }
+
+    /// Run once on the final transaction state, using the locked entity's saved
+    /// projection as the baseline. Inheritance is resolved on both sides.
+    pub(super) async fn validate_status_values(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        entity: &Entity,
+    ) -> Result<(), RepositoryError> {
+        for state in self.status_states(transaction, entity).await? {
+            validate_status_transition(&state.schema, &state.before, &state.after).map_err(
+                |message| RepositoryError::AttributeValueSchemaMismatch {
+                    attribute: state.attribute_code.clone(),
+                    instance_path: String::new(),
+                    message: format!("{message} (context: {})", state.context_code),
+                },
+            )?;
+        }
         Ok(())
+    }
+}
+
+/// A status attribute's effective value before and after a write in one context.
+pub(super) struct StatusChange {
+    pub attribute_code: String,
+    pub schema: Value,
+    pub context_id: Uuid,
+    pub context_code: String,
+    pub before: Value,
+    pub after: Value,
+}
+
+impl StatusChange {
+    pub(super) fn transition(&self) -> super::checks::CheckTransition {
+        super::checks::CheckTransition {
+            attribute_code: self.attribute_code.clone(),
+            from: self.before.as_str().map(str::to_owned),
+            to: self.after.as_str().map(str::to_owned),
+        }
     }
 }

@@ -1292,10 +1292,20 @@ impl CatalogRepository {
         .bind(entity.blueprint_version)
         .fetch_one(&mut **transaction)
         .await?;
-        let Some(entity_schema) = entity_schema else {
-            return Ok(());
-        };
+        if let Some(entity_schema) = &entity_schema {
+            self.validate_json_entity_schema(transaction, entity, entity_schema)
+                .await?;
+        }
+        self.enforce_declarative_checks(transaction, entity, entity_schema.as_ref())
+            .await
+    }
 
+    async fn validate_json_entity_schema(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        entity: &Entity,
+        entity_schema: &Value,
+    ) -> Result<(), RepositoryError> {
         let attributes = self
             .list_attributes(entity.blueprint_id, entity.blueprint_version)
             .await?;
@@ -1369,7 +1379,7 @@ impl CatalogRepository {
                     }
                 }
             }
-            if let Some(error) = validate_json_schema(&entity_schema, &Value::Object(document))
+            if let Some(error) = validate_json_schema(entity_schema, &Value::Object(document))
                 .map_err(|message| RepositoryError::EntitySchemaMismatch {
                     context: context.code.clone(),
                     instance_path: String::new(),

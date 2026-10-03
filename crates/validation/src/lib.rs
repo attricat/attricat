@@ -1,3 +1,4 @@
+pub mod predicate;
 pub mod status;
 
 /// The JSON Schema `pattern` equivalent of [`is_valid_code`], published in
@@ -20,6 +21,7 @@ pub struct JsonSchemaViolation {
 
 pub fn validate_json_schema_definition(schema: &serde_json::Value) -> Result<(), String> {
     status::validate_status_definition(schema)?;
+    predicate::entity_checks(schema)?;
     jsonschema::draft202012::options()
         .should_validate_formats(true)
         .build(schema)

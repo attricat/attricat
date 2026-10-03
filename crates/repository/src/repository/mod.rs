@@ -35,6 +35,7 @@ mod blueprint_connector_jobs;
 mod blueprint_migration_batches;
 mod blueprints;
 mod bootstrap;
+mod checks;
 mod contexts;
 mod domain_events;
 mod entity_commands;
@@ -76,6 +77,19 @@ mod workflow_runs;
 mod workflows;
 mod workspace_navigation;
 
+fn summarize_violations(violations: &[CheckViolation]) -> String {
+    violations
+        .iter()
+        .take(5)
+        .map(|violation| format!("{} ({})", violation.message, violation.code))
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+
+pub use checks::{
+    CheckSource, CheckTransition, CheckViolation, MAX_REPORTED_VIOLATIONS, PublicationReadiness,
+    StatusDestination, StatusTransitionOptions,
+};
 pub use entity_comments::{COMMENT_PAGE_SIZE, EntityComment};
 pub use lexicon::{LexiconEntry, LexiconImportMode, LexiconImportSummary};
 pub use saved_views::SavedView;
@@ -405,6 +419,23 @@ pub enum RepositoryError {
         instance_path: String,
         message: String,
     },
+    #[error("entity checks failed: {}", summarize_violations(.0))]
+    EntityCheckFailed(Vec<CheckViolation>),
+    #[error("status transition conditions are not met: {}", summarize_violations(.0))]
+    TransitionConditionsUnmet(Vec<CheckViolation>),
+    #[error("enforcing rules are violated: {}", summarize_violations(.0))]
+    RuleViolation(Vec<CheckViolation>),
+    #[error("publication to '{context}' is blocked by failing checks: {}", summarize_violations(.violations))]
+    PublicationChecksFailed {
+        context: String,
+        violations: Vec<CheckViolation>,
+    },
+    #[error("an enforcing rule needs a completed dry run of this revision before it is enabled")]
+    RuleDryRunRequired,
+    #[error(
+        "the latest dry run found {0} existing violations; fix them or enable with accept_existing_violations"
+    )]
+    RuleHasExistingViolations(i64),
     #[error("stored attribute value does not match its attribute type")]
     InvalidStoredAttributeValue,
     #[error("relationship target does not match the attribute target blueprint")]

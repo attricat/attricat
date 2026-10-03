@@ -129,6 +129,7 @@ pub fn compile(
     {
         validate_entity_schema_attributes(schema, &attributes)?;
     }
+    validate_declarative_checks(&definition, &attributes)?;
     if definition.kind == BlueprintKind::Entity && !definition.views.contains_key("dropdown_option")
     {
         return Err(BlueprintError::MissingDropdownOptionView);
@@ -164,6 +165,81 @@ pub fn compile(
         rules: definition.rules,
         attributes,
     })
+}
+
+/// Type-checks entity-schema checks, status transition conditions and rules
+/// against the effective attributes. They share one predicate engine.
+fn validate_declarative_checks(
+    definition: &BlueprintDefinition,
+    attributes: &[EffectiveAttribute],
+) -> Result<(), BlueprintError> {
+    use catalog_validation::predicate::{
+        MAX_ENTITY_CHECKS, MAX_TRANSITION_CONDITIONS, Usage, entity_checks, validate_checks,
+    };
+    use catalog_validation::status::{STATUS_KEY, transition_edges};
+    let types: HashMap<String, String> = attributes
+        .iter()
+        .map(|attribute| (attribute.code.clone(), attribute.value_type.clone()))
+        .collect();
+    if let Some(schema) = &definition.entity_schema {
+        let invalid = |message: String| BlueprintError::InvalidJsonSchema {
+            field: "entity_schema".to_owned(),
+            message,
+        };
+        let checks = entity_checks(schema).map_err(invalid)?;
+        validate_checks(&checks, Some(&types), Usage::Enforced, MAX_ENTITY_CHECKS)
+            .map_err(|message| invalid(format!("invalid x-attricat-checks: {message}")))?;
+    }
+    for attribute in attributes {
+        let Some(edges) = attribute.value_schema.as_ref().and_then(transition_edges) else {
+            continue;
+        };
+        for edge in edges {
+            validate_checks(
+                &edge.conditions,
+                Some(&types),
+                Usage::Enforced,
+                MAX_TRANSITION_CONDITIONS,
+            )
+            .map_err(|message| BlueprintError::InvalidJsonSchema {
+                field: format!("attributes.{}.value_schema", attribute.code),
+                message: format!("invalid status transition conditions: {message}"),
+            })?;
+        }
+    }
+    for rule in &definition.rules {
+        catalog_rules::validate_against_attributes(rule, &types).map_err(|error| {
+            BlueprintError::InvalidRule(format!("rule '{}': {error}", rule.code))
+        })?;
+        for selector in rule
+            .enforcement
+            .iter()
+            .flat_map(|enforcement| &enforcement.transitions)
+        {
+            let options = attributes
+                .iter()
+                .find(|attribute| attribute.code == selector.attribute_code)
+                .and_then(|attribute| attribute.value_schema.as_ref())
+                .filter(|schema| schema.get(STATUS_KEY).is_some())
+                .and_then(|schema| schema.get("enum"))
+                .and_then(serde_json::Value::as_array);
+            let Some(options) = options else {
+                return Err(BlueprintError::InvalidRule(format!(
+                    "rule '{}': enforcement attribute '{}' is not a status attribute",
+                    rule.code, selector.attribute_code
+                )));
+            };
+            for code in std::iter::once(&selector.to).chain(selector.from.as_ref()) {
+                if !options.iter().any(|option| option.as_str() == Some(code)) {
+                    return Err(BlueprintError::InvalidRule(format!(
+                        "rule '{}': unknown status '{code}' for '{}'",
+                        rule.code, selector.attribute_code
+                    )));
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 fn validate_entity_schema_attributes(

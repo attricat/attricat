@@ -197,6 +197,10 @@ pub struct PublicationChannel {
     pub context_id: Uuid,
     pub context_code: String,
     pub enabled: bool,
+    /// Codes of enabled rules that must pass before publication.
+    pub required_rule_codes: Vec<String>,
+    /// Whether the entity schema and blueprint checks must pass in this context.
+    pub require_valid_entity: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -225,6 +229,12 @@ pub struct BlueprintEntityPublicationSummary {
 #[serde(deny_unknown_fields)]
 pub struct UpdatePublicationChannel {
     pub enabled: bool,
+    /// Replaces the required rule codes. Omit to keep them.
+    #[serde(default)]
+    pub required_rule_codes: Option<Vec<String>>,
+    /// Omit to keep the current setting.
+    #[serde(default)]
+    pub require_valid_entity: Option<bool>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -903,6 +913,20 @@ pub struct CreateManualRuleRun {
     pub entity_id: Option<Uuid>,
     pub dry_run: bool,
     pub idempotency_key: String,
+    /// Published revision to dry-run before enabling it. Defaults to the
+    /// enabled revision, or the latest published one for dry runs.
+    #[serde(default)]
+    pub version: Option<i64>,
+}
+
+/// Options for enabling a rule revision.
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct EnableRule {
+    /// Enable an enforcing rule although its completed dry run found
+    /// existing violations. Those entities cannot be saved until fixed.
+    #[serde(default)]
+    pub accept_existing_violations: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]

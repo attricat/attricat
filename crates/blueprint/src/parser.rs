@@ -510,19 +510,24 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                 rule.code
             )));
         }
-        let attribute = match &rule.predicate {
-            catalog_rules::Predicate::Required { attribute_code }
-            | catalog_rules::Predicate::Stale { attribute_code, .. } => Some(attribute_code),
-            _ => None,
-        };
-        if let Some(attribute) = attribute
-            && !codes.contains(attribute)
-        {
-            return Err(BlueprintError::RuleUnknownAttribute {
-                rule: rule.code.clone(),
-                attribute: attribute.clone(),
-            });
-        }
+        let types: HashMap<String, Option<String>> = attributes
+            .iter()
+            .map(|attribute| match attribute {
+                AttributeDeclaration::Local(local) => {
+                    (local.code.clone(), Some(local.value_type.clone()))
+                }
+                AttributeDeclaration::Selection { code, .. } => (code.clone(), None),
+            })
+            .collect();
+        catalog_rules::validate_against_attributes(rule, &types).map_err(|error| {
+            match unknown_attribute(&error.to_string()) {
+                Some(attribute) => BlueprintError::RuleUnknownAttribute {
+                    rule: rule.code.clone(),
+                    attribute,
+                },
+                None => BlueprintError::InvalidRule(format!("rule '{}': {error}", rule.code)),
+            }
+        })?;
     }
 
     let definition = BlueprintDefinition {
@@ -604,6 +609,13 @@ fn parse_json_value(
             })
         })
         .transpose()
+}
+
+fn unknown_attribute(message: &str) -> Option<String> {
+    message
+        .strip_prefix("unknown attribute '")
+        .and_then(|rest| rest.strip_suffix('\''))
+        .map(str::to_owned)
 }
 
 fn parse_json_schema(
