@@ -25,6 +25,7 @@ The agent acts as you. It can only see and change what your role allows.
 **Without approval** it can:
 
 - list and read blueprints, contexts, entities, and their history;
+- look up workspace users and teams to fill in user or team attributes;
 - search entities and read saved searches;
 - preview an entity migration;
 - read data health, rule findings, and workflow runs;

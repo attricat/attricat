@@ -1,11 +1,11 @@
 ---
 title: Administracja obszarem roboczym
-description: Zarządzaj członkami, rolami, zaproszeniami, nawigacją paska bocznego, tokenami API i dziennikiem audytu.
+description: Zarządzaj członkami, zespołami, rolami, zaproszeniami, nawigacją paska bocznego, tokenami API i dziennikiem audytu.
 ---
 
 Obszar roboczy to jeden katalog z własnymi członkami, schematami, encjami, kontekstami i rozszerzeniami. Obszary robocze są całkowicie odseparowane: nic nie jest między nimi współdzielone.
 
-Większość zadań administracyjnych wykonasz w **Zarządzanie → Zarządzanie obszarem roboczym**, gdzie są cztery karty: **Członkowie**, **Role**, **Zaproszenia** i **Nawigacja**.
+Większość zadań administracyjnych wykonasz w **Zarządzanie → Zarządzanie obszarem roboczym**, gdzie jest pięć kart: **Członkowie**, **Zespoły**, **Role**, **Zaproszenia** i **Nawigacja**.
 
 ## Logowanie
 
@@ -24,6 +24,12 @@ Karta **Członkowie** wyświetla wszystkie osoby w obszarze roboczym wraz z przy
 - przenieść własność na innego aktywnego członka (tylko właściciele).
 
 Obszar roboczy zawsze ma co najmniej jednego aktywnego właściciela. Zmiany członkostwa i ról wylogowują osobę, której dotyczą, z istniejących sesji.
+
+## Zespoły
+
+Karta **Zespoły** grupuje członków pod wspólną nazwą, na przykład *Jakość* lub *Serwis terenowy*, aby [atrybut użytkownika lub zespołu](/pl/builders/modeling/#przypisz-odpowiedzialność) mógł przypisać pracę całemu zespołowi. Każdy, kto ma `members.manage`, może utworzyć zespół, zmienić jego nazwę i skład albo go usunąć. Kodu zespołu nie można zmienić po utworzeniu.
+
+Rekordy zapisują sam zespół, więc zmiana jego składu nigdy nie zmienia rekordów. Filtry **Przypisane do mnie** w Eksploratorze obejmują rekordy przypisane do Twoich zespołów. Usunięty zespół pozostaje w rekordach, które już go używają, i jest oznaczony jako usunięty, ale nie można go już przypisać. Zespoły nie nadają uprawnień.
 
 ## Role
 

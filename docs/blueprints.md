@@ -20,7 +20,9 @@ blueprint codes contain only ASCII letters, numbers, hyphens, and underscores.
 
 Every attribute declares exactly one of `value_type` or `from`. Supported value
 types are `string`, `number`, `integer`, `boolean`, `date`, `datetime`, `time`,
-`relationship`, and `file`.
+`relationship`, and `file`. Annotations on a `string` attribute's
+`value_schema` add [statuses](status-control.md) and
+[user or team assignments](#user-or-team-assignments).
 
 ```toml
 [[attributes]]
@@ -153,6 +155,51 @@ image_only = true
 relationship target, duplicate/empty policy entries, invalid purpose codes,
 zero size limits, and ordered single-file declarations. The persisted policy is
 part of the pinned blueprint revision.
+
+### User or team assignments
+
+To store who is responsible for an entity (assignee, owner, reviewer), use a
+`string` attribute with the versioned `x-attricat-principal` annotation instead
+of free text. `kinds` lists what it accepts: `user`, `team`, or both. The
+contract is [`principal-attribute-v1.schema.json`](../contracts/principal-attribute-v1.schema.json).
+
+```toml
+[[attributes]]
+code = "assignee"
+name = "Assignee"
+value_type = "string"
+value_schema = '''{
+  "type": "string",
+  "x-attricat-principal": { "version": 1, "kinds": ["user", "team"] }
+}'''
+```
+
+- A value is the canonical text `user:<uuid>` (a user ID) or `team:<uuid>` (a
+  [team](api.md#teams) ID), lowercase and hyphenated. A missing value means
+  unassigned. Reusable attributes accept the same annotation.
+- The schema must be `"type": "string"` with no `enum`, `const`, `pattern` or
+  `format`, cannot also be a status, and the attribute cannot declare a
+  `default_value` (IDs differ between workspaces).
+- On every write path (API, CLI, web app, agent, workflows, history restore,
+  migration) a value that changes must name an **active member** of the
+  workspace or a **team that is not deleted**, and a kind the attribute
+  accepts. Otherwise the save fails with `422 attribute_value_schema_mismatch`.
+  Unchanged values are not rechecked, so a record assigned to someone who left
+  can still be edited; the web app shows that person or deleted team with an
+  explanation.
+- `GET /directory` (any catalog reader) lists users (`id`, `display_name`,
+  `email`, `active`) and teams (`id`, `code`, `name`, `deleted`); the agent tool
+  `get_workspace_directory` returns the same. Look up IDs there before
+  assigning.
+- Search and Explorer filters match the stored reference exactly (`eq` only in
+  the web app). The filter value `@me` with operator `eq` means *assigned to
+  me*: it matches the caller and every team the caller belongs to. Saved
+  searches keep `@me`, so they resolve for whoever runs them.
+- Rule predicates and transition permissions can compare the value with the
+  acting user: `catalog_validation::principal::principal_matches(value, user,
+  teams)` with teams from `CatalogRepository::principal_team_ids(user)`.
+  Existing presence and equality checks work unchanged because values are
+  strings.
 
 ## Entity Schema
 

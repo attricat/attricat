@@ -7,6 +7,8 @@ import type { Attribute } from '../entities/api';
 import { isHiddenByDefault } from '../entities/attributeVisibility';
 import { attributeLabel } from '../entities/entityDisplay';
 import { AttributeFilterDialog } from './AttributeFilterDialog';
+import { principalConfiguration } from '../principals/principal';
+import { usePrincipalDirectory } from '../principals/usePrincipalDirectory';
 import {
   attributeFilterKey,
   attributeFilterLabel,
@@ -83,21 +85,34 @@ export const ExplorerFilterPicker = ({
     relationshipAttributes,
     open && editor.editingIndex === null,
   );
+  const localAttributes = attributes.filter(
+    (attribute) =>
+      isFilterableAttribute(attribute) &&
+      !isHiddenByDefault(attribute, explorerVisibilityScope),
+  );
   const filterableAttributes: Attribute[] = [
     ...new Map(
       [
-        ...attributes.filter(
-          (attribute) =>
-            isFilterableAttribute(attribute) &&
-            !isHiddenByDefault(attribute, explorerVisibilityScope),
-        ),
-        ...pathAttributes.map(({ code, value_type }) => ({ code, value_type })),
+        ...localAttributes,
+        // Table path entries carry only a code and type; never let one replace
+        // a local attribute's name and schema (status and assignee pickers).
+        ...pathAttributes
+          .filter(
+            (path) =>
+              !localAttributes.some(
+                (attribute) => attribute.code === path.code,
+              ),
+          )
+          .map(({ code, value_type }) => ({ code, value_type })),
         ...relationshipAttributes,
         ...relationshipPaths.relationshipPaths,
       ].map((attribute) => [attribute.code, attribute]),
     ).values(),
   ];
   const maximumReached = filters.length >= maximumAttributeFilters;
+  const directory = usePrincipalDirectory(
+    attributes.some((attribute) => principalConfiguration(attribute)),
+  );
 
   if (!filterableAttributes.length) {
     return (
@@ -159,6 +174,7 @@ export const ExplorerFilterPicker = ({
                 findAttribute(filter.field) ?? { code: filter.field },
               ),
               findAttribute(filter.field),
+              directory.data,
             )}
             onClick={() => openFilter(filter, index)}
             onDelete={() => onRemove(index)}

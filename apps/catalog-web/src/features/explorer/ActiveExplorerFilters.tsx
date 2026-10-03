@@ -2,6 +2,9 @@ import { Box, Chip } from '@mui/material';
 import { CircleXIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { Attribute } from '../entities/api';
+import { attributeLabel } from '../entities/entityDisplay';
+import { principalConfiguration } from '../principals/principal';
+import { usePrincipalDirectory } from '../principals/usePrincipalDirectory';
 import { attributeFilterKey, attributeFilterLabel } from './attributeFilters';
 import type { AttributeFilter } from './search';
 
@@ -32,6 +35,16 @@ export const ActiveExplorerFilters = ({
   onRemoveRelationship,
 }: Props) => {
   const { t } = useTranslation();
+  const directory = usePrincipalDirectory(
+    filters.some(
+      (filter) =>
+        filter.kind === 'attribute' &&
+        attributes.some(
+          (item) =>
+            item.code === filter.filter.field && principalConfiguration(item),
+        ),
+    ),
+  );
   if (!filters.length) return null;
 
   return (
@@ -55,8 +68,13 @@ export const ActiveExplorerFilters = ({
           : attributeFilterLabel(
               t,
               filter.filter,
-              filter.filter.field,
+              attributeLabel(
+                attributes.find(
+                  (item) => item.code === filter.filter.field,
+                ) ?? { code: filter.filter.field },
+              ),
               attributes.find((item) => item.code === filter.filter.field),
+              directory.data,
             );
         return (
           <Chip

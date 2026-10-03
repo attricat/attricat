@@ -63,6 +63,11 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     if path == "/lexicon/entries" && method == Method::GET {
         return Some(read(TargetKind::None));
     }
+    // Assignment pickers and renderers resolve users and teams for every
+    // catalog reader; managing teams is part of managing members.
+    if path == "/directory" && method == Method::GET {
+        return Some(read(TargetKind::None));
+    }
     if path.starts_with("/lexicon/") {
         return Some(Policy {
             permission: if method == Method::GET {
@@ -277,6 +282,8 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
         || path.starts_with("/workspace/members/")
         || path == "/workspace/invitations"
         || path.starts_with("/workspace/invitations/")
+        || path == "/workspace/teams"
+        || path.starts_with("/workspace/teams/")
     {
         return Some(Policy {
             permission: "members.manage",
@@ -466,6 +473,26 @@ mod tests {
                 "members.manage"
             );
             assert_eq!(additional_permission(path), Some("roles.grant"));
+        }
+    }
+
+    #[test]
+    fn directory_is_readable_and_teams_need_member_management() {
+        assert_eq!(
+            policy(&Method::GET, "/directory").unwrap().permission,
+            "entities.read"
+        );
+        for (method, path) in [
+            (Method::GET, "/workspace/teams"),
+            (Method::POST, "/workspace/teams"),
+            (Method::PATCH, "/workspace/teams/{team_id}"),
+            (Method::DELETE, "/workspace/teams/{team_id}"),
+        ] {
+            assert_eq!(
+                policy(&method, path).unwrap().permission,
+                "members.manage",
+                "{method} {path}"
+            );
         }
     }
 

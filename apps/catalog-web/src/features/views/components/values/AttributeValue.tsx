@@ -10,6 +10,8 @@ import { formatAttributeValue } from './formatAttributeValue';
 import { attributeValueTypes } from '../../../entities/valueTypes';
 import { statusConfiguration } from '../../../entities/status';
 import { StatusValue } from '../../controls/values';
+import { principalConfiguration } from '../../../principals/principal';
+import { PrincipalValue } from '../../../principals/PrincipalValue';
 
 type RelationshipValue = {
   items?: { id: string; display?: string }[];
@@ -55,6 +57,8 @@ export const AttributeValue = ({
   const { t } = useTranslation();
   const status = statusConfiguration(attribute);
   if (status) return <StatusValue config={status} value={value} />;
+  if (principalConfiguration(attribute))
+    return <PrincipalValue value={value} />;
   if (
     attribute.value_type === attributeValueTypes.relationship &&
     isRelationshipValue(value)

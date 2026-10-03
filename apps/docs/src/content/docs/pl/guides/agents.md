@@ -25,6 +25,7 @@ Agent działa w Twoim imieniu. Widzi i zmienia tylko to, na co pozwala Twoja rol
 **Bez zatwierdzenia** może:
 
 - wyświetlać i odczytywać schematy, konteksty, encje i ich historię;
+- wyszukiwać użytkowników i zespoły obszaru roboczego, aby wypełnić atrybuty użytkownika lub zespołu;
 - wyszukiwać encje i odczytywać zapisane wyszukiwania;
 - wyświetlać podgląd migracji encji;
 - odczytywać stan danych, ustalenia reguł i uruchomienia przepływów pracy;
