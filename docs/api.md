@@ -581,7 +581,7 @@ or schedule mutation is exposed to agents.
 
 ## Workflow run operations
 
-`GET /workflow-runs` lists workspace-scoped run diagnostics and requires `workflows.read`. `POST /workflow-runs/{run_id}/replay` requeues only a terminal dead-letter run and requires `workflows.manage`. Neither endpoint exposes internal domain-event payloads.
+`GET /workflow-runs` lists workspace-scoped run diagnostics and requires `workflows.read`. `GET /workflow-runs/{run_id}/targets` (also `workflows.read`) lists the per-entity outcomes of a run's `referencing_entities_update` actions: `action_index`, `entity_id`, `status` (`completed`, `failed`, or `skipped`), `attempts`, the latest bounded `last_error`, and timestamps; an unknown run returns `404`. `POST /workflow-runs/{run_id}/replay` requeues only a terminal dead-letter run and requires `workflows.manage`. Neither endpoint exposes internal domain-event payloads.
 
 ## Background processing status
 

@@ -72,6 +72,7 @@ mod tasks;
 mod tokens;
 mod upload_intents;
 mod values;
+mod workflow_actions;
 mod workflow_runs;
 mod workflows;
 mod workspace_navigation;
@@ -141,7 +142,7 @@ pub use tasks::{BackgroundProcessingStatus, ClaimedTask, TaskError, TaskSummary}
 pub use tokens::PersonalApiToken;
 pub use upload_intents::AbandonedUpload;
 pub use workflow_runs::WorkflowRun;
-pub use workflow_runs::{ClaimedWorkflowRun, WorkflowActionResult};
+pub use workflow_runs::{ClaimedWorkflowRun, WorkflowActionResult, WorkflowRunTarget};
 pub use workspace_navigation::{ExploreNavigationEntry, ExploreNavigationItem};
 
 #[derive(Debug, sqlx::FromRow)]
