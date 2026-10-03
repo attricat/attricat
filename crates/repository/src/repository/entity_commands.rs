@@ -119,6 +119,14 @@ impl CatalogRepository {
         } else {
             validate_system_annotations(&system_tags, &system_metadata)?;
         }
+        self.ensure_annotation_namespaces_unchanged(
+            transaction,
+            &[],
+            &Value::Object(Map::new()),
+            &system_tags,
+            &system_metadata,
+        )
+        .await?;
         // Do not expose an entity before its initial values and derived preview
         // agree; otherwise a concurrent reader can observe a partial create.
         if values
@@ -246,13 +254,16 @@ impl CatalogRepository {
             .into_iter()
             .filter(|tag| tag != "attricat.sample")
             .collect();
+        let (system_tags, system_metadata) = self
+            .without_claimed_annotations(system_tags, source.system_metadata)
+            .await?;
         let entity = self
             .create_entity_with_values(
                 source.blueprint_id,
                 source.blueprint_version,
                 values,
                 system_tags,
-                source.system_metadata,
+                system_metadata,
             )
             .await?;
         for (attribute_code, context_id, files) in file_values {
@@ -328,6 +339,16 @@ impl CatalogRepository {
             validate_system_tag_update(&entity.system_tags, tags)?;
         }
         if system_tags.is_some() || system_metadata.is_some() {
+            // Whole-field annotation writes may change unrelated tags and keys
+            // but never a claimed extension namespace.
+            self.ensure_annotation_namespaces_unchanged(
+                &mut transaction,
+                &entity.system_tags,
+                &entity.system_metadata,
+                system_tags.as_deref().unwrap_or(&entity.system_tags),
+                system_metadata.as_ref().unwrap_or(&entity.system_metadata),
+            )
+            .await?;
             sqlx::query(
                 r#"UPDATE entities
                    SET system_tags = COALESCE($2, system_tags),
@@ -532,6 +553,14 @@ impl CatalogRepository {
             }
         };
         if system_tags.is_some() || system_metadata.is_some() {
+            self.ensure_annotation_namespaces_unchanged(
+                &mut transaction,
+                &entity.system_tags,
+                &entity.system_metadata,
+                system_tags.as_deref().unwrap_or(&entity.system_tags),
+                system_metadata.as_ref().unwrap_or(&entity.system_metadata),
+            )
+            .await?;
             sqlx::query("UPDATE entities SET system_tags=COALESCE($2,system_tags),system_metadata=COALESCE($3,system_metadata),updated_at=now() WHERE id=$1 AND workspace_id=$4")
                 .bind(entity.id).bind(system_tags).bind(system_metadata).bind(ws).execute(&mut *transaction).await?;
         }
@@ -1845,6 +1874,7 @@ impl CatalogRepository {
                     status: ExtensionCatalogIntentStatus::Rejected,
                     entity_id: None,
                     error: Some(error.to_string()),
+                    annotation_revision: None,
                 }),
             }
         }
@@ -1881,11 +1911,38 @@ impl CatalogRepository {
                 return Ok(outcome);
             }
         }
-        let result = self
-            .apply_extension_catalog_intent(&mut transaction, intent)
-            .await;
+        let result = match intent {
+            ExtensionCatalogIntent::Annotate {
+                entity_id,
+                add_tags,
+                remove_tags,
+                set_metadata,
+                remove_metadata,
+                expected_revision,
+                ..
+            } => self
+                .apply_extension_annotation_patch(
+                    &mut transaction,
+                    extension_id,
+                    entity_id,
+                    &super::ExtensionAnnotationPatch {
+                        add_tags,
+                        remove_tags,
+                        set_metadata,
+                        remove_metadata,
+                        expected_revision,
+                    },
+                    super::extension_annotations::AnnotationPatchAuthority::Extension,
+                )
+                .await
+                .map(|revision| (entity_id, Some(revision))),
+            intent => self
+                .apply_extension_catalog_intent(&mut transaction, intent)
+                .await
+                .map(|entity_id| (entity_id, None)),
+        };
         match result {
-            Ok(entity_id) => {
+            Ok((entity_id, annotation_revision)) => {
                 let status = if dry_run {
                     ExtensionCatalogIntentStatus::Validated
                 } else {
@@ -1896,6 +1953,7 @@ impl CatalogRepository {
                     status,
                     entity_id: Some(entity_id),
                     error: None,
+                    annotation_revision,
                 };
                 if dry_run {
                     transaction.rollback().await?;
@@ -1915,6 +1973,7 @@ impl CatalogRepository {
                         status: ExtensionCatalogIntentStatus::Rejected,
                         entity_id: None,
                         error: Some(error.to_string()),
+                        annotation_revision: None,
                     })
                 } else {
                     Err(error)
@@ -1928,6 +1987,18 @@ impl CatalogRepository {
         transaction: &mut Transaction<'_, Postgres>,
         intent: ExtensionCatalogIntent,
     ) -> Result<Uuid, RepositoryError> {
+        // An interactive run is bounded by its frozen selection; it cannot
+        // create catalog entities outside that selection.
+        if self.authorization_actor().is_some()
+            && matches!(
+                intent,
+                ExtensionCatalogIntent::Create { .. } | ExtensionCatalogIntent::Upsert { .. }
+            )
+        {
+            return Err(RepositoryError::InvalidExtension(
+                "interactive runs cannot create or upsert entities".into(),
+            ));
+        }
         match intent {
             ExtensionCatalogIntent::Create {
                 blueprint_id,
@@ -1938,6 +2009,16 @@ impl CatalogRepository {
                 ..
             } => {
                 validate_system_annotations(&system_tags, &system_metadata)?;
+                // Legacy create/upsert fields predate namespace ownership and
+                // cannot write a claimed namespace, including the caller's own.
+                self.ensure_annotation_namespaces_unchanged(
+                    transaction,
+                    &[],
+                    &Value::Object(Map::new()),
+                    &system_tags,
+                    &system_metadata,
+                )
+                .await?;
                 if values
                     .iter()
                     .any(|value| matches!(value, NewAttributeValue::Relationship { .. }))
@@ -2030,6 +2111,9 @@ impl CatalogRepository {
                 )
                 .await
             }
+            ExtensionCatalogIntent::Annotate { .. } => Err(RepositoryError::InvalidExtension(
+                "annotation intents use the namespace patch path".into(),
+            )),
             ExtensionCatalogIntent::Upsert {
                 blueprint_id,
                 blueprint_version,
@@ -2109,6 +2193,28 @@ impl CatalogRepository {
             self.lock_relationship_cardinality_writes(transaction)
                 .await?;
         }
+        self.ensure_actor_may(transaction, "entities.write", entity_id)
+            .await?;
+        // A run bound to a user may link only to entities that user can read,
+        // whether or not they are in the run's selection.
+        let targets: BTreeSet<Uuid> = values
+            .iter()
+            .filter_map(|value| match value {
+                NewAttributeValue::Relationship {
+                    target_entity_id, ..
+                } => Some(*target_entity_id),
+                NewAttributeValue::Scalar { .. } => None,
+            })
+            .chain(
+                relationships
+                    .iter()
+                    .flat_map(|set| set.target_entity_ids.iter().copied()),
+            )
+            .collect();
+        for target in targets {
+            self.ensure_actor_may(transaction, "entities.read", target)
+                .await?;
+        }
         let before = self.entity_audit_snapshot(transaction, entity_id).await?;
         let entity = self.lock_entity(transaction, entity_id).await?;
         // The legacy extension intent ABI has no caller-supplied version token.
@@ -2172,7 +2278,8 @@ fn extension_intent_key(intent: &ExtensionCatalogIntent) -> &str {
         ExtensionCatalogIntent::Create { intent_key, .. }
         | ExtensionCatalogIntent::Update { intent_key, .. }
         | ExtensionCatalogIntent::Relationships { intent_key, .. }
-        | ExtensionCatalogIntent::Upsert { intent_key, .. } => intent_key,
+        | ExtensionCatalogIntent::Upsert { intent_key, .. }
+        | ExtensionCatalogIntent::Annotate { intent_key, .. } => intent_key,
     }
 }
 
@@ -2181,7 +2288,7 @@ fn validate_system_annotations(tags: &[String], metadata: &Value) -> Result<(), 
     validate_system_metadata(metadata)
 }
 
-fn validate_system_tag_update(
+pub(super) fn validate_system_tag_update(
     current: &[String],
     requested: &[String],
 ) -> Result<(), RepositoryError> {
@@ -2198,11 +2305,14 @@ fn validate_system_tag_update(
     )
 }
 
+/// Longest stored system tag, including an extension namespace prefix.
+pub(super) const MAX_SYSTEM_TAG_BYTES: usize = 128;
+
 pub(super) fn validate_system_tags(tags: &[String]) -> Result<(), RepositoryError> {
     if tags.len() > 100
-        || tags
-            .iter()
-            .any(|tag| tag.trim().is_empty() || tag.len() > 128 || tag == "attricat.sample")
+        || tags.iter().any(|tag| {
+            tag.trim().is_empty() || tag.len() > MAX_SYSTEM_TAG_BYTES || tag == "attricat.sample"
+        })
         || tags.iter().collect::<HashSet<_>>().len() != tags.len()
     {
         return Err(RepositoryError::InvalidSystemTags);
@@ -2210,7 +2320,7 @@ pub(super) fn validate_system_tags(tags: &[String]) -> Result<(), RepositoryErro
     Ok(())
 }
 
-fn validate_system_metadata(metadata: &Value) -> Result<(), RepositoryError> {
+pub(super) fn validate_system_metadata(metadata: &Value) -> Result<(), RepositoryError> {
     if !metadata.is_object()
         || serde_json::to_vec(metadata).map_or(true, |value| value.len() > 64 * 1024)
     {

@@ -96,6 +96,10 @@ fn audit_permission(method: &Method, route: &str) -> &'static str {
         "entities.read"
     } else if route == "/extensions/{extension_id}/{contribution_id}/command" {
         "entities.write"
+    } else if route == "/extensions/{extension_id}/{contribution_id}/operations"
+        || route.starts_with("/extension-runs")
+    {
+        "entities.read"
     } else if route.starts_with("/solution-packs") || route.starts_with("/presentation-assets") {
         "solution_packs.manage"
     } else if route.contains("connector-jobs")

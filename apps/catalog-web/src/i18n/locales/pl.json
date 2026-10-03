@@ -971,7 +971,8 @@
     "revokeTokenTitle": "Unieważnić osobisty token?",
     "revokeTokenWarning": "Skrypty i integracje korzystające z <strong>{{label}}</strong> natychmiast utracą dostęp. Tej operacji nie można cofnąć.",
     "revokeToken": "Unieważnij token",
-    "revokeFailed": "Nie udało się unieważnić tokenu: {{message}}"
+    "revokeFailed": "Nie udało się unieważnić tokenu: {{message}}",
+    "extensionRuns": "Uruchomienia rozszerzeń"
   },
   "files": {
     "noImages": "Nie dołączono zdjęć.",
@@ -1113,7 +1114,19 @@
       "upgrade": "Uaktualnienie",
       "quarantine": "Kwarantanna",
       "remove": "Usunięcie"
-    }
+    },
+    "actionDialogTitle": "Akcja rozszerzenia",
+    "actionDialogEntity": "Dotyczy tej encji.",
+    "actionDialogSelection_one": "Dotyczy {{count}} zaznaczonej encji.",
+    "actionDialogSelection_few": "Dotyczy {{count}} zaznaczonych encji.",
+    "actionDialogSelection_many": "Dotyczy {{count}} zaznaczonych encji.",
+    "actionDialogSelection_other": "Dotyczy {{count}} zaznaczonych encji.",
+    "actionDialogSavedData": "Używane są wyłącznie zapisane dane.",
+    "actionDialogUnsaved_one": "Masz niezapisane zmiany {{count}} encji w tej karcie. Zapisz je najpierw, aby je uwzględnić.",
+    "actionDialogUnsaved_few": "Masz niezapisane zmiany {{count}} encji w tej karcie. Zapisz je najpierw, aby je uwzględnić.",
+    "actionDialogUnsaved_many": "Masz niezapisane zmiany {{count}} encji w tej karcie. Zapisz je najpierw, aby je uwzględnić.",
+    "actionDialogUnsaved_other": "Masz niezapisane zmiany {{count}} encji w tej karcie. Zapisz je najpierw, aby je uwzględnić.",
+    "actionDialogOpenEditor": "Otwórz edytor"
   },
   "workspace": {
     "memberSummary": "{{email}} · {{state}}",
@@ -1461,5 +1474,57 @@
     "version": "Wersja API",
     "branch": "Gałąź",
     "commit": "Commit"
+  },
+  "extensionRuns": {
+    "description": "Praca w tle uruchomiona z akcji rozszerzeń. Uruchomienia trwają po zamknięciu akcji; tutaj możesz śledzić ich postęp i pobrać wyniki.",
+    "empty": "Nie uruchomiono jeszcze żadnych rozszerzeń.",
+    "loadFailed": "Nie udało się wczytać uruchomień rozszerzeń.",
+    "viewRun": "Pokaż uruchomienie",
+    "backToRuns": "Wszystkie uruchomienia rozszerzeń",
+    "started": "Uruchomiono rozszerzenie. Praca trwa w tle.",
+    "finished": "Uruchomienie rozszerzenia zakończone.",
+    "cancelledNotice": "Uruchomienie rozszerzenia anulowane.",
+    "failedNotice": "Uruchomienie rozszerzenia nie powiodło się.",
+    "entityCount_one": "{{count}} encja",
+    "entityCount_few": "{{count}} encje",
+    "entityCount_many": "{{count}} encji",
+    "entityCount_other": "{{count}} encji",
+    "progressLabel": "Postęp uruchomienia",
+    "progress": "Przetworzono {{completed}} z {{total}}",
+    "outcome": {
+      "succeeded_one": "{{count}} udane",
+      "succeeded_few": "{{count}} udane",
+      "succeeded_many": "{{count}} udanych",
+      "succeeded_other": "{{count}} udanych",
+      "failed_one": "{{count}} nieudane",
+      "failed_few": "{{count}} nieudane",
+      "failed_many": "{{count}} nieudanych",
+      "failed_other": "{{count}} nieudanych",
+      "skipped_one": "{{count}} pominięte",
+      "skipped_few": "{{count}} pominięte",
+      "skipped_many": "{{count}} pominiętych",
+      "skipped_other": "{{count}} pominiętych"
+    },
+    "status": {
+      "queued": "W kolejce",
+      "running": "W toku",
+      "cancelling": "Anulowanie",
+      "cancelled": "Anulowane",
+      "completed": "Zakończone",
+      "failed": "Niepowodzenie"
+    },
+    "failure": {
+      "access_revoked": "Uruchomienie zatrzymano, ponieważ nie masz już dostępu do tego obszaru roboczego.",
+      "extension_failed": "Rozszerzenie nie mogło dokończyć tego uruchomienia."
+    },
+    "outputs": "Wyniki",
+    "outputsAfterCompletion": "Wyniki będzie można pobrać po zakończeniu uruchomienia.",
+    "outputsExpired": "Te wyniki wygasły i nie można ich już pobrać.",
+    "outputsAvailableUntil": "Do pobrania do <timestamp/>.",
+    "noOutputs": "To uruchomienie nie utworzyło wyników do pobrania.",
+    "unnamedOutput": "Wynik",
+    "download": "Pobierz",
+    "cancel": "Anuluj uruchomienie",
+    "cancelFailed": "Nie udało się anulować uruchomienia."
   }
 }

@@ -58,6 +58,10 @@ Core types are constants in `api::domain_events` and currently include:
 
 - `entity.created.v1`, `entity.updated.v1`, `entity.deleted.v1`,
   `entity.migrated.v1`, `entity.published.v1`, and `entity.unpublished.v1`
+- `entity.annotations_changed.v1`, emitted when an extension (or an operator
+  repair) changes one extension's annotation namespace. Its payload names the
+  entity, blueprint revision, `extension_id`, new `revision`, and the tags and
+  metadata keys that changed, never their values.
 - `attribute_value.changed.v1` and `attribute_value.restored.v1`
 - `relationship.changed.v1`
 - `blueprint.created.v1`, `blueprint.revision_created.v1`, and

@@ -60,6 +60,41 @@ With `artifacts.write`, a component builds output files in pieces:
 
 Limits are 1 GiB per output, 2 GiB per run, and 8 GiB per workspace. Outputs can be downloaded once the run completes and are kept for 30 days.
 
+## Interactive operations (host API 1.5)
+
+Add `interactive` to an operation to let signed-in users start it for an entity or a selection from your version 2 actions:
+
+```json
+{"id": "generate", "handler": "generate", "request_schema": {"type": "object"}, "interactive": {"version": 1, "max_selection": 50}}
+```
+
+It needs `client.operations.start` and a `catalog.host_api` range compatible with 1.5 but not 1.4. The component uses the `catalog:host@1.5.0` world in `crates/extension-runtime/wit-interactive/`: the 1.4 world plus a `selection` interface.
+
+When a run starts, Catalog checks that the user can read every selected entity and freezes the user, release, input, context, and the ordered selection. Then:
+
+- `selection.describe()` returns the count, blueprint revision, and context.
+- `selection.page(cursor, limit)` returns 1 to 10 members with their saved values resolved in the run's context, your own annotations, and `read_at`. Members the user can no longer read come back as `unavailable`, deleted ones as `deleted`.
+- `catalog-data.read` and the connector `catalog` calls are refused. `catalog-data.batch` accepts `update`, `relationships`, and `annotate` intents for selected entities only, checked against the user's current permissions.
+- If the user leaves the workspace, the run stops with a safe reason rather than continuing with the extension's own grants.
+
+Capture what you need from each entity once and keep it in the checkpoint, so a retried batch renders the same bytes. Report progress as `{"completed": n, "total": n, "outcome": {"succeeded": n, "failed": n, "skipped": n}}`; Catalog shows these counts separately from the run status, so a run can complete with some entities failed.
+
+Users see their runs under **Profile → Extension runs**. Only the user who started a run and extension managers can open, cancel, or download it, and downloads also require read access to every selected entity.
+
+## Entity annotations
+
+With `catalog.annotations.write`, add `annotate` intents to a batch to record facts on an entity in your own namespace: tags `<extension-id>:<tag>` and the object at `system_metadata[<extension-id>]`.
+
+```json
+{"kind": "annotate", "intent_key": "doc-<run>-<entity>", "entity_id": "…",
+ "add_tags": ["document-generated"], "set_metadata": {"last_document": {"template_version": 2}},
+ "remove_tags": [], "remove_metadata": [], "expected_revision": null}
+```
+
+You name local tags and keys only; Catalog adds the namespace. A patch has 1 to 32 operations. Setting a key replaces its value (`null` is allowed). `expected_revision` rejects the write if the namespace changed since you read it; a retried intent key is reported as `already_applied` first. Other writers, including users editing the entity, cannot change your namespace, and your writes do not change the entity's `updated_at`.
+
+If entities already have data under your extension ID, an operator must adopt the namespace before your first write. Do not store signed URLs or secrets in annotations, and do not treat a tag as proof that a file is still downloadable: outputs expire.
+
 ## File transfers (host API 1.4)
 
 With `network.request` and a host permission that sets `max_transfer_bytes`, a component can move large files over HTTPS without passing bytes through JSON:

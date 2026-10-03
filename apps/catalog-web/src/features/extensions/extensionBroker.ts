@@ -7,6 +7,18 @@ import {
   notificationSeverities,
 } from '../web-components/constants';
 import {
+  cancelExtensionRun,
+  extensionRunArtifactUrl,
+  getExtensionRun,
+  listExtensionRuns,
+  startExtensionRun,
+} from '../extension-runs/api';
+import {
+  isSelectionContribution,
+  parseSelectionContext,
+  type SelectionContext,
+} from './actionSelection';
+import {
   extensionCommand,
   extensionCommandRequestSchema,
   extensionStorage,
@@ -14,6 +26,7 @@ import {
   type ExtensionContribution,
 } from './api';
 import {
+  actionDialogOutlet,
   blueprintRevisionPathPattern,
   catalogReadPathPattern,
   controlCharacterRanges,
@@ -25,7 +38,11 @@ import {
   extensionStorageOperations,
   maximumExtensionRequestBytes,
   maximumExtensionResponseBytes,
+  maximumExtensionCommandIdLength,
   maximumExtensionStorageKeyBytes,
+  maximumOperationIdempotencyKeyLength,
+  operationIdempotencyKeyPattern,
+  operationMethodPrefix,
 } from './constants';
 import { refreshCurrentEntity } from './refreshEntity';
 import { jsonByteLength, utf8ByteLength } from './utf8';
@@ -39,6 +56,21 @@ const notificationSchema = z
   })
   .strict();
 const navigationSchema = z.object({ entity_id: z.uuid() }).strict();
+const runReferenceSchema = z.object({ run_id: z.uuid() }).strict();
+const artifactReferenceSchema = z
+  .object({ run_id: z.uuid(), artifact_id: z.uuid() })
+  .strict();
+const startOperationSchema = z
+  .object({
+    operation_id: z.string().min(1).max(maximumExtensionCommandIdLength),
+    input: z.record(z.string(), z.unknown()),
+    idempotency_key: z
+      .string()
+      .min(1)
+      .max(maximumOperationIdempotencyKeyLength)
+      .regex(operationIdempotencyKeyPattern),
+  })
+  .strict();
 const catalogReadSchema = z
   .object({ path: z.string().regex(catalogReadPathPattern) })
   .strict();
@@ -87,6 +119,17 @@ export type BrokerDependencies = {
   currentContext: () => FrameContext;
   navigateToEntity: (entityId: string) => Promise<void>;
   queryClient: QueryClient;
+  /** Opens the same extension's host-managed action dialog. */
+  openActionDialog: (request: ActionDialogRequest) => void;
+  closeActionDialog: () => void;
+  /** Lets the host track a run after the source frame unmounts. */
+  onRunStarted: (runId: string) => void;
+  downloadArtifact: (url: string) => void;
+};
+
+export type ActionDialogRequest = {
+  extensionId: string;
+  context: SelectionContext;
 };
 
 const payloadObject = (payload: unknown) => payload as Record<string, unknown>;
@@ -139,6 +182,97 @@ const handleCatalogRead = async (
   if (utf8ByteLength(text) > maximumExtensionResponseBytes)
     throw new Error(extensionProtocolErrors.catalogResponseTooLarge);
   return JSON.parse(text) as unknown;
+};
+
+/** The selection a frame may act on: its own selection context, if any. */
+const frameSelection = ({
+  contribution,
+  currentContext,
+}: BrokerDependencies) => {
+  if (
+    !isSelectionContribution(contribution) &&
+    contribution.outlet !== actionDialogOutlet
+  )
+    throw new Error(extensionProtocolErrors.selectionUnavailable);
+  const selection = parseSelectionContext(currentContext());
+  if (!selection) throw new Error(extensionProtocolErrors.selectionUnavailable);
+  return selection;
+};
+
+/** Reads a run only when it belongs to the calling extension. */
+const ownRun = async (runId: string, { contribution }: BrokerDependencies) => {
+  const run = await getExtensionRun(runId);
+  if (run.extension_id !== contribution.extension_id)
+    throw new Error(extensionProtocolErrors.requestDenied);
+  return run;
+};
+
+const handleOperation = async (
+  method: string,
+  payload: unknown,
+  dependencies: BrokerDependencies,
+) => {
+  const { contribution } = dependencies;
+  const can = (capability: string) =>
+    contribution.capabilities.includes(capability);
+  if (
+    method === extensionBrokerMethods.operationsStart &&
+    can(extensionCapabilities.operationsStart)
+  ) {
+    const selection = frameSelection(dependencies);
+    const request = startOperationSchema.parse(payload);
+    if (jsonByteLength(request.input) > maximumExtensionRequestBytes)
+      throw new Error(extensionProtocolErrors.operationInputTooLarge);
+    const { run_id } = await startExtensionRun(
+      contribution.extension_id,
+      contribution.id,
+      {
+        release_id: contribution.release_id,
+        operation_id: request.operation_id,
+        input: request.input,
+        idempotency_key: request.idempotency_key,
+        selection: {
+          blueprint_id: selection.blueprint_id,
+          blueprint_version: selection.blueprint_version,
+          context_id: selection.context_id,
+          entity_ids: selection.entity_ids,
+        },
+      },
+    );
+    dependencies.onRunStarted(run_id);
+    return { run_id };
+  }
+  if (
+    method === extensionBrokerMethods.operationsList &&
+    can(extensionCapabilities.operationsRead)
+  )
+    return listExtensionRuns(contribution.extension_id);
+  if (
+    method === extensionBrokerMethods.operationsGet &&
+    can(extensionCapabilities.operationsRead)
+  )
+    return ownRun(runReferenceSchema.parse(payload).run_id, dependencies);
+  if (
+    method === extensionBrokerMethods.operationsCancel &&
+    can(extensionCapabilities.operationsCancel)
+  ) {
+    const { run_id } = runReferenceSchema.parse(payload);
+    await ownRun(run_id, dependencies);
+    await cancelExtensionRun(run_id);
+    return null;
+  }
+  if (
+    method === extensionBrokerMethods.operationsDownload &&
+    can(extensionCapabilities.operationsRead)
+  ) {
+    const { run_id, artifact_id } = artifactReferenceSchema.parse(payload);
+    const run = await ownRun(run_id, dependencies);
+    if (!run.artifacts.some((artifact) => artifact.id === artifact_id))
+      throw new Error(extensionProtocolErrors.requestDenied);
+    dependencies.downloadArtifact(extensionRunArtifactUrl(run_id, artifact_id));
+    return null;
+  }
+  throw new Error(extensionProtocolErrors.requestDenied);
 };
 
 /**
@@ -199,6 +333,28 @@ export const handleBrokerRequest = async (
     can(extensionCapabilities.catalogRead)
   )
     return handleCatalogRead(payload, dependencies);
+  if (
+    method === extensionBrokerMethods.dialogOpen &&
+    can(extensionCapabilities.actionDialog) &&
+    isSelectionContribution(contribution)
+  ) {
+    // The dialog captures the selection now; later Explorer changes never
+    // alter what the user is configuring.
+    dependencies.openActionDialog({
+      extensionId: contribution.extension_id,
+      context: frameSelection(dependencies),
+    });
+    return null;
+  }
+  if (
+    method === extensionBrokerMethods.dialogClose &&
+    contribution.outlet === actionDialogOutlet
+  ) {
+    dependencies.closeActionDialog();
+    return null;
+  }
+  if (method.startsWith(operationMethodPrefix))
+    return handleOperation(method, payload, dependencies);
   throw new Error(extensionProtocolErrors.requestDenied);
 };
 

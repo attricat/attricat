@@ -88,4 +88,45 @@ describe('extension entity refresh', () => {
     expect(client.getQueryState(publication)?.isInvalidated).toBe(true);
     client.clear();
   });
+
+  it('refreshes the previewed entity of a version 2 selection context', async () => {
+    const client = new QueryClient();
+    const invalidate = vi.spyOn(client, 'invalidateQueries');
+    const contribution = {
+      capabilities: ['client.refresh'],
+      outlet: 'entity_action' as const,
+    };
+    const payload = { target: 'current_entity' };
+    const selection = {
+      context_version: 2,
+      selection_source: 'entity_preview',
+      blueprint_id: entityId,
+      blueprint_version: 1,
+      context_id: null,
+      entity_ids: [entityId],
+    };
+    await refreshCurrentEntity(client, contribution, selection, payload);
+    expect(invalidate).toHaveBeenCalledWith(
+      { queryKey: entityQueryKeys.form(entityId) },
+      { throwOnError: true },
+    );
+    // Explorer selections and multi-entity contexts name no current entity.
+    await expect(
+      refreshCurrentEntity(
+        client,
+        contribution,
+        { ...selection, selection_source: 'explorer_row' },
+        payload,
+      ),
+    ).rejects.toThrow('Refresh denied');
+    await expect(
+      refreshCurrentEntity(
+        client,
+        contribution,
+        { ...selection, entity_ids: [entityId, entityId] },
+        payload,
+      ),
+    ).rejects.toThrow('Refresh denied');
+    client.clear();
+  });
 });

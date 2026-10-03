@@ -82,6 +82,7 @@ mod host_connector {
         exports: { default: async },
     });
 }
+mod interactive;
 mod host_v11 {
     wasmtime::component::bindgen!({
         path: "wit-next",
@@ -304,6 +305,23 @@ impl ExtensionRuntime {
         lifecycle_started: bool,
         cancelling: bool,
     ) -> Result<(Value, Value, bool), ExtensionRuntimeError> {
+        if abi_version == crate::repository::INTERACTIVE_OPERATION_ABI {
+            return self
+                .invoke_interactive_batch(
+                    installation,
+                    repository,
+                    run_id,
+                    operation_handler,
+                    configuration,
+                    input,
+                    checkpoint,
+                    batch_key,
+                    max_checkpoint_bytes,
+                    lifecycle_started,
+                    cancelling,
+                )
+                .await;
+        }
         if abi_version == "1.4.0" {
             return self
                 .invoke_connector_batch(
@@ -866,7 +884,22 @@ impl catalog::host::api::Host for HostState {
             "storage.get.v1" | "storage.set.v1" | "storage.put.v1" | "storage.delete.v1"
             | "storage.list.v1" => "storage.extension",
             "catalog.read.v1" => "catalog.read",
-            "catalog.command.v1" => "catalog.write",
+            // Annotation-only batches need only the separately granted
+            // annotation capability; any value intent still needs catalog.write.
+            "catalog.command.v1" => {
+                match parse_storage_request::<CatalogCommandRequest>(&request) {
+                    Ok(CatalogCommandRequest::Batch { batch })
+                        if !batch.intents.is_empty()
+                            && batch
+                                .intents
+                                .iter()
+                                .all(ExtensionCatalogIntent::is_annotation) =>
+                    {
+                        "catalog.annotations.write"
+                    }
+                    _ => "catalog.write",
+                }
+            }
             "events.emit.v1" => "events.emit",
             "network.request.v1" => "network.request",
             _ => return Err("unknown host operation".into()),
@@ -1182,6 +1215,10 @@ impl HostState {
     async fn catalog_command_call(&self, request: &str) -> Result<String, String> {
         let input: CatalogCommandRequest = parse_storage_request(request)?;
         let CatalogCommandRequest::Batch { batch } = input;
+        for capability in batch_capabilities(&batch) {
+            self.require(capability)
+                .map_err(|error| error.to_string())?;
+        }
         let repository = self
             .repository
             .for_extension(&self.installation.extension_id);
@@ -1431,6 +1468,23 @@ impl HostState {
     }
 }
 
+/// Capabilities required by a catalog batch: annotation intents are governed
+/// by `catalog.annotations.write`, value intents by `catalog.write`.
+fn batch_capabilities(batch: &ExtensionCatalogBatch) -> Vec<&'static str> {
+    let mut capabilities = Vec::new();
+    if batch
+        .intents
+        .iter()
+        .any(ExtensionCatalogIntent::is_annotation)
+    {
+        capabilities.push("catalog.annotations.write");
+    }
+    if batch.intents.iter().any(|intent| !intent.is_annotation()) {
+        capabilities.push("catalog.write");
+    }
+    capabilities
+}
+
 fn bounded_serialize(value: &impl serde::Serialize) -> Result<String, String> {
     let serialized =
         serde_json::to_string(value).map_err(|_| "response serialization failed".to_owned())?;
@@ -1631,6 +1685,23 @@ impl ExtensionOperationTaskHandler {
             runtime,
         }
     }
+
+    async fn fail_for_revoked_initiator(
+        &self,
+        repository: &CatalogRepository,
+        task: &ClaimedTask,
+    ) -> Result<TaskOutcome, TaskHandlerError> {
+        repository
+            .fail_extension_operation_for_revoked_initiator(task)
+            .await
+            .map_err(|error| TaskHandlerError {
+                code: "operation",
+                message: error.to_string(),
+            })?;
+        counter!("catalog_extension_operations_total", "outcome" => "initiator_revoked")
+            .increment(1);
+        Ok(TaskOutcome::DeadLettered)
+    }
 }
 #[async_trait]
 impl TaskHandler for ExtensionOperationTaskHandler {
@@ -1704,6 +1775,30 @@ impl TaskHandler for ExtensionOperationTaskHandler {
                 code: "operation",
                 message: error.to_string(),
             })?;
+        // An interactive run acts only while its initiator remains an active
+        // member; it never continues under the installer's grants alone. A
+        // cancellation the initiator requested is still delivered so the
+        // extension can clean up; its host calls recheck access and fail.
+        let initiator_revoked =
+            match repository
+                .interactive_run_scope(run.id)
+                .await
+                .map_err(|error| TaskHandlerError {
+                    code: "operation",
+                    message: error.to_string(),
+                })? {
+                Some(scope) => !repository
+                    .interactive_actor_active(scope.actor)
+                    .await
+                    .map_err(|error| TaskHandlerError {
+                        code: "operation",
+                        message: error.to_string(),
+                    })?,
+                None => false,
+            };
+        if initiator_revoked && !cancellation_requested {
+            return self.fail_for_revoked_initiator(&repository, &task).await;
+        }
         let (checkpoint, progress, done) = match self
             .runtime
             .invoke_operation_batch(
@@ -1723,6 +1818,9 @@ impl TaskHandler for ExtensionOperationTaskHandler {
             .await
         {
             Ok(value) => value,
+            Err(_) if initiator_revoked => {
+                return self.fail_for_revoked_initiator(&repository, &task).await;
+            }
             Err(error) => {
                 repository
                     .fail_extension_operation_task(&task, &error.to_string())
@@ -3028,7 +3126,9 @@ impl host_connector::catalog::host::catalog_data::Host for OperationState {
         let CatalogCommandRequest::Batch { batch } = input;
         require_operation_batch_key(&batch.batch_key, &self.batch_key)?;
         let mut host = HostState::new(self.installation.clone(), self.repository.clone(), 0);
-        host.require_active("catalog.write").await?;
+        for capability in batch_capabilities(&batch) {
+            host.require_active(capability).await?;
+        }
         let repository = host
             .repository
             .for_extension(&host.installation.extension_id);

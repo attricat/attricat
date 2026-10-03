@@ -71,6 +71,38 @@ pub enum ExtensionCatalogIntent {
         #[serde(default = "empty_object")]
         system_metadata: Value,
     },
+    /// Patches only the calling extension's annotation namespace. Requires
+    /// the separately granted `catalog.annotations.write` capability.
+    Annotate {
+        intent_key: String,
+        entity_id: Uuid,
+        #[serde(default)]
+        add_tags: Vec<String>,
+        #[serde(default)]
+        remove_tags: Vec<String>,
+        #[serde(default)]
+        set_metadata: std::collections::BTreeMap<String, Value>,
+        #[serde(default)]
+        remove_metadata: Vec<String>,
+        #[serde(default)]
+        expected_revision: Option<i64>,
+    },
+}
+
+impl ExtensionCatalogIntent {
+    pub fn is_annotation(&self) -> bool {
+        matches!(self, Self::Annotate { .. })
+    }
+
+    /// The existing entity an intent targets; creates and upserts have none.
+    pub fn target_entity_id(&self) -> Option<Uuid> {
+        match self {
+            Self::Update { entity_id, .. }
+            | Self::Relationships { entity_id, .. }
+            | Self::Annotate { entity_id, .. } => Some(*entity_id),
+            Self::Create { .. } | Self::Upsert { .. } => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -88,6 +120,9 @@ pub struct ExtensionCatalogIntentOutcome {
     pub status: ExtensionCatalogIntentStatus,
     pub entity_id: Option<Uuid>,
     pub error: Option<String>,
+    /// The extension namespace revision after an applied annotation intent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub annotation_revision: Option<i64>,
 }
 
 fn empty_object() -> Value {

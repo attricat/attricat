@@ -11,6 +11,8 @@ pub const ENTITY_DELETED_V1: &str = "entity.deleted.v1";
 pub const ENTITY_MIGRATED_V1: &str = "entity.migrated.v1";
 pub const ENTITY_PUBLISHED_V1: &str = "entity.published.v1";
 pub const ENTITY_UNPUBLISHED_V1: &str = "entity.unpublished.v1";
+/// An extension changed its own namespace of entity system tags/metadata.
+pub const ENTITY_ANNOTATIONS_CHANGED_V1: &str = "entity.annotations_changed.v1";
 pub const ATTRIBUTE_VALUE_CHANGED_V1: &str = "attribute_value.changed.v1";
 pub const ATTRIBUTE_VALUE_RESTORED_V1: &str = "attribute_value.restored.v1";
 pub const RELATIONSHIP_CHANGED_V1: &str = "relationship.changed.v1";
@@ -28,6 +30,7 @@ pub const ALL_EVENT_TYPES_V1: &[&str] = &[
     ENTITY_MIGRATED_V1,
     ENTITY_PUBLISHED_V1,
     ENTITY_UNPUBLISHED_V1,
+    ENTITY_ANNOTATIONS_CHANGED_V1,
     ATTRIBUTE_VALUE_CHANGED_V1,
     ATTRIBUTE_VALUE_RESTORED_V1,
     RELATIONSHIP_CHANGED_V1,

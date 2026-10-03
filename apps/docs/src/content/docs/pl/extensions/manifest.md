@@ -61,6 +61,7 @@ Wymień uprawnienia w `permissions` lub `optional_permissions`. Każde z nich ze
 | `secrets.read` | Odczyt nazwanych sekretów obszaru roboczego w trakcie działania. |
 | `logging.write` | Zapisywanie komunikatów dziennika. |
 | `artifacts.read`, `artifacts.write` | Odczyt danych wejściowych operacji i zapis danych wyjściowych operacji. |
+| `catalog.annotations.write` | Zapis własnej przestrzeni nazw tagów i metadanych encji. Zobacz [Adnotacje encji](/pl/extensions/operations/#adnotacje-encji). |
 | `network.request` | Wykonywanie wychodzących żądań HTTPS pasujących do przyznanego uprawnienia hosta. |
 | `webhooks.receive` | Deklarowanie przychodzących webhooków (jeszcze nie są dostarczane). |
 
@@ -82,12 +83,15 @@ Wymień uprawnienia w `permissions` lub `optional_permissions`. Każde z nich ze
 | `client.clipboard` | Zapis tekstu do schowka po akcji użytkownika. |
 | `client.locale.read` | Odczyt ustawień regionalnych użytkownika. |
 | `client.theme.read` | Akceptowane dla zgodności. Motyw jest zawsze dostępny. |
+| `client.operations.start` | Uruchamianie operacji interaktywnych rozszerzenia dla zaznaczenia ramki. |
+| `client.operations.read` | Wyświetlanie, odczyt i pobieranie wyników uruchomień tego rozszerzenia należących do użytkownika. |
+| `client.operations.cancel` | Anulowanie uruchomień tego rozszerzenia należących do użytkownika. |
 
 ### Umiejscowienie w kliencie
 
 Każde uprawnienie umiejscowienia zezwala na kontrybucję w jednym miejscu osadzenia. Zobacz [Kontrybucje klienckie](/pl/extensions/client/#miejsca-osadzenia).
 
-`client.blueprint_configuration`, `client.entity_decoration`, `client.entity_action`, `client.entity_header_action`, `client.entity_attribute_panel`, `client.explorer_row_action`, `client.explorer_table_cell`, `client.explorer_action`, `client.explorer_bulk_action`, `client.blueprint_detail_panel`, `client.blueprint_panel`, `client.blueprint_publish_check`, `client.file_panel`, `client.audit_event_panel`, `client.data_health_card`.
+`client.blueprint_configuration`, `client.entity_decoration`, `client.entity_action`, `client.entity_header_action`, `client.entity_attribute_panel`, `client.explorer_row_action`, `client.explorer_table_cell`, `client.explorer_action`, `client.explorer_bulk_action`, `client.blueprint_detail_panel`, `client.blueprint_panel`, `client.blueprint_publish_check`, `client.file_panel`, `client.audit_event_panel`, `client.data_health_card`, `client.action_dialog`.
 
 ## Uprawnienia hosta
 
@@ -185,7 +189,7 @@ Eksportowane typy zdarzeń muszą zaczynać się od `plugin.<extension-id>.` i k
 | --- | --- | --- |
 | `event_handlers` | `id`, `event_types` (dokładne wersjonowane typy), `handler` | `events.subscribe` i artefaktu `server_wasm` |
 | `commands` | `id`, `handler`, `request_schema`, `response_schema`, `max_request_bytes`, `max_response_bytes` (domyślnie 64 KiB) | `client.commands` |
-| `operations` | `id`, `handler`, `request_schema`, `max_request_bytes`, `max_checkpoint_bytes` (domyślnie i maksymalnie 64 KiB) | API hosta 1.2 lub nowszego |
+| `operations` | `id`, `handler`, `request_schema`, `max_request_bytes`, `max_checkpoint_bytes` (domyślnie i maksymalnie 64 KiB), opcjonalnie `interactive: {"version": 1, "max_selection": 1–50}` | API hosta 1.2 lub nowszego; `interactive` wymaga `client.operations.start` i zakresu zgodnego z 1.5, ale nie z 1.4 |
 | `webhooks` | `id`, `event_type`, `handler`, `methods` (`["POST"]`), `authentication`, `max_body_bytes` | `webhooks.receive`. Zadeklarowane, ale jeszcze niedostarczane. |
 
 ## Kontrybucje interfejsu
@@ -206,8 +210,9 @@ Eksportowane typy zdarzeń muszą zaczynać się od `plugin.<extension-id>.` i k
 | `embedded` | `artifact`, `outlet` | Ramka w miejscu `navigation`, `entity_preview_panel`, `blueprint_attribute_configuration`, `entity_attribute_decoration`, `entity_action` lub `explorer_table_cell`. |
 | `action` | `artifact`, `outlet` | Akcja rozmieszczana przez host w miejscu `explorer_row_action`, `explorer_action`, `explorer_bulk_action` lub `entity_header_action`. |
 | `panel` | `artifact`, `outlet` | Panel tylko do odczytu rozmieszczany przez host w miejscu `blueprint_detail_panel`, `blueprint_panel`, `blueprint_publish_check`, `entity_attribute_panel`, `file_panel`, `audit_event_panel` lub `data_health_card`. |
+| `dialog` | `artifact`, `outlet`, `title` | Zarządzane przez host okno `action_dialog` otwierane przez akcje zaznaczenia tego rozszerzenia. |
 
-Każde rozszerzenie może użyć każdego miejsca osadzenia jeden raz.
+Każde rozszerzenie może użyć każdego miejsca osadzenia jeden raz. `entity_action`, `explorer_row_action` i `explorer_bulk_action` przyjmują `version` 1 lub 2; wersja 2 otrzymuje [kontekst zaznaczenia](/pl/extensions/client/#kontekst-zaznaczenia) i wymaga zakresu API hosta zgodnego z 1.5, ale nie z 1.4.
 
 ## Renderery komórek
 

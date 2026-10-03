@@ -99,6 +99,14 @@ Menu **Akcje** działa na zaznaczeniu:
 - **Utwórz zapisane wyszukiwanie** zapisuje wyszukiwanie obejmujące dokładnie te encje.
 - Zainstalowane rozszerzenia mogą dodać własne działania zbiorcze.
 
+## Akcje i uruchomienia rozszerzeń
+
+Rozszerzenie może udostępnić akcję, na przykład generowanie dokumentów, w podglądzie encji, w menu wiersza lub dla bieżącego zaznaczenia. Takie akcje zawsze używają zapisanych danych. Jeśli w tej samej karcie przeglądarki masz niezapisane zmiany zaznaczonej encji, okno akcji o tym informuje i prowadzi do edytora, abyś mógł je najpierw zapisać.
+
+Uruchomienie akcji tworzy zadanie działające w tle. Możesz zamknąć okno lub opuścić stronę; uruchomienie trwa dalej, a po jego zakończeniu zobaczysz powiadomienie. Otwórz **Profil → Uruchomienia rozszerzeń**, aby śledzić swoje uruchomienia, anulować trwające i pobrać ich wyniki. Status pokazuje, czy uruchomienie się zakończyło; rozszerzenie osobno podaje, ile encji przetworzono pomyślnie, ile się nie udało, a ile pominięto.
+
+Twoje uruchomienia widzisz tylko Ty oraz członkowie zarządzający rozszerzeniami. Wyniki możesz pobrać tylko wtedy, gdy nadal masz dostęp do odczytu każdej encji z uruchomienia. Wyniki są dostępne po zakończeniu uruchomienia i przechowywane przez 30 dni.
+
 ## Otwieranie encji
 
 Kliknij wynik, aby otworzyć jego podgląd. Stamtąd możesz edytować encję, zobaczyć jej historię lub otworzyć powiązane encje. Zobacz [Praca z encjami](/pl/guides/entities/).

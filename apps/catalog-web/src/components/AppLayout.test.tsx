@@ -38,6 +38,14 @@ vi.mock('../features/auth/api', () => ({
   logout: logoutMock,
 }));
 
+// Shell-level extension surfaces have their own tests.
+vi.mock('../features/extensions/ExtensionActionDialogHost', () => ({
+  ExtensionActionDialogHost: () => null,
+}));
+vi.mock('../features/extension-runs/ExtensionRunWatcher', () => ({
+  ExtensionRunWatcher: () => null,
+}));
+
 vi.mock('./SideNavigation', () => ({
   SideNavigation: ({
     onCompactExploreOpenChange,

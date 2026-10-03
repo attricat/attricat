@@ -192,6 +192,12 @@ async fn related_entity_previews_are_workspace_scoped_across_pages_and_deletions
     .execute(&pool)
     .await
     .unwrap();
+    // A workspace inserted directly needs the default context that workspace
+    // provisioning creates; entity creation resolves values against it.
+    api::repository::CatalogRepository::system(pool.clone())
+        .initialize_workspace(other_workspace_id)
+        .await
+        .unwrap();
     sqlx::query(
         "INSERT INTO workspace_memberships (id, workspace_id, user_id) VALUES ($1, $2, $3)",
     )

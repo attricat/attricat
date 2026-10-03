@@ -62,6 +62,8 @@ import { Route as ManageWorkspaceInvitationsRouteImport } from './routes/manage/
 import { Route as ManageWorkspaceMembersRouteImport } from './routes/manage/workspace/members'
 import { Route as ManageWorkspaceNavigationRouteImport } from './routes/manage/workspace/navigation'
 import { Route as ManageWorkspaceRolesRouteImport } from './routes/manage/workspace/roles'
+import { Route as ProfileExtensionRunsIndexRouteImport } from './routes/profile/extension-runs/index'
+import { Route as ProfileExtensionRunsRunIdRouteImport } from './routes/profile/extension-runs/$runId'
 import { Route as ProfilePersonalAccessTokensIndexRouteImport } from './routes/profile/personal-access-tokens/index'
 import { Route as ProfilePersonalAccessTokensNewRouteImport } from './routes/profile/personal-access-tokens/new'
 import { Route as ManageBlueprintsBlueprintIdIndexRouteImport } from './routes/manage/blueprints/$blueprintId/index'
@@ -348,6 +350,18 @@ const ManageWorkspaceRolesRoute = ManageWorkspaceRolesRouteImport.update({
   path: '/manage/workspace/roles',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProfileExtensionRunsIndexRoute =
+  ProfileExtensionRunsIndexRouteImport.update({
+    id: '/extension-runs/',
+    path: '/extension-runs/',
+    getParentRoute: () => ProfileRoute,
+  } as any)
+const ProfileExtensionRunsRunIdRoute =
+  ProfileExtensionRunsRunIdRouteImport.update({
+    id: '/extension-runs/$runId',
+    path: '/extension-runs/$runId',
+    getParentRoute: () => ProfileRoute,
+  } as any)
 const ProfilePersonalAccessTokensIndexRoute =
   ProfilePersonalAccessTokensIndexRouteImport.update({
     id: '/personal-access-tokens/',
@@ -437,6 +451,7 @@ export interface FileRoutesByFullPath {
   '/manage/workspace/members': typeof ManageWorkspaceMembersRoute
   '/manage/workspace/navigation': typeof ManageWorkspaceNavigationRoute
   '/manage/workspace/roles': typeof ManageWorkspaceRolesRoute
+  '/profile/extension-runs/$runId': typeof ProfileExtensionRunsRunIdRoute
   '/profile/personal-access-tokens/new': typeof ProfilePersonalAccessTokensNewRoute
   '/entities/$entityId/': typeof EntitiesEntityIdIndexRoute
   '/manage/blueprints/': typeof ManageBlueprintsIndexRoute
@@ -446,6 +461,7 @@ export interface FileRoutesByFullPath {
   '/manage/rules/': typeof ManageRulesIndexRoute
   '/manage/workflows/': typeof ManageWorkflowsIndexRoute
   '/manage/workspace/': typeof ManageWorkspaceIndexRoute
+  '/profile/extension-runs/': typeof ProfileExtensionRunsIndexRoute
   '/profile/personal-access-tokens/': typeof ProfilePersonalAccessTokensIndexRoute
   '/manage/extensions/$owner/$repository': typeof ManageExtensionsOwnerRepositoryRoute
   '/manage/blueprints/$blueprintId/': typeof ManageBlueprintsBlueprintIdIndexRoute
@@ -494,6 +510,7 @@ export interface FileRoutesByTo {
   '/manage/workspace/members': typeof ManageWorkspaceMembersRoute
   '/manage/workspace/navigation': typeof ManageWorkspaceNavigationRoute
   '/manage/workspace/roles': typeof ManageWorkspaceRolesRoute
+  '/profile/extension-runs/$runId': typeof ProfileExtensionRunsRunIdRoute
   '/profile/personal-access-tokens/new': typeof ProfilePersonalAccessTokensNewRoute
   '/entities/$entityId': typeof EntitiesEntityIdIndexRoute
   '/manage/blueprints': typeof ManageBlueprintsIndexRoute
@@ -503,6 +520,7 @@ export interface FileRoutesByTo {
   '/manage/rules': typeof ManageRulesIndexRoute
   '/manage/workflows': typeof ManageWorkflowsIndexRoute
   '/manage/workspace': typeof ManageWorkspaceIndexRoute
+  '/profile/extension-runs': typeof ProfileExtensionRunsIndexRoute
   '/profile/personal-access-tokens': typeof ProfilePersonalAccessTokensIndexRoute
   '/manage/extensions/$owner/$repository': typeof ManageExtensionsOwnerRepositoryRoute
   '/manage/blueprints/$blueprintId': typeof ManageBlueprintsBlueprintIdIndexRoute
@@ -557,6 +575,7 @@ export interface FileRoutesById {
   '/manage/workspace/members': typeof ManageWorkspaceMembersRoute
   '/manage/workspace/navigation': typeof ManageWorkspaceNavigationRoute
   '/manage/workspace/roles': typeof ManageWorkspaceRolesRoute
+  '/profile/extension-runs/$runId': typeof ProfileExtensionRunsRunIdRoute
   '/profile/personal-access-tokens/new': typeof ProfilePersonalAccessTokensNewRoute
   '/entities/$entityId/': typeof EntitiesEntityIdIndexRoute
   '/manage/blueprints/': typeof ManageBlueprintsIndexRoute
@@ -566,6 +585,7 @@ export interface FileRoutesById {
   '/manage/rules/': typeof ManageRulesIndexRoute
   '/manage/workflows/': typeof ManageWorkflowsIndexRoute
   '/manage/workspace/': typeof ManageWorkspaceIndexRoute
+  '/profile/extension-runs/': typeof ProfileExtensionRunsIndexRoute
   '/profile/personal-access-tokens/': typeof ProfilePersonalAccessTokensIndexRoute
   '/manage/extensions/$owner/$repository': typeof ManageExtensionsOwnerRepositoryRoute
   '/manage/blueprints/$blueprintId/': typeof ManageBlueprintsBlueprintIdIndexRoute
@@ -621,6 +641,7 @@ export interface FileRouteTypes {
     | '/manage/workspace/members'
     | '/manage/workspace/navigation'
     | '/manage/workspace/roles'
+    | '/profile/extension-runs/$runId'
     | '/profile/personal-access-tokens/new'
     | '/entities/$entityId/'
     | '/manage/blueprints/'
@@ -630,6 +651,7 @@ export interface FileRouteTypes {
     | '/manage/rules/'
     | '/manage/workflows/'
     | '/manage/workspace/'
+    | '/profile/extension-runs/'
     | '/profile/personal-access-tokens/'
     | '/manage/extensions/$owner/$repository'
     | '/manage/blueprints/$blueprintId/'
@@ -678,6 +700,7 @@ export interface FileRouteTypes {
     | '/manage/workspace/members'
     | '/manage/workspace/navigation'
     | '/manage/workspace/roles'
+    | '/profile/extension-runs/$runId'
     | '/profile/personal-access-tokens/new'
     | '/entities/$entityId'
     | '/manage/blueprints'
@@ -687,6 +710,7 @@ export interface FileRouteTypes {
     | '/manage/rules'
     | '/manage/workflows'
     | '/manage/workspace'
+    | '/profile/extension-runs'
     | '/profile/personal-access-tokens'
     | '/manage/extensions/$owner/$repository'
     | '/manage/blueprints/$blueprintId'
@@ -740,6 +764,7 @@ export interface FileRouteTypes {
     | '/manage/workspace/members'
     | '/manage/workspace/navigation'
     | '/manage/workspace/roles'
+    | '/profile/extension-runs/$runId'
     | '/profile/personal-access-tokens/new'
     | '/entities/$entityId/'
     | '/manage/blueprints/'
@@ -749,6 +774,7 @@ export interface FileRouteTypes {
     | '/manage/rules/'
     | '/manage/workflows/'
     | '/manage/workspace/'
+    | '/profile/extension-runs/'
     | '/profile/personal-access-tokens/'
     | '/manage/extensions/$owner/$repository'
     | '/manage/blueprints/$blueprintId/'
@@ -1180,6 +1206,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ManageWorkspaceRolesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/profile/extension-runs/': {
+      id: '/profile/extension-runs/'
+      path: '/extension-runs'
+      fullPath: '/profile/extension-runs/'
+      preLoaderRoute: typeof ProfileExtensionRunsIndexRouteImport
+      parentRoute: typeof ProfileRoute
+    }
+    '/profile/extension-runs/$runId': {
+      id: '/profile/extension-runs/$runId'
+      path: '/extension-runs/$runId'
+      fullPath: '/profile/extension-runs/$runId'
+      preLoaderRoute: typeof ProfileExtensionRunsRunIdRouteImport
+      parentRoute: typeof ProfileRoute
+    }
     '/profile/personal-access-tokens/': {
       id: '/profile/personal-access-tokens/'
       path: '/personal-access-tokens'
@@ -1246,13 +1286,17 @@ const LoginRouteWithChildren = LoginRoute._addFileChildren(LoginRouteChildren)
 
 interface ProfileRouteChildren {
   ProfileIndexRoute: typeof ProfileIndexRoute
+  ProfileExtensionRunsRunIdRoute: typeof ProfileExtensionRunsRunIdRoute
   ProfilePersonalAccessTokensNewRoute: typeof ProfilePersonalAccessTokensNewRoute
+  ProfileExtensionRunsIndexRoute: typeof ProfileExtensionRunsIndexRoute
   ProfilePersonalAccessTokensIndexRoute: typeof ProfilePersonalAccessTokensIndexRoute
 }
 
 const ProfileRouteChildren: ProfileRouteChildren = {
   ProfileIndexRoute: ProfileIndexRoute,
+  ProfileExtensionRunsRunIdRoute: ProfileExtensionRunsRunIdRoute,
   ProfilePersonalAccessTokensNewRoute: ProfilePersonalAccessTokensNewRoute,
+  ProfileExtensionRunsIndexRoute: ProfileExtensionRunsIndexRoute,
   ProfilePersonalAccessTokensIndexRoute: ProfilePersonalAccessTokensIndexRoute,
 }
 

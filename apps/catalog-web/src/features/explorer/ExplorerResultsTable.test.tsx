@@ -344,6 +344,12 @@ describe('ExplorerResultsTable', () => {
         blueprintId: blueprint.blueprint.id,
         blueprintVersion: blueprint.blueprint.version,
       },
+      // Selection-aware (v2) contributions receive the same ordered IDs.
+      selection: expect.objectContaining({
+        source: 'explorer_selection',
+        blueprintId: blueprint.blueprint.id,
+        entityIds: [item.id],
+      }),
     });
     await user.click(selectAll);
     expect(selectAll.checked).toBe(true);

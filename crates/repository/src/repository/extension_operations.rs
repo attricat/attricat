@@ -242,7 +242,11 @@ impl CatalogRepository {
         let range = semver::VersionReq::parse(&manifest.catalog.host_api).map_err(|_| {
             RepositoryError::InvalidExtension("invalid pinned host API range".into())
         })?;
-        let abi = if range.matches(&semver::Version::new(1, 4, 0))
+        let abi = if range.matches(&semver::Version::new(1, 5, 0))
+            && !range.matches(&semver::Version::new(1, 4, 0))
+        {
+            super::INTERACTIVE_OPERATION_ABI
+        } else if range.matches(&semver::Version::new(1, 4, 0))
             && !range.matches(&semver::Version::new(1, 3, 0))
         {
             "1.4.0"
@@ -401,7 +405,8 @@ impl CatalogRepository {
             configuration,
             input,
             checkpoint,
-            batch_key: if abi_version == "1.4.0" {
+            batch_key: if abi_version == "1.4.0" || abi_version == super::INTERACTIVE_OPERATION_ABI
+            {
                 format!("{}:{}", task.subject_id, batch_number)
             } else {
                 format!("{}:{}", idempotency_key, batch_number)
@@ -610,8 +615,30 @@ impl CatalogRepository {
         Ok(changed == 1)
     }
 
+    /// Returns `InvalidContext` when an interactive run's selection context
+    /// was deleted after it failed: replaying it could never read its
+    /// selection. The share lock serializes with `delete_context`.
     pub async fn replay_extension_operation(&self, id: Uuid) -> Result<bool, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
+        let context_id: Option<Option<Uuid>> = sqlx::query_scalar(
+            "SELECT selection_context_id FROM extension_operation_runs WHERE id=$1 AND workspace_id=$2 AND status='dead_letter' FOR UPDATE",
+        )
+        .bind(id)
+        .bind(self.extension_workspace())
+        .fetch_optional(&mut *transaction)
+        .await?;
+        if let Some(Some(context_id)) = context_id {
+            let exists: Option<Uuid> = sqlx::query_scalar(
+                "SELECT id FROM attribute_contexts WHERE id=$1 AND workspace_id=$2 FOR SHARE",
+            )
+            .bind(context_id)
+            .bind(self.extension_workspace())
+            .fetch_optional(&mut *transaction)
+            .await?;
+            if exists.is_none() {
+                return Err(RepositoryError::InvalidContext);
+            }
+        }
         let changed = sqlx::query(
             "UPDATE extension_operation_runs SET status='pending',cancellation_requested=false,cancellation_delivered=false,attempts=0,last_error_code=NULL,last_error_message=NULL,completed_at=NULL,cancelled_at=NULL,lease_token=NULL,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='dead_letter' AND NOT outputs_expired",
         )

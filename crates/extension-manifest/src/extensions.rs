@@ -20,7 +20,7 @@ use url::Url;
 pub const MANIFEST_VERSION: u32 = 1;
 /// The newest host contract accepted by manifests. Components importing
 /// `catalog:host@1.0.0` remain supported by the unchanged v1 WIT package.
-pub const SUPPORTED_HOST_API: &str = "1.4.0";
+pub const SUPPORTED_HOST_API: &str = "1.5.0";
 pub const MAX_EXTENSION_ARCHIVE_BYTES: usize = 32 * 1024 * 1024;
 pub const MAX_EXTENSION_UNPACKED_BYTES: usize = 128 * 1024 * 1024;
 pub const MAX_EXTENSION_ARCHIVE_ENTRIES: usize = 256;
@@ -114,6 +114,11 @@ pub const MAX_HOST_RESPONSE_BYTES: u64 = DEFAULT_HOST_REQUEST_BYTES;
 pub const MAX_NETWORK_RESPONSE_BYTES: u64 = DEFAULT_HOST_RESPONSE_BYTES;
 pub const MAX_HOST_TIMEOUT_MILLIS: u64 = 60_000;
 pub const MAX_EXTENSION_IDENTIFIER_BYTES: usize = 128;
+/// Initial interactive operations keep the Explorer bulk-selection bound; a
+/// larger, server-managed selection resource is a separate contract.
+pub const MAX_INTERACTIVE_SELECTION: u32 = 50;
+/// Contribution contract that receives the selection-aware action context.
+pub const SELECTION_ACTION_CONTRIBUTION_VERSION: u32 = 2;
 pub const CAPABILITIES: &[&str] = &[
     "catalog.read",
     "catalog.write",
@@ -156,6 +161,11 @@ pub const CAPABILITIES: &[&str] = &[
     "client.file_panel",
     "client.audit_event_panel",
     "client.data_health_card",
+    "client.action_dialog",
+    "client.operations.start",
+    "client.operations.read",
+    "client.operations.cancel",
+    "catalog.annotations.write",
     "network.request",
     "webhooks.receive",
 ];
@@ -367,6 +377,18 @@ pub struct ServerOperation {
     pub max_request_bytes: u64,
     #[serde(default = "default_command_bytes")]
     pub max_checkpoint_bytes: u64,
+    /// Present only when signed-in users may start this operation for a
+    /// selection from a host action. Administrative starts remain separate.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub interactive: Option<InteractiveOperation>,
+}
+
+/// Versioned exposure of an operation to end-user action surfaces.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct InteractiveOperation {
+    pub version: u32,
+    pub max_selection: u32,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -449,6 +471,9 @@ pub enum UiContributionKind {
     Embedded,
     Action,
     Panel,
+    /// Host-managed dialog opened by the same extension's selection actions.
+    /// It outlives the source outlet and receives that action's captured context.
+    Dialog,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
@@ -475,6 +500,7 @@ pub enum UiOutlet {
     FilePanel,
     AuditEventPanel,
     DataHealthCard,
+    ActionDialog,
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -687,6 +713,20 @@ impl Manifest {
             )?;
             for operation in &server.operations {
                 operation.validate()?;
+                if operation.interactive.is_some() {
+                    require_interactive_host_api(&range)?;
+                    if !self
+                        .permissions
+                        .iter()
+                        .chain(&self.optional_permissions)
+                        .any(|item| item == "client.operations.start")
+                    {
+                        return Err(ManifestError::Invalid(format!(
+                            "interactive operation '{}' requires client.operations.start",
+                            operation.id
+                        )));
+                    }
+                }
             }
             if (!server.event_handlers.is_empty()
                 || !server.commands.is_empty()
@@ -787,7 +827,7 @@ impl Manifest {
             }
             if let Some(outlet) = &contribution.outlet {
                 if !matches!(outlet, UiOutlet::Navigation | UiOutlet::EntityPreviewPanel) {
-                    require_next_host_api(&range)?;
+                    require_client_outlet_host_api(&range)?;
                 }
                 let required = match outlet {
                     UiOutlet::Navigation | UiOutlet::EntityPreviewPanel => None,
@@ -808,6 +848,7 @@ impl Manifest {
                     UiOutlet::FilePanel => Some("client.file_panel"),
                     UiOutlet::AuditEventPanel => Some("client.audit_event_panel"),
                     UiOutlet::DataHealthCard => Some("client.data_health_card"),
+                    UiOutlet::ActionDialog => Some("client.action_dialog"),
                 };
                 if required.is_some_and(|capability| {
                     !self
@@ -826,7 +867,8 @@ impl Manifest {
                 (UiContributionKind::Route, None) | (UiContributionKind::Navigation, None) => {}
                 (UiContributionKind::Embedded, Some(outlet))
                 | (UiContributionKind::Action, Some(outlet))
-                | (UiContributionKind::Panel, Some(outlet)) => {
+                | (UiContributionKind::Panel, Some(outlet))
+                | (UiContributionKind::Dialog, Some(outlet)) => {
                     // Extensions may each contribute once to an outlet. A
                     // single extension cannot rely on duplicate ordering.
                     if !outlets.insert(outlet) {
@@ -859,6 +901,7 @@ impl Manifest {
                                 UiOutlet::EntityAttributeDecoration
                             )
                             | (UiContributionKind::Embedded, UiOutlet::EntityAction)
+                            | (UiContributionKind::Dialog, UiOutlet::ActionDialog)
                     );
                     if !valid_kind {
                         return Err(ManifestError::Invalid(
@@ -874,22 +917,53 @@ impl Manifest {
                 }
                 (UiContributionKind::Embedded, None)
                 | (UiContributionKind::Action, None)
-                | (UiContributionKind::Panel, None) => {
+                | (UiContributionKind::Panel, None)
+                | (UiContributionKind::Dialog, None) => {
                     return Err(ManifestError::Invalid(
                         "embedded UI contributions require an outlet".into(),
                     ));
                 }
             }
+            if contribution
+                .outlet
+                .as_ref()
+                .is_some_and(selection_action_outlet)
+            {
+                if !matches!(
+                    contribution.version,
+                    1 | SELECTION_ACTION_CONTRIBUTION_VERSION
+                ) {
+                    return Err(ManifestError::Invalid(format!(
+                        "selection action contribution '{}' supports versions 1 and 2",
+                        contribution.id
+                    )));
+                }
+                if contribution.version == SELECTION_ACTION_CONTRIBUTION_VERSION {
+                    require_interactive_host_api(&range)?;
+                }
+            }
+            if contribution.outlet == Some(UiOutlet::ActionDialog) {
+                require_interactive_host_api(&range)?;
+                if contribution.version != 1 {
+                    return Err(ManifestError::Invalid(format!(
+                        "action dialog contribution '{}' must use version 1",
+                        contribution.id
+                    )));
+                }
+            }
             if matches!(
                 contribution.kind,
-                UiContributionKind::Route | UiContributionKind::Navigation
+                UiContributionKind::Route
+                    | UiContributionKind::Navigation
+                    | UiContributionKind::Dialog
             ) && contribution
                 .title
                 .as_deref()
                 .is_none_or(|title| title.trim().is_empty())
             {
                 return Err(ManifestError::Invalid(
-                    "route UI contributions require a non-empty title".into(),
+                    "route, navigation, and dialog UI contributions require a non-empty title"
+                        .into(),
                 ));
             }
         }
@@ -1202,6 +1276,16 @@ impl ServerOperation {
                 self.id
             )));
         }
+        if let Some(interactive) = &self.interactive
+            && (interactive.version != 1
+                || interactive.max_selection == 0
+                || interactive.max_selection > MAX_INTERACTIVE_SELECTION)
+        {
+            return Err(ManifestError::Invalid(format!(
+                "interactive operation '{}' requires version 1 and max_selection 1-{MAX_INTERACTIVE_SELECTION}",
+                self.id
+            )));
+        }
         Ok(())
     }
 }
@@ -1242,16 +1326,53 @@ impl Webhook {
     }
 }
 
+/// Outlets whose v2 contribution contract receives a normalized selection.
+pub fn selection_action_outlet(outlet: &UiOutlet) -> bool {
+    matches!(
+        outlet,
+        UiOutlet::EntityAction | UiOutlet::ExplorerRowAction | UiOutlet::ExplorerBulkAction
+    )
+}
+
+/// Interactive selection operations use the additive 1.5 operation world, so a
+/// release must exclude 1.4 rather than be silently bound to an older ABI.
+fn require_interactive_host_api(range: &VersionReq) -> Result<(), ManifestError> {
+    if range.matches(&Version::new(1, 5, 0)) && !range.matches(&Version::new(1, 4, 0)) {
+        Ok(())
+    } else {
+        Err(ManifestError::Invalid(
+            "selection-aware actions and interactive operations require catalog.host_api compatible with 1.5 but not 1.4"
+                .into(),
+        ))
+    }
+}
+
 fn require_operation_host_api(range: &VersionReq) -> Result<(), ManifestError> {
     if (range.matches(&Version::new(1, 2, 0))
         || range.matches(&Version::new(1, 3, 0))
-        || range.matches(&Version::new(1, 4, 0)))
+        || range.matches(&Version::new(1, 4, 0))
+        || range.matches(&Version::new(1, 5, 0)))
         && !range.matches(&Version::new(1, 1, 0))
     {
         Ok(())
     } else {
         Err(ManifestError::Invalid(
             "server operations require catalog.host_api compatible with 1.2 or newer but not 1.1"
+                .into(),
+        ))
+    }
+}
+
+/// Fixed client outlets are host contracts introduced with 1.1. They do not
+/// select a server component world, so any later compatible host accepts them.
+fn require_client_outlet_host_api(range: &VersionReq) -> Result<(), ManifestError> {
+    if !range.matches(&Version::new(1, 0, 0))
+        && (1..=5).any(|minor| range.matches(&Version::new(1, minor, 0)))
+    {
+        Ok(())
+    } else {
+        Err(ManifestError::Invalid(
+            "this UI outlet requires catalog.host_api compatible with 1.1 or newer but not 1.0"
                 .into(),
         ))
     }
@@ -1844,6 +1965,7 @@ mod tests {
             request_schema: serde_json::json!({"type":"object"}),
             max_request_bytes: 1024,
             max_checkpoint_bytes: 1024,
+            interactive: None,
         }];
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
         value.catalog.host_api = ">=1.4.0, <2.0.0".into();
@@ -1853,6 +1975,101 @@ mod tests {
         assert!(value.validate(SUPPORTED_HOST_API).is_err());
         value.catalog.host_api = ">=1.2.0, <2.0.0".into();
         value.server.as_mut().unwrap().operations[0].request_schema = serde_json::json!([]);
+        assert!(value.validate(SUPPORTED_HOST_API).is_err());
+    }
+
+    fn interactive_manifest() -> Manifest {
+        serde_json::from_value(serde_json::json!({
+            "manifest_version": 1,
+            "name": "Documents",
+            "version": "1.0.0",
+            "description": "Selection documents",
+            "icons": {"48": "icon.png"},
+            "catalog": {"id": "acme.documents", "host_api": ">=1.5.0, <2.0.0"},
+            "permissions": [
+                "catalog.read",
+                "catalog.annotations.write",
+                "artifacts.write",
+                "client.explorer_bulk_action",
+                "client.action_dialog",
+                "client.operations.start",
+                "client.operations.read"
+            ],
+            "artifacts": [
+                {"id": "server", "kind": "server_wasm", "path": "server.wasm"},
+                {"id": "client", "kind": "client_component", "path": "client.js"}
+            ],
+            "server": {"operations": [{
+                "id": "generate",
+                "handler": "generate",
+                "request_schema": {"type": "object"},
+                "interactive": {"version": 1, "max_selection": 50}
+            }]},
+            "ui": [
+                {"id": "bulk", "version": 2, "kind": "action", "artifact": "client", "outlet": "explorer_bulk_action"},
+                {"id": "dialog", "version": 1, "kind": "dialog", "artifact": "client", "outlet": "action_dialog", "title": "Generate"}
+            ]
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn interactive_operations_and_selection_actions_require_the_v15_contract() {
+        let value = interactive_manifest();
+        assert!(value.validate(SUPPORTED_HOST_API).is_ok());
+
+        let mut invalid = value.clone();
+        invalid.catalog.host_api = ">=1.4.0, <2.0.0".into();
+        assert!(
+            invalid
+                .validate(SUPPORTED_HOST_API)
+                .unwrap_err()
+                .to_string()
+                .contains("compatible with 1.5 but not 1.4")
+        );
+
+        invalid = value.clone();
+        invalid
+            .permissions
+            .retain(|permission| permission != "client.operations.start");
+        assert!(invalid.validate(SUPPORTED_HOST_API).is_err());
+
+        invalid = value.clone();
+        invalid.server.as_mut().unwrap().operations[0]
+            .interactive
+            .as_mut()
+            .unwrap()
+            .max_selection = MAX_INTERACTIVE_SELECTION + 1;
+        assert!(invalid.validate(SUPPORTED_HOST_API).is_err());
+
+        invalid = value.clone();
+        invalid.ui[0].version = 3;
+        assert!(invalid.validate(SUPPORTED_HOST_API).is_err());
+
+        invalid = value.clone();
+        invalid.ui[1].title = None;
+        assert!(invalid.validate(SUPPORTED_HOST_API).is_err());
+
+        invalid = value.clone();
+        invalid.ui[1].kind = UiContributionKind::Embedded;
+        assert!(invalid.validate(SUPPORTED_HOST_API).is_err());
+
+        invalid = value;
+        invalid
+            .permissions
+            .retain(|permission| permission != "client.action_dialog");
+        assert!(invalid.validate(SUPPORTED_HOST_API).is_err());
+    }
+
+    #[test]
+    fn version_one_selection_actions_remain_valid_for_older_ranges() {
+        let mut value = interactive_manifest();
+        value.catalog.host_api = ">=1.1.0, <2.0.0".into();
+        value.server = None;
+        value.ui.truncate(1);
+        value.ui[0].version = 1;
+        assert!(value.validate(SUPPORTED_HOST_API).is_ok());
+        value.ui[0].version = 2;
         assert!(value.validate(SUPPORTED_HOST_API).is_err());
     }
 

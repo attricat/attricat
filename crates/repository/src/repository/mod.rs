@@ -43,7 +43,9 @@ mod entity_migration;
 mod entity_projection;
 mod entity_publications;
 mod entity_search;
+mod extension_annotations;
 mod extension_catalog_data;
+mod extension_interactive_operations;
 mod extension_operation_artifacts;
 mod extension_operation_http_transfer;
 mod extension_operation_schedules;
@@ -89,11 +91,19 @@ pub use domain_events::{EventConsumer, EventDelivery, EventPublisher, FailedEven
 pub use entity_search::{
     EntityRelationshipFilter, EntitySearchFilter, EntitySearchSort, decode_search_cursor,
 };
+pub use extension_annotations::{
+    ExtensionAnnotationNamespace, ExtensionAnnotationPatch, ExtensionAnnotations,
+    MAX_ANNOTATION_PATCH_OPERATIONS,
+};
 pub use extension_catalog_data::{
     ExtensionCatalogBatch, ExtensionCatalogChangePage, ExtensionCatalogIntent,
     ExtensionCatalogIntentOutcome, ExtensionCatalogIntentStatus, ExtensionCatalogPage,
     ExtensionCatalogPageRequest, MAX_EXTENSION_BATCH_INTENTS, MAX_EXTENSION_CATALOG_PAGE_SIZE,
     MAX_EXTENSION_LOOKUP_VALUE_BYTES,
+};
+pub use extension_interactive_operations::{
+    INITIATOR_ACCESS_REVOKED, INTERACTIVE_OPERATION_ABI, InteractiveRun, InteractiveRunArtifact,
+    InteractiveRunScope, OPERATION_OUTPUT_RETENTION_DAYS, StartInteractiveOperation,
 };
 pub use extension_operation_artifacts::{ExtensionOperationArtifact, MAX_OPERATION_ARTIFACT_BYTES};
 pub use extension_operation_http_transfer::{
@@ -152,6 +162,18 @@ pub struct CatalogRepository<S = WorkspaceScope> {
     event_context: Option<EventCommandContext>,
     task_fence: Option<TaskFence>,
     extension_id: Option<String>,
+    /// The signed-in principal whose current access bounds an interactive
+    /// extension run. It is rechecked at each host call; selection membership
+    /// is never treated as permission.
+    authorization_actor: Option<AuthorizationActor>,
+}
+
+/// A user, and optionally the personal API token, that initiated an
+/// interactive extension run.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AuthorizationActor {
+    pub user_id: Uuid,
+    pub token_id: Option<Uuid>,
 }
 
 /// Workspace data methods exist only on this scope; it cannot be absent.
@@ -289,6 +311,24 @@ pub enum RepositoryError {
     StatusPreconditionRequired,
     #[error("{0} was not found")]
     NotFound(&'static str),
+    #[error("the initiating user is no longer authorized for this entity")]
+    ActorNotAuthorized,
+    #[error("annotation namespace '{0}' is reserved")]
+    ReservedAnnotationNamespace(String),
+    #[error(
+        "annotation namespace '{0}' contains existing annotations; an operator must adopt it before the extension can write"
+    )]
+    AnnotationNamespaceAdoptionRequired(String),
+    #[error(
+        "annotations in extension namespace '{0}' can only be changed by that extension or an operator repair"
+    )]
+    ProtectedAnnotationNamespace(String),
+    #[error("extension annotations changed; expected revision {expected}, found {actual}")]
+    AnnotationRevisionConflict { expected: i64, actual: i64 },
+    #[error("invalid extension annotation patch: {0}")]
+    InvalidAnnotationPatch(String),
+    #[error("idempotency key was already used with a different request")]
+    IdempotencyKeyReused,
     #[error(transparent)]
     InvalidLexiconEntry(#[from] catalog_lexicon::EntryError),
     #[error("CATALOG_WORKSPACE_ID does not identify an active workspace")]
@@ -315,7 +355,7 @@ pub enum RepositoryError {
     DefaultContextProtected,
     #[error("a context cannot be its own descendant")]
     ContextCycle,
-    #[error("a context with descendants or active values cannot be deleted")]
+    #[error("a context with descendants, active values or active extension runs cannot be deleted")]
     ContextInUse,
     #[error("attribute can only be edited in the default context")]
     DefaultContextOnly,
@@ -509,6 +549,7 @@ impl CatalogRepository {
             event_context: None,
             task_fence: None,
             extension_id: None,
+            authorization_actor: None,
         }
     }
 
@@ -525,6 +566,7 @@ impl CatalogRepository {
             event_context: None,
             task_fence: None,
             extension_id: None,
+            authorization_actor: None,
         }
     }
 
@@ -774,6 +816,71 @@ impl CatalogRepository {
     pub fn with_audit_context(mut self, audit_context: AuditContext) -> Self {
         self.audit_context = Some(audit_context);
         self
+    }
+
+    /// Bounds subsequent extension host calls by this principal's current
+    /// grants. Used only for interactive, user-initiated extension runs.
+    pub fn with_authorization_actor(mut self, actor: AuthorizationActor) -> Self {
+        self.authorization_actor = Some(actor);
+        self
+    }
+
+    pub fn authorization_actor(&self) -> Option<AuthorizationActor> {
+        self.authorization_actor
+    }
+
+    /// Rechecks the interactive actor's live membership, grant scope and token
+    /// permission for one entity. Repositories without an actor are governed
+    /// by their caller's authorization and are not restricted here.
+    pub(crate) async fn ensure_actor_may(
+        &self,
+        connection: &mut sqlx::PgConnection,
+        permission: &str,
+        entity_id: Uuid,
+    ) -> Result<(), RepositoryError> {
+        let Some(actor) = self.authorization_actor else {
+            return Ok(());
+        };
+        self.ensure_principal_may(connection, actor, permission, entity_id)
+            .await
+    }
+
+    /// Checks one principal's current grant and, for a token, its live token
+    /// permission against one entity.
+    pub(crate) async fn ensure_principal_may(
+        &self,
+        connection: &mut sqlx::PgConnection,
+        actor: AuthorizationActor,
+        permission: &str,
+        entity_id: Uuid,
+    ) -> Result<(), RepositoryError> {
+        if !Self::is_authorized_on(
+            connection,
+            actor.user_id,
+            self.workspace_id.0,
+            permission,
+            Some(entity_id),
+            None,
+        )
+        .await?
+        {
+            return Err(RepositoryError::ActorNotAuthorized);
+        }
+        if let Some(token_id) = actor.token_id {
+            let permitted: bool = sqlx::query_scalar(
+                "SELECT EXISTS (SELECT 1 FROM personal_api_tokens t JOIN personal_api_token_permissions p ON p.token_id = t.id WHERE t.id = $1 AND t.user_id = $2 AND t.workspace_id = $3 AND t.revoked_at IS NULL AND (t.expires_at IS NULL OR t.expires_at > clock_timestamp()) AND p.permission_code = $4)",
+            )
+            .bind(token_id)
+            .bind(actor.user_id)
+            .bind(self.workspace_id.0)
+            .bind(permission)
+            .fetch_one(&mut *connection)
+            .await?;
+            if !permitted {
+                return Err(RepositoryError::ActorNotAuthorized);
+            }
+        }
+        Ok(())
     }
 
     /// Commits a catalog mutation, its audit evidence, and an outbox event as

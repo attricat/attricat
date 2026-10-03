@@ -99,7 +99,8 @@ price_gross = "price_net * (1 + 0.23)"`,
   const action = page
     .frameLocator('iframe[title="recalculate-formulas-action"]')
     .getByRole('button', { name: 'Recalculate formulas' });
-  await expect(action).toBeVisible();
+  // The sandboxed frame fetches and mounts its artifact after the page loads.
+  await expect(action).toBeVisible({ timeout: 20_000 });
   await action.click();
 
   const context = await defaultContext();

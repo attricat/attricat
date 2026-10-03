@@ -30,7 +30,8 @@ use crate::{
         BlueprintConnectorJob, CreateExtensionOperationSchedule, ExtensionGrant,
         ExtensionHttpDelivery, ExtensionInstallation, ExtensionLifecycleRecord,
         ExtensionOperationArtifact, ExtensionOperationRun, ExtensionOperationSchedule,
-        ExtensionStorageEntry, ExtensionStorageError, InstalledExtension, StartExtensionOperation,
+        ExtensionStorageEntry, ExtensionStorageError, InstalledExtension, RepositoryError,
+        StartExtensionOperation,
     },
     storage::ObjectStoreError,
 };
@@ -787,7 +788,17 @@ pub(super) async fn replay_operation(
     ScopedRepository(repository): ScopedRepository,
     ApiPath(id): ApiPath<Uuid>,
 ) -> Result<StatusCode, ApiError> {
-    if repository.replay_extension_operation(id).await? {
+    let replayed =
+        repository
+            .replay_extension_operation(id)
+            .await
+            .map_err(|error| match error {
+                RepositoryError::InvalidContext => ApiError::conflict(
+                    "the run's selection context was deleted; start a new run instead",
+                ),
+                error => error.into(),
+            })?;
+    if replayed {
         Ok(StatusCode::ACCEPTED)
     } else {
         Err(ApiError::not_found("dead-lettered extension operation run"))

@@ -100,6 +100,14 @@ impl ApiError {
             message,
         }
     }
+    pub(super) fn conflict(message: &'static str) -> Self {
+        Self {
+            status: StatusCode::CONFLICT,
+            code: "conflict",
+            message: message.into(),
+        }
+    }
+
     pub(super) fn invalid_input(message: String) -> Self {
         Self {
             status: StatusCode::UNPROCESSABLE_ENTITY,
@@ -256,6 +264,33 @@ impl From<RepositoryError> for ApiError {
                 message: error.to_string(),
             },
             RepositoryError::NotFound(resource) => Self::not_found(resource),
+            RepositoryError::ActorNotAuthorized => Self::forbidden(),
+            RepositoryError::ReservedAnnotationNamespace(_)
+            | RepositoryError::InvalidAnnotationPatch(_) => Self {
+                status: StatusCode::UNPROCESSABLE_ENTITY,
+                code: "invalid_annotation_patch",
+                message: error.to_string(),
+            },
+            RepositoryError::AnnotationNamespaceAdoptionRequired(_) => Self {
+                status: StatusCode::CONFLICT,
+                code: "annotation_namespace_adoption_required",
+                message: error.to_string(),
+            },
+            RepositoryError::ProtectedAnnotationNamespace(_) => Self {
+                status: StatusCode::CONFLICT,
+                code: "protected_annotation_namespace",
+                message: error.to_string(),
+            },
+            RepositoryError::AnnotationRevisionConflict { .. } => Self {
+                status: StatusCode::CONFLICT,
+                code: "annotation_revision_conflict",
+                message: error.to_string(),
+            },
+            RepositoryError::IdempotencyKeyReused => Self {
+                status: StatusCode::CONFLICT,
+                code: "idempotency_key_reused",
+                message: error.to_string(),
+            },
             RepositoryError::InvalidComment => Self::invalid_input(error.to_string()),
             RepositoryError::CommentConflict => Self {
                 status: StatusCode::CONFLICT,

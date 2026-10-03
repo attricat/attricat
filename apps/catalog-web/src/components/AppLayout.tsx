@@ -18,6 +18,8 @@ import { pageTitle } from '../app/pageTitle';
 import { returnToStorageKey } from '../app/storageKeys';
 import { currentSession, logout } from '../features/auth/api';
 import { authQueryKeys } from '../features/auth/queryKeys';
+import { ExtensionRunWatcher } from '../features/extension-runs/ExtensionRunWatcher';
+import { ExtensionActionDialogHost } from '../features/extensions/ExtensionActionDialogHost';
 import { useWorkspaceLexicon } from '../features/lexicon/lexicon';
 import { useSessionCacheBoundary } from '../features/auth/useSessionCacheBoundary';
 import { DesktopNavigation } from './DesktopNavigation';
@@ -158,6 +160,8 @@ export const AppLayout = () => {
           <Outlet />
         </Box>
       </Box>
+      <ExtensionActionDialogHost />
+      <ExtensionRunWatcher />
     </MobileNavigationPanelProvider>
   );
 };

@@ -1,13 +1,20 @@
 import { z } from 'zod';
+import {
+  isSelectionContribution,
+  selectionContext,
+  selectionContextSchema,
+  type ActionSelection,
+} from './actionSelection';
 import type { ExtensionContribution } from './api';
 import { navigationOutlet, outletCapacities } from './constants';
 import { outletContextSchemas } from './outletContextSchemas';
 import { extensionOutletSchema } from './schemas';
 
-// The Explorer table-cell renderer has its own host-controlled mount path.
+// The Explorer table-cell renderer and the action dialog have their own
+// host-controlled mount paths.
 export type OutletName = Exclude<
   z.infer<typeof extensionOutletSchema>,
-  'explorer_table_cell'
+  'explorer_table_cell' | 'action_dialog'
 >;
 
 export type OutletContext = Record<string, unknown>;
@@ -103,14 +110,37 @@ export const hasValidContext = (
   return !schema || schema.safeParse(context).success;
 };
 
+/**
+ * The context one contribution receives. Selection-aware (version 2) action
+ * contributions get the normalized selection; all others keep their released
+ * outlet context, so old releases are unaffected.
+ */
+export const contributionContext = (
+  contribution: ExtensionContribution,
+  context: OutletContext | undefined,
+  selection: ActionSelection | null | undefined,
+): OutletContext | undefined =>
+  isSelectionContribution(contribution)
+    ? selection
+      ? selectionContext(selection)
+      : undefined
+    : context;
+
 /** Contributions mounted in an outlet, in host-computed display order. */
 export const outletContributions = (
   runtime: ExtensionContribution[] | undefined,
   outlet: OutletName,
   context: OutletContext | undefined,
+  selection?: ActionSelection | null,
 ) =>
   runtime?.filter(
-    (item) => supportsOutlet(item, outlet) && hasValidContext(outlet, context),
+    (item) =>
+      supportsOutlet(item, outlet) &&
+      (isSelectionContribution(item)
+        ? selectionContextSchema.safeParse(
+            contributionContext(item, context, selection),
+          ).success
+        : hasValidContext(outlet, context)),
   ) ?? [];
 
 /** Groups navigation contributions by extension, preserving display order. */

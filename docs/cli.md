@@ -176,6 +176,11 @@ acli extension-operation start <extension-id> --operation-id <id> --input <json-
 acli extension-operation list
 acli extension-operation show|artifacts|deliveries|cancel|replay <run-id>
 acli extension-operation download <run-id> <artifact-id> --output <path>
+acli extension-run list [--extension-id <id>]
+acli extension-run show|cancel <run-id>
+acli extension-run download <run-id> <artifact-id> --output <path>
+acli extension annotation-namespace <extension-id> [--adopt]
+acli extension repair-annotations <extension-id> <entity-id> --patch <json-object-or-file>
 acli extension-schedule list
 acli extension-schedule create <extension-id> --operation-id <id> --input <json-object-or-file> --interval-seconds <60-2592000> [--input-file-id <uuid>]
 acli extension-schedule update <schedule-id> --enabled true|false --interval-seconds <60-2592000>

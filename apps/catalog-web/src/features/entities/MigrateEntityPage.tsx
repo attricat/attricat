@@ -84,11 +84,13 @@ export const MigrateEntityPage = ({ entityId }: { entityId: string }) => {
       });
     },
     onSuccess: async (entity) => {
-      await invalidateEntity(client, entity.id);
-      void navigate({
+      // Leave first: a completed migration has no preview (409), and the
+      // still-mounted preview query would otherwise be refetched and retried.
+      await navigate({
         to: '/entities/$entityId',
         params: { entityId: entity.id },
       });
+      await invalidateEntity(client, entity.id);
     },
   });
   return (

@@ -2,6 +2,8 @@ import { useTheme } from '@mui/material';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
+import { notifyRunStarted } from '../extension-runs/runNotifications';
+import { useActionDialogStore } from './actionDialogStore';
 import { getExtensionArtifact, type ExtensionContribution } from './api';
 import {
   defaultExtensionFrameHeight,
@@ -25,6 +27,17 @@ type UseExtensionFrameOptions = {
   onContentHeight?: (height: number) => void;
   onFailure?: () => void;
   onReady?: () => void;
+};
+
+/** Downloads through a host-owned link; the frame never receives the URL. */
+const downloadArtifact = (url: string) => {
+  const link = document.createElement('a');
+  link.href = url;
+  link.rel = 'noopener';
+  link.download = '';
+  document.body.append(link);
+  link.click();
+  link.remove();
 };
 
 const clampFrameHeight = (height: number) =>
@@ -135,6 +148,10 @@ export const useExtensionFrame = ({
                     params: { entityId },
                   }),
                 queryClient,
+                openActionDialog: useActionDialogStore.getState().open,
+                closeActionDialog: useActionDialogStore.getState().close,
+                onRunStarted: (runId) => notifyRunStarted(runId, navigate),
+                downloadArtifact,
               },
             );
             postBrokerResponse(hostPort, data.id, { ok: true, data: result });
