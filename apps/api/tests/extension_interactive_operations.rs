@@ -7,8 +7,9 @@ use api::{
     extension_runtime::{ExtensionOperationTaskHandler, ExtensionRuntime, ExtensionRuntimeConfig},
     model::{CreateAttributeContext, CreateBlueprint, NewAttributeValue},
     repository::{
-        CatalogRepository, ExtensionCatalogBatch, ExtensionCatalogIntent,
-        ExtensionCatalogIntentStatus, RepositoryError, StartExtensionOperation,
+        AuthorizationActor, CatalogRepository, ExtensionCatalogBatch, ExtensionCatalogIntent,
+        ExtensionCatalogIntentStatus, InteractiveRunScope, RepositoryError,
+        StartExtensionOperation,
     },
     storage::FakeObjectStore,
     task_worker::{TaskHandler, TaskOutcome},
@@ -1170,4 +1171,49 @@ async fn replay_is_refused_after_the_run_context_is_deleted(pool: sqlx::PgPool) 
         .unwrap();
     assert_eq!(run.status, "failed");
     server.abort();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn selection_pages_hold_at_most_one_pool_connection(pool: sqlx::PgPool) {
+    let repository = CatalogRepository::system(pool.clone())
+        .for_workspace(workspace())
+        .await
+        .unwrap();
+    let blueprint = published_blueprint(&repository, DOCUMENT_BLUEPRINT).await;
+    let first = entity(&repository, blueprint, "First").await;
+    let second = entity(&repository, blueprint, "Second").await;
+    let (viewer, _) = entity_scoped_viewer(&pool, first).await;
+    // With a single connection, holding one while acquiring another would
+    // wait for the acquire timeout and fail.
+    let bounded = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .acquire_timeout(Duration::from_secs(2))
+        .connect_with((*pool.connect_options()).clone())
+        .await
+        .unwrap();
+    let bounded_repository = CatalogRepository::system(bounded)
+        .for_workspace(workspace())
+        .await
+        .unwrap();
+    let scope = InteractiveRunScope {
+        actor: AuthorizationActor {
+            user_id: viewer,
+            token_id: None,
+        },
+        entity_ids: vec![first, second],
+        blueprint_id: blueprint.0,
+        blueprint_version: blueprint.1,
+        context_id: None,
+    };
+    let page = bounded_repository
+        .interactive_selection_page(EXTENSION, &scope, "", 10)
+        .await
+        .unwrap();
+    let statuses: Vec<&str> = page["entities"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|entity| entity["status"].as_str().unwrap())
+        .collect();
+    assert_eq!(statuses, ["available", "unavailable"]);
 }

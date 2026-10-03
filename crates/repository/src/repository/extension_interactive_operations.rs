@@ -670,7 +670,6 @@ impl CatalogRepository {
         let read_at: DateTime<Utc> = sqlx::query_scalar("SELECT clock_timestamp()")
             .fetch_one(&self.pool)
             .await?;
-        let mut connection = self.pool.acquire().await?;
         let mut entities = Vec::new();
         let mut bytes = 0;
         let mut next = None;
@@ -681,13 +680,18 @@ impl CatalogRepository {
             .skip(start)
             .take(limit as usize)
         {
-            let readable = match self
-                .ensure_principal_may(&mut connection, scope.actor, "entities.read", *entity_id)
-                .await
-            {
-                Ok(()) => true,
-                Err(RepositoryError::ActorNotAuthorized) => false,
-                Err(error) => return Err(error),
+            // The connection is released before the entity reads below, which
+            // acquire their own: a run never holds two pool connections.
+            let readable = {
+                let mut connection = self.pool.acquire().await?;
+                match self
+                    .ensure_principal_may(&mut connection, scope.actor, "entities.read", *entity_id)
+                    .await
+                {
+                    Ok(()) => true,
+                    Err(RepositoryError::ActorNotAuthorized) => false,
+                    Err(error) => return Err(error),
+                }
             };
             let item = if !readable {
                 json!({"position": position, "entity_id": entity_id, "status": "unavailable"})
@@ -703,7 +707,7 @@ impl CatalogRepository {
                         .bind(self.workspace_id.0)
                         .bind(entity_id)
                         .bind(extension_id)
-                        .fetch_optional(&mut *connection)
+                        .fetch_optional(&self.pool)
                         .await?
                         .unwrap_or(0);
                         json!({
