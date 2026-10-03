@@ -734,3 +734,159 @@ default_value = "untitled"
     assert!(!tags.iter().any(|tag| tag == "new"));
     server.abort();
 }
+
+async fn enabled_workflow(client: &Client, base_url: &str, definition: &str) -> Uuid {
+    let response = client
+        .post(format!("{base_url}/workflows"))
+        .json(&json!({ "definition": definition }))
+        .send()
+        .await
+        .unwrap();
+    assert!(
+        response.status().is_success(),
+        "{}",
+        response.text().await.unwrap()
+    );
+    let workflow: Value = response.json().await.unwrap();
+    let id = workflow["id"].as_str().unwrap();
+    for step in ["publish", "enable"] {
+        client
+            .post(format!("{base_url}/workflows/{id}/versions/1/{step}"))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap();
+    }
+    id.parse().unwrap()
+}
+
+/// Fans out the entity's most recent outbox event and returns the runs created.
+async fn fan_out_latest_event(pool: &PgPool, entity_id: &str) -> (String, u64) {
+    let event = sqlx::query_as::<_, api::domain_events::DomainEvent>(
+        "SELECT id,sequence,workspace_id,occurred_at,event_type,aggregate_kind,aggregate_id,correlation_id,causation_id,source_kind,source_name,metadata,payload FROM domain_events WHERE aggregate_id=$1 ORDER BY sequence DESC LIMIT 1",
+    )
+    .bind(Uuid::parse_str(entity_id).unwrap())
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    let created = CatalogRepository::system(pool.clone())
+        .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
+        .await
+        .unwrap()
+        .fan_out_workflow_runs(&event)
+        .await
+        .unwrap();
+    (event.event_type, created)
+}
+
+#[sqlx::test]
+async fn event_triggers_run_only_when_a_listed_attribute_changed(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let blueprint = create_blueprint(
+        &client,
+        &base_url,
+        r#"
+format_version = 1
+code = "reviewed_document"
+name = "Reviewed document"
+kind = "entity"
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["title"]
+[[attributes]]
+code = "title"
+value_type = "string"
+[[attributes]]
+code = "body"
+value_type = "string"
+[[attributes]]
+code = "license"
+value_type = "relationship"
+"#,
+    )
+    .await;
+    enabled_workflow(
+        &client,
+        &base_url,
+        r#"format_version = 2
+code = "rereview_on_content_change"
+name = "Re-review on content change"
+[[triggers]]
+event_type = "attribute_value.changed.v1"
+attributes = ["body", "license"]
+[[triggers]]
+event_type = "relationship.changed.v1"
+attributes = ["body", "license"]
+[[actions]]
+type = "system_tags_add"
+tags = ["needs-review"]"#,
+    )
+    .await;
+    let document = create_entity(&client, &base_url, &blueprint).await;
+    let id = document["id"].as_str().unwrap();
+    let license = create_entity(&client, &base_url, &blueprint).await;
+    let write = |code: &str, value: &str| {
+        client
+            .post(format!("{base_url}/entities/{id}/values"))
+            .json(&json!({"values":[{"kind":"scalar","attribute_code":code,"value":value}]}))
+    };
+
+    write("title", "Spec")
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    assert_eq!(
+        fan_out_latest_event(&pool, id).await,
+        ("attribute_value.changed.v1".into(), 0),
+        "an unlisted attribute must not start a run"
+    );
+    write("body", "v1")
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    assert_eq!(
+        fan_out_latest_event(&pool, id).await,
+        ("attribute_value.changed.v1".into(), 1)
+    );
+    // Re-saving the same value produces no fact, so the filter does not match.
+    write("body", "v1")
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    assert_eq!(fan_out_latest_event(&pool, id).await.1, 0);
+    client
+        .post(format!("{base_url}/entities/{id}/relationships/replace"))
+        .json(&json!({"relationships":[{"attribute_code":"license","target_entity_ids":[license["id"]]}]}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    assert_eq!(
+        fan_out_latest_event(&pool, id).await,
+        ("relationship.changed.v1".into(), 1),
+        "adding a relationship target is a change to that attribute"
+    );
+    client
+        .post(format!("{base_url}/entities/{id}/relationships/remove"))
+        .json(&json!({"relationships":[{"attribute_code":"license","target_entity_ids":[license["id"]]}]}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    assert_eq!(
+        fan_out_latest_event(&pool, id).await,
+        ("relationship.changed.v1".into(), 1),
+        "removing a relationship target is a change to that attribute"
+    );
+    server.abort();
+}

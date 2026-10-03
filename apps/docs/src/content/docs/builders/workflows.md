@@ -18,9 +18,7 @@ name = "Review title changes"
 
 [[triggers]]
 event_type = "attribute_value.changed.v1"
-
-[triggers.facts]
-"facts.0.attribute_code" = "title"
+attributes = ["title"]
 
 [[actions]]
 type = "system_tags_add"
@@ -71,6 +69,27 @@ source_kind = "api"
 `facts` matches the facts carried by the event. Each fact describes one changed attribute. Its fields are `attribute_id`, `attribute_code`, `context_id`, `context_code`, `relationship_target_entity_id`, `change_kind`, `before_value`, and `after_value`. Address them as `facts.<index>.<field>`, where index `0` is the first fact.
 
 The actions of an event-triggered workflow apply to the entity the event is about.
+
+### React only to specific attributes
+
+`attributes` lists attribute codes. The trigger then starts a run only when at least one of those attributes changed in the event, wherever it appears among the event's facts:
+
+```toml
+[[triggers]]
+event_type = "attribute_value.changed.v1"
+attributes = ["body", "revision_notes", "license"]
+
+[[triggers]]
+event_type = "relationship.changed.v1"
+attributes = ["license"]
+```
+
+- A change is a fact in the event. Saving a value that is identical to the current one records no fact, so it does not start a run.
+- A single save can produce `attribute_value.changed.v1`, `relationship.changed.v1`, or `entity.updated.v1`, depending on what it contains. List every event type the attributes can change through, as above.
+- `entity.created.v1` counts every value the new entity starts with, including defaults, as changed.
+- **Relationship attributes:** adding or removing a target is a change to the relationship attribute. Each added or removed target is its own fact, with `change_kind` `relationship_add` or `relationship_remove`. Changes to the linked record itself are events on that record, not on this one.
+- **File attributes:** uploading, linking, reordering, or removing files is recorded in the audit log but does not record an event, so a file attribute in `attributes` never starts a run. Track file changes with a scalar attribute that changes alongside them, such as a revision number.
+- `attributes` can't be used with `entity.migrated.v1`, which carries no facts. It combines with `envelope` and `facts`: all of them must match.
 
 ## Manual and schedule triggers
 

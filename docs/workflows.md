@@ -4,6 +4,12 @@ Workflows are workspace-scoped, versioned TOML definitions. Published revisions 
 
 Local actions remain deliberately narrow: `system_tags_add`, `system_tags_remove`, `system_metadata_merge`, `system_metadata_delete`, and `attribute_write`. They only affect one existing entity, with normal schema/readonly validation. There are no scripts, templates, loops, queries, SQL, target selectors, or cross-entity writes.
 
+## Changed-attribute filters
+
+An event trigger may declare `attributes = ["code", ...]` (1-100 unique codes). Fan-out then creates a run only if `catalog_workflow::changed_attributes_match` finds a payload fact whose `attribute_code` is listed; it is ANDed with `envelope` and `facts`. The field is optional and omitted from the compiled plan when absent, so stored revisions and their hashes are unchanged. It is rejected on `entity.migrated.v1`, whose payload has no facts.
+
+Verification for this contract: `entity.created.v1`, `entity.updated.v1`, `attribute_value.changed.v1`, `attribute_value.restored.v1` and `relationship.changed.v1` carry `facts[]` built from the audit before/after diff (`audit_changes`), so a fact exists only for a value that actually changed and always names its `attribute_code`. Relationship facts are one per added/removed target (`relationship_add`/`relationship_remove`). File attributes are excluded from the audit snapshot and the file-reference write paths (`files.rs`) enqueue no domain event, so a file attribute can never satisfy a filter. Emitting file-reference facts is a separate eventing contract change.
+
 ## Trigger contracts
 
 `format_version = 1` remains event-only and accepts only the documented catalog entity event types. `format_version = 2` additionally has these closed trigger types:

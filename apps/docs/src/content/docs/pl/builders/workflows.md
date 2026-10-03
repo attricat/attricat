@@ -18,9 +18,7 @@ name = "Review title changes"
 
 [[triggers]]
 event_type = "attribute_value.changed.v1"
-
-[triggers.facts]
-"facts.0.attribute_code" = "title"
+attributes = ["title"]
 
 [[actions]]
 type = "system_tags_add"
@@ -71,6 +69,27 @@ source_kind = "api"
 `facts` dopasowuje fakty przenoszone przez zdarzenie. Każdy fakt opisuje jeden zmieniony atrybut. Jego pola to `attribute_id`, `attribute_code`, `context_id`, `context_code`, `relationship_target_entity_id`, `change_kind`, `before_value` i `after_value`. Odwołuj się do nich jako `facts.<index>.<field>`, gdzie indeks `0` oznacza pierwszy fakt.
 
 Akcje przepływu pracy wyzwolonego zdarzeniem dotyczą encji, której dotyczy zdarzenie.
+
+### Reaguj tylko na wybrane atrybuty
+
+`attributes` to lista kodów atrybutów. Wyzwalacz uruchamia wtedy przebieg tylko wtedy, gdy w zdarzeniu zmienił się co najmniej jeden z tych atrybutów, niezależnie od jego miejsca wśród faktów zdarzenia:
+
+```toml
+[[triggers]]
+event_type = "attribute_value.changed.v1"
+attributes = ["body", "revision_notes", "license"]
+
+[[triggers]]
+event_type = "relationship.changed.v1"
+attributes = ["license"]
+```
+
+- Zmiana to fakt w zdarzeniu. Zapisanie wartości identycznej z bieżącą nie tworzy faktu, więc nie uruchamia przebiegu.
+- Jeden zapis może wygenerować `attribute_value.changed.v1`, `relationship.changed.v1` albo `entity.updated.v1`, zależnie od tego, co zawiera. Wymień każdy typ zdarzenia, przez który mogą zmienić się dane atrybuty, jak w przykładzie powyżej.
+- `entity.created.v1` traktuje każdą wartość, z którą powstaje nowa encja, łącznie z domyślnymi, jako zmienioną.
+- **Atrybuty relacji:** dodanie lub usunięcie celu jest zmianą atrybutu relacji. Każdy dodany lub usunięty cel to osobny fakt z `change_kind` równym `relationship_add` lub `relationship_remove`. Zmiany samego powiązanego rekordu są zdarzeniami tamtego rekordu, nie tego.
+- **Atrybuty plikowe:** przesłanie, podłączenie, zmiana kolejności lub usunięcie plików trafia do dziennika audytu, ale nie tworzy zdarzenia, więc atrybut plikowy w `attributes` nigdy nie uruchamia przebiegu. Śledź zmiany plików atrybutem skalarnym, który zmienia się razem z nimi, np. numerem rewizji.
+- `attributes` nie działa z `entity.migrated.v1`, które nie zawiera faktów. Łączy się z `envelope` i `facts`: wszystkie muszą pasować.
 
 ## Wyzwalacze ręczne i harmonogramowe
 
