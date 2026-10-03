@@ -337,7 +337,7 @@ impl FileWorker {
     }
 
     async fn purge(&self, job: &ClaimedJob) -> Result<(), WorkerError> {
-        let row = sqlx::query("SELECT original_key FROM files WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NOT NULL AND purge_after <= now() AND NOT EXISTS (SELECT 1 FROM attribute_file_references r WHERE r.workspace_id = files.workspace_id AND r.file_id = files.id) AND NOT EXISTS (SELECT 1 FROM workspace_memberships m WHERE m.workspace_id = files.workspace_id AND m.avatar_file_id = files.id)")
+        let row = sqlx::query("SELECT original_key FROM files WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NOT NULL AND purge_after <= now() AND NOT EXISTS (SELECT 1 FROM attribute_file_references r WHERE r.workspace_id = files.workspace_id AND r.file_id = files.id) AND NOT EXISTS (SELECT 1 FROM workspace_memberships m WHERE m.workspace_id = files.workspace_id AND m.avatar_file_id = files.id) AND NOT EXISTS (SELECT 1 FROM file_retention_holds h WHERE h.workspace_id = files.workspace_id AND h.file_id = files.id AND h.released_at IS NULL AND h.held_until > now())")
             .bind(job.file_id).bind(job.workspace_id).fetch_optional(&self.pool).await?;
         let Some(row) = row else {
             return Ok(());
@@ -361,8 +361,8 @@ impl FileWorker {
         Ok(())
     }
 
-    /// Marks unreferenced files for delayed deletion and creates one durable
-    /// purge job. Repeated runs are harmless and never delete before grace.
+    /// Marks unreferenced files without an active retention hold for delayed
+    /// deletion and creates one durable purge job. Repeated runs are harmless and never delete before grace.
     pub async fn reconcile(&self) -> Result<(), sqlx::Error> {
         let grace = i64::try_from(self.config.delete_grace.as_secs()).unwrap_or(i64::MAX);
         let mut transaction = self.pool.begin().await?;
@@ -380,6 +380,7 @@ impl FileWorker {
               AND NOT EXISTS (SELECT 1 FROM attribute_file_references r WHERE r.workspace_id = f.workspace_id AND r.file_id = f.id)
               AND NOT EXISTS (SELECT 1 FROM conversation_message_attachments a WHERE a.workspace_id = f.workspace_id AND a.file_id = f.id)
               AND NOT EXISTS (SELECT 1 FROM workspace_memberships m WHERE m.workspace_id = f.workspace_id AND m.avatar_file_id = f.id)
+              AND NOT EXISTS (SELECT 1 FROM file_retention_holds h WHERE h.workspace_id = f.workspace_id AND h.file_id = f.id AND h.released_at IS NULL AND h.held_until > now())
             ORDER BY f.id
             LIMIT 256 FOR UPDATE SKIP LOCKED"#,
         )
@@ -394,7 +395,8 @@ impl FileWorker {
                   AND (f.attachment_expires_at IS NULL OR f.attachment_expires_at <= now())
                   AND NOT EXISTS (SELECT 1 FROM attribute_file_references r WHERE r.workspace_id = f.workspace_id AND r.file_id = f.id)
                   AND NOT EXISTS (SELECT 1 FROM conversation_message_attachments a WHERE a.workspace_id = f.workspace_id AND a.file_id = f.id)
-              AND NOT EXISTS (SELECT 1 FROM workspace_memberships m WHERE m.workspace_id = f.workspace_id AND m.avatar_file_id = f.id)"#)
+              AND NOT EXISTS (SELECT 1 FROM workspace_memberships m WHERE m.workspace_id = f.workspace_id AND m.avatar_file_id = f.id)
+              AND NOT EXISTS (SELECT 1 FROM file_retention_holds h WHERE h.workspace_id = f.workspace_id AND h.file_id = f.id AND h.released_at IS NULL AND h.held_until > now())"#)
                 .bind(grace)
                 .bind(&candidates)
                 .execute(&mut *transaction)

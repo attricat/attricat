@@ -512,6 +512,7 @@ impl CatalogRepository {
             .await?;
         }
         self.validate_status_values(transaction, entity).await?;
+        self.apply_status_effects(transaction, entity).await?;
         let preview = Self::build_preview_projection(transaction, entity.id).await?;
         self.store_preview(transaction, entity.id, preview).await?;
         Ok(attachment_id)

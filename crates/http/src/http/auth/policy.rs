@@ -386,6 +386,14 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
             },
         });
     }
+    // Placing or releasing a hold changes retention for every referencing
+    // record, so it is a workspace-level permission rather than entity write.
+    if path.starts_with("/files/{file_id}/retention-holds") && method != Method::GET {
+        return Some(Policy {
+            permission: "files.hold",
+            target: TargetKind::None,
+        });
+    }
     if path.starts_with("/files/{file_id}") {
         return Some(read(TargetKind::FileRead));
     }
