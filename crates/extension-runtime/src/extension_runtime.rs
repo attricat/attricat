@@ -2,7 +2,8 @@
 //!
 //! Components get no WASI context, filesystem, environment, clocks, sockets, or
 //! pre-opened descriptors. The only imports are the versioned WIT functions in
-//! `wit/catalog-extension.wit`; every call is checked against the immutable
+//! the `wit*/catalog-extension.wit` packages (`wit-host` is the unified,
+//! evolving ABI; the others are frozen legacy worlds); every call is checked against the immutable
 //! release manifest and invocation-time grants.
 
 use std::{
@@ -82,7 +83,10 @@ mod host_connector {
         exports: { default: async },
     });
 }
+#[cfg(test)]
+mod abi_evolution_tests;
 mod interactive;
+mod unified;
 mod host_v11 {
     wasmtime::component::bindgen!({
         path: "wit-next",
@@ -305,6 +309,23 @@ impl ExtensionRuntime {
         lifecycle_started: bool,
         cancelling: bool,
     ) -> Result<(Value, Value, bool), ExtensionRuntimeError> {
+        if crate::extensions::is_unified_abi_version(abi_version) {
+            return self
+                .invoke_unified_batch(
+                    installation,
+                    repository,
+                    run_id,
+                    operation_handler,
+                    configuration,
+                    input,
+                    checkpoint,
+                    batch_key,
+                    max_checkpoint_bytes,
+                    lifecycle_started,
+                    cancelling,
+                )
+                .await;
+        }
         if abi_version == crate::repository::INTERACTIVE_OPERATION_ABI {
             return self
                 .invoke_interactive_batch(
@@ -569,6 +590,17 @@ impl ExtensionRuntime {
         request: &str,
         max_response_bytes: u64,
     ) -> Result<String, ExtensionRuntimeError> {
+        if crate::extensions::is_unified_host_api_range(&installation.manifest.catalog.host_api) {
+            return self
+                .invoke_unified_command(
+                    installation,
+                    repository,
+                    handler,
+                    request,
+                    max_response_bytes,
+                )
+                .await;
+        }
         let component = self.component(installation).await?;
         let state = HostState::new(
             installation.clone(),
@@ -664,6 +696,11 @@ impl ExtensionRuntime {
         handler: &ManifestEventHandler,
         event: &DomainEvent,
     ) -> Result<(), ExtensionRuntimeError> {
+        if crate::extensions::is_unified_host_api_range(&installation.manifest.catalog.host_api) {
+            return self
+                .invoke_unified_event(installation, repository, handler, event)
+                .await;
+        }
         if uses_v11(&installation.manifest.catalog.host_api) {
             return self
                 .invoke_v11_event(installation, repository, handler, event)

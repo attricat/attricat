@@ -189,7 +189,7 @@ Exported event types must start with `plugin.<extension-id>.` and end in `.vN`. 
 | --- | --- | --- |
 | `event_handlers` | `id`, `event_types` (exact versioned types), `handler` | `events.subscribe` and a `server_wasm` artifact |
 | `commands` | `id`, `handler`, `request_schema`, `response_schema`, `max_request_bytes`, `max_response_bytes` (default 64 KiB) | `client.commands` |
-| `operations` | `id`, `handler`, `request_schema`, `max_request_bytes`, `max_checkpoint_bytes` (default and maximum 64 KiB), optional `interactive: {"version": 1, "max_selection": 1–50}` | host API 1.2 or later; `interactive` needs `client.operations.start` and a range compatible with 1.5 but not 1.4 |
+| `operations` | `id`, `handler`, `request_schema`, `max_request_bytes`, `max_checkpoint_bytes` (default and maximum 64 KiB), optional `interactive: {"version": 1, "max_selection": 1–50}` | host API 1.2 or later; `interactive` needs `client.operations.start` and host API 1.6+ (or a range compatible with 1.5 but not 1.4) |
 | `webhooks` | `id`, `event_type`, `handler`, `methods` (`["POST"]`), `authentication`, `max_body_bytes` | `webhooks.receive`. Declared but not delivered yet. |
 
 ## UI contributions
@@ -212,7 +212,7 @@ Exported event types must start with `plugin.<extension-id>.` and end in `.vN`. 
 | `panel` | `artifact`, `outlet` | A read-only host-laid-out panel at `blueprint_detail_panel`, `blueprint_panel`, `blueprint_publish_check`, `entity_attribute_panel`, `file_panel`, `audit_event_panel`, or `data_health_card`. |
 | `dialog` | `artifact`, `outlet`, `title` | The host-managed `action_dialog` opened by this extension's selection actions. |
 
-Each extension can use each outlet once. `entity_action`, `explorer_row_action`, and `explorer_bulk_action` accept `version` 1 or 2; version 2 receives the [selection context](/extensions/client/#selection-context) and needs a host API range compatible with 1.5 but not 1.4.
+Each extension can use each outlet once. `entity_action`, `explorer_row_action`, and `explorer_bulk_action` accept `version` 1 or 2; version 2 receives the [selection context](/extensions/client/#selection-context) and needs host API 1.6+ (or a range compatible with 1.5 but not 1.4).
 
 ## Cell renderers
 

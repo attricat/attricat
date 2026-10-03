@@ -358,7 +358,9 @@ impl CatalogRepository {
         .bind(self.workspace_id.0)
         .bind(&input.extension_id)
         .bind(release)
-        .bind(INTERACTIVE_OPERATION_ABI)
+        .bind(super::extension_operations::operation_run_abi(
+            &manifest.catalog.host_api,
+        )?)
         .bind(&input.operation_id)
         .bind(input.actor.user_id)
         .bind(input.actor.token_id)

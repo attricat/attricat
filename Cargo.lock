@@ -989,6 +989,7 @@ dependencies = [
  "url",
  "uuid",
  "wasmtime",
+ "wit-parser 0.258.0",
 ]
 
 [[package]]
@@ -1168,6 +1169,14 @@ dependencies = [
  "tokio",
  "url",
  "uuid",
+]
+
+[[package]]
+name = "catalog-unified-test-component"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "wit-bindgen",
 ]
 
 [[package]]

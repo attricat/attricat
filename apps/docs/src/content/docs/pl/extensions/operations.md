@@ -68,7 +68,7 @@ Dodaj `interactive` do operacji, aby zalogowani użytkownicy mogli ją uruchomi�
 {"id": "generate", "handler": "generate", "request_schema": {"type": "object"}, "interactive": {"version": 1, "max_selection": 50}}
 ```
 
-Wymaga to `client.operations.start` i zakresu `catalog.host_api` zgodnego z 1.5, ale nie z 1.4. Komponent używa świata `catalog:host@1.5.0` z `crates/extension-runtime/wit-interactive/`: to świat 1.4 z dodatkowym interfejsem `selection`.
+Wymaga to `client.operations.start` i [ujednoliconego ABI hosta](/pl/extensions/server/#używaj-ujednoliconego-abi-w-nowych-rozszerzeniach) (`>=1.6.0`) albo starszego zakresu `catalog.host_api` zgodnego z 1.5, ale nie z 1.4. Komponent używa świata `catalog:host@1.5.0` z `crates/extension-runtime/wit-interactive/`: to świat 1.4 z dodatkowym interfejsem `selection`.
 
 Przy starcie Catalog sprawdza, czy użytkownik może odczytać każdą zaznaczoną encję, i utrwala użytkownika, wydanie, dane wejściowe, kontekst oraz uporządkowane zaznaczenie. Następnie:
 
@@ -161,4 +161,4 @@ acli connector-job list <blueprint-id>
 acli connector-job run <job-id> --idempotency-key manual-2026-03-01
 ```
 
-Zadania konektorów wymagają wydania korzystającego ze świata konektorów `catalog:host@1.4.0`, a zarządzanie nimi wymaga `extensions.manage`. Zadań nie można jeszcze wyzwalać zdarzeniami katalogu; uruchamiaj je ręcznie lub cyklicznie.
+Zadania konektorów wymagają wydania korzystającego z ujednoliconego ABI hosta (1.6+) lub ze świata konektorów `catalog:host@1.4.0`, a zarządzanie nimi wymaga `extensions.manage`. Zadań nie można jeszcze wyzwalać zdarzeniami katalogu; uruchamiaj je ręcznie lub cyklicznie.

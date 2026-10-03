@@ -20,7 +20,38 @@ use url::Url;
 pub const MANIFEST_VERSION: u32 = 1;
 /// The newest host contract accepted by manifests. Components importing
 /// `catalog:host@1.0.0` remain supported by the unchanged v1 WIT package.
-pub const SUPPORTED_HOST_API: &str = "1.5.0";
+pub const SUPPORTED_HOST_API: &str = "1.6.0";
+/// The first unified host ABI. Releases before it were parallel worlds
+/// (1.0/1.1 event-command, 1.2-1.5 operation) selected by excluding the
+/// previous minor; from this version onward every minor is an additive
+/// superset of the previous one and offers every server feature.
+pub const FIRST_UNIFIED_HOST_API: Version = Version::new(1, 6, 0);
+/// The last minor of the legacy, mutually exclusive ABI families.
+const LAST_LEGACY_HOST_MINOR: u64 = 5;
+
+/// Returns true when a `catalog.host_api` range binds the unified, evolving
+/// host ABI: it matches a unified minor this host supports and no legacy one.
+/// Ranges that also match a legacy minor keep their released legacy binding,
+/// so existing releases never change ABI on a host upgrade.
+pub fn is_unified_host_api(range: &VersionReq) -> bool {
+    let current = Version::parse(SUPPORTED_HOST_API).expect("supported host API is SemVer");
+    !(0..=LAST_LEGACY_HOST_MINOR).any(|minor| range.matches(&Version::new(1, minor, 0)))
+        && (FIRST_UNIFIED_HOST_API.minor..=current.minor)
+            .any(|minor| range.matches(&Version::new(1, minor, 0)))
+}
+
+/// String form of [`is_unified_host_api`]; invalid ranges are never unified.
+pub fn is_unified_host_api_range(range: &str) -> bool {
+    VersionReq::parse(range).is_ok_and(|range| is_unified_host_api(&range))
+}
+
+/// Recorded operation-run ABIs at or after the first unified ABI are executed
+/// through the current unified world.
+pub fn is_unified_abi_version(abi_version: &str) -> bool {
+    Version::parse(abi_version).is_ok_and(|version| {
+        version.major == FIRST_UNIFIED_HOST_API.major && version >= FIRST_UNIFIED_HOST_API
+    })
+}
 pub const MAX_EXTENSION_ARCHIVE_BYTES: usize = 32 * 1024 * 1024;
 pub const MAX_EXTENSION_UNPACKED_BYTES: usize = 128 * 1024 * 1024;
 pub const MAX_EXTENSION_ARCHIVE_ENTRIES: usize = 256;
@@ -1337,17 +1368,22 @@ pub fn selection_action_outlet(outlet: &UiOutlet) -> bool {
 /// Interactive selection operations use the additive 1.5 operation world, so a
 /// release must exclude 1.4 rather than be silently bound to an older ABI.
 fn require_interactive_host_api(range: &VersionReq) -> Result<(), ManifestError> {
-    if range.matches(&Version::new(1, 5, 0)) && !range.matches(&Version::new(1, 4, 0)) {
+    if is_unified_host_api(range)
+        || (range.matches(&Version::new(1, 5, 0)) && !range.matches(&Version::new(1, 4, 0)))
+    {
         Ok(())
     } else {
         Err(ManifestError::Invalid(
-            "selection-aware actions and interactive operations require catalog.host_api compatible with 1.5 but not 1.4"
+            "selection-aware actions and interactive operations require catalog.host_api compatible with 1.6 (or 1.5 but not 1.4)"
                 .into(),
         ))
     }
 }
 
 fn require_operation_host_api(range: &VersionReq) -> Result<(), ManifestError> {
+    if is_unified_host_api(range) {
+        return Ok(());
+    }
     if (range.matches(&Version::new(1, 2, 0))
         || range.matches(&Version::new(1, 3, 0))
         || range.matches(&Version::new(1, 4, 0))
@@ -1357,7 +1393,7 @@ fn require_operation_host_api(range: &VersionReq) -> Result<(), ManifestError> {
         Ok(())
     } else {
         Err(ManifestError::Invalid(
-            "server operations require catalog.host_api compatible with 1.2 or newer but not 1.1"
+            "server operations require catalog.host_api compatible with 1.6 (or 1.2-1.5 but not 1.1)"
                 .into(),
         ))
     }
@@ -1366,8 +1402,9 @@ fn require_operation_host_api(range: &VersionReq) -> Result<(), ManifestError> {
 /// Fixed client outlets are host contracts introduced with 1.1. They do not
 /// select a server component world, so any later compatible host accepts them.
 fn require_client_outlet_host_api(range: &VersionReq) -> Result<(), ManifestError> {
+    let current = Version::parse(SUPPORTED_HOST_API).expect("supported host API is SemVer");
     if !range.matches(&Version::new(1, 0, 0))
-        && (1..=5).any(|minor| range.matches(&Version::new(1, minor, 0)))
+        && (1..=current.minor).any(|minor| range.matches(&Version::new(1, minor, 0)))
     {
         Ok(())
     } else {
@@ -1379,11 +1416,14 @@ fn require_client_outlet_host_api(range: &VersionReq) -> Result<(), ManifestErro
 }
 
 fn require_next_host_api(range: &VersionReq) -> Result<(), ManifestError> {
-    if range.matches(&Version::new(1, 1, 0)) && !range.matches(&Version::new(1, 0, 0)) {
+    if is_unified_host_api(range)
+        || (range.matches(&Version::new(1, 1, 0)) && !range.matches(&Version::new(1, 0, 0)))
+    {
         Ok(())
     } else {
         Err(ManifestError::Invalid(
-            "this declaration requires catalog.host_api compatible with 1.1 but not 1.0".into(),
+            "this declaration requires catalog.host_api compatible with 1.6 (or 1.1 but not 1.0)"
+                .into(),
         ))
     }
 }
@@ -1701,6 +1741,24 @@ pub fn validate_schema(schema: &Value, value: &Value) -> Result<(), ManifestErro
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unified_host_api_excludes_every_legacy_minor() {
+        let unified = |range: &str| is_unified_host_api(&VersionReq::parse(range).unwrap());
+        assert!(unified(">=1.6.0, <2.0.0"));
+        assert!(unified("^1.6"));
+        assert!(!unified(">=1.5.0, <2.0.0"));
+        assert!(!unified(">=1.1.0, <2.0.0"));
+        assert!(!unified(">=1.0.0, <2.0.0"));
+        assert!(
+            !unified(">=1.7.0, <2.0.0"),
+            "1.7 is not supported by this host yet"
+        );
+        assert!(is_unified_abi_version("1.6.0"));
+        assert!(!is_unified_abi_version("1.5.0"));
+        assert!(!is_unified_abi_version("1.4"));
+        assert!(!is_unified_abi_version("2.0.0"));
+    }
 
     #[test]
     fn shared_layout_placement_classifier_covers_plan_and_apply_states() {
@@ -2025,7 +2083,7 @@ mod tests {
                 .validate(SUPPORTED_HOST_API)
                 .unwrap_err()
                 .to_string()
-                .contains("compatible with 1.5 but not 1.4")
+                .contains("1.5 but not 1.4")
         );
 
         invalid = value.clone();

@@ -68,7 +68,7 @@ Add `interactive` to an operation to let signed-in users start it for an entity 
 {"id": "generate", "handler": "generate", "request_schema": {"type": "object"}, "interactive": {"version": 1, "max_selection": 50}}
 ```
 
-It needs `client.operations.start` and a `catalog.host_api` range compatible with 1.5 but not 1.4. The component uses the `catalog:host@1.5.0` world in `crates/extension-runtime/wit-interactive/`: the 1.4 world plus a `selection` interface.
+It needs `client.operations.start` and the [unified host ABI](/extensions/server/#use-the-unified-abi-for-new-extensions) (`>=1.6.0`), or a legacy `catalog.host_api` range compatible with 1.5 but not 1.4. The component uses the `catalog:host@1.5.0` world in `crates/extension-runtime/wit-interactive/`: the 1.4 world plus a `selection` interface.
 
 When a run starts, Catalog checks that the user can read every selected entity and freezes the user, release, input, context, and the ordered selection. Then:
 
@@ -161,4 +161,4 @@ acli connector-job list <blueprint-id>
 acli connector-job run <job-id> --idempotency-key manual-2026-03-01
 ```
 
-Connector jobs need a release that uses the `catalog:host@1.4.0` connector world, and managing them needs `extensions.manage`. Jobs cannot be triggered by catalog events yet; run them manually or on an interval.
+Connector jobs need a release that uses the unified host ABI (1.6+) or the `catalog:host@1.4.0` connector world, and managing them needs `extensions.manage`. Jobs cannot be triggered by catalog events yet; run them manually or on an interval.
