@@ -190,6 +190,7 @@ pub(super) async fn authorize(
             policy::TargetKind::FileRead
                 | policy::TargetKind::WorkspaceNavigation
                 | policy::TargetKind::ExtensionRun
+                | policy::TargetKind::EntityBatch
         );
         if handler_authorized
             && !state

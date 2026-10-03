@@ -48,9 +48,14 @@ pub struct Attribute {
     pub extension_type: Option<Value>,
     pub default_value: Option<Value>,
     pub file_policy: Option<Value>,
+    /// The single allowed target blueprint, if exactly one is allowed.
     pub target_blueprint_code: Option<String>,
+    /// Every allowed target blueprint; empty means any entity blueprint.
+    pub target_blueprint_codes: Vec<String>,
     pub cardinality: Option<String>,
     pub target_cardinality: Option<String>,
+    /// `acyclic` or `tree` for self-referencing relationships.
+    pub hierarchy: Option<String>,
     pub tags: Value,
     pub context_fallback: String,
     pub context_editable: String,
@@ -631,6 +636,125 @@ pub struct UpdateEntityFormRequest {
     /// Omitted fields retain their existing values; use [] or {} to clear.
     pub system_tags: Option<Vec<String>>,
     pub system_metadata: Option<Value>,
+}
+
+/// Operations an entity batch may hold.
+pub const MAX_ENTITY_BATCH_OPERATIONS: usize = 50;
+/// Scalar values, relationship targets and removals across one entity batch.
+pub const MAX_ENTITY_BATCH_VALUES: usize = 1000;
+
+/// Writes, status transitions and deletions applied to several entities in
+/// one transaction: every operation commits, or none does.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct EntityBatchRequest {
+    pub operations: Vec<EntityBatchOperation>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
+pub enum EntityBatchOperation {
+    /// Creates an entity. A caller-chosen `entity_id` lets later operations
+    /// in the same batch link to it.
+    Create {
+        entity_id: Option<Uuid>,
+        blueprint: SearchBlueprint,
+        #[serde(default)]
+        values: Vec<NewAttributeValue>,
+        #[serde(default)]
+        system_tags: Vec<String>,
+        #[serde(default = "empty_json_object")]
+        system_metadata: Value,
+    },
+    /// Updates an entity like `PUT /v1/entities/{id}`.
+    Update {
+        entity_id: Uuid,
+        expected_updated_at: Option<DateTime<Utc>>,
+        #[serde(default)]
+        values: Vec<NewAttributeValue>,
+        #[serde(default)]
+        relationships: Vec<RelationshipTargets>,
+        #[serde(default)]
+        remove_values: Vec<AttributeValueSelector>,
+        system_tags: Option<Vec<String>>,
+        system_metadata: Option<Value>,
+    },
+    /// Deletes an entity.
+    Delete {
+        entity_id: Uuid,
+        expected_updated_at: Option<DateTime<Utc>>,
+    },
+}
+
+impl EntityBatchOperation {
+    /// The entity the operation writes, when known before it runs.
+    pub fn entity_id(&self) -> Option<Uuid> {
+        match self {
+            Self::Create { entity_id, .. } => *entity_id,
+            Self::Update { entity_id, .. } | Self::Delete { entity_id, .. } => Some(*entity_id),
+        }
+    }
+
+    /// The permission the operation needs and the entity it is checked on.
+    pub fn permission(&self) -> (&'static str, Option<Uuid>) {
+        match self {
+            Self::Create { .. } => ("entities.write", None),
+            Self::Update { entity_id, .. } => ("entities.write", Some(*entity_id)),
+            Self::Delete { entity_id, .. } => ("entities.delete", Some(*entity_id)),
+        }
+    }
+
+    pub fn value_count(&self) -> usize {
+        match self {
+            Self::Create { values, .. } => values.len(),
+            Self::Update {
+                values,
+                relationships,
+                remove_values,
+                ..
+            } => {
+                values.len()
+                    + remove_values.len()
+                    + relationships
+                        .iter()
+                        .map(|relationship| relationship.target_entity_ids.len().max(1))
+                        .sum::<usize>()
+            }
+            Self::Delete { .. } => 0,
+        }
+    }
+
+    pub fn writes_relationships(&self) -> bool {
+        match self {
+            Self::Create { values, .. } => values
+                .iter()
+                .any(|value| matches!(value, NewAttributeValue::Relationship { .. })),
+            Self::Update {
+                values,
+                relationships,
+                ..
+            } => {
+                !relationships.is_empty()
+                    || values
+                        .iter()
+                        .any(|value| matches!(value, NewAttributeValue::Relationship { .. }))
+            }
+            Self::Delete { .. } => false,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct EntityBatchResponse {
+    pub operations: Vec<EntityBatchOperationResult>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(tag = "op", rename_all = "snake_case")]
+pub enum EntityBatchOperationResult {
+    Create { entity: Entity },
+    Update { entity: Entity },
+    Delete { entity_id: Uuid },
 }
 
 fn empty_json_object() -> Value {

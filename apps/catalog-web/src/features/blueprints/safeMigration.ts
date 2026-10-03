@@ -26,6 +26,10 @@ export const isSafeAutomaticMigration = (
         sameJson(attribute.file_policy, targetAttribute.file_policy) &&
         attribute.target_blueprint_code ===
           targetAttribute.target_blueprint_code &&
+        sameJson(
+          attribute.target_blueprint_codes ?? [],
+          targetAttribute.target_blueprint_codes ?? [],
+        ) &&
         attribute.cardinality === targetAttribute.cardinality &&
         attribute.target_cardinality === targetAttribute.target_cardinality &&
         attribute.context_fallback === targetAttribute.context_fallback &&

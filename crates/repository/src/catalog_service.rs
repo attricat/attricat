@@ -11,9 +11,10 @@ use crate::{
         AppendAttributeValues, AttachReusableAttribute, AttributeContext, AttributeValue,
         BlueprintEntityPublicationSummary, BlueprintWithAttributes, CreateAttributeContext,
         CreateBlueprint, CreateEntityFormRequest, CreateReusableAttribute,
-        CreateReusableAttributeGroup, Entity, EntityPublicationStatus, EntityReusableAttribute,
-        MigrateEntityRequest, RelationshipMutation, ReusableAttribute, ReusableAttributeGroup,
-        SearchBlueprint, UpdateAttributeContext, UpdateEntityFormRequest,
+        CreateReusableAttributeGroup, Entity, EntityBatchRequest, EntityBatchResponse,
+        EntityPublicationStatus, EntityReusableAttribute, MigrateEntityRequest,
+        RelationshipMutation, ReusableAttribute, ReusableAttributeGroup, SearchBlueprint,
+        UpdateAttributeContext, UpdateEntityFormRequest,
     },
     repository::{
         CatalogRepository, ExtensionCatalogBatch, ExtensionCatalogIntentOutcome, FileMetadata,
@@ -159,6 +160,15 @@ impl<'a> CatalogMutationService<'a> {
                 input.expected_updated_at,
             )
             .await
+    }
+
+    /// Applies several entity writes atomically. Callers authorize every
+    /// operation first with `CatalogRepository::is_authorized_for_entity_batch`.
+    pub async fn apply_entity_batch(
+        &self,
+        request: EntityBatchRequest,
+    ) -> Result<EntityBatchResponse, RepositoryError> {
+        self.repository.apply_entity_batch(request).await
     }
 
     pub async fn publish_entity(

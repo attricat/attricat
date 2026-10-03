@@ -222,6 +222,39 @@ describe('RelationshipField', () => {
     });
   });
 
+  it('searches one allowed target blueprint at a time', async () => {
+    vi.mocked(searchEntities).mockResolvedValue(
+      page([{ id: firstId, label: 'First option' }], null),
+    );
+    renderField(vi.fn(), {
+      ...attribute,
+      target_blueprint_code: null,
+      target_blueprint_codes: ['product', 'material'],
+    });
+    const user = userEvent.setup();
+
+    await user.click(
+      await screen.findByRole('button', { name: 'related_products' }),
+    );
+    const dialog = await screen.findByRole('dialog', {
+      name: /^Select product, material/,
+    });
+    await waitFor(() =>
+      expect(searchEntities).toHaveBeenLastCalledWith(
+        expect.objectContaining({ blueprint: 'product' }),
+      ),
+    );
+    await user.click(
+      within(dialog).getByRole('combobox', { name: 'Target blueprint' }),
+    );
+    await user.click(await screen.findByRole('option', { name: 'material' }));
+    await waitFor(() =>
+      expect(searchEntities).toHaveBeenLastCalledWith(
+        expect.objectContaining({ blueprint: 'material' }),
+      ),
+    );
+  });
+
   it('labels sample relationship options', async () => {
     vi.mocked(searchEntities).mockResolvedValue(
       page([{ id: firstId, label: 'First product', isSample: true }], null),

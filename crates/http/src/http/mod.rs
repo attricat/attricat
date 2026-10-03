@@ -880,6 +880,7 @@ pub fn router(state: AppState) -> Router {
             post(entity_reads::relationship_tree_facet_children),
         )
         .route("/v1/entities", post(entities::create_entity_form))
+        .route("/v1/entities/batch", post(entities::apply_entity_batch))
         .route(
             "/v1/entities/{entity_id}",
             get(entities::get_entity_form).put(entities::update_entity_form),

@@ -180,9 +180,14 @@ impl CatalogRepository {
                 "could not serialize generated views: {error}"
             ))
         })?;
+        let unique_keys = serde_json::to_value(&compiled.unique_keys).map_err(|error| {
+            RepositoryError::InvalidBlueprintDefinition(format!(
+                "could not serialize unique keys: {error}"
+            ))
+        })?;
         let blueprint = sqlx::query_as::<_, Db<Blueprint>>(
-            r#"INSERT INTO blueprints (id, workspace_id, code, name, kind, version, includes, views, entity_schema, status, definition, definition_hash)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'draft', $10, $11)
+            r#"INSERT INTO blueprints (id, workspace_id, code, name, kind, version, includes, views, entity_schema, status, definition, definition_hash, unique_keys)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'draft', $10, $11, $12)
                RETURNING id, code, name, kind, version, includes, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash"#,
         )
         .bind(blueprint_id)
@@ -196,6 +201,7 @@ impl CatalogRepository {
         .bind(compiled.entity_schema)
         .bind(definition)
         .bind(compiled.raw_definition_hash)
+        .bind(unique_keys)
         .fetch_one(&mut **transaction)
         .await?
         .into_domain();
@@ -226,9 +232,9 @@ impl CatalogRepository {
             validate_attribute_default_value(&attribute)?;
             attributes.push(
                 sqlx::query_as::<_, Db<Attribute>>(
-                    r#"INSERT INTO attributes (id, workspace_id, blueprint_id, blueprint_version, code, name, value_type, value_schema, extension_type, default_value, file_policy, target_blueprint_code, cardinality, target_cardinality, tags, context_fallback, context_editable, readonly, position)
-                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
-                       RETURNING id, blueprint_id, blueprint_version, code, name, value_type, value_schema, extension_type, default_value, file_policy, target_blueprint_code, cardinality, target_cardinality, tags, context_fallback, context_editable, readonly, position, created_at, updated_at, deleted_at"#,
+                    r#"INSERT INTO attributes (id, workspace_id, blueprint_id, blueprint_version, code, name, value_type, value_schema, extension_type, default_value, file_policy, target_blueprint_code, cardinality, target_cardinality, tags, context_fallback, context_editable, readonly, position, target_blueprint_codes, hierarchy)
+                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+                       RETURNING id, blueprint_id, blueprint_version, code, name, value_type, value_schema, extension_type, default_value, file_policy, target_blueprint_code, target_blueprint_codes, cardinality, target_cardinality, hierarchy, tags, context_fallback, context_editable, readonly, position, created_at, updated_at, deleted_at"#,
                 )
                 .bind(Uuid::new_v4())
                 .bind(self.workspace_id.0)
@@ -249,6 +255,12 @@ impl CatalogRepository {
                 .bind(attribute.context_editable)
                 .bind(attribute.readonly)
                 .bind(attribute.position)
+                .bind(if attribute.target_blueprints.len() > 1 {
+                    attribute.target_blueprints
+                } else {
+                    Vec::new()
+                })
+                .bind(attribute.hierarchy)
                 .fetch_one(&mut **transaction)
                 .await?
                 .into_domain(),
@@ -461,6 +473,9 @@ impl CatalogRepository {
             if !includes_published {
                 return Err(RepositoryError::BlueprintNotPublished);
             }
+            let (previous_keys, previous_hierarchies) = self
+                .enforced_structural_constraints(&mut transaction, blueprint_id)
+                .await?;
             sqlx::query(
                 "UPDATE blueprints SET status = 'published', published_at = now(), updated_at = now() WHERE id = $1 AND version = $2 AND workspace_id = $3",
             )
@@ -468,6 +483,13 @@ impl CatalogRepository {
             .bind(version)
             .bind(self.workspace_id.0)
             .execute(&mut *transaction)
+            .await?;
+            self.apply_published_structural_constraints(
+                &mut transaction,
+                blueprint_id,
+                &previous_keys,
+                &previous_hierarchies,
+            )
             .await?;
             self.sync_blueprint_connector_jobs(
                 &mut transaction,
@@ -535,6 +557,9 @@ impl CatalogRepository {
             if !includes_published {
                 return Err(RepositoryError::BlueprintNotPublished);
             }
+            let (previous_keys, previous_hierarchies) = self
+                .enforced_structural_constraints(transaction, blueprint_id)
+                .await?;
             blueprint = sqlx::query_as::<_, Db<Blueprint>>(
                 r#"UPDATE blueprints SET status = 'published', published_at = now(), updated_at = now()
                    WHERE id = $1 AND version = $2 AND workspace_id = $3
@@ -546,6 +571,13 @@ impl CatalogRepository {
             .fetch_one(&mut **transaction)
             .await?
             .into_domain();
+            self.apply_published_structural_constraints(
+                transaction,
+                blueprint_id,
+                &previous_keys,
+                &previous_hierarchies,
+            )
+            .await?;
             self.sync_blueprint_connector_jobs(
                 transaction,
                 blueprint_id,
@@ -631,7 +663,7 @@ impl CatalogRepository {
         blueprint_version: i64,
     ) -> Result<Vec<Attribute>, RepositoryError> {
         Ok(sqlx::query_as::<_, Db<Attribute>>(
-            r#"SELECT id, blueprint_id, blueprint_version, code, name, value_type, value_schema, extension_type, default_value, file_policy, target_blueprint_code, cardinality, target_cardinality, tags, context_fallback, context_editable, readonly, position, created_at, updated_at, deleted_at
+            r#"SELECT id, blueprint_id, blueprint_version, code, name, value_type, value_schema, extension_type, default_value, file_policy, target_blueprint_code, target_blueprint_codes, cardinality, target_cardinality, hierarchy, tags, context_fallback, context_editable, readonly, position, created_at, updated_at, deleted_at
                FROM attributes
                WHERE blueprint_id = $1 AND blueprint_version = $2 AND workspace_id = $3 AND deleted_at IS NULL
                ORDER BY position"#,
@@ -692,7 +724,7 @@ impl CatalogRepository {
                 let Some(next) = sqlx::query_as::<_, Db<Attribute>>(
                     r#"SELECT a.id, a.blueprint_id, a.blueprint_version, a.code, a.name, a.value_type,
                               a.value_schema, a.extension_type, a.default_value, a.file_policy, a.target_blueprint_code,
-                              a.cardinality, a.target_cardinality, a.tags, a.context_fallback,
+                              a.target_blueprint_codes, a.cardinality, a.target_cardinality, a.hierarchy, a.tags, a.context_fallback,
                               a.context_editable, a.readonly, a.position, a.created_at, a.updated_at,
                               a.deleted_at
                          FROM blueprints b
