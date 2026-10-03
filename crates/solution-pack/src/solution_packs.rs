@@ -31,6 +31,12 @@ use crate::{
         ValidatedSampleData, explicit_fact_attribute_codes, prohibited_attribute_code,
         prohibited_numeric, prohibited_scalar, validate_sample_data,
     },
+    solution_pack_seeds::{
+        DependentPlanInput, SeedContext, SeedRule, SeedSavedSearch, SeedWorkflow,
+        SeedWorkspaceSnapshot, SolutionPackBlueprintReuse, SolutionPackPrerequisite,
+        ValidatedSeeds, plan_contexts, plan_dependents, plan_prerequisites, seed_resources,
+        validate_seed_content, validate_seed_manifest,
+    },
 };
 
 pub const SOLUTION_PACK_MANIFEST_VERSION: u32 = 1;
@@ -74,10 +80,10 @@ pub const MAX_SOLUTION_PACK_CHECK_RUN_RESPONSE_BYTES: usize = 512 * 1024;
 pub const SOLUTION_PACK_PLAN_EXPIRY_HOURS: i64 = 24;
 pub const MAX_SOLUTION_PACK_PREFIX_BYTES: usize = 32;
 const MAX_ARCHIVE_PATH_BYTES: usize = 512;
-const MAX_IDENTIFIER_BYTES: usize = 128;
-const MAX_NAME_BYTES: usize = 200;
+pub(crate) const MAX_IDENTIFIER_BYTES: usize = 128;
+pub(crate) const MAX_NAME_BYTES: usize = 200;
 const MAX_DESCRIPTION_BYTES: usize = 4096;
-const MAX_VERSION_REQUIREMENT_BYTES: usize = 256;
+pub(crate) const MAX_VERSION_REQUIREMENT_BYTES: usize = 256;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -95,6 +101,9 @@ pub struct SolutionPackManifest {
     pub documentation: Option<SolutionPackDocumentation>,
     #[serde(default, deserialize_with = "deserialize_optional_non_null")]
     pub checks: Option<SolutionPackFileRef>,
+    /// Seeds that must already be applied; see [`SolutionPackPrerequisite`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub prerequisites: Vec<SolutionPackPrerequisite>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -202,6 +211,14 @@ pub struct SolutionPackResources {
     pub presentation_assets: Vec<SolutionPackPresentationAssetResource>,
     #[serde(default, deserialize_with = "deserialize_optional_non_null")]
     pub sample_data: Option<SolutionPackSampleDataResource>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rules: Vec<SolutionPackResource>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub workflows: Vec<SolutionPackResource>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub saved_searches: Vec<SolutionPackResource>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub contexts: Vec<SolutionPackResource>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -210,6 +227,9 @@ pub struct SolutionPackSampleDataResource {
     pub key: String,
     pub path: String,
     pub sha256: String,
+    /// Bundled files that sample entities attach through ordinary file storage.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub files: Vec<SolutionPackFileRef>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -250,6 +270,9 @@ pub struct SolutionPackResource {
     pub path: String,
     pub required: bool,
     pub sha256: String,
+    /// Blueprints only: reuse the exact blueprint a prerequisite seed installed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reuse: Option<SolutionPackBlueprintReuse>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -346,6 +369,7 @@ pub struct ValidatedSolutionPack {
     sample_data: Option<ValidatedSampleData>,
     guidance: SolutionPackGuidance,
     checks: Vec<SolutionPackCheckDefinition>,
+    seeds: ValidatedSeeds,
 }
 
 #[derive(Clone, Debug, Default, Serialize)]
@@ -581,13 +605,14 @@ impl ValidatedSolutionPack {
         validate_manifest(&manifest)?;
         validate_declared_files(&manifest, &files)?;
         let blueprints = validate_content(&manifest, &files)?;
+        let seeds = validate_seed_content(&manifest, &files, &blueprints)?;
         let explore_navigation = validate_explore_navigation(&manifest, &files, &blueprints)?;
         let extension_layout = validate_extension_layout(&manifest, &files)?;
         let lexicon = validate_lexicon(&manifest, &files)?;
         validate_blueprint_extension_layouts(&manifest, &blueprints)?;
         let configuration_templates = validate_configuration_templates(&manifest, &files)?;
         let presentation_assets = validate_presentation_assets(&manifest, &files)?;
-        let sample_data = validate_sample_resource(&manifest, &files, &blueprints)?;
+        let sample_data = validate_sample_resource(&manifest, &files, &blueprints, &seeds)?;
         let (guidance, checks) =
             validate_guidance_and_checks(&manifest, &files, &extension_layout)?;
 
@@ -604,6 +629,7 @@ impl ValidatedSolutionPack {
             sample_data,
             guidance,
             checks,
+            seeds,
         })
     }
 
@@ -661,6 +687,31 @@ impl ValidatedSolutionPack {
     pub fn checks(&self) -> &[SolutionPackCheckDefinition] {
         &self.checks
     }
+
+    /// A declared archive file, such as a bundled sample file.
+    pub fn file(&self, path: &str) -> Option<&[u8]> {
+        self.files.get(path).map(Vec::as_slice)
+    }
+
+    pub fn rule(&self, key: &str) -> Option<&SeedRule> {
+        self.seeds.rules.get(key)
+    }
+
+    pub fn workflow(&self, key: &str) -> Option<&SeedWorkflow> {
+        self.seeds.workflows.get(key)
+    }
+
+    pub fn saved_search(&self, key: &str) -> Option<&SeedSavedSearch> {
+        self.seeds.saved_searches.get(key)
+    }
+
+    pub fn context(&self, key: &str) -> Option<&SeedContext> {
+        self.seeds.contexts.get(key)
+    }
+
+    pub fn contexts(&self) -> impl Iterator<Item = &SeedContext> {
+        self.seeds.contexts.values()
+    }
 }
 
 fn validate_manifest(manifest: &SolutionPackManifest) -> Result<(), SolutionPackError> {
@@ -687,9 +738,10 @@ fn validate_manifest(manifest: &SolutionPackManifest) -> Result<(), SolutionPack
         && manifest.resources.workspace_settings.is_empty()
         && manifest.resources.presentation_assets.is_empty()
         && manifest.resources.sample_data.is_none()
+        && seed_resources(manifest).next().is_none()
     {
         return invalid(
-            "at least one blueprint, workspace setting, presentation asset, or sample-data resource is required",
+            "at least one blueprint, workspace setting, presentation asset, sample-data, rule, workflow, saved-search, or context resource is required",
         );
     }
     if manifest.resources.blueprints.len() > MAX_SOLUTION_PACK_BLUEPRINTS {
@@ -746,6 +798,37 @@ fn validate_manifest(manifest: &SolutionPackManifest) -> Result<(), SolutionPack
         })?;
         if !keys.insert(&resource.key) || !paths.insert(&resource.path) {
             return invalid("duplicate sample-data key or path");
+        }
+        if resource.files.len() > crate::solution_pack_sample_data::MAX_SAMPLE_FILES {
+            return invalid("sample-data declares too many files");
+        }
+        for file in &resource.files {
+            if !crate::solution_pack_sample_data::valid_sample_file_path(&file.path) {
+                return invalid(format!("sample-data file path '{}' is invalid", file.path));
+            }
+            parse_sha256(&file.sha256).map_err(|()| {
+                SolutionPackError::Invalid(format!(
+                    "sample-data file '{}' sha256 must be 64 lowercase hexadecimal characters",
+                    file.path
+                ))
+            })?;
+            if !paths.insert(&file.path) {
+                return invalid(format!("duplicate resource path '{}'", file.path));
+            }
+        }
+    }
+    validate_seed_manifest(manifest)?;
+    for (_, _, resource) in seed_resources(manifest) {
+        if !keys.insert(&resource.key) {
+            return invalid(format!("duplicate resource key '{}'", resource.key));
+        }
+        if !paths.insert(&resource.path) {
+            return invalid(format!("duplicate resource path '{}'", resource.path));
+        }
+    }
+    for prerequisite in &manifest.prerequisites {
+        if !keys.insert(&prerequisite.key) {
+            return invalid(format!("duplicate resource key '{}'", prerequisite.key));
         }
     }
 
@@ -873,6 +956,12 @@ fn validate_extension_requirement(
 }
 
 fn validate_resource(kind: &str, resource: &SolutionPackResource) -> Result<(), SolutionPackError> {
+    if kind != "blueprints" && resource.reuse.is_some() {
+        return invalid(format!(
+            "resource '{}' cannot declare blueprint reuse",
+            resource.key
+        ));
+    }
     if kind == "workspace_settings" {
         let fixed_pair = matches!(
             (resource.key.as_str(), resource.path.as_str()),
@@ -1022,6 +1111,15 @@ fn validate_declared_files(
         )
         .chain(
             manifest
+                .resources
+                .sample_data
+                .iter()
+                .flat_map(|resource| &resource.files)
+                .map(|file| file.path.as_str()),
+        )
+        .chain(seed_resources(manifest).map(|(_, _, resource)| resource.path.as_str()))
+        .chain(
+            manifest
                 .extensions
                 .iter()
                 .filter_map(|requirement| requirement.configuration_template.as_ref())
@@ -1073,6 +1171,21 @@ fn validate_declared_files(
                 resource.sha256.as_str(),
             )
         }))
+        .chain(
+            manifest
+                .resources
+                .sample_data
+                .iter()
+                .flat_map(|resource| &resource.files)
+                .map(|file| (file.path.as_str(), file.path.as_str(), file.sha256.as_str())),
+        )
+        .chain(seed_resources(manifest).map(|(_, _, resource)| {
+            (
+                resource.key.as_str(),
+                resource.path.as_str(),
+                resource.sha256.as_str(),
+            )
+        }))
         .chain(manifest.extensions.iter().filter_map(|requirement| {
             requirement.configuration_template.as_ref().map(|template| {
                 (
@@ -1104,6 +1217,7 @@ fn validate_sample_resource(
     manifest: &SolutionPackManifest,
     files: &BTreeMap<String, Vec<u8>>,
     blueprints: &BTreeMap<String, SolutionPackBlueprint>,
+    seeds: &ValidatedSeeds,
 ) -> Result<Option<ValidatedSampleData>, SolutionPackError> {
     let Some(resource) = &manifest.resources.sample_data else {
         return Ok(None);
@@ -1114,15 +1228,38 @@ fn validate_sample_resource(
         .iter()
         .map(|blueprint| blueprint.key.as_str())
         .collect::<BTreeSet<_>>();
-    let sample = validate_sample_data(&files[&resource.path], &declared_blueprints)
-        .map_err(SolutionPackError::Invalid)?;
-    validate_effective_sample_facts(&sample, blueprints)?;
+    let declared_contexts = seeds
+        .contexts
+        .keys()
+        .map(String::as_str)
+        .collect::<BTreeSet<_>>();
+    let declared_files = resource
+        .files
+        .iter()
+        .map(|file| file.path.as_str())
+        .collect::<BTreeSet<_>>();
+    let sample = validate_sample_data(
+        &files[&resource.path],
+        &declared_blueprints,
+        &declared_contexts,
+        &declared_files,
+    )
+    .map_err(SolutionPackError::Invalid)?;
+    for (path, file) in &sample.files {
+        crate::solution_pack_sample_data::validate_sample_file_bytes(
+            &file.media_type,
+            &files[path],
+        )
+        .map_err(|error| SolutionPackError::Invalid(format!("'{path}': {error}")))?;
+    }
+    validate_effective_sample_facts(&sample, blueprints, files)?;
     Ok(Some(sample))
 }
 
 fn validate_effective_sample_facts(
     sample: &ValidatedSampleData,
     blueprints: &BTreeMap<String, SolutionPackBlueprint>,
+    files: &BTreeMap<String, Vec<u8>>,
 ) -> Result<(), SolutionPackError> {
     for entity in &sample.declaration.entities {
         let blueprint = &blueprints[&entity.blueprint];
@@ -1168,6 +1305,7 @@ fn validate_effective_sample_facts(
                     entity.key, fact.attribute
                 ));
             }
+            validate_sample_context_editable(&entity.key, fact.context.as_ref(), attribute)?;
             validate_sample_value_for_attribute(&fact.value, attribute, false)?;
         }
         for relationship in &entity.relationships {
@@ -1194,9 +1332,100 @@ fn validate_effective_sample_facts(
                     entity.key, relationship.attribute
                 ));
             }
+            validate_sample_context_editable(
+                &entity.key,
+                relationship.context.as_ref(),
+                attribute,
+            )?;
+        }
+        for value in &entity.files {
+            let code = value
+                .attribute
+                .rsplit('/')
+                .next()
+                .expect("validated attribute reference");
+            let attribute = attributes.get(code).ok_or_else(|| {
+                SolutionPackError::Invalid(format!(
+                    "sample entity '{}' references unknown file attribute '{}'",
+                    entity.key, value.attribute
+                ))
+            })?;
+            let policy = attribute
+                .file_policy
+                .as_ref()
+                .filter(|_| attribute.value_type == "file" && !attribute.readonly)
+                .ok_or_else(|| {
+                    SolutionPackError::Invalid(format!(
+                        "sample entity '{}' attribute '{}' is not a writable file attribute",
+                        entity.key, value.attribute
+                    ))
+                })?;
+            if policy.cardinality == "one" && value.files.len() != 1 {
+                return invalid(format!(
+                    "sample entity '{}' file attribute '{}' accepts one file",
+                    entity.key, value.attribute
+                ));
+            }
+            validate_sample_context_editable(&entity.key, value.context.as_ref(), attribute)?;
+            for file in &value.files {
+                if !sample_file_allowed_by_policy(policy, file, files[&file.path].len()) {
+                    return invalid(format!(
+                        "sample file '{}' is not allowed by the file policy of '{}'",
+                        file.path, value.attribute
+                    ));
+                }
+            }
         }
     }
     Ok(())
+}
+
+fn validate_sample_context_editable(
+    entity: &str,
+    context: Option<&String>,
+    attribute: &catalog_blueprint::EffectiveAttribute,
+) -> Result<(), SolutionPackError> {
+    if context.is_some() && attribute.context_editable == "default" {
+        return invalid(format!(
+            "sample entity '{entity}' sets attribute '{}' outside the default context",
+            attribute.code
+        ));
+    }
+    Ok(())
+}
+
+/// Mirrors the ordinary upload policy check for a bundled sample file.
+fn sample_file_allowed_by_policy(
+    policy: &catalog_blueprint::FilePolicy,
+    file: &crate::solution_pack_sample_data::SampleFile,
+    size: usize,
+) -> bool {
+    let media_type = file.media_type.as_str();
+    let family = media_type.split('/').next().unwrap_or_default();
+    if policy.max_bytes.is_some_and(|limit| size as u64 > limit)
+        || (policy.image_only && family != "image")
+    {
+        return false;
+    }
+    if !policy.allowed_mime_groups.is_empty()
+        && !policy.allowed_mime_groups.iter().any(|group| {
+            group == media_type || group.trim_end_matches("/*") == family || group == family
+        })
+    {
+        return false;
+    }
+    let extension = file
+        .filename
+        .rsplit_once('.')
+        .map(|(_, extension)| extension);
+    policy.allowed_extensions.is_empty()
+        || extension.is_some_and(|extension| {
+            policy.allowed_extensions.iter().any(|allowed| {
+                allowed
+                    .trim_start_matches('.')
+                    .eq_ignore_ascii_case(extension)
+            })
+        })
 }
 
 fn validate_sample_value_for_attribute(
@@ -3035,7 +3264,7 @@ fn validate_incoming_relationships_in_nodes(
     Ok(())
 }
 
-fn validate_acyclic<'a>(
+pub(crate) fn validate_acyclic<'a>(
     graph: &HashMap<&'a str, Vec<&'a str>>,
     label: &str,
 ) -> Result<(), SolutionPackError> {
@@ -3070,7 +3299,7 @@ fn validate_acyclic<'a>(
     Ok(())
 }
 
-fn validate_pack_id(value: &str) -> Result<(), SolutionPackError> {
+pub(crate) fn validate_pack_id(value: &str) -> Result<(), SolutionPackError> {
     if value.is_empty()
         || value.len() > MAX_IDENTIFIER_BYTES
         || value.split('.').count() < 2
@@ -3092,7 +3321,7 @@ fn is_valid_id_segment(segment: &str) -> bool {
         && !segment.ends_with('-')
 }
 
-fn is_valid_stable_code(value: &str) -> bool {
+pub(crate) fn is_valid_stable_code(value: &str) -> bool {
     value.len() <= MAX_IDENTIFIER_BYTES
         && is_valid_code(value)
         && value
@@ -3105,7 +3334,7 @@ fn is_valid_stable_code(value: &str) -> bool {
         && uuid::Uuid::parse_str(value).is_err()
 }
 
-fn validate_bounded_text(
+pub(crate) fn validate_bounded_text(
     value: &str,
     field: &str,
     max_bytes: usize,
@@ -3140,7 +3369,7 @@ fn is_safe_configuration_template_path(value: &str) -> bool {
     })
 }
 
-fn safe_archive_path(value: &str) -> bool {
+pub(crate) fn safe_archive_path(value: &str) -> bool {
     if value.is_empty()
         || value.len() > MAX_ARCHIVE_PATH_BYTES
         || value.starts_with('/')
@@ -3158,7 +3387,7 @@ fn safe_archive_path(value: &str) -> bool {
         .all(|component| matches!(component, Component::Normal(_)))
 }
 
-fn resource_code(key: &str) -> &str {
+pub(crate) fn resource_code(key: &str) -> &str {
     key.rsplit_once('/').expect("resource key validated").1
 }
 
@@ -3172,7 +3401,7 @@ pub fn parse_version_req(value: &str) -> Result<VersionReq, semver::Error> {
     })
 }
 
-fn parse_sha256(value: &str) -> Result<[u8; 32], ()> {
+pub(crate) fn parse_sha256(value: &str) -> Result<[u8; 32], ()> {
     if value.len() != 64
         || !value
             .bytes()
@@ -3197,7 +3426,7 @@ fn hex_nibble(byte: u8) -> Result<u8, ()> {
     }
 }
 
-fn sha256_hex(bytes: &[u8]) -> String {
+pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
     let digest = Sha256::digest(bytes);
     let mut output = String::with_capacity(64);
     for byte in digest {
@@ -3207,7 +3436,7 @@ fn sha256_hex(bytes: &[u8]) -> String {
     output
 }
 
-fn invalid<T>(message: impl Into<String>) -> Result<T, SolutionPackError> {
+pub(crate) fn invalid<T>(message: impl Into<String>) -> Result<T, SolutionPackError> {
     Err(SolutionPackError::Invalid(message.into()))
 }
 
@@ -3299,6 +3528,7 @@ pub struct PlanningWorkspaceSnapshot {
     pub extension_layout_valid: bool,
     pub role_codes: BTreeSet<String>,
     pub published_entity_codes: BTreeSet<String>,
+    pub seed: SeedWorkspaceSnapshot,
 }
 
 #[derive(Clone, Debug)]
@@ -3529,6 +3759,18 @@ pub fn validate_blueprint_mapping_requests(
         if !seen.insert(mapping.key.as_str()) {
             return invalid(format!("duplicate blueprint mapping key '{}'", mapping.key));
         }
+        if pack
+            .manifest()
+            .resources
+            .blueprints
+            .iter()
+            .any(|resource| resource.key == mapping.key && resource.reuse.is_some())
+        {
+            return invalid(format!(
+                "blueprint '{}' is reused from a prerequisite and cannot be mapped explicitly",
+                mapping.key
+            ));
+        }
         if mapping.code.len() > MAX_IDENTIFIER_BYTES || !is_valid_stable_code(&mapping.code) {
             return invalid(format!(
                 "invalid existing blueprint code for '{}'",
@@ -3568,6 +3810,14 @@ pub fn build_solution_pack_plan(
                 .clone(),
         );
     }
+
+    let (prerequisite_mappings, prerequisite_actions, prerequisite_outcomes) = plan_prerequisites(
+        pack,
+        prefix,
+        publication,
+        workspace.workspace_id,
+        &workspace.seed,
+    );
 
     let mut mappings_by_key = BTreeMap::new();
     for (logical_key, (kind, _)) in &resources {
@@ -3815,9 +4065,24 @@ pub fn build_solution_pack_plan(
                 .insert(logical_key.clone(), catalog_blueprint::raw_hash(definition));
             false
         };
+        let prerequisite_available = resource.reuse.as_ref().map(|reuse| {
+            prerequisite_outcomes
+                .get(&reuse.prerequisite)
+                .is_some_and(|(action, _)| *action == "map")
+        });
         outcomes.insert(
             logical_key.clone(),
-            if !resource.required && !explicitly_mapped {
+            if prerequisite_available == Some(false) {
+                ("blocked", "prerequisite_unavailable")
+            } else if prerequisite_available == Some(true) && !explicitly_mapped {
+                ("blocked", "prerequisite_blueprint_unavailable")
+            } else if prerequisite_available == Some(true) && !mapping_compatible {
+                ("conflict", "prerequisite_blueprint_incompatible")
+            } else if prerequisite_available == Some(true)
+                && !blueprint_layout_blocked.contains_key(logical_key)
+            {
+                ("map", "prerequisite_blueprint_match")
+            } else if !resource.required && !explicitly_mapped {
                 ("skip", "optional_not_selected")
             } else if let Some(reason) = blueprint_layout_blocked.get(logical_key) {
                 ("blocked", *reason)
@@ -3859,6 +4124,38 @@ pub fn build_solution_pack_plan(
         }
     }
 
+    let created_blueprint_codes = mappings_by_key
+        .values()
+        .filter(|mapping| mapping.resource_kind == "blueprint" && mapping.mapping_kind == "create")
+        .map(|mapping| mapping.target_code.clone())
+        .collect::<BTreeSet<_>>();
+    let (context_mappings, context_actions, planned_contexts) = plan_contexts(
+        pack,
+        prefix,
+        publication,
+        workspace.workspace_id,
+        &workspace.physical_codes,
+        &created_blueprint_codes,
+        &workspace.seed,
+    )?;
+    let (dependent_mappings, dependent_actions) = plan_dependents(&DependentPlanInput {
+        pack,
+        prefix,
+        publication,
+        workspace_id: workspace.workspace_id,
+        seed: &workspace.seed,
+        blueprint_outcomes: &outcomes,
+        blueprint_mappings: &mappings_by_key,
+        contexts: &planned_contexts,
+    })?;
+    for mapping in prerequisite_mappings
+        .into_iter()
+        .chain(context_mappings)
+        .chain(dependent_mappings)
+    {
+        mappings_by_key.insert(mapping.logical_key.clone(), mapping);
+    }
+
     // Existing blueprints already exist, so their outbound publication-time
     // dependencies impose no creation order. Keep them as dependency targets
     // for resources that will be created, but clear their own outbound edges.
@@ -3868,13 +4165,17 @@ pub fn build_solution_pack_plan(
         }
     }
     let ordered_keys = topological_resource_order(&ordering_dependencies)?;
-    let mut actions = Vec::with_capacity(ordered_keys.len());
+    // Prerequisites and contexts come first: blueprints, samples, rules and
+    // saved searches may depend on them.
+    let mut actions = prerequisite_actions;
+    actions.extend(context_actions);
     for logical_key in ordered_keys {
         let (kind, resource) = resources
             .get(&logical_key)
             .expect("dependency graph contains declared resources");
         let mapping = &mappings_by_key[&logical_key];
         let (action, reason_code) = outcomes[&logical_key];
+        let reuse = &resource.reuse;
         let normalized_payload = if action == "create" {
             Some(normalized_blueprint_payload(
                 pack.blueprint(&logical_key)
@@ -3911,13 +4212,19 @@ pub fn build_solution_pack_plan(
             logical_key: logical_key.clone(),
             action,
             reason_code,
-            summary: serde_json::json!({
-                "target_code": mapping.target_code,
-                "target_version": mapping.target_version,
-                "required": resource.required,
-                "dependencies": dependencies[&logical_key],
-                "extension_layout": blueprint_layout_evidence.get(&logical_key).cloned().unwrap_or_default(),
-            }),
+            summary: {
+                let mut summary = serde_json::json!({
+                    "target_code": mapping.target_code,
+                    "target_version": mapping.target_version,
+                    "required": resource.required,
+                    "dependencies": dependencies[&logical_key],
+                    "extension_layout": blueprint_layout_evidence.get(&logical_key).cloned().unwrap_or_default(),
+                });
+                if let Some(reuse) = reuse {
+                    summary["reuse"] = serde_json::json!(reuse);
+                }
+                summary
+            },
             normalized_payload,
             preconditions,
         });
@@ -4030,6 +4337,7 @@ pub fn build_solution_pack_plan(
                     )
                 })
                 .collect::<Vec<_>>();
+            actions.extend(dependent_actions);
             return Ok(SolutionPackPlanDraft {
                 ready: false,
                 mappings: mappings_by_key.into_values().collect(),
@@ -4300,6 +4608,7 @@ pub fn build_solution_pack_plan(
         }
     }
 
+    actions.extend(dependent_actions);
     let extension_requirements = manifest
         .extensions
         .iter()
@@ -4336,7 +4645,7 @@ fn blueprint_kind_name(kind: BlueprintKind) -> &'static str {
     }
 }
 
-fn deterministic_target_id(
+pub(crate) fn deterministic_target_id(
     workspace_id: uuid::Uuid,
     pack: &ValidatedSolutionPack,
     prefix: &str,
@@ -5192,6 +5501,7 @@ target_blueprint = "blueprints/product"
             extension_layout_valid: true,
             role_codes: BTreeSet::new(),
             published_entity_codes: BTreeSet::new(),
+            seed: Default::default(),
         };
         let action_for = |current| {
             build_solution_pack_plan(
@@ -5250,6 +5560,7 @@ target_blueprint = "blueprints/product"
                     extension_layout_valid: true,
                     role_codes: BTreeSet::new(),
                     published_entity_codes: BTreeSet::new(),
+                    seed: Default::default(),
                 },
             )
             .unwrap();
@@ -5305,6 +5616,7 @@ target_blueprint = "blueprints/product"
                 extension_layout_valid: true,
                 role_codes: BTreeSet::new(),
                 published_entity_codes: BTreeSet::new(),
+                seed: Default::default(),
             },
         )
         .unwrap();
@@ -5365,6 +5677,7 @@ hidden = []
                     extension_layout_valid: true,
                     role_codes: BTreeSet::new(),
                     published_entity_codes: BTreeSet::new(),
+                    seed: Default::default(),
                 },
             )
             .unwrap();
@@ -5427,6 +5740,7 @@ hidden = []
                             extension_layout_valid: true,
                             role_codes: BTreeSet::new(),
                             published_entity_codes: BTreeSet::from(["shop_product".to_owned()]),
+                            seed: Default::default(),
                         },
                     )
                     .unwrap();
@@ -5579,6 +5893,7 @@ hidden = ["acme.shop:a_action"]
             extension_layout_valid: true,
             role_codes: BTreeSet::from(["editor".to_owned(), "viewer".to_owned()]),
             published_entity_codes: BTreeSet::from(["ecom_product".to_owned()]),
+            seed: Default::default(),
         };
         let appended = build_solution_pack_plan(
             &pack,
@@ -5644,6 +5959,7 @@ hidden = ["acme.shop:a_action"]
                 extension_layout_valid: true,
                 role_codes: BTreeSet::new(),
                 published_entity_codes: BTreeSet::new(),
+                seed: Default::default(),
             },
         )
         .unwrap();
@@ -5709,6 +6025,7 @@ hidden = ["acme.shop:a_action"]
                     extension_layout_valid: true,
                     role_codes: BTreeSet::from(["editor".to_owned(), "viewer".to_owned()]),
                     published_entity_codes: BTreeSet::new(),
+                    seed: Default::default(),
                 },
             )
             .unwrap();
@@ -5745,6 +6062,7 @@ hidden = ["acme.shop:a_action"]
                 extension_layout_valid: true,
                 role_codes: BTreeSet::new(),
                 published_entity_codes: BTreeSet::new(),
+                seed: Default::default(),
             },
         )
         .unwrap();
@@ -6037,7 +6355,10 @@ hidden = ["acme.shop:a_action"]
                 .unwrap()
                 .is_empty()
         );
-        for contexts in [json!([]), json!([{"key": "contexts/web"}])] {
+        for contexts in [
+            json!([{"key": "contexts/web"}]),
+            json!([{"key": "contexts/web", "path": "contexts/web.toml", "required": true, "sha256": "0".repeat(64)}]),
+        ] {
             let mut with_contexts = manifest_value();
             with_contexts["resources"]["contexts"] = contexts;
             assert!(
@@ -6915,25 +7236,6 @@ value_type = "string"
     }
 
     #[test]
-    fn rejects_context_resources_as_unknown_manifest_content() {
-        for contexts in [
-            json!([]),
-            json!([resource(
-                "contexts/web",
-                "contexts/web.json",
-                br#"{"format_version":1,"code":"web","data":{}}"#,
-            )]),
-        ] {
-            let mut manifest = manifest_value();
-            manifest["resources"]["contexts"] = contexts;
-            assert_invalid(
-                &archive(&manifest, &valid_files()),
-                "not a valid strict v1 manifest",
-            );
-        }
-    }
-
-    #[test]
     fn planner_rewrites_portable_references_and_orders_dependencies() {
         let pack = ValidatedSolutionPack::from_tar_zst(&archive(&manifest_value(), &valid_files()))
             .unwrap();
@@ -6953,6 +7255,7 @@ value_type = "string"
                 extension_layout_valid: true,
                 role_codes: BTreeSet::new(),
                 published_entity_codes: BTreeSet::new(),
+                seed: Default::default(),
             },
         )
         .unwrap();
@@ -7049,6 +7352,7 @@ value_type = "string"
                 extension_layout_valid: true,
                 role_codes: BTreeSet::new(),
                 published_entity_codes: BTreeSet::new(),
+                seed: Default::default(),
             },
         )
         .unwrap();
@@ -7090,6 +7394,7 @@ value_type = "string"
                 extension_layout_valid: true,
                 role_codes: BTreeSet::new(),
                 published_entity_codes: BTreeSet::new(),
+                seed: Default::default(),
             },
         )
         .unwrap();
@@ -7131,6 +7436,7 @@ value_type = "string"
                 extension_layout_valid: true,
                 role_codes: BTreeSet::new(),
                 published_entity_codes: BTreeSet::new(),
+                seed: Default::default(),
             },
         )
         .unwrap();
@@ -7259,6 +7565,7 @@ value_type = "string"
                 extension_layout_valid: true,
                 role_codes: BTreeSet::new(),
                 published_entity_codes: BTreeSet::from(["shared".to_owned()]),
+                seed: Default::default(),
             },
         )
         .unwrap();
@@ -7295,6 +7602,7 @@ value_type = "string"
                 extension_layout_valid: true,
                 role_codes: BTreeSet::new(),
                 published_entity_codes: BTreeSet::new(),
+                seed: Default::default(),
             },
         )
         .unwrap();
@@ -7330,6 +7638,7 @@ value_type = "string"
                 extension_layout_valid: true,
                 role_codes: BTreeSet::new(),
                 published_entity_codes: BTreeSet::new(),
+                seed: Default::default(),
             },
         )
         .unwrap();
@@ -7372,6 +7681,7 @@ value_type = "string"
                 extension_layout_valid: true,
                 role_codes: BTreeSet::new(),
                 published_entity_codes: BTreeSet::new(),
+                seed: Default::default(),
             },
         )
         .unwrap();
@@ -7411,6 +7721,7 @@ value_type = "string"
                 extension_layout_valid: true,
                 role_codes: BTreeSet::new(),
                 published_entity_codes: BTreeSet::from(["ecom_product".to_owned()]),
+                seed: Default::default(),
             },
         )
         .unwrap();
@@ -7563,6 +7874,7 @@ target_blueprint = "blueprints/main"
                 extension_layout_valid: true,
                 role_codes: BTreeSet::new(),
                 published_entity_codes: BTreeSet::new(),
+                seed: Default::default(),
             };
             let baseline = build_solution_pack_plan(
                 &required_pack,
@@ -7610,6 +7922,7 @@ target_blueprint = "blueprints/main"
                     extension_layout_valid: true,
                     role_codes: BTreeSet::new(),
                     published_entity_codes: BTreeSet::from(["deps_main".to_owned()]),
+                    seed: Default::default(),
                 },
             )
             .unwrap();
@@ -7687,6 +8000,7 @@ value_type = "string"
             extension_layout_valid: true,
             role_codes: BTreeSet::new(),
             published_entity_codes: BTreeSet::new(),
+            seed: Default::default(),
         };
 
         let draft =
@@ -7787,6 +8101,7 @@ target_blueprint = "blueprints/product"
                 "existing_category".to_owned(),
                 "existing_product".to_owned(),
             ]),
+            seed: Default::default(),
         };
         for (key, code, version, id) in [
             ("blueprints/category", "existing_category", 4, 103_u128),
@@ -7844,6 +8159,7 @@ target_blueprint = "blueprints/product"
             extension_layout_valid: true,
             role_codes: BTreeSet::new(),
             published_entity_codes: BTreeSet::new(),
+            seed: Default::default(),
         };
         let first =
             build_solution_pack_plan(&pack, "ecom", BlueprintPublication::Publish, &workspace)
@@ -7944,5 +8260,845 @@ outlets = {}
             )
             .into_bytes()
         }
+    }
+
+    const DOCUMENT_BLUEPRINT: &[u8] = br#"
+format_version = 1
+code = "document"
+name = "Document"
+kind = "entity"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["title"]
+
+[[attributes]]
+code = "title"
+value_type = "string"
+
+[[attributes]]
+code = "summary"
+value_type = "string"
+context_editable = "all"
+
+[[attributes]]
+code = "internal_note"
+value_type = "string"
+context_editable = "default"
+
+[[attributes]]
+code = "scan"
+value_type = "file"
+cardinality = "one"
+image_only = true
+
+[[attributes]]
+code = "evidence"
+value_type = "file"
+cardinality = "many"
+"#;
+    const EU_CONTEXT: &[u8] =
+        br#"{"format_version":1,"kind":"solution_pack_context","data":{"region":"eu"}}"#;
+    const PL_CONTEXT: &[u8] = br#"{"format_version":1,"kind":"solution_pack_context","data":{"language":"pl"},"parent":"contexts/eu","publication_channel":{"enabled":true}}"#;
+    const NAME_RULE: &[u8] = br#"
+format_version = 1
+code = "name-required"
+name = "Products have a name"
+severity = "error"
+blueprint = "blueprints/product"
+context = "contexts/pl"
+enabled = true
+
+[[triggers]]
+type = "manual"
+
+[predicate]
+type = "required"
+attribute_code = "name"
+"#;
+    const REVIEW_WORKFLOW: &[u8] = br#"
+format_version = 2
+code = "mark-reviewed"
+name = "Mark reviewed"
+enabled = false
+
+[[triggers]]
+type = "manual"
+
+[[actions]]
+type = "system_tags_add"
+tags = ["reviewed"]
+"#;
+    const UNNAMED_SEARCH: &[u8] = br#"{"format_version":1,"kind":"solution_pack_saved_search","name":"Unnamed products","description":"Products without a name","state":{"blueprint":"blueprints/product","context":"contexts/pl","sort":{"field":"categories.name","direction":"asc"},"attributeFilters":[{"field":"name","operator":"eq","value":""}],"relationshipFacets":[{"field":"categories","targetBlueprint":"blueprints/category"}],"locked":false}}"#;
+
+    fn seed_manifest() -> (Value, Vec<(&'static str, &'static [u8])>) {
+        let mut manifest = manifest_value();
+        manifest["resources"]["contexts"] = json!([
+            resource("contexts/pl", "contexts/pl.json", PL_CONTEXT),
+            resource("contexts/eu", "contexts/eu.json", EU_CONTEXT),
+        ]);
+        manifest["resources"]["rules"] = json!([resource(
+            "rules/name-required",
+            "rules/name-required.toml",
+            NAME_RULE
+        )]);
+        manifest["resources"]["workflows"] = json!([resource(
+            "workflows/mark-reviewed",
+            "workflows/mark-reviewed.toml",
+            REVIEW_WORKFLOW
+        )]);
+        manifest["resources"]["saved_searches"] = json!([resource(
+            "saved-searches/unnamed",
+            "saved-searches/unnamed.json",
+            UNNAMED_SEARCH
+        )]);
+        let mut files = valid_files();
+        files.extend([
+            ("contexts/pl.json", PL_CONTEXT),
+            ("contexts/eu.json", EU_CONTEXT),
+            ("rules/name-required.toml", NAME_RULE),
+            ("workflows/mark-reviewed.toml", REVIEW_WORKFLOW),
+            ("saved-searches/unnamed.json", UNNAMED_SEARCH),
+        ]);
+        (manifest, files)
+    }
+
+    fn seed_workspace(seed: SeedWorkspaceSnapshot) -> PlanningWorkspaceSnapshot {
+        PlanningWorkspaceSnapshot {
+            workspace_id: uuid::Uuid::nil(),
+            physical_codes: BTreeSet::from(["default".to_owned()]),
+            existing_blueprints: BTreeMap::new(),
+            existing_presentation_assets: BTreeMap::new(),
+            installed_extensions: BTreeMap::new(),
+            explore_navigation: Vec::new(),
+            explore_navigation_valid: true,
+            extension_layout: json!({"version":1,"outlets":{}}),
+            extension_layout_valid: true,
+            role_codes: BTreeSet::new(),
+            published_entity_codes: BTreeSet::new(),
+            seed,
+        }
+    }
+
+    fn action<'a>(plan: &'a SolutionPackPlanDraft, key: &str) -> &'a PlannedAction {
+        plan.actions
+            .iter()
+            .find(|action| action.logical_key == key)
+            .unwrap_or_else(|| panic!("missing action {key}"))
+    }
+
+    fn mapping<'a>(plan: &'a SolutionPackPlanDraft, key: &str) -> &'a PlannedMapping {
+        plan.mappings
+            .iter()
+            .find(|mapping| mapping.logical_key == key)
+            .unwrap_or_else(|| panic!("missing mapping {key}"))
+    }
+
+    #[test]
+    fn seed_resources_plan_with_physical_references_in_dependency_order() {
+        let (manifest, files) = seed_manifest();
+        let pack = ValidatedSolutionPack::from_tar_zst(&archive(&manifest, &files)).unwrap();
+        assert!(pack.rule("rules/name-required").unwrap().enabled);
+        let plan = build_solution_pack_plan(
+            &pack,
+            "ecom",
+            BlueprintPublication::Publish,
+            &seed_workspace(SeedWorkspaceSnapshot::default()),
+        )
+        .unwrap();
+        assert!(plan.ready, "{:?}", plan.actions);
+        assert_eq!(plan.mappings.len(), plan.actions.len());
+        let order = plan
+            .actions
+            .iter()
+            .map(|action| action.logical_key.as_str())
+            .collect::<Vec<_>>();
+        let position = |key: &str| {
+            order
+                .iter()
+                .position(|candidate| *candidate == key)
+                .unwrap()
+        };
+        assert!(position("contexts/eu") < position("contexts/pl"));
+        assert!(position("contexts/pl") < position("channels/pl"));
+        assert!(position("channels/pl") < position("blueprints/product"));
+        assert!(position("blueprints/product") < position("rules/name-required"));
+
+        let eu = mapping(&plan, "contexts/eu");
+        let pl = mapping(&plan, "contexts/pl");
+        let product = mapping(&plan, "blueprints/product");
+        assert_eq!(pl.target_code, "ecom_pl");
+        let pl_action = action(&plan, "contexts/pl");
+        assert_eq!(pl_action.action, "create");
+        assert_eq!(
+            pl_action.normalized_payload.as_ref().unwrap()["parent_id"],
+            json!(eu.target_id)
+        );
+        assert_eq!(
+            action(&plan, "channels/pl").normalized_payload,
+            Some(json!({"context_id": pl.target_id, "context_code": "ecom_pl", "enabled": true}))
+        );
+
+        let rule = action(&plan, "rules/name-required");
+        assert_eq!(rule.action, "create");
+        let payload = rule.normalized_payload.as_ref().unwrap();
+        assert_eq!(payload["blueprint_id"], json!(product.target_id));
+        assert_eq!(payload["blueprint_version"], json!(1));
+        assert_eq!(payload["context_id"], json!(pl.target_id));
+        assert_eq!(payload["enabled"], json!(true));
+        let definition = payload["definition"].as_str().unwrap();
+        assert!(definition.contains("code = \"ecom_name-required\""));
+        assert!(!definition.contains("blueprint"));
+        assert!(catalog_rules::compile(definition).is_ok());
+        assert_eq!(
+            mapping(&plan, "rules/name-required").target_code,
+            "ecom_name-required"
+        );
+
+        let workflow = action(&plan, "workflows/mark-reviewed");
+        let payload = workflow.normalized_payload.as_ref().unwrap();
+        assert_eq!(payload["enabled"], json!(false));
+        assert!(
+            catalog_workflow::compile(payload["definition"].as_str().unwrap())
+                .unwrap()
+                .code
+                == "ecom_mark-reviewed"
+        );
+
+        let search = action(&plan, "saved-searches/unnamed");
+        assert_eq!(
+            search.normalized_payload.as_ref().unwrap()["state"],
+            json!({
+                "blueprint": "ecom_product",
+                "context": "ecom_pl",
+                "sort": {"field": "categories.name", "direction": "asc"},
+                "attributeFilters": [{"field": "name", "operator": "eq", "value": ""}],
+                "relationshipFacets": [{"field": "categories", "targetBlueprint": "ecom_category"}],
+            })
+        );
+        assert_eq!(
+            search.normalized_payload.as_ref().unwrap()["visibility"],
+            "workspace"
+        );
+    }
+
+    #[test]
+    fn seed_resources_respect_publication_mapping_and_existing_codes() {
+        let (manifest, files) = seed_manifest();
+        let pack = ValidatedSolutionPack::from_tar_zst(&archive(&manifest, &files)).unwrap();
+        let draft = build_solution_pack_plan(
+            &pack,
+            "ecom",
+            BlueprintPublication::Draft,
+            &seed_workspace(SeedWorkspaceSnapshot::default()),
+        )
+        .unwrap();
+        assert!(!draft.ready);
+        let rule = action(&draft, "rules/name-required");
+        assert_eq!(
+            (rule.action, rule.reason_code),
+            ("blocked", "blueprint_not_published")
+        );
+        assert_eq!(action(&draft, "saved-searches/unnamed").action, "create");
+
+        let existing_id = uuid::Uuid::from_u128(7);
+        for (enabled, expected) in [
+            (Some(true), ("satisfied", "exact_match")),
+            (None, ("create", "target_absent")),
+            (Some(false), ("conflict", "publication_channel_mismatch")),
+        ] {
+            let plan = build_solution_pack_plan(
+                &pack,
+                "ecom",
+                BlueprintPublication::Publish,
+                &seed_workspace(SeedWorkspaceSnapshot {
+                    existing_contexts: BTreeMap::from([(
+                        "contexts/pl".to_owned(),
+                        crate::solution_pack_seeds::ExistingContextSnapshot {
+                            id: existing_id,
+                            code: "PL".to_owned(),
+                            publication_channel_enabled: enabled,
+                        },
+                    )]),
+                    rule_codes: BTreeSet::from(["ecom_name-required".to_owned()]),
+                    ..Default::default()
+                }),
+            )
+            .unwrap();
+            let context = action(&plan, "contexts/pl");
+            assert_eq!(
+                (context.action, context.reason_code),
+                ("map", "existing_context_selected")
+            );
+            let channel = action(&plan, "channels/pl");
+            assert_eq!((channel.action, channel.reason_code), expected);
+            let rule = action(&plan, "rules/name-required");
+            assert_eq!(
+                (rule.action, rule.reason_code),
+                ("conflict", "target_code_exists")
+            );
+            assert_eq!(
+                action(&plan, "saved-searches/unnamed")
+                    .normalized_payload
+                    .as_ref()
+                    .unwrap()["state"]["context"],
+                "PL"
+            );
+        }
+
+        let conflict = build_solution_pack_plan(
+            &pack,
+            "ecom",
+            BlueprintPublication::Publish,
+            &PlanningWorkspaceSnapshot {
+                physical_codes: BTreeSet::from(["ecom_eu".to_owned()]),
+                ..seed_workspace(SeedWorkspaceSnapshot::default())
+            },
+        )
+        .unwrap();
+        assert_eq!(action(&conflict, "contexts/eu").action, "conflict");
+        let child = action(&conflict, "contexts/pl");
+        assert_eq!(
+            (child.action, child.reason_code),
+            ("blocked", "dependency_not_creatable")
+        );
+        assert_eq!(action(&conflict, "rules/name-required").action, "blocked");
+        assert_eq!(
+            action(&conflict, "saved-searches/unnamed").action,
+            "blocked"
+        );
+    }
+
+    #[test]
+    fn invalid_seed_resources_are_rejected_offline() {
+        let cases: Vec<(&str, &str, Vec<u8>, &str)> = vec![
+            (
+                "rules",
+                "rules/name-required.toml",
+                String::from_utf8(NAME_RULE.to_vec())
+                    .unwrap()
+                    .replace("attribute_code = \"name\"", "attribute_code = \"missing\"")
+                    .into_bytes(),
+                "unknown attribute 'missing'",
+            ),
+            (
+                "rules",
+                "rules/name-required.toml",
+                String::from_utf8(NAME_RULE.to_vec())
+                    .unwrap()
+                    .replace("blueprints/product", "blueprints/missing")
+                    .into_bytes(),
+                "undeclared blueprint",
+            ),
+            (
+                "rules",
+                "rules/name-required.toml",
+                String::from_utf8(NAME_RULE.to_vec())
+                    .unwrap()
+                    .replace("enabled = true\n", "")
+                    .into_bytes(),
+                "must declare boolean 'enabled'",
+            ),
+            (
+                "workflows",
+                "workflows/mark-reviewed.toml",
+                String::from_utf8(REVIEW_WORKFLOW.to_vec())
+                    .unwrap()
+                    .replace(
+                        "type = \"manual\"",
+                        "type = \"schedule\"\ncron = \"0 0 * * * *\"\ntimezone = \"UTC\"\ntarget_entity_id = \"00000000-0000-0000-0000-000000000001\"",
+                    )
+                    .into_bytes(),
+                "schedule trigger",
+            ),
+            (
+                "saved_searches",
+                "saved-searches/unnamed.json",
+                String::from_utf8(UNNAMED_SEARCH.to_vec())
+                    .unwrap()
+                    .replace("\"locked\":false", "\"version\":1")
+                    .into_bytes(),
+                "cannot be seeded",
+            ),
+            (
+                "saved_searches",
+                "saved-searches/unnamed.json",
+                String::from_utf8(UNNAMED_SEARCH.to_vec())
+                    .unwrap()
+                    .replace(
+                        "\"targetBlueprint\":\"blueprints/category\"",
+                        "\"selectedIds\":[\"00000000-0000-0000-0000-000000000001\"]",
+                    )
+                    .into_bytes(),
+                "selected entity IDs",
+            ),
+            (
+                "saved_searches",
+                "saved-searches/unnamed.json",
+                String::from_utf8(UNNAMED_SEARCH.to_vec())
+                    .unwrap()
+                    .replace("categories.name", "categories.missing")
+                    .into_bytes(),
+                "unknown attribute 'missing'",
+            ),
+            (
+                "contexts",
+                "contexts/eu.json",
+                br#"{"format_version":1,"kind":"solution_pack_context","parent":"contexts/pl"}"#
+                    .to_vec(),
+                "cycle",
+            ),
+            (
+                "contexts",
+                "contexts/eu.json",
+                br#"{"format_version":1,"code":"eu","data":{}}"#.to_vec(),
+                "not strict JSON",
+            ),
+        ];
+        for (kind, path, bytes, expected) in cases {
+            let (mut manifest, files) = seed_manifest();
+            let resources = manifest["resources"][kind].as_array_mut().unwrap();
+            let entry = resources
+                .iter_mut()
+                .find(|resource| resource["path"] == path)
+                .unwrap();
+            entry["sha256"] = json!(digest(&bytes));
+            let files = files
+                .into_iter()
+                .map(|(candidate, content)| {
+                    if candidate == path {
+                        (candidate, bytes.as_slice())
+                    } else {
+                        (candidate, content)
+                    }
+                })
+                .collect::<Vec<_>>();
+            assert_invalid(&archive(&manifest, &files), expected);
+        }
+
+        let (mut manifest, files) = seed_manifest();
+        manifest["resources"]["rules"][0]["reuse"] =
+            json!({"prerequisite": "prerequisites/base", "blueprint": "blueprints/product"});
+        assert_invalid(
+            &archive(&manifest, &files),
+            "cannot declare blueprint reuse",
+        );
+    }
+
+    fn prerequisite_archive() -> Vec<u8> {
+        let mut manifest = manifest_value();
+        manifest["prerequisites"] =
+            json!([{"key": "prerequisites/base", "id": "attricat.base", "version": "^1.2"}]);
+        manifest["resources"]["blueprints"][1]["reuse"] =
+            json!({"prerequisite": "prerequisites/base", "blueprint": "blueprints/category"});
+        archive(&manifest, &valid_files())
+    }
+
+    #[test]
+    fn prerequisites_are_declared_and_reused_blueprints_must_match_exactly() {
+        let mut manifest = manifest_value();
+        manifest["prerequisites"] =
+            json!([{"key": "prerequisites/base", "id": "attricat.base", "version": "^1.2"}]);
+        assert_invalid(&archive(&manifest, &valid_files()), "is not reused");
+        manifest["resources"]["blueprints"][1]["reuse"] =
+            json!({"prerequisite": "prerequisites/other", "blueprint": "blueprints/category"});
+        assert_invalid(
+            &archive(&manifest, &valid_files()),
+            "undeclared prerequisite",
+        );
+        manifest["prerequisites"][0]["id"] = json!("attricat.ecommerce");
+        manifest["resources"]["blueprints"][1]["reuse"]["prerequisite"] =
+            json!("prerequisites/base");
+        assert_invalid(&archive(&manifest, &valid_files()), "the pack itself");
+
+        let pack = ValidatedSolutionPack::from_tar_zst(&prerequisite_archive()).unwrap();
+        assert!(
+            validate_blueprint_mapping_requests(
+                &pack,
+                &[BlueprintMappingRequest {
+                    key: "blueprints/category".into(),
+                    code: "shared_category".into(),
+                }],
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("reused from a prerequisite")
+        );
+        for (resolution, reason) in [
+            (
+                crate::solution_pack_seeds::PrerequisiteResolution::Missing,
+                "prerequisite_missing",
+            ),
+            (
+                crate::solution_pack_seeds::PrerequisiteResolution::Incompatible {
+                    versions: vec!["2.0.0".into()],
+                },
+                "prerequisite_incompatible",
+            ),
+        ] {
+            let plan = build_solution_pack_plan(
+                &pack,
+                "shop",
+                BlueprintPublication::Publish,
+                &seed_workspace(SeedWorkspaceSnapshot {
+                    prerequisites: BTreeMap::from([("prerequisites/base".to_owned(), resolution)]),
+                    ..Default::default()
+                }),
+            )
+            .unwrap();
+            assert!(!plan.ready);
+            let prerequisite = action(&plan, "prerequisites/base");
+            assert_eq!(
+                (prerequisite.action, prerequisite.reason_code),
+                ("blocked", reason)
+            );
+            let category = action(&plan, "blueprints/category");
+            assert_eq!(
+                (category.action, category.reason_code),
+                ("blocked", "prerequisite_unavailable")
+            );
+            assert_eq!(action(&plan, "blueprints/product").action, "blocked");
+        }
+
+        let application_id = uuid::Uuid::from_u128(42);
+        let satisfied = || SeedWorkspaceSnapshot {
+            prerequisites: BTreeMap::from([(
+                "prerequisites/base".to_owned(),
+                crate::solution_pack_seeds::PrerequisiteResolution::Satisfied {
+                    application_id,
+                    pack_version: "1.4.0".into(),
+                },
+            )]),
+            ..Default::default()
+        };
+        let unavailable = build_solution_pack_plan(
+            &pack,
+            "shop",
+            BlueprintPublication::Publish,
+            &seed_workspace(satisfied()),
+        )
+        .unwrap();
+        assert_eq!(action(&unavailable, "prerequisites/base").action, "map");
+        assert_eq!(
+            action(&unavailable, "blueprints/category").reason_code,
+            "prerequisite_blueprint_unavailable"
+        );
+
+        let existing = |hash: String| ExistingBlueprintSnapshot {
+            id: uuid::Uuid::from_u128(9),
+            code: "base_category".into(),
+            version: 3,
+            kind: "entity".into(),
+            canonical_definition_hash: hash,
+            definition_hash: "0".repeat(64),
+        };
+        let mut workspace = seed_workspace(satisfied());
+        workspace.existing_blueprints =
+            BTreeMap::from([("blueprints/category".to_owned(), existing("0".repeat(64)))]);
+        let incompatible =
+            build_solution_pack_plan(&pack, "shop", BlueprintPublication::Publish, &workspace)
+                .unwrap();
+        assert_eq!(
+            action(&incompatible, "blueprints/category").reason_code,
+            "prerequisite_blueprint_incompatible"
+        );
+        let exact_hash =
+            incompatible.blueprint_canonical_definition_hashes["blueprints/category"].clone();
+        workspace.existing_blueprints =
+            BTreeMap::from([("blueprints/category".to_owned(), existing(exact_hash))]);
+        let reused =
+            build_solution_pack_plan(&pack, "shop", BlueprintPublication::Publish, &workspace)
+                .unwrap();
+        assert!(reused.ready, "{:?}", reused.actions);
+        let category = action(&reused, "blueprints/category");
+        assert_eq!(
+            (category.action, category.reason_code),
+            ("map", "prerequisite_blueprint_match")
+        );
+        assert_eq!(
+            category.summary["reuse"],
+            json!({"prerequisite": "prerequisites/base", "blueprint": "blueprints/category"})
+        );
+        let product = action(&reused, "blueprints/product");
+        assert_eq!(product.action, "create");
+        assert!(
+            product.normalized_payload.as_ref().unwrap()["definition"]
+                .as_str()
+                .unwrap()
+                .contains("target_blueprint = \"base_category\"")
+        );
+        assert_eq!(
+            mapping(&reused, "prerequisites/base").snapshot["pack_version"],
+            "1.4.0"
+        );
+    }
+
+    const PNG_BYTES: &[u8] = b"\x89PNG\r\n\x1a\nnot-a-real-image";
+    const PDF_BYTES: &[u8] = b"%PDF-1.7\nsynthetic";
+
+    fn sample_seed_archive(sample: &[u8], file_paths: &[(&'static str, &'static [u8])]) -> Vec<u8> {
+        let mut manifest = manifest_value();
+        manifest["resources"]["blueprints"]
+            .as_array_mut()
+            .unwrap()
+            .push(resource(
+                "blueprints/document",
+                "blueprints/document.toml",
+                DOCUMENT_BLUEPRINT,
+            ));
+        manifest["resources"]["contexts"] =
+            json!([resource("contexts/eu", "contexts/eu.json", EU_CONTEXT)]);
+        manifest["resources"]["sample_data"] = json!({
+            "key": "sample-data/default",
+            "path": "sample-data/sample-data.json",
+            "sha256": digest(sample),
+            "files": file_paths.iter().map(|(path, bytes)| json!({"path": path, "sha256": digest(bytes)})).collect::<Vec<_>>(),
+        });
+        let mut files = valid_files();
+        files.push(("blueprints/document.toml", DOCUMENT_BLUEPRINT));
+        files.push(("contexts/eu.json", EU_CONTEXT));
+        files.push(("sample-data/sample-data.json", sample));
+        files.extend_from_slice(file_paths);
+        archive(&manifest, &files)
+    }
+
+    fn document_sample(entity: Value) -> Vec<u8> {
+        serde_json::to_vec(&json!({
+            "format_version": 1,
+            "kind": "solution_pack_sample_data",
+            "classification": "synthetic",
+            "entities": [entity],
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn samples_attach_bundled_files_and_set_contextual_values() {
+        let valid = json!({
+            "key": "sample-entities/spec",
+            "blueprint": "blueprints/document",
+            "facts": [
+                {"attribute": "blueprints/document/attributes/title", "value": "Sample specification"},
+                {"attribute": "blueprints/document/attributes/summary", "value": "Default summary"},
+                {"attribute": "blueprints/document/attributes/summary", "value": "EU summary", "context": "contexts/eu"}
+            ],
+            "relationships": [],
+            "files": [
+                {"attribute": "blueprints/document/attributes/scan", "files": [{"path": "sample-data/files/scan.png", "filename": "scan.png", "media_type": "image/png"}]},
+                {"attribute": "blueprints/document/attributes/evidence", "context": "contexts/eu", "files": [
+                    {"path": "sample-data/files/spec.pdf", "filename": "spec.pdf", "media_type": "application/pdf"},
+                    {"path": "sample-data/files/scan.png", "filename": "scan.png", "media_type": "image/png"}
+                ]}
+            ]
+        });
+        let bundled = [
+            ("sample-data/files/scan.png", PNG_BYTES),
+            ("sample-data/files/spec.pdf", PDF_BYTES),
+        ];
+        let sample = document_sample(valid.clone());
+        let pack =
+            ValidatedSolutionPack::from_tar_zst(&sample_seed_archive(&sample, &bundled)).unwrap();
+        let validated = pack.sample_data().unwrap();
+        assert_eq!(validated.files.len(), 2);
+        assert_eq!(
+            validated.files["sample-data/files/spec.pdf"].filename,
+            "spec.pdf"
+        );
+
+        let unchanged = document_sample(json!({
+            "key": "sample-entities/plain",
+            "blueprint": "blueprints/document",
+            "facts": [{"attribute": "blueprints/document/attributes/title", "value": "Plain"}],
+            "relationships": []
+        }));
+        let plain = crate::solution_pack_sample_data::validate_sample_data(
+            &unchanged,
+            &BTreeSet::from(["blueprints/document"]),
+            &BTreeSet::new(),
+            &BTreeSet::new(),
+        )
+        .unwrap();
+        assert!(
+            !String::from_utf8(serde_json::to_vec(&plain.declaration).unwrap())
+                .unwrap()
+                .contains("files"),
+            "format-1 samples without files keep their canonical encoding"
+        );
+
+        let mutate = |pointer: &str, value: Value| {
+            let mut entity = valid.clone();
+            *entity.pointer_mut(pointer).unwrap() = value;
+            document_sample(entity)
+        };
+        for (sample, files, expected) in [
+            (
+                mutate("/facts/2/context", json!("contexts/missing")),
+                bundled.to_vec(),
+                "undeclared context",
+            ),
+            (
+                mutate(
+                    "/facts/2/attribute",
+                    json!("blueprints/document/attributes/internal_note"),
+                ),
+                bundled.to_vec(),
+                "outside the default context",
+            ),
+            (
+                mutate("/files/0/files/0/path", json!("sample-data/files/spec.pdf")),
+                bundled.to_vec(),
+                "different filenames or media types",
+            ),
+            (
+                mutate(
+                    "/files/0/files/0",
+                    json!({"path": "sample-data/files/spec.pdf", "filename": "spec.pdf", "media_type": "application/pdf"}),
+                ),
+                bundled.to_vec(),
+                "not allowed by the file policy",
+            ),
+            (
+                mutate("/files/0/files/0/filename", json!("scan.pdf")),
+                bundled.to_vec(),
+                "matching extension",
+            ),
+            (
+                document_sample(valid.clone()),
+                vec![
+                    ("sample-data/files/scan.png", PDF_BYTES),
+                    ("sample-data/files/spec.pdf", PDF_BYTES),
+                ],
+                "does not match media type",
+            ),
+            (
+                document_sample(valid.clone()),
+                vec![
+                    ("sample-data/files/scan.png", PNG_BYTES),
+                    ("sample-data/files/spec.pdf", PDF_BYTES),
+                    ("sample-data/files/unused.pdf", PDF_BYTES),
+                ],
+                "not attached by any sample entity",
+            ),
+        ] {
+            let Err(error) =
+                ValidatedSolutionPack::from_tar_zst(&sample_seed_archive(&sample, &files))
+            else {
+                panic!("sample was accepted; expected {expected}");
+            };
+            let error = error.to_string();
+            assert!(
+                error.contains(expected),
+                "{error} does not contain {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn context_mapping_requests_name_declared_contexts_and_distinct_targets() {
+        use crate::solution_pack_seeds::{
+            ContextMappingRequest, validate_context_mapping_requests,
+        };
+        let (manifest, files) = seed_manifest();
+        let pack = ValidatedSolutionPack::from_tar_zst(&archive(&manifest, &files)).unwrap();
+        let mapping = |key: &str, code: &str| ContextMappingRequest {
+            key: key.into(),
+            code: code.into(),
+        };
+        validate_context_mapping_requests(&pack, &[mapping("contexts/pl", "PL")]).unwrap();
+        for (mappings, expected) in [
+            (
+                vec![mapping("contexts/missing", "PL")],
+                "unknown context mapping key",
+            ),
+            (
+                vec![mapping("contexts/pl", "PL"), mapping("contexts/eu", "PL")],
+                "more than one pack context",
+            ),
+            (
+                vec![mapping("contexts/pl", "P L")],
+                "invalid existing context code",
+            ),
+        ] {
+            let error = validate_context_mapping_requests(&pack, &mappings)
+                .unwrap_err()
+                .to_string();
+            assert!(error.contains(expected), "{error}");
+        }
+    }
+
+    #[test]
+    fn published_seed_schemas_accept_the_seed_fixtures() {
+        let schema = |source: &str| -> Value {
+            let schema = serde_json::from_str(source).unwrap();
+            catalog_validation::validate_json_schema_definition(&schema).unwrap();
+            schema
+        };
+        let accepts = |schema: &Value, value: &Value| {
+            catalog_validation::validate_json_schema(schema, value)
+                .unwrap()
+                .is_empty()
+        };
+        let manifest = schema(include_str!(
+            "../../../contracts/solution-pack-manifest-v1.schema.json"
+        ));
+        let (mut seeds, _) = seed_manifest();
+        seeds["prerequisites"] =
+            json!([{"key": "prerequisites/base", "id": "attricat.base", "version": "^1.2"}]);
+        seeds["resources"]["blueprints"][1]["reuse"] =
+            json!({"prerequisite": "prerequisites/base", "blueprint": "blueprints/category"});
+        seeds["resources"]["sample_data"] = json!({
+            "key": "sample-data/default",
+            "path": "sample-data/sample-data.json",
+            "sha256": "0".repeat(64),
+            "files": [{"path": "sample-data/files/spec.pdf", "sha256": "0".repeat(64)}],
+        });
+        assert!(accepts(&manifest, &seeds));
+        let mut reused_context = seeds.clone();
+        reused_context["resources"]["contexts"][0]["reuse"] =
+            seeds["resources"]["blueprints"][1]["reuse"].clone();
+        assert!(!accepts(&manifest, &reused_context));
+
+        let context = schema(include_str!(
+            "../../../contracts/solution-pack-context-v1.schema.json"
+        ));
+        for fixture in [EU_CONTEXT, PL_CONTEXT] {
+            assert!(accepts(&context, &serde_json::from_slice(fixture).unwrap()));
+        }
+        assert!(!accepts(
+            &context,
+            &json!({"format_version": 1, "code": "eu", "data": {}})
+        ));
+
+        let search = schema(include_str!(
+            "../../../contracts/solution-pack-saved-search-v1.schema.json"
+        ));
+        let mut fixture: Value = serde_json::from_slice(UNNAMED_SEARCH).unwrap();
+        assert!(accepts(&search, &fixture));
+        fixture["state"]["version"] = json!(1);
+        assert!(!accepts(&search, &fixture));
+
+        let sample = schema(include_str!(
+            "../../../contracts/solution-pack-sample-data-v1.schema.json"
+        ));
+        let declaration = json!({
+            "format_version": 1,
+            "kind": "solution_pack_sample_data",
+            "classification": "synthetic",
+            "entities": [{
+                "key": "sample-entities/spec",
+                "blueprint": "blueprints/document",
+                "facts": [{"attribute": "blueprints/document/attributes/summary", "value": "EU", "context": "contexts/eu"}],
+                "relationships": [],
+                "files": [{
+                    "attribute": "blueprints/document/attributes/evidence",
+                    "context": "contexts/eu",
+                    "files": [{"path": "sample-data/files/spec.pdf", "filename": "spec.pdf", "media_type": "application/pdf"}]
+                }]
+            }]
+        });
+        assert!(accepts(&sample, &declaration));
+        let mut unsupported = declaration;
+        unsupported["entities"][0]["files"][0]["files"][0]["media_type"] = json!("image/svg+xml");
+        assert!(!accepts(&sample, &unsupported));
     }
 }

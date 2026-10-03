@@ -62,39 +62,51 @@ impl CatalogRepository {
         &self,
         input: CreateWorkflow,
     ) -> Result<Workflow, RepositoryError> {
+        let mut tx = self.pool.begin().await?;
+        let id = self
+            .create_workflow_in_transaction(&mut tx, Uuid::new_v4(), input)
+            .await?;
+        self.commit_mutation(tx).await?;
+        self.get_workflow_revision(id, 1)
+            .await?
+            .ok_or(RepositoryError::NotFound("workflow"))
+    }
+    /// Shared mutation seam for callers that create a workflow with a chosen
+    /// id as part of a larger transaction, such as seed application.
+    pub(super) async fn create_workflow_in_transaction(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        id: Uuid,
+        input: CreateWorkflow,
+    ) -> Result<Uuid, RepositoryError> {
         let compiled = catalog_workflow::compile(&input.definition)
             .map_err(|e| RepositoryError::InvalidWorkflowDefinition(e.to_string()))?;
         let ws = self.workspace_id.0;
-        let mut tx = self.pool.begin().await?;
         // A versioned primary key cannot express a unique workflow family code.
         // Serialize first revisions by workspace and code, as blueprint creation does.
         sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
             .bind(format!("workflow-code:{ws}:{}", compiled.code))
-            .execute(&mut *tx)
+            .execute(&mut **tx)
             .await?;
         let exists: bool = sqlx::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM workflows WHERE workspace_id=$1 AND code=$2)",
         )
         .bind(ws)
         .bind(&compiled.code)
-        .fetch_one(&mut *tx)
+        .fetch_one(&mut **tx)
         .await?;
         if exists {
             return Err(RepositoryError::WorkflowCodeTaken);
         }
-        let id = Uuid::new_v4();
         let plan = serde_json::to_value(&compiled)
             .map_err(|e| RepositoryError::InvalidWorkflowDefinition(e.to_string()))?;
-        sqlx::query("INSERT INTO workflows (id,workspace_id,code,name,version,definition,definition_hash,compiled_plan) VALUES($1,$2,$3,$4,1,$5,$6,$7)").bind(id).bind(ws).bind(&compiled.code).bind(&compiled.name).bind(input.definition).bind(&compiled.raw_definition_hash).bind(plan).execute(&mut *tx).await?;
+        sqlx::query("INSERT INTO workflows (id,workspace_id,code,name,version,definition,definition_hash,compiled_plan) VALUES($1,$2,$3,$4,1,$5,$6,$7)").bind(id).bind(ws).bind(&compiled.code).bind(&compiled.name).bind(input.definition).bind(&compiled.raw_definition_hash).bind(plan).execute(&mut **tx).await?;
         sqlx::query("INSERT INTO workflow_lifecycles(workflow_id,workspace_id) VALUES($1,$2)")
             .bind(id)
             .bind(ws)
-            .execute(&mut *tx)
+            .execute(&mut **tx)
             .await?;
-        self.commit_mutation(tx).await?;
-        self.get_workflow_revision(id, 1)
-            .await?
-            .ok_or(RepositoryError::NotFound("workflow"))
+        Ok(id)
     }
     pub async fn create_workflow_revision(
         &self,
@@ -127,25 +139,48 @@ impl CatalogRepository {
         id: Uuid,
         version: i64,
     ) -> Result<Workflow, RepositoryError> {
-        let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
-        let affected=sqlx::query("UPDATE workflows SET status='published',published_at=COALESCE(published_at,now()) WHERE id=$1 AND version=$2 AND workspace_id=$3").bind(id).bind(version).bind(ws).execute(&mut *tx).await?;
-        if affected.rows_affected() == 0 {
-            return Err(RepositoryError::NotFound("workflow revision"));
-        };
+        self.publish_workflow_revision_in_transaction(&mut tx, id, version)
+            .await?;
         self.commit_mutation(tx).await?;
         self.get_workflow_revision(id, version)
             .await?
             .ok_or(RepositoryError::NotFound("workflow revision"))
+    }
+    pub(super) async fn publish_workflow_revision_in_transaction(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        id: Uuid,
+        version: i64,
+    ) -> Result<(), RepositoryError> {
+        let ws = self.workspace_id.0;
+        let affected=sqlx::query("UPDATE workflows SET status='published',published_at=COALESCE(published_at,now()) WHERE id=$1 AND version=$2 AND workspace_id=$3").bind(id).bind(version).bind(ws).execute(&mut **tx).await?;
+        if affected.rows_affected() == 0 {
+            return Err(RepositoryError::NotFound("workflow revision"));
+        };
+        Ok(())
     }
     pub async fn enable_workflow_revision(
         &self,
         id: Uuid,
         version: i64,
     ) -> Result<Workflow, RepositoryError> {
-        let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
-        let published:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM workflows WHERE id=$1 AND version=$2 AND workspace_id=$3 AND status='published')").bind(id).bind(version).bind(ws).fetch_one(&mut *tx).await?;
+        self.enable_workflow_revision_in_transaction(&mut tx, id, version)
+            .await?;
+        self.commit_mutation(tx).await?;
+        self.get_workflow_revision(id, version)
+            .await?
+            .ok_or(RepositoryError::NotFound("workflow revision"))
+    }
+    pub(super) async fn enable_workflow_revision_in_transaction(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        id: Uuid,
+        version: i64,
+    ) -> Result<(), RepositoryError> {
+        let ws = self.workspace_id.0;
+        let published:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM workflows WHERE id=$1 AND version=$2 AND workspace_id=$3 AND status='published')").bind(id).bind(version).bind(ws).fetch_one(&mut **tx).await?;
         if !published {
             return Err(RepositoryError::WorkflowNotPublished);
         };
@@ -155,9 +190,9 @@ impl CatalogRepository {
         // activation boundary.
         sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
             .bind(format!("workflow-activation-boundary:{ws}"))
-            .execute(&mut *tx)
+            .execute(&mut **tx)
             .await?;
-        sqlx::query("UPDATE workflow_lifecycles SET enabled_version=$2, activation_sequence=(SELECT COALESCE(max(sequence), 0) FROM domain_events WHERE workspace_id=$3), enabled_at=now(), disabled_at=NULL, updated_at=now() WHERE workflow_id=$1 AND workspace_id=$3").bind(id).bind(version).bind(ws).execute(&mut *tx).await?;
+        sqlx::query("UPDATE workflow_lifecycles SET enabled_version=$2, activation_sequence=(SELECT COALESCE(max(sequence), 0) FROM domain_events WHERE workspace_id=$3), enabled_at=now(), disabled_at=NULL, updated_at=now() WHERE workflow_id=$1 AND workspace_id=$3").bind(id).bind(version).bind(ws).execute(&mut **tx).await?;
         // Create schedule cursors in the enable transaction. A scheduler that starts
         // later observes a durable post-enable boundary instead of inventing one.
         let plan: Value = sqlx::query_scalar(
@@ -166,7 +201,7 @@ impl CatalogRepository {
         .bind(id)
         .bind(version)
         .bind(ws)
-        .fetch_one(&mut *tx)
+        .fetch_one(&mut **tx)
         .await?;
         let compiled: catalog_workflow::CompiledWorkflow = serde_json::from_value(plan)
             .map_err(|error| RepositoryError::InvalidWorkflowDefinition(error.to_string()))?;
@@ -183,12 +218,9 @@ impl CatalogRepository {
                 )
             })?;
             sqlx::query("INSERT INTO workflow_schedule_states(workspace_id,workflow_id,workflow_version,trigger_index,next_run_at) VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING")
-                .bind(ws).bind(id).bind(version).bind(trigger_index as i32).bind(next).execute(&mut *tx).await?;
+                .bind(ws).bind(id).bind(version).bind(trigger_index as i32).bind(next).execute(&mut **tx).await?;
         }
-        self.commit_mutation(tx).await?;
-        self.get_workflow_revision(id, version)
-            .await?
-            .ok_or(RepositoryError::NotFound("workflow revision"))
+        Ok(())
     }
     pub async fn disable_workflow(&self, id: Uuid) -> Result<Workflow, RepositoryError> {
         let ws = self.workspace_id.0;

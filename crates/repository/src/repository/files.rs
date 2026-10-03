@@ -539,7 +539,7 @@ impl CatalogRepository {
         row.ok_or(RepositoryError::NotFound("file"))
     }
 
-    async fn file_upload_attribute(
+    pub(super) async fn file_upload_attribute(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         entity: &Entity,

@@ -12,9 +12,16 @@ use crate::{
         ExtensionLayoutPlacement, Manifest, classify_extension_layout_placement,
         valid_contribution_key,
     },
-    model::{CreateBlueprint, NewAttributeValue},
+    model::{
+        CreateAttributeContext, CreateBlueprint, CreateRule, CreateWorkflow, NewAttributeValue,
+    },
     solution_pack_extensions::ResolvedExtensionRelease,
     solution_pack_sample_data::{SampleEntity, explicit_fact_attribute_codes},
+    solution_pack_seeds::{
+        ContextMappingRequest, ExistingContextSnapshot, PrerequisiteResolution,
+        SeedWorkspaceSnapshot, prerequisite_version_req, reused_blueprints,
+        validate_context_mapping_requests,
+    },
     solution_packs::{
         BlueprintMappingRequest, BlueprintPublication, ExistingBlueprintSnapshot,
         ExistingPresentationAssetSnapshot, InstalledExtensionSnapshot,
@@ -39,6 +46,8 @@ pub struct CreateSolutionPackPlanRequest<'a> {
     pub publication: BlueprintPublication,
     pub blueprint_mappings: &'a [BlueprintMappingRequest],
     pub asset_mappings: &'a [PresentationAssetMappingRequest],
+    /// Explicit existing contexts selected for pack contexts.
+    pub context_mappings: &'a [ContextMappingRequest],
     pub prior_application_id: Option<Uuid>,
     pub include_sample_data: bool,
     /// Official releases of missing extensions, in dependency order, that the
@@ -681,6 +690,27 @@ async fn load_prior_assets(
     Ok(prior)
 }
 
+/// Pack contexts a sample entity sets values in.
+fn sample_entity_contexts(entity: &SampleEntity) -> std::collections::BTreeSet<&str> {
+    entity
+        .facts
+        .iter()
+        .filter_map(|fact| fact.context.as_deref())
+        .chain(
+            entity
+                .relationships
+                .iter()
+                .filter_map(|relationship| relationship.context.as_deref()),
+        )
+        .chain(
+            entity
+                .files
+                .iter()
+                .filter_map(|value| value.context.as_deref()),
+        )
+        .collect()
+}
+
 fn canonical_sample_input(pack: &ValidatedSolutionPack, entity: &SampleEntity) -> (Value, String) {
     let explicit_attributes = explicit_fact_attribute_codes(entity);
     let effective_defaults = pack
@@ -768,7 +798,318 @@ async fn load_prior_samples(
     Ok(prior)
 }
 
+/// The latest published revision of a blueprint code, with the canonical
+/// definition hash used to compare it with a pack definition.
+async fn latest_published_blueprint(
+    tx: &mut Transaction<'_, Postgres>,
+    workspace_id: Uuid,
+    code: &str,
+) -> Result<Option<ExistingBlueprintSnapshot>, RepositoryError> {
+    let Some(existing) = sqlx::query_as::<_, (Uuid, String, i64, String, String, String)>(
+        "SELECT id,code,version,kind,definition_hash,definition FROM blueprints WHERE workspace_id=$1 AND code=$2 AND status='published' AND deleted_at IS NULL ORDER BY version DESC LIMIT 1",
+    )
+    .bind(workspace_id)
+    .bind(code)
+    .fetch_optional(&mut **tx)
+    .await?
+    else {
+        return Ok(None);
+    };
+    let compiled = crate::blueprint_resolver::compile_definition(tx, workspace_id, &existing.5)
+        .await
+        .map_err(|error| {
+            RepositoryError::InvalidSolutionPackPlan(format!(
+                "existing blueprint '{code}' is not valid: {error}"
+            ))
+        })?;
+    if compiled.code != existing.1
+        || compiled.kind.as_str() != existing.3
+        || compiled.raw_definition_hash != existing.4
+    {
+        return Err(RepositoryError::InvalidSolutionPackPlan(format!(
+            "existing blueprint '{code}' does not match its stored definition evidence"
+        )));
+    }
+    let canonical_definition = toml::from_str::<toml::Value>(&existing.5)
+        .ok()
+        .and_then(|value| toml::to_string(&value).ok())
+        .ok_or_else(|| {
+            RepositoryError::InvalidSolutionPackPlan(format!(
+                "existing blueprint '{code}' cannot be canonicalized"
+            ))
+        })?;
+    Ok(Some(ExistingBlueprintSnapshot {
+        id: existing.0,
+        code: existing.1,
+        version: existing.2,
+        kind: existing.3,
+        canonical_definition_hash: catalog_blueprint::raw_hash(&canonical_definition),
+        definition_hash: existing.4,
+    }))
+}
+
+async fn publication_channel_enabled(
+    tx: &mut Transaction<'_, Postgres>,
+    workspace_id: Uuid,
+    context_id: Uuid,
+) -> Result<Option<bool>, RepositoryError> {
+    Ok(sqlx::query_scalar(
+        "SELECT enabled FROM publication_channels WHERE workspace_id=$1 AND context_id=$2",
+    )
+    .bind(workspace_id)
+    .bind(context_id)
+    .fetch_optional(&mut **tx)
+    .await?)
+}
+
+#[derive(sqlx::FromRow)]
+struct PriorSeedStep {
+    resource_kind: String,
+    logical_key: String,
+    target_id: Uuid,
+    target_code: String,
+}
+
+/// Seed resources a completed earlier application created or reused.
+async fn load_prior_seed_steps(
+    tx: &mut Transaction<'_, Postgres>,
+    workspace_id: Uuid,
+    application_id: Uuid,
+) -> Result<Vec<PriorSeedStep>, RepositoryError> {
+    Ok(sqlx::query_as::<_, PriorSeedStep>(
+        "SELECT resource_kind,logical_key,target_id,target_code FROM solution_pack_application_steps WHERE workspace_id=$1 AND application_id=$2 AND state='completed' AND resource_kind IN ('context','publication_channel','rule','workflow','saved_search') ORDER BY position",
+    )
+    .bind(workspace_id)
+    .bind(application_id)
+    .fetch_all(&mut **tx)
+    .await?)
+}
+
+/// Marks staged sample-file uploads of the given plans for immediate cleanup.
+/// Files already attached to a sample entity no longer have an intent.
+async fn expire_sample_file_staging(
+    tx: &mut Transaction<'_, Postgres>,
+    workspace_id: Uuid,
+    plan_ids: &[Uuid],
+) -> Result<(), RepositoryError> {
+    sqlx::query("UPDATE file_upload_intents SET cleanup_after=clock_timestamp() WHERE workspace_id=$1 AND state='pending' AND object_key IN (SELECT object_key FROM solution_pack_plan_sample_files WHERE workspace_id=$1 AND plan_id=ANY($2))")
+        .bind(workspace_id)
+        .bind(plan_ids)
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
+}
+
+/// A bundled sample file uploaded under an upload intent while planning.
+struct StagedSampleFile {
+    path: String,
+    file_id: Uuid,
+    object_key: String,
+    filename: String,
+    media_type: String,
+    byte_size: i64,
+    sha256: String,
+}
+
 impl CatalogRepository {
+    /// Collects workspace facts for seed resources and resolves prerequisite
+    /// seeds. A reused blueprint is offered to the planner exactly like an
+    /// explicit mapping, so only an exact definition match is reused.
+    async fn seed_workspace_snapshot(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        pack: &ValidatedSolutionPack,
+        prefix: &str,
+        context_mappings: &[ContextMappingRequest],
+        existing_blueprints: &mut std::collections::BTreeMap<String, ExistingBlueprintSnapshot>,
+    ) -> Result<SeedWorkspaceSnapshot, RepositoryError> {
+        let workspace_id = self.workspace_id.0;
+        let mut seed = SeedWorkspaceSnapshot::default();
+        for requested in context_mappings {
+            let id: Uuid = sqlx::query_scalar(
+                "SELECT id FROM attribute_contexts WHERE workspace_id=$1 AND code=$2",
+            )
+            .bind(workspace_id)
+            .bind(&requested.code)
+            .fetch_optional(&mut **tx)
+            .await?
+            .ok_or_else(|| {
+                RepositoryError::InvalidSolutionPackPlan(format!(
+                    "existing context '{}' was not found",
+                    requested.code
+                ))
+            })?;
+            seed.existing_contexts.insert(
+                requested.key.clone(),
+                ExistingContextSnapshot {
+                    id,
+                    code: requested.code.clone(),
+                    publication_channel_enabled: publication_channel_enabled(tx, workspace_id, id)
+                        .await?,
+                },
+            );
+        }
+        let codes = |resources: &[crate::solution_packs::SolutionPackResource]| {
+            resources
+                .iter()
+                .map(|resource| {
+                    format!(
+                        "{prefix}_{}",
+                        resource.key.rsplit_once('/').map_or("", |(_, code)| code)
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
+        seed.rule_codes = sqlx::query_scalar::<_, String>(
+            "SELECT DISTINCT code FROM rules WHERE workspace_id=$1 AND code=ANY($2)",
+        )
+        .bind(workspace_id)
+        .bind(codes(&pack.manifest().resources.rules))
+        .fetch_all(&mut **tx)
+        .await?
+        .into_iter()
+        .collect();
+        seed.workflow_codes = sqlx::query_scalar::<_, String>(
+            "SELECT DISTINCT code FROM workflows WHERE workspace_id=$1 AND code=ANY($2)",
+        )
+        .bind(workspace_id)
+        .bind(codes(&pack.manifest().resources.workflows))
+        .fetch_all(&mut **tx)
+        .await?
+        .into_iter()
+        .collect();
+
+        for prerequisite in &pack.manifest().prerequisites {
+            let requirement = prerequisite_version_req(prerequisite);
+            let candidates = sqlx::query_as::<_, (Uuid, String)>(
+                "SELECT id,pack_version FROM solution_pack_applications WHERE workspace_id=$1 AND pack_id=$2 AND state='completed' ORDER BY completed_at DESC,id",
+            )
+            .bind(workspace_id)
+            .bind(&prerequisite.id)
+            .fetch_all(&mut **tx)
+            .await?;
+            let selected = candidates
+                .iter()
+                .filter_map(|(id, version)| {
+                    semver::Version::parse(version)
+                        .ok()
+                        .filter(|parsed| requirement.matches(parsed))
+                        .map(|parsed| (parsed, *id, version.clone()))
+                })
+                .max_by(|left, right| left.0.cmp_precedence(&right.0));
+            let resolution = match selected {
+                Some((_, application_id, pack_version)) => PrerequisiteResolution::Satisfied {
+                    application_id,
+                    pack_version,
+                },
+                None if candidates.is_empty() => PrerequisiteResolution::Missing,
+                None => {
+                    let mut versions = candidates
+                        .into_iter()
+                        .map(|(_, version)| version)
+                        .collect::<Vec<_>>();
+                    versions.sort();
+                    versions.dedup();
+                    PrerequisiteResolution::Incompatible { versions }
+                }
+            };
+            if let PrerequisiteResolution::Satisfied { application_id, .. } = &resolution {
+                for (resource, reuse) in reused_blueprints(pack)
+                    .filter(|(_, reuse)| reuse.prerequisite == prerequisite.key)
+                {
+                    // The prerequisite's own record of the blueprint it created
+                    // or reused under that logical key.
+                    let installed = sqlx::query_as::<_, (Uuid, String)>(
+                        "SELECT target_id,target_code FROM solution_pack_application_steps WHERE workspace_id=$1 AND application_id=$2 AND resource_kind='blueprint' AND logical_key=$3 AND state='completed'",
+                    )
+                    .bind(workspace_id)
+                    .bind(application_id)
+                    .bind(&reuse.blueprint)
+                    .fetch_optional(&mut **tx)
+                    .await?;
+                    let Some((target_id, target_code)) = installed else {
+                        continue;
+                    };
+                    if let Some(existing) =
+                        latest_published_blueprint(tx, workspace_id, &target_code).await?
+                        && existing.id == target_id
+                    {
+                        existing_blueprints.insert(resource.key.clone(), existing);
+                    }
+                }
+            }
+            seed.prerequisites
+                .insert(prerequisite.key.clone(), resolution);
+        }
+        Ok(seed)
+    }
+
+    /// Uploads every bundled sample file of the pack, verifying each object
+    /// by reading it back. Every object key is first recorded as an ordinary
+    /// upload intent with a short deadline; the plan transaction extends the
+    /// deadline, so an unused upload is removed by ordinary cleanup.
+    async fn stage_solution_pack_sample_files(
+        &self,
+        pack: &ValidatedSolutionPack,
+        object_store: &dyn ObjectStore,
+    ) -> Result<Vec<StagedSampleFile>, RepositoryError> {
+        let Some(sample) = pack.sample_data() else {
+            return Ok(Vec::new());
+        };
+        if sample.files.is_empty() {
+            return Ok(Vec::new());
+        }
+        let staged = sample
+            .files
+            .iter()
+            .map(|(path, file)| {
+                let bytes = pack.file(path).expect("validated sample file exists");
+                StagedSampleFile {
+                    path: path.clone(),
+                    file_id: Uuid::new_v4(),
+                    object_key: format!("files/{}", Uuid::new_v4()),
+                    filename: file.filename.clone(),
+                    media_type: file.media_type.clone(),
+                    byte_size: bytes.len() as i64,
+                    sha256: format!("{:x}", Sha256::digest(bytes)),
+                }
+            })
+            .collect::<Vec<_>>();
+        let keys = staged
+            .iter()
+            .map(|file| file.object_key.clone())
+            .collect::<Vec<_>>();
+        self.begin_file_uploads(&keys, Utc::now() + Duration::hours(1))
+            .await?;
+        for file in &staged {
+            let bytes = pack.file(&file.path).expect("validated sample file exists");
+            let _ = object_store
+                .put(
+                    &file.object_key,
+                    StoredObject {
+                        bytes: bytes::Bytes::copy_from_slice(bytes),
+                        content_type: Some(file.media_type.clone()),
+                    },
+                )
+                .await;
+            let verified = get_object_for_integrity(object_store, &file.object_key, bytes.len())
+                .await
+                .is_ok_and(|stored| {
+                    stored.bytes.len() == bytes.len()
+                        && format!("{:x}", Sha256::digest(&stored.bytes)) == file.sha256
+                });
+            if !verified {
+                sqlx::query("UPDATE file_upload_intents SET cleanup_after=clock_timestamp() WHERE workspace_id=$1 AND object_key=ANY($2) AND state='pending'")
+                    .bind(self.workspace_id.0)
+                    .bind(&keys)
+                    .execute(&self.pool)
+                    .await?;
+                return Err(RepositoryError::SolutionPackAssetStorageUnavailable);
+            }
+        }
+        Ok(staged)
+    }
+
     async fn reconcile_solution_pack_asset_cleanup(
         &self,
         object_store: &dyn ObjectStore,
@@ -867,6 +1208,7 @@ impl CatalogRepository {
             }
             sqlx::query("DELETE FROM solution_pack_plan_sample_entities s WHERE s.workspace_id=$1 AND s.plan_id=ANY($2) AND NOT EXISTS (SELECT 1 FROM solution_pack_applications a WHERE a.workspace_id=s.workspace_id AND a.plan_id=s.plan_id)")
                 .bind(workspace_id).bind(&expired_plan_ids).execute(&mut *tx).await?;
+            expire_sample_file_staging(&mut tx, workspace_id, &expired_plan_ids).await?;
             tx.commit().await?;
             if expired_plan_ids.len() < 64 {
                 break;
@@ -967,6 +1309,7 @@ impl CatalogRepository {
         .bind(application.1)
         .execute(&mut *tx)
         .await?;
+        expire_sample_file_staging(&mut tx, workspace_id, &[application.1]).await?;
         let (diagnostic_code, diagnostic_message) = if require_expired {
             (
                 "resumability_expired",
@@ -1000,6 +1343,7 @@ impl CatalogRepository {
             publication,
             blueprint_mappings: requested_mappings,
             asset_mappings: requested_asset_mappings,
+            context_mappings: requested_context_mappings,
             prior_application_id,
             include_sample_data,
             official_extensions,
@@ -1019,7 +1363,9 @@ impl CatalogRepository {
             .await?;
         self.cleanup_solution_pack_sample_staging().await?;
         if prior_application_id.is_some()
-            && (!requested_mappings.is_empty() || !requested_asset_mappings.is_empty())
+            && (!requested_mappings.is_empty()
+                || !requested_asset_mappings.is_empty()
+                || !requested_context_mappings.is_empty())
         {
             return Err(RepositoryError::InvalidSolutionPackPlan(
                 "from_application and explicit mappings are mutually exclusive".into(),
@@ -1029,7 +1375,18 @@ impl CatalogRepository {
             .map_err(|error| RepositoryError::InvalidSolutionPackPlan(error.to_string()))?;
         validate_presentation_asset_mapping_requests(pack, requested_asset_mappings)
             .map_err(|error| RepositoryError::InvalidSolutionPackPlan(error.to_string()))?;
+        validate_context_mapping_requests(pack, requested_context_mappings)
+            .map_err(|error| RepositoryError::InvalidSolutionPackPlan(error.to_string()))?;
         let workspace_id = self.workspace_id.0;
+        // Bundled sample files reach object storage before the plan transaction,
+        // each under an ordinary upload intent, so no transaction stays open
+        // during object I/O and an abandoned upload is reaped.
+        let staged_sample_files = if include_sample_data {
+            self.stage_solution_pack_sample_files(pack, object_store)
+                .await?
+        } else {
+            Vec::new()
+        };
         let mut tx = self.pool.begin().await?;
         sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
             .execute(&mut *tx)
@@ -1103,60 +1460,15 @@ impl CatalogRepository {
         .collect();
         let mut existing_blueprints = std::collections::BTreeMap::new();
         for requested in requested_mappings {
-            let existing = sqlx::query_as::<_, (Uuid, String, i64, String, String, String)>(
-                "SELECT id,code,version,kind,definition_hash,definition FROM blueprints WHERE workspace_id=$1 AND code=$2 AND status='published' AND deleted_at IS NULL ORDER BY version DESC LIMIT 1",
-            )
-            .bind(workspace_id)
-            .bind(&requested.code)
-            .fetch_optional(&mut *tx)
-            .await?
-            .ok_or_else(|| {
-                RepositoryError::InvalidSolutionPackPlan(format!(
-                    "existing published blueprint '{}' was not found",
-                    requested.code
-                ))
-            })?;
-            let compiled =
-                crate::blueprint_resolver::compile_definition(&mut tx, workspace_id, &existing.5)
-                    .await
-                    .map_err(|error| {
-                        RepositoryError::InvalidSolutionPackPlan(format!(
-                            "existing blueprint '{}' is not valid: {error}",
-                            requested.code
-                        ))
-                    })?;
-            if compiled.code != existing.1
-                || compiled.kind.as_str() != existing.3
-                || compiled.raw_definition_hash != existing.4
-            {
-                return Err(RepositoryError::InvalidSolutionPackPlan(format!(
-                    "existing blueprint '{}' does not match its stored definition evidence",
-                    requested.code
-                )));
-            }
-            let canonical_value: toml::Value = toml::from_str(&existing.5).map_err(|_| {
-                RepositoryError::InvalidSolutionPackPlan(format!(
-                    "existing blueprint '{}' cannot be canonicalized",
-                    requested.code
-                ))
-            })?;
-            let canonical_definition = toml::to_string(&canonical_value).map_err(|_| {
-                RepositoryError::InvalidSolutionPackPlan(format!(
-                    "existing blueprint '{}' cannot be canonicalized",
-                    requested.code
-                ))
-            })?;
-            existing_blueprints.insert(
-                requested.key.clone(),
-                ExistingBlueprintSnapshot {
-                    id: existing.0,
-                    code: existing.1,
-                    version: existing.2,
-                    kind: existing.3,
-                    canonical_definition_hash: catalog_blueprint::raw_hash(&canonical_definition),
-                    definition_hash: existing.4,
-                },
-            );
+            let existing = latest_published_blueprint(&mut tx, workspace_id, &requested.code)
+                .await?
+                .ok_or_else(|| {
+                    RepositoryError::InvalidSolutionPackPlan(format!(
+                        "existing published blueprint '{}' was not found",
+                        requested.code
+                    ))
+                })?;
+            existing_blueprints.insert(requested.key.clone(), existing);
         }
         let mut existing_presentation_assets = std::collections::BTreeMap::new();
         for requested in requested_asset_mappings {
@@ -1412,6 +1724,47 @@ impl CatalogRepository {
                 pending_extension_snapshot(release),
             );
         }
+        let seed = self
+            .seed_workspace_snapshot(
+                &mut tx,
+                pack,
+                prefix,
+                requested_context_mappings,
+                &mut existing_blueprints,
+            )
+            .await?;
+        let prior_seed_steps = match prior_application_id {
+            Some(application_id) => {
+                load_prior_seed_steps(&mut tx, workspace_id, application_id).await?
+            }
+            None => Vec::new(),
+        };
+        let mut seed = seed;
+        for step in &prior_seed_steps {
+            if step.resource_kind == "context" {
+                let current: Option<String> = sqlx::query_scalar(
+                    "SELECT code FROM attribute_contexts WHERE workspace_id=$1 AND id=$2",
+                )
+                .bind(workspace_id)
+                .bind(step.target_id)
+                .fetch_optional(&mut *tx)
+                .await?;
+                if current.as_deref() == Some(step.target_code.as_str())
+                    && pack.context(&step.logical_key).is_some()
+                {
+                    let channel =
+                        publication_channel_enabled(&mut tx, workspace_id, step.target_id).await?;
+                    seed.existing_contexts.insert(
+                        step.logical_key.clone(),
+                        ExistingContextSnapshot {
+                            id: step.target_id,
+                            code: step.target_code.clone(),
+                            publication_channel_enabled: channel,
+                        },
+                    );
+                }
+            }
+        }
         let mut draft = build_solution_pack_plan(
             pack,
             prefix,
@@ -1428,9 +1781,42 @@ impl CatalogRepository {
                 extension_layout_valid,
                 role_codes,
                 published_entity_codes,
+                seed,
             },
         )
         .map_err(|error| RepositoryError::InvalidSolutionPackPlan(error.to_string()))?;
+        // A later release neither updates nor recreates seed resources an
+        // earlier application already provided; contexts map back to them.
+        for step in &prior_seed_steps {
+            let Some(action) = draft
+                .actions
+                .iter_mut()
+                .find(|action| action.logical_key == step.logical_key)
+            else {
+                continue;
+            };
+            if step.resource_kind == "context" {
+                if action.action == "map" {
+                    action.reason_code = "unchanged_from_prior_application";
+                }
+            } else if action.resource_kind == step.resource_kind
+                && matches!(action.action, "create" | "conflict" | "blocked")
+            {
+                action.action = "skip";
+                action.reason_code = "provided_by_prior_application";
+                action.normalized_payload = None;
+                action.preconditions = serde_json::json!([]);
+            }
+        }
+        draft.ready = draft.actions.iter().all(|action| {
+            matches!(
+                action.action,
+                "create" | "map" | "append" | "satisfied" | "skip"
+            )
+        }) && draft
+            .extension_requirements
+            .iter()
+            .all(|requirement| requirement.status != "blocked");
 
         let mut release_changes = Vec::new();
         if prior_application_id.is_some() {
@@ -1658,6 +2044,18 @@ impl CatalogRepository {
                         "sample entity '{}' requires a published mapped or created blueprint",
                         entity.key
                     )));
+                }
+                for context in sample_entity_contexts(entity) {
+                    if !draft.actions.iter().any(|action| {
+                        action.resource_kind == "context"
+                            && action.logical_key == context
+                            && matches!(action.action, "create" | "map")
+                    }) {
+                        return Err(RepositoryError::InvalidSolutionPackPlan(format!(
+                            "sample entity '{}' requires context '{context}' to be created or mapped",
+                            entity.key
+                        )));
+                    }
                 }
                 let (_, current_digest) = canonical_sample_input(pack, entity);
                 let prior = prior_by_key.get(entity.key.as_str()).copied();
@@ -1929,6 +2327,20 @@ impl CatalogRepository {
                     .bind(entity.relationships.iter().map(|relationship| relationship.targets.len() as i32).sum::<i32>())
                     .execute(&mut *tx).await?;
             }
+            for file in &staged_sample_files {
+                sqlx::query("INSERT INTO solution_pack_plan_sample_files (plan_id,workspace_id,path,file_id,object_key,filename,media_type,byte_size,sha256) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)")
+                    .bind(id).bind(workspace_id).bind(&file.path).bind(file.file_id).bind(&file.object_key)
+                    .bind(&file.filename).bind(&file.media_type).bind(file.byte_size).bind(&file.sha256)
+                    .execute(&mut *tx).await?;
+            }
+            // Staged files stay claimable for the plan lifetime and the
+            // sample application's resumability window.
+            sqlx::query("UPDATE file_upload_intents SET cleanup_after=$3 WHERE workspace_id=$1 AND object_key=ANY($2) AND state='pending'")
+                .bind(workspace_id)
+                .bind(staged_sample_files.iter().map(|file| file.object_key.clone()).collect::<Vec<_>>())
+                .bind(expires_at + Duration::days(30) + Duration::hours(1))
+                .execute(&mut *tx)
+                .await?;
         }
         insert_plan_rows(&mut tx, workspace_id, id, &draft).await?;
         insert_extension_installs(&mut tx, workspace_id, id, &draft, &official_extensions).await?;
@@ -1949,7 +2361,9 @@ impl CatalogRepository {
                 .await?;
         }
         insert_release_changes(&mut tx, workspace_id, id, &release_changes).await?;
-        let evidence_format = if include_sample_data {
+        let evidence_format = if !staged_sample_files.is_empty() {
+            5_i16
+        } else if include_sample_data {
             4_i16
         } else if manifest.resources.presentation_assets.is_empty() {
             2_i16
@@ -1957,6 +2371,7 @@ impl CatalogRepository {
             3_i16
         };
         let evidence_sha256 = match evidence_format {
+            5 => plan_resource_evidence_sha256_v5(&mut tx, workspace_id, id).await?,
             4 => plan_resource_evidence_sha256_v4(&mut tx, workspace_id, id).await?,
             3 => plan_resource_evidence_sha256_v3(&mut tx, workspace_id, id).await?,
             _ => plan_resource_evidence_sha256_v2(&mut tx, workspace_id, id).await?,
@@ -2049,7 +2464,9 @@ impl CatalogRepository {
                 .await?;
             let evidence_format: Option<i16> = sqlx::query_scalar("SELECT resource_evidence_format FROM solution_pack_plans WHERE workspace_id=$1 AND id=$2")
                 .bind(workspace_id).bind(id).fetch_one(&mut *finalize).await?;
-            let evidence_sha256 = if evidence_format == Some(4) {
+            let evidence_sha256 = if evidence_format == Some(5) {
+                plan_resource_evidence_sha256_v5(&mut finalize, workspace_id, id).await?
+            } else if evidence_format == Some(4) {
                 plan_resource_evidence_sha256_v4(&mut finalize, workspace_id, id).await?
             } else {
                 plan_resource_evidence_sha256_v3(&mut finalize, workspace_id, id).await?
@@ -2488,6 +2905,25 @@ async fn validate_sample_staging_integrity(
         }
     }
     Ok(())
+}
+
+/// Format 5 adds staged sample-file evidence to format 4.
+async fn plan_resource_evidence_sha256_v5(
+    tx: &mut Transaction<'_, Postgres>,
+    workspace_id: Uuid,
+    plan_id: Uuid,
+) -> Result<String, RepositoryError> {
+    let base = plan_resource_evidence_sha256_v4(tx, workspace_id, plan_id).await?;
+    let files: Value = sqlx::query_scalar(
+        "SELECT COALESCE(jsonb_agg(jsonb_build_object('path',path,'file_id',file_id,'object_key',object_key,'filename',filename,'media_type',media_type,'byte_size',byte_size,'sha256',sha256) ORDER BY path),'[]'::jsonb) FROM solution_pack_plan_sample_files WHERE workspace_id=$1 AND plan_id=$2",
+    )
+    .bind(workspace_id)
+    .bind(plan_id)
+    .fetch_one(&mut **tx)
+    .await?;
+    let encoded = serde_json::to_vec(&(base, files))
+        .map_err(|error| RepositoryError::InvalidSolutionPackPlan(error.to_string()))?;
+    Ok(format!("{:x}", Sha256::digest(encoded)))
 }
 
 async fn plan_resource_evidence_sha256_v4(
@@ -2989,6 +3425,7 @@ async fn invalidate_solution_pack_application(
     .bind(plan_id)
     .execute(&mut **tx)
     .await?;
+    expire_sample_file_staging(tx, workspace_id, &[plan_id]).await?;
     sqlx::query("UPDATE solution_pack_applications SET state='invalid',diagnostic_code=$3,diagnostic_message=$4,updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2 AND state <> 'completed'")
         .bind(workspace_id)
         .bind(application_id)
@@ -3132,9 +3569,9 @@ impl CatalogRepository {
         .bind(plan_id)
         .fetch_one(&mut **tx)
         .await?;
-        if (matches!(evidence_format, Some(2..=4)) && stored_evidence_sha256.is_none())
+        if (matches!(evidence_format, Some(2..=5)) && stored_evidence_sha256.is_none())
             || (prior_application_id.is_some()
-                && (!matches!(evidence_format, Some(2..=4)) || stored_evidence_sha256.is_none()))
+                && (!matches!(evidence_format, Some(2..=5)) || stored_evidence_sha256.is_none()))
         {
             return Err(RepositoryError::InvalidSolutionPackPlan(
                 "persisted solution-pack resource evidence is missing".into(),
@@ -3144,6 +3581,7 @@ impl CatalogRepository {
             // A persisted digest is authoritative even if every covered row or its
             // mapping/action discriminator was modified after review.
             let actual = match evidence_format {
+                Some(5) => plan_resource_evidence_sha256_v5(tx, workspace_id, plan_id).await?,
                 Some(4) => plan_resource_evidence_sha256_v4(tx, workspace_id, plan_id).await?,
                 Some(3) => plan_resource_evidence_sha256_v3(tx, workspace_id, plan_id).await?,
                 Some(2) => plan_resource_evidence_sha256_v2(tx, workspace_id, plan_id).await?,
@@ -3154,7 +3592,7 @@ impl CatalogRepository {
                     "persisted solution-pack resource evidence is inconsistent".into(),
                 ));
             }
-            if evidence_format == Some(4) {
+            if matches!(evidence_format, Some(4 | 5)) {
                 validate_sample_staging_integrity(tx, workspace_id, plan_id).await?;
             }
         } else if mappings
@@ -3164,6 +3602,26 @@ impl CatalogRepository {
             // Only legacy create/workspace-only plans predate this evidence column.
             return Err(RepositoryError::InvalidSolutionPackPlan(
                 "persisted existing mapping is missing resource evidence".into(),
+            ));
+        }
+        // Seed resource kinds only exist in plans with a resource digest.
+        // Rows of these kinds without one are legacy context evidence from
+        // before contexts were pack resources, and must not be applied.
+        if evidence_format.is_none()
+            && mappings.iter().any(|mapping| {
+                matches!(
+                    mapping.resource_kind.as_str(),
+                    "prerequisite"
+                        | "context"
+                        | "publication_channel"
+                        | "rule"
+                        | "workflow"
+                        | "saved_search"
+                )
+            })
+        {
+            return Err(RepositoryError::InvalidSolutionPackPlan(
+                "unsupported persisted resource mapping".into(),
             ));
         }
         if mappings.len() != actions.len() {
@@ -3191,6 +3649,21 @@ impl CatalogRepository {
                     matches!(mapping.mapping_kind.as_str(), "create" | "reuse")
                         && mapping.target_version.is_none()
                         && mapping.target_code == "sample_entity"
+                }
+                "prerequisite" => {
+                    mapping.mapping_kind == "existing" && mapping.target_version.is_none()
+                }
+                "context" | "publication_channel" => {
+                    matches!(mapping.mapping_kind.as_str(), "create" | "existing")
+                        && mapping.target_version.is_none()
+                }
+                "rule" | "workflow" => {
+                    mapping.mapping_kind == "create" && mapping.target_version == Some(1)
+                }
+                "saved_search" => {
+                    mapping.mapping_kind == "create"
+                        && mapping.target_version.is_none()
+                        && mapping.target_code == "saved_search"
                 }
                 "workspace_setting" => {
                     mapping.mapping_kind == "workspace"
@@ -3309,6 +3782,21 @@ impl CatalogRepository {
                     "sample_entity" => matches!(
                         (action.action.as_str(), mapping.mapping_kind.as_str()),
                         ("create" | "conflict", "create") | ("map" | "conflict", "reuse")
+                    ),
+                    "prerequisite" => matches!(action.action.as_str(), "map" | "blocked"),
+                    "context" => matches!(
+                        (action.action.as_str(), mapping.mapping_kind.as_str()),
+                        ("create" | "skip" | "conflict" | "blocked", "create")
+                            | ("map", "existing")
+                    ),
+                    "publication_channel" => matches!(
+                        (action.action.as_str(), mapping.mapping_kind.as_str()),
+                        ("create" | "skip" | "conflict" | "blocked", "create")
+                            | ("satisfied" | "skip" | "conflict" | "blocked", "existing")
+                    ),
+                    "rule" | "workflow" | "saved_search" => matches!(
+                        (action.action.as_str(), mapping.mapping_kind.as_str()),
+                        ("create" | "skip" | "conflict" | "blocked", "create")
                     ),
                     _ => false,
                 };
@@ -3434,7 +3922,9 @@ impl CatalogRepository {
             if action.action == "map" && action.resource_kind == "blueprint" {
                 if !matches!(
                     action.reason_code.as_str(),
-                    "exact_blueprint_match" | "unchanged_from_prior_application"
+                    "exact_blueprint_match"
+                        | "unchanged_from_prior_application"
+                        | "prerequisite_blueprint_match"
                 ) || action.normalized_payload.is_some()
                 {
                     return Err(RepositoryError::InvalidSolutionPackPlan(
@@ -3893,6 +4383,25 @@ impl CatalogRepository {
                 }
                 continue;
             }
+            if step.resource_kind == "prerequisite" {
+                self.revalidate_prerequisite(tx, step.target_id, &step.preconditions)
+                    .await?;
+                continue;
+            }
+            if step.resource_kind == "context" && step.action == "map" {
+                self.revalidate_existing_context(tx, step.target_id, &step.target_code)
+                    .await?;
+                continue;
+            }
+            if step.resource_kind == "publication_channel" && step.action == "satisfied" {
+                self.revalidate_satisfied_channel(
+                    tx,
+                    step.target_id,
+                    step.normalized_payload.as_ref(),
+                )
+                .await?;
+                continue;
+            }
             if step.action == "map" {
                 continue;
             }
@@ -4015,7 +4524,24 @@ impl CatalogRepository {
                 }
                 continue;
             }
-            if step.resource_kind != "blueprint" {
+            if matches!(
+                step.resource_kind.as_str(),
+                "publication_channel" | "rule" | "workflow" | "saved_search"
+            ) {
+                let (exists, code_taken) = self
+                    .seed_target_state(tx, &step.resource_kind, step.target_id, &step.target_code)
+                    .await?;
+                let valid = if step.state == "completed" {
+                    exists
+                } else {
+                    !exists && !code_taken
+                };
+                if !valid {
+                    return Err(RepositoryError::SolutionPackPlanStale);
+                }
+                continue;
+            }
+            if !matches!(step.resource_kind.as_str(), "blueprint" | "context") {
                 return Err(RepositoryError::InvalidSolutionPackPlan(
                     "unsupported persisted resource kind".into(),
                 ));
@@ -4203,6 +4729,7 @@ impl CatalogRepository {
         let Some(step) = step else {
             sqlx::query("DELETE FROM solution_pack_plan_sample_entities WHERE workspace_id=$1 AND plan_id=$2")
                 .bind(workspace_id).bind(plan_id).execute(&mut *tx).await?;
+            expire_sample_file_staging(&mut tx, workspace_id, &[plan_id]).await?;
             sqlx::query("UPDATE solution_pack_applications SET state='completed', completed_at=clock_timestamp(), updated_at=clock_timestamp(), diagnostic_code=NULL, diagnostic_message=NULL WHERE workspace_id=$1 AND id=$2")
                     .bind(workspace_id).bind(application_id).execute(&mut *tx).await?;
             tx.commit().await?;
@@ -4217,7 +4744,9 @@ impl CatalogRepository {
         self.revalidate_all_existing_blueprints(&mut tx, application_id)
             .await?;
         *attempted_position = Some(step.position);
-        if step.resource_kind != "workspace_setting" && step.action != "map" {
+        if step.resource_kind != "workspace_setting"
+            && !matches!(step.action.as_str(), "map" | "satisfied")
+        {
             self.ensure_target_absent(&mut tx, &step).await?;
         }
         let (result_snapshot, events) = if step.action == "map" {
@@ -4265,6 +4794,18 @@ impl CatalogRepository {
                 }
                 (
                     serde_json::json!({"outcome":"reused","id":step.target_id,"purpose":actual.0,"media_type":actual.1,"byte_size":actual.2,"sha256":actual.3,"source_sha256":expected[0].source_sha256}),
+                    Vec::new(),
+                )
+            } else if step.resource_kind == "prerequisite" {
+                (
+                    self.revalidate_prerequisite(&mut tx, step.target_id, &step.preconditions)
+                        .await?,
+                    Vec::new(),
+                )
+            } else if step.resource_kind == "context" {
+                (
+                    self.revalidate_existing_context(&mut tx, step.target_id, &step.target_code)
+                        .await?,
                     Vec::new(),
                 )
             } else if step.resource_kind == "sample_entity" {
@@ -4400,6 +4941,9 @@ impl CatalogRepository {
                         events,
                     )
                 }
+                "context" | "publication_channel" | "rule" | "workflow" | "saved_search" => {
+                    self.apply_seed_step(&mut tx, &step).await?
+                }
                 "sample_entity" => {
                     let (blueprint_id, blueprint_version, canonical_digest, canonical_input) = sqlx::query_as::<_, (Uuid, i64, String, Value)>(
                         "SELECT blueprint_id,blueprint_version,canonical_declaration_sha256,canonical_input FROM solution_pack_plan_sample_entities WHERE workspace_id=$1 AND plan_id=$2 AND logical_key=$3 AND target_id=$4 FOR UPDATE",
@@ -4418,13 +4962,17 @@ impl CatalogRepository {
                             "sample staging input is invalid".into(),
                         )
                     })?;
+                    let contexts = self
+                        .sample_context_ids(&mut tx, plan_id, sample_entity_contexts(&sample))
+                        .await?;
+                    let file_values = sample.files.clone();
                     let mut values = sample
                         .facts
                         .into_iter()
                         .map(|fact| NewAttributeValue::Scalar {
                             attribute_id: None,
                             attribute_code: fact.attribute.rsplit('/').next().map(str::to_owned),
-                            context_id: None,
+                            context_id: fact.context.as_ref().map(|context| contexts[context]),
                             value: fact.value,
                         })
                         .collect::<Vec<_>>();
@@ -4448,7 +4996,10 @@ impl CatalogRepository {
                                     .rsplit('/')
                                     .next()
                                     .map(str::to_owned),
-                                context_id: None,
+                                context_id: relationship
+                                    .context
+                                    .as_ref()
+                                    .map(|context| contexts[context]),
                                 target_entity_id: target_ids[&target],
                             });
                         }
@@ -4475,8 +5026,24 @@ impl CatalogRepository {
                     entity_repository
                         .stage_entity_mutation(&mut tx, changes, event)
                         .await?;
+                    let file_count = self
+                        .attach_sample_files(
+                            &mut tx,
+                            plan_id,
+                            entity.id,
+                            &file_values,
+                            &contexts,
+                            object_store,
+                        )
+                        .await?;
                     (
-                        serde_json::json!({"id":entity.id,"blueprint_id":entity.blueprint_id,"blueprint_version":entity.blueprint_version,"is_sample":true,"canonical_declaration_sha256":canonical_digest}),
+                        {
+                            let mut result = serde_json::json!({"id":entity.id,"blueprint_id":entity.blueprint_id,"blueprint_version":entity.blueprint_version,"is_sample":true,"canonical_declaration_sha256":canonical_digest});
+                            if file_count > 0 {
+                                result["file_count"] = file_count.into();
+                            }
+                            result
+                        },
                         Vec::new(),
                     )
                 }
@@ -4772,7 +5339,42 @@ impl CatalogRepository {
                 Ok(())
             };
         }
-        if step.resource_kind != "blueprint" {
+        if matches!(
+            step.resource_kind.as_str(),
+            "publication_channel" | "rule" | "workflow" | "saved_search"
+        ) {
+            match step.resource_kind.as_str() {
+                "rule" => {
+                    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))")
+                        .bind(format!("rule-code:{workspace_id}:{}", step.target_code))
+                        .execute(&mut **tx)
+                        .await?;
+                }
+                "workflow" => {
+                    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+                        .bind(format!("workflow-code:{workspace_id}:{}", step.target_code))
+                        .execute(&mut **tx)
+                        .await?;
+                }
+                "publication_channel" => {
+                    sqlx::query("SELECT id FROM attribute_contexts WHERE workspace_id=$1 AND id=$2 FOR UPDATE")
+                        .bind(workspace_id)
+                        .bind(step.target_id)
+                        .execute(&mut **tx)
+                        .await?;
+                }
+                _ => {}
+            }
+            let (exists, code_taken) = self
+                .seed_target_state(tx, &step.resource_kind, step.target_id, &step.target_code)
+                .await?;
+            return if exists || code_taken {
+                Err(RepositoryError::SolutionPackPlanStale)
+            } else {
+                Ok(())
+            };
+        }
+        if !matches!(step.resource_kind.as_str(), "blueprint" | "context") {
             return Err(RepositoryError::InvalidSolutionPackPlan(
                 "unsupported persisted resource kind".into(),
             ));
@@ -5600,6 +6202,510 @@ fn solution_pack_mutation_error(error: RepositoryError) -> RepositoryError {
             RepositoryError::SolutionPackPlanStale
         }
         error => error,
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ContextPayload {
+    code: String,
+    data: Value,
+    parent_id: Option<Uuid>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PublicationChannelPayload {
+    context_id: Uuid,
+    context_code: String,
+    enabled: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RulePayload {
+    definition: String,
+    blueprint_id: Uuid,
+    blueprint_version: i64,
+    context_id: Option<Uuid>,
+    enabled: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WorkflowPayload {
+    definition: String,
+    enabled: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SavedSearchPayload {
+    name: String,
+    description: Option<String>,
+    visibility: String,
+    state: Value,
+}
+
+fn seed_payload<T: serde::de::DeserializeOwned>(
+    payload: Option<&Value>,
+    label: &str,
+) -> Result<T, RepositoryError> {
+    payload
+        .cloned()
+        .and_then(|payload| serde_json::from_value(payload).ok())
+        .ok_or_else(|| {
+            RepositoryError::InvalidSolutionPackPlan(format!("invalid persisted {label} payload"))
+        })
+}
+
+impl CatalogRepository {
+    /// Workspace context ids of the pack contexts a sample entity uses, from
+    /// the plan's reviewed context mappings.
+    async fn sample_context_ids(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        plan_id: Uuid,
+        keys: std::collections::BTreeSet<&str>,
+    ) -> Result<std::collections::BTreeMap<String, Uuid>, RepositoryError> {
+        if keys.is_empty() {
+            return Ok(Default::default());
+        }
+        let keys = keys.into_iter().map(str::to_owned).collect::<Vec<_>>();
+        let contexts = sqlx::query_as::<_, (String, Uuid)>(
+            "SELECT m.logical_key,m.target_id FROM solution_pack_plan_mappings m JOIN attribute_contexts c ON c.workspace_id=m.workspace_id AND c.id=m.target_id AND c.code=m.target_code WHERE m.workspace_id=$1 AND m.plan_id=$2 AND m.resource_kind='context' AND m.logical_key=ANY($3)",
+        )
+        .bind(self.workspace_id.0)
+        .bind(plan_id)
+        .bind(&keys)
+        .fetch_all(&mut **tx)
+        .await?
+        .into_iter()
+        .collect::<std::collections::BTreeMap<_, _>>();
+        if contexts.len() != keys.len() {
+            return Err(RepositoryError::SolutionPackPlanStale);
+        }
+        Ok(contexts)
+    }
+
+    /// Attaches bundled sample files to a just-created sample entity through
+    /// ordinary file storage. Each bundled path becomes one ordinary file the
+    /// first time a sample entity attaches it; later references link it.
+    async fn attach_sample_files(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        plan_id: Uuid,
+        entity_id: Uuid,
+        values: &[crate::solution_pack_sample_data::SampleFileValue],
+        contexts: &std::collections::BTreeMap<String, Uuid>,
+        object_store: &dyn ObjectStore,
+    ) -> Result<usize, RepositoryError> {
+        if values.is_empty() {
+            return Ok(0);
+        }
+        let workspace_id = self.workspace_id.0;
+        let entity = self.lock_entity(tx, entity_id).await?;
+        let default_context: Uuid = sqlx::query_scalar(
+            "SELECT id FROM attribute_contexts WHERE workspace_id=$1 AND code='default'",
+        )
+        .bind(workspace_id)
+        .fetch_one(&mut **tx)
+        .await?;
+        let mut attached = 0;
+        for value in values {
+            let code = value.attribute.rsplit('/').next().unwrap_or_default();
+            let (attribute_id, _, context_editable) =
+                self.file_upload_attribute(tx, &entity, code).await?;
+            let context_id = value
+                .context
+                .as_ref()
+                .map_or(default_context, |context| contexts[context]);
+            self.validate_context_editable(tx, Some(context_id), &context_editable)
+                .await?;
+            let value_id: Uuid = sqlx::query_scalar(
+                "INSERT INTO attribute_values (id, workspace_id, entity_id, attribute_id, context_id, active) VALUES ($1, $2, $3, $4, $5, true) RETURNING id",
+            )
+            .bind(Uuid::new_v4())
+            .bind(workspace_id)
+            .bind(entity_id)
+            .bind(attribute_id)
+            .bind(context_id)
+            .fetch_one(&mut **tx)
+            .await?;
+            for (position, file) in value.files.iter().enumerate() {
+                let (file_id, object_key, filename, media_type, byte_size, sha256) =
+                    sqlx::query_as::<_, (Uuid, String, String, String, i64, String)>(
+                        "SELECT file_id,object_key,filename,media_type,byte_size,sha256 FROM solution_pack_plan_sample_files WHERE workspace_id=$1 AND plan_id=$2 AND path=$3",
+                    )
+                    .bind(workspace_id)
+                    .bind(plan_id)
+                    .bind(&file.path)
+                    .fetch_optional(&mut **tx)
+                    .await?
+                    .ok_or_else(|| {
+                        RepositoryError::InvalidSolutionPackPlan(
+                            "sample file staging evidence is missing".into(),
+                        )
+                    })?;
+                if filename != file.filename || media_type != file.media_type {
+                    return Err(RepositoryError::InvalidSolutionPackPlan(
+                        "sample file staging evidence is inconsistent".into(),
+                    ));
+                }
+                let created: bool = sqlx::query_scalar(
+                    "SELECT EXISTS(SELECT 1 FROM files WHERE workspace_id=$1 AND id=$2)",
+                )
+                .bind(workspace_id)
+                .bind(file_id)
+                .fetch_one(&mut **tx)
+                .await?;
+                if !created {
+                    let expected_size = usize::try_from(byte_size)
+                        .map_err(|_| RepositoryError::SolutionPackAssetObjectIntegrityFailed)?;
+                    let stored = get_object_for_integrity(object_store, &object_key, expected_size)
+                        .await
+                        .map_err(|error| match error {
+                            ObjectStoreError::Unavailable
+                            | ObjectStoreError::TimedOut(_)
+                            | ObjectStoreError::Operation(_) => {
+                                RepositoryError::SolutionPackAssetStorageUnavailable
+                            }
+                            ObjectStoreError::NotFound => {
+                                RepositoryError::SolutionPackAssetObjectIntegrityFailed
+                            }
+                        })?;
+                    if stored.bytes.len() as i64 != byte_size
+                        || format!("{:x}", Sha256::digest(&stored.bytes)) != sha256
+                    {
+                        return Err(RepositoryError::SolutionPackAssetObjectIntegrityFailed);
+                    }
+                    self.finish_file_upload(tx, &object_key).await?;
+                    sqlx::query(
+                        "INSERT INTO files (id, workspace_id, original_filename, display_filename, mime_type, byte_size, sha256, original_key, status) VALUES ($1,$2,$3,$3,$4,$5,$6,$7,'queued')",
+                    )
+                    .bind(file_id)
+                    .bind(workspace_id)
+                    .bind(&filename)
+                    .bind(&media_type)
+                    .bind(byte_size)
+                    .bind(&sha256)
+                    .bind(&object_key)
+                    .execute(&mut **tx)
+                    .await?;
+                    sqlx::query("INSERT INTO file_processing_jobs (id, workspace_id, file_id, kind, status) VALUES ($1,$2,$3,'metadata','queued')")
+                        .bind(Uuid::new_v4())
+                        .bind(workspace_id)
+                        .bind(file_id)
+                        .execute(&mut **tx)
+                        .await?;
+                }
+                sqlx::query("INSERT INTO attribute_file_references (attribute_value_id, workspace_id, file_id, position) VALUES ($1,$2,$3,$4)")
+                    .bind(value_id)
+                    .bind(workspace_id)
+                    .bind(file_id)
+                    .bind(position as i32)
+                    .execute(&mut **tx)
+                    .await?;
+                attached += 1;
+            }
+        }
+        Ok(attached)
+    }
+
+    /// A prerequisite application is completed and immutable, but it must
+    /// still exist with the reviewed pack identity.
+    async fn revalidate_prerequisite(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        application_id: Uuid,
+        preconditions: &Value,
+    ) -> Result<Value, RepositoryError> {
+        let expected = preconditions
+            .as_array()
+            .filter(|values| values.len() == 1)
+            .and_then(|values| values[0].as_object())
+            .filter(|value| {
+                value.get("kind").and_then(Value::as_str) == Some("prerequisite_application")
+                    && value.get("application_id").and_then(Value::as_str)
+                        == Some(application_id.to_string().as_str())
+            })
+            .ok_or_else(|| {
+                RepositoryError::InvalidSolutionPackPlan(
+                    "invalid prerequisite preconditions".into(),
+                )
+            })?;
+        let actual = sqlx::query_as::<_, (String, String, String)>(
+            "SELECT state,pack_id,pack_version FROM solution_pack_applications WHERE workspace_id=$1 AND id=$2 FOR SHARE",
+        )
+        .bind(self.workspace_id.0)
+        .bind(application_id)
+        .fetch_optional(&mut **tx)
+        .await?;
+        let Some((state, pack_id, pack_version)) = actual else {
+            return Err(RepositoryError::SolutionPackPlanStale);
+        };
+        if state != "completed"
+            || expected.get("pack_id").and_then(Value::as_str) != Some(pack_id.as_str())
+            || expected.get("pack_version").and_then(Value::as_str) != Some(pack_version.as_str())
+        {
+            return Err(RepositoryError::SolutionPackPlanStale);
+        }
+        Ok(serde_json::json!({
+            "outcome": "reused",
+            "application_id": application_id,
+            "pack_id": pack_id,
+            "pack_version": pack_version,
+        }))
+    }
+
+    async fn revalidate_existing_context(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        context_id: Uuid,
+        code: &str,
+    ) -> Result<Value, RepositoryError> {
+        let current: Option<String> = sqlx::query_scalar(
+            "SELECT code FROM attribute_contexts WHERE workspace_id=$1 AND id=$2 FOR SHARE",
+        )
+        .bind(self.workspace_id.0)
+        .bind(context_id)
+        .fetch_optional(&mut **tx)
+        .await?;
+        if current.as_deref() != Some(code) {
+            return Err(RepositoryError::SolutionPackPlanStale);
+        }
+        Ok(serde_json::json!({"outcome": "reused", "id": context_id, "code": code}))
+    }
+
+    async fn revalidate_satisfied_channel(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        context_id: Uuid,
+        payload: Option<&Value>,
+    ) -> Result<Value, RepositoryError> {
+        let payload: PublicationChannelPayload = seed_payload(payload, "publication channel")?;
+        if payload.context_id != context_id {
+            return Err(RepositoryError::InvalidSolutionPackPlan(
+                "persisted publication channel mapping does not match its payload".into(),
+            ));
+        }
+        let current = publication_channel_enabled(tx, self.workspace_id.0, context_id).await?;
+        if current != Some(payload.enabled) {
+            return Err(RepositoryError::SolutionPackPlanStale);
+        }
+        Ok(serde_json::json!({
+            "outcome": "satisfied",
+            "context_id": context_id,
+            "context_code": payload.context_code,
+            "enabled": payload.enabled,
+        }))
+    }
+
+    /// Whether a seed resource target exists by its planned id, and whether
+    /// its planned code is taken by any resource.
+    async fn seed_target_state(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        resource_kind: &str,
+        target_id: Uuid,
+        target_code: &str,
+    ) -> Result<(bool, bool), RepositoryError> {
+        let query = match resource_kind {
+            "rule" => {
+                "SELECT EXISTS(SELECT 1 FROM rules WHERE workspace_id=$1 AND id=$2), EXISTS(SELECT 1 FROM rules WHERE workspace_id=$1 AND code=$3)"
+            }
+            "workflow" => {
+                "SELECT EXISTS(SELECT 1 FROM workflows WHERE workspace_id=$1 AND id=$2), EXISTS(SELECT 1 FROM workflows WHERE workspace_id=$1 AND code=$3)"
+            }
+            "saved_search" => {
+                "SELECT EXISTS(SELECT 1 FROM saved_views WHERE workspace_id=$1 AND id=$2), false AND $3 <> ''"
+            }
+            "publication_channel" => {
+                "SELECT EXISTS(SELECT 1 FROM publication_channels WHERE workspace_id=$1 AND context_id=$2), false AND $3 <> ''"
+            }
+            _ => {
+                return Err(RepositoryError::InvalidSolutionPackPlan(
+                    "unsupported persisted resource kind".into(),
+                ));
+            }
+        };
+        Ok(sqlx::query_as::<_, (bool, bool)>(query)
+            .bind(self.workspace_id.0)
+            .bind(target_id)
+            .bind(target_code)
+            .fetch_one(&mut **tx)
+            .await?)
+    }
+
+    /// Creates one seed resource through its ordinary in-transaction path.
+    async fn apply_seed_step(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        step: &PendingApplicationStep,
+    ) -> Result<(Value, Vec<crate::domain_events::NewDomainEvent>), RepositoryError> {
+        let workspace_id = self.workspace_id.0;
+        let payload = step.normalized_payload.as_ref();
+        match (step.resource_kind.as_str(), step.action.as_str()) {
+            ("context", "create") => {
+                let payload: ContextPayload = seed_payload(payload, "context")?;
+                if payload.code != step.target_code {
+                    return Err(RepositoryError::InvalidSolutionPackPlan(
+                        "persisted context mapping does not match its payload".into(),
+                    ));
+                }
+                let context = self
+                    .create_context_in_transaction(
+                        tx,
+                        step.target_id,
+                        CreateAttributeContext {
+                            code: payload.code,
+                            data: payload.data,
+                            parent_id: payload.parent_id,
+                        },
+                    )
+                    .await
+                    .map_err(solution_pack_mutation_error)?;
+                Ok((
+                    serde_json::json!({"id": context.id, "code": context.code, "parent_id": context.parent_id}),
+                    vec![super::contexts::context_event(
+                        self,
+                        crate::domain_events::CONTEXT_CREATED_V1,
+                        &context,
+                    )],
+                ))
+            }
+            ("publication_channel", "satisfied") => Ok((
+                self.revalidate_satisfied_channel(tx, step.target_id, payload)
+                    .await?,
+                Vec::new(),
+            )),
+            ("publication_channel", "create") => {
+                let payload: PublicationChannelPayload =
+                    seed_payload(payload, "publication channel")?;
+                if payload.context_id != step.target_id {
+                    return Err(RepositoryError::InvalidSolutionPackPlan(
+                        "persisted publication channel mapping does not match its payload".into(),
+                    ));
+                }
+                sqlx::query("INSERT INTO publication_channels (workspace_id, context_id, enabled) VALUES ($1, $2, $3)")
+                    .bind(workspace_id)
+                    .bind(payload.context_id)
+                    .bind(payload.enabled)
+                    .execute(&mut **tx)
+                    .await?;
+                Ok((
+                    serde_json::json!({"context_id": payload.context_id, "context_code": payload.context_code, "enabled": payload.enabled}),
+                    Vec::new(),
+                ))
+            }
+            ("rule", "create") => {
+                let payload: RulePayload = seed_payload(payload, "rule")?;
+                let id = self
+                    .create_rule_in_transaction(
+                        tx,
+                        step.target_id,
+                        CreateRule {
+                            blueprint_id: payload.blueprint_id,
+                            blueprint_version: payload.blueprint_version,
+                            context_id: payload.context_id,
+                            definition: payload.definition,
+                        },
+                    )
+                    .await
+                    .map_err(solution_pack_mutation_error)?;
+                let code: String = sqlx::query_scalar(
+                    "SELECT code FROM rules WHERE workspace_id=$1 AND id=$2 AND version=1",
+                )
+                .bind(workspace_id)
+                .bind(id)
+                .fetch_one(&mut **tx)
+                .await?;
+                if code != step.target_code {
+                    return Err(RepositoryError::InvalidSolutionPackPlan(
+                        "persisted rule mapping does not match its payload".into(),
+                    ));
+                }
+                self.publish_rule_in_transaction(tx, id, 1).await?;
+                if payload.enabled {
+                    self.enable_rule_in_transaction(tx, id, 1).await?;
+                }
+                Ok((
+                    serde_json::json!({"id": id, "code": code, "version": 1, "status": "published", "enabled": payload.enabled}),
+                    Vec::new(),
+                ))
+            }
+            ("workflow", "create") => {
+                let payload: WorkflowPayload = seed_payload(payload, "workflow")?;
+                let id = self
+                    .create_workflow_in_transaction(
+                        tx,
+                        step.target_id,
+                        CreateWorkflow {
+                            definition: payload.definition,
+                        },
+                    )
+                    .await
+                    .map_err(solution_pack_mutation_error)?;
+                let code: String = sqlx::query_scalar(
+                    "SELECT code FROM workflows WHERE workspace_id=$1 AND id=$2 AND version=1",
+                )
+                .bind(workspace_id)
+                .bind(id)
+                .fetch_one(&mut **tx)
+                .await?;
+                if code != step.target_code {
+                    return Err(RepositoryError::InvalidSolutionPackPlan(
+                        "persisted workflow mapping does not match its payload".into(),
+                    ));
+                }
+                self.publish_workflow_revision_in_transaction(tx, id, 1)
+                    .await?;
+                if payload.enabled {
+                    self.enable_workflow_revision_in_transaction(tx, id, 1)
+                        .await?;
+                }
+                Ok((
+                    serde_json::json!({"id": id, "code": code, "version": 1, "status": "published", "enabled": payload.enabled}),
+                    Vec::new(),
+                ))
+            }
+            ("saved_search", "create") => {
+                let payload: SavedSearchPayload = seed_payload(payload, "saved search")?;
+                if payload.visibility != "workspace" || !payload.state.is_object() {
+                    return Err(RepositoryError::InvalidSolutionPackPlan(
+                        "invalid persisted saved search payload".into(),
+                    ));
+                }
+                // A workspace saved search is owned by the person applying the
+                // seed, like any search they share.
+                let owner = self
+                    .audit_context
+                    .as_ref()
+                    .and_then(|context| context.actor_user_id)
+                    .ok_or_else(|| {
+                        RepositoryError::InvalidSolutionPackPlan(
+                            "a saved search can only be seeded by a signed-in user or personal token".into(),
+                        )
+                    })?;
+                sqlx::query("INSERT INTO saved_views (id,workspace_id,owner_user_id,kind,name,description,visibility,state,state_hash) VALUES ($1,$2,$3,'explorer_search',$4,$5,'workspace',$6,$7)")
+                    .bind(step.target_id)
+                    .bind(workspace_id)
+                    .bind(owner)
+                    .bind(&payload.name)
+                    .bind(&payload.description)
+                    .bind(&payload.state)
+                    .bind(super::saved_views::state_hash(&payload.state))
+                    .execute(&mut **tx)
+                    .await?;
+                Ok((
+                    serde_json::json!({"id": step.target_id, "name": payload.name, "visibility": "workspace", "owner_user_id": owner}),
+                    Vec::new(),
+                ))
+            }
+            _ => Err(RepositoryError::InvalidSolutionPackPlan(
+                "unsupported persisted seed step".into(),
+            )),
+        }
     }
 }
 

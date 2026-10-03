@@ -112,11 +112,28 @@ impl CatalogRepository {
     }
 
     pub async fn create_rule(&self, input: CreateRule) -> Result<Rule, RepositoryError> {
+        let mut tx = self.pool.begin().await?;
+        let id = self
+            .create_rule_in_transaction(&mut tx, Uuid::new_v4(), input)
+            .await?;
+        self.commit_mutation(tx).await?;
+        self.get_rule(id)
+            .await?
+            .ok_or(RepositoryError::NotFound("rule"))
+    }
+
+    /// Shared mutation seam for callers that create a rule with a chosen id
+    /// as part of a larger transaction, such as seed application.
+    pub(super) async fn create_rule_in_transaction(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        id: Uuid,
+        input: CreateRule,
+    ) -> Result<Uuid, RepositoryError> {
         let compiled = catalog_rules::compile(&input.definition)
             .map_err(|e| RepositoryError::InvalidRuleDefinition(e.to_string()))?;
         let ws = self.workspace_id.0;
-        let mut tx = self.pool.begin().await?;
-        let valid_blueprint:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM blueprints WHERE id=$1 AND version=$2 AND workspace_id=$3 AND status='published' AND deleted_at IS NULL)").bind(input.blueprint_id).bind(input.blueprint_version).bind(ws).fetch_one(&mut *tx).await?;
+        let valid_blueprint:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM blueprints WHERE id=$1 AND version=$2 AND workspace_id=$3 AND status='published' AND deleted_at IS NULL)").bind(input.blueprint_id).bind(input.blueprint_version).bind(ws).fetch_one(&mut **tx).await?;
         if !valid_blueprint {
             return Err(RepositoryError::BlueprintNotPublished);
         }
@@ -126,7 +143,7 @@ impl CatalogRepository {
             )
             .bind(context_id)
             .bind(ws)
-            .fetch_one(&mut *tx)
+            .fetch_one(&mut **tx)
             .await?;
             if !exists {
                 return Err(RepositoryError::InvalidContext);
@@ -134,31 +151,27 @@ impl CatalogRepository {
         }
         sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))")
             .bind(format!("rule-code:{ws}:{}", compiled.code))
-            .execute(&mut *tx)
+            .execute(&mut **tx)
             .await?;
         let exists: bool = sqlx::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM rules WHERE workspace_id=$1 AND code=$2)",
         )
         .bind(ws)
         .bind(&compiled.code)
-        .fetch_one(&mut *tx)
+        .fetch_one(&mut **tx)
         .await?;
         if exists {
             return Err(RepositoryError::RuleCodeTaken);
         }
-        let id = Uuid::new_v4();
         let plan = serde_json::to_value(&compiled)
             .map_err(|e| RepositoryError::InvalidRuleDefinition(e.to_string()))?;
-        sqlx::query("INSERT INTO rules(id,workspace_id,blueprint_id,blueprint_version,context_id,code,name,version,definition,definition_hash,compiled_plan) VALUES($1,$2,$3,$4,$5,$6,$7,1,$8,$9,$10)").bind(id).bind(ws).bind(input.blueprint_id).bind(input.blueprint_version).bind(input.context_id).bind(&compiled.code).bind(&compiled.name).bind(input.definition).bind(&compiled.raw_definition_hash).bind(plan).execute(&mut *tx).await?;
+        sqlx::query("INSERT INTO rules(id,workspace_id,blueprint_id,blueprint_version,context_id,code,name,version,definition,definition_hash,compiled_plan) VALUES($1,$2,$3,$4,$5,$6,$7,1,$8,$9,$10)").bind(id).bind(ws).bind(input.blueprint_id).bind(input.blueprint_version).bind(input.context_id).bind(&compiled.code).bind(&compiled.name).bind(input.definition).bind(&compiled.raw_definition_hash).bind(plan).execute(&mut **tx).await?;
         sqlx::query("INSERT INTO rule_lifecycles(rule_id,workspace_id) VALUES($1,$2)")
             .bind(id)
             .bind(ws)
-            .execute(&mut *tx)
+            .execute(&mut **tx)
             .await?;
-        self.commit_mutation(tx).await?;
-        self.get_rule(id)
-            .await?
-            .ok_or(RepositoryError::NotFound("rule"))
+        Ok(id)
     }
     pub async fn create_rule_revision(
         &self,
@@ -203,29 +216,52 @@ impl CatalogRepository {
             .into_domain())
     }
     pub async fn publish_rule(&self, id: Uuid, version: i64) -> Result<Rule, RepositoryError> {
-        let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
-        if sqlx::query("UPDATE rules SET status='published',published_at=COALESCE(published_at,now()) WHERE workspace_id=$1 AND id=$2 AND version=$3").bind(ws).bind(id).bind(version).execute(&mut *tx).await?.rows_affected()==0{return Err(RepositoryError::NotFound("rule revision"));}
+        self.publish_rule_in_transaction(&mut tx, id, version)
+            .await?;
         self.commit_mutation(tx).await?;
         self.get_rule(id)
             .await?
             .ok_or(RepositoryError::NotFound("rule"))
     }
-    pub async fn enable_rule(&self, id: Uuid, version: i64) -> Result<Rule, RepositoryError> {
+    pub(super) async fn publish_rule_in_transaction(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        id: Uuid,
+        version: i64,
+    ) -> Result<(), RepositoryError> {
         let ws = self.workspace_id.0;
+        if sqlx::query("UPDATE rules SET status='published',published_at=COALESCE(published_at,now()) WHERE workspace_id=$1 AND id=$2 AND version=$3").bind(ws).bind(id).bind(version).execute(&mut **tx).await?.rows_affected()==0{return Err(RepositoryError::NotFound("rule revision"));}
+        Ok(())
+    }
+    pub async fn enable_rule(&self, id: Uuid, version: i64) -> Result<Rule, RepositoryError> {
         let mut tx = self.pool.begin().await?;
-        let exists:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM rules WHERE workspace_id=$1 AND id=$2 AND version=$3 AND status='published')").bind(ws).bind(id).bind(version).fetch_one(&mut *tx).await?;
+        self.enable_rule_in_transaction(&mut tx, id, version)
+            .await?;
+        self.commit_mutation(tx).await?;
+        self.get_rule(id)
+            .await?
+            .ok_or(RepositoryError::NotFound("rule"))
+    }
+    pub(super) async fn enable_rule_in_transaction(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        id: Uuid,
+        version: i64,
+    ) -> Result<(), RepositoryError> {
+        let ws = self.workspace_id.0;
+        let exists:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM rules WHERE workspace_id=$1 AND id=$2 AND version=$3 AND status='published')").bind(ws).bind(id).bind(version).fetch_one(&mut **tx).await?;
         if !exists {
             return Err(RepositoryError::RuleNotPublished);
         }
-        sqlx::query("UPDATE rule_lifecycles SET enabled_version=$3,activation_sequence=(SELECT COALESCE(max(sequence),0) FROM domain_events WHERE workspace_id=$1),enabled_at=now(),disabled_at=NULL,updated_at=now() WHERE workspace_id=$1 AND rule_id=$2").bind(ws).bind(id).bind(version).execute(&mut *tx).await?;
+        sqlx::query("UPDATE rule_lifecycles SET enabled_version=$3,activation_sequence=(SELECT COALESCE(max(sequence),0) FROM domain_events WHERE workspace_id=$1),enabled_at=now(),disabled_at=NULL,updated_at=now() WHERE workspace_id=$1 AND rule_id=$2").bind(ws).bind(id).bind(version).execute(&mut **tx).await?;
         let plan: serde_json::Value = sqlx::query_scalar(
             "SELECT compiled_plan FROM rules WHERE workspace_id=$1 AND id=$2 AND version=$3",
         )
         .bind(ws)
         .bind(id)
         .bind(version)
-        .fetch_one(&mut *tx)
+        .fetch_one(&mut **tx)
         .await?;
         let compiled: catalog_rules::CompiledRule = serde_json::from_value(plan)
             .map_err(|error| RepositoryError::InvalidRuleDefinition(error.to_string()))?;
@@ -239,12 +275,9 @@ impl CatalogRepository {
             let next = schedule.after(&Utc::now()).next().ok_or_else(|| {
                 RepositoryError::InvalidRuleDefinition("schedule has no future occurrence".into())
             })?;
-            sqlx::query("INSERT INTO rule_schedule_states(workspace_id,rule_id,rule_version,trigger_index,next_run_at) VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING").bind(ws).bind(id).bind(version).bind(index as i32).bind(next).execute(&mut *tx).await?;
+            sqlx::query("INSERT INTO rule_schedule_states(workspace_id,rule_id,rule_version,trigger_index,next_run_at) VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING").bind(ws).bind(id).bind(version).bind(index as i32).bind(next).execute(&mut **tx).await?;
         }
-        self.commit_mutation(tx).await?;
-        self.get_rule(id)
-            .await?
-            .ok_or(RepositoryError::NotFound("rule"))
+        Ok(())
     }
     pub async fn disable_rule(&self, id: Uuid) -> Result<Rule, RepositoryError> {
         let ws = self.workspace_id.0;
