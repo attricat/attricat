@@ -1,6 +1,9 @@
 import { Box, Chip, Stack, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import type { StatusConfiguration } from '../../entities/status';
+import {
+  statusOptionLabel,
+  type StatusConfiguration,
+} from '../../entities/status';
 import { MarkdownContent } from '../../markdown/MarkdownContent';
 import type { ValueRenderer } from '../components/componentTypes';
 import { NotSetValue } from '../components/values/NotSetValue';
@@ -93,7 +96,7 @@ export const StatusValue = ({
   const { t } = useTranslation();
   if (value === null || value === undefined) return <NotSetValue />;
   const option = config.options.find((item) => item.code === value);
-  const label = option?.label ?? String(value);
+  const label = option ? statusOptionLabel(option) : String(value);
   return (
     <Stack spacing={0.5} sx={{ alignItems: 'flex-start' }}>
       <Chip

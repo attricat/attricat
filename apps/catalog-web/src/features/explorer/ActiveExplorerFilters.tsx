@@ -1,6 +1,7 @@
 import { Box, Chip } from '@mui/material';
 import { CircleXIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import type { Attribute } from '../entities/api';
 import { attributeFilterKey, attributeFilterLabel } from './attributeFilters';
 import type { AttributeFilter } from './search';
 
@@ -17,12 +18,15 @@ export type ActiveExplorerFilter =
     };
 
 type Props = {
+  /** The selected blueprint's attributes, to show status labels. */
+  attributes?: Attribute[];
   filters: ActiveExplorerFilter[];
   onRemoveAttribute: (index: number) => void;
   onRemoveRelationship: (field: string) => void;
 };
 
 export const ActiveExplorerFilters = ({
+  attributes = [],
   filters,
   onRemoveAttribute,
   onRemoveRelationship,
@@ -48,7 +52,12 @@ export const ActiveExplorerFilters = ({
               field: filter.field,
               count: filter.selectedCount,
             })
-          : attributeFilterLabel(t, filter.filter);
+          : attributeFilterLabel(
+              t,
+              filter.filter,
+              filter.filter.field,
+              attributes.find((item) => item.code === filter.filter.field),
+            );
         return (
           <Chip
             deleteIcon={

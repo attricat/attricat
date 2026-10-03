@@ -310,6 +310,7 @@ Two practices save trouble later:
 A blueprint can also carry:
 
 - [Rules](/builders/rules/) that flag data-quality problems, such as a missing title.
+- [Status attributes](/builders/validation/#statuses) with allowed transitions and [translated labels](/builders/translations/#status-labels).
 - A [publication policy](/guides/publishing/#keep-publication-after-trusted-edits) that lets trusted roles edit without withdrawing channel approvals.
 - [Connector jobs](/reference/blueprint/#connector-jobs) that import or export entities through a connector extension.
 - Attributes whose type comes from an [extension](/reference/blueprint/#extension-attribute-types).

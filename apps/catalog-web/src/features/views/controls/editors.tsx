@@ -3,6 +3,8 @@ import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import { attributeLabel } from '../../entities/entityDisplay';
 import {
+  statusCodeLabel,
+  statusOptionLabel,
   statusTransitionAllowed,
   type StatusConfiguration,
 } from '../../entities/status';
@@ -162,9 +164,7 @@ export const StatusEditor = ({
       <MenuItem value="" disabled={!allowed('')}>
         {inheritedValue
           ? t('entities.statusInherit', {
-              value:
-                config.options.find((option) => option.code === inheritedValue)
-                  ?.label ?? inheritedValue,
+              value: statusCodeLabel(config, inheritedValue) ?? inheritedValue,
             })
           : t('entities.notSet')}
       </MenuItem>
@@ -179,7 +179,7 @@ export const StatusEditor = ({
           value={option.code}
           disabled={!allowed(option.code)}
         >
-          {option.label}
+          {statusOptionLabel(option)}
         </MenuItem>
       ))}
     </TextField>

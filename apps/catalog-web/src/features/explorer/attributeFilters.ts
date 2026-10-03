@@ -1,5 +1,6 @@
 import type { TFunction } from 'i18next';
 import type { Attribute } from '../entities/api';
+import { statusConfiguration, statusLabel } from '../entities/status';
 import type { AttributeFilter } from './search';
 
 export type AttributeFilterOperator = AttributeFilter['operator'];
@@ -33,6 +34,14 @@ export const operatorsForValueType = (
   return [];
 };
 
+/** Status codes are matched exactly, so a status offers equality only. */
+export const operatorsForAttribute = (
+  attribute: Attribute | undefined,
+): AttributeFilterOperator[] =>
+  attribute && statusConfiguration(attribute)
+    ? ['eq']
+    : operatorsForValueType(attribute?.value_type ?? 'string');
+
 /**
  * Attribute filters have no identity of their own and may repeat, so their
  * position is part of the key.
@@ -40,21 +49,25 @@ export const operatorsForValueType = (
 export const attributeFilterKey = (filter: AttributeFilter, index: number) =>
   `${filter.field}-${filter.operator}-${String(filter.value)}-${index}`;
 
+/** The filter value as shown to the user; status codes show their label. */
 export const attributeFilterValueLabel = (
   t: TFunction,
   filter: AttributeFilter,
+  attribute?: Attribute,
 ) =>
   typeof filter.value === 'boolean'
     ? t(filter.value ? 'explorer.true' : 'explorer.false')
-    : String(filter.value);
+    : ((attribute && statusLabel(attribute, filter.value)) ??
+      String(filter.value));
 
 export const attributeFilterLabel = (
   t: TFunction,
   filter: AttributeFilter,
   fieldLabel: string = filter.field,
+  attribute?: Attribute,
 ) =>
   t('explorer.attributeFilterPill', {
     field: fieldLabel,
     operator: t(`explorer.filterOperatorSymbols.${filter.operator}`),
-    value: JSON.stringify(attributeFilterValueLabel(t, filter)),
+    value: JSON.stringify(attributeFilterValueLabel(t, filter, attribute)),
   });

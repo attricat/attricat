@@ -310,6 +310,7 @@ Dwie praktyki oszczędzają później kłopotów:
 Schemat może też zawierać:
 
 - [Reguły](/pl/builders/rules/), które oznaczają problemy z jakością danych, np. brak tytułu.
+- [Atrybuty statusu](/pl/builders/validation/#statusy) z dozwolonymi przejściami i [przetłumaczonymi etykietami](/pl/builders/translations/#etykiety-statusów).
 - [Politykę publikacji](/pl/guides/publishing/#zachowaj-publikację-po-zaufanych-edycjach), która pozwala zaufanym rolom edytować bez cofania zatwierdzeń w kanałach.
 - [Zadania konektorów](/pl/reference/blueprint/#zadania-konektorów), które importują lub eksportują encje przez rozszerzenie konektora.
 - Atrybuty, których typ pochodzi z [rozszerzenia](/pl/reference/blueprint/#typy-atrybutów-z-rozszerzeń).

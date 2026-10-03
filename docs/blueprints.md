@@ -351,8 +351,11 @@ label = "{{Products in this category}}"
 
 These fields resolve references: the blueprint `name`, inline attribute
 `name`, `tabs` and `accordion` section `label`, table `columns[].label`,
-`incoming_relationship_list` `label`, and the `name` of a reusable attribute
-definition. Headings, text blocks, separators, and values are always literal.
+`incoming_relationship_list` `label`, the `name` of a reusable attribute
+definition, and each option `label` in an `x-attricat-status` annotation on an
+inline or reusable attribute ([status control](status-control.md)). Headings,
+text blocks, separators, and values (including status codes) are always
+literal.
 
 - `{{key}}` is a reference. The web app shows the lexicon entry for the user's
   UI language, then the `en` entry, then the key itself, so an untranslated

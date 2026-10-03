@@ -5,7 +5,8 @@ import { useTranslation } from 'react-i18next';
 import { RelationshipSelectorDialog } from '../../components/RelationshipSelectorDialog';
 import type { Attribute } from '../entities/api';
 import { attributeLabel } from '../entities/entityDisplay';
-import { operatorsForValueType } from './attributeFilters';
+import { statusConfiguration, statusOptionLabel } from '../entities/status';
+import { operatorsForAttribute } from './attributeFilters';
 import {
   attributeFilterInputType,
   booleanFilterValues,
@@ -26,9 +27,7 @@ const describeDraft = (
   attributes: Attribute[],
 ) => {
   const attribute = attributes.find((item) => item.code === draft.field);
-  const availableOperators = operatorsForValueType(
-    attribute?.value_type ?? 'string',
-  );
+  const availableOperators = operatorsForAttribute(attribute);
   return {
     attribute,
     availableOperators,
@@ -100,6 +99,7 @@ export const AttributeFilterDialog = ({
     relationship,
     valueIsValid,
   } = describeDraft(values, attributes);
+  const status = attribute && statusConfiguration(attribute);
   const submit = () => void form.handleSubmit();
   const submitOnEnter = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== 'Enter') return;
@@ -225,6 +225,21 @@ export const AttributeFilterDialog = ({
                     <MenuItem value={booleanFilterValues.false}>
                       {t('explorer.false')}
                     </MenuItem>
+                  </TextField>
+                ) : status ? (
+                  <TextField
+                    fullWidth
+                    label={t('explorer.value')}
+                    onChange={(event) => field.handleChange(event.target.value)}
+                    onKeyDown={submitOnEnter}
+                    select
+                    value={field.state.value}
+                  >
+                    {status.options.map((option) => (
+                      <MenuItem key={option.code} value={option.code}>
+                        {statusOptionLabel(option)}
+                      </MenuItem>
+                    ))}
                   </TextField>
                 ) : (
                   <TextField

@@ -158,6 +158,7 @@ export const ExplorerFilterPicker = ({
               attributeLabel(
                 findAttribute(filter.field) ?? { code: filter.field },
               ),
+              findAttribute(filter.field),
             )}
             onClick={() => openFilter(filter, index)}
             onDelete={() => onRemove(index)}

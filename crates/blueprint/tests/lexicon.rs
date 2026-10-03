@@ -35,6 +35,21 @@ relationships = [{ source_blueprint = "product", field = "category" }]
 code = "title"
 name = "{{Name}}"
 value_type = "string"
+
+[[attributes]]
+code = "status"
+value_type = "string"
+value_schema = '''{
+  "type": "string",
+  "enum": ["draft", "live"],
+  "x-attricat-status": {
+    "version": 1,
+    "options": [
+      { "code": "draft", "label": "{{Draft|status}}" },
+      { "code": "live", "label": "Live" }
+    ]
+  }
+}'''
 "#;
 
 fn reference(key: &str, context: Option<&str>) -> Reference {
@@ -56,6 +71,7 @@ fn extracts_references_from_translatable_labels_only() {
         [
             (reference("Product", None), true),
             (reference("Name", None), false),
+            (reference("Draft", Some("status")), false),
             (reference("Overview", None), false),
             (reference("Products in this category", None), false),
             (reference("Title", Some("heading")), false),
@@ -86,6 +102,7 @@ fn rejects_malformed_references_in_translatable_labels() {
             "label = \"{{a|b|c}}\"",
             ReferenceError::MultipleContexts,
         ),
+        ("{{Draft|status}}", "{{Draft", ReferenceError::Unclosed),
     ] {
         let source = SOURCE.replacen(from, to, 1);
         assert!(

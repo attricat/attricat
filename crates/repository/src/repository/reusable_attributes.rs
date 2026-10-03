@@ -154,6 +154,14 @@ fn parse_definition(
     if let Some(schema) = toml_value_to_json(definition.value_schema.clone())? {
         catalog_validation::validate_json_schema_definition(&schema)
             .map_err(RepositoryError::InvalidReusableAttributeDefinition)?;
+        for text in catalog_blueprint::status_option_texts("attribute", &schema) {
+            catalog_lexicon::parse(text.text).map_err(|error| {
+                RepositoryError::InvalidReusableAttributeDefinition(format!(
+                    "{} has an invalid lexicon reference: {error}",
+                    text.location
+                ))
+            })?;
+        }
         if let Some(default) = toml_value_to_json(definition.default_value.clone())? {
             catalog_validation::status::validate_status_transition(&schema, &Value::Null, &default)
                 .map_err(RepositoryError::InvalidReusableAttributeDefinition)?;
