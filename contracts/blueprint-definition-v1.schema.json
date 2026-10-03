@@ -200,6 +200,16 @@
       "additionalProperties": false,
       "description": "An attribute declared by the blueprint or selected from an include.",
       "properties": {
+        "acyclic": {
+          "description": "Reject relationship writes that would form a cycle through this\nself-referencing attribute. Requires `context_editable = \"default\"`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "x-attricat-value-types": [
+            "relationship"
+          ]
+        },
         "allowed_extensions": {
           "default": [],
           "description": "Accepted file extensions without the leading dot.",
@@ -369,6 +379,19 @@
             "relationship"
           ]
         },
+        "target_blueprints": {
+          "default": [],
+          "description": "Several blueprints that relationship targets may use. Cannot be\ncombined with `target_blueprint`.",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array",
+          "x-attricat-reference": "blueprint",
+          "x-attricat-value-types": [
+            "relationship"
+          ]
+        },
         "target_cardinality": {
           "description": "How many sources may link to one target. Defaults to `many`.",
           "enum": [
@@ -377,6 +400,16 @@
           ],
           "type": [
             "string",
+            "null"
+          ],
+          "x-attricat-value-types": [
+            "relationship"
+          ]
+        },
+        "tree": {
+          "description": "An acyclic hierarchy in which every entity has at most one target\n(parent). Implies `acyclic` and `cardinality = \"one\"`.",
+          "type": [
+            "boolean",
             "null"
           ],
           "x-attricat-value-types": [
@@ -640,6 +673,46 @@
       },
       "required": [
         "field"
+      ],
+      "type": "object"
+    },
+    "UniqueKeyDefinition": {
+      "additionalProperties": false,
+      "description": "A business key: no two entities of the blueprint family may share the\nnormalized values of these attributes.",
+      "properties": {
+        "attributes": {
+          "description": "One to eight scalar attributes, or single-target relationships, whose\ncombined values must be unique.",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "type": "array",
+          "x-attricat-reference": "attribute"
+        },
+        "case_sensitive": {
+          "default": false,
+          "description": "Compare strings exactly. By default strings are compared after\ntrimming, collapsing whitespace, and lowercasing.",
+          "type": "boolean"
+        },
+        "code": {
+          "description": "Stable key identifier, unique within the blueprint.",
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "type": "string"
+        },
+        "scope": {
+          "default": "workspace",
+          "description": "`workspace` (default) compares default-context values; `context`\ncompares resolved values separately in every context.",
+          "enum": [
+            "workspace",
+            "context"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "attributes"
       ],
       "type": "object"
     },
@@ -1454,6 +1527,14 @@
           "predicate"
         ],
         "type": "object"
+      },
+      "type": "array"
+    },
+    "unique_keys": {
+      "default": [],
+      "description": "Business keys whose normalized values must be unique across the\nblueprint family. Entity blueprints only.",
+      "items": {
+        "$ref": "#/$defs/UniqueKeyDefinition"
       },
       "type": "array"
     },

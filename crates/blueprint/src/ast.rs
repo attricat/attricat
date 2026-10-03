@@ -15,7 +15,46 @@ pub struct BlueprintDefinition {
     pub publication: PublicationPolicy,
     pub connector_jobs: Vec<ConnectorJobDefinition>,
     pub rules: Vec<catalog_rules::CompiledRule>,
+    pub unique_keys: Vec<UniqueKeyDefinition>,
     pub attributes: Vec<AttributeDeclaration>,
+}
+
+/// Unique-key scopes: `workspace` compares default-context values across the
+/// blueprint family; `context` compares resolved values within each context.
+pub const UNIQUE_KEY_SCOPES: &[&str] = &["workspace", "context"];
+/// Hierarchy constraints a self-referencing relationship can declare.
+pub const RELATIONSHIP_HIERARCHIES: &[&str] = &["acyclic", "tree"];
+/// Attributes a unique key may combine.
+pub const MAX_UNIQUE_KEY_ATTRIBUTES: usize = 8;
+
+/// A business key: no two entities of the blueprint family may share the
+/// normalized values of these attributes.
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct UniqueKeyDefinition {
+    /// Stable key identifier, unique within the blueprint.
+    #[schemars(regex(pattern = catalog_validation::CODE_PATTERN))]
+    pub code: String,
+    /// One to eight scalar attributes, or single-target relationships, whose
+    /// combined values must be unique.
+    #[schemars(
+        length(min = 1, max = 8),
+        extend("x-attricat-reference" = "attribute")
+    )]
+    pub attributes: Vec<String>,
+    /// `workspace` (default) compares default-context values; `context`
+    /// compares resolved values separately in every context.
+    #[serde(default = "default_unique_key_scope")]
+    #[schemars(extend("enum" = UNIQUE_KEY_SCOPES))]
+    pub scope: String,
+    /// Compare strings exactly. By default strings are compared after
+    /// trimming, collapsing whitespace, and lowercasing.
+    #[serde(default)]
+    pub case_sensitive: bool,
+}
+
+fn default_unique_key_scope() -> String {
+    "workspace".to_owned()
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
@@ -390,8 +429,13 @@ pub struct LocalAttributeDeclaration {
     pub default_value: Option<serde_json::Value>,
     pub file_policy: Option<FilePolicy>,
     pub target_blueprint: Option<String>,
+    /// Every allowed target blueprint. A single target is also kept in
+    /// `target_blueprint`; empty means any entity blueprint.
+    pub target_blueprints: Vec<String>,
     pub cardinality: Option<String>,
     pub target_cardinality: Option<String>,
+    /// `acyclic` or `tree` for self-referencing relationships.
+    pub hierarchy: Option<String>,
     pub tags: Vec<String>,
     pub context_fallback: String,
     pub context_editable: String,
@@ -429,8 +473,12 @@ pub struct EffectiveAttribute {
     pub default_value: Option<serde_json::Value>,
     pub file_policy: Option<FilePolicy>,
     pub target_blueprint: Option<String>,
+    /// Every allowed target blueprint; empty means any entity blueprint.
+    pub target_blueprints: Vec<String>,
     pub cardinality: Option<String>,
     pub target_cardinality: Option<String>,
+    /// `acyclic` or `tree` for self-referencing relationships.
+    pub hierarchy: Option<String>,
     pub tags: Vec<String>,
     pub context_fallback: String,
     pub context_editable: String,
@@ -448,5 +496,6 @@ pub struct CompiledBlueprint {
     pub views: HashMap<String, ViewDefinition>,
     pub entity_schema: Option<serde_json::Value>,
     pub rules: Vec<catalog_rules::CompiledRule>,
+    pub unique_keys: Vec<UniqueKeyDefinition>,
     pub attributes: Vec<EffectiveAttribute>,
 }
