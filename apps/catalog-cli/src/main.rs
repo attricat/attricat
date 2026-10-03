@@ -891,6 +891,10 @@ enum WorkflowCommand {
         idempotency_key: String,
     },
     RunList,
+    /// Per-target outcomes of `referencing_entities_update` actions in a run.
+    RunTargets {
+        run_id: Uuid,
+    },
     RunReplay {
         run_id: Uuid,
     },
@@ -2678,6 +2682,16 @@ async fn workflow_command(
         }
         WorkflowCommand::RunList => {
             request(client, server, Method::GET, "/workflow-runs", None).await
+        }
+        WorkflowCommand::RunTargets { run_id } => {
+            request(
+                client,
+                server,
+                Method::GET,
+                &format!("/workflow-runs/{}/targets", segment(run_id)),
+                None,
+            )
+            .await
         }
         WorkflowCommand::RunReplay { run_id } => {
             request(

@@ -890,3 +890,339 @@ tags = ["needs-review"]"#,
     );
     server.abort();
 }
+
+const LICENSED_PRODUCT: &str = r#"
+format_version = 1
+code = "licensed_product"
+name = "Licensed product"
+kind = "entity"
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["title"]
+[[attributes]]
+code = "title"
+value_type = "string"
+[[attributes]]
+code = "license"
+value_type = "relationship"
+[[attributes]]
+code = "status"
+value_type = "string"
+value_schema = '''{"type":"string","enum":["draft","approved","in_review","retired"],"x-attricat-status":{"version":1,"options":[{"code":"draft","label":"Draft"},{"code":"approved","label":"Approved"},{"code":"in_review","label":"In review"},{"code":"retired","label":"Retired"}],"transitions":[{"from":null,"to":"draft"},{"from":"draft","to":"approved"},{"from":"approved","to":"in_review"},{"from":"draft","to":"retired"}]}}'''
+"#;
+
+async fn licensed_product(
+    client: &Client,
+    base_url: &str,
+    license: Option<&Value>,
+    status: &str,
+) -> Uuid {
+    let mut values = vec![json!({"kind":"scalar","attribute_code":"status","value":"draft"})];
+    if let Some(license) = license {
+        values.push(
+            json!({"kind":"relationship","attribute_code":"license","target_entity_id":license["id"]}),
+        );
+    }
+    let entity: Value = client
+        .post(format!("{base_url}/v1/entities"))
+        .json(&json!({"blueprint":{"code":"licensed_product"},"values":values}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let id = entity["id"].as_str().unwrap();
+    if status != "draft" {
+        client
+            .put(format!("{base_url}/v1/entities/{id}"))
+            .json(&json!({"expected_updated_at":entity["updated_at"],"values":[{"kind":"scalar","attribute_code":"status","value":status}]}))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap();
+    }
+    id.parse().unwrap()
+}
+
+async fn product_state(pool: &PgPool, id: Uuid) -> (Option<String>, bool) {
+    let (status, tags): (Option<String>, Vec<String>) = sqlx::query_as(
+        "SELECT e.projections->'preview'->'default'->>'status', e.system_tags FROM entities e WHERE e.id=$1",
+    )
+    .bind(id)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    (status, tags.iter().any(|tag| tag == "needs-review"))
+}
+
+/// Claims and handles the run's task once, then requeues it if it failed.
+async fn handle_workflow_task_once(repository: &CatalogRepository) -> bool {
+    let task = repository
+        .claim_task("referencing-test", Duration::from_secs(30))
+        .await
+        .unwrap()
+        .expect("a queued workflow task");
+    let (id, owner, token) = (task.id, task.lease_owner.clone(), task.lease_token);
+    match workflow_runtime::task_handler(repository.clone())
+        .handle(task)
+        .await
+    {
+        Ok(_) => true,
+        Err(error) => {
+            let message: String = error.message.chars().take(1000).collect();
+            repository
+                .retry_task_at(
+                    id,
+                    &owner,
+                    token,
+                    chrono::Utc::now(),
+                    "workflow_run",
+                    &message,
+                )
+                .await
+                .unwrap();
+            false
+        }
+    }
+}
+
+#[sqlx::test]
+async fn referencing_update_validates_each_target_and_retries_only_failures(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    create_blueprint(
+        &client,
+        &base_url,
+        r#"
+format_version = 1
+code = "license_record"
+name = "License"
+kind = "entity"
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["title"]
+[[attributes]]
+code = "title"
+value_type = "string"
+"#,
+    )
+    .await;
+    create_blueprint(&client, &base_url, LICENSED_PRODUCT).await;
+    let new_license = || {
+        client
+            .post(format!("{base_url}/v1/entities"))
+            .json(&json!({"blueprint":{"code":"license_record"},"values":[]}))
+    };
+    let license: Value = new_license().send().await.unwrap().json().await.unwrap();
+    let other_license: Value = new_license().send().await.unwrap().json().await.unwrap();
+    let first = licensed_product(&client, &base_url, Some(&license), "approved").await;
+    let second = licensed_product(&client, &base_url, Some(&license), "approved").await;
+    let retired = licensed_product(&client, &base_url, Some(&license), "retired").await;
+    let unrelated = licensed_product(&client, &base_url, Some(&other_license), "approved").await;
+    let unlinked = licensed_product(&client, &base_url, None, "approved").await;
+
+    let workflow_id = enabled_workflow(
+        &client,
+        &base_url,
+        r#"format_version = 2
+code = "license_changed"
+name = "Send licensed products back to review"
+[[triggers]]
+type = "manual"
+[[actions]]
+type = "referencing_entities_update"
+relationship_attribute = "license"
+max_targets = 10
+[[actions.actions]]
+type = "attribute_write"
+attribute_code = "status"
+fixed = "in_review"
+[[actions.actions]]
+type = "system_tags_add"
+tags = ["needs-review"]"#,
+    )
+    .await;
+    let run: Value = client
+        .post(format!("{base_url}/workflows/{workflow_id}/run-now"))
+        .json(&json!({"entity_id": license["id"], "idempotency_key": "license-changed"}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let run_id = run["id"].as_str().unwrap();
+    let repository = CatalogRepository::new(pool.clone(), BOOTSTRAP_WORKSPACE_ID.parse().unwrap());
+
+    // The retired product has no transition to in_review: it fails on its own
+    // while the other targets commit, and the run stays pending for a retry.
+    assert!(!handle_workflow_task_once(&repository).await);
+    for id in [first, second] {
+        assert_eq!(
+            product_state(&pool, id).await,
+            (Some("in_review".into()), true)
+        );
+    }
+    assert_eq!(
+        product_state(&pool, retired).await,
+        (Some("retired".into()), false)
+    );
+    for id in [unrelated, unlinked] {
+        assert_eq!(
+            product_state(&pool, id).await,
+            (Some("approved".into()), false)
+        );
+    }
+    let targets: Vec<Value> = client
+        .get(format!("{base_url}/workflow-runs/{run_id}/targets"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(targets.len(), 3);
+    let target = |id: Uuid| {
+        targets
+            .iter()
+            .find(|target| target["entity_id"] == id.to_string())
+            .unwrap()
+            .clone()
+    };
+    assert_eq!(target(first)["status"], "completed");
+    assert_eq!(target(second)["status"], "completed");
+    assert_eq!(target(retired)["status"], "failed");
+    assert!(
+        target(retired)["last_error"]
+            .as_str()
+            .unwrap()
+            .contains("status"),
+        "{targets:?}"
+    );
+    let audits_after_first_attempt: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM audit_events WHERE metadata->>'workflow_run_id'=$1",
+    )
+    .bind(run_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(audits_after_first_attempt, 2);
+
+    // A retry revisits only the failed target and never repeats completed writes.
+    assert!(!handle_workflow_task_once(&repository).await);
+    let retried: Vec<Value> = client
+        .get(format!("{base_url}/workflow-runs/{run_id}/targets"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let attempts = |id: Uuid| {
+        retried
+            .iter()
+            .find(|target| target["entity_id"] == id.to_string())
+            .unwrap()["attempts"]
+            .clone()
+    };
+    assert_eq!((attempts(first), attempts(retired)), (json!(1), json!(2)));
+
+    // Once the failing record stops referencing the license, the retry settles
+    // it as skipped and the action completes.
+    client
+        .post(format!("{base_url}/entities/{retired}/relationships/remove"))
+        .json(&json!({"relationships":[{"attribute_code":"license","target_entity_ids":[license["id"]]}]}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    assert!(handle_workflow_task_once(&repository).await);
+    let (status, actions): (String, i64) = sqlx::query_as(
+        "SELECT r.status,(SELECT count(*) FROM workflow_run_actions a WHERE a.run_id=r.id) FROM workflow_runs r WHERE r.id=$1::uuid",
+    )
+    .bind(run_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!((status.as_str(), actions), ("completed", 1));
+    let settled: Vec<(Uuid, String)> = sqlx::query_as(
+        "SELECT entity_id,status FROM workflow_run_action_targets WHERE run_id=$1::uuid ORDER BY entity_id",
+    )
+    .bind(run_id)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert!(settled.contains(&(retired, "skipped".into())));
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM audit_events WHERE metadata->>'workflow_run_id'=$1",
+        )
+        .bind(run_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        2
+    );
+    let missing = client
+        .get(format!(
+            "{base_url}/workflow-runs/{}/targets",
+            Uuid::new_v4()
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+    server.abort();
+}
+
+#[sqlx::test]
+async fn referencing_update_refuses_more_targets_than_its_limit(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let license_blueprint = create_blueprint(
+        &client,
+        &base_url,
+        "format_version = 1\ncode = \"limited_license\"\nname = \"License\"\nkind = \"entity\"\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"",
+    )
+    .await;
+    create_blueprint(&client, &base_url, LICENSED_PRODUCT).await;
+    let license = create_entity(&client, &base_url, &license_blueprint).await;
+    let first = licensed_product(&client, &base_url, Some(&license), "approved").await;
+    let second = licensed_product(&client, &base_url, Some(&license), "approved").await;
+    let workflow_id = enabled_workflow(
+        &client,
+        &base_url,
+        "format_version = 2\ncode = \"limited\"\nname = \"Limited\"\n[[triggers]]\ntype = \"manual\"\n[[actions]]\ntype = \"referencing_entities_update\"\nrelationship_attribute = \"license\"\nmax_targets = 1\n[[actions.actions]]\ntype = \"system_tags_add\"\ntags = [\"needs-review\"]",
+    )
+    .await;
+    client
+        .post(format!("{base_url}/workflows/{workflow_id}/run-now"))
+        .json(&json!({"entity_id": license["id"], "idempotency_key": "limited"}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    let repository = CatalogRepository::new(pool.clone(), BOOTSTRAP_WORKSPACE_ID.parse().unwrap());
+    assert!(!handle_workflow_task_once(&repository).await);
+    for id in [first, second] {
+        assert!(!product_state(&pool, id).await.1);
+    }
+    let error: String = sqlx::query_scalar(
+        "SELECT last_error_message FROM tasks WHERE kind='workflow_run.v1' ORDER BY created_at DESC LIMIT 1",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(error.contains("more than 1 entities"), "{error}");
+    server.abort();
+}

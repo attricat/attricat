@@ -1,11 +1,11 @@
 ---
 title: Workflows
-description: Automate small, auditable changes to one entity in response to catalog events, a schedule, or a manual trigger.
+description: Automate small, auditable changes to an entity, or to the records that reference it, in response to catalog events, a schedule, or a manual trigger.
 ---
 
 A workflow reacts to a trigger by applying a short list of actions to one entity: add or remove system tags, update system metadata, or write an attribute value. Workflows are versioned TOML, like blueprints, and every change they make goes through normal validation and appears in the audit log.
 
-Workflows have no scripts, loops, queries, or network calls, and they cannot change more than the one entity that triggered them. For anything bigger, write an [extension](/extensions/build/).
+Workflows have no scripts, loops, queries, or network calls. They change the entity that triggered them and, with one bounded action, the records that link to it through a named relationship. For anything bigger, write an [extension](/extensions/build/).
 
 ## A first workflow
 
@@ -128,13 +128,50 @@ Manual and scheduled runs have no event, so their actions must use fixed values.
 | `system_metadata_merge` | `values` (table of scalar values) | Sets keys in system metadata. Keys may be dotted paths. |
 | `system_metadata_delete` | `keys` | Removes keys from system metadata. |
 | `attribute_write` | `attribute_code` and exactly one of `fixed` or `event_field` | Writes a scalar attribute value. `fixed` is a literal; `event_field` copies a value from the event, such as `facts.0.after_value`. |
+| `referencing_entities_update` | `relationship_attribute`, optional `max_targets`, and nested `actions` | Applies the nested actions to every record that links to the trigger entity. See below. |
 
-`attribute_write` obeys the blueprint: type checks, schemas, and `readonly` all apply.
+`attribute_write` obeys the blueprint: type checks, schemas, `readonly`, and [status transitions](/builders/validation/#statuses) all apply.
+
+### Update records that reference the trigger entity
+
+When a license, specification, or composition changes, the records that depend on it often need to go back to review. `referencing_entities_update` finds every live record whose `relationship_attribute` currently links to the trigger entity, in any context, and applies its nested actions to each of them:
+
+```toml
+format_version = 2
+code = "license-changed"
+name = "Send licensed products back to review"
+
+[[triggers]]
+event_type = "attribute_value.changed.v1"
+attributes = ["terms"]
+
+[[actions]]
+type = "referencing_entities_update"
+relationship_attribute = "license"
+max_targets = 200
+
+[[actions.actions]]
+type = "attribute_write"
+attribute_code = "status"
+fixed = "in_review"
+
+[[actions.actions]]
+type = "system_tags_add"
+tags = ["needs-review"]
+```
+
+- `relationship_attribute` is the code of the relationship attribute on the **referencing** records, not on the trigger entity.
+- Nested actions can set statuses and other attributes with fixed values, and add or remove system tags and metadata. They can't use `event_field`, and they can't contain another `referencing_entities_update`.
+- `max_targets` defaults to 100 and can be at most 500. If more records link to the trigger entity, the action fails before changing any further record. Raise the limit or narrow the relationship.
+- Each record is updated in its own save, with the same checks as any other edit: schemas, `readonly`, and status transitions. A record that would make a transition its status doesn't allow fails on its own; the other records are still updated.
+- If any record fails, the run is retried. A retry only revisits records that failed or weren't reached; records already updated are never changed twice. A record that no longer exists or no longer links to the trigger entity by then is skipped.
+- See the outcome for each record, including its latest error, with `acli workflow run-targets <run-id>` or `GET /workflow-runs/{id}/targets`. The run list shows the run's overall error once it becomes a dead letter.
+- The records' own changes don't start workflows, like any other change made by a workflow.
 
 ## How runs behave
 
 - Each run uses the revision that was enabled when it started, even if a newer one is enabled later.
-- Delivery is at least once. Every action is recorded with its run so a retry never applies it twice.
+- Delivery is at least once. Every action is recorded with its run so a retry never applies it twice. A `referencing_entities_update` action also records each record it updates.
 - A failed run is retried with increasing delays and becomes a dead letter after five attempts. Replay it from the workflow's run list or with `acli workflow run-replay <run-id>`.
 - Disabling a workflow cancels its queued and running runs.
 - Changes made by a workflow do not trigger workflows again by default, and chains are capped at a depth of eight.

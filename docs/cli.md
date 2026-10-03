@@ -110,6 +110,7 @@ acli workflow publish|enable <workflow-id> <version>
 acli workflow disable <workflow-id>
 acli workflow run-now <workflow-id> --entity-id <entity-id> --idempotency-key <key>
 acli workflow run-list
+acli workflow run-targets <run-id>
 acli workflow run-replay <run-id>
 
 acli rule list [--blueprint-id <uuid>]

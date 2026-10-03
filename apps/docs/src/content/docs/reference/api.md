@@ -176,6 +176,7 @@ See [Translate labels](/builders/translations/).
 | `POST` | `/workflows/{id}/versions/{version}/publish`, `/enable`; `/workflows/{id}/disable` | Lifecycle. |
 | `POST` | `/workflows/{id}/run-now` | Manual run. |
 | `GET` | `/workflow-runs` | Run history. |
+| `GET` | `/workflow-runs/{id}/targets` | Per-record outcomes of a `referencing_entities_update` action. |
 | `POST` | `/workflow-runs/{id}/replay` | Replay a dead letter. |
 
 ### Agents

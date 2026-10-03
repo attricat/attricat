@@ -26,6 +26,19 @@ pub struct WorkflowRun {
     pub causal_depth: i32,
 }
 
+/// Per-target outcome of a `referencing_entities_update` action. Failed rows
+/// keep the latest error while the run retries; they never expose payloads.
+#[derive(Debug, Clone, serde::Serialize, sqlx::FromRow)]
+pub struct WorkflowRunTarget {
+    pub action_index: i32,
+    pub entity_id: Uuid,
+    pub status: String,
+    pub attempts: i32,
+    pub last_error: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
 #[derive(Debug, Clone)]
 pub enum WorkflowActionResult {
     Executed,
@@ -246,6 +259,32 @@ impl CatalogRepository {
         let ws = self.workspace_id.0;
         sqlx::query_as("SELECT id,workflow_id,workflow_version,trigger_event_id,trigger_sequence,source,status,attempts,failed_at,completed_at,last_error,created_at,cancelled_at,root_trigger_event_id,causal_depth FROM workflow_runs WHERE workspace_id=$1 AND id=$2")
             .bind(ws).bind(id).fetch_optional(&self.pool).await.map_err(Into::into)
+    }
+
+    /// `None` when the run does not exist in this workspace.
+    pub async fn workflow_run_targets(
+        &self,
+        run_id: Uuid,
+    ) -> Result<Option<Vec<WorkflowRunTarget>>, RepositoryError> {
+        let ws = self.workspace_id.0;
+        let mut tx = self.pool.begin().await?;
+        let exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM workflow_runs WHERE id=$1 AND workspace_id=$2)",
+        )
+        .bind(run_id)
+        .bind(ws)
+        .fetch_one(&mut *tx)
+        .await?;
+        if !exists {
+            return Ok(None);
+        }
+        let targets = sqlx::query_as("SELECT action_index,entity_id,status,attempts,last_error,created_at,updated_at FROM workflow_run_action_targets WHERE run_id=$1 AND workspace_id=$2 ORDER BY action_index,entity_id")
+            .bind(run_id)
+            .bind(ws)
+            .fetch_all(&mut *tx)
+            .await?;
+        tx.commit().await?;
+        Ok(Some(targets))
     }
 
     pub async fn workflow_runs_page(
