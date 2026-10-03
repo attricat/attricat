@@ -82,7 +82,16 @@ cardinality = "one"
 
 **Przeglądarka encji** wykrywa relacje odwołujące się do własnego schematu i zamienia filtr dla `product.categories` w drzewo z sumowanymi licznikami. Wybranie *Shirts* obejmuje także produkty przypisane do kategorii podrzędnych. Zobacz [Przeglądanie encji](/pl/guides/explore/#fasety-relacji).
 
-Aby pokazać ścieżkę na stronie produktu, użyj komponentu [`catalog.relationship_hierarchy`](/pl/builders/views/#hierarchie).
+Aby pokazać ścieżkę na stronie produktu, użyj komponentu [`catalog.relationship_hierarchy`](/pl/builders/views/#hierarchie). Aby wykryć kategorię, która stała się własnym przodkiem, dodaj regułę z predykatem [`acyclic`](/pl/builders/rules/#predykaty).
+
+## Ograniczenia obejmujące relacje
+
+Niektóre ograniczenia dotyczą dwóch rekordów: zakłady na certyfikacie muszą należeć do dostawcy z certyfikatu, a niezgodności nie można zamknąć, dopóki wskazujące ją działanie korygujące jest otwarte. Zapisz je w rekordzie, do którego ograniczenie należy, jako [kontrolę `linked` lub `referenced_by`](/pl/builders/validation/#sprawdzaj-powiązane-rekordy).
+
+- **Jeden krok.** Kontrola odczytuje rekordy, które encja wskazuje, albo rekordy, które wskazują ją, i na tym się zatrzymuje. Jeśli ograniczenie wymaga dwóch kroków, dodaj relację lub atrybut, który przybliży potrzebną wartość o jeden krok.
+- **Ograniczony zakres.** Kontrola odczytuje najwyżej 200 powiązanych rekordów na relację i 1000 rekordów wskazujących. Relacje, które mają być sprawdzane, utrzymuj małe; kontrole na większych zbiorach nie przechodzą.
+- **Sprawdzane przy zapisie właściciela.** Zmiana powiązanego rekordu nie jest odrzucana. Połącz kontrolę z [regułą](/pl/builders/rules/#zmiany-w-powiązanych-rekordach) wyzwalaną zdarzeniem, aby rekordy, których to dotyczy, były zgłaszane jako ustalenia.
+- **Dla każdego kontekstu.** Powiązane rekordy są odczytywane w tym samym kontekście co encja, więc relacja, która różni się między rynkami, jest sprawdzana osobno dla każdego rynku.
 
 ## Konteksty
 

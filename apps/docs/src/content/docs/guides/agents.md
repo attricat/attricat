@@ -55,7 +55,7 @@ Read proposals carefully. Replacing relationships sets the complete list for tha
 
 ## Where changes show up
 
-Changes made through the agent go through the same validation and audit as your own edits. On an entity's **Changes** page and in **Manage → Activity / Audit log**, they show the agent run, the tool, the approval decision, and who approved.
+Changes made through the agent go through the same validation and audit as your own edits. If an approved change is rejected by a check (`entity_check_failed`), a status transition condition (`transition_conditions_unmet`), an enforcing rule (`rule_violation`), or a channel's required checks (`publication_checks_failed`), nothing is saved. The agent explains which checks failed and proposes a corrected change, which needs your approval again. To explain why a status option is blocked or an entity cannot be published yet, the agent can read the entity's status transitions and publication readiness. On an entity's **Changes** page and in **Manage → Activity / Audit log**, they show the agent run, the tool, the approval decision, and who approved.
 
 ## Data sent to the provider
 

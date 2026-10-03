@@ -26,9 +26,25 @@ Formularz informuje, skąd pochodzi każda wartość:
 
 Zapis waliduje całą encję w każdym kontekście. Jeśli zmiana unieważniłaby którykolwiek kontekst, nic nie zostaje zapisane, a formularz wskazuje problem. Zobacz [Walidacja](/pl/builders/validation/).
 
+Schemat może też zawierać kontrole, na przykład „data ważności nie może być wcześniejsza niż data rozpoczęcia” albo „każdy zakład należy do tego dostawcy”, a obszar roboczy może egzekwować reguły jakości danych. Gdy któraś z nich nie przejdzie, komunikat podaje nazwę kontroli lub reguły i opisuje problem. Zmień wskazane pola w wymienionych kontekstach i zapisz ponownie. Jeśli komunikat dotyczy powiązanego rekordu, na przykład niezatwierdzonego zakładu, najpierw popraw lub zastąp ten rekord.
+
 ### Niezapisane szkice
 
 Formularz edycji przechowuje niezapisane zmiany na czas trwania karty przeglądarki. Jeśli przeładujesz stronę lub do niej wrócisz, Attricat zaproponuje **Przywróć szkic** lub **Odrzuć szkic**. Szkic jest usuwany po zapisaniu. Szkice nigdy nie zawierają haseł ani plików.
+
+## Zmiana statusu
+
+Pole statusu, na przykład *Szkic*, *W przeglądzie* lub *Wydany*, to lista wyboru. Schemat może ograniczać, które statusy mogą nastąpić po bieżącym, i określać warunki zmiany. Statusu może nie dać się wybrać lub zapisać z jednego z tych powodów:
+
+- **Opcja jest wyłączona.** Schemat nie pozwala na tę zmianę z bieżącego statusu. Na przykład wydany dokument może najpierw wymagać powrotu do *Szkicu*, zanim znów trafi do przeglądu. Przechodź przez dozwolone statusy.
+- **Opcja jest wyłączona i pokazuje *Zablokowane*** wraz z niespełnionymi warunkami. Zmiana jest dozwolona, ale zapisana encja nie spełnia jeszcze jej warunków. Uzupełnij to, czego wymagają, zapisz, a potem wybierz status.
+- **Zapis zostaje odrzucony** z komunikatem takim jak *status transition conditions are not met: Set an approver before release (approver-set)*. Zmiana jest dozwolona, ale zapisywane wartości nie spełniają jej warunków. Podobny komunikat zaczynający się od *enforcing rules are violated* oznacza, że zmianę chroni reguła jakości danych. Nic nie zostaje zapisane.
+
+Aby to naprawić, przeczytaj wymienione warunki i uzupełnij to, czego wymagają. Brakujące wartości możesz podać w tym samym zapisie co zmianę statusu: uzupełnij osobę zatwierdzającą i jednocześnie wybierz *Wydany*. Niektóre warunki zależą od innych rekordów, np. „każde działanie korygujące jest zamknięte”; najpierw zaktualizuj te rekordy, a potem ponownie zmień status.
+
+Warunki są sprawdzane w każdym kontekście, w którym zmienia się status. Jeśli status jest dziedziczony, zmiana w kontekście domyślnym musi spełniać warunki również w każdym kontekście potomnym.
+
+Aby sprawdzić, które statusy są dostępne i dlaczego inne są zablokowane, bez próby zapisu, wywołaj `GET /v1/entities/{id}/status-transitions` z opcjonalnym `context_id`. Każdy status docelowy ma pola `allowed`, `reason` i `unmet` z niespełnionymi warunkami.
 
 ## Relacje
 

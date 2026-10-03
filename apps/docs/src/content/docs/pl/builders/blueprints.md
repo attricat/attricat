@@ -256,6 +256,25 @@ Umieść `entity_schema` razem z pozostałymi kluczami najwyższego poziomu, prz
 
 Attricat sprawdza schemat w każdym kontekście po każdej zmianie. Zapis, który pozostawiłby którykolwiek kontekst w niepoprawnym stanie, zostaje odrzucony z `422 entity_schema_mismatch` i nic nie jest zapisywane.
 
+JSON Schema nie potrafi porównać dwóch atrybutów. Dla reguł w rodzaju „cena promocyjna musi być niższa od ceny” dodaj do tego samego schematu nazwaną kontrolę w `x-attricat-checks`:
+
+```toml
+entity_schema = '''
+{
+  "type": "object",
+  "required": ["title", "sku"],
+  "x-attricat-checks": [
+    { "code": "sale-below-price", "message": "The sale price must be lower than the price",
+      "predicate": { "type": "compare", "attribute_code": "sale_price", "op": "lt", "other_attribute_code": "price" } }
+  ]
+}
+'''
+```
+
+Kontrola, która nie przejdzie, powoduje odrzucenie zapisu z `422 entity_check_failed`. Kontrole mogą też sprawdzać powiązane rekordy. Zobacz [Walidacja](/pl/builders/validation/#porównuj-atrybuty-za-pomocą-kontroli).
+
+Atrybut [statusu](/pl/builders/validation/#statusy) może ograniczać dozwolone zmiany, a każda dozwolona zmiana może mieć [warunki](/pl/builders/validation/#warunki-przejść), np. „osoba zatwierdzająca jest ustawiona”, zanim `review` zmieni się w `released`. Zmiana z niespełnionymi warunkami zostaje odrzucona z `422 transition_conditions_unmet`.
+
 ## Krok 9: udostępnij atrybuty w domieszce
 
 Gdy kilka schematów potrzebuje tych samych pól, np. metadanych SEO, umieść je w domieszce:
@@ -309,7 +328,7 @@ Dwie praktyki oszczędzają później kłopotów:
 
 Schemat może też zawierać:
 
-- [Reguły](/pl/builders/rules/), które oznaczają problemy z jakością danych, np. brak tytułu.
+- [Reguły](/pl/builders/rules/), które oznaczają problemy z jakością danych, np. brak tytułu, i mogą je [egzekwować](/pl/builders/rules/#egzekwowanie-reguły) przy zapisie lub zmianie statusu.
 - [Politykę publikacji](/pl/guides/publishing/#zachowaj-publikację-po-zaufanych-edycjach), która pozwala zaufanym rolom edytować bez cofania zatwierdzeń w kanałach.
 - [Zadania konektorów](/pl/reference/blueprint/#zadania-konektorów), które importują lub eksportują encje przez rozszerzenie konektora.
 - Atrybuty, których typ pochodzi z [rozszerzenia](/pl/reference/blueprint/#typy-atrybutów-z-rozszerzeń).

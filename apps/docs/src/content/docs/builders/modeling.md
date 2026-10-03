@@ -82,7 +82,16 @@ cardinality = "one"
 
 The Explorer detects self-referencing relationships and turns the facet for `product.categories` into a tree with roll-up counts. Selecting *Shirts* also matches products assigned to its children. See [Explore entities](/guides/explore/#relationship-facets).
 
-To show the path on a product page, use the [`catalog.relationship_hierarchy`](/builders/views/#hierarchies) component.
+To show the path on a product page, use the [`catalog.relationship_hierarchy`](/builders/views/#hierarchies) component. To flag a category that ends up as its own ancestor, add a rule with the [`acyclic`](/builders/rules/#predicates) predicate.
+
+## Constraints across relationships
+
+Some constraints span two records: a certificate's facilities must belong to the certificate's supplier, or a nonconformance cannot close while a corrective action that refers to it is still open. Express them on the record that owns the constraint, with a [`linked` or `referenced_by` check](/builders/validation/#check-linked-records).
+
+- **One hop.** A check reads the records an entity links to, or the records that link to it, and stops there. If a constraint needs two hops, add a relationship or attribute that brings the value one hop closer.
+- **Bounded.** A check reads at most 200 linked records per relationship and 1,000 referring records. Keep relationships that need checking small; checks on larger sets fail.
+- **Checked on the owner's save.** Changing the linked record is not rejected. Pair the check with an event-triggered [rule](/builders/rules/#changes-to-linked-records) so affected records are reported as findings.
+- **Per context.** Linked records are read in the same context as the entity, so a relationship that differs by market is checked per market.
 
 ## Contexts
 
