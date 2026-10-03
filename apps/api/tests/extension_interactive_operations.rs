@@ -1104,3 +1104,70 @@ async fn generic_writes_serialize_with_namespace_claims(pool: sqlx::PgPool) {
         .unwrap()
         .unwrap();
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn replay_is_refused_after_the_run_context_is_deleted(pool: sqlx::PgPool) {
+    let repository = CatalogRepository::system(pool.clone())
+        .for_workspace(workspace())
+        .await
+        .unwrap();
+    let store = Arc::new(FakeObjectStore::available());
+    let release = install(&repository, store.clone(), &interactive_component()).await;
+    let blueprint = published_blueprint(&repository, DOCUMENT_BLUEPRINT).await;
+    let member = entity(&repository, blueprint, "Replay").await;
+    let (viewer, _) = entity_scoped_viewer(&pool, member).await;
+    let context = repository
+        .create_context(CreateAttributeContext {
+            code: "replay_context".into(),
+            data: json!({}),
+            parent_id: None,
+        })
+        .await
+        .unwrap();
+    let (base, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
+    let mut body = start_body(release, "replay-1", blueprint, &[member]);
+    body["selection"]["context_id"] = json!(context.id);
+    let run_id: Uuid = client_for(viewer)
+        .post(format!("{base}/extensions/{EXTENSION}/bulk/operations"))
+        .json(&body)
+        .send()
+        .await
+        .unwrap()
+        .json::<Value>()
+        .await
+        .unwrap()["run_id"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+
+    // The run fails closed while its initiator is suspended; a failed run no
+    // longer blocks deleting its context.
+    sqlx::query("UPDATE workspace_memberships SET state='inactive' WHERE user_id=$1")
+        .bind(viewer)
+        .execute(&pool)
+        .await
+        .unwrap();
+    drain_operations(&repository, store).await;
+    let failed = repository
+        .interactive_extension_run(run_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(failed.status, "failed");
+    repository.delete_context(context.id).await.unwrap();
+
+    let replay = authenticated_client()
+        .post(format!("{base}/extension-operation-runs/{run_id}/replay"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(replay.status(), StatusCode::CONFLICT);
+    let run = repository
+        .interactive_extension_run(run_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(run.status, "failed");
+    server.abort();
+}

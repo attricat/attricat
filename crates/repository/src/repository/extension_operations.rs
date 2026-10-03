@@ -615,8 +615,30 @@ impl CatalogRepository {
         Ok(changed == 1)
     }
 
+    /// Returns `InvalidContext` when an interactive run's selection context
+    /// was deleted after it failed: replaying it could never read its
+    /// selection. The share lock serializes with `delete_context`.
     pub async fn replay_extension_operation(&self, id: Uuid) -> Result<bool, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
+        let context_id: Option<Option<Uuid>> = sqlx::query_scalar(
+            "SELECT selection_context_id FROM extension_operation_runs WHERE id=$1 AND workspace_id=$2 AND status='dead_letter' FOR UPDATE",
+        )
+        .bind(id)
+        .bind(self.extension_workspace())
+        .fetch_optional(&mut *transaction)
+        .await?;
+        if let Some(Some(context_id)) = context_id {
+            let exists: Option<Uuid> = sqlx::query_scalar(
+                "SELECT id FROM attribute_contexts WHERE id=$1 AND workspace_id=$2 FOR SHARE",
+            )
+            .bind(context_id)
+            .bind(self.extension_workspace())
+            .fetch_optional(&mut *transaction)
+            .await?;
+            if exists.is_none() {
+                return Err(RepositoryError::InvalidContext);
+            }
+        }
         let changed = sqlx::query(
             "UPDATE extension_operation_runs SET status='pending',cancellation_requested=false,cancellation_delivered=false,attempts=0,last_error_code=NULL,last_error_message=NULL,completed_at=NULL,cancelled_at=NULL,lease_token=NULL,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='dead_letter' AND NOT outputs_expired",
         )
