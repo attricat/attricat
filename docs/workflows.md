@@ -2,7 +2,32 @@
 
 Workflows are workspace-scoped, versioned TOML definitions. Published revisions are immutable; enabling records an outbox-sequence high-water boundary, so only later events fan out. Each run snapshots its exact enabled compiled revision and never changes to a newer definition.
 
-Local actions remain deliberately narrow: `system_tags_add`, `system_tags_remove`, `system_metadata_merge`, `system_metadata_delete`, and `attribute_write`. They only affect one existing entity, with normal schema/readonly validation. There are no scripts, templates, loops, queries, SQL, target selectors, or cross-entity writes.
+Local actions remain deliberately narrow: `system_tags_add`, `system_tags_remove`, `system_metadata_merge`, `system_metadata_delete`, and `attribute_write`. They only affect one existing entity, with normal schema, readonly and status-transition validation. The only cross-entity action is the bounded `referencing_entities_update` described below. There are no scripts, templates, loops, queries, SQL, or arbitrary target selectors.
+
+Execution lives in `crates/repository/src/repository/workflow_actions.rs`. Every workflow entity write, for the trigger entity or a referencing entity, goes through `apply_workflow_actions`: it stages all actions for one locked entity, then runs `validate_entity_schema` (schemas, readonly, status transitions), rebuilds the preview, writes audit evidence and enqueues one `entity.updated.v1` in the caller's transaction. New write checks (for example locks on finalized records or per-transition permissions) must be enforced in that shared path, or in the normal entity write validation it calls, so that workflow writes cannot bypass them.
+
+## Changed-attribute filters
+
+An event trigger may declare `attributes = ["code", ...]` (1-100 unique codes). Fan-out then creates a run only if `catalog_workflow::changed_attributes_match` finds a payload fact whose `attribute_code` is listed; it is ANDed with `envelope` and `facts`. The field is optional and omitted from the compiled plan when absent, so stored revisions and their hashes are unchanged. It is rejected on `entity.migrated.v1`, whose payload has no facts.
+
+Verification for this contract: `entity.created.v1`, `entity.updated.v1`, `attribute_value.changed.v1`, `attribute_value.restored.v1` and `relationship.changed.v1` carry `facts[]` built from the audit before/after diff (`audit_changes`), so a fact exists only for a value that actually changed and always names its `attribute_code`. Relationship facts are one per added/removed target (`relationship_add`/`relationship_remove`). File attributes are excluded from the audit snapshot and the file-reference write paths (`files.rs`) enqueue no domain event, so a file attribute can never satisfy a filter. Emitting file-reference facts is a separate eventing contract change.
+
+## Referencing entity updates
+
+```toml
+[[actions]]
+type = "referencing_entities_update"
+relationship_attribute = "license"   # attribute on the referencing entities
+max_targets = 100                    # default 100, hard maximum 500
+[[actions.actions]]
+type = "attribute_write"
+attribute_code = "status"
+fixed = "in_review"
+```
+
+Nested actions are 1-20 local actions with fixed values only (no `event_field`, no nesting). Targets are live entities with an active relationship value, in any context, whose attribute with that code belongs to the entity's current blueprint revision or the entity itself, excluding the trigger entity. They are selected in ID order with `LIMIT max_targets + 1`; exceeding the limit fails the attempt before any further target is written.
+
+Each target is a separate transaction: lifecycle lock, run lock and task fence (as for any action), then the target entity row lock, a reference recheck under that lock, a `workflow_run_action_targets (run_id, action_index, entity_id)` marker and the entity write. A missing or no-longer-referencing target is marked `skipped`. A failing target rolls back and is recorded as `failed` (with a bounded `last_error` and attempt count) in its own task-fenced transaction; other targets continue. If any target failed, the action returns an error and the run retries normally; a retry revisits only `failed` rows and targets not yet reached, so completed targets are never written twice. The action's `workflow_run_actions` marker is written only after every target has settled. A lost task lease aborts immediately. `GET /workflow-runs/{run_id}/targets` exposes the rows. Target writes use the `workflow:<id>` source, so they do not fan out to workflows.
 
 ## Trigger contracts
 

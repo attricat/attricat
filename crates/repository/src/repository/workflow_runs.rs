@@ -26,6 +26,19 @@ pub struct WorkflowRun {
     pub causal_depth: i32,
 }
 
+/// Per-target outcome of a `referencing_entities_update` action. Failed rows
+/// keep the latest error while the run retries; they never expose payloads.
+#[derive(Debug, Clone, serde::Serialize, sqlx::FromRow)]
+pub struct WorkflowRunTarget {
+    pub action_index: i32,
+    pub entity_id: Uuid,
+    pub status: String,
+    pub attempts: i32,
+    pub last_error: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
 #[derive(Debug, Clone)]
 pub enum WorkflowActionResult {
     Executed,
@@ -248,6 +261,32 @@ impl CatalogRepository {
             .bind(ws).bind(id).fetch_optional(&self.pool).await.map_err(Into::into)
     }
 
+    /// `None` when the run does not exist in this workspace.
+    pub async fn workflow_run_targets(
+        &self,
+        run_id: Uuid,
+    ) -> Result<Option<Vec<WorkflowRunTarget>>, RepositoryError> {
+        let ws = self.workspace_id.0;
+        let mut tx = self.pool.begin().await?;
+        let exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM workflow_runs WHERE id=$1 AND workspace_id=$2)",
+        )
+        .bind(run_id)
+        .bind(ws)
+        .fetch_one(&mut *tx)
+        .await?;
+        if !exists {
+            return Ok(None);
+        }
+        let targets = sqlx::query_as("SELECT action_index,entity_id,status,attempts,last_error,created_at,updated_at FROM workflow_run_action_targets WHERE run_id=$1 AND workspace_id=$2 ORDER BY action_index,entity_id")
+            .bind(run_id)
+            .bind(ws)
+            .fetch_all(&mut *tx)
+            .await?;
+        tx.commit().await?;
+        Ok(Some(targets))
+    }
+
     pub async fn workflow_runs_page(
         &self,
         limit: i64,
@@ -466,11 +505,13 @@ fn workflow_trigger_matches(trigger: &catalog_workflow::Trigger, event: &DomainE
         event_type,
         envelope,
         facts,
+        attributes,
     } = trigger
     else {
         return false;
     };
     event_type == &event.event_type
+        && catalog_workflow::changed_attributes_match(attributes, &event.payload)
         && envelope.iter().all(|(key, expected)| match key.as_str() {
             "event_type" => expected == &Value::String(event.event_type.clone()),
             "aggregate_kind" => expected == &Value::String(event.aggregate_kind.clone()),
@@ -508,6 +549,7 @@ mod tests {
             event_type: "entity.updated.v1".into(),
             envelope: [("source_kind".into(), json!("api"))].into(),
             facts: [("facts.0.attribute_code".into(), json!("title"))].into(),
+            attributes: Vec::new(),
         };
         let event = DomainEvent {
             id: Uuid::new_v4(),
@@ -535,6 +577,7 @@ mod tests {
             event_type: "entity.updated.v1".into(),
             envelope: [("metadata.tenant_hint".into(), json!("north"))].into(),
             facts: Default::default(),
+            attributes: Vec::new(),
         };
         assert!(!workflow_trigger_matches(&metadata_trigger, &event));
         let metadata_event = DomainEvent {
@@ -542,5 +585,36 @@ mod tests {
             ..event
         };
         assert!(workflow_trigger_matches(&metadata_trigger, &metadata_event));
+    }
+
+    #[test]
+    fn attribute_filters_match_any_changed_fact() {
+        let trigger = |attributes: &[&str]| catalog_workflow::Trigger::Event {
+            event_type: "relationship.changed.v1".into(),
+            envelope: Default::default(),
+            facts: Default::default(),
+            attributes: attributes.iter().map(|code| (*code).to_owned()).collect(),
+        };
+        let event = DomainEvent {
+            id: Uuid::new_v4(),
+            sequence: 1,
+            workspace_id: Uuid::new_v4(),
+            occurred_at: Utc::now(),
+            event_type: "relationship.changed.v1".into(),
+            aggregate_kind: "entity".into(),
+            aggregate_id: Uuid::new_v4(),
+            correlation_id: Uuid::new_v4(),
+            causation_id: None,
+            source_kind: "api".into(),
+            source_name: "catalog_api".into(),
+            metadata: json!({}),
+            payload: json!({"facts":[{"attribute_code":"license","change_kind":"relationship_add"}]}),
+        };
+        assert!(workflow_trigger_matches(&trigger(&[]), &event));
+        assert!(workflow_trigger_matches(
+            &trigger(&["title", "license"]),
+            &event
+        ));
+        assert!(!workflow_trigger_matches(&trigger(&["title"]), &event));
     }
 }

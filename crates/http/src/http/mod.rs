@@ -785,6 +785,10 @@ pub fn router(state: AppState) -> Router {
         .route("/workflows/{workflow_id}/disable", post(workflows::disable))
         .route("/workflow-runs", get(workflows::list_runs))
         .route(
+            "/workflow-runs/{run_id}/targets",
+            get(workflows::list_run_targets),
+        )
+        .route(
             "/workflow-runs/{run_id}/replay",
             post(workflows::replay_run),
         )
