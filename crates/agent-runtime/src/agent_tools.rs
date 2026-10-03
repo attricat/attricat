@@ -84,6 +84,57 @@ pub enum ToolError {
     Repository(#[from] RepositoryError),
 }
 
+/// The provider-facing payload of a failed tool call. Declarative check
+/// failures add the API error code as `error_code` and the API's
+/// `error.details` as `details`, so the agent can name the failed checks and
+/// the attributes or linked records to fix.
+pub fn tool_error_payload(error: &ToolError) -> Value {
+    let mut payload = json!({"code":"tool_error","message":error.to_string()});
+    let ToolError::Repository(error) = error else {
+        return payload;
+    };
+    let violations =
+        |violations: &[crate::repository::CheckViolation]| json!({ "violations": violations });
+    let (code, details) = match error {
+        RepositoryError::EntityCheckFailed(items) => {
+            ("entity_check_failed", Some(violations(items)))
+        }
+        RepositoryError::TransitionConditionsUnmet(items) => {
+            ("transition_conditions_unmet", Some(violations(items)))
+        }
+        RepositoryError::RuleViolation(items) => ("rule_violation", Some(violations(items))),
+        RepositoryError::PublicationChecksFailed {
+            context,
+            violations: items,
+        } => (
+            "publication_checks_failed",
+            Some(json!({ "violations": items, "context": context })),
+        ),
+        RepositoryError::RuleDryRunRequired => ("rule_dry_run_required", None),
+        RepositoryError::RuleHasExistingViolations(count) => (
+            "rule_has_existing_violations",
+            Some(json!({ "existing_violations": count })),
+        ),
+        _ => return payload,
+    };
+    payload["error_code"] = json!(code);
+    if let Some(mut details) = details {
+        // Evidence can list many related entity IDs; keep the payload within
+        // the tool result bound by dropping it before anything else.
+        if details.to_string().len() > MAX_TOOL_RESULT_BYTES / 2
+            && let Some(items) = details["violations"].as_array_mut()
+        {
+            for item in items {
+                if let Some(item) = item.as_object_mut() {
+                    item.remove("evidence");
+                }
+            }
+        }
+        payload["details"] = details;
+    }
+    payload
+}
+
 pub fn definitions() -> Vec<ToolDefinition> {
     vec![
         definition(
@@ -265,6 +316,16 @@ pub fn definitions() -> Vec<ToolDefinition> {
             "get_entity_publications",
             "List this entity's enabled channel publication status. Use this before proposing channel publication.",
             json!({"type":"object","required":["entity_id"],"properties":{"entity_id":{"type":"string","format":"uuid"}},"additionalProperties":false}),
+        ),
+        definition(
+            "get_entity_publication_readiness",
+            "Check whether an entity passes each enabled channel's required rules and entity checks, without publishing. Returns context_id, context_code, ready, and violations (source, code, message, contexts, attributes, evidence). Use before publishing or to explain publication_checks_failed.",
+            json!({"type":"object","required":["entity_id"],"properties":{"entity_id":{"type":"string","format":"uuid"}},"additionalProperties":false}),
+        ),
+        definition(
+            "get_entity_status_transitions",
+            "List each status attribute's destinations from the entity's saved state in one context (default context when context_id is omitted). Each destination has allowed, an optional reason (transition_not_allowed or conditions_unmet), and unmet violations from transition conditions or enforcing rules. Use before proposing a status change or to explain transition_conditions_unmet.",
+            json!({"type":"object","required":["entity_id"],"properties":{"entity_id":{"type":"string","format":"uuid"},"context_id":{"type":["string","null"],"format":"uuid"}},"additionalProperties":false}),
         ),
         definition(
             "publish_entity",
@@ -453,6 +514,8 @@ pub fn kind(name: &str) -> Result<ToolKind, ToolError> {
         | "list_saved_searches"
         | "get_saved_search"
         | "get_entity_publications"
+        | "get_entity_publication_readiness"
+        | "get_entity_status_transitions"
         | "preview_entity_migration" => Ok(ToolKind::Read),
         "create_blueprint"
         | "create_blueprint_revision"
@@ -711,6 +774,24 @@ pub async fn execute_read(
                 .await?,
         )
         .expect("publication status serializes"),
+        "get_entity_publication_readiness" => serde_json::to_value(
+            repository
+                .publication_readiness(parse_uuid(&arguments, "entity_id")?)
+                .await?,
+        )
+        .expect("publication readiness serializes"),
+        "get_entity_status_transitions" => {
+            let context_id = match arguments.get("context_id") {
+                None | Some(Value::Null) => None,
+                Some(_) => Some(parse_uuid(&arguments, "context_id")?),
+            };
+            serde_json::to_value(
+                repository
+                    .status_transition_options(parse_uuid(&arguments, "entity_id")?, context_id)
+                    .await?,
+            )
+            .expect("status transitions serialize")
+        }
         "get_entity_changes" | "get_value_history" => {
             let (entity_id, limit, offset) = history_page_arguments(arguments)?;
             // Keep the same deleted/not-found behavior as the HTTP endpoints.
@@ -2085,7 +2166,9 @@ async fn read_authorized(
         | "get_entity_changes"
         | "get_value_history"
         | "get_entity_preview_link"
-        | "get_entity_publications" => (
+        | "get_entity_publications"
+        | "get_entity_publication_readiness"
+        | "get_entity_status_transitions" => (
             "entities.read",
             Some(parse_uuid(arguments, "entity_id")?),
             None,
@@ -2427,6 +2510,98 @@ mod tests {
             vec![second]
         );
         assert!(crate::search_filters::intersect_ids(Some(vec![first]), vec![second]).is_empty());
+    }
+
+    #[test]
+    fn check_readiness_tools_are_entity_scoped_reads() {
+        let definitions = definitions();
+        for name in [
+            "get_entity_publication_readiness",
+            "get_entity_status_transitions",
+        ] {
+            assert_eq!(kind(name).unwrap(), ToolKind::Read);
+            let definition = definitions
+                .iter()
+                .find(|tool| tool.function.name == name)
+                .unwrap();
+            assert_eq!(
+                definition.function.parameters["required"],
+                json!(["entity_id"])
+            );
+        }
+    }
+
+    #[test]
+    fn check_failures_keep_the_api_error_code_and_violations() {
+        use crate::repository::{CheckSource, CheckTransition, CheckViolation, RepositoryError};
+        let violation = CheckViolation {
+            source: CheckSource::TransitionCondition,
+            code: "has-root-cause".into(),
+            message: "Record the root cause".into(),
+            contexts: vec!["default".into()],
+            attributes: vec!["root_cause".into()],
+            severity: None,
+            transition: Some(CheckTransition {
+                attribute_code: "status".into(),
+                from: Some("open".into()),
+                to: Some("closed".into()),
+            }),
+            evidence: json!({"attribute_code": "root_cause"}),
+        };
+        let payload = super::tool_error_payload(&ToolError::Repository(
+            RepositoryError::TransitionConditionsUnmet(vec![violation.clone()]),
+        ));
+        assert_eq!(payload["code"], "tool_error");
+        assert_eq!(payload["error_code"], "transition_conditions_unmet");
+        assert_eq!(
+            payload["details"]["violations"][0]["attributes"],
+            json!(["root_cause"])
+        );
+        assert_eq!(
+            payload["details"]["violations"][0]["transition"]["to"],
+            "closed"
+        );
+
+        let payload = super::tool_error_payload(&ToolError::Repository(
+            RepositoryError::PublicationChecksFailed {
+                context: "web".into(),
+                violations: vec![violation.clone()],
+            },
+        ));
+        assert_eq!(payload["error_code"], "publication_checks_failed");
+        assert_eq!(payload["details"]["context"], "web");
+
+        let payload = super::tool_error_payload(&ToolError::Repository(
+            RepositoryError::RuleHasExistingViolations(3),
+        ));
+        assert_eq!(payload["details"]["existing_violations"], 3);
+
+        // Large evidence is dropped so the result stays bounded.
+        let mut large = violation;
+        large.evidence = json!({"ids": "x".repeat(MAX_TOOL_RESULT_BYTES)});
+        let payload = super::tool_error_payload(&ToolError::Repository(
+            RepositoryError::EntityCheckFailed(vec![large]),
+        ));
+        assert!(
+            payload["details"]["violations"][0]
+                .get("evidence")
+                .is_none()
+        );
+
+        let payload = super::tool_error_payload(&ToolError::Forbidden);
+        assert!(payload.get("error_code").is_none());
+    }
+
+    #[test]
+    fn authoring_guide_fits_the_tool_result_bound() {
+        let guide = json!({
+            "blueprints_markdown": super::BLUEPRINT_AUTHORING_GUIDE,
+            "views_markdown": super::VIEW_CONFIGURATION_GUIDE,
+            "json_schema_markdown": super::JSON_SCHEMA_GUIDE,
+        });
+        assert!(bounded(guide).is_ok());
+        assert!(super::JSON_SCHEMA_GUIDE.contains("x-attricat-checks"));
+        assert!(super::BLUEPRINT_AUTHORING_GUIDE.contains("rules.enforcement"));
     }
 
     #[test]

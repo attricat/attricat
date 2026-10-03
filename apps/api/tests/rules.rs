@@ -14,7 +14,7 @@ severity = "error"
 type = "manual"
 [predicate]
 type = "required"
-attribute_code = "title"
+attribute_code = "summary"
 "#;
 
 async fn setup_rule(pool: &PgPool) -> (String, tokio::task::JoinHandle<()>, Uuid, Value) {
@@ -39,6 +39,9 @@ fields = ["title"]
 code = "title"
 value_type = "string"
 default_value = "untitled"
+[[attributes]]
+code = "summary"
+value_type = "string"
 "#,
     )
     .await;

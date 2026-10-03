@@ -57,7 +57,10 @@ const schemaNodeSchema: z.ZodType<SchemaNode> = z.lazy(() =>
     default: z.unknown().optional(),
     description: z.string().optional(),
     enum: z.array(z.unknown()).optional(),
-    items: schemaNodeSchema.optional(),
+    // `items: true` accepts any item, which is the same as omitting it.
+    items: z
+      .union([schemaNodeSchema, z.literal(true).transform(() => undefined)])
+      .optional(),
     oneOf: z.array(schemaNodeSchema).optional(),
     properties: z.record(z.string(), schemaNodeSchema).optional(),
     required: z.array(z.string()).optional(),

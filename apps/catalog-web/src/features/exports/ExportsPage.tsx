@@ -22,7 +22,11 @@ import {
   listPublicationChannels,
   updatePublicationChannel,
   type PublicationChannel,
+  type PublicationChannelChecks,
 } from './api';
+import { listRules } from '../rules/api';
+import { ruleQueryKeys } from '../rules/queryKeys';
+import { ChannelChecksEditor } from './ChannelChecksEditor';
 import { EXPORT_TABLE_COLUMN_COUNT } from './constants';
 import { exportQueryKeys } from './queryKeys';
 import { ExportIcon } from '../../components/systemIcons';
@@ -38,14 +42,24 @@ export const ExportsPage = () => {
     queryKey: exportQueryKeys.channels(),
     queryFn: listPublicationChannels,
   });
+  // Rule codes are suggestions only; a reader without rule access can type them.
+  const rules = useQuery({
+    queryKey: ruleQueryKeys.definitions(),
+    queryFn: listRules,
+  });
+  const ruleCodes = [
+    ...new Set(rules.data?.map((rule) => rule.code) ?? []),
+  ].sort();
   const updateChannel = useMutation({
     mutationFn: ({
       contextId,
       enabled,
+      checks,
     }: {
       contextId: string;
       enabled: boolean;
-    }) => updatePublicationChannel(contextId, enabled),
+      checks?: PublicationChannelChecks;
+    }) => updatePublicationChannel(contextId, enabled, checks),
     onSuccess: (channel) => {
       client.setQueryData<PublicationChannel[]>(
         exportQueryKeys.channels(),
@@ -85,6 +99,7 @@ export const ExportsPage = () => {
               <TableRow>
                 <TableCell>{t('exports.context')}</TableCell>
                 <TableCell>{t('exports.channel')}</TableCell>
+                <TableCell>{t('exports.publicationChecks')}</TableCell>
                 <TableCell>{t('exports.actions')}</TableCell>
               </TableRow>
             </TableHead>
@@ -120,6 +135,23 @@ export const ExportsPage = () => {
                             size="small"
                           />
                         }
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <ChannelChecksEditor
+                        disabled={updateChannel.isPending}
+                        onChange={(checks) =>
+                          updateChannel.mutate({
+                            contextId: context.id,
+                            enabled,
+                            checks,
+                          })
+                        }
+                        requireValidEntity={
+                          channel?.require_valid_entity ?? false
+                        }
+                        requiredRuleCodes={channel?.required_rule_codes ?? []}
+                        ruleCodes={ruleCodes}
                       />
                     </TableCell>
                     <TableCell>

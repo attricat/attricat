@@ -3,7 +3,7 @@ use super::{
     extractors::{ApiJson, ApiPath, ApiQuery},
     pagination::{ArrayPage, array_response},
 };
-use crate::model::{CreateManualRuleRun, CreateRule, Rule, RuleFinding};
+use crate::model::{CreateManualRuleRun, CreateRule, EnableRule, Rule, RuleFinding};
 use axum::{Json, http::StatusCode, response::Response};
 use serde::Deserialize;
 use uuid::Uuid;
@@ -61,8 +61,10 @@ pub(super) async fn publish(
 pub(super) async fn enable(
     super::auth::ScopedRepository(repo): super::auth::ScopedRepository,
     ApiPath((id, version)): ApiPath<(Uuid, i64)>,
+    input: Option<ApiJson<EnableRule>>,
 ) -> Result<Json<Rule>, ApiError> {
-    Ok(Json(repo.enable_rule(id, version).await?))
+    let options = input.map(|ApiJson(input)| input).unwrap_or_default();
+    Ok(Json(repo.enable_rule_with(id, version, options).await?))
 }
 pub(super) async fn run_now(
     super::auth::ScopedRepository(repo): super::auth::ScopedRepository,

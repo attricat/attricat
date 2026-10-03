@@ -22,7 +22,7 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 ## Conventions
 
 - Requests and responses are JSON unless a route says otherwise. Successful empty responses are `204`.
-- Errors return the HTTP status and a body like `{"error": {"code": "entity_schema_mismatch", "message": "…"}}`. Match on `code`, not on the message.
+- Errors return the HTTP status and a body like `{"error": {"code": "entity_schema_mismatch", "message": "…"}}`. Match on `code`, not on the message. Some errors add structured data in `error.details`; see below.
 - `401` means no valid credential; `403` means the credential lacks the permission or scope.
 - `422` means the request was understood but is invalid, such as a blueprint that does not compile or a value that fails its schema.
 - `409` means a conflict with current state, such as a relationship cardinality limit.
@@ -41,6 +41,26 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `file_processing` | 409 | The file is not ready to download yet. |
 | `approval_already_decided` | 409 | An agent tool call was already approved or rejected. |
 | `service_unavailable` | 503 | For agent routes: no AI provider is configured. |
+| `entity_check_failed` | 422 | An `x-attricat-checks` check fails in some context. |
+| `transition_conditions_unmet` | 422 | A status transition's conditions are not met. |
+| `rule_violation` | 422 | The write leaves the entity violating an enforcing rule. |
+| `publication_checks_failed` | 422 | A channel's required checks fail. `details.context` is the channel code. |
+| `invalid_rule_definition` | 422 | The rule TOML is invalid or does not fit its blueprint revision. |
+| `rule_dry_run_required` | 409 | Enabling an enforcing rule needs a completed full dry run of that revision first. |
+| `rule_has_existing_violations` | 409 | The dry run found violations. `details.existing_violations` is the count. |
+
+The four 422 check errors list up to 50 violations in `error.details.violations`:
+
+```json
+{"error": {"code": "transition_conditions_unmet", "message": "…", "details": {"violations": [
+  {"source": "transition_condition", "code": "approver-set", "message": "Set an approver before release",
+   "contexts": ["default"], "attributes": ["approved_by"],
+   "transition": {"attribute_code": "status", "from": "review", "to": "released"},
+   "evidence": {"attribute_code": "approved_by"}}
+]}}}
+```
+
+`source` is `entity_check`, `transition_condition`, `rule`, or (publication only) `entity_schema`. `contexts` lists the context codes where the check failed, and `attributes` the entity's attributes involved, for highlighting fields. Rules add `severity`; publication bulk failures add `evidence.entity_id`. See [Validation](/builders/validation/#errors-and-how-to-fix-them).
 
 ## Routes
 
@@ -84,6 +104,7 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `POST` | `/v1/entities/{id}/blueprint-migration/preview` | Check migration to the current revision. |
 | `POST` | `/v1/entities/{id}/blueprint-migration` | Migrate. |
 | `POST` | `/v1/entities/{id}/reusable-attributes`, `/v1/entities/{id}/reusable-attribute-groups/{group_id}` | Attach a reusable attribute or group. |
+| `GET` | `/v1/entities/{id}/status-transitions?context_id=…` | Status destinations from the saved state in one context (default context if omitted): `[{attribute_code, context_id, context_code, current, destinations: [{to, allowed, reason?, unmet}]}]`. `reason` is `transition_not_allowed` or `conditions_unmet`; `unmet` lists unmet conditions and enforcing rules as violations. |
 
 ### Search
 
@@ -131,10 +152,11 @@ Downloads return `409 file_processing` until the file is `ready`.
 | `GET` | `/contexts/{code}` | Read by code. |
 | `PUT`, `DELETE` | `/contexts/id/{id}` | Update or delete. |
 | `GET` | `/publication-channels` | Channel contexts. |
-| `PUT` | `/publication-channels/{context_id}` | `{"enabled": true}` to make a context a channel. |
+| `PUT` | `/publication-channels/{context_id}` | `{"enabled": true}` to make a context a channel. Optional `required_rule_codes` (up to 32 rule codes) and `require_valid_entity` set the checks publication requires; omitted fields keep their current value. |
 | `GET`, `POST` | `/v1/entities/{id}/publications` | Publication status, or publish with `{"context_id": "…"}`. |
 | `POST` | `/v1/entities/{id}/publications/unpublish` | Unpublish from one channel. |
 | `POST` | `/v1/entities/{id}/publications/publish-all` | Publish to every channel. |
+| `GET` | `/v1/entities/{id}/publications/readiness` | For each enabled channel: `{context_id, context_code, ready, violations}`. |
 | `POST` | `/blueprints/{id}/versions/{version}/entity-publications`, `…/publish-all` | Publish all entities of a revision. |
 
 ### Saved searches
@@ -167,8 +189,8 @@ See [Translate labels](/builders/translations/).
 | `POST` | `/rules/validate` | Validate rule TOML. |
 | `GET`, `POST` | `/rules` | List or create rules. |
 | `GET` | `/rules/{id}` | Read a rule. |
-| `POST` | `/rules/{id}/versions/{version}/publish`, `/enable`; `/rules/{id}/disable` | Lifecycle. |
-| `POST` | `/rules/{id}/run-now` | `{"entity_id": null, "dry_run": false, "idempotency_key": "…"}` |
+| `POST` | `/rules/{id}/versions/{version}/publish`, `/enable`; `/rules/{id}/disable` | Lifecycle. `/enable` accepts an optional `{"accept_existing_violations": true}` for an enforcing rule whose dry run found violations. |
+| `POST` | `/rules/{id}/run-now` | `{"entity_id": null, "dry_run": false, "idempotency_key": "…"}`. A dry run may add `"version": 2` to target a published revision that is not enabled; it defaults to the enabled revision, or the latest published one. |
 | `GET` | `/rule-runs`, `/rule-findings` | Runs and findings. |
 | `POST` | `/rule-runs/{id}/replay`, `/rule-findings/{id}/acknowledge` | Replay a dead letter; acknowledge a finding. |
 | `POST` | `/workflows/validate` | Validate workflow TOML. |

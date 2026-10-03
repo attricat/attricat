@@ -1,5 +1,9 @@
 import { z } from 'zod';
-import type { Attribute, FormAttributeValue } from './api';
+import type {
+  Attribute,
+  FormAttributeValue,
+  StatusTransitionOptions,
+} from './api';
 
 export const STATUS_SCHEMA_KEY = 'x-attricat-status';
 const codeSchema = z
@@ -67,6 +71,35 @@ export const statusTransitionAllowed = (
       (edge) => edge.from === before && edge.to === after,
     );
   return after !== null;
+};
+
+export type StatusDestination = StatusTransitionOptions['destinations'][number];
+
+/**
+ * The server-evaluated destination that blocks moving from `before` to
+ * `after`, if any. Without server destinations (for example, an unsaved
+ * entity) only the transition graph applies.
+ */
+export const blockedStatusDestination = (
+  destinations: readonly StatusDestination[] | undefined,
+  before: string | null,
+  after: string | null,
+): StatusDestination | undefined => {
+  if (!destinations || after === null || after === before) return undefined;
+  const destination = destinations.find((item) => item.to === after);
+  return destination && !destination.allowed ? destination : undefined;
+};
+
+/** Server destinations for one status attribute from the form's baseline. */
+export const statusDestinationsFor = (
+  options: readonly StatusTransitionOptions[] | undefined,
+  attributeCode: string,
+  baseline: string | null,
+): StatusDestination[] | undefined => {
+  const match = options?.find((item) => item.attribute_code === attributeCode);
+  // A response for another saved state (for example, a concurrent edit) does
+  // not describe the transitions this form will submit.
+  return match && match.current === baseline ? match.destinations : undefined;
 };
 
 export const statusParentContexts = (

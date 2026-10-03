@@ -374,8 +374,15 @@
       "published": "Published",
       "publishedDetails": "Published {{publishedAt}} by {{publishedBy}}",
       "channelDisabled": "Not an export channel",
-      "channelDisabledDescription": "Enable this context as an export channel in Manage > Exports before publishing."
-    }
+      "channelDisabledDescription": "Enable this context as an export channel in Manage > Exports before publishing.",
+      "notReady": "Not ready",
+      "channelsNotReady": "Not ready for: {{channels}}"
+    },
+    "checks": {
+      "violationInContexts": "{{message}} (contexts: {{contexts}})",
+      "publicationBlocked": "Publication to {{context}} is blocked by failing checks."
+    },
+    "statusConditionsUnmet": "Blocked: {{conditions}}"
   },
   "exports": {
     "title": "Exports",
@@ -387,7 +394,11 @@
     "enabled": "Enabled",
     "disabled": "Disabled",
     "openInExplore": "Open in Explore",
-    "noContexts": "No contexts are available."
+    "noContexts": "No contexts are available.",
+    "publicationChecks": "Publication checks",
+    "requireValidEntity": "Require a valid entity",
+    "requiredRules": "Required rules",
+    "requiredRulesHelp": "Codes of enabled rules that must pass before publishing (at most {{max}})."
   },
   "blueprints": {
     "blueprint": "Blueprint",

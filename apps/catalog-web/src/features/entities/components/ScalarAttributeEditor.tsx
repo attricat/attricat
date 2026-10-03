@@ -11,7 +11,7 @@ import {
   JSON_EDITOR_MIN_ROWS,
   scalarValuePlaceholders,
 } from '../constants';
-import { statusConfiguration } from '../status';
+import { statusConfiguration, type StatusDestination } from '../status';
 
 const numeric = (attribute: Attribute) =>
   attribute.value_type === attributeValueTypes.number ||
@@ -79,12 +79,15 @@ export const ScalarAttributeEditor = ({
   component,
   statusBaseline = null,
   inheritedStatus = null,
+  statusDestinations,
   ...props
 }: ValueEditorProps & {
   component?: ComponentReference | null;
   /** Saved status that transitions start from; `null` for a new value. */
   statusBaseline?: string | null;
   inheritedStatus?: string | null;
+  /** Server-evaluated destinations of a saved entity's status. */
+  statusDestinations?: readonly StatusDestination[];
 }) => {
   const status = statusConfiguration(props.attribute);
   if (status)
@@ -94,6 +97,7 @@ export const ScalarAttributeEditor = ({
         config={status}
         baseline={statusBaseline}
         inheritedValue={inheritedStatus}
+        destinations={statusDestinations}
       />
     );
   const Editor =

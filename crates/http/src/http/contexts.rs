@@ -51,7 +51,7 @@ pub(super) async fn set_publication_channel(
 ) -> Result<Json<PublicationChannel>, ApiError> {
     Ok(Json(
         repository
-            .set_publication_channel(context_id, input.enabled)
+            .update_publication_channel(context_id, input)
             .await?,
     ))
 }

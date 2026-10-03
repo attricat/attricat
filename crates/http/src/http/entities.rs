@@ -563,6 +563,29 @@ pub(super) async fn list_entity_publications(
 ) -> Result<Json<Vec<crate::model::EntityPublicationStatus>>, ApiError> {
     Ok(Json(repository.publication_statuses(entity_id).await?))
 }
+/// Readiness of the entity for each enabled channel's required checks.
+pub(super) async fn entity_publication_readiness(
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    ApiPath(entity_id): ApiPath<Uuid>,
+) -> Result<Json<Vec<crate::repository::PublicationReadiness>>, ApiError> {
+    Ok(Json(repository.publication_readiness(entity_id).await?))
+}
+#[derive(Deserialize)]
+pub(super) struct StatusTransitionQuery {
+    context_id: Option<Uuid>,
+}
+/// Status destinations from the saved state, with unmet conditions.
+pub(super) async fn entity_status_transitions(
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    ApiPath(entity_id): ApiPath<Uuid>,
+    super::extractors::ApiQuery(query): super::extractors::ApiQuery<StatusTransitionQuery>,
+) -> Result<Json<Vec<crate::repository::StatusTransitionOptions>>, ApiError> {
+    Ok(Json(
+        repository
+            .status_transition_options(entity_id, query.context_id)
+            .await?,
+    ))
+}
 pub(super) async fn publish_entity(
     State(state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,

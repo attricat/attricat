@@ -1,6 +1,11 @@
 import { useTranslation } from 'react-i18next';
-import { savedStatusState } from '../status';
-import type { Attribute, ComponentReference, FormAttributeValue } from '../api';
+import { savedStatusState, statusDestinationsFor } from '../status';
+import type {
+  Attribute,
+  ComponentReference,
+  FormAttributeValue,
+  StatusTransitionOptions,
+} from '../api';
 import {
   filesForAttribute,
   formatResolvedValue,
@@ -20,6 +25,8 @@ export type EntityFormAttributeEditorContext = {
   entityId?: string;
   existingValues: readonly FormAttributeValue[];
   statusSavedValues?: readonly FormAttributeValue[];
+  /** Server-evaluated status destinations of a saved entity. */
+  statusTransitions?: readonly StatusTransitionOptions[];
   fieldErrors: Record<string, string>;
   highlightedAttributes: readonly string[];
   migrationReviewMessages: Readonly<Record<string, string>>;
@@ -47,6 +54,7 @@ export const EntityFormAttributeEditor = ({
   entityId,
   existingValues,
   statusSavedValues = existingValues,
+  statusTransitions,
   fieldErrors,
   highlightedAttributes,
   migrationReviewMessages,
@@ -104,6 +112,11 @@ export const EntityFormAttributeEditor = ({
         disabled={disabled || readonly || defaultOnly}
         statusBaseline={savedStatus.current}
         inheritedStatus={savedStatus.inherited}
+        statusDestinations={statusDestinationsFor(
+          statusTransitions,
+          attribute.code,
+          savedStatus.current,
+        )}
         entityId={entityId}
         files={filesForAttribute(existingValues, attribute.code, contextId)}
         error={fieldErrors[attribute.code]}

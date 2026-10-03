@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { getCoreRowModel, useLegacyTable } from '@tanstack/react-table/legacy';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { Alert, Paper, Typography } from '@mui/material';
+import { Paper, Typography } from '@mui/material';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { BlueprintWithAttributes, EntityItem } from '../entities/api';
@@ -34,6 +34,7 @@ import type { ExplorerSort } from './search';
 import { SearchInfoDialog } from './SearchInfoDialog';
 import { SendSelectedToAgentDialog } from './SendSelectedToAgentDialog';
 import { useEntityPublicationActions } from './useEntityPublicationActions';
+import { ApiErrorAlert } from '../entities/components/CheckViolationsAlert';
 import { useExplorerColumnPreferences } from './useExplorerColumnPreferences';
 import type { ExplorerSelection } from './useExplorerSelection';
 import { VirtualizedExplorerTable } from './VirtualizedExplorerTable';
@@ -121,11 +122,18 @@ export const ExplorerResultsTable = ({
     : undefined;
   if (activeActionEntity)
     publicationItems.set(activeActionEntity.id, activeActionEntity);
-  const { duplicate, error, publicationsByEntityId, publish, unpublish } =
-    useEntityPublicationActions(
-      [...publicationItems.values()],
-      publicationContextId,
-    );
+  const {
+    duplicate,
+    error,
+    publicationsByEntityId,
+    publish,
+    readiness,
+    unpublish,
+  } = useEntityPublicationActions(
+    [...publicationItems.values()],
+    publicationContextId,
+    canPublish ? activeActionEntity?.id : undefined,
+  );
   const tableColumns = buildExplorerTableColumns(
     blueprint,
     relationshipSortAvailable,
@@ -183,11 +191,7 @@ export const ExplorerResultsTable = ({
 
   return (
     <Paper component="section">
-      {error && (
-        <Alert severity="error" sx={{ m: 2 }}>
-          {error.message}
-        </Alert>
-      )}
+      {error && <ApiErrorAlert error={error} sx={{ m: 2 }} />}
       <ExplorerResultsToolbar
         blueprintName={blueprint.blueprint.name}
         itemCount={items.length}
@@ -246,6 +250,7 @@ export const ExplorerResultsTable = ({
           publicationContextId={publicationContextId}
           publish={() => publish.mutate(activeActionEntity.id)}
           publishing={publish.isPending}
+          readiness={readiness}
           duplicate={() => duplicate.mutate(activeActionEntity.id)}
           duplicating={duplicate.isPending}
           unpublish={() => unpublish.mutate(activeActionEntity.id)}

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  blockedStatusDestination,
   statusConfiguration,
+  statusDestinationsFor,
   statusLabel,
   statusParentContexts,
   statusTransitionAllowed,
@@ -71,5 +73,44 @@ describe('status configuration', () => {
         ['child', ...path],
       ),
     ).toBe('live');
+  });
+});
+
+describe('server status destinations', () => {
+  const blocked = {
+    to: 'live',
+    allowed: false,
+    reason: 'conditions_unmet',
+    unmet: [],
+  };
+  const options = [
+    {
+      attribute_code: 'status',
+      context_id: '123e4567-e89b-12d3-a456-426614174000',
+      context_code: 'default',
+      current: 'draft',
+      destinations: [blocked, { to: 'done', allowed: true, unmet: [] }],
+    },
+  ];
+
+  it('blocks only disallowed destinations that change the status', () => {
+    const destinations = statusDestinationsFor(options, 'status', 'draft');
+    expect(blockedStatusDestination(destinations, 'draft', 'live')).toBe(
+      blocked,
+    );
+    expect(
+      blockedStatusDestination(destinations, 'draft', 'done'),
+    ).toBeUndefined();
+    expect(
+      blockedStatusDestination(destinations, 'live', 'live'),
+    ).toBeUndefined();
+    expect(blockedStatusDestination(undefined, 'draft', 'live')).toBe(
+      undefined,
+    );
+  });
+
+  it('ignores destinations evaluated from another saved status', () => {
+    expect(statusDestinationsFor(options, 'status', 'live')).toBeUndefined();
+    expect(statusDestinationsFor(options, 'phase', 'draft')).toBeUndefined();
   });
 });

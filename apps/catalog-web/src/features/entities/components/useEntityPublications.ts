@@ -4,16 +4,27 @@ import {
   publishEntityAllChannels,
   unpublishEntity,
 } from '../api';
-import { entityPublicationOptions } from '../queryOptions';
+import {
+  entityPublicationOptions,
+  entityPublicationReadinessOptions,
+} from '../queryOptions';
 import { invalidateEntityPublications } from '../invalidateEntity';
 
-/** Loads an entity's channel publications and exposes publishing actions. */
+/**
+ * Loads an entity's channel publications and exposes publishing actions.
+ * With `checkReadiness`, it also evaluates each enabled channel's checks.
+ */
 export const useEntityPublications = (
   entityId: string,
   contextId: string | null,
+  checkReadiness = false,
 ) => {
   const client = useQueryClient();
   const publications = useQuery(entityPublicationOptions(entityId));
+  const readiness = useQuery({
+    ...entityPublicationReadinessOptions(entityId),
+    enabled: checkReadiness,
+  });
   const invalidatePublications = () =>
     invalidateEntityPublications(client, entityId);
   const publish = useMutation({
@@ -37,6 +48,11 @@ export const useEntityPublications = (
       contextId === null
         ? undefined
         : publications.data?.find((item) => item.context_id === contextId),
+    readiness:
+      contextId === null
+        ? undefined
+        : readiness.data?.find((item) => item.context_id === contextId),
+    notReadyChannels: (readiness.data ?? []).filter((item) => !item.ready),
     publish: () => {
       if (contextId) publish.mutate(contextId);
     },

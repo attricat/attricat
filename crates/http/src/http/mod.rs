@@ -898,6 +898,14 @@ pub fn router(state: AppState) -> Router {
             get(entities::list_entity_publications).post(entities::publish_entity),
         )
         .route(
+            "/v1/entities/{entity_id}/publications/readiness",
+            get(entities::entity_publication_readiness),
+        )
+        .route(
+            "/v1/entities/{entity_id}/status-transitions",
+            get(entities::entity_status_transitions),
+        )
+        .route(
             "/v1/entities/{entity_id}/publications/unpublish",
             post(entities::unpublish_entity),
         )

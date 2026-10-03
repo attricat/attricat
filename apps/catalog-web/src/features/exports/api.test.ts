@@ -20,7 +20,13 @@ describe('publication channel API client', () => {
     });
 
     await expect(listPublicationChannels()).resolves.toEqual([
-      { context_id: contextId, context_code: 'storefront', enabled: true },
+      {
+        context_id: contextId,
+        context_code: 'storefront',
+        enabled: true,
+        required_rule_codes: [],
+        require_valid_entity: false,
+      },
     ]);
     expect(fetchMock).toHaveBeenCalledWith('/api/publication-channels');
   });
@@ -44,6 +50,39 @@ describe('publication channel API client', () => {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ enabled: false }),
+      },
+    );
+  });
+
+  it('updates the publication checks a channel requires', async () => {
+    const channel = {
+      context_id: contextId,
+      context_code: 'storefront',
+      enabled: true,
+      required_rule_codes: ['has-sku'],
+      require_valid_entity: true,
+    };
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(channel),
+    });
+
+    await expect(
+      updatePublicationChannel(contextId, true, {
+        required_rule_codes: ['has-sku'],
+        require_valid_entity: true,
+      }),
+    ).resolves.toEqual(channel);
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/publication-channels/${contextId}`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          enabled: true,
+          required_rule_codes: ['has-sku'],
+          require_valid_entity: true,
+        }),
       },
     );
   });
