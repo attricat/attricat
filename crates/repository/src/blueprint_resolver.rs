@@ -94,7 +94,57 @@ async fn compile_source(
         .map_err(RepositoryError::invalid_blueprint_definition)?;
     resolve_extension_attribute_types(transaction, workspace_id, &mut compiled).await?;
     validate_table_columns(transaction, workspace_id, &compiled).await?;
+    validate_status_coverage(&compiled)?;
     Ok(compiled)
+}
+
+/// Status locks and approvals must name attributes of the effective entity
+/// blueprint, so a typo cannot silently leave a finalized field editable.
+/// Qualified `namespace:code` reusable attributes are attached per entity and
+/// cannot be checked here.
+fn validate_status_coverage(compiled: &CompiledBlueprint) -> Result<(), RepositoryError> {
+    if compiled.kind != BlueprintKind::Entity {
+        return Ok(());
+    }
+    let codes: HashSet<&str> = compiled
+        .attributes
+        .iter()
+        .map(|attribute| attribute.code.as_str())
+        .collect();
+    for attribute in &compiled.attributes {
+        let Some(options) = attribute
+            .value_schema
+            .as_ref()
+            .and_then(|schema| schema.get(catalog_validation::status::STATUS_KEY))
+            .and_then(|config| config.get("options"))
+            .and_then(Value::as_array)
+        else {
+            continue;
+        };
+        for option in options {
+            let lists = [
+                option.get("lock"),
+                option
+                    .get("approval")
+                    .and_then(|approval| approval.get("covers")),
+            ];
+            for code in lists
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_array)
+                .flatten()
+                .filter_map(Value::as_str)
+            {
+                if !code.contains(':') && !codes.contains(code) {
+                    return Err(RepositoryError::InvalidBlueprintDefinition(format!(
+                        "status attribute '{}' covers unknown attribute '{code}'",
+                        attribute.code
+                    )));
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Resolve only while authoring/publishing. Persisted attributes contain the

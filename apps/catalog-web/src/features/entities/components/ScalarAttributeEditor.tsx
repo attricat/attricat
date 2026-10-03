@@ -12,6 +12,7 @@ import {
   scalarValuePlaceholders,
 } from '../constants';
 import { statusConfiguration } from '../status';
+import type { StatusTransitionAccess } from '../recordControls';
 
 const numeric = (attribute: Attribute) =>
   attribute.value_type === attributeValueTypes.number ||
@@ -79,12 +80,15 @@ export const ScalarAttributeEditor = ({
   component,
   statusBaseline = null,
   inheritedStatus = null,
+  statusTransitions,
   ...props
 }: ValueEditorProps & {
   component?: ComponentReference | null;
   /** Saved status that transitions start from; `null` for a new value. */
   statusBaseline?: string | null;
   inheritedStatus?: string | null;
+  /** The caller's access to each declared edge, when the server provided it. */
+  statusTransitions?: readonly StatusTransitionAccess[];
 }) => {
   const status = statusConfiguration(props.attribute);
   if (status)
@@ -94,6 +98,7 @@ export const ScalarAttributeEditor = ({
         config={status}
         baseline={statusBaseline}
         inheritedValue={inheritedStatus}
+        transitions={statusTransitions}
       />
     );
   const Editor =

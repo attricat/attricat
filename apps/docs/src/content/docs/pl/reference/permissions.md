@@ -34,6 +34,13 @@ Brak zalogowania lub wygasła sesja zwraca `401`. Zalogowana osoba bez uprawnien
 | `extensions.read` | Przeglądanie rejestrów rozszerzeń i zainstalowanych rozszerzeń. | ✓ | ✓ | | |
 | `extensions.manage` | Instalowanie, konfigurowanie, przyznawanie uprawnień, włączanie i usuwanie rozszerzeń; rejestry, układ, sekrety, operacje i zadania konektorów. | ✓ | ✓ | | |
 | `solution_packs.manage` | Sprawdzanie, planowanie i stosowanie pakietów rozwiązań; zasoby prezentacyjne. | ✓ | ✓ | | |
+| `files.hold` | Zakładanie i zwalnianie jawnych blokad retencji plików. | ✓ | ✓ | | |
+
+## Przejścia statusów
+
+Status w schemacie może wymagać uprawnienia lub roli dla pojedynczego przejścia oraz tego, by wykonała je inna osoba niż ta, która wykonała wcześniejsze przejście. Te kontrole obowiązują dodatkowo do `entities.write` i dotyczą każdego, kto zapisuje dane, także przepływów pracy, rozszerzeń i agentów. Odrzucone przejście zwraca `403` z kodem `status_transition_forbidden` lub `status_separation_of_duties`. Zobacz [Kontroluj cykl życia rekordu](/pl/builders/blueprints/#krok-10-kontroluj-cykl-życia-rekordu).
+
+Rekordy w zablokowanym statusie odrzucają zmiany zablokowanej treści z `409 record_locked` niezależnie od uprawnień zapisującego. Odblokowanie wymaga jawnego, dozwolonego przejścia korygującego, które jest zapisywane w dzienniku audytu.
 
 ## Osobiste tokeny API
 

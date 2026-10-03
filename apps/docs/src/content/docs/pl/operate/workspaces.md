@@ -90,6 +90,23 @@ Skrypty, CLI i integracje uwierzytelniają się osobistymi tokenami API. Utwórz
 
 Tworzenie tokenów wymaga uprawnienia `tokens.manage`.
 
+## Blokady retencji
+
+Blokada retencji przechowuje dokładną zawartość pliku w magazynie do określonej daty. Dopóki plik ma choć jedną aktywną blokadę, Attricat nigdy go nie usuwa, nawet jeśli żadna encja już się do niego nie odwołuje.
+
+Blokady pochodzą z dwóch źródeł:
+
+- **Statusy rekordów.** Status w schemacie z `retention_days` zakłada blokadę na pliki rekordu, gdy ten przechodzi do tego statusu, np. gdy dokument zostaje wydany. Zobacz [Kontroluj cykl życia rekordu](/pl/builders/blueprints/#krok-10-kontroluj-cykl-życia-rekordu). Takich blokad nie można zwolnić przed terminem.
+- **Blokady jawne**, np. blokada na potrzeby postępowania prawnego. Osoby z uprawnieniem `files.hold` (domyślnie właściciele i administratorzy) mogą założyć ją na plik na określoną liczbę dni, podając powód, i zwolnić ją przed terminem.
+
+Strona encji wyświetla blokady jej plików i datę ich wygaśnięcia. Zakładanie i zwalnianie blokad jest zapisywane w dzienniku audytu.
+
+```sh
+curl -X POST "$CATALOG_API_URL/files/<file-id>/retention-holds" \
+  -H "Authorization: Bearer $CATALOG_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"days": 365, "reason": "Litigation hold 2026-14"}'
+```
+
 ## Dziennik audytu
 
 **Zarządzanie → Aktywność / dziennik audytu** wyświetla każdą udaną zmianę w obszarze roboczym: kto ją wykonał (osoba, token lub agent), co się zmieniło, kiedy oraz identyfikator żądania. Filtruj według czasu, wykonawcy, kategorii działania, typu obiektu lub tego, czy zmianę wprowadziła osoba, czy agent.

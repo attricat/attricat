@@ -90,6 +90,23 @@ Scripts, the CLI, and integrations authenticate with personal API tokens. Create
 
 Creating tokens needs `tokens.manage`.
 
+## Retention holds
+
+A retention hold keeps a file's exact bytes in storage until a date. While any hold on a file is active, Attricat never reclaims it, even when no entity references it any more.
+
+Holds come from two places:
+
+- **Record statuses.** A blueprint status with `retention_days` places a hold on the files of a record when it enters that status, for example when a document is released. See [Control a record's lifecycle](/builders/blueprints/#step-10-control-a-records-lifecycle). These holds cannot be released early.
+- **Explicit holds**, such as a legal hold. People with the `files.hold` permission (owners and admins by default) can place one on a file for a number of days with a reason, and release it early.
+
+The entity page lists the holds on its files and when they expire. Placing and releasing holds is recorded in the audit log.
+
+```sh
+curl -X POST "$CATALOG_API_URL/files/<file-id>/retention-holds" \
+  -H "Authorization: Bearer $CATALOG_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"days": 365, "reason": "Litigation hold 2026-14"}'
+```
+
 ## Audit log
 
 **Manage → Activity / Audit log** lists every successful change in the workspace: who did it (person, token, or agent), what changed, when, and the request ID. Filter by time, actor, action category, target type, or whether a person or an agent made the change.
