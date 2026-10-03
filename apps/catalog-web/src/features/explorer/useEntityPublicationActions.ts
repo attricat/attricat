@@ -1,5 +1,10 @@
 import { useNavigate } from '@tanstack/react-router';
-import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query';
+import {
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
   duplicateEntity,
@@ -9,16 +14,23 @@ import {
   type EntityPublicationStatus,
 } from '../entities/api';
 import { entityQueryKeys } from '../entities/queryKeys';
-import { entityPublicationOptions } from '../entities/queryOptions';
+import {
+  entityPublicationOptions,
+  entityPublicationReadinessOptions,
+} from '../entities/queryOptions';
 import {
   invalidateEntityPublications,
   invalidateEntitySearches,
 } from '../entities/invalidateEntity';
 
-/** Observe only visible rows (plus an open action menu), never all loaded pages. */
+/**
+ * Observe only visible rows (plus an open action menu), never all loaded pages.
+ * Channel checks are evaluated only for `readinessEntityId` (the open menu).
+ */
 export const useEntityPublicationActions = (
   items: EntityItem[],
   publicationContextId: string | undefined,
+  readinessEntityId?: string,
 ) => {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -37,6 +49,15 @@ export const useEntityPublicationActions = (
       ),
     ]),
   );
+  const readinessQuery = useQuery({
+    ...entityPublicationReadinessOptions(readinessEntityId ?? ''),
+    enabled: Boolean(readinessEntityId && publicationContextId),
+  });
+  const readiness = readinessEntityId
+    ? readinessQuery.data?.find(
+        (item) => item.context_id === publicationContextId,
+      )
+    : undefined;
   const requirePublicationContext = () => {
     if (!publicationContextId)
       throw new Error(t('explorer.publicationContextUnavailable'));
@@ -86,6 +107,7 @@ export const useEntityPublicationActions = (
     error: publish.error ?? unpublish.error ?? duplicate.error,
     publicationsByEntityId,
     publish,
+    readiness,
     unpublish,
   };
 };

@@ -13,6 +13,8 @@ const projections = [
   entityQueryKeys.resolvedPreview('entity', 'context'),
   entityQueryKeys.changes('entity'),
   entityQueryKeys.publication('entity'),
+  entityQueryKeys.publicationReadiness('entity'),
+  entityQueryKeys.statusTransitions('entity', 'context'),
   entityQueryKeys.migrationPreview('entity'),
   entityQueryKeys.hierarchy('entity', 'context', 'parent'),
   entityQueryKeys.incomingRelationships('entity', [], 25),

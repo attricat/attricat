@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import type { Attribute, ComponentReference } from '../api';
 import type { FileMetadata } from '../../files/schemas';
 import { attributeValueTypes } from '../valueTypes';
+import type { StatusDestination } from '../status';
 import { FileAttributeEditor } from '../../files/FileAttributeEditor';
 import { RelationshipField } from './RelationshipField';
 import { smallIconSize } from '../../../components/iconSizes';
@@ -15,6 +16,7 @@ export const EntityAttributeEditor = ({
   component,
   statusBaseline = null,
   inheritedStatus = null,
+  statusDestinations,
   contextId,
   disabled,
   required,
@@ -32,6 +34,7 @@ export const EntityAttributeEditor = ({
   component?: ComponentReference | null;
   statusBaseline?: string | null;
   inheritedStatus?: string | null;
+  statusDestinations?: readonly StatusDestination[];
   contextId: string | null;
   disabled: boolean;
   required?: boolean;
@@ -75,6 +78,7 @@ export const EntityAttributeEditor = ({
         component={component}
         statusBaseline={statusBaseline}
         inheritedStatus={inheritedStatus}
+        statusDestinations={statusDestinations}
         value={value}
         disabled={effectiveDisabled}
         required={required}

@@ -17,6 +17,7 @@ const entityProjections = (id: string) => [
   entityQueryKeys.resolvedPreviews(id),
   entityQueryKeys.changes(id),
   entityQueryKeys.publication(id),
+  entityQueryKeys.statusTransitionResults(id),
   entityQueryKeys.migrationPreview(id),
   entityQueryKeys.hierarchies(id),
   entityQueryKeys.incomingRelationshipResults(id),

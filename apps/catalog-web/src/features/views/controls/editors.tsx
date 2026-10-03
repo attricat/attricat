@@ -1,10 +1,12 @@
-import { MenuItem, Stack, TextField } from '@mui/material';
+import { ListItemText, MenuItem, Stack, TextField } from '@mui/material';
 import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import { attributeLabel } from '../../entities/entityDisplay';
 import {
+  blockedStatusDestination,
   statusTransitionAllowed,
   type StatusConfiguration,
+  type StatusDestination,
 } from '../../entities/status';
 import { MarkdownEditor } from '../../markdown/MarkdownEditor';
 import type { ValueEditorProps } from '../components/componentTypes';
@@ -104,7 +106,9 @@ export const MarkdownFieldEditor = ({
 /**
  * Single select for a status attribute. Destinations the transition graph
  * forbids from the saved `baseline` are disabled; an empty selection inherits
- * `inheritedValue` (or clears the status when nothing is inherited).
+ * `inheritedValue` (or clears the status when nothing is inherited). For a
+ * saved entity, `destinations` from the API also disables destinations whose
+ * transition conditions are unmet and explains why.
  */
 export const StatusEditor = ({
   attribute,
@@ -112,6 +116,7 @@ export const StatusEditor = ({
   value,
   baseline,
   inheritedValue,
+  destinations,
   disabled,
   error,
   helperText,
@@ -120,13 +125,21 @@ export const StatusEditor = ({
   config: StatusConfiguration;
   baseline: string | null;
   inheritedValue: string | null;
+  destinations?: readonly StatusDestination[];
 }) => {
   const { t } = useTranslation();
   const id = useId();
   const known =
     !value || config.options.some((option) => option.code === value);
+  const blocked = (next: string) =>
+    blockedStatusDestination(destinations, baseline, next || inheritedValue);
   const allowed = (next: string) =>
-    statusTransitionAllowed(config, baseline, next || inheritedValue);
+    statusTransitionAllowed(config, baseline, next || inheritedValue) &&
+    !blocked(next);
+  const unmetText = (next: string) =>
+    blocked(next)
+      ?.unmet.map((violation) => violation.message)
+      .join(' ') || undefined;
   const terminal =
     !config.options.some(
       (option) => option.code !== baseline && allowed(option.code),
@@ -173,15 +186,27 @@ export const StatusEditor = ({
           {value}
         </MenuItem>
       )}
-      {config.options.map((option) => (
-        <MenuItem
-          key={option.code}
-          value={option.code}
-          disabled={!allowed(option.code)}
-        >
-          {option.label}
-        </MenuItem>
-      ))}
+      {config.options.map((option) => {
+        const unmet = unmetText(option.code);
+        return (
+          <MenuItem
+            key={option.code}
+            value={option.code}
+            disabled={!allowed(option.code)}
+          >
+            {unmet ? (
+              <ListItemText
+                primary={option.label}
+                secondary={t('entities.statusConditionsUnmet', {
+                  conditions: unmet,
+                })}
+              />
+            ) : (
+              option.label
+            )}
+          </MenuItem>
+        );
+      })}
     </TextField>
   );
 };

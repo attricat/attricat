@@ -64,6 +64,44 @@ describe('status presentation and input', () => {
     fireEvent.click(screen.getByRole('option', { name: 'Done' }));
     expect(onChange).not.toHaveBeenCalled();
   });
+  it('disables destinations whose server conditions are unmet and explains why', () => {
+    const onChange = vi.fn();
+    render(
+      <StatusEditor
+        config={config}
+        attribute={attribute}
+        value="draft"
+        baseline="draft"
+        inheritedValue={null}
+        destinations={[
+          {
+            to: 'live',
+            allowed: false,
+            reason: 'conditions_unmet',
+            unmet: [
+              {
+                source: 'transition_condition',
+                code: 'has-sku',
+                message: 'SKU is required before going live',
+                contexts: ['default'],
+                attributes: ['sku'],
+              },
+            ],
+          },
+        ]}
+        disabled={false}
+        onChange={onChange}
+      />,
+    );
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Status' }));
+    const live = screen.getByRole('option', { name: /Live/ });
+    expect(live.getAttribute('aria-disabled')).toBe('true');
+    expect(
+      screen.getByText('Blocked: SKU is required before going live'),
+    ).toBeTruthy();
+    fireEvent.click(live);
+    expect(onChange).not.toHaveBeenCalled();
+  });
   it('disables keyboard and pointer mutation when readonly', () => {
     const onChange = vi.fn();
     render(

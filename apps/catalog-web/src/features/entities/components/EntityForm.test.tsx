@@ -7,6 +7,7 @@ import '../../../i18n';
 import { authQueryKeys } from '../../auth/queryKeys';
 import { draftEditors } from '../../drafts/constants';
 import { draftStorageKey, writeDraft } from '../../drafts/draftStorage';
+import { ApiRequestError } from '../../../api/request';
 import type { BlueprintWithAttributes, Attribute } from '../api';
 import { EntityForm, type EntityFormHandle } from './EntityForm';
 
@@ -589,5 +590,55 @@ describe('EntityForm', () => {
     });
     expect(screen.getByText('Managed by system actions')).toBeTruthy();
     expect(screen.getByText(/Original/)).toBeTruthy();
+  });
+  it('shows declarative check violations on their fields and summarizes the rest', () => {
+    const error = new ApiRequestError(
+      422,
+      'Entity checks failed',
+      'entity_check_failed',
+      {
+        violations: [
+          {
+            source: 'entity_check',
+            code: 'valid-range',
+            message: 'Valid until must not be before valid from',
+            contexts: ['default'],
+            attributes: ['valid_until'],
+            evidence: {},
+          },
+          {
+            source: 'entity_check',
+            code: 'facility-of-supplier',
+            message: 'Facility must belong to the supplier',
+            contexts: ['default'],
+            attributes: [],
+            evidence: {},
+          },
+        ],
+      },
+    );
+    renderForm({
+      blueprint: blueprint([attribute('title'), attribute('valid_until')]),
+      error,
+    });
+    expect(
+      screen.getByText('Valid until must not be before valid from'),
+    ).toBeTruthy();
+    expect(screen.getByText('Entity checks failed')).toBeTruthy();
+    expect(
+      screen.getByText(
+        'Facility must belong to the supplier (contexts: default)',
+      ),
+    ).toBeTruthy();
+
+    fireEvent.change(
+      screen.getByRole('textbox', { hidden: true, name: 'valid until' }),
+      {
+        target: { value: 'fixed' },
+      },
+    );
+    expect(
+      screen.queryByText('Valid until must not be before valid from'),
+    ).toBeNull();
   });
 });

@@ -3,18 +3,30 @@ import i18n from 'i18next';
 import { apiFetch, csrfToken } from './fetch';
 
 export const apiErrorSchema = z.object({
-  error: z.object({ code: z.string(), message: z.string() }),
+  error: z.object({
+    code: z.string(),
+    message: z.string(),
+    details: z.unknown().optional(),
+  }),
 });
 
 export class ApiRequestError extends Error {
   status: number;
   code?: string;
+  /** Endpoint-specific `error.details`; validate it at the feature boundary. */
+  details?: unknown;
 
-  constructor(status: number, message: string, code?: string) {
+  constructor(
+    status: number,
+    message: string,
+    code?: string,
+    details?: unknown,
+  ) {
     super(message);
     this.name = 'ApiRequestError';
     this.status = status;
     this.code = code;
+    this.details = details;
   }
 }
 
@@ -28,6 +40,7 @@ export const apiRequestError = (
     status,
     error.success ? error.data.error.message : fallbackMessage,
     error.success ? error.data.error.code : undefined,
+    error.success ? error.data.error.details : undefined,
   );
 };
 

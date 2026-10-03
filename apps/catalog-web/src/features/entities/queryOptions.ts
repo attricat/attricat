@@ -1,5 +1,9 @@
 import { queryOptions } from '@tanstack/react-query';
-import { getEntityPublications } from './api';
+import {
+  getEntityPublicationReadiness,
+  getEntityPublications,
+  getEntityStatusTransitions,
+} from './api';
 import { entityQueryKeys } from './queryKeys';
 
 // Revisited virtual rows reuse their result; mutations explicitly invalidate it.
@@ -10,4 +14,21 @@ export const entityPublicationOptions = (entityId: string) =>
     queryKey: entityQueryKeys.publication(entityId),
     queryFn: ({ signal }) => getEntityPublications(entityId, signal),
     staleTime: publicationStaleTimeMs,
+  });
+
+/** Readiness is evaluated live, so it is refetched whenever it is observed. */
+export const entityPublicationReadinessOptions = (entityId: string) =>
+  queryOptions({
+    queryKey: entityQueryKeys.publicationReadiness(entityId),
+    queryFn: ({ signal }) => getEntityPublicationReadiness(entityId, signal),
+  });
+
+export const entityStatusTransitionOptions = (
+  entityId: string,
+  contextId: string,
+) =>
+  queryOptions({
+    queryKey: entityQueryKeys.statusTransitions(entityId, contextId),
+    queryFn: ({ signal }) =>
+      getEntityStatusTransitions(entityId, contextId, signal),
   });
