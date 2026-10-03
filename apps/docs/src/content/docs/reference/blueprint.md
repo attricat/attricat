@@ -37,6 +37,7 @@ entity_schema = '''{ "type": "object", "required": ["title"] }'''
 | `entity_schema` | string (JSON) | No | JSON Schema for the whole entity. Entity blueprints only. See [Validation](/builders/validation/). |
 | `publication` | table | No | Publication reapproval policy. See [Publication](#publication). |
 | `rules` | array of tables | No | Data-quality rules owned by this blueprint. See [Rules](/builders/rules/). |
+| `unique_keys` | array of tables | No | Business keys whose values must be unique. Entity blueprints only. See [Unique keys](#unique-keys). |
 | `connector_jobs` | array of tables | No | Scheduled or manual import and export jobs run by a connector extension. Entity blueprints only. See [Connector jobs](#connector-jobs). |
 | `extensions` | table | No | Free-form data for extensions, namespaced as `[extensions.<extension-id>]`. The core compiler ignores it; extensions read it from the stored definition. |
 
@@ -94,10 +95,34 @@ cardinality = "one"
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
 | `target_blueprint` | code | Any entity blueprint | Restricts targets to entities of this blueprint family. |
+| `target_blueprints` | array of codes | Any entity blueprint | Restricts targets to entities of any of these blueprint families. Cannot be combined with `target_blueprint`; a one-item list is the same as `target_blueprint`. |
 | `cardinality` | `"one"`, `"many"`, or `"one_to_one"` | `"many"` | How many targets one entity may link to in one context. `one_to_one` is shorthand for `cardinality = "one"` plus `target_cardinality = "one"` and cannot be combined with `target_cardinality`. |
 | `target_cardinality` | `"one"` or `"many"` | `"many"` | How many entities may link to the same target through this attribute in one context. |
+| `acyclic` | boolean | `false` | Rejects links that would form a cycle through this attribute. Requires `context_editable = "default"`, and the targets must include the blueprint itself. See [Hierarchies](#hierarchies). |
+| `tree` | boolean | `false` | An acyclic hierarchy in which every entity has at most one target (its parent). Implies `acyclic = true` and defaults `cardinality` to `"one"`; `cardinality = "many"` is rejected. |
 
 `cardinality = "one"` gives a single-select field whose options can be shared, such as a brand. Add `target_cardinality = "one"` only for an exclusive pairing, where each target can be claimed once. A write that breaks either limit returns `409 relationship_cardinality_conflict`.
+
+A write that links an entity of a blueprint not allowed by `target_blueprint` or `target_blueprints` returns `422 relationship_target_type_mismatch`. The entity picker in the web app offers only the allowed blueprints; when there are several, the picker has a **Target blueprint** selector. An `incoming_relationship_list` on any of the allowed target blueprints can list the field.
+
+#### Hierarchies
+
+```toml
+[[attributes]]
+code = "parent"
+value_type = "relationship"
+target_blueprint = "location"
+tree = true
+context_editable = "default"
+```
+
+`acyclic` and `tree` protect self-referencing structures such as location or asset hierarchies, and predecessor chains such as revision → previous revision.
+
+- A write that would close a cycle returns `409 relationship_cycle`. `error.details.path` lists the entity IDs along the cycle, starting and ending with the entity being written. Linking an entity to itself is a cycle of length one.
+- In a `tree`, giving an entity a second target returns `409 relationship_cardinality_conflict`.
+- Checks see links of every revision of the blueprint and run inside the write's transaction. Two concurrent writes cannot each add half of a cycle.
+- The hierarchy applies to the whole blueprint family as declared by its latest published revision, including entities still pinned to older revisions.
+- Publishing a revision that adds `acyclic` or `tree` checks the existing links first. If they contain cycles, or a tree has entities with more than one target, publication fails with `409 relationship_hierarchy_violations`; `error.details` lists up to 20 cycles and entities with extra targets. Fix the links and publish again.
 
 Relationships cannot have `value_schema` or `default_value`. Constrain them with `entity_schema` instead.
 
@@ -339,6 +364,40 @@ This does not grant any permission. See [Publishing](/guides/publishing/).
 
 `[[rules]]` tables use the rule syntax described in [Rules](/builders/rules/), without `format_version`. Rule codes must be unique within the blueprint, and `required` and `stale` predicates must name an attribute of the blueprint.
 
+## Unique keys
+
+A unique key declares a business identifier that two entities of the blueprint family cannot share, such as a part number, a document number, or a combination such as manufacturer and part number.
+
+```toml
+[[unique_keys]]
+code = "manufacturer_part"
+attributes = ["manufacturer", "part_number"]
+
+[[unique_keys]]
+code = "slug"
+attributes = ["slug"]
+scope = "context"
+case_sensitive = true
+```
+
+| Key | Type | Default | Description |
+| --- | --- | --- | --- |
+| `code` | code | Required | Unique within the blueprint. Reported in errors. |
+| `attributes` | array of attribute codes | Required | One to eight attributes whose combined values must be unique. Each must be a scalar other than `json`, or a relationship with `cardinality = "one"`. |
+| `scope` | `"workspace"` or `"context"` | `"workspace"` | `workspace` compares values in the default context. `context` compares the values each context shows, including inherited ones, separately in every context. |
+| `case_sensitive` | boolean | `false` | Compare text exactly instead of case-insensitively. |
+
+How values are compared:
+
+- Text is trimmed and every run of whitespace becomes one space. Unless `case_sensitive = true`, text is also compared in lowercase, so `ABC-1  Rev` and ` abc-1 rev` are the same key.
+- Numbers compare by value (`1.50` equals `1.5`), date-times by instant, and relationships by the linked entity.
+- An entity that has no value, or only blank text, for any of the key's attributes is not checked against that key. Make the attributes required in `entity_schema` if every entity must have the key.
+- The key covers the whole blueprint family as declared by its latest published revision, including entities pinned to older revisions. Attributes are matched by code.
+
+A write that would give a second entity the same key value returns `409 unique_key_conflict`. `error.details` names the `key`, the `context` code, the normalized `values`, and the `conflicting_entity_id` that already holds them. The check runs in the database inside the write's transaction, so when two people save the same value at the same moment, exactly one save succeeds.
+
+Publishing a revision that adds or changes unique keys checks existing entities first. If some already share a value, publication fails with `409 unique_key_duplicates`, and `error.details.duplicates` lists up to 20 groups with the key, context, values, and entity IDs (`error.details.total` counts all groups). Change or delete the duplicates and publish again.
+
 ## Connector jobs
 
 Connector jobs run an operation of an installed connector extension, such as a CSV import or export, against this blueprint.
@@ -375,5 +434,6 @@ A few compile-time rules that are easy to miss:
 - An entity blueprint without `views.dropdown_option` is rejected.
 - `entity_schema` on a mixin is rejected.
 - `entity_schema` may only name attributes the blueprint has in its top-level `required`, `properties`, `dependentRequired`, and `dependentSchemas`.
-- `target_blueprint` on a non-relationship attribute is rejected.
+- `target_blueprint`, `target_blueprints`, `acyclic`, and `tree` on a non-relationship attribute are rejected.
+- `unique_keys` on a mixin, a key naming an unknown, `json`, file, or many-target relationship attribute, or a key listing an attribute twice is rejected.
 - `from` must be `alias.code` where `code` matches the attribute's own code.
