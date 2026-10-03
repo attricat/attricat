@@ -16,8 +16,28 @@ The host interface is defined in WIT packages in the Attricat repository under `
 | `catalog:host@1.2.0` | `wit-operations/` | Durable [operations](/extensions/operations/). |
 | `catalog:host@1.3.0` | `wit-artifacts/` | Operation input and output artifacts. |
 | `catalog:host@1.4.0` | `wit-connectors/` | Connector catalog calls and HTTPS file transfer. |
+| `catalog:host@1.5.0` | `wit-interactive/` | [Interactive operations](/extensions/operations/#interactive-operations-host-api-15) over a selection. |
+| `catalog:host@1.6.0` | `wit-host/` | **Unified ABI**: everything from 1.1 and 1.5 in one package. |
 
 Set `catalog.host_api` in your manifest to the range your component is built for.
+
+### Use the unified ABI for new extensions
+
+Versions up to 1.5 are two separate families. 1.0 and 1.1 handle events and commands. 1.2 to 1.5 run operations. A release on one of them can't use the other family's features, so one release can't have both client commands and interactive operations.
+
+From 1.6 there is one ABI that only grows. Use `"host_api": ">=1.6.0, <2.0.0"` and your component can use event handlers, commands, scoped configuration and every kind of operation together. Build it against one of these worlds in `wit-host/`:
+
+| World | Exports |
+| --- | --- |
+| `catalog-extension` | `handler` and `operations` |
+| `handler-extension` | `handler` (event handlers and commands) |
+| `operation-extension` | `operations` |
+
+Every import is always available, but some only work in the right place. The operation interfaces (`artifacts`, `catalog-data`, `catalog`, `transfer`, `selection`) return an error outside an operation run. Inside a run, the typed `read` and `write` functions and the `catalog.read.v1` and `catalog.command.v1` calls return an error; use the run's own catalog interfaces instead.
+
+Later 1.x versions only add to 1.6. A component built for 1.6 keeps working on newer hosts without a rebuild.
+
+Ranges that include 1.5 or earlier, such as `>=1.1.0, <2.0.0`, keep their legacy world.
 
 ## Handle catalog events
 

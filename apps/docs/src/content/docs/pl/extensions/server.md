@@ -16,8 +16,28 @@ Interfejs hosta jest zdefiniowany w pakietach WIT w repozytorium Attricat, w kat
 | `catalog:host@1.2.0` | `wit-operations/` | Trwałe [operacje](/pl/extensions/operations/). |
 | `catalog:host@1.3.0` | `wit-artifacts/` | Artefakty wejściowe i wyjściowe operacji. |
 | `catalog:host@1.4.0` | `wit-connectors/` | Wywołania katalogu przez konektory i przesyłanie plików przez HTTPS. |
+| `catalog:host@1.5.0` | `wit-interactive/` | [Operacje interaktywne](/pl/extensions/operations/#operacje-interaktywne-api-hosta-15) na zaznaczeniu. |
+| `catalog:host@1.6.0` | `wit-host/` | **Ujednolicone ABI**: wszystko z 1.1 i 1.5 w jednym pakiecie. |
 
 Ustaw `catalog.host_api` w manifeście na zakres, dla którego zbudowano Twój komponent.
+
+### Używaj ujednoliconego ABI w nowych rozszerzeniach
+
+Wersje do 1.5 tworzą dwie osobne rodziny. 1.0 i 1.1 obsługują zdarzenia i polecenia. 1.2–1.5 uruchamiają operacje. Wydanie oparte na jednej z nich nie może używać funkcji drugiej rodziny, więc jedno wydanie nie może mieć jednocześnie poleceń klienta i operacji interaktywnych.
+
+Od 1.6 jest jedno ABI, które tylko się rozrasta. Ustaw `"host_api": ">=1.6.0, <2.0.0"`, a komponent może łączyć procedury obsługi zdarzeń, polecenia, konfigurację zakresową i wszystkie rodzaje operacji. Zbuduj go dla jednego ze światów z `wit-host/`:
+
+| Świat | Eksportuje |
+| --- | --- |
+| `catalog-extension` | `handler` i `operations` |
+| `handler-extension` | `handler` (zdarzenia i polecenia) |
+| `operation-extension` | `operations` |
+
+Wszystkie importy są zawsze dostępne, ale część działa tylko we właściwym miejscu. Interfejsy operacji (`artifacts`, `catalog-data`, `catalog`, `transfer`, `selection`) zwracają błąd poza przebiegiem operacji. W przebiegu błąd zwracają typowane funkcje `read` i `write` oraz wywołania `catalog.read.v1` i `catalog.command.v1`; używaj wtedy interfejsów katalogu przypisanych do przebiegu.
+
+Kolejne wersje 1.x tylko rozszerzają 1.6. Komponent zbudowany dla 1.6 działa na nowszych hostach bez przebudowy.
+
+Zakresy obejmujące 1.5 lub starsze wersje, np. `>=1.1.0, <2.0.0`, zachowują swój dotychczasowy świat.
 
 ## Obsługuj zdarzenia katalogu
 

@@ -196,6 +196,71 @@ descriptors. Server WASM execution, client components, storage, commands, mediat
 extension-owned event publication, and mediated network/secrets APIs are
 implemented. Webhook delivery remains follow-on work.
 
+## Host ABI versions and evolution
+
+`catalog.host_api` selects the component ABI the host binds for a release.
+There are two eras.
+
+**Legacy worlds (1.0–1.5, frozen).** Each of these is a separate, immutable WIT
+package. They form two parallel families: the event/command world
+(`wit/` 1.0, `wit-next/` 1.1, which exports `handler`) and the operation world
+(`wit-operations/` 1.2, `wit-artifacts/` 1.3, `wit-connectors/` 1.4,
+`wit-interactive/` 1.5, which export `operations`). A legacy release is bound
+by excluding the previous minor (for example "1.5 but not 1.4"). Because the
+families never merged, no legacy range can declare both `server.commands` and
+interactive operations. The legacy rules are unchanged and existing releases
+keep exactly the world they were built for.
+
+**Unified ABI (1.6 and later).** `crates/extension-runtime/wit-host/` is the
+single `catalog:host` package that evolves. 1.6 contains every 1.1
+`api`/`handler` item and every 1.5 operation interface, unchanged. A range that
+matches a unified minor and **no** legacy minor (for example
+`">=1.6.0, <2.0.0"`) binds the unified ABI. Such a release may use every server
+feature in one component: event handlers, client commands, scoped
+configuration, scheduled, connector and interactive operations, connector jobs,
+and version 2 selection actions. `is_unified_host_api` in
+`crates/extension-manifest` is the only place that makes this decision, and the
+manifest validator, event dispatcher, command broker, operation runs and
+connector jobs all call it.
+
+A component targets the combined `catalog-extension` world, or the narrower
+`handler-extension` or `operation-extension` world. The host links every
+import for every invocation and loads only the export it needs. Run-bound
+interfaces (`artifacts`, `catalog-data`, `catalog`, `transfer`, `selection`)
+return an error outside an operation run. Direct catalog access through `api`
+(`read`, `write`, and the `catalog.read.v1`/`catalog.command.v1` calls) returns
+an error inside one, so operations, including interactive runs confined to
+their selection, reach catalog data only through their run-scoped interfaces.
+Other `api` calls (configuration, secrets, storage, events, network, logging)
+work in both, still checked against capabilities at each call.
+
+### Host ABI evolution rules
+
+These rules apply to every change to `wit-host/` and to the code that binds it:
+
+1. **Additive only.** A new minor may add functions, interfaces, types, world
+   imports and worlds. It must never remove, rename or change the signature of
+   anything released. It must never add a case or field to a released variant,
+   enum, flags or record, because an older guest cannot decode it. Introduce a
+   new type and a new function instead.
+2. **Released worlds keep their exports.** Adding an export to a released world
+   would make components built for it invalid. Add a new world instead.
+3. **One package, one binding.** Do not add another `wit-*` directory or a new
+   parallel world family. Bump the `wit-host` package version and
+   `SUPPORTED_HOST_API` together, and copy the released file to
+   `wit-released/catalog-host-<version>.wit`. Snapshots are never edited.
+4. **Behavior is versioned with the ABI.** A released function keeps its
+   semantics. Stricter behavior needs a new function or an opt-in field on a
+   new type.
+5. **No new mutually exclusive ranges.** Feature gates must accept every unified
+   ABI (`is_unified_host_api`), never "X but not X-1".
+
+`released_host_abis_are_preserved` (in
+`crates/extension-runtime/src/extension_runtime/abi_evolution_tests.rs`)
+enforces rules 1–3 against every snapshot. wasmtime resolves imports and
+exports with semver-compatible names, so a component built for 1.6 instantiates
+unchanged against a host that binds a later 1.x unified package.
+
 ## Server WASM runtime
 
 A `server_wasm` artifact is a WebAssembly **component** using the checked-in
@@ -880,8 +945,8 @@ in the extension.
 ### Selection context
 
 Contributions to `entity_action`, `explorer_row_action`, and
-`explorer_bulk_action` may declare `"version": 2`, which requires a
-`catalog.host_api` range compatible with 1.5 but not 1.4. Version 1
+`explorer_bulk_action` may declare `"version": 2`, which requires the unified
+host ABI (1.6+) or a legacy `catalog.host_api` range compatible with 1.5 but not 1.4. Version 1
 contributions keep their released contexts. A version 2 contribution receives:
 
 ```json
@@ -911,8 +976,9 @@ A `server.operations` entry exposes itself to these actions with:
 {"id": "generate", "handler": "generate", "request_schema": {"type": "object"}, "interactive": {"version": 1, "max_selection": 50}}
 ```
 
-`max_selection` is 1–50. The release needs `client.operations.start`, and the
-operation runs in the `catalog:host@1.5.0` world at
+`max_selection` is 1–50. The release needs `client.operations.start`. A unified
+release (1.6+) runs it in the [unified world](#host-abi-versions-and-evolution);
+a legacy release runs it in the `catalog:host@1.5.0` world at
 `crates/extension-runtime/wit-interactive/catalog-extension.wit`. That world is
 the released 1.4 connector world plus a `selection` interface and the
 `annotate` catalog intent; the 1.4 package is unchanged.

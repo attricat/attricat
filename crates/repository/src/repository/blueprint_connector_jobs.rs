@@ -60,11 +60,12 @@ impl CatalogRepository {
                 .ok_or_else(|| invalid("connector release is not enabled or authorized"))?;
             let range = semver::VersionReq::parse(&installation.manifest.catalog.host_api)
                 .map_err(|_| invalid("invalid connector host API range"))?;
-            if !range.matches(&semver::Version::new(1, 4, 0))
-                || range.matches(&semver::Version::new(1, 3, 0))
+            if !crate::extensions::is_unified_host_api(&range)
+                && (!range.matches(&semver::Version::new(1, 4, 0))
+                    || range.matches(&semver::Version::new(1, 3, 0)))
             {
                 return Err(invalid(
-                    "blueprint connector jobs require the 1.4 connector ABI",
+                    "blueprint connector jobs require the 1.4 connector ABI or the unified 1.6 ABI",
                 ));
             }
             let operation = installation
@@ -169,8 +170,9 @@ impl CatalogRepository {
             .ok_or_else(|| invalid("connector release is not enabled"))?;
         let range = semver::VersionReq::parse(&installation.manifest.catalog.host_api)
             .map_err(|_| invalid("invalid connector host API range"))?;
-        if !range.matches(&semver::Version::new(1, 4, 0))
-            || range.matches(&semver::Version::new(1, 3, 0))
+        if !crate::extensions::is_unified_host_api(&range)
+            && (!range.matches(&semver::Version::new(1, 4, 0))
+                || range.matches(&semver::Version::new(1, 3, 0)))
         {
             return Err(invalid("connector release no longer supports scoped jobs"));
         }

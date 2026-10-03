@@ -237,22 +237,7 @@ impl CatalogRepository {
         }
 
         let source_reference = input.source_reference.clone();
-        // A release that explicitly requires 1.4 uses the additive connector
-        // ABI; broad compatibility ranges retain the released 1.3 world.
-        let range = semver::VersionReq::parse(&manifest.catalog.host_api).map_err(|_| {
-            RepositoryError::InvalidExtension("invalid pinned host API range".into())
-        })?;
-        let abi = if range.matches(&semver::Version::new(1, 5, 0))
-            && !range.matches(&semver::Version::new(1, 4, 0))
-        {
-            super::INTERACTIVE_OPERATION_ABI
-        } else if range.matches(&semver::Version::new(1, 4, 0))
-            && !range.matches(&semver::Version::new(1, 3, 0))
-        {
-            "1.4.0"
-        } else {
-            "1.2.0"
-        };
+        let abi = operation_run_abi(&manifest.catalog.host_api)?;
         let id = Uuid::new_v4();
         let inserted: Option<Uuid> = sqlx::query_scalar(
             "INSERT INTO extension_operation_runs(id,workspace_id,extension_id,installed_release_id,abi_version,operation_id,actor_user_id,actor_token_id,configuration_snapshot,input,source_reference,destination_reference,idempotency_key,schedule_id,connector_job_id,connector_blueprint_id,connector_context_id,connector_blueprint_version,connector_channel_id) VALUES($1,$2,$3,$4,$13,$5,$6,$7,$8,$9,$10,$11,$12,$14,$15,$16,$17,$18,$19) ON CONFLICT(workspace_id,extension_id,installed_release_id,operation_id,idempotency_key) DO NOTHING RETURNING id",
@@ -405,7 +390,9 @@ impl CatalogRepository {
             configuration,
             input,
             checkpoint,
-            batch_key: if abi_version == "1.4.0" || abi_version == super::INTERACTIVE_OPERATION_ABI
+            batch_key: if abi_version == "1.4.0"
+                || abi_version == super::INTERACTIVE_OPERATION_ABI
+                || crate::extensions::is_unified_abi_version(&abi_version)
             {
                 format!("{}:{}", task.subject_id, batch_number)
             } else {
@@ -691,6 +678,31 @@ impl CatalogRepository {
         sqlx::query_as("SELECT id,schedule_id,connector_job_id,connector_channel_id,extension_id,installed_release_id,abi_version,operation_id,status,outputs_expired,progress,checkpoint,attempts,last_error_code,created_at,completed_at FROM extension_operation_runs WHERE id=$1 AND workspace_id=$2")
             .bind(id).bind(self.extension_workspace()).fetch_optional(&self.pool).await.map_err(Into::into)
     }
+}
+
+/// The ABI recorded on a new operation run, fixed for the run's lifetime.
+///
+/// Unified releases (see [`crate::extensions::is_unified_host_api`]) record
+/// the host's current unified ABI, which is a superset of every earlier unified
+/// ABI. Legacy releases keep their released world: a range that explicitly
+/// requires 1.5 or 1.4 uses that additive world, and broad ranges retain the
+/// released 1.3 world (recorded as "1.2.0").
+pub(crate) fn operation_run_abi(host_api: &str) -> Result<&'static str, RepositoryError> {
+    let range = semver::VersionReq::parse(host_api)
+        .map_err(|_| RepositoryError::InvalidExtension("invalid pinned host API range".into()))?;
+    Ok(if crate::extensions::is_unified_host_api(&range) {
+        crate::extensions::SUPPORTED_HOST_API
+    } else if range.matches(&semver::Version::new(1, 5, 0))
+        && !range.matches(&semver::Version::new(1, 4, 0))
+    {
+        super::INTERACTIVE_OPERATION_ABI
+    } else if range.matches(&semver::Version::new(1, 4, 0))
+        && !range.matches(&semver::Version::new(1, 3, 0))
+    {
+        "1.4.0"
+    } else {
+        "1.2.0"
+    })
 }
 
 #[cfg(test)]

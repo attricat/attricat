@@ -189,7 +189,7 @@ Eksportowane typy zdarzeń muszą zaczynać się od `plugin.<extension-id>.` i k
 | --- | --- | --- |
 | `event_handlers` | `id`, `event_types` (dokładne wersjonowane typy), `handler` | `events.subscribe` i artefaktu `server_wasm` |
 | `commands` | `id`, `handler`, `request_schema`, `response_schema`, `max_request_bytes`, `max_response_bytes` (domyślnie 64 KiB) | `client.commands` |
-| `operations` | `id`, `handler`, `request_schema`, `max_request_bytes`, `max_checkpoint_bytes` (domyślnie i maksymalnie 64 KiB), opcjonalnie `interactive: {"version": 1, "max_selection": 1–50}` | API hosta 1.2 lub nowszego; `interactive` wymaga `client.operations.start` i zakresu zgodnego z 1.5, ale nie z 1.4 |
+| `operations` | `id`, `handler`, `request_schema`, `max_request_bytes`, `max_checkpoint_bytes` (domyślnie i maksymalnie 64 KiB), opcjonalnie `interactive: {"version": 1, "max_selection": 1–50}` | API hosta 1.2 lub nowszego; `interactive` wymaga `client.operations.start` i API hosta 1.6+ (lub zakresu zgodnego z 1.5, ale nie z 1.4) |
 | `webhooks` | `id`, `event_type`, `handler`, `methods` (`["POST"]`), `authentication`, `max_body_bytes` | `webhooks.receive`. Zadeklarowane, ale jeszcze niedostarczane. |
 
 ## Kontrybucje interfejsu
@@ -212,7 +212,7 @@ Eksportowane typy zdarzeń muszą zaczynać się od `plugin.<extension-id>.` i k
 | `panel` | `artifact`, `outlet` | Panel tylko do odczytu rozmieszczany przez host w miejscu `blueprint_detail_panel`, `blueprint_panel`, `blueprint_publish_check`, `entity_attribute_panel`, `file_panel`, `audit_event_panel` lub `data_health_card`. |
 | `dialog` | `artifact`, `outlet`, `title` | Zarządzane przez host okno `action_dialog` otwierane przez akcje zaznaczenia tego rozszerzenia. |
 
-Każde rozszerzenie może użyć każdego miejsca osadzenia jeden raz. `entity_action`, `explorer_row_action` i `explorer_bulk_action` przyjmują `version` 1 lub 2; wersja 2 otrzymuje [kontekst zaznaczenia](/pl/extensions/client/#kontekst-zaznaczenia) i wymaga zakresu API hosta zgodnego z 1.5, ale nie z 1.4.
+Każde rozszerzenie może użyć każdego miejsca osadzenia jeden raz. `entity_action`, `explorer_row_action` i `explorer_bulk_action` przyjmują `version` 1 lub 2; wersja 2 otrzymuje [kontekst zaznaczenia](/pl/extensions/client/#kontekst-zaznaczenia) i wymaga API hosta 1.6+ (lub zakresu zgodnego z 1.5, ale nie z 1.4).
 
 ## Renderery komórek
 
