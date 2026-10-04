@@ -366,14 +366,18 @@ pub(super) async fn search_entity_previews(
             matching = Some(intersect_entity_ids(matching, facet_matching));
         }
     }
-    let matching_versions = repository
-        .search_result_versions(
+    // Totals are intentionally limited and only calculated for a first page.
+    // Cursor pages retain the first response's total in the client cache.
+    let include_total = input.include_total && input.page.cursor.is_none();
+    let (matching_versions, total_count) = repository
+        .search_result_versions_and_count(
             current.blueprint.id,
             selected,
             matching.as_deref(),
             &input.system_tags,
             input.outdated,
             current.blueprint.version,
+            include_total.then_some(SEARCH_TOTAL_COUNT_CAP + 1),
         )
         .instrument(tracing::info_span!(
             "sql.operation",
@@ -478,30 +482,8 @@ pub(super) async fn search_entity_previews(
             }
         }
     };
-    // Totals are intentionally limited and only calculated for a first page.
-    // Cursor pages retain the first response's total in the client cache.
-    let include_total = input.include_total && input.page.cursor.is_none();
-    let total = async {
-        if !include_total {
-            return Ok(None);
-        }
-        let count = repository
-            .count_entity_previews(
-                current.blueprint.id,
-                selected,
-                matching.as_deref(),
-                &input.system_tags,
-                input.outdated,
-                current.blueprint.version,
-                SEARCH_TOTAL_COUNT_CAP + 1,
-            )
-            .instrument(tracing::info_span!(
-                "sql.operation",
-                label = "entities-count"
-            ))
-            .await?;
-        Ok(Some(count))
-    };
+    // The total was counted with the result versions.
+    let total = async { Ok::<_, crate::repository::RepositoryError>(total_count) };
     let hidden_outdated = async {
         if selected != Some(current.blueprint.version) || input.page.cursor.is_some() {
             return Ok(None);
