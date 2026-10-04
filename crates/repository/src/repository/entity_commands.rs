@@ -322,6 +322,12 @@ impl CatalogRepository {
         let entity = if file_values.is_empty() {
             entity
         } else {
+            let all_file_ids: Vec<Uuid> = file_values
+                .iter()
+                .flat_map(|(_, _, file_ids)| file_ids.iter().copied())
+                .collect();
+            self.lock_files_in_transaction(&mut transaction, &all_file_ids)
+                .await?;
             for (attribute_code, context_id, file_ids) in file_values {
                 self.link_files_in_transaction(
                     &mut transaction,

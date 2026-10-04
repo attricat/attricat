@@ -360,6 +360,29 @@ impl CatalogRepository {
         .await
     }
 
+    /// Locks the workspace's file rows among `file_ids`, in ID order. A write
+    /// that links several file lists takes every lock here first, so two such
+    /// writes sharing files lock them in one global order and cannot
+    /// deadlock; each list's own lock in [`Self::prepare_file_link`] then
+    /// finds them held.
+    pub(super) async fn lock_files_in_transaction(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        file_ids: &[Uuid],
+    ) -> Result<(), RepositoryError> {
+        let mut unique = file_ids.to_vec();
+        unique.sort_unstable();
+        unique.dedup();
+        sqlx::query(
+            "SELECT id FROM files WHERE id = ANY($1) AND workspace_id = $2 ORDER BY id FOR UPDATE",
+        )
+        .bind(&unique)
+        .bind(self.workspace_id.0)
+        .execute(&mut **transaction)
+        .await?;
+        Ok(())
+    }
+
     /// Checks that `file_ids` can be linked to the attribute and returns the
     /// change with the current files and the file list after linking: the
     /// files appended in order to a many-valued attribute, or replacing the
