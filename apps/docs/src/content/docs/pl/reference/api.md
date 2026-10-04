@@ -33,6 +33,7 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 
 | Kod | Status | Znaczenie |
 | --- | --- | --- |
+| `invalid_input` | 422 | Treść żądania zawiera nieprawidłową wartość, na przykład błędny, powtórzony lub nieznany kod. Komunikat wskazuje, którą. |
 | `invalid_blueprint_definition` | 422 | TOML schematu się nie kompiluje. Komunikat podaje przyczynę. |
 | `attribute_value_schema_mismatch` | 422 | Wartość nie spełnia `value_schema` swojego atrybutu. |
 | `entity_schema_mismatch` | 422 | Encja nie spełnia swojego `entity_schema` w którymś kontekście. |
@@ -223,7 +224,7 @@ Pobieranie zwraca `409 file_processing`, dopóki plik nie ma stanu `ready`.
 | `GET` | `/contexts/{code}` | Odczyt po kodzie. |
 | `PUT`, `DELETE` | `/contexts/id/{id}` | Aktualizuje lub usuwa. |
 | `GET` | `/publication-channels` | Konteksty będące kanałami. |
-| `PUT` | `/publication-channels/{context_id}` | `{"enabled": true}`, aby uczynić kontekst kanałem. Opcjonalne `required_rule_codes` (do 32 kodów reguł) i `require_valid_entity` ustawiają kontrole wymagane przed publikacją; pominięte pola zachowują bieżącą wartość. |
+| `PUT` | `/publication-channels/{context_id}` | `{"enabled": true}`, aby uczynić kontekst kanałem. Opcjonalne `required_rule_codes` (do 32 kodów reguł) i `require_valid_entity` ustawiają kontrole wymagane przed publikacją; pominięte pola zachowują bieżącą wartość. Nieprawidłowe lub powtórzone kody albo kody, które nie wskazują żadnej reguły w obszarze roboczym, zwracają `422 invalid_input`. |
 | `GET`, `POST` | `/v1/entities/{id}/publications` | Stan publikacji lub publikacja z `{"context_id": "…"}`. |
 | `POST` | `/v1/entities/{id}/publications/unpublish` | Wycofuje publikację z jednego kanału. |
 | `POST` | `/v1/entities/{id}/publications/publish-all` | Publikuje we wszystkich kanałach. |

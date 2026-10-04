@@ -33,6 +33,7 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 
 | Code | Status | Meaning |
 | --- | --- | --- |
+| `invalid_input` | 422 | The request body has an invalid value, such as a malformed, repeated, or unknown code. The message says which. |
 | `invalid_blueprint_definition` | 422 | The blueprint TOML does not compile. The message says why. |
 | `attribute_value_schema_mismatch` | 422 | A value fails its attribute's `value_schema`. |
 | `entity_schema_mismatch` | 422 | The entity fails its `entity_schema` in some context. |
@@ -223,7 +224,7 @@ Downloads return `409 file_processing` until the file is `ready`.
 | `GET` | `/contexts/{code}` | Read by code. |
 | `PUT`, `DELETE` | `/contexts/id/{id}` | Update or delete. |
 | `GET` | `/publication-channels` | Channel contexts. |
-| `PUT` | `/publication-channels/{context_id}` | `{"enabled": true}` to make a context a channel. Optional `required_rule_codes` (up to 32 rule codes) and `require_valid_entity` set the checks publication requires; omitted fields keep their current value. |
+| `PUT` | `/publication-channels/{context_id}` | `{"enabled": true}` to make a context a channel. Optional `required_rule_codes` (up to 32 rule codes) and `require_valid_entity` set the checks publication requires; omitted fields keep their current value. Invalid or repeated codes, or codes that name no rule in the workspace, return `422 invalid_input`. |
 | `GET`, `POST` | `/v1/entities/{id}/publications` | Publication status, or publish with `{"context_id": "…"}`. |
 | `POST` | `/v1/entities/{id}/publications/unpublish` | Unpublish from one channel. |
 | `POST` | `/v1/entities/{id}/publications/publish-all` | Publish to every channel. |
