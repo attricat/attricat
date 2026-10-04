@@ -1570,6 +1570,26 @@ impl CatalogRepository {
             .collect()
     }
 
+    /// [`Self::audit_changes`] across a blueprint migration. A preserved value
+    /// moves to the target revision's attribute with the same code, so it is
+    /// compared under that attribute instead of appearing removed and re-set.
+    pub(super) fn migration_audit_changes(
+        entity_id: Uuid,
+        mut before: Vec<AuditValueSnapshot>,
+        after: Vec<AuditValueSnapshot>,
+    ) -> Vec<AuditEventChange> {
+        let target_ids: std::collections::HashMap<_, _> = after
+            .iter()
+            .map(|value| (value.attribute_code.clone(), value.attribute_id))
+            .collect();
+        for value in &mut before {
+            if let Some(attribute_id) = target_ids.get(&value.attribute_code) {
+                value.attribute_id = *attribute_id;
+            }
+        }
+        Self::audit_changes(entity_id, before, after, false)
+    }
+
     pub(super) async fn archive_current_value(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
