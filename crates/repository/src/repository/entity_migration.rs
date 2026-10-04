@@ -3,8 +3,8 @@ use super::write_context::WriteContext;
 use super::*;
 use crate::domain_events::{
     ENTITY_MIGRATED_V1, EntityMigratedV1, EventSource, EventSourceKind,
-    MAX_RELEASED_RELATIONSHIP_TARGETS, MAX_RELEASED_TARGETS_PER_EVENT, NewDomainEvent,
-    ReleasedRelationshipV1,
+    MAX_RELEASED_RELATIONSHIP_TARGETS, MAX_RELEASED_RELATIONSHIPS_BYTES,
+    MAX_RELEASED_TARGETS_PER_EVENT, NewDomainEvent, ReleasedRelationshipV1,
 };
 use crate::persistence_rows::Db;
 use catalog_validation::validate_json_schema;
@@ -28,17 +28,25 @@ fn released_relationships(changes: &[AuditEventChange]) -> Vec<ReleasedRelations
                 .push(target);
         }
     }
+    // Serialized sizes: an entry's fixed JSON plus its code, and a quoted
+    // UUID with its comma.
+    const ENTRY_BYTES: usize = 48;
+    const TARGET_BYTES: usize = 39;
     let mut remaining = MAX_RELEASED_TARGETS_PER_EVENT;
+    let mut remaining_bytes = MAX_RELEASED_RELATIONSHIPS_BYTES;
     released
         .into_iter()
         .map_while(|(attribute_code, mut target_entity_ids)| {
-            if remaining == 0 {
+            let entry_bytes = ENTRY_BYTES + attribute_code.len();
+            if remaining == 0 || remaining_bytes < entry_bytes + TARGET_BYTES {
                 return None;
             }
+            let fits = (remaining_bytes - entry_bytes) / TARGET_BYTES;
             target_entity_ids.sort_unstable();
             target_entity_ids.dedup();
-            target_entity_ids.truncate(MAX_RELEASED_RELATIONSHIP_TARGETS.min(remaining));
+            target_entity_ids.truncate(MAX_RELEASED_RELATIONSHIP_TARGETS.min(remaining).min(fits));
             remaining -= target_entity_ids.len();
+            remaining_bytes -= entry_bytes + target_entity_ids.len() * TARGET_BYTES;
             Some(ReleasedRelationshipV1 {
                 attribute_code: attribute_code.to_owned(),
                 target_entity_ids,
@@ -987,5 +995,36 @@ mod tests {
             .sum();
         assert_eq!(total, MAX_RELEASED_TARGETS_PER_EVENT);
         assert_eq!(released.len(), 10);
+    }
+
+    #[test]
+    fn released_relationships_stay_within_the_byte_budget() {
+        let long = "r".repeat(120);
+        let changes: Vec<_> = (0..1_000)
+            .map(|attribute| removal(&format!("{long}{attribute:04}")))
+            .collect();
+        let released = released_relationships(&changes);
+        let bytes = serde_json::to_vec(&released).unwrap().len();
+        assert!(bytes <= MAX_RELEASED_RELATIONSHIPS_BYTES, "{bytes} bytes");
+        assert!(!released.is_empty());
+    }
+
+    #[test]
+    fn the_per_event_cap_can_end_partway_through_a_relationship() {
+        let changes: Vec<_> = (0..11)
+            .flat_map(|attribute| {
+                let code = format!("rel_{attribute:02}");
+                let count = if attribute == 10 { 100 } else { 95 };
+                (0..count).map(move |_| removal(&code))
+            })
+            .collect();
+        let released = released_relationships(&changes);
+        assert_eq!(released.len(), 11);
+        assert_eq!(released[10].target_entity_ids.len(), 50);
+        let total: usize = released
+            .iter()
+            .map(|entry| entry.target_entity_ids.len())
+            .sum();
+        assert_eq!(total, MAX_RELEASED_TARGETS_PER_EVENT);
     }
 }

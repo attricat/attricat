@@ -333,6 +333,10 @@ impl CatalogRepository {
         let upsert = mode == ExtensionLookupMode::Upsert;
         let row_lock = if upsert { " FOR UPDATE OF e" } else { "" };
         let workspace_id = self.workspace_id.0;
+        if upsert {
+            // The entity-writer lock comes before any entity row lock.
+            super::entity_commands::lock_entity_writes(transaction, workspace_id, false).await?;
+        }
         let attribute: Option<(String, String)> = sqlx::query_as(
             "SELECT code, value_type FROM attributes WHERE id = $1 AND workspace_id = $2 AND blueprint_id = $3 AND blueprint_version = $4 AND deleted_at IS NULL",
         )

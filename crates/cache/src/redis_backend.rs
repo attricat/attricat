@@ -9,8 +9,8 @@
 
 use std::{
     sync::{
-        Arc,
-        atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering},
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
     },
     time::{Duration, Instant},
 };
@@ -42,21 +42,27 @@ fn error(error: impl std::fmt::Display) -> CacheError {
 /// Skips Redis for [`COOLDOWN`] after [`FAILURE_THRESHOLD`] consecutive
 /// failures. After the cooldown one command is a trial while concurrent
 /// commands keep skipping Redis: success closes the breaker, failure opens it
-/// for another cooldown.
+/// for another cooldown. The failure count and the open state change together
+/// under one lock, so a success racing a failure cannot reopen a breaker it
+/// just closed.
 struct CircuitBreaker {
     origin: Instant,
-    failures: AtomicU32,
-    /// Milliseconds since `origin` until which Redis is skipped; `0` while
-    /// the breaker is closed.
-    open_until: AtomicU64,
+    state: Mutex<BreakerState>,
+}
+
+#[derive(Default)]
+struct BreakerState {
+    failures: u32,
+    /// Milliseconds since `origin` until which Redis is skipped; `None`
+    /// while the breaker is closed.
+    open_until: Option<u64>,
 }
 
 impl CircuitBreaker {
     fn new() -> Self {
         Self {
             origin: Instant::now(),
-            failures: AtomicU32::new(0),
-            open_until: AtomicU64::new(0),
+            state: Mutex::default(),
         }
     }
 
@@ -68,56 +74,56 @@ impl CircuitBreaker {
         self.now() + COOLDOWN.as_millis() as u64
     }
 
+    fn state(&self) -> std::sync::MutexGuard<'_, BreakerState> {
+        // The state stays consistent even if a holder panicked.
+        self.state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
     /// Whether a command may use Redis. Once the cooldown has passed, the
     /// first caller claims the trial by starting another cooldown, so the
     /// others keep skipping Redis until the trial succeeds. A trial that
     /// never reports back is retried after that cooldown.
     fn admits(&self) -> bool {
-        let until = self.open_until.load(Ordering::Acquire);
-        if until == 0 {
-            return true;
+        let now = self.now();
+        let mut state = self.state();
+        match state.open_until {
+            None => true,
+            Some(until) if now < until => false,
+            Some(_) => {
+                state.open_until = Some(now + COOLDOWN.as_millis() as u64);
+                true
+            }
         }
-        if self.now() < until {
-            return false;
-        }
-        self.open_until
-            .compare_exchange(until, self.reopen_at(), Ordering::AcqRel, Ordering::Acquire)
-            .is_ok()
     }
 
     fn succeeded(&self) {
-        self.failures.store(0, Ordering::Relaxed);
-        if self.open_until.swap(0, Ordering::AcqRel) != 0 {
+        let mut state = self.state();
+        state.failures = 0;
+        if state.open_until.take().is_some() {
             tracing::info!("Redis responds again; the shared cache tier is back in use");
         }
     }
 
     fn failed(&self) {
-        let failures = self.failures.fetch_add(1, Ordering::Relaxed) + 1;
-        if failures < FAILURE_THRESHOLD {
+        let reopen_at = self.reopen_at();
+        let mut state = self.state();
+        state.failures = state.failures.saturating_add(1);
+        if state.failures < FAILURE_THRESHOLD {
             return;
         }
-        let reopen_at = self.reopen_at();
-        match self
-            .open_until
-            .compare_exchange(0, reopen_at, Ordering::AcqRel, Ordering::Acquire)
-        {
-            Ok(_) => {
+        match state.open_until {
+            // Already open: a failed trial starts another cooldown.
+            Some(until) => state.open_until = Some(until.max(reopen_at)),
+            None => {
+                state.open_until = Some(reopen_at);
+                drop(state);
                 tracing::warn!(
                     cooldown_ms = COOLDOWN.as_millis() as u64,
                     "Redis keeps failing; skipping the shared cache tier"
                 );
                 metrics::counter!("catalog_query_cache_redis_circuit_opened_total").increment(1);
-            }
-            // Already open: a failed trial starts another cooldown. A success
-            // may have closed the breaker since the exchange failed; leave it
-            // closed then.
-            Err(_) => {
-                let _ =
-                    self.open_until
-                        .try_update(Ordering::AcqRel, Ordering::Acquire, |open_until| {
-                            (open_until != 0).then(|| open_until.max(reopen_at))
-                        });
             }
         }
     }
@@ -383,14 +389,14 @@ mod tests {
         assert!(!breaker.admits());
 
         // After the cooldown one caller runs the trial; the others still skip.
-        breaker.open_until.store(1, Ordering::Relaxed);
+        breaker.state().open_until = Some(1);
         assert!(breaker.admits());
         assert!(!breaker.admits());
         // The trial fails: open for another cooldown.
         breaker.failed();
         assert!(!breaker.admits());
 
-        breaker.open_until.store(1, Ordering::Relaxed);
+        breaker.state().open_until = Some(1);
         assert!(breaker.admits());
         breaker.succeeded();
         assert!(breaker.admits());

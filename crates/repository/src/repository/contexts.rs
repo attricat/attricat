@@ -262,6 +262,9 @@ impl CatalogRepository {
             return Err(RepositoryError::DefaultContextProtected);
         }
         let mut transaction = self.pool.begin().await?;
+        // The workspace row comes first, as in context creation (see the lock
+        // order in `mod.rs`).
+        advance_generation(&mut transaction, self.workspace_id.0, Generation::Contexts).await?;
         // Lock first so the active-run check below sees every run that
         // started against this context; run creation holds a share lock.
         sqlx::query(
@@ -302,7 +305,6 @@ impl CatalogRepository {
         if result.rows_affected() == 0 {
             return Err(RepositoryError::ContextInUse);
         }
-        advance_generation(&mut transaction, self.workspace_id.0, Generation::Contexts).await?;
         self.commit_mutation_with_event(
             transaction,
             context_event(self, CONTEXT_DELETED_V1, &context),

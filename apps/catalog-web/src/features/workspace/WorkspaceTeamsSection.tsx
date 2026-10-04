@@ -158,9 +158,10 @@ export const WorkspaceTeamsSection = ({
   const directory = usePrincipalDirectory(canManage);
   const remove = useMutation({
     mutationFn: (team: Team) => deleteTeam(team.id),
-    onSuccess: async () => {
-      await client.invalidateQueries({ queryKey: principalQueryKeys.all() });
+    onSuccess: () => {
+      // Close before refetching: a slow refetch must not hold the dialog.
       hideDelete();
+      void client.invalidateQueries({ queryKey: principalQueryKeys.all() });
     },
   });
   const openDelete = (team: Team) => {

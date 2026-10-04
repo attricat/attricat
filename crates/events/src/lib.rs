@@ -157,6 +157,10 @@ pub const MAX_RELEASED_RELATIONSHIP_TARGETS: usize = 100;
 /// relationships; about 40 KB of the 64 KiB payload limit.
 pub const MAX_RELEASED_TARGETS_PER_EVENT: usize = 1_000;
 
+/// The most bytes the serialized `released_relationships` may use, so many
+/// relationships with long codes also stay within the payload limit.
+pub const MAX_RELEASED_RELATIONSHIPS_BYTES: usize = 48 * 1024;
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ContextCreatedV1 {
     pub context_id: Uuid,

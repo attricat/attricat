@@ -71,8 +71,9 @@ Workflow event triggers can filter on these facts' `attribute_code` values; see
 `released_relationships` when the migration dropped or re-pointed a
 relationship. Each entry has an `attribute_code` and the ascending
 `target_entity_ids` the entity stopped pointing to, at most 100 per
-relationship and 1,000 across the event (attributes in code order), so the
-payload stays within its size limit. Rule fan-out uses it
+relationship and 1,000 across the event (attributes in code order), and at
+most 48 KiB of JSON however long the codes are, so the payload stays within
+its size limit. Rule fan-out uses it
 to re-evaluate `referenced_by` dependents the migration released.
 
 Core types are constants in `api::domain_events` and currently include:
