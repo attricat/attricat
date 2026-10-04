@@ -6399,6 +6399,38 @@ impl CatalogRepository {
         .bind(workspace_id)
         .fetch_one(&mut **tx)
         .await?;
+        let paths = values
+            .iter()
+            .flat_map(|value| &value.files)
+            .map(|file| file.path.as_str())
+            .collect::<Vec<_>>();
+        let staged = sqlx::query_as::<_, (String, Uuid, String, String, String, i64, String)>(
+            "SELECT path,file_id,object_key,filename,media_type,byte_size,sha256 FROM solution_pack_plan_sample_files WHERE workspace_id=$1 AND plan_id=$2 AND path=ANY($3)",
+        )
+        .bind(workspace_id)
+        .bind(plan_id)
+        .bind(&paths)
+        .fetch_all(&mut **tx)
+        .await?
+        .into_iter()
+        .map(|(path, file_id, object_key, filename, media_type, byte_size, sha256)| {
+            (path, (file_id, object_key, filename, media_type, byte_size, sha256))
+        })
+        .collect::<std::collections::HashMap<_, _>>();
+        let staged_ids = staged
+            .values()
+            .map(|(file_id, ..)| *file_id)
+            .collect::<Vec<_>>();
+        // Files an earlier sample entity of this application already created.
+        let mut created = sqlx::query_scalar::<_, Uuid>(
+            "SELECT id FROM files WHERE workspace_id=$1 AND id=ANY($2)",
+        )
+        .bind(workspace_id)
+        .bind(&staged_ids)
+        .fetch_all(&mut **tx)
+        .await?
+        .into_iter()
+        .collect::<std::collections::HashSet<_>>();
         let mut attached = 0;
         for value in values {
             let code = value.attribute.rsplit('/').next().unwrap_or_default();
@@ -6424,15 +6456,7 @@ impl CatalogRepository {
             .await?;
             for (position, file) in value.files.iter().enumerate() {
                 let (file_id, object_key, filename, media_type, byte_size, sha256) =
-                    sqlx::query_as::<_, (Uuid, String, String, String, i64, String)>(
-                        "SELECT file_id,object_key,filename,media_type,byte_size,sha256 FROM solution_pack_plan_sample_files WHERE workspace_id=$1 AND plan_id=$2 AND path=$3",
-                    )
-                    .bind(workspace_id)
-                    .bind(plan_id)
-                    .bind(&file.path)
-                    .fetch_optional(&mut **tx)
-                    .await?
-                    .ok_or_else(|| {
+                    staged.get(&file.path).cloned().ok_or_else(|| {
                         RepositoryError::InvalidSolutionPackPlan(
                             "sample file staging evidence is missing".into(),
                         )
@@ -6442,14 +6466,7 @@ impl CatalogRepository {
                         "sample file staging evidence is inconsistent".into(),
                     ));
                 }
-                let created: bool = sqlx::query_scalar(
-                    "SELECT EXISTS(SELECT 1 FROM files WHERE workspace_id=$1 AND id=$2)",
-                )
-                .bind(workspace_id)
-                .bind(file_id)
-                .fetch_one(&mut **tx)
-                .await?;
-                if !created {
+                if created.insert(file_id) {
                     let expected_size = usize::try_from(byte_size)
                         .map_err(|_| RepositoryError::SolutionPackAssetObjectIntegrityFailed)?;
                     let stored = get_object_for_integrity(object_store, &object_key, expected_size)
