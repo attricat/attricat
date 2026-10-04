@@ -22,11 +22,12 @@ import { useTranslation } from 'react-i18next';
 import {
   createTeam,
   deleteTeam,
-  listTeams,
   updateTeam,
+  type TeamInput,
 } from '../principals/api';
 import { userLabel } from '../principals/principal';
 import { principalQueryKeys } from '../principals/queryKeys';
+import { teamListOptions } from '../principals/queryOptions';
 import type { DirectoryUser, Team } from '../principals/schemas';
 import { usePrincipalDirectory } from '../principals/usePrincipalDirectory';
 
@@ -44,11 +45,7 @@ const TeamDialog = ({
   const { t } = useTranslation();
   const client = useQueryClient();
   const save = useMutation({
-    mutationFn: (value: {
-      code: string;
-      name: string;
-      member_user_ids: string[];
-    }) =>
+    mutationFn: (value: TeamInput) =>
       team
         ? updateTeam(team.id, {
             name: value.name,
@@ -80,7 +77,7 @@ const TeamDialog = ({
         }}
       >
         <DialogTitle>
-          {t(team ? 'workspace.editTeam' : 'workspace.createTeam')}
+          {t(team ? 'workspace.editTeamTitle' : 'workspace.createTeam')}
         </DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ pt: 1 }}>
@@ -154,11 +151,7 @@ export const WorkspaceTeamsSection = ({
   const client = useQueryClient();
   const [editing, setEditing] = useState<Editing>(null);
   const [deleting, setDeleting] = useState<Team | null>(null);
-  const teams = useQuery({
-    enabled: canManage,
-    queryKey: principalQueryKeys.teams(),
-    queryFn: listTeams,
-  });
+  const teams = useQuery({ ...teamListOptions(), enabled: canManage });
   const directory = usePrincipalDirectory(canManage);
   const remove = useMutation({
     mutationFn: (team: Team) => deleteTeam(team.id),
@@ -193,10 +186,19 @@ export const WorkspaceTeamsSection = ({
               key={team.id}
               secondaryAction={
                 <Stack direction="row" spacing={1}>
-                  <Button onClick={() => setEditing({ team })} size="small">
+                  <Button
+                    aria-label={t('workspace.editNamedTeam', {
+                      team: team.name,
+                    })}
+                    onClick={() => setEditing({ team })}
+                    size="small"
+                  >
                     {t('workspace.editTeam')}
                   </Button>
                   <Button
+                    aria-label={t('workspace.deleteNamedTeam', {
+                      team: team.name,
+                    })}
                     color="error"
                     onClick={() => setDeleting(team)}
                     size="small"

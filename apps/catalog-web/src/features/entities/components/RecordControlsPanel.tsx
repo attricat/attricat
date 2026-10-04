@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Box, Chip, Paper, Stack, Typography } from '@mui/material';
-import { useId } from 'react';
+import { useId, type ReactNode } from 'react';
+import { monoFontFamily } from '../../../app/theme';
 import { useTranslation } from 'react-i18next';
 import { QueryErrorNotice } from '../../../components/QueryErrorNotice';
 import { Timestamp } from '../../../time/Timestamp';
@@ -30,6 +31,34 @@ const recordLabels = (attributes: readonly Attribute[]) => {
 };
 type RecordLabels = ReturnType<typeof recordLabels>;
 
+/** One approval or hold: its title and state chip, then its details. */
+const RecordItem = ({
+  title,
+  state,
+  children,
+}: {
+  title: string;
+  state: { label: string; color: 'default' | 'success' | 'warning' };
+  children: ReactNode;
+}) => (
+  <Box component="li" sx={{ py: 1.5, borderBottom: 1, borderColor: 'divider' }}>
+    <Stack
+      direction="row"
+      spacing={1}
+      sx={{ alignItems: 'baseline', flexWrap: 'wrap' }}
+    >
+      <Typography variant="subtitle2">{title}</Typography>
+      <Chip
+        size="small"
+        label={state.label}
+        color={state.color}
+        variant="outlined"
+      />
+    </Stack>
+    {children}
+  </Box>
+);
+
 const ApprovalItem = ({
   approval,
   labels,
@@ -45,28 +74,16 @@ const ApprovalItem = ({
         ? t('entities.recordControls.approvalSuperseded')
         : t('entities.recordControls.approvalActive');
   return (
-    <Box
-      component="li"
-      sx={{ py: 1.5, borderBottom: 1, borderColor: 'divider' }}
+    <RecordItem
+      title={t('entities.recordControls.approvedAs', {
+        status: labels.status(approval.attribute_code, approval.status),
+        context: approval.context_code,
+      })}
+      state={{
+        label: state,
+        color: approval.end_reason === null ? 'success' : 'default',
+      }}
     >
-      <Stack
-        direction="row"
-        spacing={1}
-        sx={{ alignItems: 'baseline', flexWrap: 'wrap' }}
-      >
-        <Typography variant="subtitle2">
-          {t('entities.recordControls.approvedAs', {
-            status: labels.status(approval.attribute_code, approval.status),
-            context: approval.context_code,
-          })}
-        </Typography>
-        <Chip
-          size="small"
-          label={state}
-          color={approval.end_reason === null ? 'success' : 'default'}
-          variant="outlined"
-        />
-      </Stack>
       <Typography variant="body2" color="text.secondary">
         {t('entities.recordControls.approvedBy', {
           user: approval.approved_by ?? t('audit.system'),
@@ -89,13 +106,13 @@ const ApprovalItem = ({
       <Typography
         variant="caption"
         color="text.secondary"
-        sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}
+        sx={{ fontFamily: monoFontFamily, wordBreak: 'break-all' }}
       >
         {t('entities.recordControls.digest', {
           digest: approval.content_digest,
         })}
       </Typography>
-    </Box>
+    </RecordItem>
   );
 };
 
@@ -108,45 +125,32 @@ const HoldItem = ({
 }) => {
   const { t } = useTranslation();
   return (
-    <Box
-      component="li"
-      sx={{ py: 1.5, borderBottom: 1, borderColor: 'divider' }}
+    <RecordItem
+      title={
+        hold.source === 'status'
+          ? t('entities.recordControls.statusHold', {
+              attribute: hold.attribute_code
+                ? labels.attribute(hold.attribute_code)
+                : '',
+              status: hold.status
+                ? labels.status(hold.attribute_code, hold.status)
+                : '',
+            })
+          : t('entities.recordControls.explicitHold', {
+              reason: hold.reason ?? '',
+            })
+      }
+      state={
+        hold.active
+          ? { label: t('entities.recordControls.holdActive'), color: 'warning' }
+          : { label: t('entities.recordControls.holdEnded'), color: 'default' }
+      }
     >
-      <Stack
-        direction="row"
-        spacing={1}
-        sx={{ alignItems: 'baseline', flexWrap: 'wrap' }}
-      >
-        <Typography variant="subtitle2">
-          {hold.source === 'status'
-            ? t('entities.recordControls.statusHold', {
-                attribute: hold.attribute_code
-                  ? labels.attribute(hold.attribute_code)
-                  : '',
-                status: hold.status
-                  ? labels.status(hold.attribute_code, hold.status)
-                  : '',
-              })
-            : t('entities.recordControls.explicitHold', {
-                reason: hold.reason ?? '',
-              })}
-        </Typography>
-        <Chip
-          size="small"
-          label={
-            hold.active
-              ? t('entities.recordControls.holdActive')
-              : t('entities.recordControls.holdEnded')
-          }
-          color={hold.active ? 'warning' : 'default'}
-          variant="outlined"
-        />
-      </Stack>
       <Typography variant="body2" color="text.secondary">
         {t('entities.recordControls.heldUntil')}{' '}
         <Timestamp value={hold.held_until} />
       </Typography>
-    </Box>
+    </RecordItem>
   );
 };
 

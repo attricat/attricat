@@ -7,21 +7,22 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  IconButton,
   Stack,
   Typography,
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { useRouterState } from '@tanstack/react-router';
-import { XIcon } from 'lucide-react';
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RouterButton } from '../../components/RouterLink';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
 import { draftEditors } from '../drafts/constants';
 import { draftResourceIds } from '../drafts/draftStorage';
-import { useActionDialogStore } from './actionDialogStore';
+import {
+  useActionDialogStore,
+  type OpenActionDialog,
+} from './actionDialogStore';
 import { extensionLoadingIndicatorSize, selectionSources } from './constants';
 import { ExtensionFrame } from './ExtensionFrame';
 import { useExtensionRuntime } from './useExtensionRuntime';
@@ -32,13 +33,19 @@ import { useExtensionRuntime } from './useExtensionRuntime';
  * that opened it. The selection is captured when it opens and never changes.
  */
 export const ExtensionActionDialogHost = () => {
-  const dialogKey = useActionDialogStore((state) => state.dialog?.key);
+  const dialog = useActionDialogStore((state) => state.dialog);
   const close = useActionDialogStore((state) => state.close);
-  if (dialogKey === undefined) return null;
-  return <ActionDialog key={dialogKey} onClose={close} />;
+  if (!dialog) return null;
+  return <ActionDialog dialog={dialog} key={dialog.key} onClose={close} />;
 };
 
-const ActionDialog = ({ onClose }: { onClose: () => void }) => {
+const ActionDialog = ({
+  dialog: { context, extensionId },
+  onClose,
+}: {
+  dialog: OpenActionDialog;
+  onClose: () => void;
+}) => {
   const { t } = useTranslation();
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
@@ -65,9 +72,6 @@ const ActionDialog = ({ onClose }: { onClose: () => void }) => {
     },
     [opener],
   );
-  const titleId = useId();
-  const dialog = useActionDialogStore((state) => state.dialog)!;
-  const { context, extensionId } = dialog;
   const runtime = useExtensionRuntime({
     blueprintId: context.blueprint_id,
     blueprintVersion: context.blueprint_version,
@@ -98,25 +102,8 @@ const ActionDialog = ({ onClose }: { onClose: () => void }) => {
   const title = contribution?.title ?? t('extensions.actionDialogTitle');
 
   return (
-    <Dialog
-      aria-labelledby={titleId}
-      fullWidth
-      maxWidth="sm"
-      onClose={onClose}
-      open
-    >
-      <DialogTitle
-        sx={{ alignItems: 'center', display: 'flex', gap: 2, pr: 7 }}
-      >
-        <span id={titleId}>{title}</span>
-        <IconButton
-          aria-label={t('common.close')}
-          onClick={onClose}
-          sx={{ position: 'absolute', right: 12, top: 12 }}
-        >
-          <XIcon />
-        </IconButton>
-      </DialogTitle>
+    <Dialog fullWidth maxWidth="sm" onClose={onClose} open>
+      <DialogTitle>{title}</DialogTitle>
       <DialogContent>
         <Stack spacing={3}>
           <Typography color="text.secondary" variant="body2">

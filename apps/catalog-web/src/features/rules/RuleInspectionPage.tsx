@@ -10,7 +10,6 @@ import {
   acknowledgeFinding,
   listFindings,
   listRuleRuns,
-  listRules,
   runRuleNow,
 } from './api';
 import {
@@ -24,6 +23,7 @@ import {
 } from './constants';
 import { FindingsSection } from './FindingsSection';
 import { ruleQueryKeys } from './queryKeys';
+import { ruleDefinitionsOptions } from './queryOptions';
 import { RulesSection } from './RulesSection';
 import { RunsSection } from './RunsSection';
 import { RuleIcon } from '../../components/systemIcons';
@@ -46,8 +46,7 @@ export const RuleInspectionPage = ({
   const canRead = session.data?.capabilities?.rules_read === true;
   const canManage = session.data?.capabilities?.rules_manage === true;
   const rules = useQuery({
-    queryKey: ruleQueryKeys.definitions(),
-    queryFn: listRules,
+    ...ruleDefinitionsOptions(),
     enabled: canRead && section === RULE_SECTION_RULES,
   });
   const findings = useQuery({

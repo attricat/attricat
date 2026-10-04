@@ -2,7 +2,6 @@ import { Box, Chip } from '@mui/material';
 import { CircleXIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { Attribute } from '../entities/api';
-import { attributeLabel } from '../entities/entityDisplay';
 import { principalConfiguration } from '../principals/principal';
 import { usePrincipalDirectory } from '../principals/usePrincipalDirectory';
 import { attributeFilterKey, attributeFilterLabel } from './attributeFilters';
@@ -21,7 +20,7 @@ export type ActiveExplorerFilter =
     };
 
 type Props = {
-  /** The selected blueprint's attributes, to show status labels. */
+  /** The selected blueprint's attributes, to label fields and values. */
   attributes?: Attribute[];
   filters: ActiveExplorerFilter[];
   onRemoveAttribute: (index: number) => void;
@@ -35,15 +34,14 @@ export const ActiveExplorerFilters = ({
   onRemoveRelationship,
 }: Props) => {
   const { t } = useTranslation();
+  const findAttribute = (code: string) =>
+    attributes.find((item) => item.code === code);
   const directory = usePrincipalDirectory(
-    filters.some(
-      (filter) =>
-        filter.kind === 'attribute' &&
-        attributes.some(
-          (item) =>
-            item.code === filter.filter.field && principalConfiguration(item),
-        ),
-    ),
+    filters.some((filter) => {
+      if (filter.kind !== 'attribute') return false;
+      const attribute = findAttribute(filter.filter.field);
+      return Boolean(attribute && principalConfiguration(attribute));
+    }),
   );
   if (!filters.length) return null;
 
@@ -68,12 +66,7 @@ export const ActiveExplorerFilters = ({
           : attributeFilterLabel(
               t,
               filter.filter,
-              attributeLabel(
-                attributes.find(
-                  (item) => item.code === filter.filter.field,
-                ) ?? { code: filter.filter.field },
-              ),
-              attributes.find((item) => item.code === filter.filter.field),
+              findAttribute(filter.filter.field),
               directory.data,
             );
         return (

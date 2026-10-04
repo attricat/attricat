@@ -3,12 +3,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { Alert, Button, Typography } from '@mui/material';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import {
-  getCurrentBlueprint,
-  getEntityForm,
-  getStatusTransitions,
-  updateEntity,
-} from './api';
+import { getCurrentBlueprint, getEntityForm, updateEntity } from './api';
 import { EDIT_ENTITY_FORM_ID } from './constants';
 import { draftEditors } from '../drafts/constants';
 import { EditEntityToolbar } from './components/EditEntityToolbar';
@@ -28,6 +23,7 @@ import { valuesForForm } from './entityForm';
 import { checkViolationError } from './checkViolations';
 import { statusParentContexts } from './status';
 import { entityQueryKeys } from './queryKeys';
+import { entityStatusTransitionsOptions } from './queryOptions';
 import { invalidateEntity } from './invalidateEntity';
 import {
   useEntityContextSelection,
@@ -80,8 +76,7 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
   const resolvedPreview = useResolvedEntityPreview(entityId, contextId);
   // Explains which transitions this user may take; the server still decides.
   const statusTransitions = useQuery({
-    queryKey: entityQueryKeys.statusTransitions(entityId, contextId),
-    queryFn: ({ signal }) => getStatusTransitions(entityId, contextId, signal),
+    ...entityStatusTransitionsOptions(entityId, contextId),
     enabled: contextId !== null,
   });
   const blueprint = entityForm.data?.blueprint.blueprint;

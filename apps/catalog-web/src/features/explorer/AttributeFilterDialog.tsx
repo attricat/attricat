@@ -109,9 +109,30 @@ export const AttributeFilterDialog = ({
   const principal = attribute && principalConfiguration(attribute);
   const directory = usePrincipalDirectory(Boolean(principal));
   // Filters may target former members and deleted teams, unlike assignment.
-  const principalOptions = principal
-    ? directoryOptions(directory.data, principal)
-    : [];
+  // Attributes with a closed set of values are filtered by choosing one.
+  const valueChoices: { value: string; label: string }[] | undefined =
+    attribute?.value_type === 'boolean'
+      ? [
+          { value: booleanFilterValues.true, label: t('explorer.true') },
+          { value: booleanFilterValues.false, label: t('explorer.false') },
+        ]
+      : principal
+        ? [
+            {
+              value: CURRENT_USER_FILTER_VALUE,
+              label: t('explorer.assignedToMe'),
+            },
+            ...directoryOptions(directory.data, principal).map((option) => ({
+              value: option.value,
+              label: option.principal.label,
+            })),
+          ]
+        : status
+          ? status.options.map((option) => ({
+              value: option.code,
+              label: statusOptionLabel(option),
+            }))
+          : undefined;
   const submit = () => void form.handleSubmit();
   const submitOnEnter = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== 'Enter') return;
@@ -222,7 +243,7 @@ export const AttributeFilterDialog = ({
             </form.Field>
             <form.Field name="value">
               {(field) =>
-                attribute.value_type === 'boolean' ? (
+                valueChoices ? (
                   <TextField
                     fullWidth
                     label={t('explorer.value')}
@@ -231,43 +252,9 @@ export const AttributeFilterDialog = ({
                     select
                     value={field.state.value}
                   >
-                    <MenuItem value={booleanFilterValues.true}>
-                      {t('explorer.true')}
-                    </MenuItem>
-                    <MenuItem value={booleanFilterValues.false}>
-                      {t('explorer.false')}
-                    </MenuItem>
-                  </TextField>
-                ) : principal ? (
-                  <TextField
-                    fullWidth
-                    label={t('explorer.value')}
-                    onChange={(event) => field.handleChange(event.target.value)}
-                    onKeyDown={submitOnEnter}
-                    select
-                    value={field.state.value}
-                  >
-                    <MenuItem value={CURRENT_USER_FILTER_VALUE}>
-                      {t('explorer.assignedToMe')}
-                    </MenuItem>
-                    {principalOptions.map((option) => (
-                      <MenuItem key={option.value} value={option.value}>
-                        {option.principal.label}
-                      </MenuItem>
-                    ))}
-                  </TextField>
-                ) : status ? (
-                  <TextField
-                    fullWidth
-                    label={t('explorer.value')}
-                    onChange={(event) => field.handleChange(event.target.value)}
-                    onKeyDown={submitOnEnter}
-                    select
-                    value={field.state.value}
-                  >
-                    {status.options.map((option) => (
-                      <MenuItem key={option.code} value={option.code}>
-                        {statusOptionLabel(option)}
+                    {valueChoices.map((choice) => (
+                      <MenuItem key={choice.value} value={choice.value}>
+                        {choice.label}
                       </MenuItem>
                     ))}
                   </TextField>

@@ -5,7 +5,6 @@ import { useTranslation } from 'react-i18next';
 import { compactOutlinedActionButtonSx } from '../../components/CompactOutlinedActionButton';
 import type { Attribute } from '../entities/api';
 import { isHiddenByDefault } from '../entities/attributeVisibility';
-import { attributeLabel } from '../entities/entityDisplay';
 import { AttributeFilterDialog } from './AttributeFilterDialog';
 import { principalConfiguration } from '../principals/principal';
 import { usePrincipalDirectory } from '../principals/usePrincipalDirectory';
@@ -170,9 +169,6 @@ export const ExplorerFilterPicker = ({
             label={attributeFilterLabel(
               t,
               filter,
-              attributeLabel(
-                findAttribute(filter.field) ?? { code: filter.field },
-              ),
               findAttribute(filter.field),
               directory.data,
             )}

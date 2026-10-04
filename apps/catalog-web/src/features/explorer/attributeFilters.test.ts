@@ -44,7 +44,6 @@ describe('attribute filters', () => {
       attributeFilterLabel(
         i18n.t,
         { field: 'assignee', operator: 'eq', value: `team:${teamId}` },
-        'Assignee',
         assigneeAttribute,
         directory,
       ),
@@ -53,7 +52,6 @@ describe('attribute filters', () => {
       attributeFilterLabel(
         i18n.t,
         { field: 'assignee', operator: 'eq', value: '@me' },
-        'Assignee',
         assigneeAttribute,
       ),
     ).toContain(i18n.t('explorer.assignedToMe'));
@@ -65,9 +63,9 @@ describe('attribute filters', () => {
       operatorsForAttribute({ code: 'title', value_type: 'string' }),
     ).toEqual(['eq', 'contains', 'starts_with']);
     const filter = { field: 'status', operator: 'eq' as const, value: 'live' };
-    expect(
-      attributeFilterLabel(i18n.t, filter, 'Status', statusAttribute),
-    ).toContain('"Live"');
-    expect(attributeFilterLabel(i18n.t, filter, 'Status')).toContain('"live"');
+    expect(attributeFilterLabel(i18n.t, filter, statusAttribute)).toContain(
+      '"Live"',
+    );
+    expect(attributeFilterLabel(i18n.t, filter)).toContain('"live"');
   });
 });

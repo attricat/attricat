@@ -24,8 +24,7 @@ import {
   type PublicationChannel,
   type PublicationChannelChecks,
 } from './api';
-import { listRules } from '../rules/api';
-import { ruleQueryKeys } from '../rules/queryKeys';
+import { ruleDefinitionsOptions } from '../rules/queryOptions';
 import { ChannelChecksEditor } from './ChannelChecksEditor';
 import { EXPORT_TABLE_COLUMN_COUNT } from './constants';
 import { exportQueryKeys } from './queryKeys';
@@ -43,10 +42,7 @@ export const ExportsPage = () => {
     queryFn: listPublicationChannels,
   });
   // Rule codes are suggestions only; a reader without rule access can type them.
-  const rules = useQuery({
-    queryKey: ruleQueryKeys.definitions(),
-    queryFn: listRules,
-  });
+  const rules = useQuery(ruleDefinitionsOptions());
   const ruleCodes = [
     ...new Set(rules.data?.map((rule) => rule.code) ?? []),
   ].sort();

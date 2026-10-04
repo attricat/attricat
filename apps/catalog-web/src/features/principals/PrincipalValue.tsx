@@ -1,10 +1,23 @@
 import { Chip, Stack, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { compactIconSize } from '../../components/iconSizes';
-import { AssignedUserIcon, TeamIcon } from '../../components/systemIcons';
 import { NotSetValue } from '../views/components/values/NotSetValue';
+import { AssignedUserIcon, TeamIcon } from '../../components/systemIcons';
+import { principalKinds } from './constants';
 import { isAssignable, resolvePrincipal } from './principal';
+import type { PrincipalKind } from './schemas';
 import { usePrincipalDirectory } from './usePrincipalDirectory';
+
+/** The icon of a user or a team at the compact size. */
+export const PrincipalKindIcon = ({ kind }: { kind: PrincipalKind }) =>
+  kind === principalKinds.team ? (
+    <TeamIcon aria-hidden size={compactIconSize} />
+  ) : (
+    <AssignedUserIcon aria-hidden size={compactIconSize} />
+  );
+
+const isAssigned = (value: unknown) =>
+  value !== null && value !== undefined && value !== '';
 
 /**
  * An assigned user or team as a labelled chip. References the directory no
@@ -12,11 +25,9 @@ import { usePrincipalDirectory } from './usePrincipalDirectory';
  */
 export const PrincipalValue = ({ value }: { value: unknown }) => {
   const { t } = useTranslation();
-  const directory = usePrincipalDirectory(
-    value !== null && value !== undefined,
-  );
-  if (value === null || value === undefined || value === '')
-    return <NotSetValue />;
+  const assigned = isAssigned(value);
+  const directory = usePrincipalDirectory(assigned);
+  if (!assigned) return <NotSetValue />;
   const principal = resolvePrincipal(directory.data, value);
   if (!principal) {
     return (
@@ -27,11 +38,10 @@ export const PrincipalValue = ({ value }: { value: unknown }) => {
       </Typography>
     );
   }
-  const Icon = principal.kind === 'team' ? TeamIcon : AssignedUserIcon;
   return (
     <Stack spacing={0.5} sx={{ alignItems: 'flex-start' }}>
       <Chip
-        icon={<Icon aria-hidden size={compactIconSize} />}
+        icon={<PrincipalKindIcon kind={principal.kind} />}
         label={principal.label}
         variant="outlined"
         title={principal.kind === 'user' ? principal.user.email : undefined}
@@ -53,10 +63,8 @@ export const PrincipalValue = ({ value }: { value: unknown }) => {
 /** Plain-text form of an assignment, for headings and compact text. */
 export const PrincipalText = ({ value }: { value: unknown }) => {
   const { t } = useTranslation();
-  const directory = usePrincipalDirectory(
-    value !== null && value !== undefined,
-  );
-  if (value === null || value === undefined || value === '')
-    return <>{t('views.notSet')}</>;
+  const assigned = isAssigned(value);
+  const directory = usePrincipalDirectory(assigned);
+  if (!assigned) return <>{t('views.notSet')}</>;
   return <>{resolvePrincipal(directory.data, value)?.label ?? String(value)}</>;
 };
