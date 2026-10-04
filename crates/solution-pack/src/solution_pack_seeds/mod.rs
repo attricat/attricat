@@ -363,7 +363,10 @@ pub(crate) fn validate_seed_content(
 
 fn utf8_source<'a>(key: &str, bytes: &'a [u8]) -> Result<&'a str, SolutionPackError> {
     if bytes.len() > MAX_SEED_SOURCE_BYTES {
-        return invalid(format!("resource '{key}' exceeds the 64 KiB size limit"));
+        return invalid(format!(
+            "resource '{key}' exceeds the {} KiB size limit",
+            MAX_SEED_SOURCE_BYTES / 1024
+        ));
     }
     std::str::from_utf8(bytes)
         .map_err(|_| SolutionPackError::Invalid(format!("resource '{key}' must be UTF-8")))
@@ -486,9 +489,7 @@ pub(crate) fn predicate_blueprint_keys(
                             "'{owner}' references blueprint '{blueprint_code}' that is not a pack entity blueprint"
                         ))
                     })?;
-                if !source.effective_attributes().iter().any(|attribute| {
-                    &attribute.code == relationship_code && attribute.value_type == "relationship"
-                }) {
+                if !declares_relationship(source, relationship_code) {
                     return invalid(format!(
                         "'{owner}' references unknown relationship '{relationship_code}' of '{}'",
                         source.key()
@@ -586,71 +587,20 @@ fn validate_workflow(
             "workflow '{key}' cannot seed a schedule trigger because it targets a workspace entity"
         ));
     }
-    let declares = |blueprint: &SolutionPackBlueprint, code: &str| {
-        blueprint
-            .effective_attributes()
-            .iter()
-            .any(|attribute| attribute.code == code)
-    };
     let all = blueprints.values().collect::<Vec<_>>();
     for trigger in &compiled.triggers {
         if let catalog_workflow::Trigger::Event { attributes, .. } = trigger
-            && let Some(code) = attributes
-                .iter()
-                .find(|code| !all.iter().any(|blueprint| declares(blueprint, code)))
+            && let Some(code) = attributes.iter().find(|code| {
+                !all.iter()
+                    .any(|blueprint| declares_attribute(blueprint, code))
+            })
         {
             return invalid(format!(
                 "workflow '{key}' trigger filters attribute '{code}' that no pack blueprint declares"
             ));
         }
     }
-    /// Checks every write, including those nested in a referencing-entities
-    /// update, against the pack blueprints that can hold the written entity.
-    fn validate_actions(
-        key: &str,
-        actions: &[catalog_workflow::Action],
-        candidates: &[&SolutionPackBlueprint],
-        declares: &dyn Fn(&SolutionPackBlueprint, &str) -> bool,
-    ) -> Result<(), SolutionPackError> {
-        for action in actions {
-            match action {
-                catalog_workflow::Action::AttributeWrite { attribute_code, .. }
-                    if !candidates
-                        .iter()
-                        .any(|blueprint| declares(blueprint, attribute_code)) =>
-                {
-                    return invalid(format!(
-                        "workflow '{key}' writes attribute '{attribute_code}' that no pack blueprint declares"
-                    ));
-                }
-                catalog_workflow::Action::ReferencingEntitiesUpdate {
-                    relationship_attribute,
-                    actions,
-                    ..
-                } => {
-                    let referencing = candidates
-                        .iter()
-                        .copied()
-                        .filter(|blueprint| {
-                            blueprint.effective_attributes().iter().any(|attribute| {
-                                &attribute.code == relationship_attribute
-                                    && attribute.value_type == "relationship"
-                            })
-                        })
-                        .collect::<Vec<_>>();
-                    if referencing.is_empty() {
-                        return invalid(format!(
-                            "workflow '{key}' follows relationship '{relationship_attribute}' that no pack blueprint declares"
-                        ));
-                    }
-                    validate_actions(key, actions, &referencing, declares)?;
-                }
-                _ => {}
-            }
-        }
-        Ok(())
-    }
-    validate_actions(key, &compiled.actions, &all, &declares)?;
+    validate_workflow_actions(key, &compiled.actions, &all)?;
     Ok(SeedWorkflow {
         key: key.to_owned(),
         code: compiled.code.clone(),
@@ -658,6 +608,61 @@ fn validate_workflow(
         definition,
         compiled,
     })
+}
+
+fn declares_attribute(blueprint: &SolutionPackBlueprint, code: &str) -> bool {
+    blueprint
+        .effective_attributes()
+        .iter()
+        .any(|attribute| attribute.code == code)
+}
+
+fn declares_relationship(blueprint: &SolutionPackBlueprint, code: &str) -> bool {
+    blueprint
+        .effective_attributes()
+        .iter()
+        .any(|attribute| attribute.code == code && attribute.value_type == "relationship")
+}
+
+/// Checks every write, including those nested in a referencing-entities
+/// update, against the pack blueprints that can hold the written entity.
+fn validate_workflow_actions(
+    key: &str,
+    actions: &[catalog_workflow::Action],
+    candidates: &[&SolutionPackBlueprint],
+) -> Result<(), SolutionPackError> {
+    for action in actions {
+        match action {
+            catalog_workflow::Action::AttributeWrite { attribute_code, .. }
+                if !candidates
+                    .iter()
+                    .any(|blueprint| declares_attribute(blueprint, attribute_code)) =>
+            {
+                return invalid(format!(
+                    "workflow '{key}' writes attribute '{attribute_code}' that no pack blueprint declares"
+                ));
+            }
+            catalog_workflow::Action::ReferencingEntitiesUpdate {
+                relationship_attribute,
+                actions,
+                ..
+            } => {
+                let referencing = candidates
+                    .iter()
+                    .copied()
+                    .filter(|blueprint| declares_relationship(blueprint, relationship_attribute))
+                    .collect::<Vec<_>>();
+                if referencing.is_empty() {
+                    return invalid(format!(
+                        "workflow '{key}' follows relationship '{relationship_attribute}' that no pack blueprint declares"
+                    ));
+                }
+                validate_workflow_actions(key, actions, &referencing)?;
+            }
+            _ => {}
+        }
+    }
+    Ok(())
 }
 
 #[derive(Deserialize)]
@@ -904,7 +909,8 @@ fn validate_context(
             > MAX_CONTEXT_DATA_BYTES
     {
         return invalid(format!(
-            "context '{key}' data must be a JSON object of at most 4 KiB"
+            "context '{key}' data must be a JSON object of at most {} KiB",
+            MAX_CONTEXT_DATA_BYTES / 1024
         ));
     }
     if let Some(parent) = &file.parent {

@@ -31,7 +31,7 @@ use crate::{
         SOLUTION_PACK_PLAN_EXPIRY_HOURS, SolutionPackCheckDefinition, SolutionPackCheckPredicate,
         SolutionPackExtensionRequirement, SolutionPackPlanDraft, ValidatedSolutionPack,
         build_solution_pack_plan, evaluate_extension_requirement, json_deep_contains,
-        parse_version_req, validate_blueprint_mapping_requests,
+        parse_version_req, physical_code, validate_blueprint_mapping_requests,
         validate_presentation_asset_mapping_requests,
     },
     storage::{ObjectStore, ObjectStoreError, StoredObject, get_object_for_integrity},
@@ -870,6 +870,60 @@ async fn existing_publication_channel(
     ))
 }
 
+/// A workspace context and its publication channel, if any.
+#[derive(sqlx::FromRow)]
+struct ExistingContextRow {
+    id: Uuid,
+    code: String,
+    channel_enabled: Option<bool>,
+    required_rule_codes: Option<Vec<String>>,
+    require_valid_entity: Option<bool>,
+}
+
+impl ExistingContextRow {
+    fn into_snapshot(self) -> ExistingContextSnapshot {
+        let publication_channel = match (
+            self.channel_enabled,
+            self.required_rule_codes,
+            self.require_valid_entity,
+        ) {
+            (Some(enabled), Some(required_rule_codes), Some(require_valid_entity)) => {
+                Some(ExistingPublicationChannel {
+                    enabled,
+                    required_rule_codes,
+                    require_valid_entity,
+                })
+            }
+            _ => None,
+        };
+        ExistingContextSnapshot {
+            id: self.id,
+            code: self.code,
+            publication_channel,
+        }
+    }
+}
+
+/// Workspace contexts selected by id or by code, with their channels.
+async fn existing_contexts(
+    tx: &mut Transaction<'_, Postgres>,
+    workspace_id: Uuid,
+    ids: &[Uuid],
+    codes: &[&str],
+) -> Result<Vec<ExistingContextSnapshot>, RepositoryError> {
+    Ok(sqlx::query_as::<_, ExistingContextRow>(
+        "SELECT c.id,c.code,p.enabled AS channel_enabled,p.required_rule_codes,p.require_valid_entity FROM attribute_contexts c LEFT JOIN publication_channels p ON p.workspace_id=c.workspace_id AND p.context_id=c.id WHERE c.workspace_id=$1 AND (c.id=ANY($2) OR c.code=ANY($3))",
+    )
+    .bind(workspace_id)
+    .bind(ids)
+    .bind(codes)
+    .fetch_all(&mut **tx)
+    .await?
+    .into_iter()
+    .map(ExistingContextRow::into_snapshot)
+    .collect())
+}
+
 #[derive(sqlx::FromRow)]
 struct PriorSeedStep {
     resource_kind: String,
@@ -933,38 +987,30 @@ impl CatalogRepository {
     ) -> Result<SeedWorkspaceSnapshot, RepositoryError> {
         let workspace_id = self.workspace_id.0;
         let mut seed = SeedWorkspaceSnapshot::default();
-        for requested in context_mappings {
-            let id: Uuid = sqlx::query_scalar(
-                "SELECT id FROM attribute_contexts WHERE workspace_id=$1 AND code=$2",
-            )
-            .bind(workspace_id)
-            .bind(&requested.code)
-            .fetch_optional(&mut **tx)
+        let requested_codes = context_mappings
+            .iter()
+            .map(|requested| requested.code.as_str())
+            .collect::<Vec<_>>();
+        let mut found = existing_contexts(tx, workspace_id, &[], &requested_codes)
             .await?
-            .ok_or_else(|| {
+            .into_iter()
+            .map(|context| (context.code.clone(), context))
+            .collect::<std::collections::HashMap<_, _>>();
+        for requested in context_mappings {
+            let context = found.remove(&requested.code).ok_or_else(|| {
                 RepositoryError::InvalidSolutionPackPlan(format!(
                     "existing context '{}' was not found",
                     requested.code
                 ))
             })?;
-            seed.existing_contexts.insert(
-                requested.key.clone(),
-                ExistingContextSnapshot {
-                    id,
-                    code: requested.code.clone(),
-                    publication_channel: existing_publication_channel(tx, workspace_id, id).await?,
-                },
-            );
+            seed.existing_contexts
+                .insert(requested.key.clone(), context);
         }
+        // A code the planner would reject cannot name an existing resource.
         let codes = |resources: &[crate::solution_packs::SolutionPackResource]| {
             resources
                 .iter()
-                .map(|resource| {
-                    format!(
-                        "{prefix}_{}",
-                        resource.key.rsplit_once('/').map_or("", |(_, code)| code)
-                    )
-                })
+                .filter_map(|resource| physical_code(prefix, &resource.key).ok())
                 .collect::<Vec<_>>()
         };
         seed.rule_codes = sqlx::query_scalar::<_, String>(
@@ -1090,7 +1136,7 @@ impl CatalogRepository {
             .await?;
         for file in &staged {
             let bytes = pack.file(&file.path).expect("validated sample file exists");
-            let _ = object_store
+            let stored = object_store
                 .put(
                     &file.object_key,
                     StoredObject {
@@ -1098,13 +1144,15 @@ impl CatalogRepository {
                         content_type: Some(file.media_type.clone()),
                     },
                 )
-                .await;
-            let verified = get_object_for_integrity(object_store, &file.object_key, bytes.len())
                 .await
-                .is_ok_and(|stored| {
-                    stored.bytes.len() == bytes.len()
-                        && format!("{:x}", Sha256::digest(&stored.bytes)) == file.sha256
-                });
+                .is_ok();
+            let verified = stored
+                && get_object_for_integrity(object_store, &file.object_key, bytes.len())
+                    .await
+                    .is_ok_and(|stored| {
+                        stored.bytes.len() == bytes.len()
+                            && format!("{:x}", Sha256::digest(&stored.bytes)) == file.sha256
+                    });
             if !verified {
                 sqlx::query("UPDATE file_upload_intents SET cleanup_after=clock_timestamp() WHERE workspace_id=$1 AND object_key=ANY($2) AND state='pending'")
                     .bind(self.workspace_id.0)
@@ -1746,30 +1794,32 @@ impl CatalogRepository {
             }
             None => Vec::new(),
         };
+        // Contexts an earlier application provided map back to themselves
+        // while they keep the code it gave them.
         let mut seed = seed;
-        for step in &prior_seed_steps {
-            if step.resource_kind == PlanResourceKind::Context.as_str() {
-                let current: Option<String> = sqlx::query_scalar(
-                    "SELECT code FROM attribute_contexts WHERE workspace_id=$1 AND id=$2",
-                )
-                .bind(workspace_id)
-                .bind(step.target_id)
-                .fetch_optional(&mut *tx)
-                .await?;
-                if current.as_deref() == Some(step.target_code.as_str())
+        let prior_context_steps = prior_seed_steps
+            .iter()
+            .filter(|step| {
+                step.resource_kind == PlanResourceKind::Context.as_str()
                     && pack.context(&step.logical_key).is_some()
-                {
-                    let channel =
-                        existing_publication_channel(&mut tx, workspace_id, step.target_id).await?;
-                    seed.existing_contexts.insert(
-                        step.logical_key.clone(),
-                        ExistingContextSnapshot {
-                            id: step.target_id,
-                            code: step.target_code.clone(),
-                            publication_channel: channel,
-                        },
-                    );
-                }
+            })
+            .collect::<Vec<_>>();
+        let prior_context_ids = prior_context_steps
+            .iter()
+            .map(|step| step.target_id)
+            .collect::<Vec<_>>();
+        let current_contexts = existing_contexts(&mut tx, workspace_id, &prior_context_ids, &[])
+            .await?
+            .into_iter()
+            .map(|context| (context.id, context))
+            .collect::<std::collections::HashMap<_, _>>();
+        for step in prior_context_steps {
+            if let Some(context) = current_contexts
+                .get(&step.target_id)
+                .filter(|context| context.code == step.target_code)
+            {
+                seed.existing_contexts
+                    .insert(step.logical_key.clone(), context.clone());
             }
         }
         let mut draft = build_solution_pack_plan(

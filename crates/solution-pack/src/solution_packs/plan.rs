@@ -634,6 +634,18 @@ pub fn build_solution_pack_plan(
     Ok(draft)
 }
 
+/// The workspace code a plan generates for a pack resource that it creates:
+/// the plan prefix and the resource's pack-local code.
+pub fn physical_code(prefix: &str, logical_key: &str) -> Result<String, SolutionPackError> {
+    let code = format!("{prefix}_{}", resource_code(logical_key));
+    if code.len() > MAX_IDENTIFIER_BYTES || !is_valid_stable_code(&code) {
+        return invalid(format!(
+            "prefix produces an invalid physical code for '{logical_key}'"
+        ));
+    }
+    Ok(code)
+}
+
 const EXPLORE_NAVIGATION_KEY: &str = "workspace/explore-navigation";
 const LEXICON_KEY: &str = "workspace/lexicon";
 const EXTENSION_LAYOUT_KEY: &str = "workspace/extension-layout";
@@ -691,13 +703,7 @@ fn plan_resource_mappings(
                 }),
             }
         } else {
-            let generated_code = format!("{prefix}_{}", resource_code(logical_key));
-            if generated_code.len() > MAX_IDENTIFIER_BYTES || !is_valid_stable_code(&generated_code)
-            {
-                return invalid(format!(
-                    "prefix produces an invalid physical code for '{logical_key}'"
-                ));
-            }
+            let generated_code = physical_code(prefix, logical_key)?;
             PlannedMapping {
                 resource_kind: PlanResourceKind::Blueprint,
                 logical_key: logical_key.clone(),
