@@ -47,7 +47,9 @@ import {
   statusTransitionDenial,
 } from '../status';
 import { useStatusTransitionDenialText } from '../useStatusTransitionDenialText';
-import { checkViolationError, violationFieldErrors } from '../checkViolations';
+import { checkViolationError } from '../../../api/checkViolations';
+import { violationFieldErrors } from '../checkViolations';
+import { useViolationText } from '../../../components/useViolationText';
 import { ApiErrorAlert } from '../../../components/CheckViolationsAlert';
 import type { StatusTransitionAccess } from '../api';
 import { EntityFormAttributeEditor } from './EntityFormAttributeEditor';
@@ -152,6 +154,7 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
     ref,
   ) => {
     const { t } = useTranslation();
+    const violationText = useViolationText();
     const denialText = useStatusTransitionDenialText();
     // A versioned editing session keeps values and its concurrency token from
     // the same snapshot. Refetches must not silently rebase unsaved edits.
@@ -190,6 +193,7 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
       ? violationFieldErrors(
           checks.violations,
           editableAttributes.map((attribute) => attribute.code),
+          violationText,
         )
       : undefined;
     const serverFieldErrors = Object.fromEntries(

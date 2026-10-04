@@ -1,54 +1,16 @@
-import { ApiRequestError } from '../../api/request';
-import { statusTransitionDenialCodes } from './constants';
-import {
-  checkViolationDetailsSchema,
-  type CheckViolation,
-  type EntityPublicationReadiness,
-} from './schemas';
-
-/** API error codes whose `details.violations` list failed declarative checks. */
-export const checkViolationErrorCodes = {
-  entityCheckFailed: 'entity_check_failed',
-  transitionConditionsUnmet: statusTransitionDenialCodes.conditionsUnmet,
-  ruleViolation: 'rule_violation',
-  publicationChecksFailed: 'publication_checks_failed',
-} as const;
-
-const violationCodes = new Set<string>(Object.values(checkViolationErrorCodes));
-
-export type CheckViolationError = {
-  message: string;
-  violations: CheckViolation[];
-  /** Publication channel code for `publication_checks_failed`. */
-  context?: string;
-};
-
-/** Reads structured check violations from an API error, if it carries them. */
-export const checkViolationError = (
-  error: unknown,
-): CheckViolationError | undefined => {
-  if (
-    !(error instanceof ApiRequestError) ||
-    !error.code ||
-    !violationCodes.has(error.code)
-  )
-    return undefined;
-  const details = checkViolationDetailsSchema.safeParse(error.details);
-  if (!details.success) return undefined;
-  return {
-    message: error.message,
-    violations: details.data.violations,
-    ...(details.data.context ? { context: details.data.context } : {}),
-  };
-};
+import type { CheckViolation } from '../../api/checkViolations';
+import type { EntityPublicationReadiness } from './schemas';
 
 /**
  * Places each violation's message on the form fields it involves. Violations
  * that name no field shown in the form are returned for a summary instead.
+ * Pass `text` to word each message, for example with its failing contexts.
  */
 export const violationFieldErrors = (
   violations: readonly CheckViolation[],
   fieldCodes: readonly string[],
+  text: (violation: CheckViolation) => string = (violation) =>
+    violation.message,
 ) => {
   const fields = new Set(fieldCodes);
   const fieldErrors: Record<string, string> = {};
@@ -59,10 +21,11 @@ export const violationFieldErrors = (
       unplaced.push(violation);
       continue;
     }
+    const message = text(violation);
     for (const code of involved)
       fieldErrors[code] = fieldErrors[code]
-        ? `${fieldErrors[code]} ${violation.message}`
-        : violation.message;
+        ? `${fieldErrors[code]} ${message}`
+        : message;
   }
   return { fieldErrors, unplaced };
 };

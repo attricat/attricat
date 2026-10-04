@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ApiRequestError } from '../../api/request';
+import { checkViolationError } from '../../api/checkViolations';
 import {
-  checkViolationError,
   publicationReadinessText,
   readinessForContext,
   violationFieldErrors,
@@ -89,6 +89,16 @@ describe('check violations', () => {
       },
       unplaced: [linked, hidden],
     });
+  });
+
+  it('words field messages with the given formatter', () => {
+    expect(
+      violationFieldErrors(
+        [violation('sku', ['sku'], 'SKU is required')],
+        ['sku'],
+        (item) => `${item.message} (${item.contexts.join(', ')})`,
+      ).fieldErrors,
+    ).toEqual({ sku: 'SKU is required (default)' });
   });
 
   it('joins the failing channel checks', () => {

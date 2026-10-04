@@ -6,6 +6,7 @@ import { listAssignableRoles, listInvitations } from './api';
 import { CreateUserInviteForm } from './CreateUserInviteForm';
 import { InvitationList } from './InvitationList';
 import { InviteExistingUserForm } from './InviteExistingUserForm';
+import { principalQueryKeys } from '../principals/queryKeys';
 import { workspaceQueryKeys } from './queryKeys';
 
 export const WorkspaceInvitationsSection = ({
@@ -28,8 +29,13 @@ export const WorkspaceInvitationsSection = ({
     queryKey: workspaceQueryKeys.assignableRoles(),
     queryFn: listAssignableRoles,
   });
-  const refresh = () =>
-    client.invalidateQueries({ queryKey: workspaceQueryKeys.invitations() });
+  const refresh = () => {
+    // Joined members become assignable, so refresh the assignee directory.
+    void client.invalidateQueries({ queryKey: principalQueryKeys.directory() });
+    return client.invalidateQueries({
+      queryKey: workspaceQueryKeys.invitations(),
+    });
+  };
   if (!canManage) {
     return (
       <Alert severity="error">{t('workspace.notAuthorizedInvitations')}</Alert>

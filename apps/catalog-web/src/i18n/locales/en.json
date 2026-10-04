@@ -1540,6 +1540,7 @@
   "principals": {
     "loading": "Loading…",
     "unknown": "Unknown user or team ({{value}})",
+    "loadFailed": "Users and teams could not be loaded",
     "inactiveUser": "No longer an active member",
     "deletedTeam": "Deleted team",
     "users": "Users",

@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import type { CheckViolation } from '../features/entities/schemas';
+import type { CheckViolation } from '../api/checkViolations';
 
 /** One violation's message, naming the contexts in which it failed. */
 export const useViolationText = () => {

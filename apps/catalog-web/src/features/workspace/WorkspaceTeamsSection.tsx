@@ -9,6 +9,7 @@ import {
   DialogContent,
   DialogContentText,
   DialogTitle,
+  LinearProgress,
   List,
   ListItem,
   ListItemText,
@@ -32,6 +33,8 @@ import type { DirectoryUser, Team } from '../principals/schemas';
 import { usePrincipalDirectory } from '../principals/usePrincipalDirectory';
 
 type Editing = { team: Team | null } | null;
+/** The team keeps its name in the dialog while it fades out after closing. */
+type Deleting = { team: Team; open: boolean } | null;
 
 const TeamDialog = ({
   team,
@@ -150,16 +153,22 @@ export const WorkspaceTeamsSection = ({
   const { t } = useTranslation();
   const client = useQueryClient();
   const [editing, setEditing] = useState<Editing>(null);
-  const [deleting, setDeleting] = useState<Team | null>(null);
+  const [deleting, setDeleting] = useState<Deleting>(null);
   const teams = useQuery({ ...teamListOptions(), enabled: canManage });
   const directory = usePrincipalDirectory(canManage);
   const remove = useMutation({
     mutationFn: (team: Team) => deleteTeam(team.id),
     onSuccess: async () => {
       await client.invalidateQueries({ queryKey: principalQueryKeys.all() });
-      setDeleting(null);
+      closeDelete();
     },
   });
+  const openDelete = (team: Team) => {
+    remove.reset();
+    setDeleting({ team, open: true });
+  };
+  const closeDelete = () =>
+    setDeleting((current) => current && { ...current, open: false });
   if (!canManage)
     return (
       <Alert severity="error">{t('workspace.notAuthorizedMembers')}</Alert>
@@ -177,8 +186,12 @@ export const WorkspaceTeamsSection = ({
         {t('workspace.teamsDescription')}
       </Typography>
       {teams.isError && <Alert severity="error">{teams.error.message}</Alert>}
+      {directory.isError && (
+        <Alert severity="error">{directory.error.message}</Alert>
+      )}
       {remove.isError && <Alert severity="error">{remove.error.message}</Alert>}
       <Paper>
+        {teams.isPending && <LinearProgress aria-label={t('app.loading')} />}
         <List>
           {teams.data?.map((team) => (
             <ListItem
@@ -200,7 +213,7 @@ export const WorkspaceTeamsSection = ({
                       team: team.name,
                     })}
                     color="error"
-                    onClick={() => setDeleting(team)}
+                    onClick={() => openDelete(team)}
                     size="small"
                   >
                     {t('workspace.deleteTeam')}
@@ -238,21 +251,23 @@ export const WorkspaceTeamsSection = ({
           users={users}
         />
       )}
-      <Dialog onClose={() => setDeleting(null)} open={Boolean(deleting)}>
+      <Dialog
+        onClose={closeDelete}
+        open={Boolean(deleting?.open)}
+        slotProps={{ transition: { onExited: () => setDeleting(null) } }}
+      >
         <DialogTitle>{t('workspace.deleteTeam')}</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            {t('workspace.deleteTeamConfirm', { team: deleting?.name })}
+            {t('workspace.deleteTeamConfirm', { team: deleting?.team.name })}
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDeleting(null)}>
-            {t('workspace.cancel')}
-          </Button>
+          <Button onClick={closeDelete}>{t('workspace.cancel')}</Button>
           <Button
             color="error"
             disabled={remove.isPending}
-            onClick={() => deleting && remove.mutate(deleting)}
+            onClick={() => deleting && remove.mutate(deleting.team)}
             variant="contained"
           >
             {t('workspace.deleteTeam')}

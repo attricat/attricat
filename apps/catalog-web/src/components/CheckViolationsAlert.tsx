@@ -1,8 +1,10 @@
 import { Alert, AlertTitle, Box, Typography } from '@mui/material';
 import type { SxProps, Theme } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import type { CheckViolation } from '../features/entities/schemas';
-import { checkViolationError } from '../features/entities/checkViolations';
+import {
+  checkViolationError,
+  type CheckViolation,
+} from '../api/checkViolations';
 import { useViolationText } from './useViolationText';
 
 type Props = {

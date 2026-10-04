@@ -1,3 +1,5 @@
+import { checkViolationErrorCodes } from '../../api/checkViolations';
+
 /** Largest integer the API accepts for component protocol versions (Rust u32). */
 export const MAX_COMPONENT_PROTOCOL_VERSION = 4_294_967_295;
 
@@ -98,7 +100,7 @@ export const statusTransitionDenialCodes = {
   forbidden: 'status_transition_forbidden',
   separationOfDuties: 'status_separation_of_duties',
   /** Also the API error code whose details list the unmet conditions. */
-  conditionsUnmet: 'transition_conditions_unmet',
+  conditionsUnmet: checkViolationErrorCodes.transitionConditionsUnmet,
 } as const;
 export type StatusTransitionDenialCode =
   (typeof statusTransitionDenialCodes)[keyof typeof statusTransitionDenialCodes];

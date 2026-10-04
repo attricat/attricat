@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { checkViolationSchema } from '../../api/checkViolations';
 import { attributeContextSchema } from '../contexts/api';
 import { fileMetadataSchema } from '../files/schemas';
 import { attributeValueKinds, attributeValueTypes } from './valueTypes';
@@ -347,27 +348,6 @@ export const entityPublicationStatusSchema = z.object({
   published_at: z.string().datetime().nullable(),
   published_by_user_id: uuidSchema.nullable(),
 });
-/** One failed declarative check, condition or rule (`error.details.violations`). */
-export const checkViolationSchema = z.object({
-  source: z.string(),
-  code: z.string(),
-  message: z.string(),
-  contexts: z.array(z.string()).default([]),
-  attributes: z.array(z.string()).default([]),
-  severity: z.string().optional(),
-  transition: z
-    .object({
-      attribute_code: z.string(),
-      from: z.string().nullable(),
-      to: z.string().nullable(),
-    })
-    .optional(),
-  evidence: z.unknown().optional(),
-});
-export const checkViolationDetailsSchema = z.object({
-  violations: z.array(checkViolationSchema),
-  context: z.string().optional(),
-});
 export const entityPublicationReadinessSchema = z.object({
   context_id: uuidSchema,
   context_code: z.string(),
@@ -674,7 +654,7 @@ export type Entity = z.infer<typeof entitySchema>;
 export type EntityPublicationStatus = z.infer<
   typeof entityPublicationStatusSchema
 >;
-export type CheckViolation = z.infer<typeof checkViolationSchema>;
+export type { CheckViolation } from '../../api/checkViolations';
 export type EntityPublicationReadiness = z.infer<
   typeof entityPublicationReadinessSchema
 >;

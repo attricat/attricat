@@ -622,7 +622,9 @@ describe('EntityForm', () => {
       error,
     });
     expect(
-      screen.getByText('Valid until must not be before valid from'),
+      screen.getByText(
+        'Valid until must not be before valid from (contexts: default)',
+      ),
     ).toBeTruthy();
     expect(screen.getByText('Entity checks failed')).toBeTruthy();
     expect(
@@ -638,7 +640,9 @@ describe('EntityForm', () => {
       },
     );
     expect(
-      screen.queryByText('Valid until must not be before valid from'),
+      screen.queryByText(
+        'Valid until must not be before valid from (contexts: default)',
+      ),
     ).toBeNull();
   });
 });

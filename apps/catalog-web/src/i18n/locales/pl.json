@@ -1265,7 +1265,7 @@
     "teamCodeHelp": "Litery, cyfry, - i _. Kodu nie można później zmienić.",
     "teamMembers": "Członkowie",
     "teamMemberCount_one": "{{count}} członek",
-    "teamMemberCount_few": "{{count}} członków",
+    "teamMemberCount_few": "{{count}} członkowie",
     "teamMemberCount_many": "{{count}} członków",
     "teamMemberCount_other": "{{count}} członka",
     "noTeams": "Nie ma jeszcze zespołów.",
@@ -1584,6 +1584,7 @@
   "principals": {
     "loading": "Wczytywanie…",
     "unknown": "Nieznany użytkownik lub zespół ({{value}})",
+    "loadFailed": "Nie udało się wczytać użytkowników i zespołów",
     "inactiveUser": "Nie jest już aktywnym członkiem",
     "deletedTeam": "Usunięty zespół",
     "users": "Użytkownicy",

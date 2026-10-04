@@ -20,7 +20,7 @@ import { useReusableAttributeAttachment } from './components/useReusableAttribut
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { valuesForForm } from './entityForm';
-import { checkViolationError } from './checkViolations';
+import { checkViolationError } from '../../api/checkViolations';
 import { statusParentContexts } from './status';
 import { entityQueryKeys } from './queryKeys';
 import { entityStatusTransitionsOptions } from './queryOptions';

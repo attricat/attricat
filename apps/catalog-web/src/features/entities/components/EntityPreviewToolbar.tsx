@@ -171,11 +171,14 @@ export const EntityPreviewToolbar = ({
         </Tooltip>
       )}
       {publication && notReady && (
-        <Tooltip enterTouchDelay={0} title={readinessText}>
+        // Focusable so keyboard users can open the reasons; they also form
+        // the chip's accessible description.
+        <Tooltip describeChild enterTouchDelay={0} title={readinessText}>
           <Chip
             color="warning"
             label={t('entities.publication.notReady')}
             size="small"
+            tabIndex={0}
           />
         </Tooltip>
       )}

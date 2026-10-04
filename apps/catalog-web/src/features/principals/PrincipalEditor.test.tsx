@@ -80,4 +80,26 @@ describe('user-or-team attributes', () => {
     expect(await screen.findByText('Former')).toBeTruthy();
     expect(screen.getByText('No longer an active member')).toBeTruthy();
   });
+
+  it('report a failed directory load instead of an unknown assignee', async () => {
+    vi.mocked(getDirectory).mockRejectedValue(new Error('Directory down'));
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <ScalarAttributeEditor
+          attribute={assignee}
+          value={`user:${ada}`}
+          disabled={false}
+          onChange={vi.fn()}
+        />
+      </QueryClientProvider>,
+    );
+    expect(
+      await screen.findByText('Users and teams could not be loaded'),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Unknown user or team/)).toBeNull();
+  });
 });

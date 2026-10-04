@@ -17,6 +17,7 @@ import { useRef, useState } from 'react';
 import { UserAvatar } from '../../components/UserAvatar';
 import { userAvatarSizes } from '../../components/userAvatars';
 import { authQueryKeys } from '../auth/queryKeys';
+import { principalQueryKeys } from '../principals/queryKeys';
 import { useTranslation } from 'react-i18next';
 import {
   ensureActiveScopeTarget,
@@ -63,6 +64,8 @@ export const WorkspaceMembersSection = ({
   });
   const refresh = () => {
     void client.invalidateQueries({ queryKey: authQueryKeys.session() });
+    // Assignee pickers list members, so membership changes refresh them too.
+    void client.invalidateQueries({ queryKey: principalQueryKeys.directory() });
     return client.invalidateQueries({ queryKey: workspaceQueryKeys.members() });
   };
   const form = useForm({

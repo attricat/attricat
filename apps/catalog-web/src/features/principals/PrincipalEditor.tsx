@@ -30,7 +30,9 @@ export const PrincipalEditor = ({
       ? [{ value, principal: current }, ...assignable]
       : assignable;
   const selected = options.find((option) => option.value === value) ?? null;
-  const unknown = Boolean(value) && !selected && !directory.isPending;
+  // A reference is unknown only once the directory has loaded without it.
+  const loadFailed = directory.isError;
+  const unknown = Boolean(value) && !selected && directory.isSuccess;
   return (
     <Autocomplete
       disabled={disabled}
@@ -85,9 +87,14 @@ export const PrincipalEditor = ({
           {...params}
           label={attributeLabel(attribute)}
           required={required}
-          error={Boolean(error) || unknown}
+          error={Boolean(error) || loadFailed || unknown}
           helperText={
-            error ?? (unknown ? t('principals.unknown', { value }) : helperText)
+            error ??
+            (loadFailed
+              ? t('principals.loadFailed')
+              : unknown
+                ? t('principals.unknown', { value })
+                : helperText)
           }
         />
       )}

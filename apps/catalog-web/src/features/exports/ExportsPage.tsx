@@ -16,6 +16,8 @@ import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { RouterButton } from '../../components/RouterLink';
+import { currentSession } from '../auth/api';
+import { authQueryKeys } from '../auth/queryKeys';
 import { listContexts } from '../contexts/api';
 import { contextQueryKeys } from '../contexts/queryKeys';
 import {
@@ -41,8 +43,15 @@ export const ExportsPage = () => {
     queryKey: exportQueryKeys.channels(),
     queryFn: listPublicationChannels,
   });
+  const session = useQuery({
+    queryKey: authQueryKeys.session(),
+    queryFn: currentSession,
+  });
   // Rule codes are suggestions only; a reader without rule access can type them.
-  const rules = useQuery(ruleDefinitionsOptions());
+  const rules = useQuery({
+    ...ruleDefinitionsOptions(),
+    enabled: session.data?.capabilities?.rules_read === true,
+  });
   const ruleCodes = [
     ...new Set(rules.data?.map((rule) => rule.code) ?? []),
   ].sort();
