@@ -19,3 +19,5 @@ export const ERROR_FINDING_SEVERITIES: readonly string[] = [
   'error',
   'critical',
 ];
+export const RULE_STATUS_PUBLISHED = 'published';
+export const RULE_HAS_EXISTING_VIOLATIONS = 'rule_has_existing_violations';

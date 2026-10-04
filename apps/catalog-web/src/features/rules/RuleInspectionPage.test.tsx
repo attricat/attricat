@@ -1,13 +1,16 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { forwardRef, type ComponentPropsWithoutRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
+import { ApiRequestError } from '../../api/request';
 import { currentSession } from '../auth/api';
 import {
   acknowledgeFinding,
+  disableRule,
+  enableRuleRevision,
   listFindings,
   listRules,
   runRuleNow,
@@ -29,6 +32,8 @@ vi.mock('@tanstack/react-router', () => ({
 vi.mock('../auth/api', () => ({ currentSession: vi.fn() }));
 vi.mock('./api', () => ({
   acknowledgeFinding: vi.fn(),
+  disableRule: vi.fn(),
+  enableRuleRevision: vi.fn(),
   listFindings: vi.fn(),
   listRuleRuns: vi.fn(),
   listRules: vi.fn(),
@@ -110,7 +115,7 @@ describe('RuleInspectionPage', () => {
     renderPage('rules');
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: 'Dry run' }));
-    expect(runRuleNow).toHaveBeenCalledWith(id, true);
+    expect(runRuleNow).toHaveBeenCalledWith(id, 1, true);
     expect(
       (screen.getByRole('button', { name: 'Dry run' }) as HTMLButtonElement)
         .disabled,
@@ -185,5 +190,76 @@ describe('RuleInspectionPage', () => {
     expect((await screen.findByRole('alert')).textContent).toBe(
       'finding was already resolved',
     );
+  });
+
+  it('enables a published revision from its switch', async () => {
+    vi.mocked(currentSession).mockResolvedValue(manager);
+    vi.mocked(listRules).mockResolvedValue([rule]);
+    vi.mocked(enableRuleRevision).mockResolvedValue({
+      ...rule,
+      enabled_version: 1,
+    });
+    renderPage('rules');
+    await userEvent
+      .setup()
+      .click(await screen.findByRole('switch', { name: 'Enable Check v1' }));
+    expect(enableRuleRevision).toHaveBeenCalledWith(id, 1, undefined);
+  });
+
+  it('marks only the enabled revision and disables the rule', async () => {
+    vi.mocked(currentSession).mockResolvedValue(manager);
+    vi.mocked(listRules).mockResolvedValue([
+      { ...rule, version: 2, enabled_version: 2 },
+      { ...rule, version: 1, enabled_version: 2 },
+      { ...rule, version: 3, status: 'draft', enabled_version: 2 },
+    ]);
+    vi.mocked(disableRule).mockResolvedValue({
+      ...rule,
+      enabled_version: null,
+    });
+    renderPage('rules');
+    const enabled = await screen.findByRole('switch', {
+      name: 'Enable Check v2',
+    });
+    const older = screen.getByRole('switch', { name: 'Enable Check v1' });
+    expect((enabled as HTMLInputElement).checked).toBe(true);
+    expect((older as HTMLInputElement).checked).toBe(false);
+    const [, v1Row, draftRow] = screen
+      .getAllByRole('row')
+      .filter((row) => row.textContent?.includes('Check'));
+    expect(within(v1Row).getByText('Disabled')).toBeTruthy();
+    expect(within(draftRow).queryByRole('switch')).toBeNull();
+    expect(within(draftRow).getByText('Draft')).toBeTruthy();
+
+    await userEvent.setup().click(enabled);
+    expect(disableRule).toHaveBeenCalledWith(id);
+  });
+
+  it('offers to accept the existing violations of an enforcing rule', async () => {
+    vi.mocked(currentSession).mockResolvedValue(manager);
+    vi.mocked(listRules).mockResolvedValue([rule]);
+    vi.mocked(enableRuleRevision)
+      .mockRejectedValueOnce(
+        new ApiRequestError(
+          409,
+          'the latest dry run found 3 existing violations',
+          'rule_has_existing_violations',
+          { existing_violations: 3 },
+        ),
+      )
+      .mockResolvedValueOnce({ ...rule, enabled_version: 1 });
+    renderPage('rules');
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByRole('switch', { name: 'Enable Check v1' }),
+    );
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain(
+      'the latest dry run found 3 existing violations',
+    );
+    await user.click(
+      within(alert).getByRole('button', { name: 'Enable anyway' }),
+    );
+    expect(enableRuleRevision).toHaveBeenLastCalledWith(id, 1, true);
   });
 });

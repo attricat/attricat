@@ -1,11 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import {
-  createEntity,
-  createEntityBlueprint,
-  request,
-  scalar,
-  suffix,
-} from './helpers';
+import { createEntity, createEntityBlueprint, scalar, suffix } from './helpers';
 
 // Run history rows do not name their rule, but they are listed newest first.
 const expectLatestRun = async (page: Page, row: string) => {
@@ -69,22 +63,22 @@ attribute_code = "${attribute}"`,
   const ruleRow = page.getByRole('row').filter({ hasText: ruleName });
   await expect(ruleRow).toContainText('Disabled');
   await ruleRow.getByRole('button', { name: 'Run now' }).click();
-  await expect(page.getByRole('alert')).toBeVisible();
+  await expect(page.getByRole('alert')).toContainText(
+    'rule has no enabled revision to run',
+  );
 
-  // The web app cannot enable rules.
-  const rules =
-    await request<Array<{ id: string; name: string; version: number }>>(
-      '/rules',
-    );
-  const rule = rules.find(({ name }) => name === ruleName)!;
-  await request(`/rules/${rule.id}/versions/${rule.version}/enable`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: '{}',
+  const toggle = ruleRow.getByRole('switch', {
+    name: `Enable ${ruleName} v1`,
   });
-
-  await page.reload();
+  // The switch reflects the saved lifecycle, so it flips after the response.
+  await toggle.click();
+  await expect(toggle).toBeChecked();
   await expect(ruleRow).toContainText('Enabled');
+  await expect(
+    page.getByText('rule has no enabled revision to run'),
+  ).toBeHidden();
+  await page.reload();
+  await expect(toggle).toBeChecked();
   await ruleRow.getByRole('button', { name: 'Dry run' }).click();
   await expectLatestRun(page, 'manual (dry run) Completed 2 1');
   await openFindings(page);
@@ -120,4 +114,11 @@ attribute_code = "${attribute}"`,
   await page.goto(`/entities/${missing.id}`);
   await expect(page.getByText('Fixed summary')).toBeVisible();
   await expect(page.getByText('1 data quality finding')).toBeHidden();
+
+  await page.goto('/manage/rules');
+  await toggle.click();
+  await expect(toggle).not.toBeChecked();
+  await expect(ruleRow).toContainText('Disabled');
+  await page.reload();
+  await expect(toggle).not.toBeChecked();
 });

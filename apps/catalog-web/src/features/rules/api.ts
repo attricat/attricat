@@ -37,7 +37,7 @@ export const acknowledgeFinding = (findingId: string) =>
   request(`/api/rule-findings/${id(findingId)}/acknowledge`, findingSchema, {
     method: 'POST',
   });
-export const runRuleNow = (ruleId: string, dryRun: boolean) =>
+export const runRuleNow = (ruleId: string, version: number, dryRun: boolean) =>
   request(`/api/rules/${id(ruleId)}/run-now`, z.object({ id: z.uuid() }), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -45,5 +45,24 @@ export const runRuleNow = (ruleId: string, dryRun: boolean) =>
       dry_run: dryRun,
       entity_id: null,
       idempotency_key: crypto.randomUUID(),
+      version: z.number().int().positive().parse(version),
     }),
   });
+export const enableRuleRevision = (
+  ruleId: string,
+  version: number,
+  acceptExistingViolations = false,
+) =>
+  request(
+    `/api/rules/${id(ruleId)}/versions/${z.number().int().positive().parse(version)}/enable`,
+    ruleSchema,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(
+        acceptExistingViolations ? { accept_existing_violations: true } : {},
+      ),
+    },
+  );
+export const disableRule = (ruleId: string) =>
+  request(`/api/rules/${id(ruleId)}/disable`, ruleSchema, { method: 'POST' });

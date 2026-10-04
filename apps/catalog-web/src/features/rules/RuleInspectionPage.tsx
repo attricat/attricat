@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createLink } from '@tanstack/react-router';
-import { Alert, Box, Tab, Tabs, Typography } from '@mui/material';
+import { Alert, Box, Button, Tab, Tabs, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import { ApiRequestError } from '../../api/request';
 import { ApiErrorAlert } from '../../components/CheckViolationsAlert';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
@@ -9,11 +10,15 @@ import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
 import {
   acknowledgeFinding,
+  disableRule,
+  enableRuleRevision,
   listFindings,
   listRuleRuns,
   runRuleNow,
+  type Rule,
 } from './api';
 import {
+  RULE_HAS_EXISTING_VIOLATIONS,
   RULE_SECTION_FINDINGS,
   RULE_SECTION_RULES,
   RULE_SECTION_RUNS,
@@ -67,10 +72,32 @@ export const RuleInspectionPage = ({
     onSuccess: refresh,
   });
   const run = useMutation({
-    mutationFn: ({ id, dryRun }: { id: string; dryRun: boolean }) =>
-      runRuleNow(id, dryRun),
+    mutationFn: ({ rule, dryRun }: { rule: Rule; dryRun: boolean }) =>
+      runRuleNow(rule.id, rule.version, dryRun),
     onSuccess: refresh,
   });
+  const toggle = useMutation({
+    mutationFn: ({
+      rule,
+      enabled,
+      acceptExistingViolations,
+    }: {
+      rule: Rule;
+      enabled: boolean;
+      acceptExistingViolations?: boolean;
+    }) =>
+      enabled
+        ? enableRuleRevision(rule.id, rule.version, acceptExistingViolations)
+        : disableRule(rule.id),
+    onSuccess: refresh,
+  });
+  // Existing violations of an enforcing rule may be accepted explicitly.
+  const violationsToAccept =
+    toggle.error instanceof ApiRequestError &&
+    toggle.error.code === RULE_HAS_EXISTING_VIOLATIONS &&
+    toggle.variables
+      ? toggle.variables
+      : undefined;
 
   if (session.isPending) {
     return (
@@ -123,6 +150,33 @@ export const RuleInspectionPage = ({
         {section === RULE_SECTION_RULES && run.error && (
           <ApiErrorAlert error={run.error} sx={{ mt: 3 }} />
         )}
+        {section === RULE_SECTION_RULES &&
+          toggle.error &&
+          (violationsToAccept ? (
+            <Alert
+              action={
+                <Button
+                  color="inherit"
+                  disabled={toggle.isPending}
+                  onClick={() =>
+                    toggle.mutate({
+                      ...violationsToAccept,
+                      acceptExistingViolations: true,
+                    })
+                  }
+                  size="small"
+                >
+                  {t('rules.enableAnyway')}
+                </Button>
+              }
+              severity="warning"
+              sx={{ mt: 3 }}
+            >
+              {toggle.error.message}
+            </Alert>
+          ) : (
+            <ApiErrorAlert error={toggle.error} sx={{ mt: 3 }} />
+          ))}
         {section === RULE_SECTION_FINDINGS && acknowledge.error && (
           <ApiErrorAlert error={acknowledge.error} sx={{ mt: 3 }} />
         )}
@@ -130,8 +184,15 @@ export const RuleInspectionPage = ({
           <RulesSection
             canManage={canManage}
             error={rules.isError}
-            onRun={(id, dryRun) => run.mutate({ id, dryRun })}
-            running={run.isPending}
+            onRun={(rule, dryRun) => {
+              toggle.reset();
+              run.mutate({ rule, dryRun });
+            }}
+            onToggle={(rule, enabled) => {
+              run.reset();
+              toggle.mutate({ rule, enabled });
+            }}
+            running={run.isPending || toggle.isPending}
             rules={rules.data}
           />
         )}

@@ -57,8 +57,7 @@ attribute_code = "summary"`,
   const entity = await createEntity(blueprint, [
     scalar('title', 'Exported entity'),
   ]);
-  // Channels may only require enabled rules, and the web app cannot enable
-  // blueprint rules.
+  // Channels may only require enabled rules.
   const rules =
     await request<Array<{ id: string; code: string; version: number }>>(
       '/rules',
