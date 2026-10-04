@@ -423,98 +423,43 @@ async fn parse_plan_request(
                 archive = Some(Bytes::from(bytes));
             }
             Some("asset_map") => {
-                if asset_mappings.len() >= MAX_SOLUTION_PACK_PRESENTATION_ASSETS {
-                    return Err(ApiError::invalid_input(
-                        "too many presentation asset mappings".into(),
-                    ));
-                }
-                let mut bytes = Vec::new();
-                while let Some(chunk) = field.chunk().await.map_err(|error| {
-                    multipart_error(error, "invalid presentation asset mapping part")
-                })? {
-                    if metadata_bytes
-                        .saturating_add(bytes.len())
-                        .saturating_add(chunk.len())
-                        > 64 * 1024
-                    {
-                        return Err(ApiError::invalid_input(
-                            "mapping metadata exceeds the size limit".into(),
-                        ));
-                    }
-                    bytes.extend_from_slice(&chunk);
-                }
-                metadata_bytes += bytes.len();
-                let text = std::str::from_utf8(&bytes).map_err(|_| {
-                    ApiError::invalid_input("presentation asset mapping must be UTF-8".into())
-                })?;
-                asset_mappings.push(serde_json::from_str(text).map_err(|_| {
-                    ApiError::invalid_input(
-                        "presentation asset mapping must be a {key,id} JSON object".into(),
-                    )
-                })?);
+                read_mapping_part(
+                    &mut field,
+                    &mut metadata_bytes,
+                    &mut asset_mappings,
+                    MappingPart {
+                        label: "presentation asset mapping",
+                        shape: "{key,id}",
+                        max_parts: MAX_SOLUTION_PACK_PRESENTATION_ASSETS,
+                    },
+                )
+                .await?;
             }
             Some("context_map") => {
-                if context_mappings.len() >= MAX_SOLUTION_PACK_CONTEXTS {
-                    return Err(ApiError::invalid_input("too many context mappings".into()));
-                }
-                let mut bytes = Vec::new();
-                while let Some(chunk) = field
-                    .chunk()
-                    .await
-                    .map_err(|error| multipart_error(error, "invalid context mapping part"))?
-                {
-                    if metadata_bytes
-                        .saturating_add(bytes.len())
-                        .saturating_add(chunk.len())
-                        > 64 * 1024
-                    {
-                        return Err(ApiError::invalid_input(
-                            "mapping metadata exceeds the size limit".into(),
-                        ));
-                    }
-                    bytes.extend_from_slice(&chunk);
-                }
-                metadata_bytes += bytes.len();
-                let text = std::str::from_utf8(&bytes)
-                    .map_err(|_| ApiError::invalid_input("context mapping must be UTF-8".into()))?;
-                context_mappings.push(serde_json::from_str(text).map_err(|_| {
-                    ApiError::invalid_input(
-                        "context mapping must be a {key,code} JSON object".into(),
-                    )
-                })?);
+                read_mapping_part(
+                    &mut field,
+                    &mut metadata_bytes,
+                    &mut context_mappings,
+                    MappingPart {
+                        label: "context mapping",
+                        shape: "{key,code}",
+                        max_parts: MAX_SOLUTION_PACK_CONTEXTS,
+                    },
+                )
+                .await?;
             }
             Some("blueprint_map") => {
-                if mappings.len() >= MAX_SOLUTION_PACK_BLUEPRINTS {
-                    return Err(ApiError::invalid_input(
-                        "too many blueprint mappings".into(),
-                    ));
-                }
-                let mut bytes = Vec::new();
-                while let Some(chunk) = field
-                    .chunk()
-                    .await
-                    .map_err(|error| multipart_error(error, "invalid blueprint mapping part"))?
-                {
-                    if metadata_bytes
-                        .saturating_add(bytes.len())
-                        .saturating_add(chunk.len())
-                        > 64 * 1024
-                    {
-                        return Err(ApiError::invalid_input(
-                            "blueprint mapping metadata exceeds the size limit".into(),
-                        ));
-                    }
-                    bytes.extend_from_slice(&chunk);
-                }
-                metadata_bytes += bytes.len();
-                let text = std::str::from_utf8(&bytes).map_err(|_| {
-                    ApiError::invalid_input("blueprint mapping must be UTF-8".into())
-                })?;
-                mappings.push(serde_json::from_str(text).map_err(|_| {
-                    ApiError::invalid_input(
-                        "blueprint mapping must be a {key,code} JSON object".into(),
-                    )
-                })?);
+                read_mapping_part(
+                    &mut field,
+                    &mut metadata_bytes,
+                    &mut mappings,
+                    MappingPart {
+                        label: "blueprint mapping",
+                        shape: "{key,code}",
+                        max_parts: MAX_SOLUTION_PACK_BLUEPRINTS,
+                    },
+                )
+                .await?;
             }
             _ => {
                 return Err(ApiError::invalid_input(
@@ -529,9 +474,63 @@ async fn parse_plan_request(
     Ok((archive, mappings, asset_mappings, context_mappings))
 }
 
+/// Combined size bound of every mapping part in one plan request.
+const MAX_MAPPING_METADATA_BYTES: usize = 64 * 1024;
+
+/// One kind of JSON mapping part in a plan request.
+struct MappingPart {
+    label: &'static str,
+    shape: &'static str,
+    max_parts: usize,
+}
+
+/// Reads one JSON mapping part into `mappings`, keeping all mapping parts of
+/// the request within [`MAX_MAPPING_METADATA_BYTES`].
+async fn read_mapping_part<T: serde::de::DeserializeOwned>(
+    field: &mut axum::extract::multipart::Field<'_>,
+    metadata_bytes: &mut usize,
+    mappings: &mut Vec<T>,
+    part: MappingPart,
+) -> Result<(), ApiError> {
+    let MappingPart {
+        label,
+        shape,
+        max_parts,
+    } = part;
+    if mappings.len() >= max_parts {
+        return Err(ApiError::invalid_input(format!("too many {label}s")));
+    }
+    let mut bytes = Vec::new();
+    while let Some(chunk) = field
+        .chunk()
+        .await
+        .map_err(|error| multipart_error(error, format!("invalid {label} part")))?
+    {
+        if metadata_bytes
+            .saturating_add(bytes.len())
+            .saturating_add(chunk.len())
+            > MAX_MAPPING_METADATA_BYTES
+        {
+            return Err(ApiError::invalid_input(
+                "mapping metadata exceeds the size limit".into(),
+            ));
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    *metadata_bytes += bytes.len();
+    let text = std::str::from_utf8(&bytes)
+        .map_err(|_| ApiError::invalid_input(format!("{label} must be UTF-8")))?;
+    mappings.push(
+        serde_json::from_str(text).map_err(|_| {
+            ApiError::invalid_input(format!("{label} must be a {shape} JSON object"))
+        })?,
+    );
+    Ok(())
+}
+
 fn multipart_error(
     error: axum::extract::multipart::MultipartError,
-    message: &'static str,
+    message: impl Into<String>,
 ) -> ApiError {
     if error.status() == StatusCode::PAYLOAD_TOO_LARGE {
         ApiError::payload_too_large()
