@@ -898,6 +898,10 @@ enum WorkflowCommand {
         idempotency_key: String,
     },
     RunList,
+    /// Per-target outcomes of `referencing_entities_update` actions in a run.
+    RunTargets {
+        run_id: Uuid,
+    },
     RunReplay {
         run_id: Uuid,
     },
@@ -1276,8 +1280,16 @@ enum SolutionPackCommand {
             conflicts_with = "from_application"
         )]
         asset_maps: Vec<String>,
+        /// Use an existing context for a pack context instead of creating one
+        /// (`logical_key=existing_code`).
+        #[arg(
+            long = "map-context",
+            value_name = "LOGICAL_KEY=EXISTING_CODE",
+            conflicts_with = "from_application"
+        )]
+        context_maps: Vec<String>,
         /// Reuse unchanged resources from one completed application.
-        #[arg(long, conflicts_with_all = ["blueprint_maps", "asset_maps"])]
+        #[arg(long, conflicts_with_all = ["blueprint_maps", "asset_maps", "context_maps"])]
         from_application: Option<Uuid>,
         /// Explicitly select the pack's optional synthetic sample entities.
         #[arg(long)]
@@ -2705,6 +2717,16 @@ async fn workflow_command(
         WorkflowCommand::RunList => {
             request(client, server, Method::GET, "/workflow-runs", None).await
         }
+        WorkflowCommand::RunTargets { run_id } => {
+            request(
+                client,
+                server,
+                Method::GET,
+                &format!("/workflow-runs/{}/targets", segment(run_id)),
+                None,
+            )
+            .await
+        }
         WorkflowCommand::RunReplay { run_id } => {
             request(
                 client,
@@ -3161,9 +3183,10 @@ async fn solution_pack_command(
             blueprint_publication: None,
             blueprint_maps,
             asset_maps,
+            context_maps,
             from_application: None,
             include_sample_data: false,
-        } if blueprint_maps.is_empty() && asset_maps.is_empty() => {
+        } if blueprint_maps.is_empty() && asset_maps.is_empty() && context_maps.is_empty() => {
             request(
                 client,
                 server,
@@ -3180,6 +3203,7 @@ async fn solution_pack_command(
             blueprint_publication: Some(publication),
             blueprint_maps,
             asset_maps,
+            context_maps,
             from_application,
             include_sample_data,
         } => {
@@ -3195,7 +3219,7 @@ async fn solution_pack_command(
             if include_sample_data {
                 path.push_str("&include_sample_data=true");
             }
-            if blueprint_maps.is_empty() && asset_maps.is_empty() {
+            if blueprint_maps.is_empty() && asset_maps.is_empty() && context_maps.is_empty() {
                 raw_upload(client, server, &path, &file, "application/zstd").await
             } else {
                 solution_pack_plan_upload(
@@ -3205,6 +3229,7 @@ async fn solution_pack_command(
                     &file,
                     &blueprint_maps,
                     &asset_maps,
+                    &context_maps,
                 )
                 .await
             }
@@ -3505,6 +3530,7 @@ async fn solution_pack_plan_upload(
     archive: &Path,
     requested_maps: &[String],
     requested_asset_maps: &[String],
+    requested_context_maps: &[String],
 ) -> Result<String, CliError> {
     let mut seen = std::collections::BTreeSet::new();
     let mut parsed = Vec::with_capacity(requested_maps.len());
@@ -3551,6 +3577,30 @@ async fn solution_pack_plan_upload(
         parsed_assets.push(serde_json::json!({"key": key, "id": id}).to_string());
     }
 
+    let mut seen_contexts = std::collections::BTreeSet::new();
+    let mut parsed_contexts = Vec::with_capacity(requested_context_maps.len());
+    for requested in requested_context_maps {
+        let (key, code) = requested.split_once('=').ok_or_else(|| {
+            CliError::Input("--map-context must be LOGICAL_KEY=EXISTING_CODE".to_owned())
+        })?;
+        let safe_code = !code.is_empty()
+            && code.len() <= 128
+            && code
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'));
+        if !key.starts_with("contexts/") || key.len() > 128 || !safe_code {
+            return Err(CliError::Input(format!(
+                "invalid --map-context value '{requested}'"
+            )));
+        }
+        if !seen_contexts.insert(key.to_owned()) {
+            return Err(CliError::Input(format!(
+                "duplicate --map-context key '{key}'"
+            )));
+        }
+        parsed_contexts.push(serde_json::json!({"key": key, "code": code}).to_string());
+    }
+
     let length = fs::metadata(archive)
         .map_err(|error| CliError::Input(format!("cannot read {}: {error}", archive.display())))?
         .len();
@@ -3569,6 +3619,9 @@ async fn solution_pack_plan_upload(
     }
     for mapping in parsed_assets {
         form = form.text("asset_map", mapping);
+    }
+    for mapping in parsed_contexts {
+        form = form.text("context_map", mapping);
     }
     raw_response(
         client
@@ -5927,6 +5980,7 @@ value = "Blue shirt"
                 blueprint_publication: None,
                 blueprint_maps: Vec::new(),
                 asset_maps: Vec::new(),
+                context_maps: Vec::new(),
                 from_application: None,
                 include_sample_data: false,
             },
@@ -5946,6 +6000,7 @@ value = "Blue shirt"
                 blueprint_publication: Some(BlueprintPublicationArgument::Draft),
                 blueprint_maps: Vec::new(),
                 asset_maps: Vec::new(),
+                context_maps: Vec::new(),
                 from_application: None,
                 include_sample_data: false,
             },
@@ -5979,6 +6034,7 @@ value = "Blue shirt"
                     blueprint_publication: Some(BlueprintPublicationArgument::Draft),
                     blueprint_maps: vec![mapping.to_owned()],
                     asset_maps: Vec::new(),
+                    context_maps: Vec::new(),
                     from_application: None,
                     include_sample_data: false,
                 },
@@ -6055,6 +6111,7 @@ value = "Blue shirt"
                 blueprint_publication: Some(BlueprintPublicationArgument::Publish),
                 blueprint_maps: Vec::new(),
                 asset_maps: Vec::new(),
+                context_maps: Vec::new(),
                 from_application: None,
                 include_sample_data: false,
             },
@@ -6083,6 +6140,7 @@ value = "Blue shirt"
                 blueprint_publication: Some(BlueprintPublicationArgument::Publish),
                 blueprint_maps: Vec::new(),
                 asset_maps: Vec::new(),
+                context_maps: Vec::new(),
                 from_application: Some(prior_application_id),
                 include_sample_data: false,
             },
@@ -6115,6 +6173,7 @@ value = "Blue shirt"
                 asset_maps: vec![
                     "assets/brand-logo=00000000-0000-4000-8000-000000000999".to_owned(),
                 ],
+                context_maps: vec!["contexts/poland=PL".to_owned()],
                 from_application: None,
                 include_sample_data: false,
             },
@@ -6134,6 +6193,8 @@ value = "Blue shirt"
         assert!(body.contains("00000000-0000-4000-8000-000000000999"));
         assert!(body.contains("blueprints/product"));
         assert!(body.contains("shared_product"));
+        assert_eq!(body.matches("name=\"context_map\"").count(), 1);
+        assert!(body.contains(r#"{"code":"PL","key":"contexts/poland"}"#));
 
         let duplicate = solution_pack_command(
             &Client::new(),
@@ -6148,6 +6209,7 @@ value = "Blue shirt"
                     "blueprints/product=other_product".to_owned(),
                 ],
                 asset_maps: Vec::new(),
+                context_maps: Vec::new(),
                 from_application: None,
                 include_sample_data: false,
             },
@@ -6165,6 +6227,7 @@ value = "Blue shirt"
                 blueprint_publication: None,
                 blueprint_maps: Vec::new(),
                 asset_maps: Vec::new(),
+                context_maps: Vec::new(),
                 from_application: None,
                 include_sample_data: false,
             },

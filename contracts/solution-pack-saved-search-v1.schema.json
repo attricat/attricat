@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://attricat.com/contracts/solution-pack-saved-search-v1.schema.json",
+  "title": "Attricat solution-pack saved search v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format_version",
+    "kind",
+    "name",
+    "state"
+  ],
+  "properties": {
+    "format_version": {
+      "const": 1
+    },
+    "kind": {
+      "const": "solution_pack_saved_search"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120,
+      "pattern": "^\\S(?:.*\\S)?$"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "blueprint"
+      ],
+      "$comment": "Runtime also resolves blueprint, context, field, and targetBlueprint references against the pack.",
+      "properties": {
+        "blueprint": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^blueprints/[a-z][a-z0-9_-]*$"
+        },
+        "context": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^contexts/[a-z][a-z0-9_-]*$"
+        },
+        "query": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "allVersions": {
+          "type": "boolean"
+        },
+        "locked": {
+          "type": "boolean"
+        },
+        "sort": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "field",
+            "direction"
+          ],
+          "properties": {
+            "field": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512,
+              "pattern": "^[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+)*$"
+            },
+            "direction": {
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            }
+          }
+        },
+        "attributeFilters": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "field",
+              "operator",
+              "value"
+            ],
+            "properties": {
+              "field": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512,
+                "pattern": "^[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+)*$"
+              },
+              "operator": {
+                "enum": [
+                  "eq",
+                  "contains",
+                  "starts_with",
+                  "gt",
+                  "gte",
+                  "lt",
+                  "lte"
+                ]
+              },
+              "value": {
+                "type": [
+                  "string",
+                  "number",
+                  "boolean"
+                ]
+              }
+            }
+          }
+        },
+        "relationshipFacets": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "field"
+            ],
+            "properties": {
+              "field": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512,
+                "pattern": "^[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+)*$"
+              },
+              "targetBlueprint": {
+                "type": "string",
+                "maxLength": 128,
+                "pattern": "^blueprints/[a-z][a-z0-9_-]*$"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

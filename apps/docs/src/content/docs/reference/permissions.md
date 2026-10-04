@@ -34,6 +34,13 @@ A missing or expired sign-in returns `401`. A signed-in person without the permi
 | `extensions.read` | Browsing extension registries and installed extensions. | ✓ | ✓ | | |
 | `extensions.manage` | Installing, configuring, granting, enabling, and removing extensions; registries, layout, secrets, operations, and connector jobs. | ✓ | ✓ | | |
 | `solution_packs.manage` | Inspecting, planning, and applying solution packs; presentation assets. | ✓ | ✓ | | |
+| `files.hold` | Placing and releasing explicit retention holds on files. | ✓ | ✓ | | |
+
+## Status transitions
+
+A blueprint status can require a permission or a role for an individual transition, and can require that a different person makes it than made an earlier transition. These checks come on top of `entities.write` and apply to every writer, including workflows, extensions, and agents. A refused transition returns `403` with the code `status_transition_forbidden` or `status_separation_of_duties`. See [Control a record's lifecycle](/builders/blueprints/#step-10-control-a-records-lifecycle).
+
+Records in a locked status reject changes to locked content with `409 record_locked`, whatever the writer's permissions. Unlocking takes an explicit, permitted correction transition, which is recorded in the audit log.
 
 ## Personal API tokens
 

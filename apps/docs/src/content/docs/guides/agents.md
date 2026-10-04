@@ -29,7 +29,8 @@ The agent acts as you. It can only see and change what your role allows.
 - preview an entity migration;
 - read data health, rule findings, and workflow runs;
 - view images and read text files in the workspace;
-- read extension operation runs and connector jobs (with `extensions.manage`).
+- read extension operation runs and connector jobs (with `extensions.manage`);
+- explain an entity's status transitions, approvals, and retention holds.
 
 **With your approval** it can:
 
@@ -66,6 +67,14 @@ Blueprints can declare rules the server enforces on every change, including the 
 - **Hierarchies.** A link that would make an entity its own ancestor, such as a location inside itself, is refused with the path of the loop.
 - **Allowed targets.** A relationship can only link to the blueprints it lists.
 - **Publishing constraints.** Publishing a blueprint that adds a unique key or hierarchy fails if existing entities break it; the agent lists them so you can fix them first.
+
+## Controlled records
+
+Blueprints can restrict who makes a status transition, lock finalized records, and tie approvals to reviewed content. The agent follows the same rules as you:
+
+- A change the rules refuse fails with a clear reason, such as a locked record or a transition you are not permitted to make. The agent explains it rather than retrying, and can show which transitions you may make, who must act, and which correction transition unlocks the record.
+- A transition that must be made by a different person than an earlier one counts you as the person, because the change runs as you when you approve it.
+- If a proposed edit touches approved content, approving it voids the approval and returns the record to an earlier status in the same change.
 
 ## Where changes show up
 

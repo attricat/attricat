@@ -112,6 +112,37 @@ value_type = "string"
 default_value = "draft"
 ```
 
+A string attribute becomes a status when its `value_schema` has an `enum` and an
+`x-attricat-status` annotation with `version = 1`, one `options` entry
+(`code`, `label`, optional `tone`) per enum code, and optional `transitions`
+(`from`/`to` codes or `null`). Controlled records add optional keys:
+
+- on a transition: `code` (names the edge), `permission` (a permission code the
+  actor needs), `roles` (role codes, any one suffices) and `separate_from`
+  (edge codes whose most recent actor may not make this transition);
+- on an option: `lock` (`"all"` or attribute codes that become read-only while
+  the record has that status; requires declared `transitions`), `approval`
+  (`{"covers": "all" | [codes], "void_to": "<option>"}`: entering records an
+  approval bound to a digest of the covered content, and a later change to that
+  content voids it and moves the record to `void_to`) and `retention_days`
+  (holds the locked files for that many days; requires `lock`).
+
+Restricted transitions fail with `403 status_transition_forbidden` or
+`403 status_separation_of_duties`; changes to locked content fail with
+`409 record_locked`. A correction is a separate, restricted transition out of
+the locked status that changes nothing else.
+
+```toml
+[[attributes]]
+code = "status"
+value_type = "string"
+value_schema = '''{"type":"string","enum":["draft","released"],"x-attricat-status":{"version":1,
+  "options":[{"code":"draft","label":"Draft"},{"code":"released","label":"Released","lock":"all"}],
+  "transitions":[{"from":null,"to":"draft"},
+    {"from":"draft","to":"released","code":"release","permission":"entities.publish"},
+    {"from":"released","to":"draft","code":"correct","roles":["owner","admin"]}]}}'''
+```
+
 A relationship may restrict its target type and directional cardinality.
 `cardinality = "one"` allows at most one active target per source and context;
 `target_cardinality = "one"` allows at most one source to claim a target for the

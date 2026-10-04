@@ -141,6 +141,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .ensure_entity_publication_permissions()
         .await?;
     CatalogRepository::system(maintenance_pool.clone())
+        .ensure_retention_hold_permissions()
+        .await?;
+    CatalogRepository::system(maintenance_pool.clone())
         .ensure_extension_registry_permissions()
         .await?;
     CatalogRepository::system(maintenance_pool.clone())

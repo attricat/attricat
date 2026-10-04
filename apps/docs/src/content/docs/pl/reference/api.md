@@ -224,6 +224,7 @@ Zobacz [Tłumaczenie etykiet](/pl/builders/translations/).
 | `POST` | `/workflows/{id}/versions/{version}/publish`, `/enable`; `/workflows/{id}/disable` | Cykl życia. |
 | `POST` | `/workflows/{id}/run-now` | Uruchomienie ręczne. |
 | `GET` | `/workflow-runs` | Historia uruchomień. |
+| `GET` | `/workflow-runs/{id}/targets` | Wyniki akcji `referencing_entities_update` dla poszczególnych rekordów. |
 | `POST` | `/workflow-runs/{id}/replay` | Ponawia martwą wiadomość. |
 
 ### Agenci

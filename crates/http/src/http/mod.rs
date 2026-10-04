@@ -19,6 +19,7 @@ mod lexicon;
 mod members;
 mod pagination;
 mod presentation_assets;
+mod record_controls;
 mod reusable_attributes;
 mod roles;
 mod rules;
@@ -785,6 +786,10 @@ pub fn router(state: AppState) -> Router {
         .route("/workflows/{workflow_id}/disable", post(workflows::disable))
         .route("/workflow-runs", get(workflows::list_runs))
         .route(
+            "/workflow-runs/{run_id}/targets",
+            get(workflows::list_run_targets),
+        )
+        .route(
             "/workflow-runs/{run_id}/replay",
             post(workflows::replay_run),
         )
@@ -921,6 +926,26 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/entities/{entity_id}/file-attributes/{attribute_code}/references",
             put(files::update_references),
+        )
+        .route(
+            "/v1/entities/{entity_id}/status-transitions",
+            get(record_controls::status_transitions),
+        )
+        .route(
+            "/v1/entities/{entity_id}/approvals",
+            get(record_controls::approvals),
+        )
+        .route(
+            "/v1/entities/{entity_id}/retention-holds",
+            get(record_controls::entity_holds),
+        )
+        .route(
+            "/files/{file_id}/retention-holds",
+            get(record_controls::file_holds).post(record_controls::place_hold),
+        )
+        .route(
+            "/files/{file_id}/retention-holds/{hold_id}/release",
+            post(record_controls::release_hold),
         )
         .route("/files/{file_id}", get(files::metadata))
         .route("/files/{file_id}/download", get(files::download_original))

@@ -17,6 +17,7 @@ import { EntityAgentDrawer } from './components/EntityAgentDrawer';
 import { EntityPreviewToolbar } from './components/EntityPreviewToolbar';
 import { DeleteEntityDialog } from './components/DeleteEntityDialog';
 import { RelationshipPickerActionBar } from './components/RelationshipPickerActionBar';
+import { RecordControlsPanel } from './components/RecordControlsPanel';
 import { useEntityPublications } from './components/useEntityPublications';
 import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
 import {
@@ -253,6 +254,7 @@ export const EntityPreviewPage = ({
           )}
         </>
       )}
+      {resolved.data && <RecordControlsPanel entityId={entityId} />}
       {resolved.data && (
         <Suspense
           fallback={<CircularProgress aria-label={t('comments.loading')} />}

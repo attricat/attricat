@@ -29,7 +29,8 @@ Agent działa w Twoim imieniu. Widzi i zmienia tylko to, na co pozwala Twoja rol
 - wyświetlać podgląd migracji encji;
 - odczytywać stan danych, ustalenia reguł i uruchomienia przepływów pracy;
 - oglądać obrazy i odczytywać pliki tekstowe w obszarze roboczym;
-- odczytywać uruchomienia operacji rozszerzeń i zadania konektorów (z uprawnieniem `extensions.manage`).
+- odczytywać uruchomienia operacji rozszerzeń i zadania konektorów (z uprawnieniem `extensions.manage`);
+- wyjaśniać przejścia statusów encji, jej zatwierdzenia i blokady retencji.
 
 **Po Twoim zatwierdzeniu** może:
 
@@ -66,6 +67,14 @@ Schematy mogą deklarować reguły, które serwer egzekwuje przy każdej zmianie
 - **Hierarchie.** Powiązanie, które uczyniłoby encję własnym przodkiem, np. lokalizację wewnątrz niej samej, zostaje odrzucone wraz ze ścieżką pętli.
 - **Dozwolone cele.** Relacja może wskazywać tylko wymienione w niej schematy.
 - **Ograniczenia publikacji.** Publikacja schematu, który dodaje klucz unikalny lub hierarchię, nie powiedzie się, jeśli istniejące encje je naruszają; agent wymienia je, aby można było je najpierw poprawić.
+
+## Rekordy kontrolowane
+
+Schematy mogą ograniczać, kto wykonuje przejście statusu, blokować sfinalizowane rekordy i wiązać zatwierdzenia z przejrzaną treścią. Agent przestrzega tych samych zasad co Ty:
+
+- Zmiana odrzucona przez te zasady kończy się błędem z jasnym powodem, np. zablokowanym rekordem lub przejściem, którego nie możesz wykonać. Agent wyjaśnia go zamiast ponawiać próbę i może pokazać, które przejścia możesz wykonać, kto musi działać i które przejście korygujące odblokowuje rekord.
+- Przy przejściu, które musi wykonać inna osoba niż autor wcześniejszego przejścia, za wykonującego uznaje się Ciebie, ponieważ zatwierdzona przez Ciebie zmiana działa w Twoim imieniu.
+- Jeśli proponowana edycja dotyczy zatwierdzonej treści, to gdy ją zaakceptujesz, zatwierdzenie rekordu zostanie unieważnione, a rekord w tej samej zmianie wróci do wcześniejszego statusu.
 
 ## Gdzie widać zmiany
 

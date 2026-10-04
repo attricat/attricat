@@ -61,6 +61,7 @@ mod health;
 mod lexicon;
 mod members;
 mod presentation_assets;
+mod retention_holds;
 mod reusable_attributes;
 mod roles;
 mod rules;
@@ -74,6 +75,7 @@ mod tasks;
 mod tokens;
 mod upload_intents;
 mod values;
+mod workflow_actions;
 mod workflow_runs;
 mod workflows;
 mod workspace_navigation;
@@ -132,6 +134,7 @@ pub use extensions::{
 pub use files::{FileObject, FilePolicy, FileUploadResult, NewUploadedFile};
 pub use members::{WorkspaceInvitation, WorkspaceMember};
 pub use presentation_assets::{MAX_PRESENTATION_ASSET_PAGE_SIZE, PresentationAsset};
+pub use retention_holds::FileRetentionHold;
 pub use roles::{Permission, WorkspaceGrantTarget, WorkspaceRole};
 pub use rules::{ClaimedRuleRun, RuleCandidateResult};
 pub use solution_packs::SolutionPackCheckResult;
@@ -140,11 +143,12 @@ pub use solution_packs::{
     SolutionPackApplicationSummary, SolutionPackCheckRun, SolutionPackCheckRunSummary,
     SolutionPackPlan,
 };
+pub use status::{EntityApproval, StatusTransitionAccess};
 pub use tasks::{BackgroundProcessingStatus, ClaimedTask, TaskError, TaskSummary};
 pub use tokens::PersonalApiToken;
 pub use upload_intents::AbandonedUpload;
 pub use workflow_runs::WorkflowRun;
-pub use workflow_runs::{ClaimedWorkflowRun, WorkflowActionResult};
+pub use workflow_runs::{ClaimedWorkflowRun, WorkflowActionResult, WorkflowRunTarget};
 pub use workspace_navigation::{ExploreNavigationEntry, ExploreNavigationItem};
 
 #[derive(Debug, sqlx::FromRow)]
@@ -302,6 +306,16 @@ impl FromStr for ValueHistoryRetentionDays {
     }
 }
 
+/// Why a status transition was refused to its actor.
+#[derive(Debug)]
+pub struct StatusTransitionDenial {
+    pub attribute: String,
+    pub context: String,
+    pub from: String,
+    pub to: String,
+    pub reason: String,
+}
+
 #[derive(Debug, Error)]
 pub enum RepositoryError {
     #[error("comment must contain 1 to 10000 characters and no null characters")]
@@ -312,6 +326,29 @@ pub enum RepositoryError {
     StaleEntity,
     #[error("status edits require expected_updated_at from the entity form")]
     StatusPreconditionRequired,
+    #[error(
+        "status transition of '{}' from {} to {} is not permitted (context: {}): {}",
+        .0.attribute, .0.from, .0.to, .0.context, .0.reason
+    )]
+    StatusTransitionForbidden(Box<StatusTransitionDenial>),
+    #[error(
+        "status transition of '{attribute}' must be made by someone other than the user who made the '{edge}' transition (context: {context})"
+    )]
+    StatusSeparationOfDuties {
+        attribute: String,
+        context: String,
+        edge: String,
+    },
+    #[error(
+        "'{attribute}' is locked while the record is '{status}' (context: {context}); use a permitted correction transition first"
+    )]
+    RecordLocked {
+        attribute: String,
+        context: String,
+        status: String,
+    },
+    #[error("invalid retention hold: {0}")]
+    InvalidRetentionHold(String),
     #[error("{0} was not found")]
     NotFound(&'static str),
     #[error("the initiating user is no longer authorized for this entity")]

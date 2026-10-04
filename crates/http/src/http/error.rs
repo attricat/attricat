@@ -296,6 +296,25 @@ impl From<RepositoryError> for ApiError {
                 message: error.to_string(),
                 details: None,
             },
+            RepositoryError::StatusTransitionForbidden(_) => Self {
+                status: StatusCode::FORBIDDEN,
+                code: "status_transition_forbidden",
+                message: error.to_string(),
+                details: None,
+            },
+            RepositoryError::StatusSeparationOfDuties { .. } => Self {
+                status: StatusCode::FORBIDDEN,
+                code: "status_separation_of_duties",
+                message: error.to_string(),
+                details: None,
+            },
+            RepositoryError::RecordLocked { .. } => Self {
+                status: StatusCode::CONFLICT,
+                code: "record_locked",
+                message: error.to_string(),
+                details: None,
+            },
+            RepositoryError::InvalidRetentionHold(_) => Self::invalid_input(error.to_string()),
             RepositoryError::NotFound(resource) => Self::not_found(resource),
             RepositoryError::ActorNotAuthorized => Self::forbidden(),
             RepositoryError::ReservedAnnotationNamespace(_)

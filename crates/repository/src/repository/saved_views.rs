@@ -22,7 +22,7 @@ pub struct SavedView {
 const FIELDS: &str =
     "id,owner_user_id,kind,name,description,visibility,state,created_at,updated_at";
 
-fn state_hash(state: &Value) -> String {
+pub(super) fn state_hash(state: &Value) -> String {
     format!(
         "{:x}",
         Sha256::digest(serde_json::to_vec(state).expect("JSON value serializes"))

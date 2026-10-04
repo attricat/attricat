@@ -171,6 +171,11 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `GET`, `POST` | `/v1/entities/{id}/publications` | List channel publication status or publish to `{ "context_id": "…" }`. |
 | `POST` | `/v1/entities/{id}/publications/unpublish` | Unpublish from `{ "context_id": "…" }`. |
 | `POST` | `/v1/entities/{id}/publications/publish-all` | Publish atomically to every enabled channel. |
+| `GET` | `/v1/entities/{id}/status-transitions` | Declared status edges from the saved status in `?context_id=` and whether the caller may take each. See [status control](status-control.md#controlled-records). |
+| `GET` | `/v1/entities/{id}/approvals` | Approval decisions with content digests and void reasons. |
+| `GET` | `/v1/entities/{id}/retention-holds` | Retention holds on the entity's files. |
+| `GET`, `POST` | `/files/{id}/retention-holds` | List holds, or place an explicit hold (`files.hold`). |
+| `POST` | `/files/{id}/retention-holds/{hold_id}/release` | Release an explicit hold early (`files.hold`). |
 | `GET`, `PUT` | `/publication-channels`, `/publication-channels/{context_id}` | List enabled channel contexts or enable/disable one. |
 | `POST` | `/entities/{entity_id}/file-attributes/{attribute_code}/uploads` | Stream one or more multipart file parts to a file attribute. |
 | `GET` | `/files/{file_id}` | Read safe file metadata and generated variant metadata. |
@@ -206,9 +211,11 @@ HTTP endpoints.
 `POST /solution-packs/inspect` takes an `application/zstd` `.tar.zst` body (at
 most 32 MiB compressed). Its response is at most 512 KiB and contains safe
 manifest metadata, whole-archive SHA-256, blueprint keys, bounded setting
-summaries, normalized presentation-asset digests, and extension requirement
-summaries. Inspection never returns resource bytes, archive paths, or private
-object keys.
+summaries, normalized presentation-asset digests, extension requirement
+summaries, and a `seeds` summary of prerequisite packs, contexts with their
+publication channels, rules and workflows (with their declared enabled state),
+and saved searches. `sample_data.file_count` counts bundled sample files.
+Inspection never returns resource bytes, archive paths, or private object keys.
 
 `POST /solution-packs/plans` requires `prefix` and
 `blueprint_publication=draft|publish` query parameters. Optional
@@ -225,11 +232,20 @@ Without explicit maps, upload the archive as `application/zstd`, including
 when using `from_application`. For explicit reuse, send `multipart/form-data`
 with exactly one streamed `archive` part (`application/zstd`) and repeated
 `blueprint_map` JSON text parts such as
-`{"key":"blueprints/product","code":"shared_product"}` and/or `asset_map`
-parts such as `{"key":"assets/brand-logo","id":"<uuid>"}`. The 32 MiB
+`{"key":"blueprints/product","code":"shared_product"}`, `asset_map`
+parts such as `{"key":"assets/brand-logo","id":"<uuid>"}`, and/or
+`context_map` parts such as `{"key":"contexts/poland","code":"PL"}` selecting an
+existing context for a pack context. The 32 MiB
 compressed archive and structural limits still apply. The archive is not
 retained; asset-create actions privately stage normalized bytes before the
-plan is ready.
+plan is ready, and bundled sample files of a sample-selected plan are uploaded
+to ordinary file storage under upload intents before the plan is saved.
+
+Plans can also contain `prerequisite`, `context`, `publication_channel`,
+`rule`, `workflow`, and `saved_search` actions. Prerequisites are resolved
+against completed applications of the required pack in the workspace; they are
+never installed automatically. See
+[solution-pack operation](solution-packs.md#prerequisite-packs).
 
 The response is at most 1 MiB. It contains safe source/digest metadata,
 optional prior-application identity, ordered release-change evidence, mapping
@@ -668,7 +684,7 @@ or schedule mutation is exposed to agents.
 
 ## Workflow run operations
 
-`GET /workflow-runs` lists workspace-scoped run diagnostics and requires `workflows.read`. `POST /workflow-runs/{run_id}/replay` requeues only a terminal dead-letter run and requires `workflows.manage`. Neither endpoint exposes internal domain-event payloads.
+`GET /workflow-runs` lists workspace-scoped run diagnostics and requires `workflows.read`. `GET /workflow-runs/{run_id}/targets` (also `workflows.read`) lists the per-entity outcomes of a run's `referencing_entities_update` actions: `action_index`, `entity_id`, `status` (`completed`, `failed`, or `skipped`), `attempts`, the latest bounded `last_error`, and timestamps; an unknown run returns `404`. `POST /workflow-runs/{run_id}/replay` requeues only a terminal dead-letter run and requires `workflows.manage`. Neither endpoint exposes internal domain-event payloads.
 
 ## Background processing status
 

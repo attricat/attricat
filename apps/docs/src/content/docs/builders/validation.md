@@ -70,6 +70,8 @@ value_schema = '''{
 
 The web app shows a status as a labeled chip and edits it with a select that disables forbidden choices. Transitions are checked by the server for every writer, including the API, CLI, workflows, history restores, and migrations. They compare effective values, so a value inherited from a parent context counts as the starting point. A forbidden change returns `422 attribute_value_schema_mismatch`.
 
+A status can also restrict who may make each transition, lock finalized records, and bind approvals to reviewed content. See [Control a record's lifecycle](/builders/blueprints/#step-10-control-a-records-lifecycle).
+
 ## Constrain the whole entity
 
 `entity_schema` sees the entity as one JSON object. Use it for rules that involve more than one attribute:

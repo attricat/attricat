@@ -17,7 +17,7 @@ use crate::{
         DEFAULT_ENTITY_PAGE_SIZE, DEFAULT_PAGE_SIZE, DEFAULT_STALE_AFTER_DAYS, MAX_STALE_AFTER_DAYS,
     },
     file_access::{AllowFileAccess, FileAccessOperation, authorize_file_read},
-    repository::{CatalogRepository, EntitySearchSort, RepositoryError},
+    repository::{AuthorizationActor, CatalogRepository, EntitySearchSort, RepositoryError},
     search_filters::{intersect_ids, resolve_agent_filter, resolve_agent_relationship_filter},
 };
 const BLUEPRINT_AUTHORING_GUIDE: &str = include_str!("../../../docs/blueprints.md");
@@ -82,6 +82,27 @@ pub enum ToolError {
     Forbidden,
     #[error(transparent)]
     Repository(#[from] RepositoryError),
+}
+
+impl ToolError {
+    /// Stable code for the tool result. Controlled-record denials keep their
+    /// API codes so the agent can explain them instead of retrying blindly.
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::Forbidden => "forbidden",
+            Self::Repository(RepositoryError::RecordLocked { .. }) => "record_locked",
+            Self::Repository(RepositoryError::StatusTransitionForbidden(_)) => {
+                "status_transition_forbidden"
+            }
+            Self::Repository(RepositoryError::StatusSeparationOfDuties { .. }) => {
+                "status_separation_of_duties"
+            }
+            Self::Repository(RepositoryError::StatusPreconditionRequired) => {
+                "status_precondition_required"
+            }
+            _ => "tool_error",
+        }
+    }
 }
 
 pub fn definitions() -> Vec<ToolDefinition> {
@@ -277,6 +298,11 @@ pub fn definitions() -> Vec<ToolDefinition> {
             json!({"type":"object","required":["entity_id"],"properties":{"entity_id":{"type":"string","format":"uuid"}},"additionalProperties":false}),
         ),
         definition(
+            "get_entity_record_controls",
+            "Explain an entity's controlled-record state: for each status attribute in a context (default when context_id is null), the declared transitions from the current status and whether the initiating user may take each one (denial_code and denial_reason when not), the approval history with content digests and void reasons, and file retention holds with their expiry. Use it to explain record_locked, status_transition_forbidden and status_separation_of_duties errors.",
+            json!({"type":"object","required":["entity_id"],"properties":{"entity_id":{"type":"string","format":"uuid"},"context_id":{"type":["string","null"],"format":"uuid"}},"additionalProperties":false}),
+        ),
+        definition(
             "get_entity_publications",
             "List this entity's enabled channel publication status. Use this before proposing channel publication.",
             json!({"type":"object","required":["entity_id"],"properties":{"entity_id":{"type":"string","format":"uuid"}},"additionalProperties":false}),
@@ -468,6 +494,7 @@ pub fn kind(name: &str) -> Result<ToolKind, ToolError> {
         | "list_saved_searches"
         | "get_saved_search"
         | "get_entity_publications"
+        | "get_entity_record_controls"
         | "preview_entity_migration" => Ok(ToolKind::Read),
         "create_blueprint"
         | "create_blueprint_revision"
@@ -759,6 +786,25 @@ pub async fn execute_read(
             let preview = repository.preview_entity_migration(parse_uuid(&arguments, "entity_id")?).await?;
             json!({"migration_id":preview.migration_id,"source_version":preview.source_version,
                 "target_version":preview.target.blueprint.version,"status":preview.status,"issues":preview.issues})
+        }
+        "get_entity_record_controls" => {
+            let entity_id = parse_uuid(&arguments, "entity_id")?;
+            let context_id = match arguments.get("context_id") {
+                None | Some(Value::Null) => None,
+                Some(_) => Some(parse_uuid(&arguments, "context_id")?),
+            };
+            let transitions = repository
+                .status_transition_access(
+                    entity_id,
+                    context_id,
+                    AuthorizationActor { user_id: actor, token_id: None },
+                )
+                .await?;
+            json!({
+                "transitions": transitions,
+                "approvals": repository.entity_approvals(entity_id).await?,
+                "retention_holds": repository.entity_retention_holds(entity_id).await?,
+            })
         }
         "get_entity_publications" => serde_json::to_value(
             repository
@@ -2149,7 +2195,8 @@ async fn read_authorized(
         | "get_entity_changes"
         | "get_value_history"
         | "get_entity_preview_link"
-        | "get_entity_publications" => (
+        | "get_entity_publications"
+        | "get_entity_record_controls" => (
             "entities.read",
             Some(parse_uuid(arguments, "entity_id")?),
             None,

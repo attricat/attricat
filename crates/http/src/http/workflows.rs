@@ -116,3 +116,14 @@ pub(super) async fn replay_run(
         Err(ApiError::not_found("terminal workflow run"))
     }
 }
+
+/// Per-target outcomes of `referencing_entities_update` actions in one run.
+pub(super) async fn list_run_targets(
+    super::auth::ScopedRepository(repo): super::auth::ScopedRepository,
+    ApiPath(id): ApiPath<Uuid>,
+) -> Result<Json<Vec<crate::repository::WorkflowRunTarget>>, ApiError> {
+    repo.workflow_run_targets(id)
+        .await?
+        .map(Json)
+        .ok_or_else(|| ApiError::not_found("workflow run"))
+}

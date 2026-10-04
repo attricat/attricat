@@ -67,6 +67,15 @@ Zdarzenia encji i wartości opisują, co się zmieniło, a nie całą encję:
 
 Aby działać na bieżącym stanie encji, odczytaj ją; ładunek jest wyłącznie opisem zmiany.
 
+### Które zmiany tworzą fakty
+
+`facts` zawiera po jednym wpisie dla każdej wartości atrybutu, która faktycznie się zmieniła. Zapis, który pozostawia wartość bez zmian, nie dodaje dla niej faktu. [Wyzwalacze przepływów pracy](/pl/builders/workflows/#reaguj-tylko-na-wybrane-atrybuty) mogą filtrować po `attribute_code` za pomocą `attributes`.
+
+- **Atrybuty skalarne:** `change_kind` to `set`, `replace` lub `remove`; `restore` w `attribute_value.restored.v1`. `entity.created.v1` wymienia każdą wartość początkową, łącznie z domyślnymi, jako `set`.
+- **Atrybuty relacji:** każdy dodany lub usunięty cel to osobny fakt z `change_kind` równym `relationship_add` lub `relationship_remove`, ustawionym `relationship_target_entity_id` i identyfikatorem celu jako wartością. Zapis zmieniający tylko relacje tworzy `relationship.changed.v1`; zapis zmieniający też inne wartości tworzy `entity.updated.v1`.
+- **Atrybuty plikowe:** przesłanie, podłączenie, zmiana kolejności lub usunięcie plików trafia do dziennika audytu, ale nie tworzy zdarzenia ani faktu.
+- Zmiany tagów i metadanych systemowych nie są wartościami atrybutów i nie dodają faktów.
+
 ## Gwarancje dostarczania
 
 - **Co najmniej raz.** Konsument może otrzymać to samo zdarzenie dwa razy, np. jeśli ulegnie awarii po wykonaniu pracy, ale przed zapisaniem dostarczenia. Twórz idempotentne procedury obsługi, oparte na identyfikatorze zdarzenia.

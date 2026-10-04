@@ -369,6 +369,10 @@ async fn start_configured_server(
         .await
         .unwrap();
     CatalogRepository::system(pool.clone())
+        .ensure_retention_hold_permissions()
+        .await
+        .unwrap();
+    CatalogRepository::system(pool.clone())
         .ensure_solution_pack_permissions()
         .await
         .unwrap();
