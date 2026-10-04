@@ -7,6 +7,7 @@ import {
   screen,
   within,
 } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import '../../../i18n';
@@ -93,10 +94,16 @@ describe('EntityPreviewToolbar readiness', () => {
     expect(onPublish).not.toHaveBeenCalled();
   });
 
-  it('makes the not-ready reasons reachable from the keyboard', () => {
+  it('makes the not-ready reasons reachable from the keyboard', async () => {
     renderToolbar(notReady);
     const chip = screen.getByText('Not ready').closest('[tabindex]');
-    expect(chip?.getAttribute('tabindex')).toBe('0');
+    const user = userEvent.setup();
+    while (document.activeElement !== chip && document.activeElement) {
+      await user.tab();
+      if (document.activeElement === document.body) break;
+    }
+    expect(document.activeElement).toBe(chip);
+    // Closed, the tooltip describes the focused chip through its title.
     expect(chip?.getAttribute('title')).toBe('SKU is required.');
   });
 

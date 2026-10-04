@@ -289,17 +289,18 @@ components with `storage.extension`. The legacy JSON
 single-attribute `lookup` requests; `page` cursors pin a database-clock snapshot
 and `changes` cursors pin a domain-event sequence high-water mark. Cursors are
 opaque and filter/workspace-bound. A `lookup` resolves exactly like an upsert's
-business key (below): a single-attribute unique key uses its normalized index
+business key (below): a single-attribute unique key on a string attribute uses
+its normalized index
 across every revision of the blueprint family, and a value that matches more
 than one entity fails with `lookup matched multiple entities` rather than
-returning an arbitrary match. This is a host behaviour change that applies to
+returning an arbitrary match. This is a host behavior change that applies to
 every host ABI version. `catalog.command.v1` accepts a bounded,
 idempotent batch of typed `create`, `update`, `relationships`, or `upsert`
 intents. Each intent runs the ordinary entity create or update path (validation,
 checks, audit, publication reconciliation and its domain event). An upsert
 serializes its declared blueprint/attribute business key, creates only when it
 is absent, and rejects an ambiguous match. When the lookup attribute alone is a
-declared unique key, the lookup uses that key's normalized index across every
+declared unique key on a string attribute, the lookup uses that key's normalized index across every
 revision of the blueprint family; otherwise it matches the exact text among
 entities of the requested revision. An upsert's declared relationship sets
 apply whether it updates a match or creates; on create they are written as the

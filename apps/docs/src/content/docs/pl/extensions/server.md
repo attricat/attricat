@@ -75,7 +75,7 @@ Zapis wykonany podczas obsługi zdarzenia jest przypisywany użytkownikowi lub t
 
 Wywołania JSON `catalog.read.v1` i `catalog.command.v1` dodają odczyty stronicowane, kanały zmian, wyszukiwanie pojedynczego atrybutu oraz partie intencji `create`, `update`, `relationships` i `upsert`. Upsert dopasowuje encję po zadeklarowanym atrybucie klucza biznesowego, tworzy ją tylko wtedy, gdy żadna encja nie pasuje, i kończy się błędem, jeśli pasuje więcej niż jedna. Zbiory relacji z upsertu są stosowane zarówno wtedy, gdy aktualizuje on dopasowaną encję, jak i wtedy, gdy ją tworzy.
 
-Wyszukiwanie działa dokładnie tak samo jak dopasowanie w upsercie. Jeśli sam atrybut jest zadeklarowanym kluczem unikalnym, wyszukiwanie korzysta ze znormalizowanych wartości tego klucza we wszystkich wersjach Schematu; w przeciwnym razie dopasowuje dokładny tekst wśród encji żądanej wersji. Wartość pasująca do więcej niż jednej encji kończy się błędem `lookup matched multiple entities`, zamiast zwracać jedną z nich. To zachowanie hosta dotyczy każdej wersji API hosta, więc widzą je także rozszerzenia zbudowane dla starszej wersji.
+Wyszukiwanie działa dokładnie tak samo jak dopasowanie w upsercie. Jeśli sam atrybut tekstowy jest zadeklarowanym kluczem unikalnym, wyszukiwanie korzysta ze znormalizowanych wartości tego klucza we wszystkich wersjach Schematu; w przeciwnym razie dopasowuje dokładny tekst wśród encji żądanej wersji. Wartość pasująca do więcej niż jednej encji kończy się błędem `lookup matched multiple entities`, zamiast zwracać jedną z nich. To zachowanie hosta dotyczy każdej wersji API hosta, więc widzą je także rozszerzenia zbudowane dla starszej wersji.
 
 ## Magazyn
 

@@ -31,7 +31,7 @@ export const PrincipalValue = ({ value }: { value: unknown }) => {
   const principal = resolvePrincipal(directory.data, value);
   if (!principal) {
     // A reference is unknown only once the directory has loaded without it.
-    if (directory.isError)
+    if (directory.isLoadingError)
       return (
         <Typography color="error" variant="body2">
           {t('principals.loadFailed')}

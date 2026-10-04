@@ -75,7 +75,7 @@ A write made while handling an event is attributed to the user or token behind t
 
 The JSON `catalog.read.v1` and `catalog.command.v1` calls add paged reads, change feeds, single-attribute lookups, and batches of `create`, `update`, `relationships`, and `upsert` intents. An upsert matches on a declared business key attribute, creates only when no entity matches, and fails if more than one does. Its relationship sets apply whether it updates a match or creates the entity.
 
-A lookup resolves exactly like an upsert. If the attribute alone is a declared unique key, the lookup uses that key's normalized values across every revision of the blueprint family; otherwise it matches the exact text among entities of the requested revision. A value that matches more than one entity fails with `lookup matched multiple entities` instead of returning one of them. This host behaviour applies to every host API version, so extensions built against an older version see it too.
+A lookup resolves exactly like an upsert. If the attribute alone is a declared unique key on a string attribute, the lookup uses that key's normalized values across every revision of the blueprint family; otherwise it matches the exact text among entities of the requested revision. A value that matches more than one entity fails with `lookup matched multiple entities` instead of returning one of them. This host behavior applies to every host API version, so extensions built against an older version see it too.
 
 ## Storage
 

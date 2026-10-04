@@ -189,7 +189,6 @@ export const WorkspaceTeamsSection = ({
       {directory.isError && (
         <Alert severity="error">{directory.error.message}</Alert>
       )}
-      {remove.isError && <Alert severity="error">{remove.error.message}</Alert>}
       <Paper>
         {teams.isPending && <LinearProgress aria-label={t('app.loading')} />}
         <List>
@@ -261,12 +260,17 @@ export const WorkspaceTeamsSection = ({
           <DialogContentText>
             {t('workspace.deleteTeamConfirm', { team: deleting?.team.name })}
           </DialogContentText>
+          {remove.isError && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              {remove.error.message}
+            </Alert>
+          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={closeDelete}>{t('workspace.cancel')}</Button>
           <Button
             color="error"
-            disabled={remove.isPending}
+            disabled={remove.isPending || !deleting?.open}
             onClick={() => deleting && remove.mutate(deleting.team)}
             variant="contained"
           >

@@ -169,7 +169,7 @@ describe('WorkspaceTeamsSection', () => {
     fireEvent.click(
       within(dialog).getByRole('button', { name: 'Delete team' }),
     );
-    expect(await screen.findByText('Team in use')).toBeTruthy();
+    expect(await within(dialog).findByText('Team in use')).toBeTruthy();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     fireEvent.click(

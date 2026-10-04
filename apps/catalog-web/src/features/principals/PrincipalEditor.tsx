@@ -30,8 +30,9 @@ export const PrincipalEditor = ({
       ? [{ value, principal: current }, ...assignable]
       : assignable;
   const selected = options.find((option) => option.value === value) ?? null;
-  // A reference is unknown only once the directory has loaded without it.
-  const loadFailed = directory.isError;
+  // A reference is unknown only once the directory has loaded without it. A
+  // failed background refetch keeps the loaded directory usable.
+  const loadFailed = directory.isLoadingError;
   const unknown = Boolean(value) && !selected && directory.isSuccess;
   return (
     <Autocomplete
