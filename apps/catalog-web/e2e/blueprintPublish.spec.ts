@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { suffix } from './helpers';
+import { replaceDefinition, suffix } from './helpers';
 
 const definition = (code: string, extraAttributes = '') => `format_version = 1
 code = "${code}"
@@ -14,18 +14,6 @@ fields = ["title"]
 code = "title"
 value_type = "string"
 ${extraAttributes}`;
-
-const replaceDefinition = async (page: Page, value: string) => {
-  const editor = page.locator('.monaco-editor').first();
-  await expect(editor.locator('.view-lines')).toContainText('format_version');
-  await editor.locator('.view-lines').click();
-  // Monaco's EditContext input inserts text at the caret and ignores the
-  // selection, so clear the selected document before inserting.
-  await page.keyboard.press('Control+End');
-  await page.keyboard.press('Shift+Control+Home');
-  await page.keyboard.press('Backspace');
-  await page.keyboard.insertText(value);
-};
 
 const publishDraft = async (page: Page, version: number) => {
   await expect(page.getByText(`Latest: v${version}`)).toBeVisible();

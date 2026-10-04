@@ -1,4 +1,5 @@
-import { e2eApiUrl } from './ports.ts';
+import { expect, type Browser, type Page } from '@playwright/test';
+import { e2eApiUrl, e2eMailpitUrl } from './ports.ts';
 
 const fixtureEmail = 'fixture@example.test';
 const fixturePassword = 'e2e-only-fixture-password';
@@ -139,3 +140,99 @@ export const appendValues = (entityId: string, values: NewValue[]) =>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ values }),
   });
+
+const onboardingUrlFor = async (email: string) => {
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    const { messages } = await fetch(`${e2eMailpitUrl}/api/v1/messages`).then(
+      (response) => response.json(),
+    );
+    const message = messages.find(
+      (candidate: { To: Array<{ Address: string }> }) =>
+        candidate.To.some((recipient) => recipient.Address === email),
+    );
+    if (message) {
+      const delivered = await fetch(
+        `${e2eMailpitUrl}/api/v1/message/${message.ID}`,
+      ).then((response) => response.json());
+      const rawUrl = JSON.stringify(delivered).match(
+        /http:\/\/127\.0\.0\.1:\d+\/onboarding\?[^"\\\s]+/,
+      )?.[0];
+      if (!rawUrl) throw new Error(`Onboarding email for ${email} had no URL`);
+      return new URL(
+        rawUrl.replaceAll('\\u0026', '&').replaceAll('&amp;', '&'),
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`Timed out waiting for onboarding email to ${email}`);
+};
+
+/** Creates and onboards a workspace member holding one system role. */
+export const createMember = async (roleCode: string) => {
+  const email = `${roleCode}-${suffix()}@example.test`;
+  const password = `${roleCode}-e2e-password`;
+  const session = await request<{ workspace_id: string }>('/auth/session');
+  const roles = await request<Array<{ id: string; code: string }>>(
+    '/workspace/assignable-roles',
+  );
+  const role = roles.find(({ code }) => code === roleCode);
+  if (!role) throw new Error(`E2E workspace has no ${roleCode} role`);
+  await request('/workspace/users', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email,
+      role_id: role.id,
+      scope_type: 'workspace',
+      scope_target_id: session.workspace_id,
+      expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+    }),
+  });
+  const url = await onboardingUrlFor(email);
+  const response = await fetch(`${e2eApiUrl}/onboarding/complete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      invitation_secret: url.searchParams.get('invitation_secret'),
+      onboarding_secret: url.searchParams.get('onboarding_secret'),
+      password,
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(
+      `E2E onboarding failed: ${response.status} ${await response.text()}`,
+    );
+  }
+  return { email, password };
+};
+
+/** Replaces the whole document in the page's first Monaco editor. */
+export const replaceDefinition = async (page: Page, value: string) => {
+  const editor = page.locator('.monaco-editor').first();
+  await expect(editor.locator('.view-lines')).toContainText('format_version');
+  await editor.locator('.view-lines').click();
+  // Monaco's EditContext input inserts text at the caret and ignores the
+  // selection, so clear the selected document before inserting.
+  await page.keyboard.press('Control+End');
+  await page.keyboard.press('Shift+Control+Home');
+  await page.keyboard.press('Backspace');
+  await page.keyboard.insertText(value);
+};
+
+/** Signs a new member holding `roleCode` in through the login page. */
+export const signInAsMember = async (browser: Browser, roleCode: string) => {
+  const member = await createMember(roleCode);
+  const context = await browser.newContext({
+    storageState: { cookies: [], origins: [] },
+  });
+  const page = await context.newPage();
+  await page.goto('/login');
+  await page.getByLabel('Workspace').fill('default.local');
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await page.getByLabel('Email').fill(member.email);
+  await page.getByLabel('Password').fill(member.password);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page).toHaveURL(/\/$/);
+  return page;
+};
