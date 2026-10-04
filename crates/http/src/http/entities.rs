@@ -512,16 +512,24 @@ pub(super) async fn get_entity_form(
     let (entity, values) = CatalogReadService::new(&repository)
         .entity_with_values(entity_id)
         .await?;
-    let blueprint = repository
-        .get_blueprint_revision(entity.blueprint_id, entity.blueprint_version)
-        .await?
-        .ok_or_else(|| ApiError::not_found("blueprint version"))?;
-    let reusable_attributes = repository.entity_reusable_attributes(entity_id).await?;
-    let reusable_values = repository.reusable_form_values(entity_id).await?;
+    // The remaining reads are independent of each other.
+    let (blueprint, reusable_attributes, reusable_values, can_write) = tokio::try_join!(
+        async {
+            repository
+                .get_blueprint_revision(entity.blueprint_id, entity.blueprint_version)
+                .await?
+                .ok_or_else(|| ApiError::not_found("blueprint version"))
+        },
+        async { Ok(repository.entity_reusable_attributes(entity_id).await?) },
+        async { Ok(repository.reusable_form_values(entity_id).await?) },
+        async {
+            Ok(repository
+                .is_authorized(user, workspace_id, "entities.write", Some(entity_id), None)
+                .await?)
+        },
+    )?;
     Ok(Json(EntityFormResponse {
-        can_write: repository
-            .is_authorized(user, workspace_id, "entities.write", Some(entity_id), None)
-            .await?,
+        can_write,
         context: entity
             .projections
             .get("preview")

@@ -123,11 +123,30 @@ pub(super) async fn session_response_payload(
     user_id: Uuid,
     workspace_id: Uuid,
 ) -> Result<SessionResponse, ApiError> {
-    let login_identifier = state
-        .repository
-        .workspace_login_identifier(workspace_id)
-        .await?;
-    session_response_payload_with_identifier(state, user_id, workspace_id, login_identifier).await
+    // These reads are independent; run them concurrently.
+    let (login_identifier, account, avatar, capabilities) = tokio::try_join!(
+        async {
+            Ok::<_, ApiError>(
+                state
+                    .repository
+                    .workspace_login_identifier(workspace_id)
+                    .await?,
+            )
+        },
+        async { Ok(state.repository.user_account(user_id).await?) },
+        async { Ok(state.repository.own_avatar(user_id, workspace_id).await?) },
+        session_capabilities(state, user_id, workspace_id),
+    )?;
+    Ok(SessionResponse {
+        user_id,
+        display_name: account.display_name,
+        email: account.email,
+        time_zone: account.time_zone,
+        avatar,
+        workspace_id,
+        login_identifier,
+        capabilities,
+    })
 }
 
 async fn session_response_payload_with_identifier(
@@ -136,16 +155,20 @@ async fn session_response_payload_with_identifier(
     workspace_id: Uuid,
     login_identifier: String,
 ) -> Result<SessionResponse, ApiError> {
-    let account = state.repository.user_account(user_id).await?;
+    let (account, avatar, capabilities) = tokio::try_join!(
+        async { Ok::<_, ApiError>(state.repository.user_account(user_id).await?) },
+        async { Ok(state.repository.own_avatar(user_id, workspace_id).await?) },
+        session_capabilities(state, user_id, workspace_id),
+    )?;
     Ok(SessionResponse {
         user_id,
         display_name: account.display_name,
         email: account.email,
         time_zone: account.time_zone,
-        avatar: state.repository.own_avatar(user_id, workspace_id).await?,
+        avatar,
         workspace_id,
         login_identifier,
-        capabilities: session_capabilities(state, user_id, workspace_id).await?,
+        capabilities,
     })
 }
 

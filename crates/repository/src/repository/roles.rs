@@ -66,9 +66,17 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
         if known != permissions.len() as i64 {
             return Err(RepositoryError::NotFound("permission"));
         }
-        for permission in permissions {
-            self.require_permission(actor_id, workspace_id, permission)
-                .await?;
+        // An actor may only delegate permissions it holds workspace-wide;
+        // one query covers every requested permission.
+        let requested: Vec<&str> = permissions.iter().map(String::as_str).collect();
+        let held = self
+            .workspace_permissions(actor_id, workspace_id, &requested)
+            .await?;
+        if requested
+            .iter()
+            .any(|permission| !held.contains(*permission))
+        {
+            return Err(RepositoryError::NotFound("permission"));
         }
         Ok(())
     }
