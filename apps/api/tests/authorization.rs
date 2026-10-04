@@ -422,3 +422,86 @@ async fn system_health_reports_the_running_build_to_signed_in_users(pool: PgPool
     assert_eq!(body["build"]["commit"], env!("ATTRICAT_BUILD_COMMIT"));
     server.abort();
 }
+
+#[sqlx::test]
+async fn explore_navigation_lists_only_readable_published_entries(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let owner = authenticated_client();
+    let definition = |code: &str| {
+        format!(
+            "format_version = 1\ncode = \"{code}\"\nname = \"Name of {code}\"\nkind = \"entity\"\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"\n"
+        )
+    };
+    let alpha = create_blueprint(&owner, &base_url, &definition("nav_alpha")).await;
+    create_blueprint(&owner, &base_url, &definition("nav_beta")).await;
+    create_blueprint(&owner, &base_url, &definition("nav_gamma")).await;
+    let response = owner
+        .put(format!("{base_url}/workspace/navigation"))
+        .json(&json!({ "explore_navigation": [
+            { "blueprint_code": "nav_gamma" },
+            { "blueprint_code": "nav_alpha" },
+            { "blueprint_code": "nav_beta", "visible_to_role_codes": ["owner"] }
+        ] }))
+        .send()
+        .await
+        .unwrap();
+    assert!(response.status().is_success(), "{}", response.status());
+
+    // A member whose only read grant is the alpha blueprint family.
+    let workspace_id: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
+    let member_id = Uuid::new_v4();
+    let membership_id = Uuid::new_v4();
+    sqlx::query("INSERT INTO users (id, email) VALUES ($1, 'nav-member@example.test')")
+        .bind(member_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO workspace_memberships (id, workspace_id, user_id) VALUES ($1, $2, $3)",
+    )
+    .bind(membership_id)
+    .bind(workspace_id)
+    .bind(member_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO role_grants (id, workspace_id, membership_id, role_id, scope_type, scope_target_id) VALUES ($1, $2, $3, '00000000-0000-4000-8000-000000000104', 'blueprint_family', $4)")
+        .bind(Uuid::new_v4())
+        .bind(workspace_id)
+        .bind(membership_id)
+        .bind(alpha["blueprint"]["id"].as_str().unwrap().parse::<Uuid>().unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+    let repository = api::repository::CatalogRepository::new(pool.clone(), workspace_id);
+    let codes = |items: Vec<api::repository::ExploreNavigationItem>| {
+        items
+            .into_iter()
+            .map(|item| (item.blueprint_code, item.blueprint_name))
+            .collect::<Vec<_>>()
+    };
+    let owner_id: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
+    assert_eq!(
+        codes(
+            repository
+                .list_explore_navigation(owner_id, workspace_id)
+                .await
+                .unwrap()
+        ),
+        vec![
+            ("nav_gamma".to_owned(), "Name of nav_gamma".to_owned()),
+            ("nav_alpha".to_owned(), "Name of nav_alpha".to_owned()),
+            ("nav_beta".to_owned(), "Name of nav_beta".to_owned()),
+        ]
+    );
+    assert_eq!(
+        codes(
+            repository
+                .list_explore_navigation(member_id, workspace_id)
+                .await
+                .unwrap()
+        ),
+        vec![("nav_alpha".to_owned(), "Name of nav_alpha".to_owned())]
+    );
+    server.abort();
+}

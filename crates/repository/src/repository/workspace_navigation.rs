@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 use sqlx::{Postgres, Transaction};
@@ -65,39 +65,44 @@ impl CatalogRepository {
         .fetch_all(&self.pool)
         .await?;
         let held_roles: HashSet<_> = held_roles.into_iter().collect();
+        let entries: Vec<ExploreNavigationEntry> = entries
+            .into_iter()
+            .filter(|entry| {
+                entry.visible_to_role_codes.is_empty()
+                    || entry
+                        .visible_to_role_codes
+                        .iter()
+                        .any(|role| held_roles.contains(role))
+            })
+            .collect();
+        if entries.is_empty() {
+            return Ok(Vec::new());
+        }
+        let codes: Vec<String> = entries
+            .iter()
+            .map(|entry| entry.blueprint_code.clone())
+            .collect();
+        let readable = self
+            .authorized_target_codes(actor_id, workspace_id, "entities.read", &codes)
+            .await?;
+        let names: HashMap<String, String> = sqlx::query_as::<_, (String, String)>(
+            "SELECT DISTINCT ON (code) code, name FROM blueprints WHERE workspace_id = $1 AND code = ANY($2) AND kind = 'entity' AND status = 'published' AND deleted_at IS NULL ORDER BY code, version DESC",
+        )
+        .bind(workspace_id)
+        .bind(&codes)
+        .fetch_all(&self.pool)
+        .await?
+        .into_iter()
+        .collect();
         let mut items = Vec::new();
         for entry in entries {
-            if !entry.visible_to_role_codes.is_empty()
-                && !entry
-                    .visible_to_role_codes
-                    .iter()
-                    .any(|role| held_roles.contains(role))
-            {
+            if !readable.contains(&entry.blueprint_code) {
                 continue;
             }
-            if !self
-                .is_authorized(
-                    actor_id,
-                    workspace_id,
-                    "entities.read",
-                    None,
-                    Some(&entry.blueprint_code),
-                )
-                .await?
-            {
-                continue;
-            }
-            let blueprint_name: Option<String> = sqlx::query_scalar(
-                "SELECT name FROM blueprints WHERE workspace_id = $1 AND code = $2 AND kind = 'entity' AND status = 'published' AND deleted_at IS NULL ORDER BY version DESC LIMIT 1",
-            )
-            .bind(workspace_id)
-            .bind(&entry.blueprint_code)
-            .fetch_optional(&self.pool)
-            .await?;
-            if let Some(blueprint_name) = blueprint_name {
+            if let Some(blueprint_name) = names.get(&entry.blueprint_code) {
                 items.push(ExploreNavigationItem {
+                    blueprint_name: blueprint_name.clone(),
                     blueprint_code: entry.blueprint_code,
-                    blueprint_name,
                 });
             }
         }

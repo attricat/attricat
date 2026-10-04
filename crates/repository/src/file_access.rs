@@ -78,16 +78,18 @@ pub async fn authorize_file_read(
     file_id: Uuid,
     operation: impl Fn(Uuid, Uuid, Uuid) -> FileAccessOperation,
 ) -> Result<bool, RepositoryError> {
-    for target in repository.file_read_targets(file_id).await? {
-        if repository
-            .is_authorized(
-                principal,
-                workspace,
-                "entities.read",
-                Some(target.entity_id),
-                None,
-            )
-            .await?
+    let targets = repository.file_read_targets(file_id).await?;
+    if targets.is_empty() {
+        return Ok(false);
+    }
+    // One grant query for every referencing entity; the policy is still
+    // consulted per readable target, in order, until one allows.
+    let entity_ids: Vec<Uuid> = targets.iter().map(|target| target.entity_id).collect();
+    let readable = repository
+        .authorized_entity_ids(principal, workspace, "entities.read", &entity_ids)
+        .await?;
+    for target in targets {
+        if readable.contains(&target.entity_id)
             && policy
                 .authorize(operation(file_id, target.entity_id, target.blueprint_id))
                 .await

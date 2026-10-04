@@ -1654,6 +1654,34 @@ impl<S: RepositoryScope> CatalogRepository<S> {
         Ok(rows.into_iter().collect())
     }
 
+    /// The subset of `target_codes` the user may access with `permission`,
+    /// in one query. Equivalent to calling [`Self::is_authorized`] with each
+    /// code as the target code and no target ID.
+    pub async fn authorized_target_codes(
+        &self,
+        user_id: Uuid,
+        workspace_id: Uuid,
+        permission: &str,
+        target_codes: &[String],
+    ) -> Result<HashSet<String>, RepositoryError> {
+        if target_codes.is_empty() {
+            return Ok(HashSet::new());
+        }
+        let codes = GrantCodes::Permission(permission);
+        let sql = format!(
+            "WITH RECURSIVE {}, requested AS (SELECT DISTINCT code FROM unnest($4::text[]) AS requested(code)), ancestors AS (SELECT r.code, c.id, c.parent_id FROM requested r JOIN attribute_contexts c ON c.workspace_id = $2 AND c.code = r.code UNION ALL SELECT a.code, p.id, p.parent_id FROM attribute_contexts p JOIN ancestors a ON a.parent_id = p.id WHERE p.workspace_id = $2) SELECT r.code FROM requested r WHERE EXISTS (SELECT 1 FROM grants g WHERE (g.scope_type = 'workspace' AND g.scope_target_id = $2) OR (g.scope_type = 'blueprint_family' AND EXISTS (SELECT 1 FROM blueprints b WHERE b.workspace_id = $2 AND b.code = r.code AND b.id = g.scope_target_id)) OR (g.scope_type = 'context_subtree' AND EXISTS (SELECT 1 FROM ancestors a WHERE a.code = r.code AND a.id = g.scope_target_id)) OR (r.code = '__context_list__' AND g.scope_type = 'context_subtree'))",
+            codes.grant_set_sql()
+        );
+        let rows: Vec<String> = sqlx::query_scalar(&sql)
+            .bind(user_id)
+            .bind(workspace_id)
+            .bind(codes.codes())
+            .bind(target_codes)
+            .fetch_all(&self.pool)
+            .await?;
+        Ok(rows.into_iter().collect())
+    }
+
     pub async fn is_authorized(
         &self,
         user_id: Uuid,
