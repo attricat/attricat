@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createLink } from '@tanstack/react-router';
 import { Alert, Box, Tab, Tabs, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import { ApiErrorAlert } from '../../components/CheckViolationsAlert';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { currentSession } from '../auth/api';
@@ -119,6 +120,12 @@ export const RuleInspectionPage = ({
         id={`${RULE_TABPANEL_ID_PREFIX}-${activeSectionIndex}`}
         role="tabpanel"
       >
+        {section === RULE_SECTION_RULES && run.error && (
+          <ApiErrorAlert error={run.error} sx={{ mt: 3 }} />
+        )}
+        {section === RULE_SECTION_FINDINGS && acknowledge.error && (
+          <ApiErrorAlert error={acknowledge.error} sx={{ mt: 3 }} />
+        )}
         {section === RULE_SECTION_RULES && (
           <RulesSection
             canManage={canManage}

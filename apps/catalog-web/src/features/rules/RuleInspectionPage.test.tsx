@@ -6,7 +6,14 @@ import { forwardRef, type ComponentPropsWithoutRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { currentSession } from '../auth/api';
-import { acknowledgeFinding, listFindings, listRules, runRuleNow } from './api';
+import {
+  acknowledgeFinding,
+  listFindings,
+  listRules,
+  runRuleNow,
+  type Finding,
+  type Rule,
+} from './api';
 import { RuleInspectionPage } from './RuleInspectionPage';
 
 vi.mock('@tanstack/react-router', () => ({
@@ -29,6 +36,40 @@ vi.mock('./api', () => ({
 }));
 
 const id = '123e4567-e89b-42d3-a456-426614174000';
+const manager = {
+  capabilities: { rules_read: true, rules_manage: true },
+} as Awaited<ReturnType<typeof currentSession>>;
+const rule: Rule = {
+  id,
+  blueprint_id: id,
+  blueprint_version: 1,
+  context_id: null,
+  code: 'check',
+  name: 'Check',
+  version: 1,
+  status: 'published',
+  definition: '',
+  definition_hash: '',
+  compiled_plan: {},
+  published_at: null,
+  created_at: '',
+  enabled_version: null,
+};
+const finding: Finding = {
+  id,
+  rule_id: id,
+  rule_version: 1,
+  entity_id: id,
+  context_id: null,
+  severity: 'warning',
+  message: 'Check failed',
+  evidence: {},
+  state: 'open',
+  acknowledged_at: null,
+  resolved_at: null,
+  created_at: '',
+  updated_at: '',
+};
 const renderPage = (section: 'rules' | 'findings') => {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -114,5 +155,35 @@ describe('RuleInspectionPage', () => {
       (screen.getByRole('button', { name: 'Acknowledge' }) as HTMLButtonElement)
         .disabled,
     ).toBe(true);
+  });
+
+  it('shows why a rule run was refused', async () => {
+    vi.mocked(currentSession).mockResolvedValue(manager);
+    vi.mocked(listRules).mockResolvedValue([rule]);
+    vi.mocked(runRuleNow).mockRejectedValue(
+      new Error('rule has no enabled revision'),
+    );
+    renderPage('rules');
+    await userEvent
+      .setup()
+      .click(await screen.findByRole('button', { name: 'Run now' }));
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      'rule has no enabled revision',
+    );
+  });
+
+  it('shows why an acknowledgement was refused', async () => {
+    vi.mocked(currentSession).mockResolvedValue(manager);
+    vi.mocked(listFindings).mockResolvedValue([finding]);
+    vi.mocked(acknowledgeFinding).mockRejectedValue(
+      new Error('finding was already resolved'),
+    );
+    renderPage('findings');
+    await userEvent
+      .setup()
+      .click(await screen.findByRole('button', { name: 'Acknowledge' }));
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      'finding was already resolved',
+    );
   });
 });

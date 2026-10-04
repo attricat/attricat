@@ -64,7 +64,14 @@ attribute_code = "${attribute}"`,
   const missing = await createEntity(blueprint, [
     scalar('title', 'Incomplete product'),
   ]);
-  // Blueprint rules publish disabled, and the web app cannot enable them.
+  // Blueprint rules publish disabled, so a normal run is refused.
+  await page.goto('/manage/rules');
+  const ruleRow = page.getByRole('row').filter({ hasText: ruleName });
+  await expect(ruleRow).toContainText('Disabled');
+  await ruleRow.getByRole('button', { name: 'Run now' }).click();
+  await expect(page.getByRole('alert')).toBeVisible();
+
+  // The web app cannot enable rules.
   const rules =
     await request<Array<{ id: string; name: string; version: number }>>(
       '/rules',
@@ -76,8 +83,7 @@ attribute_code = "${attribute}"`,
     body: '{}',
   });
 
-  await page.goto('/manage/rules');
-  const ruleRow = page.getByRole('row').filter({ hasText: ruleName });
+  await page.reload();
   await expect(ruleRow).toContainText('Enabled');
   await ruleRow.getByRole('button', { name: 'Dry run' }).click();
   await expectLatestRun(page, 'manual (dry run) Completed 2 1');
