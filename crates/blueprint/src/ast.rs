@@ -38,7 +38,7 @@ pub struct UniqueKeyDefinition {
     /// One to eight scalar attributes, or single-target relationships, whose
     /// combined values must be unique.
     #[schemars(
-        length(min = 1, max = 8),
+        length(min = 1, max = MAX_UNIQUE_KEY_ATTRIBUTES),
         extend("x-attricat-reference" = "attribute")
     )]
     pub attributes: Vec<String>,

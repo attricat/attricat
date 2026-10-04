@@ -209,6 +209,28 @@ pub enum Predicate {
     },
 }
 
+/// Why a predicate is not valid for its usage and attribute types.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum PredicateError {
+    /// The predicate names an attribute the record does not declare.
+    #[error("unknown attribute '{0}'")]
+    UnknownAttribute(String),
+    #[error("{0}")]
+    Invalid(String),
+}
+
+impl From<String> for PredicateError {
+    fn from(message: String) -> Self {
+        Self::Invalid(message)
+    }
+}
+
+impl From<&str> for PredicateError {
+    fn from(message: &str) -> Self {
+        Self::Invalid(message.to_owned())
+    }
+}
+
 /// A named predicate in an entity schema (`x-attricat-checks`) or on a status
 /// transition edge (`conditions`).
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize, PartialEq)]
@@ -295,7 +317,7 @@ pub fn validate_predicate(
     predicate: &Predicate,
     attributes: Option<&dyn AttributeTypes>,
     usage: Usage,
-) -> Result<(), String> {
+) -> Result<(), PredicateError> {
     let mut nodes = 0;
     walk(
         predicate,
@@ -360,21 +382,21 @@ fn walk(
     depth: usize,
     nodes: &mut usize,
     usage: Usage,
-) -> Result<(), String> {
+) -> Result<(), PredicateError> {
     *nodes += 1;
     if depth > MAX_DEPTH {
-        return Err(format!("predicates can be nested at most {MAX_DEPTH} deep"));
+        return Err(format!("predicates can be nested at most {MAX_DEPTH} deep").into());
     }
     if *nodes > MAX_NODES {
-        return Err(format!("a predicate can have at most {MAX_NODES} parts"));
+        return Err(format!("a predicate can have at most {MAX_NODES} parts").into());
     }
-    let rules_only = |name: &str| {
+    let rules_only = |name: &str| -> Result<(), PredicateError> {
         if usage == Usage::Enforced {
             Err(format!(
                 "'{name}' is not safe for synchronous evaluation and is only available in rules that report findings"
-            ))
+            ).into())
         } else if scope.nested {
-            Err(format!("'{name}' cannot be used on linked records"))
+            Err(format!("'{name}' cannot be used on linked records").into())
         } else {
             Ok(())
         }
@@ -392,14 +414,16 @@ fn walk(
             if !(1..=MAX_STALE_AGE_SECONDS).contains(max_age_seconds) {
                 return Err(format!(
                     "stale max_age_seconds must be between 1 and {MAX_STALE_AGE_SECONDS}"
-                ));
+                )
+                .into());
             }
         }
         Predicate::HasTag { tag } | Predicate::MissingTag { tag } => {
             if tag.trim().is_empty() || tag.len() > MAX_TAG_LENGTH {
                 return Err(format!(
                     "tag must be a non-empty string no longer than {MAX_TAG_LENGTH} bytes"
-                ));
+                )
+                .into());
             }
         }
         Predicate::Compare {
@@ -425,7 +449,7 @@ fn walk(
                 return Err("one_of does not apply to relationship or file attributes".into());
             }
             if values.is_empty() || values.len() > MAX_ONE_OF_VALUES {
-                return Err(format!("one_of needs 1-{MAX_ONE_OF_VALUES} values"));
+                return Err(format!("one_of needs 1-{MAX_ONE_OF_VALUES} values").into());
             }
             for value in values {
                 literal(value, kind, CompareOp::Eq)?;
@@ -446,20 +470,21 @@ fn walk(
             if offset_days.abs() > MAX_OFFSET_DAYS {
                 return Err(format!(
                     "offset_days must be between -{MAX_OFFSET_DAYS} and {MAX_OFFSET_DAYS}"
-                ));
+                )
+                .into());
             }
         }
         Predicate::Unique { attribute_codes } => {
             rules_only("unique")?;
             if attribute_codes.is_empty() || attribute_codes.len() > MAX_UNIQUE_ATTRIBUTES {
-                return Err(format!(
-                    "unique needs 1-{MAX_UNIQUE_ATTRIBUTES} attribute codes"
-                ));
+                return Err(
+                    format!("unique needs 1-{MAX_UNIQUE_ATTRIBUTES} attribute codes").into(),
+                );
             }
             let mut seen = HashSet::new();
             for code in attribute_codes {
                 if !seen.insert(code) {
-                    return Err(format!("duplicate unique attribute '{code}'"));
+                    return Err(format!("duplicate unique attribute '{code}'").into());
                 }
                 if attribute(scope.current, code)?
                     .map(Category::of)
@@ -505,9 +530,7 @@ fn walk(
         }
         Predicate::AllOf { predicates } | Predicate::AnyOf { predicates } => {
             if predicates.is_empty() || predicates.len() > MAX_BRANCHES {
-                return Err(format!(
-                    "all_of and any_of need 1-{MAX_BRANCHES} predicates"
-                ));
+                return Err(format!("all_of and any_of need 1-{MAX_BRANCHES} predicates").into());
             }
             for predicate in predicates {
                 walk(predicate, scope, depth + 1, nodes, usage)?;
@@ -524,7 +547,7 @@ fn validate_compare(
     other_attribute_code: Option<&str>,
     subject_attribute_code: Option<&str>,
     value: Option<&Value>,
-) -> Result<(), String> {
+) -> Result<(), PredicateError> {
     let left = attribute(scope.current, attribute_code)?.map(Category::of);
     let operands = usize::from(other_attribute_code.is_some())
         + usize::from(subject_attribute_code.is_some())
@@ -555,10 +578,9 @@ fn validate_compare(
             return Err("file attributes cannot be compared".into());
         }
         if op.is_ordering() && !side.is_orderable() {
-            return Err(format!(
-                "'{}' orders only numbers, dates and datetimes",
-                op.as_str()
-            ));
+            return Err(
+                format!("'{}' orders only numbers, dates and datetimes", op.as_str()).into(),
+            );
         }
         if op == CompareOp::Disjoint && side != Category::Set {
             return Err("'disjoint' compares relationship attributes only".into());
@@ -569,7 +591,8 @@ fn validate_compare(
     {
         return Err(format!(
             "'{attribute_code}' and the compared attribute have incompatible types"
-        ));
+        )
+        .into());
     }
     if let Some(value) = value {
         literal(value, left, op)?;
@@ -582,10 +605,10 @@ fn validate_referenced_by(
     relationship_code: &str,
     min: Option<u32>,
     max: Option<u32>,
-) -> Result<(), String> {
+) -> Result<(), PredicateError> {
     for code in [blueprint_code, relationship_code] {
         if !crate::is_valid_code(code) {
-            return Err(format!("invalid code '{code}'"));
+            return Err(format!("invalid code '{code}'").into());
         }
     }
     match (min, max) {
@@ -600,9 +623,7 @@ fn validate_referenced_by(
         .flatten()
         .any(|bound| bound as usize > MAX_REFERENCING_RECORDS)
     {
-        return Err(format!(
-            "referenced_by bounds cannot exceed {MAX_REFERENCING_RECORDS}"
-        ));
+        return Err(format!("referenced_by bounds cannot exceed {MAX_REFERENCING_RECORDS}").into());
     }
     Ok(())
 }
@@ -613,7 +634,7 @@ fn walk_nested(
     depth: usize,
     nodes: &mut usize,
     usage: Usage,
-) -> Result<(), String> {
+) -> Result<(), PredicateError> {
     walk(
         predicate,
         Scope {
@@ -630,28 +651,28 @@ fn walk_nested(
 fn attribute<'a>(
     types: Option<&'a dyn AttributeTypes>,
     code: &str,
-) -> Result<Option<&'a str>, String> {
+) -> Result<Option<&'a str>, PredicateError> {
     if !crate::is_valid_code(code) {
-        return Err(format!("invalid attribute code '{code}'"));
+        return Err(format!("invalid attribute code '{code}'").into());
     }
     match types {
         None => Ok(None),
         Some(types) => types
             .attribute_type(code)
-            .ok_or_else(|| format!("unknown attribute '{code}'")),
+            .ok_or_else(|| PredicateError::UnknownAttribute(code.to_owned())),
     }
 }
 
-fn relationship(types: Option<&dyn AttributeTypes>, code: &str) -> Result<(), String> {
+fn relationship(types: Option<&dyn AttributeTypes>, code: &str) -> Result<(), PredicateError> {
     match attribute(types, code)? {
         Some(value_type) if value_type != "relationship" => {
-            Err(format!("'{code}' is not a relationship attribute"))
+            Err(format!("'{code}' is not a relationship attribute").into())
         }
         _ => Ok(()),
     }
 }
 
-fn literal(value: &Value, kind: Option<Category>, op: CompareOp) -> Result<(), String> {
+fn literal(value: &Value, kind: Option<Category>, op: CompareOp) -> Result<(), PredicateError> {
     let valid = match (kind, value) {
         (_, Value::Null | Value::Array(_) | Value::Object(_)) => false,
         (Some(Category::Set | Category::File), _) => false,
@@ -671,7 +692,7 @@ fn literal(value: &Value, kind: Option<Category>, op: CompareOp) -> Result<(), S
     if valid {
         Ok(())
     } else {
-        Err(format!("value {value} does not match the attribute type"))
+        Err(format!("value {value} does not match the attribute type").into())
     }
 }
 
@@ -1509,7 +1530,7 @@ mod tests {
         ));
     }
 
-    fn validate(source: Value, usage: Usage) -> Result<(), String> {
+    fn validate(source: Value, usage: Usage) -> Result<(), PredicateError> {
         let types = types();
         validate_predicate(&predicate(source), Some(&types), usage)
     }
