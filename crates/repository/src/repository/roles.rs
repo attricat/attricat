@@ -310,6 +310,19 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
         {
             return Err(RepositoryError::NotFound("replacement role"));
         }
+        // Reassigned grants become owner grants only under the rules for
+        // granting the owner role directly: an active owner grants it, and
+        // only at workspace scope.
+        if replacement == OWNER_ROLE_ID {
+            let narrower_scope: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM role_grants WHERE role_id = $1 AND workspace_id = $2 AND (scope_type <> 'workspace' OR scope_target_id <> $2))")
+                .bind(role_id)
+                .bind(workspace_id)
+                .fetch_one(&mut *tx)
+                .await?;
+            if narrower_scope || !Self::active_owner_on(&mut tx, actor_id, workspace_id).await? {
+                return Err(RepositoryError::NotFound("replacement role"));
+            }
+        }
         sqlx::query("DELETE FROM role_grants old USING role_grants replacement WHERE old.role_id = $1 AND replacement.role_id = $2 AND replacement.workspace_id = old.workspace_id AND replacement.membership_id = old.membership_id AND replacement.scope_type = old.scope_type AND replacement.scope_target_id = old.scope_target_id").bind(role_id).bind(replacement).execute(&mut *tx).await?;
         sqlx::query("UPDATE role_grants SET role_id = $1 WHERE role_id = $2 AND workspace_id = $3")
             .bind(replacement)

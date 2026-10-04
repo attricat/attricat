@@ -79,3 +79,57 @@ async fn custom_roles_are_managed_by_the_repository(pool: PgPool) {
         1
     );
 }
+
+#[sqlx::test]
+async fn retiring_a_role_into_owner_keeps_owner_grants_workspace_scoped(pool: PgPool) {
+    let (workspace, owner, membership) = workspace_owner(&pool).await;
+    let repository = CatalogRepository::system(pool.clone());
+    let reader = repository
+        .create_workspace_role(
+            owner,
+            workspace,
+            "scoped-reader",
+            &["entities.read".to_owned()],
+        )
+        .await
+        .unwrap();
+    let context: Uuid = sqlx::query_scalar(
+        "SELECT id FROM attribute_contexts WHERE workspace_id = $1 AND code = 'default'",
+    )
+    .bind(workspace)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    repository
+        .grant_workspace_member_role(
+            owner,
+            workspace,
+            membership,
+            reader,
+            "context_subtree",
+            context,
+        )
+        .await
+        .unwrap();
+
+    assert!(
+        repository
+            .retire_workspace_role(
+                owner,
+                workspace,
+                reader,
+                Some(OWNER_ROLE_ID.parse().unwrap()),
+            )
+            .await
+            .is_err()
+    );
+    let scoped_owner_grants: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM role_grants WHERE workspace_id = $1 AND role_id = $2 AND scope_type <> 'workspace'",
+    )
+    .bind(workspace)
+    .bind(OWNER_ROLE_ID.parse::<Uuid>().unwrap())
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(scoped_owner_grants, 0);
+}

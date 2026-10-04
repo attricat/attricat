@@ -205,7 +205,7 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
         let mut connection = self.pool.acquire().await?;
         Self::active_owner_on(&mut connection, actor_id, workspace_id).await
     }
-    async fn active_owner_on(
+    pub(super) async fn active_owner_on(
         connection: &mut sqlx::PgConnection,
         actor_id: Uuid,
         workspace_id: Uuid,
