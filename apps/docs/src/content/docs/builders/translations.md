@@ -1,6 +1,6 @@
 ---
 title: Translate labels
-description: Show blueprint names, attribute names, and view labels in each user's language with the workspace lexicon.
+description: Show blueprint names, attribute names, status labels, and view labels in each user's language with the workspace lexicon.
 ---
 
 Blueprint labels are plain text by default and display exactly as written. To translate a label, wrap it in double braces. The text inside the braces is looked up in the workspace **lexicon**, a set of translations that lives outside blueprints:
@@ -28,11 +28,25 @@ Because the lexicon is separate from blueprints, you can fix a translation or ad
 | Blueprint name | `name` |
 | Attribute name | `[[attributes]] name` on an inline attribute |
 | Reusable attribute name | `name` in its definition |
+| Status option label | `label` of each option in an `x-attricat-status` annotation, on inline and reusable attributes |
 | Tab and accordion section label | `label` in `tabs` and `accordion` blocks |
 | Table column heading | `label` in `[views.table] columns` |
 | Incoming relationship button and dialog title | `label` in `incoming_relationship_list` |
 
 Other text, such as `heading` and `text` blocks, display separators, and catalog values, is always shown as written.
+
+### Status labels
+
+A [status](/builders/validation/#statuses) stores a stable code, such as `live`, and shows its option label. Translate the label like any other:
+
+```toml
+"options": [
+  { "code": "draft", "label": "{{Draft|status}}" },
+  { "code": "live", "label": "{{Live}}", "tone": "success" }
+]
+```
+
+Status chips, the status select in the entity form, the Explorer's filter value list and filter pills, and plain-text values all show the translated label, with the same fallback as other labels. Searches, filters, saved searches, the API, and exports keep using the code, so translating or rewording a label never changes stored data. A context such as `{{Draft|status}}` keeps a status called "Draft" apart from other uses of the word.
 
 ## Reference syntax
 

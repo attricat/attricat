@@ -164,6 +164,7 @@ export const Explorer = ({ search: urlSearch, savedView }: Props) => {
             }
           />
           <ActiveExplorerFilters
+            attributes={selectedBlueprint.data?.attributes}
             filters={[
               ...(search.attributeFilters ?? []).map((filter, index) => ({
                 filter,

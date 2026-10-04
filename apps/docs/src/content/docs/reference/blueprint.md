@@ -71,7 +71,7 @@ value_type = "string"
 
 | `value_type` | Stored value | CLI/TOML example | Notes |
 | --- | --- | --- | --- |
-| `string` | Text | `value = "Blue shirt"` | Clearing a string in a non-default context removes the override instead of storing `""`. |
+| `string` | Text | `value = "Blue shirt"` | Clearing a string in a non-default context removes the override instead of storing `""`. Can also be a [status](/builders/validation/#statuses) or a [user or team assignment](#user-or-team-assignments). |
 | `number` | Decimal | `value = 19.99` | |
 | `integer` | 64-bit integer | `value = 12` | |
 | `boolean` | `true` or `false` | `value = true` | |
@@ -81,6 +81,27 @@ value_type = "string"
 | `json` | Any JSON value | | Cannot be sorted or used in Explorer filters. Prefer typed attributes or relationships. |
 | `relationship` | Links to other entities | | See [Relationship keys](#relationship-keys). |
 | `file` | Uploaded files | | See [File keys](#file-keys). |
+
+### User or team assignments
+
+A `string` attribute whose `value_schema` has an `x-attricat-principal` annotation stores a reference to a workspace user or team:
+
+```toml
+[[attributes]]
+code = "assignee"
+value_type = "string"
+value_schema = '''{"type": "string", "x-attricat-principal": {"version": 1, "kinds": ["user", "team"]}}'''
+```
+
+| Key | Value | Description |
+| --- | --- | --- |
+| `version` | `1` | Required. |
+| `kinds` | `["user"]`, `["team"]`, or both | Required. What the attribute accepts. |
+
+- Values are `user:<id>` or `team:<id>`, with the lowercase ID from `acli directory` or `GET /directory`. A missing value means unassigned.
+- The schema must have `"type": "string"` and no `enum`, `const`, `pattern`, or `format`. The attribute cannot have a `default_value` or also be a status. Reusable attributes accept the same annotation.
+- A new or changed value must be an active workspace member or a team that has not been deleted, of an accepted kind. Otherwise saving returns `422 attribute_value_schema_mismatch`. Unchanged values are not checked again.
+- Search filters match the stored value exactly. The value `@me` with operator `eq` matches the caller and every team the caller belongs to.
 
 ### Relationship keys
 

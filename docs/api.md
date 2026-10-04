@@ -126,6 +126,9 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `POST` | `/workspace/members/{member_id}/grants` | Add a role grant at one requested scope. |
 | `DELETE` | `/workspace/members/{member_id}/grants/{grant_id}` | Revoke a role grant. |
 | `POST` | `/workspace/members/{member_id}/transfer-ownership` | Transfer ownership to an active member (owner only). |
+| `GET` | `/directory` | Users and teams that [assignment attributes](blueprints.md#user-or-team-assignments) can reference (`entities.read`). |
+| `GET`, `POST` | `/workspace/teams` | List or create [teams](#teams) (`members.manage`). |
+| `PATCH`, `DELETE` | `/workspace/teams/{team_id}` | Rename a team or replace its members; delete it (`members.manage`). |
 | `GET`, `POST` | `/workspace/invitations` | List or create expiring email invitations. |
 | `POST` | `/workspace/users` | Create a workspace user and membership (`members.manage`). |
 | `DELETE` | `/workspace/invitations/{invitation_id}` | Revoke a pending invitation. |
@@ -296,6 +299,12 @@ through up to three relationship hops, for example
 type. A many-valued path matches when any reachable scalar satisfies the
 criterion. Each hop uses the linked entity's pinned blueprint revision.
 
+For a [user or team assignment](blueprints.md#user-or-team-assignments)
+attribute, `{"operator":"eq","value":"@me"}` matches entities assigned to the
+caller or to any team the caller belongs to (`@me` is resolved per request, so
+saved searches keep it literally). Other values match the stored
+`user:<uuid>` / `team:<uuid>` reference exactly.
+
 ### Search table sorting
 
 A search request may include `sort` when its `field` is a scalar column
@@ -388,6 +397,25 @@ The report returns `reference_count`, per-language `translated_count`,
 `untranslated` references (never for `en`), and `missing_plural_categories`
 (blueprint names and any entry with plural forms), plus `orphaned` keys no
 non-deleted blueprint revision or reusable attribute name references.
+
+## Teams
+
+Teams are named groups of workspace members that assignment attributes can
+reference as `team:<id>`. `POST /workspace/teams` takes
+`{"code","name","member_user_ids"?}`; `PATCH /workspace/teams/{id}` takes
+`{"name"?,"member_user_ids"?}` and replaces the whole member list when given.
+Codes are unique among non-deleted teams, use `A-Z a-z 0-9 _ -` (at most 128
+characters) and cannot change; names are 1–200 characters. Members must be
+workspace members. A workspace has at most 1,000 teams of up to 1,000 members.
+Responses return `id`, `code`, `name`, `member_user_ids`, `created_at` and
+`updated_at`. Deleting a team removes its memberships but keeps the row:
+existing assignments still resolve its name through `GET /directory`
+(`deleted: true`), and new assignments to it are rejected.
+
+`GET /directory` returns `{"users":[{"id","display_name","email","active"}],
+"teams":[{"id","code","name","deleted"}]}`. It includes inactive members and
+deleted teams so existing assignments render; only active members and
+non-deleted teams can be newly assigned.
 
 ## Saved views and share links
 

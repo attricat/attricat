@@ -11,9 +11,10 @@ import { WorkspaceInvitationsSection } from './WorkspaceInvitationsSection';
 import { WorkspaceMembersSection } from './WorkspaceMembersSection';
 import { WorkspaceNavigationSection } from './WorkspaceNavigationSection';
 import { WorkspaceRolesSection } from './WorkspaceRolesSection';
+import { WorkspaceTeamsSection } from './WorkspaceTeamsSection';
 
 export type WorkspaceManagementSection =
-  'members' | 'roles' | 'invitations' | 'navigation';
+  'members' | 'teams' | 'roles' | 'invitations' | 'navigation';
 
 const sections: {
   labelKey: string;
@@ -24,6 +25,11 @@ const sections: {
     labelKey: 'workspace.members',
     section: 'members',
     to: '/manage/workspace/members',
+  },
+  {
+    labelKey: 'workspace.teams',
+    section: 'teams',
+    to: '/manage/workspace/teams',
   },
   {
     labelKey: 'workspace.roles',
@@ -69,7 +75,9 @@ export const WorkspaceManagementPage = ({
           .filter(
             (item) =>
               (item.section === 'roles' && capabilities?.roles_manage) ||
-              ((item.section === 'members' || item.section === 'invitations') &&
+              ((item.section === 'members' ||
+                item.section === 'teams' ||
+                item.section === 'invitations') &&
                 capabilities?.members_manage) ||
               (item.section === 'navigation' &&
                 capabilities?.workspace_navigation_manage),
@@ -94,6 +102,11 @@ export const WorkspaceManagementPage = ({
           canGrantRoles={capabilities?.roles_grant === true}
           currentUserId={session.data?.user_id}
           workspaceId={session.data?.workspace_id}
+        />
+      )}
+      {section === 'teams' && (
+        <WorkspaceTeamsSection
+          canManage={capabilities?.members_manage === true}
         />
       )}
       {section === 'roles' && (

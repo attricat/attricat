@@ -5,7 +5,18 @@ import { useTranslation } from 'react-i18next';
 import { RelationshipSelectorDialog } from '../../components/RelationshipSelectorDialog';
 import type { Attribute } from '../entities/api';
 import { attributeLabel } from '../entities/entityDisplay';
-import { operatorsForValueType } from './attributeFilters';
+import { statusConfiguration, statusOptionLabel } from '../entities/status';
+import {
+  CURRENT_USER_FILTER_VALUE,
+  principalKinds,
+} from '../principals/constants';
+import {
+  principalConfiguration,
+  principalReference,
+  userLabel,
+} from '../principals/principal';
+import { usePrincipalDirectory } from '../principals/usePrincipalDirectory';
+import { operatorsForAttribute } from './attributeFilters';
 import {
   attributeFilterInputType,
   booleanFilterValues,
@@ -26,9 +37,7 @@ const describeDraft = (
   attributes: Attribute[],
 ) => {
   const attribute = attributes.find((item) => item.code === draft.field);
-  const availableOperators = operatorsForValueType(
-    attribute?.value_type ?? 'string',
-  );
+  const availableOperators = operatorsForAttribute(attribute);
   return {
     attribute,
     availableOperators,
@@ -100,6 +109,26 @@ export const AttributeFilterDialog = ({
     relationship,
     valueIsValid,
   } = describeDraft(values, attributes);
+  const status = attribute && statusConfiguration(attribute);
+  const principal = attribute && principalConfiguration(attribute);
+  const directory = usePrincipalDirectory(Boolean(principal));
+  // Filters may target former members and deleted teams, unlike assignment.
+  const principalOptions = principal
+    ? [
+        ...(principal.kinds.includes(principalKinds.user)
+          ? (directory.data?.users ?? []).map((user) => ({
+              value: principalReference(principalKinds.user, user.id),
+              label: userLabel(user),
+            }))
+          : []),
+        ...(principal.kinds.includes(principalKinds.team)
+          ? (directory.data?.teams ?? []).map((team) => ({
+              value: principalReference(principalKinds.team, team.id),
+              label: team.name,
+            }))
+          : []),
+      ]
+    : [];
   const submit = () => void form.handleSubmit();
   const submitOnEnter = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== 'Enter') return;
@@ -225,6 +254,39 @@ export const AttributeFilterDialog = ({
                     <MenuItem value={booleanFilterValues.false}>
                       {t('explorer.false')}
                     </MenuItem>
+                  </TextField>
+                ) : principal ? (
+                  <TextField
+                    fullWidth
+                    label={t('explorer.value')}
+                    onChange={(event) => field.handleChange(event.target.value)}
+                    onKeyDown={submitOnEnter}
+                    select
+                    value={field.state.value}
+                  >
+                    <MenuItem value={CURRENT_USER_FILTER_VALUE}>
+                      {t('explorer.assignedToMe')}
+                    </MenuItem>
+                    {principalOptions.map((option) => (
+                      <MenuItem key={option.value} value={option.value}>
+                        {option.label}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                ) : status ? (
+                  <TextField
+                    fullWidth
+                    label={t('explorer.value')}
+                    onChange={(event) => field.handleChange(event.target.value)}
+                    onKeyDown={submitOnEnter}
+                    select
+                    value={field.state.value}
+                  >
+                    {status.options.map((option) => (
+                      <MenuItem key={option.code} value={option.code}>
+                        {statusOptionLabel(option)}
+                      </MenuItem>
+                    ))}
                   </TextField>
                 ) : (
                   <TextField

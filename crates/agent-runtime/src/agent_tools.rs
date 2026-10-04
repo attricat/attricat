@@ -128,6 +128,11 @@ pub fn definitions() -> Vec<ToolDefinition> {
             json!({"type":"object","additionalProperties":false}),
         ),
         definition(
+            "get_workspace_directory",
+            "List workspace users (id, display_name, email, active) and teams (id, code, name, deleted) for user-or-team assignment attributes (x-attricat-principal). Assignment values are \"user:<id>\" or \"team:<id>\"; only active users and teams that are not deleted can be newly assigned. In search_entities filters, the value \"@me\" with operator eq matches the person who started this conversation and their teams.",
+            json!({"type":"object","additionalProperties":false}),
+        ),
+        definition(
             "get_context",
             "Read one attribute context by ID, including its parent and data; use before changing a context.",
             json!({"type":"object","required":["context_id"],"properties":{"context_id":{"type":"string","format":"uuid"}},"additionalProperties":false}),
@@ -472,6 +477,7 @@ pub fn kind(name: &str) -> Result<ToolKind, ToolError> {
         | "list_blueprints"
         | "get_blueprint_revision"
         | "list_contexts"
+        | "get_workspace_directory"
         | "get_context"
         | "get_entity"
         | "get_entity_context_preview"
@@ -769,6 +775,10 @@ pub async fn execute_read(
                 .await?,
         )
         .expect("models serialize"),
+        "get_workspace_directory" => {
+            serde_json::to_value(repository.workspace_directory().await?)
+                .expect("directory serializes")
+        }
         "get_context" => serde_json::to_value(repository.get_context_by_id(parse_uuid(&arguments, "context_id")?).await?
             .ok_or(RepositoryError::NotFound("context"))?).expect("context serializes"),
         "list_saved_searches" => json!(repository.list_saved_views(actor, "").await?
@@ -1087,7 +1097,7 @@ pub async fn execute_read(
                 .map(|resolved| resolved.ids.iter().copied().collect::<Vec<_>>());
             let mut filters = Vec::with_capacity(input.filters.len());
             for filter in &input.filters {
-                filters.push(resolve_agent_filter(repository, &search_blueprint, filter).await?);
+                filters.push(resolve_agent_filter(repository, &search_blueprint, filter, actor).await?);
             }
             if !filters.is_empty() {
                 let ids = repository
@@ -1605,7 +1615,7 @@ pub async fn execute_mutation(
                 current
             };
             for filter in &input.attribute_filters {
-                resolve_agent_filter(repository, &source, filter).await?;
+                resolve_agent_filter(repository, &source, filter, actor).await?;
             }
             for facet in &input.relationship_facets {
                 resolve_agent_relationship_filter(
@@ -1795,7 +1805,7 @@ pub async fn execute_mutation(
             };
             if let Some(filters) = input.attribute_filters.as_ref() {
                 for filter in filters {
-                    resolve_agent_filter(repository, &source, filter).await?;
+                    resolve_agent_filter(repository, &source, filter, actor).await?;
                 }
             }
             if let Some(facets) = input.relationship_facets.as_ref() {
@@ -2185,6 +2195,7 @@ async fn read_authorized(
         | "get_extension_operation_run"
         | "list_blueprint_connector_jobs" => ("extensions.manage", None, None),
         "list_contexts" => ("contexts.read", None, Some("__context_list__")),
+        "get_workspace_directory" => ("entities.read", None, None),
         "get_context" => (
             "contexts.read",
             Some(parse_uuid(arguments, "context_id")?),
@@ -2440,6 +2451,7 @@ mod tests {
             assert!(definitions().iter().any(|tool| tool.function.name == name));
         }
         assert_eq!(kind("get_context").unwrap(), ToolKind::Read);
+        assert_eq!(kind("get_workspace_directory").unwrap(), ToolKind::Read);
         assert!(change_summary("update_entity_annotations", &json!({"entity_id":"id"})).is_err());
         assert_eq!(
             change_summary("update_context", &json!({"context_id":"id"})).unwrap(),

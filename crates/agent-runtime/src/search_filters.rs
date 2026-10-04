@@ -27,10 +27,13 @@ pub(crate) fn intersect_ids(current: Option<Vec<Uuid>>, next: Vec<Uuid>) -> Vec<
     }
 }
 
+/// `actor` is the person who started the conversation; `@me` filters on
+/// assignment attributes match them and their teams.
 pub(crate) async fn resolve_agent_filter(
     repository: &CatalogRepository,
     blueprint: &BlueprintWithAttributes,
     filter: &SearchFilter,
+    actor: Uuid,
 ) -> Result<EntitySearchFilter, ToolError> {
     let parts: Vec<_> = filter.field.split('.').collect();
     if parts.len() > 4 || parts.iter().any(|part| part.is_empty()) {
@@ -67,9 +70,14 @@ pub(crate) async fn resolve_agent_filter(
             .ok_or(RepositoryError::NotFound("target blueprint"))?;
     }
     let leaf = parts[parts.len() - 1];
-    let (attribute_code, value_type, reusable) =
+    let (attribute_code, value_type, reusable, value_schema) =
         match current.attributes.iter().find(|a| a.code == leaf) {
-            Some(attribute) => (attribute.code.clone(), attribute.value_type.clone(), false),
+            Some(attribute) => (
+                attribute.code.clone(),
+                attribute.value_type.clone(),
+                false,
+                attribute.value_schema.clone(),
+            ),
             None if relationship_path.is_empty() => {
                 let attribute = repository
                     .attached_reusable_attribute_for_blueprint(
@@ -88,6 +96,7 @@ pub(crate) async fn resolve_agent_filter(
                     format!("{}:{}", attribute.namespace, attribute.code),
                     attribute.value_type,
                     true,
+                    attribute.value_schema,
                 )
             }
             None => {
@@ -96,6 +105,25 @@ pub(crate) async fn resolve_agent_filter(
                 )));
             }
         };
+    if let Some(value) = repository
+        .current_user_filter_value(
+            value_schema.as_ref(),
+            &filter.operator,
+            &filter.value,
+            actor,
+        )
+        .await?
+    {
+        return Ok(EntitySearchFilter {
+            field: filter.field.clone(),
+            relationship_path,
+            leaf_field: attribute_code,
+            reusable,
+            operator: crate::repository::SEARCH_FILTER_EQ_ANY.to_owned(),
+            value_type,
+            value,
+        });
+    }
     let valid_operator = match value_type.as_str() {
         "string" => matches!(filter.operator.as_str(), "eq" | "contains" | "starts_with"),
         "number" | "integer" | "date" | "datetime" | "time" => {

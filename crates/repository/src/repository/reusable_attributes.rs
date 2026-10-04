@@ -154,9 +154,27 @@ fn parse_definition(
     if let Some(schema) = toml_value_to_json(definition.value_schema.clone())? {
         catalog_validation::validate_json_schema_definition(&schema)
             .map_err(RepositoryError::InvalidReusableAttributeDefinition)?;
+        for text in catalog_blueprint::status_option_texts("attribute", &schema) {
+            catalog_lexicon::parse(text.text).map_err(|error| {
+                RepositoryError::InvalidReusableAttributeDefinition(format!(
+                    "{} has an invalid lexicon reference: {error}",
+                    text.location
+                ))
+            })?;
+        }
         if let Some(default) = toml_value_to_json(definition.default_value.clone())? {
             catalog_validation::status::validate_status_transition(&schema, &Value::Null, &default)
                 .map_err(RepositoryError::InvalidReusableAttributeDefinition)?;
+        }
+        if schema
+            .get(catalog_validation::principal::PRINCIPAL_KEY)
+            .is_some()
+            && (definition.value_type != "string" || definition.default_value.is_some())
+        {
+            return Err(RepositoryError::InvalidReusableAttributeDefinition(
+                "user or team assignment requires a string attribute without a default_value"
+                    .into(),
+            ));
         }
         if schema.get(catalog_validation::status::STATUS_KEY).is_some()
             && definition.value_type != "string"
@@ -512,6 +530,7 @@ impl CatalogRepository {
             .await?;
         }
         self.validate_status_values(transaction, entity).await?;
+        self.validate_principal_values(transaction, entity).await?;
         self.apply_status_effects(transaction, entity).await?;
         let preview = Self::build_preview_projection(transaction, entity.id).await?;
         self.store_preview(transaction, entity.id, preview).await?;

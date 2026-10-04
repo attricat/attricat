@@ -209,6 +209,22 @@ acli file download-original <file-id> --output original.bin [--range 'bytes=0-10
 acli file download-variant <file-id> <kind> --output preview.webp [--range 'bytes=0-1023']
 ```
 
+
+## Teams and assignments
+
+```sh
+acli directory                     # users and teams assignment attributes can reference
+acli team list
+acli team create --code qa --name "Quality" --member <user-id> [--member <user-id>]
+acli team update <team-id> [--name "QA"] [--member <user-id> … | --clear-members]
+acli team delete <team-id>
+```
+
+Team commands require `members.manage`; `directory` requires `entities.read`.
+Assignment values are `user:<id>` or `team:<id>`
+([user or team assignments](blueprints.md#user-or-team-assignments)); filter
+with `"value": "@me"` to find entities assigned to the caller or their teams.
+
 ## Translations
 
 `acli lexicon` manages the workspace lexicon used by `{{…}}` references in

@@ -1,11 +1,11 @@
 ---
 title: Workspace administration
-description: Manage members, roles, invitations, sidebar navigation, API tokens, and the audit log.
+description: Manage members, teams, roles, invitations, sidebar navigation, API tokens, and the audit log.
 ---
 
 A workspace is one catalog with its own members, blueprints, entities, contexts, and extensions. Workspaces are fully separated: nothing is shared between them.
 
-Most administration happens under **Manage → Workspace management**, which has four tabs: **Members**, **Roles**, **Invitations**, and **Navigation**.
+Most administration happens under **Manage → Workspace management**, which has five tabs: **Members**, **Teams**, **Roles**, **Invitations**, and **Navigation**.
 
 ## Signing in
 
@@ -24,6 +24,12 @@ Password sign-in is the only method today. Single sign-on, multi-factor authenti
 - transfer ownership to another active member (owners only).
 
 A workspace always has at least one active owner. Membership and role changes sign the affected person out of existing sessions.
+
+## Teams
+
+**Teams** groups members under a name, such as *Quality* or *Field service*, so a [user or team attribute](/builders/modeling/#assign-responsibility) can assign work to a whole team. Anyone with `members.manage` can create a team, rename it, change its members, or delete it. A team's code cannot change after it is created.
+
+Records store the team itself, so changing its members never changes records. **Assigned to me** filters in the Explorer include records assigned to your teams. Deleting a team keeps it on records that already use it, shown as deleted, but it can no longer be assigned. Teams do not grant permissions.
 
 ## Roles
 

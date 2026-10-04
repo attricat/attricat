@@ -1,4 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import i18n from '../../i18n';
+import { LEXICON_NAMESPACE } from '../lexicon/constants';
 import {
   statusConfiguration,
   statusLabel,
@@ -32,6 +34,39 @@ export const statusAttribute: Attribute = {
 };
 
 describe('status configuration', () => {
+  afterEach(async () => {
+    i18n.removeResourceBundle('pl', LEXICON_NAMESPACE);
+    i18n.removeResourceBundle('en', LEXICON_NAMESPACE);
+    await i18n.changeLanguage('en');
+  });
+
+  it('resolves lexicon references in option labels with the usual fallback', async () => {
+    const attribute: Attribute = {
+      ...statusAttribute,
+      value_schema: {
+        type: 'string',
+        enum: ['draft', 'live', 'done'],
+        'x-attricat-status': {
+          version: 1,
+          options: [
+            { code: 'draft', label: '{{Draft|status}}' },
+            { code: 'live', label: '{{Live}}' },
+            { code: 'done', label: '{{Done}}' },
+          ],
+        },
+      },
+    };
+    i18n.addResourceBundle('pl', LEXICON_NAMESPACE, {
+      Draft_status: 'Szkic',
+    });
+    i18n.addResourceBundle('en', LEXICON_NAMESPACE, { Live: 'Published' });
+    await i18n.changeLanguage('pl');
+    expect(statusLabel(attribute, 'draft')).toBe('Szkic');
+    // Missing Polish text falls back to English, then to the key.
+    expect(statusLabel(attribute, 'live')).toBe('Published');
+    expect(statusLabel(attribute, 'done')).toBe('Done');
+  });
+
   it('uses stable codes and display labels', () => {
     expect(statusLabel(statusAttribute, 'live')).toBe('Live');
     expect(statusLabel(statusAttribute, 'retired')).toBeUndefined();

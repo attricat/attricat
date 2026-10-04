@@ -12,8 +12,8 @@ pub struct LexiconText<'a> {
 }
 
 /// Every translatable label in the definition: the blueprint name, local
-/// attribute names, and view tab, section, column, and incoming-relationship
-/// labels.
+/// attribute names and status option labels, and view tab, section, column,
+/// and incoming-relationship labels.
 pub fn lexicon_texts(definition: &BlueprintDefinition) -> Vec<LexiconText<'_>> {
     let mut texts = vec![LexiconText {
         location: "name".to_owned(),
@@ -21,14 +21,21 @@ pub fn lexicon_texts(definition: &BlueprintDefinition) -> Vec<LexiconText<'_>> {
         counted: true,
     }];
     for attribute in &definition.attributes {
-        if let AttributeDeclaration::Local(attribute) = attribute
-            && let Some(name) = &attribute.name
-        {
+        let AttributeDeclaration::Local(attribute) = attribute else {
+            continue;
+        };
+        if let Some(name) = &attribute.name {
             texts.push(LexiconText {
                 location: format!("attribute '{}' name", attribute.code),
                 text: name,
                 counted: false,
             });
+        }
+        if let Some(schema) = &attribute.value_schema {
+            texts.extend(status_option_texts(
+                &format!("attribute '{}'", attribute.code),
+                schema,
+            ));
         }
     }
     let mut views: Vec<_> = definition.views.iter().collect();
@@ -73,6 +80,21 @@ pub fn lexicon_texts(definition: &BlueprintDefinition) -> Vec<LexiconText<'_>> {
         }
     }
     texts
+}
+
+/// Status option labels in an attribute's value schema, which resolve lexicon
+/// references like attribute names. `location` names the attribute.
+pub fn status_option_texts<'a>(
+    location: &str,
+    schema: &'a serde_json::Value,
+) -> impl Iterator<Item = LexiconText<'a>> {
+    catalog_validation::status::status_option_labels(schema)
+        .into_iter()
+        .map(move |(code, text)| LexiconText {
+            location: format!("{location} status option '{code}' label"),
+            text,
+            counted: false,
+        })
 }
 
 fn tab_text<'a>(

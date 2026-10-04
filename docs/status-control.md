@@ -39,8 +39,12 @@ value_schema = '''{
 - Labels are nonblank text, at most 200 characters. There may be 1–100 options.
 - Tones are `default`, `success`, `warning`, `error`, or `info`. Omit a tone for
   neutral presentation. Labels always remain visible; color alone is not a
-  status indicator. Labels are catalog-authored text, not translation keys or
-  HTML.
+  status indicator. Labels are catalog-authored text, never HTML.
+- Labels resolve `{{key}}` / `{{key|context}}` workspace lexicon references
+  like other catalog labels ([Translated labels](blueprints.md#translated-labels)),
+  for example `"label": "{{Draft|status}}"`. Saving a blueprint or reusable
+  attribute rejects malformed references in option labels, and the lexicon
+  coverage report counts them as used. Codes are never translated.
 - Omit `transitions` to allow any configured destination. Include it—even an
   empty array—to restrict changes to declared edges. At most 10,000 unique
   edges are allowed. Endpoints must be configured codes or `null`.
@@ -53,7 +57,13 @@ value_schema = '''{
 ## Display and editing
 
 Entity fields and compact value renderers display a labelled chip. Plain-text
-renderers use the same label. Missing values display “Not set”; unknown or
+renderers use the same label. Every label is resolved for the user's UI
+language (then `en`, then the key) through `statusOptionLabel` in
+`apps/catalog-web/src/features/entities/status.ts`: chips, the form select,
+the Explorer attribute-filter value select (status filters offer `eq` only)
+and filter pills. Search requests, saved searches, API payloads, events and
+connector exports carry stable codes; consumers that render labels resolve
+them from the attribute's `value_schema` and `GET /lexicon/entries`. Missing values display “Not set”; unknown or
 retired values remain visible with an explanation, never silently coerced.
 The entity form uses a single-select control, with forbidden destinations
 disabled. The saved status—not another unsaved selection—is the starting

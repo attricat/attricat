@@ -1112,6 +1112,7 @@ impl CatalogRepository {
         entity: &Entity,
     ) -> Result<(), RepositoryError> {
         self.validate_status_values(transaction, entity).await?;
+        self.validate_principal_values(transaction, entity).await?;
         self.apply_status_effects(transaction, entity).await?;
         // Every value write validates here, so unique keys stay current.
         self.sync_entity_unique_keys(transaction, entity).await?;
