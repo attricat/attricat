@@ -574,8 +574,6 @@ impl CatalogRepository {
         dependents.truncate(MAX_DEPENDENTS as usize);
         Ok(dependents)
     }
-    /// Materialize due cron occurrences as durable runs. The occurrence timestamp is the
-    /// idempotency key, while schedule state is the only timer/cursor held by the system.
     /// Whether any enabled rule's schedule cursor is due. Schedulers check
     /// this first so an idle tick costs one statement.
     pub async fn rule_schedules_due(&self) -> Result<bool, RepositoryError> {
@@ -588,6 +586,8 @@ impl CatalogRepository {
         .await?)
     }
 
+    /// Materialize due cron occurrences as durable runs. The occurrence timestamp is the
+    /// idempotency key, while schedule state is the only timer/cursor held by the system.
     pub async fn schedule_rule_runs(&self) -> Result<u64, RepositoryError> {
         let ws = self.workspace_id.0;
         let now = Utc::now();

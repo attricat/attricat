@@ -345,9 +345,6 @@ impl CatalogRepository {
         }
     }
 
-    /// Advances schedule cursors; it is a producer only. Each created run and
-    /// task envelope is committed together, while active task/run state keeps
-    /// the existing no-overlap semantics.
     /// Whether any enabled workflow's schedule cursor is due. Schedulers check
     /// this first so an idle tick costs one statement; a periodic full pass
     /// still creates cursors that predate enable-time creation.
@@ -361,6 +358,9 @@ impl CatalogRepository {
         .await?)
     }
 
+    /// Advances schedule cursors; it is a producer only. Each created run and
+    /// task envelope is committed together, while active task/run state keeps
+    /// the existing no-overlap semantics.
     pub async fn schedule_workflow_runs(&self) -> Result<u64, RepositoryError> {
         use chrono::Duration as ChronoDuration;
         let ws = self.workspace_id.0;
