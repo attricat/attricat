@@ -15,7 +15,7 @@ use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
 use super::EventPublisher;
-use super::{CatalogRepository, RepositoryError, entity_commands};
+use super::{CatalogRepository, RepositoryError, system_annotations};
 use crate::domain_events::ENTITY_ANNOTATIONS_CHANGED_V1;
 
 /// Maximum add/remove/set/delete operations in one patch.
@@ -100,7 +100,7 @@ impl ExtensionAnnotationPatch {
     /// qualified with the extension's namespace.
     fn validate_qualified_tags(&self, extension_id: &str) -> Result<(), RepositoryError> {
         let limit =
-            entity_commands::MAX_SYSTEM_TAG_BYTES.saturating_sub(tag_prefix(extension_id).len());
+            system_annotations::MAX_SYSTEM_TAG_BYTES.saturating_sub(tag_prefix(extension_id).len());
         if let Some(tag) = self.add_tags.iter().find(|tag| tag.len() > limit) {
             return Err(invalid(format!(
                 "local tag '{tag}' exceeds the {limit} bytes available after this extension's namespace prefix"
@@ -502,10 +502,10 @@ impl CatalogRepository {
                 ));
             }
         };
-        let changes = entity_commands::apply_tag_metadata_patch(
+        let changes = system_annotations::apply_tag_metadata_patch(
             &mut tags,
             &mut namespace,
-            &entity_commands::TagMetadataPatch {
+            &system_annotations::TagMetadataPatch {
                 add_tags: qualify(&patch.add_tags),
                 remove_tags: qualify(&patch.remove_tags),
                 set_metadata: patch.set_metadata.clone(),
@@ -527,8 +527,8 @@ impl CatalogRepository {
         if changes.is_empty() && replaced_value.is_none() {
             return Ok(revision);
         }
-        entity_commands::validate_system_tag_update(&entity.system_tags, &tags)?;
-        entity_commands::validate_system_metadata(&metadata)?;
+        system_annotations::validate_system_tag_update(&entity.system_tags, &tags)?;
+        system_annotations::validate_system_metadata(&metadata)?;
         self.ensure_task_fence(transaction).await?;
         // Annotation bookkeeping is not catalog data. Leaving `updated_at`
         // unchanged keeps extensions from invalidating their own output and

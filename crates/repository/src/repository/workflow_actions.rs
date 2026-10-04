@@ -3,7 +3,7 @@
 //! [`CatalogRepository::apply_workflow_actions`], which uses the ordinary
 //! entity update seam, so it is validated, audited and published exactly like
 //! any other entity write.
-use super::entity_commands::{TagMetadataPatch, apply_tag_metadata_patch};
+use super::system_annotations::{TagMetadataPatch, apply_tag_metadata_patch};
 use super::*;
 use crate::model::UpdateEntityFormRequest;
 use sqlx::{Postgres, Transaction};
