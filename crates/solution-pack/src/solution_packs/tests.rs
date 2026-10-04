@@ -4689,3 +4689,18 @@ fn published_seed_schemas_accept_the_seed_fixtures() {
     unsupported["entities"][0]["files"][0]["files"][0]["media_type"] = json!("image/svg+xml");
     assert!(!accepts(&sample, &unsupported));
 }
+
+#[test]
+fn publication_channel_required_rules_compare_as_a_set() {
+    let channel = |codes: &[&str]| crate::solution_pack_seeds::ExistingPublicationChannel {
+        enabled: true,
+        required_rule_codes: codes.iter().map(|code| (*code).to_owned()).collect(),
+        require_valid_entity: false,
+    };
+    assert!(channel(&["a", "b"]).same_settings(&channel(&["b", "a"])));
+    assert!(channel(&["a", "b"]).same_settings(&channel(&["b", "a", "b"])));
+    assert!(!channel(&["a", "b"]).same_settings(&channel(&["a"])));
+    let mut disabled = channel(&["a"]);
+    disabled.enabled = false;
+    assert!(!channel(&["a"]).same_settings(&disabled));
+}

@@ -6693,7 +6693,7 @@ impl CatalogRepository {
             ));
         }
         let current = existing_publication_channel(tx, self.workspace_id.0, context_id).await?;
-        if current != Some(payload.settings()) {
+        if !current.is_some_and(|current| current.same_settings(&payload.settings())) {
             return Err(RepositoryError::SolutionPackPlanStale);
         }
         let mut result = payload.result();

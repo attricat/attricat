@@ -36,6 +36,23 @@ pub struct ExistingPublicationChannel {
     pub require_valid_entity: bool,
 }
 
+impl ExistingPublicationChannel {
+    /// Whether two channels have the same settings. Required rules are a set,
+    /// so their order and repetition do not matter.
+    pub fn same_settings(&self, other: &Self) -> bool {
+        fn codes(channel: &ExistingPublicationChannel) -> std::collections::BTreeSet<&str> {
+            channel
+                .required_rule_codes
+                .iter()
+                .map(String::as_str)
+                .collect()
+        }
+        self.enabled == other.enabled
+            && self.require_valid_entity == other.require_valid_entity
+            && codes(self) == codes(other)
+    }
+}
+
 /// How a prerequisite seed is satisfied by the workspace's completed
 /// applications. Resolved by the repository; the planner never searches.
 #[derive(Clone, Debug)]
@@ -668,7 +685,7 @@ fn plan_publication_channels(
             .and_then(|existing| existing.publication_channel.as_ref());
         let outcome = if !available(Some(context_outcome)) || !rules_available {
             (PlanActionKind::Blocked, "dependency_not_creatable")
-        } else if existing == Some(&declared) {
+        } else if existing.is_some_and(|existing| existing.same_settings(&declared)) {
             (PlanActionKind::Satisfied, "exact_match")
         } else if existing.is_some() {
             (PlanActionKind::Conflict, "publication_channel_mismatch")
