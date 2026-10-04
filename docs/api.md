@@ -3,7 +3,10 @@
 Most API routes exchange JSON over HTTP; successful empty responses use `204`,
 and file, asset, and metrics routes return their documented content types.
 Failures return a JSON `error` object with a machine-readable code and message,
-alongside the HTTP status. Use the [CLI](cli.md) for shell automation.
+alongside the HTTP status. Some failures add an `error.details` object with
+machine-readable context, such as the entity holding a conflicting unique key
+(see [Structural constraint errors](#structural-constraint-errors)). Use the
+[CLI](cli.md) for shell automation.
 
 ## Authorization
 
@@ -161,6 +164,7 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `POST` | `/entities/{id}/relationships/remove` | Remove relationship targets. |
 | `POST` | `/v1/entities/search` | Search a selected blueprint across published revisions by default, or one explicit revision; supports text queries, validated filters, facets, and sorting. |
 | `POST` | `/v1/entities` | Create an entity atomically with form values and optional system annotations. |
+| `POST` | `/v1/entities/batch` | Apply create, update, and delete operations to several entities in one transaction; see [Entity batches](#entity-batches). |
 | `GET`, `PUT` | `/v1/entities/{id}` | Read or update an entity form atomically, including optional system annotations. |
 | `POST` | `/v1/entities/{id}/blueprint-migration/preview` | Assess migration to the highest published revision. |
 | `POST` | `/v1/entities/{id}/blueprint-migration` | Migrate an entity to that revision. |
@@ -406,6 +410,86 @@ Creation and update payloads:
 
 Use `visibility: "private"` or `"workspace"` for named views. For a snapshot, omit `name`, `description` and `visibility` when posting to `/view-state-links`; send `kind` and `state`. Responses include `id`, `owner_user_id`, `kind`, `name`, `description`, `visibility`, `state`, `created_at`, `updated_at`. State uses the Explorer URL field names; see [saved views](saved-views.md) for semantics and limits.
 
+## Entity batches
+
+`POST /v1/entities/batch` applies writes, status transitions, and deletions to
+several entities atomically: either every operation commits, with its audit
+event and domain event, or nothing does.
+
+```json
+{
+  "operations": [
+    {
+      "op": "create",
+      "entity_id": "5b0b8c55-0c55-4cc5-9a0f-4a4c3d1a2b10",
+      "blueprint": { "code": "document_revision" },
+      "values": [
+        { "kind": "scalar", "attribute_code": "label", "context_id": null, "value": "B" },
+        { "kind": "scalar", "attribute_code": "status", "context_id": null, "value": "released" },
+        { "kind": "relationship", "attribute_code": "previous", "context_id": null,
+          "target_entity_id": "1f7e2d9a-6a3e-4a8a-9d0c-2f8d4f7f9e11" }
+      ]
+    },
+    {
+      "op": "update",
+      "entity_id": "1f7e2d9a-6a3e-4a8a-9d0c-2f8d4f7f9e11",
+      "expected_updated_at": "2026-10-01T09:30:00Z",
+      "values": [
+        { "kind": "scalar", "attribute_code": "status", "context_id": null, "value": "superseded" }
+      ]
+    }
+  ]
+}
+```
+
+- `create` takes the `POST /v1/entities` fields plus an optional
+  caller-chosen `entity_id`, so later operations can link to the new entity.
+  An existing ID returns `409 entity_id_taken`.
+- `update` takes the `PUT /v1/entities/{id}` fields (`values`,
+  `relationships`, `remove_values`, `system_tags`, `system_metadata`, and
+  `expected_updated_at`). Status transitions are ordinary values and keep their
+  rules, including the `expected_updated_at` requirement.
+- `delete` takes `entity_id` and an optional `expected_updated_at`; a stale
+  value returns `409 stale_entity`.
+- Operations run in order, each seeing the earlier ones, and each validates as
+  its single-entity endpoint does when it runs: types, schemas, statuses,
+  relationship targets and cardinality, unique keys, and hierarchies. Order
+  operations so each is valid at its turn, for example release a unique value
+  before reusing it.
+- A batch has 1–50 operations and at most 1,000 values, relationship targets,
+  and removals. Each entity appears in at most one operation; combine its
+  changes. Violations return `422 invalid_input`.
+- Every operation is authorized before anything runs: `entities.write` on the
+  entity for updates, `entities.delete` for deletes, and workspace
+  `entities.write` for creates. A personal API token needs each of those
+  permissions. Any denial returns `403` for the whole batch.
+
+The response is `200` with one result per operation, in order:
+
+```json
+{"operations": [{"op": "create", "entity": {}}, {"op": "update", "entity": {}}, {"op": "delete", "entity_id": "…"}]}
+```
+
+When an operation fails, the transaction rolls back and the response keeps
+that operation's status and error code. The message starts with
+`operation <index>:` and `error.details` adds `operation_index` and
+`entity_id` to the operation's own details. Each operation's audit event
+targets its entity and records `metadata.batch` with `operation_index` and
+`operation_count`; all share the request and correlation IDs.
+
+## Structural constraint errors
+
+Blueprint [unique keys and hierarchies](blueprints.md#unique-keys) add these
+errors to entity writes and blueprint publication:
+
+| Status | Code | `error.details` |
+| --- | --- | --- |
+| `409` | `unique_key_conflict` | `key`, `context`, normalized `values`, `conflicting_entity_id` |
+| `409` | `unique_key_duplicates` | `duplicates` (up to 20 `{ key, context, values, entity_ids }`) and `total`; returned by publication |
+| `409` | `relationship_cycle` | `attribute`, and `path`: entity IDs from the written entity back to it |
+| `409` | `relationship_hierarchy_violations` | `attribute`, `cycles`, `multiple_parents`; returned by publication |
+| `422` | `relationship_target_type_mismatch` | none; the target's blueprint is not in the attribute's `target_blueprint_codes` |
+
 ## Entity system annotations
 
 Entities include `system_tags` (an array of unique, non-empty strings) and
@@ -573,7 +657,10 @@ reaches a repository write. Built-in tools include exact blueprint-revision
 inspection and read-only entity migration assessment, plus approved replacement
 or removal of relationship targets. Replacement sets the complete target list
 for each specified attribute/context (an empty list clears it); removal unlinks
-only named targets. The agent must inspect current values first. These tools
+only named targets. `apply_entity_batch` proposes several entity operations
+as one approval and applies them through [entity batches](#entity-batches);
+each operation is authorized for the initiating user when the approved call
+runs. The agent must inspect current values first. These tools
 use the initiating user's `blueprints.read` or entity-scoped permissions:
 `entities.write` for migration assessment and relationship changes, and
 `entities.read` for existing entity inspection. Bounded `get_entity_changes`

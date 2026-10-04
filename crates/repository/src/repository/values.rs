@@ -98,7 +98,7 @@ pub(super) enum ValueType {
     File,
 }
 
-#[derive(sqlx::FromRow)]
+#[derive(Clone, sqlx::FromRow)]
 pub struct NativeValueRow {
     pub value_type: String,
     pub value_text: Option<String>,
@@ -525,7 +525,7 @@ impl CatalogRepository {
     ) -> Result<Vec<Attribute>, RepositoryError> {
         Ok(sqlx::query_as::<_, Db<Attribute>>(
             r#"SELECT id, blueprint_id, blueprint_version, code, name, value_type, value_schema, extension_type, default_value, file_policy,
-                      target_blueprint_code, cardinality, target_cardinality, tags, context_fallback, context_editable, readonly,
+                      target_blueprint_code, target_blueprint_codes, cardinality, target_cardinality, hierarchy, tags, context_fallback, context_editable, readonly,
                       position, created_at, updated_at, deleted_at
                FROM attributes
                WHERE blueprint_id = $1 AND blueprint_version = $2 AND deleted_at IS NULL

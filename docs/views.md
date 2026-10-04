@@ -140,6 +140,13 @@ field = "price"
 Every referenced field must be an effective attribute. `field` accepts scalar
 attributes; `relationship_list` accepts relationships only.
 
+In `edit`, a relationship field opens the entity picker for its allowed target
+blueprints. When the attribute lists several `target_blueprints`, the picker
+shows a **Target blueprint** selector and searches one of them at a time;
+selected entities are labelled with their own blueprint's `dropdown_option`
+view. An `incoming_relationship_list` may name such a field on any of its
+allowed target blueprints.
+
 ## Entity Heading
 
 The preview heading reuses a normal `stack` with the

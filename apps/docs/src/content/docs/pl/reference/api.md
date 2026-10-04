@@ -22,7 +22,7 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 ## Konwencje
 
 - Żądania i odpowiedzi są w formacie JSON, chyba że trasa stanowi inaczej. Udane puste odpowiedzi mają kod `204`.
-- Błędy zwracają status HTTP i treść w postaci `{"error": {"code": "entity_schema_mismatch", "message": "…"}}`. Dopasowuj po `code`, a nie po komunikacie.
+- Błędy zwracają status HTTP i treść w postaci `{"error": {"code": "entity_schema_mismatch", "message": "…"}}`. Dopasowuj po `code`, a nie po komunikacie. Niektóre błędy dodają obiekt `error.details` z danymi, na podstawie których możesz działać, np. encją, która już ma dany klucz unikalny.
 - `401` oznacza brak ważnych danych uwierzytelniających; `403` oznacza, że dane uwierzytelniające nie mają uprawnienia lub zakresu.
 - `422` oznacza, że żądanie zostało zrozumiane, ale jest nieprawidłowe, np. schemat się nie kompiluje albo wartość nie spełnia swojego schematu walidacji.
 - `409` oznacza konflikt z bieżącym stanem, np. przekroczenie limitu krotności relacji.
@@ -36,7 +36,13 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | `invalid_blueprint_definition` | 422 | TOML schematu się nie kompiluje. Komunikat podaje przyczynę. |
 | `attribute_value_schema_mismatch` | 422 | Wartość nie spełnia `value_schema` swojego atrybutu. |
 | `entity_schema_mismatch` | 422 | Encja nie spełnia swojego `entity_schema` w którymś kontekście. |
-| `relationship_cardinality_conflict` | 409 | Zapis relacji przekracza `cardinality` lub `target_cardinality`. |
+| `relationship_cardinality_conflict` | 409 | Zapis relacji przekracza `cardinality` lub `target_cardinality` albo nadaje encji w drzewie (`tree`) drugiego rodzica. |
+| `relationship_target_type_mismatch` | 422 | Schemat powiązanej encji nie jest dozwolony przez `target_blueprint` ani `target_blueprints`. |
+| `relationship_cycle` | 409 | Powiązanie zamknęłoby cykl w relacji `acyclic` lub `tree`. `details.path` wymienia identyfikatory encji wzdłuż cyklu. |
+| `unique_key_conflict` | 409 | Inna encja ma już te wartości klucza unikalnego. `details` zawiera `key`, `context`, `values` i `conflicting_entity_id`. |
+| `unique_key_duplicates` | 409 | Publikacja nowego klucza unikalnego nie powiodła się, bo istniejące encje współdzielą wartości. `details.duplicates` je wymienia. |
+| `relationship_hierarchy_violations` | 409 | Publikacja `acyclic` lub `tree` nie powiodła się, bo istniejące powiązania zawierają cykle lub nadmiarowych rodziców. `details` je wymienia. |
+| `stale_entity` | 409 | `expected_updated_at` nie odpowiada już encji. Wczytaj ją ponownie i spróbuj jeszcze raz. |
 | `relationship_path_sort_requires_single_result_version` | 422 | Sortowanie według powiązanej wartości w kilku wersjach schematu. |
 | `file_processing` | 409 | Plik nie jest jeszcze gotowy do pobrania. |
 | `approval_already_decided` | 409 | Wywołanie narzędzia przez agenta zostało już zatwierdzone lub odrzucone. |
@@ -66,6 +72,7 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | Metoda | Ścieżka | Opis |
 | --- | --- | --- |
 | `POST` | `/v1/entities` | Tworzy encję z wartościami oraz opcjonalnymi `system_tags` i `system_metadata`. |
+| `POST` | `/v1/entities/batch` | Tworzy, aktualizuje i usuwa kilka encji naraz: zapisują się wszystkie zmiany albo żadna. Zobacz [Zmiany wsadowe](#zmiany-wsadowe). |
 | `GET`, `PUT` | `/v1/entities/{id}` | Odczytuje lub aktualizuje formularz encji: wartości, relacje, usunięcia, adnotacje. |
 | `GET`, `DELETE` | `/entities/{id}` | Odczytuje lub usuwa encję. |
 | `POST` | `/v1/entities/search` | Wyszukiwanie. Zobacz poniżej. |
@@ -84,6 +91,47 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | `POST` | `/v1/entities/{id}/blueprint-migration/preview` | Sprawdza migrację do bieżącej wersji. |
 | `POST` | `/v1/entities/{id}/blueprint-migration` | Migruje. |
 | `POST` | `/v1/entities/{id}/reusable-attributes`, `/v1/entities/{id}/reusable-attribute-groups/{group_id}` | Dołącza atrybut lub grupę atrybutów wielokrotnego użytku. |
+
+### Zmiany wsadowe
+
+Niektóre zmiany mają sens tylko razem: wydanie nowej wersji dokumentu i oznaczenie poprzedniej jako zastąpionej albo zarejestrowanie przemieszczenia i aktualizacja bieżącej lokalizacji obiektu. Wyślij je jako jeden wsad, aby błąd nie zostawił zapisanej tylko połowy zmiany.
+
+```json
+POST /api/v1/entities/batch
+{
+  "operations": [
+    {
+      "op": "create",
+      "entity_id": "5b0b8c55-0c55-4cc5-9a0f-4a4c3d1a2b10",
+      "blueprint": { "code": "document_revision" },
+      "values": [
+        { "kind": "scalar", "attribute_code": "label", "context_id": null, "value": "B" },
+        { "kind": "scalar", "attribute_code": "status", "context_id": null, "value": "released" },
+        { "kind": "relationship", "attribute_code": "previous", "context_id": null,
+          "target_entity_id": "1f7e2d9a-6a3e-4a8a-9d0c-2f8d4f7f9e11" }
+      ]
+    },
+    {
+      "op": "update",
+      "entity_id": "1f7e2d9a-6a3e-4a8a-9d0c-2f8d4f7f9e11",
+      "expected_updated_at": "2026-10-01T09:30:00Z",
+      "values": [
+        { "kind": "scalar", "attribute_code": "status", "context_id": null, "value": "superseded" }
+      ]
+    }
+  ]
+}
+```
+
+- `op` to `create`, `update` lub `delete`. `create` przyjmuje te same pola co `POST /v1/entities` oraz opcjonalny wybrany przez Ciebie `entity_id`, aby kolejne operacje mogły powiązać się z nową encją. `update` przyjmuje te same pola co `PUT /v1/entities/{id}`. `delete` przyjmuje `entity_id`.
+- `expected_updated_at` w `update` i `delete` jest warunkiem wstępnym: jeśli encja zmieniła się od odczytu, wsad kończy się błędem `409 stale_entity`. Zmiany statusu go wymagają, tak jak pojedyncza aktualizacja.
+- Operacje są wykonywane po kolei, a każda jest sprawdzana jak odpowiednie pojedyncze żądanie w chwili wykonania: wartości, schematy walidacji, przejścia statusów, reguły relacji i klucze unikalne. Ułóż je tak, aby każda była poprawna w swojej kolejności.
+- Wsad ma od 1 do 50 operacji i do 1000 wartości, powiązań i usunięć. Encja może wystąpić tylko w jednej operacji.
+- Każda operacja wymaga własnego uprawnienia: `entities.write` dla encji, aby ją zaktualizować, `entities.delete`, aby ją usunąć, oraz `entities.write` w całym obszarze roboczym, aby utworzyć encję. Jeśli któregoś brakuje, nic nie jest wykonywane, a odpowiedź to `403`.
+
+Udany wsad zwraca `200` z jednym wynikiem na operację, np. `{"op": "update", "entity": {…}}` lub `{"op": "delete", "entity_id": "…"}`. Każda operacja jest zapisywana w dzienniku audytu i emituje swoje zwykłe zdarzenie, ale dopiero po zapisaniu całego wsadu.
+
+Jeśli operacja się nie powiedzie, nic nie zostaje zapisane. Odpowiedź ma status i kod błędu tej operacji, komunikat zaczyna się od `operation <index>:`, a `error.details` zawiera `operation_index` i `entity_id`. Popraw tę operację i wyślij cały wsad ponownie. Odpowiednikiem w CLI jest `acli entity batch --operations <plik>`.
 
 ### Wyszukiwanie
 

@@ -77,6 +77,7 @@ acli context delete <context-id>
 
 acli entity create --blueprint product --values values.toml [--version <version>] [--context-id <context-id>] [--system-tags <json>] [--system-metadata <json>]
 acli entity get|delete|form <entity-id>
+acli entity batch --operations <json-or-file>
 acli entity list --blueprint <code> --related-from <entity-id> --relationship <attribute-code> [--limit <limit>] [--cursor <cursor>]
 acli entity preview <entity-id> [--relationship-depth <depth>] [--relationship-limit <limit>]
 acli entity resolved-preview <entity-id> --context-id <context-id>
@@ -388,6 +389,16 @@ atomic form endpoint: scalar values append history, relationship files replace
 the supplied relationship sets, and removal files remove scalar overrides.
 `entity delete` soft-deletes the entity. Its value and relationship history are
 retained, while normal reads and relationship previews no longer expose it.
+
+`entity batch --operations <json-or-file>` sends a JSON array of create,
+update, and delete operations to `POST /v1/entities/batch`. They are applied in
+order in one transaction: all succeed or none do, and a failure names the
+operation index. See [Entity batches](api.md#entity-batches) for the operation
+shapes.
+
+```sh
+acli entity batch --operations release-revision-b.json
+```
 
 ## Blueprint Migrations
 

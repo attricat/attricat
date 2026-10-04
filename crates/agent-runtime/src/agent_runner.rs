@@ -22,6 +22,10 @@ const MAX_INLINE_TOOL_TEXT_BYTES: i64 = 64 * 1024;
 
 const SYSTEM_PROMPT: &str = "You are a catalogue assistant. Use tools for catalogue facts. Before drafting a blueprint, call blueprint_authoring_guide and use create_blueprint with complete TOML; every entity blueprint must include a views.dropdown_option definition. To modify a blueprint, use create_blueprint_revision with its id and a complete revised TOML definition. New blueprints and revisions are drafts: use publish_blueprint with the returned id and version before creating entities from them. Entity edits are not channel exports: inspect publication status and explicitly publish an entity to a requested channel only after human approval. Never put blueprint attributes or a definition in create_entity. Use list_blueprints to find an existing blueprint before creating an entity. Use search_entities to find matching entities; set outdated to true when looking for entities that need a blueprint upgrade. Use get_blueprint_revision to inspect an exact blueprint revision. Use preview_entity_migration to assess an upgrade without proposing a write. To change relationship sets, inspect the entity first; replace_entity_relationships supplies the complete target set, while remove_entity_relationships unlinks only named targets. Use get_entity_preview_link for each entity you cite and include its returned link as a Markdown link in your reply. When asked to save a named Explorer search, first use list_saved_searches and get_saved_search to check for an existing owned search; use update_saved_search for changes to an existing search instead of creating duplicates. Use create_saved_search only for a new search. Include the returned link after approval. Use data_health_summary, list_rule_findings, and list_workflow_runs for diagnostic questions; use get_rule_definition, get_workflow_definition, list_rule_runs, or get_workflow_run when a user needs more context. For extension or blueprint connector operations, use list_extension_operation_runs, get_extension_operation_run, and list_blueprint_connector_jobs only when the initiating user has extension management access. These tools are read-only and do not authorize replay or management actions. Use get_entity_changes and get_value_history with pagination to inspect history. Before proposing update_entity_annotations, inspect the entity; when changing contexts, inspect get_context first. Before proposing remove_entity_values or restore_entity_value, inspect the entity and the specific history entry; restored history can change current values. Use preview_entity_migration first; use migrate_entity only when the user requests the upgrade and approval is appropriate. Report issues if it needs input. Use view_image with an image file ID from get_entity when visual inspection is needed, or read_file for UTF-8 text files. When a conversation attachment should be retained on an entity, use link_file with its file_id and an applicable file attribute. Status attributes can restrict who may make a transition (a permission or role, or a different user than an earlier named transition) and can lock a record: a status_transition_forbidden, status_separation_of_duties or record_locked tool error is a deliberate control, not a fault. Do not retry the same change or try to work around it through other tools; call get_entity_record_controls to explain which transitions the user may take, who must act, and which correction transition unlocks the record. An edit to content covered by an approval voids that approval and returns the record to its declared status in the same change, so warn the user before proposing such edits. Files of finalized records may be under a retention hold until a stated date. Never claim a mutation happened until its tool result says so. All mutations require human approval.";
 
+/// Appended to [`SYSTEM_PROMPT`]: atomic multi-entity changes and how to
+/// explain and recover from blueprint structural constraints.
+const STRUCTURAL_CONSTRAINTS_PROMPT: &str = " When one business change touches several entities, such as releasing a new revision and superseding the previous one or recording a movement and updating an item's current location, propose a single apply_entity_batch instead of separate mutations, so the user approves it once and it applies all-or-nothing. Choose a new UUID for each created entity_id that later operations link to, order operations so each is valid when it runs, and pass expected_updated_at from get_entity for every status change. A failed batch applies nothing; the error names the failing operation index, so fix that operation and propose the whole batch again. Blueprints can declare unique_keys, relationship target_blueprints, and acyclic or tree hierarchies; read the blueprint definition before proposing writes. A unique_key_conflict error means another entity already holds that business key (it names the key, the normalized values, the context, and the conflicting entity ID): never retry with the same values; inspect the conflicting entity, explain the conflict, and offer to update that entity, choose a different value, or stop. Keys ignore case and surrounding or repeated whitespace unless the key is case-sensitive. A relationship_cycle error means the link would make an entity its own ancestor; it names the path of entity IDs, so explain the path and propose a different target. relationship_target_type_mismatch means the target belongs to a blueprint the relationship does not allow; search the allowed blueprints instead. When publish_blueprint fails with unique_key_duplicates or relationship_hierarchy_violations, list the named entities and propose fixing them first; do not remove the constraint unless the user asks.";
+
 #[derive(Debug, thiserror::Error)]
 pub enum RunError {
     #[error(transparent)]
@@ -92,7 +96,9 @@ async fn drive(
     };
     let mut request = vec![ChatMessage {
         role: "system".into(),
-        content: Value::String(format!("{SYSTEM_PROMPT}{context_prompt}")),
+        content: Value::String(format!(
+            "{SYSTEM_PROMPT}{STRUCTURAL_CONSTRAINTS_PROMPT}{context_prompt}"
+        )),
         tool_call_id: None,
         tool_calls: None,
     }];
@@ -538,6 +544,8 @@ fn mutation_authorization(name: &str, arguments: &Value) -> Option<(&'static str
         "create_blueprint" | "create_blueprint_revision" => ("blueprints.write", None),
         "publish_blueprint" => ("blueprints.publish", None),
         "create_entity" | "link_file" => ("entities.write", None),
+        // Every operation is authorized separately in `mutation_authorized`.
+        "apply_entity_batch" => ("entities.write", None),
         "publish_entity" | "unpublish_entity" | "publish_entity_to_all_channels" => (
             "entities.publish",
             arguments
@@ -585,6 +593,16 @@ async fn mutation_authorized(
     name: &str,
     arguments: &Value,
 ) -> Result<bool, RepositoryError> {
+    if name == "apply_entity_batch" {
+        let Ok(batch) =
+            serde_json::from_value::<crate::model::EntityBatchRequest>(arguments.clone())
+        else {
+            return Ok(false);
+        };
+        return repository
+            .is_authorized_for_entity_batch(actor, workspace, None, &batch)
+            .await;
+    }
     let Some((permission, target_id)) = mutation_authorization(name, arguments) else {
         return Ok(false);
     };

@@ -37,6 +37,7 @@ mod blueprints;
 mod bootstrap;
 mod contexts;
 mod domain_events;
+mod entity_batches;
 mod entity_commands;
 mod entity_comments;
 mod entity_migration;
@@ -69,6 +70,7 @@ mod scope;
 mod sessions;
 mod solution_packs;
 mod status;
+mod structural_constraints;
 mod tasks;
 mod tokens;
 mod upload_intents;
@@ -81,6 +83,7 @@ mod workspace_navigation;
 pub use entity_comments::{COMMENT_PAGE_SIZE, EntityComment};
 pub use lexicon::{LexiconEntry, LexiconImportMode, LexiconImportSummary};
 pub use saved_views::SavedView;
+pub use structural_constraints::UniqueKeyDuplicate;
 
 pub use agents::{
     AgentRun, AgentRunEvent, AgentToolCall, ApprovalDecision, Conversation, ConversationMessage,
@@ -453,6 +456,49 @@ pub enum RepositoryError {
         source_entity_id: Uuid,
         target_entity_id: Uuid,
         conflicting_source_entity_id: Option<Uuid>,
+    },
+    #[error(
+        "unique key '{key}' already has values {values} on entity {conflicting_entity_id} in context '{context}'"
+    )]
+    UniqueKeyConflict {
+        key: String,
+        context: String,
+        values: Value,
+        conflicting_entity_id: Uuid,
+    },
+    #[error(
+        "{total} unique key value(s) are already shared by more than one entity; resolve the duplicates before publishing: {}",
+        structural_constraints::describe_duplicates(.duplicates)
+    )]
+    UniqueKeyDuplicates {
+        duplicates: Vec<UniqueKeyDuplicate>,
+        total: usize,
+    },
+    #[error(
+        "relationship '{attribute}' would create a cycle: {}",
+        .path.iter().map(Uuid::to_string).collect::<Vec<_>>().join(" -> ")
+    )]
+    RelationshipCycle { attribute: String, path: Vec<Uuid> },
+    #[error(
+        "existing '{attribute}' relationships contain {} cycle(s) and {} entities with more than one parent; resolve them before publishing: {}",
+        .cycles.len(),
+        .multiple_parents.len(),
+        structural_constraints::describe_hierarchy_violations(.cycles, .multiple_parents)
+    )]
+    RelationshipHierarchyViolations {
+        attribute: String,
+        cycles: Vec<Vec<Uuid>>,
+        multiple_parents: Vec<Uuid>,
+    },
+    #[error("invalid entity batch: {0}")]
+    InvalidEntityBatch(String),
+    #[error("entity {0} already exists")]
+    EntityIdTaken(Uuid),
+    #[error("batch operation {index} failed; no changes were applied: {source}")]
+    EntityBatchOperationFailed {
+        index: usize,
+        entity_id: Option<Uuid>,
+        source: Box<RepositoryError>,
     },
     #[error("entity preview must be a JSON object organized by context")]
     InvalidPreview,

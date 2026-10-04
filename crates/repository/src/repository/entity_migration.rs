@@ -90,7 +90,7 @@ impl CatalogRepository {
                 }
                 Some(target)
                     if source.value_type == "relationship"
-                        && target.target_blueprint_code != source.target_blueprint_code =>
+                        && target.target_blueprint_codes != source.target_blueprint_codes =>
                 {
                     issues.push(MigrationIssue {
                         attribute_code: Some(source.code.clone()),
@@ -804,7 +804,7 @@ fn migration_contract_compatible(
     }
     match source.value_type.as_str() {
         "relationship" => {
-            target.target_blueprint_code == source.target_blueprint_code
+            target.target_blueprint_codes == source.target_blueprint_codes
                 && target.cardinality == source.cardinality
                 && target.target_cardinality == source.target_cardinality
         }

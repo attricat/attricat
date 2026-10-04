@@ -164,6 +164,65 @@ source limit. Set both cardinalities to `"one"` only for exclusive pairing; see
 [Tags, labels, and classifications](classifications.md) for the recommended
 model for controlled classifications.
 
+### Several target blueprints
+
+`target_blueprints` lists every blueprint a relationship may target. It cannot
+be combined with `target_blueprint`; a one-item list is the single-target form.
+
+```toml
+[[attributes]]
+code = "subject"
+value_type = "relationship"
+target_blueprints = ["product", "product_revision", "material", "part"]
+```
+
+A write linking an entity of any other blueprint returns
+`422 relationship_target_type_mismatch`. Compiled attributes expose the complete
+allowed set as `target_blueprint_codes` (empty means any blueprint);
+`target_blueprint_code` is set only when exactly one target is allowed, so
+single-target consumers such as table column paths, Explorer relationship
+filters, and tree facets treat a multi-target relationship like an unrestricted
+one. The entity form picker searches one allowed blueprint at a time with a
+**Target blueprint** selector, and an `incoming_relationship_list` on any
+allowed target can list the field. A migration preview reports
+`relationship_target_changed` when the allowed set differs between revisions.
+
+### Hierarchies
+
+`acyclic = true` rejects relationship writes that would close a cycle through
+the attribute. `tree = true` is an acyclic hierarchy where every entity has at
+most one target (its parent): it implies `acyclic` and defaults `cardinality`
+to `"one"` (`"many"` is rejected). Both require `context_editable = "default"`,
+because cycle checks follow direct default-context edges, and the targets must
+include the blueprint itself (any target set is allowed for mixins; a consuming
+entity blueprint must then be among the selected attribute's targets).
+
+```toml
+[[attributes]]
+code = "parent"
+value_type = "relationship"
+target_blueprint = "location"
+tree = true
+context_editable = "default"
+```
+
+- A write closing a cycle returns `409 relationship_cycle` with
+  `error.details = { attribute, path }`. `path` lists entity IDs from the
+  written entity along the cycle back to it, for example `[c, a, b, c]`; a
+  self-link is `[a, a]`.
+- In a tree, a second target returns `409 relationship_cardinality_conflict`,
+  also for entities pinned to a revision that allowed several.
+- The check walks edges of every revision of the blueprint family's field
+  (matched by code) in the written context. It runs while the edge is inserted,
+  under the workspace relationship lock every relationship writer holds, so
+  concurrent writes cannot jointly create a cycle.
+- The latest published revision decides whether a field is a hierarchy, for
+  every entity in the family.
+- Publishing a revision that adds or changes `acyclic`/`tree` checks existing
+  edges first. Cycles, or tree entities with more than one target, fail
+  publication with `409 relationship_hierarchy_violations` and
+  `error.details = { attribute, cycles, multiple_parents }` (up to 20 each).
+
 File attributes declare their cardinality and upload policy. `many` values are
 ordered by default; set `ordered = false` when callers must not rely on their
 order. File policy fields are valid only with `value_type = "file"`.
@@ -184,6 +243,54 @@ image_only = true
 relationship target, duplicate/empty policy entries, invalid purpose codes,
 zero size limits, and ordered single-file declarations. The persisted policy is
 part of the pinned blueprint revision.
+
+## Unique Keys
+
+Entity blueprints may declare business keys that no two entities of the
+blueprint family can share:
+
+```toml
+[[unique_keys]]
+code = "manufacturer_part"
+attributes = ["manufacturer", "part_number"]
+
+[[unique_keys]]
+code = "slug"
+attributes = ["slug"]
+scope = "context"
+case_sensitive = true
+```
+
+- `code` is unique within the blueprint. `attributes` lists one to eight
+  distinct attribute codes (including `from` selections). Each must be a scalar
+  other than `json`, or a relationship with `cardinality = "one"`; files and
+  many-target relationships are rejected. Mixins cannot declare keys.
+- `scope = "workspace"` (default) compares default-context values. `scope =
+  "context"` compares resolved values, including inherited ones and respecting
+  `context_fallback`, separately in every context.
+- Normalization: text is trimmed, whitespace runs collapse to one space, and
+  unless `case_sensitive = true` text is lowercased. Numbers compare by value
+  (`1.50` = `1.5`), datetimes by instant, relationships by target entity ID.
+- An entity missing any key attribute in a context (blank text counts as
+  missing) does not participate in that key there. Require the attributes in
+  `entity_schema` when every entity must have the key.
+- The latest published revision of the family defines the enforced keys for
+  every entity in the family, including entities pinned to older revisions.
+  Attributes are matched by code.
+
+A write that gives a second entity the same key value returns
+`409 unique_key_conflict` with
+`error.details = { key, context, values, conflicting_entity_id }`; `values` are
+the normalized components. The database enforces keys inside the write
+transaction, so of two concurrent duplicate writes exactly one commits.
+Recover by updating or reusing the conflicting entity, or by choosing a
+different value.
+
+Publishing a revision that adds or changes keys re-indexes the family. If
+existing entities already share a value, publication fails with
+`409 unique_key_duplicates` and
+`error.details = { duplicates: [{ key, context, values, entity_ids }], total }`
+(up to 20 groups). Fix the duplicates and publish again.
 
 ## Entity Schema
 
@@ -338,7 +445,8 @@ children = [
 
 Each selector names a source blueprint and one of its relationship fields. A
 source entity matched by multiple selectors appears once. Selecting an item
-opens that source entity.
+opens that source entity. A field with several `target_blueprints` can be
+listed on every allowed target blueprint.
 
 `views.edit` uses the same layout blocks to order entity create/edit controls.
 Field, relationship-list, and table blocks may optionally reference a

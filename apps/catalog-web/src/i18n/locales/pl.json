@@ -307,6 +307,7 @@
     "previewRelationshipOption": "Podgląd",
     "previewRelationshipOptionLabel": "Podejrzyj {{option}} w nowej karcie",
     "searchRelationshipOptions": "Szukaj opcji",
+    "relationshipTargetBlueprint": "Schemat celu",
     "selectedRelationships": "Wybrane",
     "relationshipOptions": "Opcje",
     "relationshipSelected_one": "Wybrano: {{count}}",

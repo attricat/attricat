@@ -307,6 +307,7 @@
     "previewRelationshipOption": "Preview",
     "previewRelationshipOptionLabel": "Preview {{option}} in a new tab",
     "searchRelationshipOptions": "Search options",
+    "relationshipTargetBlueprint": "Target blueprint",
     "selectedRelationships": "Selected",
     "relationshipOptions": "Options",
     "relationshipSelected_one": "{{count}} selected",

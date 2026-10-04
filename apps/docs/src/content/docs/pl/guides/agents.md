@@ -36,6 +36,7 @@ Agent działa w Twoim imieniu. Widzi i zmienia tylko to, na co pozwala Twoja rol
 
 - tworzyć schematy i ich wersje oraz publikować schematy;
 - tworzyć, aktualizować, migrować i usuwać encje; ustawiać, usuwać i przywracać wartości; zmieniać relacje; łączyć pliki;
+- wprowadzać kilka zmian encji razem jako jeden wsad;
 - aktualizować tagi systemowe i metadane;
 - publikować encje i cofać ich publikację;
 - tworzyć, aktualizować i usuwać konteksty;
@@ -53,6 +54,19 @@ Gdy agent chce coś zmienić, rozmowa pokazuje **Wymagane zatwierdzenie** wraz z
 Decyzja jest ostateczna. Dwukrotne zatwierdzenie nigdy nie uruchamia zmiany dwa razy.
 
 Czytaj propozycje uważnie. Zastąpienie relacji ustawia pełną listę dla danego atrybutu i kontekstu; pusta lista usuwa każde powiązanie.
+
+### Zmiany w kilku encjach
+
+Gdy jedna prośba zmienia kilka encji, np. wydanie nowej wersji i zastąpienie poprzedniej, agent proponuje jeden **wsad** (`apply_entity_batch`). Podsumowanie do zatwierdzenia wymienia wszystkie kroki po kolei. Zatwierdzasz wsad raz i zostaje on zapisany w całości albo wcale: jeśli jeden krok się nie powiedzie, np. dlatego, że encja w międzyczasie się zmieniła, nic nie zostaje zapisane, a agent dowiaduje się, który krok zawiódł.
+
+## Gdy zmiana zostaje odrzucona
+
+Schematy mogą deklarować reguły, które serwer egzekwuje przy każdej zmianie, także zmianie agenta:
+
+- **Klucze unikalne.** Jeśli inna encja ma już ten sam numer części lub dokumentu, zmiana zostaje odrzucona, a agent dowiaduje się, która encja go ma. Powinien pokazać Ci tę encję i zapytać, czy ją zaktualizować, czy użyć innej wartości, zamiast ponawiać próbę.
+- **Hierarchie.** Powiązanie, które uczyniłoby encję własnym przodkiem, np. lokalizację wewnątrz niej samej, zostaje odrzucone wraz ze ścieżką pętli.
+- **Dozwolone cele.** Relacja może wskazywać tylko wymienione w niej schematy.
+- **Ograniczenia publikacji.** Publikacja schematu, który dodaje klucz unikalny lub hierarchię, nie powiedzie się, jeśli istniejące encje je naruszają; agent wymienia je, aby można było je najpierw poprawić.
 
 ## Rekordy kontrolowane
 
