@@ -296,7 +296,10 @@ serializes its declared blueprint/attribute business key, creates only when it
 is absent, and rejects an ambiguous match. When the lookup attribute alone is a
 declared unique key, the lookup uses that key's normalized index across every
 revision of the blueprint family; otherwise it matches the exact text among
-entities of the requested revision. `events.emit.v1`
+entities of the requested revision. An upsert's declared relationship sets
+apply whether it updates a match or creates; on create they are written as the
+new entity's relationship values.
+`events.emit.v1`
 is implemented only for a manifest-declared, per-contract event export as
 described in [Inter-extension events](#inter-extension-events).
 
