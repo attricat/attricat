@@ -1,5 +1,9 @@
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::{
+    collections::{BTreeSet, HashMap, HashSet},
+    sync::Arc,
+};
 
+use catalog_cache::{CacheKey, Policy};
 use chrono::{DateTime, Utc};
 use semver::{Version, VersionReq};
 use serde_json::{Value, json};
@@ -470,31 +474,54 @@ impl CatalogRepository {
             .await
     }
 
+    /// The decoded manifest of an installed release. Release rows never
+    /// change, so manifests are cached by release ID. The loader reads
+    /// committed data only.
+    pub(crate) async fn cached_release_manifest(
+        &self,
+        release_id: Uuid,
+    ) -> Result<Arc<Manifest>, RepositoryError> {
+        self.cache
+            .fetch(
+                CacheKey::new("extension_manifest", &[&release_id]),
+                &[],
+                Policy::Immutable,
+                || async {
+                    let raw: Value = sqlx::query_scalar(
+                        "SELECT manifest FROM installed_extension_releases WHERE id = $1",
+                    )
+                    .bind(release_id)
+                    .fetch_optional(&self.pool)
+                    .await?
+                    .ok_or(RepositoryError::NotFound("installed extension release"))?;
+                    serde_json::from_value::<Manifest>(raw).map_err(|_| {
+                        RepositoryError::InvalidExtension(
+                            "stored extension manifest is invalid".into(),
+                        )
+                    })
+                },
+            )
+            .await
+    }
+
     /// Resolves enabled, policy-compatible manifest contributions without
     /// applying presentation visibility. Artifact and broker authorization and
     /// publication validation must not depend on a layout hiding a contribution.
     pub async fn enabled_client_extension_contributions(
         &self,
     ) -> Result<Vec<ClientExtensionContribution>, RepositoryError> {
-        let rows: Vec<(Uuid, String, Uuid, Value, Value)> = sqlx::query_as(
-            "SELECT i.id, i.extension_id, i.installed_release_id, i.configuration, r.manifest FROM extension_installations i JOIN installed_extension_releases r ON r.id = i.installed_release_id JOIN workspaces w ON w.id = i.workspace_id WHERE i.workspace_id = $1 AND i.state = 'enabled' AND w.extensions_enabled ORDER BY i.extension_id",
+        // Capability grants are aggregated in the same statement.
+        let rows: Vec<(String, Uuid, Value, Vec<String>)> = sqlx::query_as(
+            "SELECT i.extension_id, i.installed_release_id, i.configuration, ARRAY(SELECT g.grant_id FROM extension_grants g WHERE g.installation_id = i.id AND g.grant_kind = 'capability' ORDER BY g.grant_id) FROM extension_installations i JOIN workspaces w ON w.id = i.workspace_id WHERE i.workspace_id = $1 AND i.state = 'enabled' AND w.extensions_enabled ORDER BY i.extension_id",
         )
         .bind(self.extension_workspace())
         .fetch_all(&self.pool)
         .await?;
         let mut contributions = Vec::new();
-        for (installation_id, extension_id, installed_release_id, configuration, stored_manifest) in
-            rows
-        {
+        for (extension_id, installed_release_id, configuration, capabilities) in rows {
             if !extension_policy::allows(&extension_id, installed_release_id) {
                 continue;
             }
-            let capabilities: Vec<String> = sqlx::query_scalar(
-                "SELECT grant_id FROM extension_grants WHERE installation_id = $1 AND grant_kind = 'capability' ORDER BY grant_id",
-            )
-            .bind(installation_id)
-            .fetch_all(&self.pool)
-            .await?;
             let client_configuration = if capabilities
                 .iter()
                 .any(|capability| capability == "configuration.read")
@@ -503,11 +530,9 @@ impl CatalogRepository {
             } else {
                 json!({})
             };
-            let manifest: Manifest = serde_json::from_value(stored_manifest).map_err(|_| {
-                RepositoryError::InvalidExtension("stored extension manifest is invalid".into())
-            })?;
-            let extension_name = manifest.name;
-            for contribution in manifest.ui {
+            let manifest = self.cached_release_manifest(installed_release_id).await?;
+            let extension_name = manifest.name.clone();
+            for contribution in manifest.ui.iter().cloned() {
                 contributions.push(ClientExtensionContribution {
                     contribution_key: format!("{}:{}", extension_id, contribution.id),
                     display_order: 0,

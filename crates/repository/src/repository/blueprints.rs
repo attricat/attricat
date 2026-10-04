@@ -927,33 +927,28 @@ impl CatalogRepository {
     pub(super) async fn enabled_extension_attribute_types(
         &self,
     ) -> Result<HashSet<(String, String, String, String)>, RepositoryError> {
-        let enabled_manifests = sqlx::query_as::<_, (String, Value)>(
-            "SELECT i.extension_id, r.manifest FROM extension_installations i JOIN installed_extension_releases r ON r.id = i.installed_release_id JOIN workspaces w ON w.id = i.workspace_id WHERE i.workspace_id = $1 AND i.state = 'enabled' AND w.extensions_enabled",
+        let enabled = sqlx::query_as::<_, (String, Uuid)>(
+            "SELECT i.extension_id, i.installed_release_id FROM extension_installations i JOIN workspaces w ON w.id = i.workspace_id WHERE i.workspace_id = $1 AND i.state = 'enabled' AND w.extensions_enabled",
         )
         .bind(self.workspace_id.0)
         .fetch_all(&self.pool)
         .await?;
-        Ok(enabled_manifests
-            .into_iter()
-            .filter_map(|(extension_id, raw_manifest)| {
-                serde_json::from_value::<crate::extensions::Manifest>(raw_manifest)
-                    .ok()
-                    .map(|manifest| (extension_id, manifest))
-            })
-            .flat_map(|(extension_id, manifest)| {
-                manifest
-                    .attribute_types
-                    .into_iter()
-                    .map(move |declaration| {
-                        (
-                            extension_id.clone(),
-                            declaration.id,
-                            declaration.version,
-                            declaration.primitive,
-                        )
-                    })
-            })
-            .collect())
+        let mut types = HashSet::new();
+        for (extension_id, release_id) in enabled {
+            // An undecodable manifest declares no available type.
+            let Ok(manifest) = self.cached_release_manifest(release_id).await else {
+                continue;
+            };
+            types.extend(manifest.attribute_types.iter().map(|declaration| {
+                (
+                    extension_id.clone(),
+                    declaration.id.clone(),
+                    declaration.version.clone(),
+                    declaration.primitive.clone(),
+                )
+            }));
+        }
+        Ok(types)
     }
 }
 

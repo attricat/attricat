@@ -30,7 +30,7 @@ use serde::{Serialize, de::DeserializeOwned};
 pub struct CacheKey(Arc<str>);
 
 impl CacheKey {
-    pub fn new(namespace: &str, parts: &[&dyn fmt::Display]) -> Self {
+    pub fn new(namespace: &str, parts: &[&(dyn fmt::Display + Sync)]) -> Self {
         let mut key = namespace.to_owned();
         for part in parts {
             key.push(':');
@@ -60,7 +60,7 @@ impl fmt::Display for CacheKey {
 pub struct Tag(Arc<str>);
 
 impl Tag {
-    pub fn new(namespace: &str, parts: &[&dyn fmt::Display]) -> Self {
+    pub fn new(namespace: &str, parts: &[&(dyn fmt::Display + Sync)]) -> Self {
         Self(CacheKey::new(namespace, parts).0)
     }
 
