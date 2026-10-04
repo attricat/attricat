@@ -31,7 +31,7 @@ use api::{
     telemetry::{init_metrics, init_tracing},
     workflow_runtime,
 };
-use catalog_cache::{CacheBackend, CacheConfig, QueryCache};
+use catalog_cache::{CacheConfig, QueryCache};
 use sqlx::postgres::PgPoolOptions;
 use tokio::sync::Semaphore;
 use uuid::Uuid;
@@ -265,11 +265,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .unwrap_or_else(|_| "http://127.0.0.1:5173/onboarding".to_owned());
 
     // One query cache shared by request handlers and background workers.
-    let cache_config = CacheConfig::from_env()?;
-    if cache_config.backend != CacheBackend::Memory {
-        return Err("CACHE_BACKEND=redis is not supported by this build".into());
-    }
-    let query_cache = QueryCache::new(cache_config);
+    // With CACHE_BACKEND=redis, replicas also share cached values, cache
+    // invalidations and extension network rate limits; Redis failures
+    // degrade to process memory.
+    let (query_cache, rate_limiter) = QueryCache::from_config(CacheConfig::from_env()?).await;
+    extension_runtime::use_network_rate_limiter(rate_limiter);
     let task_repository =
         CatalogRepository::system(task_pool.clone()).with_cache(query_cache.clone());
     // Agent provider calls are not safely resumable. On process restart mark

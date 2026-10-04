@@ -21,7 +21,13 @@ use std::{
 
 use async_trait::async_trait;
 use bytes::Bytes;
+
+mod rate_limit;
+mod redis_backend;
+
 use futures_util::{StreamExt, stream::BoxStream};
+pub use rate_limit::{LocalRateLimiter, RateLimiter, RedisRateLimiter};
+pub use redis_backend::{RedisBus, RedisStore, connect as connect_redis};
 use serde::{Serialize, de::DeserializeOwned};
 
 /// A cache key. By convention `namespace:part:part`; the namespace labels
@@ -297,6 +303,31 @@ impl QueryCache {
         }
     }
 
+    /// Builds the configured cache and the rate limiter that goes with it.
+    /// An unreachable Redis is logged and the process continues in memory:
+    /// the shared tier is an optimization, never a dependency.
+    pub async fn from_config(config: CacheConfig) -> (Self, Arc<dyn RateLimiter>) {
+        match &config.backend {
+            CacheBackend::Memory => (Self::new(config), Arc::new(LocalRateLimiter::default())),
+            CacheBackend::Redis { url } => match connect_redis(url).await {
+                Ok((client, connection)) => {
+                    let cache = Self::with_backends(
+                        config.clone(),
+                        Some(Arc::new(RedisStore::new(connection.clone()))),
+                        Arc::new(RedisBus::new(client, connection.clone())),
+                    );
+                    cache.spawn_invalidation_listener();
+                    tracing::info!("query cache uses Redis as its shared tier");
+                    (cache, Arc::new(RedisRateLimiter::new(connection)))
+                }
+                Err(error) => {
+                    tracing::error!(%error, "Redis is unavailable; the query cache stays in memory");
+                    (Self::new(config), Arc::new(LocalRateLimiter::default()))
+                }
+            },
+        }
+    }
+
     /// Returns the cached value for `key`, or loads, stores and returns it.
     /// Concurrent misses for one key run `load` once; a failed load is not
     /// cached and its error goes to that caller only.
@@ -527,6 +558,126 @@ mod tests {
 
     fn key(name: &str) -> CacheKey {
         CacheKey::new("test", &[&name])
+    }
+
+    /// Behaviour every backend provides; `peer` shares `cache`'s remote tier
+    /// and bus (for memory, it is a separate process-local cache).
+    async fn shared_behaviour(cache: QueryCache, peer: QueryCache, shared: bool) {
+        let run = uuid_like();
+        let key = CacheKey::new("behaviour", &[&run, &"value"]);
+        let tag = Tag::new("behaviour", &[&run]);
+        let loads = Arc::new(AtomicUsize::new(0));
+        let load = |value: u32| {
+            let loads = loads.clone();
+            move || async move {
+                loads.fetch_add(1, Ordering::SeqCst);
+                Ok::<_, CacheError>(value)
+            }
+        };
+        let tags = std::slice::from_ref(&tag);
+        assert_eq!(
+            *cache
+                .fetch(key.clone(), tags, Policy::Generation, load(1))
+                .await
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            *cache
+                .fetch(key.clone(), tags, Policy::Generation, load(2))
+                .await
+                .unwrap(),
+            1
+        );
+        assert_eq!(loads.load(Ordering::SeqCst), 1);
+        // A peer reads the shared tier instead of loading; a process-local
+        // peer loads for itself.
+        let peer_value = *peer
+            .fetch(key.clone(), tags, Policy::Generation, load(3))
+            .await
+            .unwrap();
+        assert_eq!(peer_value, if shared { 1 } else { 3 });
+        // Invalidation reaches both.
+        cache.invalidate(&tag).await;
+        if shared {
+            for _ in 0..50 {
+                if peer.get::<u32>(&key).await.is_none() {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+            assert!(
+                peer.get::<u32>(&key).await.is_none(),
+                "peer L1 was invalidated"
+            );
+        }
+        assert_eq!(
+            *cache
+                .fetch(key.clone(), tags, Policy::Generation, load(4))
+                .await
+                .unwrap(),
+            4
+        );
+    }
+
+    fn uuid_like() -> String {
+        format!(
+            "{}-{:?}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        )
+    }
+
+    #[tokio::test]
+    async fn memory_backend_behaviour() {
+        shared_behaviour(QueryCache::default(), QueryCache::default(), false).await;
+    }
+
+    /// Runs only when `REDIS_URL` points at a Redis server.
+    #[tokio::test]
+    async fn redis_backend_behaviour() {
+        let Some(url) = std::env::var("REDIS_URL")
+            .ok()
+            .filter(|url| !url.trim().is_empty())
+        else {
+            return;
+        };
+        let config = CacheConfig {
+            backend: CacheBackend::Redis { url },
+            max_entries: 100,
+        };
+        let (cache, limiter) = QueryCache::from_config(config.clone()).await;
+        let (peer, _) = QueryCache::from_config(config).await;
+        assert!(cache.inner.l2.is_some(), "Redis is reachable");
+        // Let both subscriptions attach before publishing.
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        shared_behaviour(cache, peer, true).await;
+        let key = uuid_like();
+        assert!(limiter.allow(&key, 1, Duration::from_secs(5)).await);
+        assert!(!limiter.allow(&key, 1, Duration::from_secs(5)).await);
+    }
+
+    #[tokio::test]
+    async fn an_unreachable_redis_degrades_to_memory() {
+        let config = CacheConfig {
+            backend: CacheBackend::Redis {
+                url: "redis://127.0.0.1:1".to_owned(),
+            },
+            max_entries: 100,
+        };
+        let (cache, limiter) = QueryCache::from_config(config).await;
+        assert!(cache.inner.l2.is_none());
+        let value = cache
+            .fetch(key("degraded"), &[], Policy::Immutable, || async {
+                Ok::<_, CacheError>(5_u32)
+            })
+            .await
+            .unwrap();
+        assert_eq!(*value, 5);
+        assert!(limiter.allow("degraded", 1, Duration::from_secs(1)).await);
     }
 
     #[test]

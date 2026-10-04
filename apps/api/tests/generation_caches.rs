@@ -6,10 +6,7 @@ mod support;
 use std::time::Duration;
 
 use api::{
-    repository::CatalogRepository,
-    rule_runtime,
-    task_queue::TaskKind,
-    task_worker::TaskOutcome,
+    repository::CatalogRepository, rule_runtime, task_queue::TaskKind, task_worker::TaskOutcome,
 };
 use support::*;
 

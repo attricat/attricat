@@ -6,7 +6,7 @@ import net from "node:net";
  *
  * Each worktree receives stable, otherwise-unused PostgreSQL, API, web,
  * documentation ports, Mailpit SMTP, Mailpit UI, Jaeger OTLP,
- * Jaeger UI, RustFS S3, RustFS Console, and file worker operations ports in
+ * Jaeger UI, RustFS S3, RustFS Console, Redis, and file worker operations ports in
  * `.worktree`. The assignments are reused on later runs so
  * `just dev` can be stopped and restarted without changing its URLs. The
  * script creates `.env` from `.env.example` when necessary, while preserving
@@ -27,6 +27,7 @@ const portNames = [
   "RUSTFS_PORT",
   "RUSTFS_CONSOLE_PORT",
   "FILE_WORKER_OPERATIONS_PORT",
+  "REDIS_PORT",
 ];
 
 /** Parse simple KEY=VALUE entries from .env-style files. */
@@ -114,6 +115,9 @@ env = setEnvValue(
   `http://127.0.0.1:${ports.JAEGER_OTLP_GRPC_PORT}`,
 );
 env = setEnvValue(env, "RUSTFS_PORT", ports.RUSTFS_PORT);
+// The query cache stays in memory unless CACHE_BACKEND=redis is set.
+env = setEnvValue(env, "REDIS_PORT", ports.REDIS_PORT);
+env = setEnvValue(env, "REDIS_URL", `redis://127.0.0.1:${ports.REDIS_PORT}`);
 env = setEnvValue(env, "RUSTFS_CONSOLE_PORT", ports.RUSTFS_CONSOLE_PORT);
 env = setEnvValue(
   env,

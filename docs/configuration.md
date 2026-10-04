@@ -34,7 +34,10 @@ or inaccessible configured bucket.
 | `PREVIEW_MAX_RELATIONSHIP_DEPTH` | `3` | API | Maximum recursive relationship preview depth. |
 | `PREVIEW_MAX_RELATIONSHIP_ITEMS` | `10` | API | Maximum inline targets per relationship. |
 | `ENTITY_MAX_PAGE_SIZE` | `100` | API | Maximum page size for relationship browsing. |
-| `DATA_HEALTH_CACHE_TTL_SECONDS` | `300` | API | Data-health response cache lifetime. |
+| `DATA_HEALTH_CACHE_TTL_SECONDS` | `300` | API | Data-health response cache lifetime. Any recorded catalog change also makes the next request a miss. |
+| `CACHE_BACKEND` | `memory` | API | Query cache backend: `memory` keeps cached definitions in each process; `redis` also shares them between replicas, broadcasts cache invalidations and shares extension network rate limits. Correctness never depends on the backend; an unreachable Redis degrades to memory. |
+| `REDIS_URL` | Unset | API | Redis URL, required when `CACHE_BACKEND=redis`. `just setup` writes the local development Redis URL. |
+| `CACHE_MAX_ENTRIES` | `20000` | API | Positive maximum number of in-memory query cache entries per process. |
 | `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE` | `50` | API | Maximum page size for incoming-relationship browsing. |
 | `RELATIONSHIP_FACET_MAX_NODES` | `100` | API | Maximum relationship nodes considered while building Explorer facets. |
 | `ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS` | `90` | API | Number of days of attribute-value history retained; must be a positive signed 64-bit integer. Invalid values stop startup. A periodic worker deletes at most 1,000 rows per transaction, with a 10-second sweep budget every minute. Failures are logged and retried without blocking startup. |

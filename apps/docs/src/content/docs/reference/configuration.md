@@ -96,7 +96,10 @@ Session lifetime (eight hours), the login rate limit (five failures per workspac
 | `ENTITY_MAX_PAGE_SIZE` | `100` | Largest page size for relationship target browsing. |
 | `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE` | `50` | Largest page size for incoming-relationship lists. Caps `page_size` in `incoming_relationship_list` view blocks. |
 | `RELATIONSHIP_FACET_MAX_NODES` | `100` | Maximum nodes returned per page of an Explorer relationship facet. |
-| `DATA_HEALTH_CACHE_TTL_SECONDS` | `300` | How long data-health responses are cached. `0` disables the cache. |
+| `DATA_HEALTH_CACHE_TTL_SECONDS` | `300` | How long data-health responses are cached. `0` disables the cache. Any recorded catalog change also refreshes them on the next request. |
+| `CACHE_BACKEND` | `memory` | Where cached definitions live: `memory` (each process) or `redis` (shared by every replica, which then also share cache invalidations and extension network rate limits). If Redis is unreachable the API keeps working from memory. |
+| `REDIS_URL` | Unset | Redis connection URL. Required when `CACHE_BACKEND` is `redis`. |
+| `CACHE_MAX_ENTRIES` | `20000` | Maximum number of in-memory cache entries per process. |
 | `ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS` | `90` | Days of attribute-value history kept. Every minute the API spends up to 10 seconds deleting older history, at most 1,000 rows per transaction. A failed cleanup is logged and tried again; it does not stop the API. |
 | `BLUEPRINT_MIGRATION_PAGE_SIZE` | `100` | Entities read per page during a background blueprint migration. 1 to 1000. |
 | `BLUEPRINT_MIGRATION_CONCURRENCY` | `4` | Entities migrated at the same time within one migration batch. 1 to 64. |

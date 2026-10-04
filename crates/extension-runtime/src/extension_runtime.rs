@@ -11,7 +11,7 @@ use std::{
     fs::{File, OpenOptions},
     io::Write,
     path::PathBuf,
-    sync::{Arc, LazyLock, Mutex},
+    sync::{Arc, Mutex, OnceLock},
     time::{Duration, Instant},
 };
 
@@ -22,6 +22,7 @@ use reqwest::{Client, Method, redirect::Policy};
 use url::Url;
 
 use async_trait::async_trait;
+use catalog_cache::{LocalRateLimiter, RateLimiter};
 use catalog_repository::round_trips::measure;
 use semver::{Version, VersionReq};
 use serde::Deserialize;
@@ -203,30 +204,26 @@ const MAX_WRITE_VALUES: usize = 100;
 const EPOCH_TICK_INTERVAL: Duration = Duration::from_millis(10);
 const NETWORK_RATE_WINDOW: Duration = Duration::from_secs(60);
 const NETWORK_RATE_LIMIT: usize = 60;
-type NetworkRateBucketKey = (Uuid, String);
-type NetworkRateBuckets = HashMap<NetworkRateBucketKey, VecDeque<Instant>>;
-static NETWORK_RATE_BUCKETS: LazyLock<Mutex<NetworkRateBuckets>> =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
+/// The network request limiter: per process by default, shared by every
+/// replica when the composition root installs a Redis-backed limiter.
+static NETWORK_RATE_LIMITER: OnceLock<Arc<dyn RateLimiter>> = OnceLock::new();
 
-fn allow_network_request(workspace_id: Uuid, extension_id: &str) -> bool {
-    let now = Instant::now();
-    let mut buckets = NETWORK_RATE_BUCKETS
-        .lock()
-        .expect("network rate buckets are not poisoned");
-    let bucket = buckets
-        .entry((workspace_id, extension_id.to_owned()))
-        .or_default();
-    while bucket
-        .front()
-        .is_some_and(|at| now.duration_since(*at) >= NETWORK_RATE_WINDOW)
-    {
-        bucket.pop_front();
-    }
-    if bucket.len() >= NETWORK_RATE_LIMIT {
-        return false;
-    }
-    bucket.push_back(now);
-    true
+/// Installs the process-wide network rate limiter. Call before the runtime
+/// serves requests; later calls are ignored.
+pub fn use_network_rate_limiter(limiter: Arc<dyn RateLimiter>) {
+    let _ = NETWORK_RATE_LIMITER.set(limiter);
+}
+
+/// Admits one network request of a release's extension.
+async fn allow_network_request(release_id: Uuid, extension_id: &str) -> bool {
+    NETWORK_RATE_LIMITER
+        .get_or_init(|| Arc::new(LocalRateLimiter::default()))
+        .allow(
+            &format!("network:{release_id}:{extension_id}"),
+            NETWORK_RATE_LIMIT as u32,
+            NETWORK_RATE_WINDOW,
+        )
+        .await
 }
 
 #[derive(Clone, Debug)]
@@ -1363,7 +1360,9 @@ impl HostState {
         if !allow_network_request(
             self.installation.installed_release_id,
             &self.installation.extension_id,
-        ) {
+        )
+        .await
+        {
             return Err("network request rate limit exceeded".into());
         }
         let addresses: Vec<std::net::SocketAddr> = tokio::time::timeout(
@@ -2270,15 +2269,15 @@ mod tests {
         );
     }
 
-    #[test]
-    fn network_rate_limit_is_release_scoped_and_failed_calls_do_not_share_a_bucket() {
+    #[tokio::test]
+    async fn network_rate_limit_is_release_scoped_and_failed_calls_do_not_share_a_bucket() {
         let release = Uuid::new_v4();
         for _ in 0..NETWORK_RATE_LIMIT {
-            assert!(allow_network_request(release, "acme.extension"));
+            assert!(allow_network_request(release, "acme.extension").await);
         }
-        assert!(!allow_network_request(release, "acme.extension"));
-        assert!(allow_network_request(Uuid::new_v4(), "acme.extension"));
-        assert!(allow_network_request(release, "acme.other"));
+        assert!(!allow_network_request(release, "acme.extension").await);
+        assert!(allow_network_request(Uuid::new_v4(), "acme.extension").await);
+        assert!(allow_network_request(release, "acme.other").await);
     }
 
     #[test]
@@ -2674,7 +2673,9 @@ impl OperationState {
         if !allow_network_request(
             host.installation.installed_release_id,
             &host.installation.extension_id,
-        ) {
+        )
+        .await
+        {
             return Err("network request rate limit exceeded".into());
         }
         let address = url.host_str().ok_or("HTTPS URL needs a host")?;
