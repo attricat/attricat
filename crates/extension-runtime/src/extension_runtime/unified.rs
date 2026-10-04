@@ -361,10 +361,6 @@ fn to_wit_v16_event(event: &DomainEvent) -> v16::api::Event {
     }
 }
 
-fn runtime_error(error: impl ToString) -> ExtensionRuntimeError {
-    ExtensionRuntimeError::Runtime(error.to_string())
-}
-
 impl ExtensionRuntime {
     /// Instantiates a unified component with every import linked. `operation`
     /// is present only for an operation-run batch.
@@ -477,37 +473,16 @@ impl ExtensionRuntime {
 
     /// Executes one batch through the unified world. The lifecycle mirrors the
     /// released 1.4/1.5 operation worlds exactly.
-    #[allow(clippy::too_many_arguments)]
     pub(super) async fn invoke_unified_batch(
         &self,
         installation: &ExtensionRuntimeInstallation,
         repository: CatalogRepository,
-        run_id: Uuid,
-        operation_handler: &str,
-        configuration: &Value,
-        input: &Value,
-        checkpoint: &Value,
-        batch_key: &str,
-        max_checkpoint_bytes: u64,
-        lifecycle_started: bool,
+        run: &ClaimedExtensionOperationRun,
         cancelling: bool,
     ) -> Result<(Value, Value, bool), ExtensionRuntimeError> {
-        let request = v16_operations::OperationRequest {
-            run_id: run_id.to_string(),
-            operation_id: operation_handler.to_owned(),
-            configuration: serde_json::to_string(configuration).map_err(runtime_error)?,
-            input: serde_json::to_string(input).map_err(runtime_error)?,
-            checkpoint: serde_json::to_string(checkpoint).map_err(runtime_error)?,
-            batch_key: batch_key.to_owned(),
-        };
-        let operation = OperationState::new(
-            self.config.max_memory_bytes,
-            installation.clone(),
-            repository.clone(),
-            self.object_store.clone(),
-            run_id,
-        )
-        .with_batch_key(batch_key);
+        let operation = self
+            .operation_state(installation, repository.clone(), run.id)
+            .with_batch_key(&run.batch_key);
         let (mut store, pre, instance) = self
             .instantiate_unified(installation, repository, Some(operation))
             .await?;
@@ -518,14 +493,6 @@ impl ExtensionRuntime {
                     "component does not export catalog:host/operations: {error}"
                 ))
             })?;
-        run_operation_batch!(
-            &mut store,
-            &operations,
-            request,
-            checkpoint: checkpoint,
-            max_checkpoint_bytes: max_checkpoint_bytes,
-            lifecycle_started: lifecycle_started,
-            cancelling: cancelling,
-        )
+        run_operation_batch(&mut store, &operations, run, cancelling).await
     }
 }
