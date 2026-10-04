@@ -19,13 +19,14 @@ impl<S: RepositoryScope> CatalogRepository<S> {
             task_fence: self.task_fence.clone(),
             extension_id: self.extension_id.clone(),
             authorization_actor: self.authorization_actor,
+            cache: self.cache.clone(),
         })
     }
 
     /// Explicitly leave tenant scope for process-level coordination. System
     /// repositories cannot call workspace data methods until re-scoped.
     pub fn system_scope(&self) -> SystemRepository {
-        CatalogRepository::system(self.pool.clone())
+        CatalogRepository::system(self.pool.clone()).with_cache(self.cache.clone())
     }
 }
 

@@ -7,8 +7,10 @@ use crate::domain_events::{
 use crate::model::TablePathAttribute;
 use crate::persistence_rows::{Db, IntoDomain};
 use catalog_blueprint::{ViewDefinition, parse};
+use catalog_cache::{CacheKey, Policy};
 use catalog_validation::validate_json_schema;
 use serde_json::json;
+use std::sync::Arc;
 use uuid::Uuid;
 
 #[derive(sqlx::FromRow)]
@@ -299,6 +301,16 @@ impl CatalogRepository {
         blueprint_id: Uuid,
         version: i64,
     ) -> Result<Option<BlueprintWithAttributes>, RepositoryError> {
+        if let Some(revision) = self
+            .cached_revision(&self.revision_key(blueprint_id, version))
+            .await
+        {
+            let (blueprint, attributes) = revision.as_ref().clone();
+            return self
+                .decorate_revision(blueprint, attributes)
+                .await
+                .map(Some);
+        }
         let blueprint = sqlx::query_as::<_, Db<Blueprint>>(
             r#"SELECT id, code, name, kind, version, includes, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
                FROM blueprints
@@ -361,6 +373,16 @@ impl CatalogRepository {
         version: i64,
     ) -> Result<Option<BlueprintWithAttributes>, RepositoryError> {
         validate_code(code)?;
+        if let Some(revision) = self
+            .cached_revision(&self.revision_code_key(code, version))
+            .await
+        {
+            let (blueprint, attributes) = revision.as_ref().clone();
+            return self
+                .decorate_revision(blueprint, attributes)
+                .await
+                .map(Some);
+        }
         let blueprint = sqlx::query_as::<_, Db<Blueprint>>(
             r#"SELECT id, code, name, kind, version, includes, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
                FROM blueprints
@@ -382,6 +404,16 @@ impl CatalogRepository {
         version: i64,
     ) -> Result<Option<BlueprintWithAttributes>, RepositoryError> {
         validate_code(code)?;
+        if let Some(revision) = self
+            .cached_revision(&self.revision_code_key(code, version))
+            .await
+        {
+            let (blueprint, attributes) = revision.as_ref().clone();
+            return self
+                .decorate_revision(blueprint, attributes)
+                .await
+                .map(Some);
+        }
         let blueprint = sqlx::query_as::<_, Db<Blueprint>>(
             r#"SELECT id, code, name, kind, version, includes, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
                FROM blueprints
@@ -662,6 +694,12 @@ impl CatalogRepository {
         blueprint_id: Uuid,
         blueprint_version: i64,
     ) -> Result<Vec<Attribute>, RepositoryError> {
+        if let Some(revision) = self
+            .cached_revision(&self.revision_key(blueprint_id, blueprint_version))
+            .await
+        {
+            return Ok(revision.1.clone());
+        }
         Ok(sqlx::query_as::<_, Db<Attribute>>(
             r#"SELECT id, blueprint_id, blueprint_version, code, name, value_type, value_schema, extension_type, default_value, file_policy, target_blueprint_code, target_blueprint_codes, cardinality, target_cardinality, hierarchy, tags, context_fallback, context_editable, readonly, position, created_at, updated_at, deleted_at
                FROM attributes
@@ -757,56 +795,131 @@ impl CatalogRepository {
         Ok(resolved)
     }
 
+    /// The cache key of a published revision's row and attributes, by ID.
+    fn revision_key(&self, blueprint_id: Uuid, version: i64) -> CacheKey {
+        CacheKey::new(
+            "blueprint_revision",
+            &[&self.workspace_id.0, &blueprint_id, &version],
+        )
+    }
+
+    /// The same revision by family code; codes never move between families.
+    fn revision_code_key(&self, code: &str, version: i64) -> CacheKey {
+        CacheKey::new(
+            "blueprint_revision_code",
+            &[&self.workspace_id.0, &code, &version],
+        )
+    }
+
+    /// A published revision previously cached by a committed read. A
+    /// transaction may consult this, but never fills it: it could see a
+    /// publication of its own that is later rolled back.
+    pub(super) async fn cached_published_revision(
+        &self,
+        blueprint_id: Uuid,
+        version: i64,
+    ) -> Option<Arc<CachedRevision>> {
+        self.cached_revision(&self.revision_key(blueprint_id, version))
+            .await
+    }
+
+    /// A cached published revision, by ID or by code.
+    async fn cached_revision(&self, key: &CacheKey) -> Option<Arc<CachedRevision>> {
+        self.cache.get::<CachedRevision>(key).await
+    }
+
+    /// The revision's attributes. Published revisions never change, so their
+    /// row and attributes are cached; drafts are always read from the table.
+    async fn revision_attributes(
+        &self,
+        blueprint: &Blueprint,
+    ) -> Result<Vec<Attribute>, RepositoryError> {
+        if blueprint.status != "published" {
+            return self.list_attributes(blueprint.id, blueprint.version).await;
+        }
+        let key = self.revision_key(blueprint.id, blueprint.version);
+        if let Some(revision) = self.cached_revision(&key).await {
+            return Ok(revision.1.clone());
+        }
+        let attributes = self
+            .list_attributes(blueprint.id, blueprint.version)
+            .await?;
+        let revision = Arc::new((blueprint.clone(), attributes.clone()));
+        self.cache
+            .insert(key, revision.clone(), &[], Policy::Immutable)
+            .await;
+        self.cache
+            .insert(
+                self.revision_code_key(&blueprint.code, blueprint.version),
+                revision,
+                &[],
+                Policy::Immutable,
+            )
+            .await;
+        Ok(attributes)
+    }
+
     async fn with_attributes(
         &self,
         blueprint: Option<Blueprint>,
     ) -> Result<Option<BlueprintWithAttributes>, RepositoryError> {
         match blueprint {
             Some(blueprint) => {
-                let mut attributes = self
-                    .list_attributes(blueprint.id, blueprint.version)
-                    .await?;
-                // Availability is presentation-only metadata. The pinned
-                // declaration remains in the revision even when its provider
-                // is disabled, so ordinary blueprint/entity reads cannot fail
-                // and clients can choose the host-owned read-only fallback.
-                if attributes
-                    .iter()
-                    .any(|attribute| attribute.extension_type.is_some())
-                {
-                    let available_types = self.enabled_extension_attribute_types().await?;
-                    for attribute in &mut attributes {
-                        if let Some(metadata) = attribute.extension_type.as_mut()
-                            && let Some(object) = metadata.as_object_mut()
-                        {
-                            let field = |name: &str| {
-                                object.get(name).and_then(Value::as_str).map(str::to_owned)
-                            };
-                            let available = field("provider")
-                                .zip(field("type"))
-                                .zip(field("version"))
-                                .zip(field("primitive"))
-                                .is_some_and(|(((provider, type_id), version), primitive)| {
-                                    available_types
-                                        .contains(&(provider, type_id, version, primitive))
-                                });
-                            object.insert("available".to_owned(), Value::Bool(available));
-                        }
-                    }
-                }
-                let table_path_attributes = self
-                    .resolve_table_path_attributes(&blueprint, &attributes)
-                    .await?;
-                Ok(Some(BlueprintWithAttributes {
-                    blueprint,
-                    attributes,
-                    table_path_attributes,
-                }))
+                let attributes = self.revision_attributes(&blueprint).await?;
+                self.decorate_revision(blueprint, attributes)
+                    .await
+                    .map(Some)
             }
             None => Ok(None),
         }
     }
+
+    /// Adds read-time state to a revision: extension type availability and
+    /// table paths, which follow other blueprints and enabled extensions.
+    async fn decorate_revision(
+        &self,
+        blueprint: Blueprint,
+        mut attributes: Vec<Attribute>,
+    ) -> Result<BlueprintWithAttributes, RepositoryError> {
+        // Availability is presentation-only metadata. The pinned
+        // declaration remains in the revision even when its provider
+        // is disabled, so ordinary blueprint/entity reads cannot fail
+        // and clients can choose the host-owned read-only fallback.
+        if attributes
+            .iter()
+            .any(|attribute| attribute.extension_type.is_some())
+        {
+            let available_types = self.enabled_extension_attribute_types().await?;
+            for attribute in &mut attributes {
+                if let Some(metadata) = attribute.extension_type.as_mut()
+                    && let Some(object) = metadata.as_object_mut()
+                {
+                    let field =
+                        |name: &str| object.get(name).and_then(Value::as_str).map(str::to_owned);
+                    let available = field("provider")
+                        .zip(field("type"))
+                        .zip(field("version"))
+                        .zip(field("primitive"))
+                        .is_some_and(|(((provider, type_id), version), primitive)| {
+                            available_types.contains(&(provider, type_id, version, primitive))
+                        });
+                    object.insert("available".to_owned(), Value::Bool(available));
+                }
+            }
+        }
+        let table_path_attributes = self
+            .resolve_table_path_attributes(&blueprint, &attributes)
+            .await?;
+        Ok(BlueprintWithAttributes {
+            blueprint,
+            attributes,
+            table_path_attributes,
+        })
+    }
 }
+
+/// A published revision's row and attributes.
+pub(super) type CachedRevision = (Blueprint, Vec<Attribute>);
 
 impl CatalogRepository {
     /// `(provider, type, version, primitive)` of every attribute type declared

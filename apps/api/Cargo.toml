@@ -9,6 +9,7 @@ publish.workspace = true
 [dependencies]
 axum.workspace = true
 catalog-agent-runtime = { path = "../../crates/agent-runtime" }
+catalog-cache = { path = "../../crates/cache" }
 catalog-domain = { path = "../../crates/domain" }
 catalog-events = { path = "../../crates/events" }
 catalog-extension-manifest = { path = "../../crates/extension-manifest" }

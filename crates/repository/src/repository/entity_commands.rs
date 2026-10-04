@@ -1357,13 +1357,19 @@ impl CatalogRepository {
         }
         // Every value write validates here, so unique keys stay current.
         self.sync_entity_unique_keys(transaction, entity).await?;
-        let entity_schema = sqlx::query_scalar::<_, Option<Value>>(
-            "SELECT entity_schema FROM blueprints WHERE id = $1 AND version = $2 AND deleted_at IS NULL",
-        )
-        .bind(entity.blueprint_id)
-        .bind(entity.blueprint_version)
-        .fetch_one(&mut **transaction)
-        .await?;
+        let entity_schema = match self
+            .cached_published_revision(entity.blueprint_id, entity.blueprint_version)
+            .await
+        {
+            Some(revision) => revision.0.entity_schema.clone(),
+            None => sqlx::query_scalar::<_, Option<Value>>(
+                "SELECT entity_schema FROM blueprints WHERE id = $1 AND version = $2 AND deleted_at IS NULL",
+            )
+            .bind(entity.blueprint_id)
+            .bind(entity.blueprint_version)
+            .fetch_one(&mut **transaction)
+            .await?,
+        };
         let record = write
             .after_record(transaction, self.workspace_id.0, entity.id)
             .await?

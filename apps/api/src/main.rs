@@ -31,6 +31,7 @@ use api::{
     telemetry::{init_metrics, init_tracing},
     workflow_runtime,
 };
+use catalog_cache::{CacheBackend, CacheConfig, QueryCache};
 use sqlx::postgres::PgPoolOptions;
 use tokio::sync::Semaphore;
 use uuid::Uuid;
@@ -263,7 +264,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let workspace_onboarding_url = std::env::var("WORKSPACE_ONBOARDING_URL")
         .unwrap_or_else(|_| "http://127.0.0.1:5173/onboarding".to_owned());
 
-    let task_repository = CatalogRepository::system(task_pool.clone());
+    // One query cache shared by request handlers and background workers.
+    let cache_config = CacheConfig::from_env()?;
+    if cache_config.backend != CacheBackend::Memory {
+        return Err("CACHE_BACKEND=redis is not supported by this build".into());
+    }
+    let query_cache = QueryCache::new(cache_config);
+    let task_repository =
+        CatalogRepository::system(task_pool.clone()).with_cache(query_cache.clone());
     // Agent provider calls are not safely resumable. On process restart mark
     // any previously running run interrupted before its task can be reclaimed.
     if agent_provider.is_some() {
@@ -336,7 +344,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         object_store.clone(),
         shutdown_receiver.clone(),
     );
-    let workflow_repository = CatalogRepository::system(task_pool.clone());
+    let workflow_repository =
+        CatalogRepository::system(task_pool.clone()).with_cache(query_cache.clone());
     let dispatcher_handles = event_dispatcher::start(
         workflow_repository.clone(),
         rule_runtime::add_to_registry(workflow_runtime::add_to_registry(
@@ -364,7 +373,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     axum::serve(
         listener,
         router(AppState {
-            repository: CatalogRepository::system(request_pool.clone()),
+            repository: CatalogRepository::system(request_pool.clone())
+                .with_cache(query_cache.clone()),
             agent_provider,
             official_extension_releases,
             registry,

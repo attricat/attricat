@@ -11,6 +11,7 @@ async-trait.workspace = true
 base64.workspace = true
 bytes.workspace = true
 catalog-blueprint = { path = "../blueprint" }
+catalog-cache = { path = "../cache" }
 catalog-domain = { path = "../domain" }
 catalog-events = { path = "../events" }
 catalog-extension-manifest = { path = "../extension-manifest" }

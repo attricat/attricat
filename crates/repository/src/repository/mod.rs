@@ -110,6 +110,7 @@ pub use agents::{
 pub use audit_events::{AuditEventFilter, AuditEventPage};
 pub use avatars::{AVATAR_VARIANT_KIND, OwnAvatar};
 pub use blueprint_connector_jobs::BlueprintConnectorJob;
+pub use catalog_cache::QueryCache;
 pub use catalog_domain::model::{FileMetadata, FileVariantMetadata};
 pub use domain_events::{EventConsumer, EventDelivery, EventPublisher, FailedEventDelivery};
 pub use entity_search::{
@@ -194,6 +195,8 @@ pub struct CatalogRepository<S = WorkspaceScope> {
     /// extension run. It is rechecked at each host call; selection membership
     /// is never treated as permission.
     authorization_actor: Option<AuthorizationActor>,
+    /// Shared by every repository derived from the same composition root.
+    pub(crate) cache: QueryCache,
 }
 
 /// A user, and optionally the personal API token, that initiated an
@@ -673,6 +676,7 @@ impl CatalogRepository {
             task_fence: None,
             extension_id: None,
             authorization_actor: None,
+            cache: QueryCache::default(),
         }
     }
 
@@ -690,6 +694,7 @@ impl CatalogRepository {
             task_fence: None,
             extension_id: None,
             authorization_actor: None,
+            cache: QueryCache::default(),
         }
     }
 
@@ -932,6 +937,19 @@ fn add_initiating_actor_metadata(metadata: &mut Value, audit: Option<&AuditConte
             "initiating_actor_token_id".to_owned(),
             Value::String(actor_token_id.to_string()),
         );
+    }
+}
+
+impl<S> CatalogRepository<S> {
+    /// Uses `cache` for this repository and every repository derived from it.
+    /// The composition root shares one cache across requests and workers.
+    pub fn with_cache(mut self, cache: QueryCache) -> Self {
+        self.cache = cache;
+        self
+    }
+
+    pub fn cache(&self) -> &QueryCache {
+        &self.cache
     }
 }
 
