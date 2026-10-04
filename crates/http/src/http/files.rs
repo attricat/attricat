@@ -652,7 +652,7 @@ async fn download(
         {
             return Ok(conditional::not_modified_response(
                 etag.clone(),
-                conditional::IMMUTABLE,
+                conditional::REVALIDATE,
             ));
         }
         // Metadata is database-owned: never trust storage-supplied content types.
@@ -697,7 +697,7 @@ async fn download(
         }
         response_headers.insert(
             header::CACHE_CONTROL,
-            HeaderValue::from_static(conditional::IMMUTABLE),
+            HeaderValue::from_static(conditional::REVALIDATE),
         );
         response_headers.insert(
             header::CONTENT_DISPOSITION,

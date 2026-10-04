@@ -545,10 +545,9 @@ async fn reads_file_metadata_and_downloads_with_safe_range_headers(pool: PgPool)
         format!("bytes 2-5/{}", PNG.len())
     );
     assert_eq!(response.headers()["accept-ranges"], "bytes");
-    assert_eq!(
-        response.headers()["cache-control"],
-        "private, max-age=31536000, immutable"
-    );
+    // Browsers revalidate every use, so revoked access or a purged file
+    // takes effect at once.
+    assert_eq!(response.headers()["cache-control"], "private, no-cache");
     assert_eq!(
         response.headers()["etag"],
         format!("\"{:x}\"", Sha256::digest(PNG))
@@ -565,7 +564,16 @@ async fn reads_file_metadata_and_downloads_with_safe_range_headers(pool: PgPool)
         .await
         .unwrap();
     assert_eq!(revalidated.status(), StatusCode::NOT_MODIFIED);
+    assert_eq!(revalidated.headers()["cache-control"], "private, no-cache");
     assert!(revalidated.bytes().await.unwrap().is_empty());
+    // Revalidation is authorized like a download.
+    let anonymous = reqwest::Client::new()
+        .get(format!("{base_url}/files/{file_id}/download"))
+        .header("if-none-match", format!("\"{:x}\"", Sha256::digest(PNG)))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(anonymous.status(), StatusCode::UNAUTHORIZED);
     let object_key =
         sqlx::query_scalar::<_, String>("SELECT original_key FROM files WHERE id = $1")
             .bind(file_id.parse::<Uuid>().unwrap())
