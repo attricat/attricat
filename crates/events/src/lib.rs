@@ -140,8 +140,10 @@ pub struct EntityMigratedV1 {
 }
 
 /// The targets one relationship attribute released in a migration, at most
-/// [`MAX_RELEASED_RELATIONSHIP_TARGETS`] in ascending order, so the payload
-/// stays within its size limit however large the relationship was.
+/// [`MAX_RELEASED_RELATIONSHIP_TARGETS`] in ascending order. Across all
+/// attributes an event lists at most [`MAX_RELEASED_TARGETS_PER_EVENT`], so
+/// the payload stays within its size limit however many relationships the
+/// migration released.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ReleasedRelationshipV1 {
     pub attribute_code: String,
@@ -150,6 +152,10 @@ pub struct ReleasedRelationshipV1 {
 
 /// The most released targets `entity.migrated.v1` lists per relationship.
 pub const MAX_RELEASED_RELATIONSHIP_TARGETS: usize = 100;
+
+/// The most released targets `entity.migrated.v1` lists across all
+/// relationships; about 40 KB of the 64 KiB payload limit.
+pub const MAX_RELEASED_TARGETS_PER_EVENT: usize = 1_000;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ContextCreatedV1 {

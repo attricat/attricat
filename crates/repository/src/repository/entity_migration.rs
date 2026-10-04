@@ -3,7 +3,8 @@ use super::write_context::WriteContext;
 use super::*;
 use crate::domain_events::{
     ENTITY_MIGRATED_V1, EntityMigratedV1, EventSource, EventSourceKind,
-    MAX_RELEASED_RELATIONSHIP_TARGETS, NewDomainEvent, ReleasedRelationshipV1,
+    MAX_RELEASED_RELATIONSHIP_TARGETS, MAX_RELEASED_TARGETS_PER_EVENT, NewDomainEvent,
+    ReleasedRelationshipV1,
 };
 use crate::persistence_rows::Db;
 use catalog_validation::validate_json_schema;
@@ -27,16 +28,21 @@ fn released_relationships(changes: &[AuditEventChange]) -> Vec<ReleasedRelations
                 .push(target);
         }
     }
+    let mut remaining = MAX_RELEASED_TARGETS_PER_EVENT;
     released
         .into_iter()
-        .map(|(attribute_code, mut target_entity_ids)| {
+        .map_while(|(attribute_code, mut target_entity_ids)| {
+            if remaining == 0 {
+                return None;
+            }
             target_entity_ids.sort_unstable();
             target_entity_ids.dedup();
-            target_entity_ids.truncate(MAX_RELEASED_RELATIONSHIP_TARGETS);
-            ReleasedRelationshipV1 {
+            target_entity_ids.truncate(MAX_RELEASED_RELATIONSHIP_TARGETS.min(remaining));
+            remaining -= target_entity_ids.len();
+            Some(ReleasedRelationshipV1 {
                 attribute_code: attribute_code.to_owned(),
                 target_entity_ids,
-            }
+            })
         })
         .collect()
 }
@@ -941,4 +947,45 @@ fn migration_scalar_values_equal(value_type: &str, current: &Value, supplied: &V
         || super::values::ValueType::parse(value_type)
             .and_then(|value_type| super::values::NativeValue::parse(value_type, supplied.clone()))
             .is_ok_and(|value| value.json() == *current)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn removal(attribute_code: &str) -> AuditEventChange {
+        AuditEventChange {
+            entity_id: Uuid::nil(),
+            attribute_id: Uuid::nil(),
+            attribute_code: attribute_code.to_owned(),
+            context_id: None,
+            context_code: None,
+            relationship_target_entity_id: Some(Uuid::new_v4()),
+            change_kind: "relationship_remove",
+            before_value: None,
+            after_value: None,
+        }
+    }
+
+    #[test]
+    fn released_targets_are_capped_per_relationship_and_per_event() {
+        let changes: Vec<_> = (0..17)
+            .flat_map(|attribute| {
+                let code = format!("rel_{attribute:02}");
+                (0..150).map(move |_| removal(&code))
+            })
+            .collect();
+        let released = released_relationships(&changes);
+        assert!(
+            released
+                .iter()
+                .all(|entry| entry.target_entity_ids.len() <= MAX_RELEASED_RELATIONSHIP_TARGETS)
+        );
+        let total: usize = released
+            .iter()
+            .map(|entry| entry.target_entity_ids.len())
+            .sum();
+        assert_eq!(total, MAX_RELEASED_TARGETS_PER_EVENT);
+        assert_eq!(released.len(), 10);
+    }
 }
