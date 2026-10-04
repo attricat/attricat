@@ -131,7 +131,25 @@ pub struct EntityMigratedV1 {
     pub source_version: i64,
     pub target_version: i64,
     pub migration_id: Uuid,
+    /// Relationship targets the migration stopped referencing, because it
+    /// dropped or re-pointed a relationship. The event carries no `facts`, so
+    /// this lets consumers such as rule fan-out reach the released records.
+    /// Absent when the migration released none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub released_relationships: Vec<ReleasedRelationshipV1>,
 }
+
+/// The targets one relationship attribute released in a migration, at most
+/// [`MAX_RELEASED_RELATIONSHIP_TARGETS`] in ascending order, so the payload
+/// stays within its size limit however large the relationship was.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ReleasedRelationshipV1 {
+    pub attribute_code: String,
+    pub target_entity_ids: Vec<Uuid>,
+}
+
+/// The most released targets `entity.migrated.v1` lists per relationship.
+pub const MAX_RELEASED_RELATIONSHIP_TARGETS: usize = 100;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ContextCreatedV1 {

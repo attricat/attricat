@@ -74,6 +74,9 @@ re-run for dependents when a linked or referencing entity changes: entities of
 the rule's blueprint revision that link to the changed entity, and the entities
 a changed record of the `referenced_by` blueprint points to or, according to
 the event's facts, stopped pointing to (a removed or re-pointed relationship).
+`entity.migrated.v1` carries no facts; a migration that drops or re-points a
+relationship lists the released targets in the payload's
+`released_relationships` (at most 100 per relationship) instead.
 At most 100
 dependents run per rule and event. Changing a linked record is never rejected
 because of another record's checks; the dependent receives a finding, and an

@@ -1040,23 +1040,29 @@ impl CatalogRepository {
 /// The relationship targets of `attribute_code` that the event's facts
 /// record as added or removed.
 fn changed_relationship_targets(event: &DomainEvent, attribute_code: &str) -> Vec<Uuid> {
-    let Some(facts) = event
-        .payload
-        .get("facts")
-        .and_then(|facts| facts.as_array())
-    else {
-        return Vec::new();
+    let has_code = |entry: &&Value| {
+        entry.get("attribute_code").and_then(Value::as_str) == Some(attribute_code)
     };
-    let mut targets: Vec<Uuid> = facts
-        .iter()
-        .filter(|fact| {
-            fact.get("attribute_code").and_then(|code| code.as_str()) == Some(attribute_code)
-        })
-        .filter_map(|fact| {
-            fact.get("relationship_target_entity_id")
-                .and_then(|id| id.as_str())
-                .and_then(|id| id.parse().ok())
-        })
+    let as_uuid = |id: &Value| id.as_str().and_then(|id| id.parse().ok());
+    let entries = |field: &str| {
+        event
+            .payload
+            .get(field)
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter(has_code)
+    };
+    // Entity writes list changed targets in their facts; a migration, which
+    // carries no facts, lists the targets it released.
+    let mut targets: Vec<Uuid> = entries("facts")
+        .filter_map(|fact| fact.get("relationship_target_entity_id").and_then(as_uuid))
+        .chain(
+            entries("released_relationships")
+                .filter_map(|released| released.get("target_entity_ids").and_then(Value::as_array))
+                .flatten()
+                .filter_map(as_uuid),
+        )
         .collect();
     targets.sort();
     targets.dedup();

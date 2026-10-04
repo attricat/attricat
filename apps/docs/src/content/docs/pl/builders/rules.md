@@ -123,7 +123,7 @@ Reguła powiązana z kontekstem sprawdza rozstrzygnięte wartości encji w tym k
 
 ### Zmiany w powiązanych rekordach
 
-`linked` i `referenced_by` zależą od innych rekordów. Gdy zmieni się rekord powiązany lub wskazujący, reguły z wyzwalaczem zdarzenia uruchamiają się też ponownie dla maksymalnie 100 zależnych od niego encji, dzięki czemu ich ustalenia pozostają aktualne. Dotyczy to też rekordu, który rekord wskazujący przestaje wskazywać, na przykład gdy działanie korygujące zostanie przeniesione do innej niezgodności. Reguły wyzwalane tylko harmonogramem lub ręcznie zauważą zmianę przy następnym przebiegu.
+`linked` i `referenced_by` zależą od innych rekordów. Gdy zmieni się rekord powiązany lub wskazujący, reguły z wyzwalaczem zdarzenia uruchamiają się też ponownie dla maksymalnie 100 zależnych od niego encji, dzięki czemu ich ustalenia pozostają aktualne. Dotyczy to też rekordu, który rekord wskazujący przestaje wskazywać, na przykład gdy działanie korygujące zostanie przeniesione do innej niezgodności, zgodnie z [faktami](/pl/reference/events/#które-zmiany-tworzą-fakty) zdarzenia. Migracja Schematu, która usuwa relację lub zmienia jej cele, nie zapisuje faktów, ale jej zdarzenie `entity.migrated.v1` wymienia zwolnione rekordy, więc dla nich reguły również uruchamiają się ponownie. Reguły wyzwalane tylko harmonogramem lub ręcznie zauważą zmianę przy następnym przebiegu.
 
 Zasady porównywania dla każdego typu oraz limity zagnieżdżania i powiązanych rekordów opisuje [dokumentacja Schematu](/pl/reference/blueprint/#predykaty).
 

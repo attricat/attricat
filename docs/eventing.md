@@ -66,6 +66,14 @@ System tags and metadata are not attribute values and produce no facts.
 Workflow event triggers can filter on these facts' `attribute_code` values; see
 [Workflows](workflows.md#changed-attribute-filters).
 
+`entity.migrated.v1` carries no facts: its payload is `entity_id`,
+`blueprint_id`, `source_version`, `target_version` and `migration_id`, plus
+`released_relationships` when the migration dropped or re-pointed a
+relationship. Each entry has an `attribute_code` and the ascending
+`target_entity_ids` the entity stopped pointing to, at most 100 per
+relationship, so the payload stays within its size limit. Rule fan-out uses it
+to re-evaluate `referenced_by` dependents the migration released.
+
 Core types are constants in `api::domain_events` and currently include:
 
 - `entity.created.v1`, `entity.updated.v1`, `entity.deleted.v1`,

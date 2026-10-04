@@ -2,7 +2,8 @@ use super::entity_commands::Revalidation;
 use super::write_context::WriteContext;
 use super::*;
 use crate::domain_events::{
-    ENTITY_MIGRATED_V1, EntityMigratedV1, EventSource, EventSourceKind, NewDomainEvent,
+    ENTITY_MIGRATED_V1, EntityMigratedV1, EventSource, EventSourceKind,
+    MAX_RELEASED_RELATIONSHIP_TARGETS, NewDomainEvent, ReleasedRelationshipV1,
 };
 use crate::persistence_rows::Db;
 use catalog_validation::validate_json_schema;
@@ -11,6 +12,34 @@ use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
 type AttributeContextKey = (String, Option<Uuid>);
+
+/// The relationship targets a migration's audit changes removed, grouped by
+/// attribute code; see [`EntityMigratedV1::released_relationships`].
+fn released_relationships(changes: &[AuditEventChange]) -> Vec<ReleasedRelationshipV1> {
+    let mut released: std::collections::BTreeMap<&str, Vec<Uuid>> = Default::default();
+    for change in changes {
+        if let (Some(target), "relationship_remove") =
+            (change.relationship_target_entity_id, change.change_kind)
+        {
+            released
+                .entry(change.attribute_code.as_str())
+                .or_default()
+                .push(target);
+        }
+    }
+    released
+        .into_iter()
+        .map(|(attribute_code, mut target_entity_ids)| {
+            target_entity_ids.sort_unstable();
+            target_entity_ids.dedup();
+            target_entity_ids.truncate(MAX_RELEASED_RELATIONSHIP_TARGETS);
+            ReleasedRelationshipV1 {
+                attribute_code: attribute_code.to_owned(),
+                target_entity_ids,
+            }
+        })
+        .collect()
+}
 
 /// The target revision and default context a migration batch previews every
 /// entity against, read once per batch.
@@ -767,6 +796,7 @@ impl CatalogRepository {
             .entity_audit_snapshot(&mut transaction, entity.id)
             .await?;
         let changes = Self::migration_audit_changes(entity.id, before, after);
+        let released_relationships = released_relationships(&changes);
         // A migration changes stored values like any entity write: field-level
         // audit and publication reconciliation go through the shared seam.
         self.commit_entity_mutation(
@@ -797,6 +827,7 @@ impl CatalogRepository {
                     source_version: entity.blueprint_version,
                     target_version: target_entity.blueprint_version,
                     migration_id: input.migration_id,
+                    released_relationships,
                 })
                 .expect("entity-migrated payload is serializable"),
             },

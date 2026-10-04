@@ -75,6 +75,7 @@ To act on the entity's current state, read it; the payload is only a description
 - **Relationship attributes:** each added or removed target is its own fact, with `change_kind` `relationship_add` or `relationship_remove`, `relationship_target_entity_id` set, and the target ID as the value. A save that only changes relationships records `relationship.changed.v1`; one that also changes other values records `entity.updated.v1`.
 - **File attributes:** uploading, linking, reordering, or removing files is recorded in the audit log but records no event and no fact.
 - System tag and system metadata changes are not attribute values and add no fact.
+- **Migrations:** `entity.migrated.v1` has no `facts`. Its payload names the entity, its blueprint, `source_version`, `target_version`, and `migration_id`. When the migration dropped or re-pointed a relationship, `released_relationships` lists the targets the entity no longer points to, as `attribute_code` and `target_entity_ids` (at most 100 per relationship).
 
 ## Delivery guarantees
 

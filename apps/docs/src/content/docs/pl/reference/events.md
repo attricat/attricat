@@ -75,6 +75,7 @@ Aby działać na bieżącym stanie encji, odczytaj ją; ładunek jest wyłączni
 - **Atrybuty relacji:** każdy dodany lub usunięty cel to osobny fakt z `change_kind` równym `relationship_add` lub `relationship_remove`, ustawionym `relationship_target_entity_id` i identyfikatorem celu jako wartością. Zapis zmieniający tylko relacje tworzy `relationship.changed.v1`; zapis zmieniający też inne wartości tworzy `entity.updated.v1`.
 - **Atrybuty plikowe:** przesłanie, podłączenie, zmiana kolejności lub usunięcie plików trafia do dziennika audytu, ale nie tworzy zdarzenia ani faktu.
 - Zmiany tagów i metadanych systemowych nie są wartościami atrybutów i nie dodają faktów.
+- **Migracje:** `entity.migrated.v1` nie zawiera `facts`. Jego ładunek wskazuje encję, jej Schemat, `source_version`, `target_version` i `migration_id`. Jeśli migracja usunęła relację lub zmieniła jej cele, `released_relationships` wymienia cele, których encja już nie wskazuje, jako `attribute_code` i `target_entity_ids` (najwyżej 100 na relację).
 
 ## Gwarancje dostarczania
 

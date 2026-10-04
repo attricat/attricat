@@ -1350,6 +1350,134 @@ predicate = {type = "one_of", attribute_code = "state", values = ["open"]}"#,
     server.abort();
 }
 
+/// A blueprint migration that re-points a relationship also re-evaluates the
+/// record it released, although `entity.migrated.v1` carries no facts.
+#[sqlx::test]
+async fn referenced_by_rules_reevaluate_records_a_migration_releases(pool: PgPool) {
+    CatalogRepository::system(pool.clone())
+        .ensure_rule_permissions()
+        .await
+        .unwrap();
+    let (base, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let nonconformances = create_blueprint(&client, &base, NONCONFORMANCE).await;
+    let actions = create_blueprint(&client, &base, ACTION).await;
+    let open_nc = || {
+        create_entity_with(
+            &client,
+            &base,
+            "nonconformance",
+            json!([scalar("status", json!("open"))]),
+        )
+    };
+    let first = open_nc().await;
+    let second = open_nc().await;
+    let action = create_entity_with(
+        &client,
+        &base,
+        "corrective_action",
+        json!([
+            scalar("state", json!("open")),
+            relationship("nonconformance", &first)
+        ]),
+    )
+    .await;
+    let (status, created) = create_rule(
+        &client,
+        &base,
+        &nonconformances,
+        &rule(
+            "no-open-actions-migrated",
+            r#"type = "referenced_by"
+blueprint_code = "corrective_action"
+relationship_code = "nonconformance"
+max = 0
+predicate = {type = "one_of", attribute_code = "state", values = ["open"]}"#,
+            "[[triggers]]\ntype = \"event\"\nevent_type = \"entity.migrated.v1\"",
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{created}");
+    enable_rule(&client, &base, &created).await;
+    let rule_id: Uuid = created["id"].as_str().unwrap().parse().unwrap();
+    run_rule(&client, &base, created["id"].as_str().unwrap(), "initial").await;
+    drain_rule_tasks(&pool).await;
+    let open_findings = || async {
+        sqlx::query_scalar::<_, Uuid>(
+            "SELECT entity_id FROM rule_findings WHERE rule_id = $1 AND state = 'open'",
+        )
+        .bind(rule_id)
+        .fetch_all(&pool)
+        .await
+        .unwrap()
+    };
+    let id_of = |entity: &Value| entity["id"].as_str().unwrap().parse::<Uuid>().unwrap();
+    assert_eq!(open_findings().await, vec![id_of(&first)]);
+
+    // Migrate the action to a new revision, re-pointing it to `second`.
+    let blueprint_id = actions["blueprint"]["id"].as_str().unwrap();
+    let (status, revision) = post(
+        &client,
+        format!("{base}/blueprints/{blueprint_id}/versions"),
+        json!({"definition": format!("{ACTION}\n# revision two\n")}),
+    )
+    .await;
+    assert!(status.is_success(), "{revision}");
+    let (status, body) = post(
+        &client,
+        format!("{base}/blueprints/{blueprint_id}/versions/2/publish"),
+        json!({}),
+    )
+    .await;
+    assert!(status.is_success(), "{body}");
+    let action_id = id_of(&action);
+    let (status, preview) = post(
+        &client,
+        format!("{base}/v1/entities/{action_id}/blueprint-migration/preview"),
+        json!({}),
+    )
+    .await;
+    assert!(status.is_success(), "{preview}");
+    let (status, body) = post(
+        &client,
+        format!("{base}/v1/entities/{action_id}/blueprint-migration"),
+        json!({
+            "migration_id": preview["migration_id"],
+            "expected_target_version": 2,
+            "relationships": [{
+                "attribute_code": "nonconformance",
+                "target_entity_ids": [second["id"]],
+            }],
+        }),
+    )
+    .await;
+    assert!(status.is_success(), "{body}");
+    let event = sqlx::query_as::<_, api::domain_events::DomainEvent>(
+        "SELECT id,sequence,workspace_id,occurred_at,event_type,aggregate_kind,aggregate_id,correlation_id,causation_id,source_kind,source_name,metadata,payload FROM domain_events WHERE aggregate_id=$1 AND event_type='entity.migrated.v1'",
+    )
+    .bind(action_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        event.payload["released_relationships"],
+        json!([{"attribute_code": "nonconformance", "target_entity_ids": [first["id"]]}]),
+        "{}",
+        event.payload
+    );
+    let created_runs = CatalogRepository::system(pool.clone())
+        .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
+        .await
+        .unwrap()
+        .fan_out_rule_runs(&event)
+        .await
+        .unwrap();
+    assert_eq!(created_runs, 2);
+    drain_rule_tasks(&pool).await;
+    assert_eq!(open_findings().await, vec![id_of(&second)]);
+    server.abort();
+}
+
 /// The status-transitions preview checks every context the write would
 /// change, including child contexts that inherit the status.
 #[sqlx::test]
