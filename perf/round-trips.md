@@ -32,3 +32,21 @@ request route, background tick, or task kind) and
 Idle breakdown (round trips per second): extension coordinator 64.8, task
 claim 48.0, each of three event-dispatcher handlers 34.2, rule schedule 22.8,
 workflow schedule 22.8, task metrics 0.4.
+
+## After optimization
+
+Measured on the same harness after Phases 1–9 (in-memory cache backend).
+
+| Scenario | Before | After |
+| --- | ---: | ---: |
+| Explorer search, 3 filters (cold / warm) | 17 / 16 | 8 / 6 |
+| Entity update, 10 values (cold / warm) | 83 / 85 | 23 / 23 |
+| Extension event task, unified no-op handler | 9 | 4 |
+| Extension event task, example extension (cold / warm) | 23 / 22 | 12 / 10 |
+| Idle round trips per second, 1 workspace | 261 | 37.4 |
+
+Idle breakdown (round trips per second): extension coordinator 9.1, the
+workflow and rule event-dispatcher handlers 8.0 and 7.8 (the computed-field
+handler was removed), task claim 4.0, rule schedule 4.0, workflow schedule
+3.9, task metrics 0.6. Schedule coordinators run only on the replica holding
+their advisory lock.
