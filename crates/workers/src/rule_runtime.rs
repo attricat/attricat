@@ -1,5 +1,6 @@
 //! Rule intake and schedule advancement are producers. Evaluation is owned by
 //! the shared task worker after the rule task cutover.
+use crate::preparation_backoff::PreparationBackoff;
 use crate::repository::CoordinatorLeadership;
 use crate::{
     domain_events::{ALL_EVENT_TYPES_V1, DomainEvent},
@@ -236,6 +237,7 @@ pub fn start_schedule_coordinator(
     tokio::spawn(async move {
         // Workspaces this coordinator has prepared, with the last full pass.
         let mut prepared: HashMap<Uuid, Instant> = HashMap::new();
+        let mut backoff = PreparationBackoff::default();
         // Only one replica runs schedules; the others stand by.
         let mut leadership = CoordinatorLeadership::new("rule_schedule");
         loop {
@@ -265,8 +267,11 @@ pub fn start_schedule_coordinator(
                             // whether any schedule cursor is due.
                             // A workspace counts as prepared only once its
                             // backfill and first full pass succeed; a failure
-                            // is retried on the next tick.
+                            // is retried after a per-workspace backoff.
                             let first = !prepared.contains_key(&workspace);
+                            if first && !backoff.ready(workspace, Instant::now()) {
+                                continue;
+                            }
                             let backfilled = !first
                                 || match scoped.backfill_rule_tasks().await {
                                     Ok(_) => true,
@@ -285,13 +290,15 @@ pub fn start_schedule_coordinator(
                                 Ok(false) => Ok(()),
                                 Err(error) => Err(error),
                             };
-                            match result {
-                                Ok(()) if first && backfilled => {
+                            if let Err(error) = &result {
+                                tracing::error!(%error, "rule schedule poll failed");
+                            }
+                            if first {
+                                if result.is_ok() && backfilled {
+                                    backoff.succeeded(workspace);
                                     prepared.insert(workspace, Instant::now());
-                                }
-                                Ok(()) => {}
-                                Err(error) => {
-                                    tracing::error!(%error, "rule schedule poll failed");
+                                } else {
+                                    backoff.failed(workspace, Instant::now());
                                 }
                             }
                         }

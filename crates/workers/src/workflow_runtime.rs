@@ -1,5 +1,6 @@
 //! Workflow intake and schedule advancement are producers. Execution is owned
 //! exclusively by the shared task worker after the workflow task cutover.
+use crate::preparation_backoff::PreparationBackoff;
 use crate::repository::CoordinatorLeadership;
 use crate::{
     domain_events::{ALL_EVENT_TYPES_V1, DomainEvent},
@@ -145,6 +146,7 @@ pub fn start_schedule_coordinator(
     tokio::spawn(async move {
         // Workspaces this coordinator has prepared, with the last full pass.
         let mut prepared: HashMap<Uuid, Instant> = HashMap::new();
+        let mut backoff = PreparationBackoff::default();
         // Only one replica runs schedules; the others stand by.
         let mut leadership = CoordinatorLeadership::new("workflow_schedule");
         loop {
@@ -174,8 +176,14 @@ pub fn start_schedule_coordinator(
                             // whether any schedule cursor is due.
                             // A workspace counts as prepared, and a full pass
                             // as done, only once they succeed; a failure is
-                            // retried on the next tick.
+                            // retried after a per-workspace backoff, during
+                            // which a prepared workspace still runs due
+                            // schedules and an unprepared one is skipped.
                             let last_full = prepared.get(&workspace).copied();
+                            let retry_ready = backoff.ready(workspace, Instant::now());
+                            if last_full.is_none() && !retry_ready {
+                                continue;
+                            }
                             let backfilled = last_full.is_some()
                                 || match scoped.backfill_workflow_tasks().await {
                                     Ok(_) => true,
@@ -186,8 +194,8 @@ pub fn start_schedule_coordinator(
                                 };
                             // A full pass also creates cursors for schedules
                             // enabled before cursors were created on enable.
-                            let full =
-                                last_full.is_none_or(|last| last.elapsed() >= FULL_SCHEDULE_PASS);
+                            let full = retry_ready
+                                && last_full.is_none_or(|last| last.elapsed() >= FULL_SCHEDULE_PASS);
                             let run = if full {
                                 Ok(true)
                             } else {
@@ -198,13 +206,15 @@ pub fn start_schedule_coordinator(
                                 Ok(false) => Ok(()),
                                 Err(error) => Err(error),
                             };
-                            match result {
-                                Ok(()) if full && backfilled => {
+                            if let Err(error) = &result {
+                                tracing::error!(%error, "workflow schedule poll failed");
+                            }
+                            if full {
+                                if result.is_ok() && backfilled {
+                                    backoff.succeeded(workspace);
                                     prepared.insert(workspace, Instant::now());
-                                }
-                                Ok(()) => {}
-                                Err(error) => {
-                                    tracing::error!(%error, "workflow schedule poll failed");
+                                } else {
+                                    backoff.failed(workspace, Instant::now());
                                 }
                             }
                         }
