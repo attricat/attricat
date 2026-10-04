@@ -201,7 +201,9 @@ A channel can require checks before an entity is published to it:
 - `required_rule_codes` (at most 32 unique codes): enabled rules of the
   entity's blueprint revision with those codes, evaluated live in the channel
   context. Rules scoped to another context do not apply; any predicate is
-  allowed.
+  allowed. Every code must name a rule of the workspace (any revision or
+  lifecycle state); an unknown, invalid or repeated code returns
+  `422 invalid_input`, so a typo cannot silently disable the gate.
 - `require_valid_entity`: re-runs the entity JSON schema (at most 10 errors,
   `source = "entity_schema"`, `code = "entity_schema"`) and `x-attricat-checks`
   in the channel context, which catches inherited or date-dependent failures

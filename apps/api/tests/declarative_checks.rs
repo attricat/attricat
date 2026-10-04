@@ -861,6 +861,17 @@ async fn channels_require_checks_before_publication(pool: PgPool) {
 
     let context = get_json(&client, format!("{base}/contexts/default")).await;
     let context_id = context["id"].as_str().unwrap();
+    // A code that names no rule would silently disable the gate.
+    for codes in [json!(["has-skuu"]), json!(["has-sku", "has-sku"])] {
+        let (status, body) = put(
+            &client,
+            format!("{base}/publication-channels/{context_id}"),
+            json!({"enabled": true, "required_rule_codes": codes}),
+        )
+        .await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+        assert_eq!(body["error"]["code"], "invalid_input", "{body}");
+    }
     let (status, channel) = put(
         &client,
         format!("{base}/publication-channels/{context_id}"),
@@ -918,6 +929,122 @@ async fn channels_require_checks_before_publication(pool: PgPool) {
     )
     .await;
     assert!(status.is_success(), "{body}");
+    server.abort();
+}
+
+#[sqlx::test]
+async fn retained_edits_withdraw_publications_whose_channel_checks_now_fail(pool: PgPool) {
+    CatalogRepository::system(pool.clone())
+        .ensure_rule_permissions()
+        .await
+        .unwrap();
+    let (base, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let definition = PRODUCT.replace("rule_product", "retained_product")
+        + "[publication]\nretain_on_edit_roles = [\"owner\"]\n";
+    let blueprint = create_blueprint(&client, &base, &definition).await;
+    let (status, created) = create_rule(
+        &client,
+        &base,
+        &blueprint,
+        &rule(
+            "retained-sku",
+            "type = \"required\"\nattribute_code = \"sku\"",
+            "",
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{created}");
+    enable_rule(&client, &base, &created).await;
+
+    let mut channels = Vec::new();
+    for (code, required) in [
+        ("gated-web", json!(["retained-sku"])),
+        ("open-web", json!([])),
+    ] {
+        let (status, context) = post(
+            &client,
+            format!("{base}/contexts"),
+            json!({"code": code, "data": {}}),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED, "{context}");
+        let context_id = context["id"].as_str().unwrap().to_owned();
+        let (status, body) = put(
+            &client,
+            format!("{base}/publication-channels/{context_id}"),
+            json!({"enabled": true, "required_rule_codes": required}),
+        )
+        .await;
+        assert!(status.is_success(), "{body}");
+        channels.push(context_id);
+    }
+    let product = create_entity_with(
+        &client,
+        &base,
+        "retained_product",
+        json!([scalar("sku", json!("A-1")), scalar("price", json!(5))]),
+    )
+    .await;
+    let entity_id: Uuid = product["id"].as_str().unwrap().parse().unwrap();
+    let entity_url = format!("{base}/v1/entities/{entity_id}");
+    let (status, body) = post(
+        &client,
+        format!("{entity_url}/publications/publish-all"),
+        json!({}),
+    )
+    .await;
+    assert!(status.is_success(), "{body}");
+
+    // A retained edit that keeps the gate passing keeps both publications.
+    let (status, body) = put(
+        &client,
+        entity_url.clone(),
+        json!({"values": [scalar("price", json!(6))]}),
+    )
+    .await;
+    assert!(status.is_success(), "{body}");
+    let published = |statuses: &Value| {
+        statuses
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|status| status["status"] == "published")
+            .map(|status| status["context_id"].as_str().unwrap().to_owned())
+            .collect::<Vec<_>>()
+    };
+    let statuses = get_json(&client, format!("{entity_url}/publications")).await;
+    assert_eq!(published(&statuses).len(), 2, "{statuses}");
+
+    // Removing the SKU fails the gated channel's rule: that publication is
+    // withdrawn, the ungated one is retained.
+    let default_context = get_json(&client, format!("{base}/contexts/default")).await;
+    let (status, body) = put(
+        &client,
+        entity_url.clone(),
+        json!({"remove_values": [{
+            "attribute_code": "sku",
+            "context_id": default_context["id"],
+        }]}),
+    )
+    .await;
+    assert!(status.is_success(), "{body}");
+    let statuses = get_json(&client, format!("{entity_url}/publications")).await;
+    assert_eq!(
+        published(&statuses),
+        vec![channels[1].clone()],
+        "{statuses}"
+    );
+    let unpublished: Vec<Value> = sqlx::query_scalar(
+        "SELECT payload FROM domain_events WHERE aggregate_id = $1 AND event_type = 'entity.unpublished.v1'",
+    )
+    .bind(entity_id)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(unpublished.len(), 1, "{unpublished:?}");
+    assert_eq!(unpublished[0]["context_id"], channels[0].as_str());
+    assert_eq!(unpublished[0]["reason"], "checks_failed");
     server.abort();
 }
 

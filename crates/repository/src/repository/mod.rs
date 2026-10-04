@@ -616,6 +616,8 @@ pub enum RepositoryError {
     RuleCodeTaken,
     #[error("invalid rule definition: {0}")]
     InvalidRuleDefinition(String),
+    #[error("invalid publication channel: {0}")]
+    InvalidPublicationChannel(String),
     #[error("rule revision must be published before it can be enabled")]
     RuleNotPublished,
     #[error("workflow revision must be published before it can be enabled")]

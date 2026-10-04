@@ -44,7 +44,7 @@ PUT /publication-channels/{context_id}
 {"enabled": true, "required_rule_codes": ["has-sku", "certificate-valid"], "require_valid_entity": true}
 ```
 
-- `required_rule_codes` zawiera do 32 kodów [reguł jakości danych](/pl/builders/rules/). Wymieniona reguła dotyczy encji, gdy reguła o tym kodzie jest włączona dla wersji schematu encji i nie jest powiązana z innym kontekstem. Reguły, które nie mają zastosowania, są pomijane. Działa każdy predykat, także `unique` i `stale`.
+- `required_rule_codes` zawiera do 32 kodów [reguł jakości danych](/pl/builders/rules/). Wymieniona reguła dotyczy encji, gdy reguła o tym kodzie jest włączona dla wersji schematu encji i nie jest powiązana z innym kontekstem. Reguły, które nie mają zastosowania, są pomijane. Działa każdy predykat, także `unique` i `stale`. Każdy kod musi wskazywać regułę istniejącą w obszarze roboczym, dlatego literówka kończy się błędem `422 invalid_input`, zamiast po cichu wyłączyć kontrolę.
 - `require_valid_entity` ponownie sprawdza schemat encji i jego [kontrole](/pl/builders/validation/#porównuj-atrybuty-za-pomocą-kontroli) w kontekście kanału. Wychwytuje to problemy, które pojawiają się bez edycji, np. kontrolę `relative_date` daty wygaśnięcia.
 - Oba pola są opcjonalne. Pominięcie pola zachowuje jego bieżące ustawienie. `GET /publication-channels` je pokazuje.
 
@@ -58,7 +58,9 @@ Sekcja **Publikacja** na stronie encji oznacza etykietą **Niegotowe** kanały, 
 
 Domyślnie każda zmiana encji cofa wszystkie jej publikacje w kanałach: zmiany wartości, relacji, plików, metadanych systemowych i aktualizacje schematu.
 
-Zmiana kontekstu cofa publikacje w tym kanale, ponieważ może zmienić wynikowe wartości każdej encji w tym kontekście.
+Zmiana lub usunięcie kontekstu cofa publikacje w tym kanale, ponieważ może zmienić wynikowe wartości każdej encji w tym kontekście.
+
+Usunięcie encji cofa wszystkie jej publikacje.
 
 ## Zachowaj publikację po zaufanych edycjach
 
@@ -69,7 +71,9 @@ Schemat może wskazać role, których edycje zachowują istniejące publikacje:
 retain_on_edit_roles = ["admin", "product_owner"]
 ```
 
-Role muszą istnieć w chwili publikowania wersji schematu. To ustawienie nie pozwala nikomu edytować ani publikować; nadal potrzebne są odpowiednie uprawnienia. Nie dotyczy zmian kontekstu, które zawsze cofają publikację.
+Role muszą istnieć w chwili publikowania wersji schematu. To ustawienie nie pozwala nikomu edytować ani publikować; nadal potrzebne są odpowiednie uprawnienia. Nie dotyczy zmian ani usuwania kontekstu, które zawsze cofają publikację.
+
+Zaufana edycja nadal musi przejść [kontrole publikacji](#wymagaj-kontroli-przed-publikacją) każdego kanału. Po edycji Attricat ponownie uruchamia kontrole wszystkich kanałów, w których encja jest opublikowana, i cofa publikacje tam, gdzie kontrole już nie przechodzą. Pozostałe publikacje zostają. Na przykład usunięcie SKU zachowuje publikację w kanale bez kontroli, ale cofa ją w kanale, który wymaga reguły `has-sku`.
 
 ## Eksporty
 

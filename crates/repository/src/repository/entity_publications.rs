@@ -58,8 +58,9 @@ impl PublicationGate {
         };
         if channel.require_valid_entity {
             gate.entity_schema = sqlx::query_scalar(
-                "SELECT entity_schema FROM blueprints WHERE id = $1 AND version = $2",
+                "SELECT entity_schema FROM blueprints WHERE workspace_id = $1 AND id = $2 AND version = $3",
             )
+            .bind(workspace_id)
             .bind(blueprint_id)
             .bind(blueprint_version)
             .fetch_one(&mut *conn)
@@ -234,18 +235,40 @@ impl CatalogRepository {
         context_id: Uuid,
         input: crate::model::UpdatePublicationChannel,
     ) -> Result<PublicationChannel, RepositoryError> {
+        let workspace_id = self.workspace_id.0;
         if let Some(codes) = &input.required_rule_codes {
             let unique: std::collections::HashSet<_> = codes.iter().collect();
             if codes.len() > 32
                 || unique.len() != codes.len()
                 || codes.iter().any(|code| !is_valid_code(code))
             {
-                return Err(RepositoryError::InvalidRuleDefinition(
+                return Err(RepositoryError::InvalidPublicationChannel(
                     "required_rule_codes must be at most 32 unique rule codes".into(),
                 ));
             }
+            // A code that names no rule would never fail, silently disabling
+            // the gate. Rules created earlier in this transaction count.
+            let known: std::collections::HashSet<String> = sqlx::query_scalar(
+                "SELECT DISTINCT code FROM rules WHERE workspace_id = $1 AND code = ANY($2)",
+            )
+            .bind(workspace_id)
+            .bind(codes)
+            .fetch_all(&mut **tx)
+            .await?
+            .into_iter()
+            .collect();
+            let unknown: Vec<&str> = codes
+                .iter()
+                .filter(|code| !known.contains(*code))
+                .map(String::as_str)
+                .collect();
+            if !unknown.is_empty() {
+                return Err(RepositoryError::InvalidPublicationChannel(format!(
+                    "required_rule_codes name no rule in this workspace: {}",
+                    unknown.join(", ")
+                )));
+            }
         }
-        let workspace_id = self.workspace_id.0;
         let context = sqlx::query_as::<_, Db<AttributeContext>>(
             "SELECT id, code, data, parent_id FROM attribute_contexts WHERE workspace_id = $1 AND id = $2",
         )
@@ -545,14 +568,14 @@ impl CatalogRepository {
             return Ok(None);
         };
         let workspace_id = self.workspace_id.0;
-        let definition: Option<String> = sqlx::query_scalar(
-            "SELECT b.definition FROM entities e JOIN blueprints b ON b.workspace_id = e.workspace_id AND b.id = e.blueprint_id AND b.version = e.blueprint_version WHERE e.workspace_id = $1 AND e.id = $2 AND e.deleted_at IS NULL",
+        let row: Option<(String, Uuid, i64)> = sqlx::query_as(
+            "SELECT b.definition, e.blueprint_id, e.blueprint_version FROM entities e JOIN blueprints b ON b.workspace_id = e.workspace_id AND b.id = e.blueprint_id AND b.version = e.blueprint_version WHERE e.workspace_id = $1 AND e.id = $2 AND e.deleted_at IS NULL",
         )
         .bind(workspace_id)
         .bind(entity_id)
         .fetch_optional(&mut **tx)
         .await?;
-        let Some(definition) = definition else {
+        let Some((definition, blueprint_id, blueprint_version)) = row else {
             return Ok(None);
         };
         let roles = catalog_blueprint::parse(&definition)
@@ -572,11 +595,79 @@ impl CatalogRepository {
         .bind(&roles)
         .fetch_optional(&mut **tx)
         .await?;
-        if retained_role.is_none() {
-            self.clear_entity_publications(tx, entity_id, reason)
-                .await?;
+        match retained_role {
+            None => {
+                self.clear_entity_publications(tx, entity_id, reason)
+                    .await?
+            }
+            Some(_) => {
+                self.withdraw_failing_publications(tx, entity_id, (blueprint_id, blueprint_version))
+                    .await?
+            }
         }
         Ok(retained_role)
+    }
+
+    /// Re-evaluates the gate of every channel the entity is published to
+    /// after a retained edit, and withdraws the publications whose channel
+    /// checks now fail with reason `checks_failed`. A retained edit keeps a
+    /// publication only where the channel would still accept it.
+    async fn withdraw_failing_publications(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        entity_id: Uuid,
+        revision: (Uuid, i64),
+    ) -> Result<(), RepositoryError> {
+        let workspace_id = self.workspace_id.0;
+        let channels = sqlx::query_as::<_, Db<PublicationChannel>>(&format!(
+            "{CHANNEL_SELECT} AND EXISTS (SELECT 1 FROM entity_channel_publications p WHERE p.workspace_id = c.workspace_id AND p.entity_id = $2 AND p.context_id = c.context_id AND p.published_at IS NOT NULL) ORDER BY c.context_id"
+        ))
+        .bind(workspace_id)
+        .bind(entity_id)
+        .fetch_all(&mut **tx)
+        .await?
+        .into_domain();
+        // Contexts and the entity's values load once, on the first gate.
+        let mut evaluation: Option<(CheckScope, RecordValues)> = None;
+        let mut failing = Vec::new();
+        for channel in channels {
+            let Some(gate) = PublicationGate::load(tx, workspace_id, &channel, revision).await?
+            else {
+                continue;
+            };
+            let (scope, subject) = match &evaluation {
+                Some(loaded) => loaded,
+                None => evaluation.insert(gate_subject(tx, workspace_id, entity_id).await?),
+            };
+            if !gate.violations(tx, scope, subject).await?.is_empty() {
+                failing.push(channel.context_id);
+            }
+        }
+        if failing.is_empty() {
+            return Ok(());
+        }
+        let contexts: Vec<Uuid> = sqlx::query_scalar(
+            "UPDATE entity_channel_publications SET published_at = NULL, published_by_user_id = NULL WHERE workspace_id = $1 AND entity_id = $2 AND context_id = ANY($3) AND published_at IS NOT NULL RETURNING context_id",
+        )
+        .bind(workspace_id)
+        .bind(entity_id)
+        .bind(&failing)
+        .fetch_all(&mut **tx)
+        .await?;
+        let events = contexts
+            .into_iter()
+            .map(|context_id| {
+                self.publication_event(
+                    ENTITY_UNPUBLISHED_V1,
+                    entity_id,
+                    context_id,
+                    None,
+                    None,
+                    Some("checks_failed"),
+                )
+            })
+            .collect();
+        self.enqueue_events(tx, events).await
     }
 
     pub(crate) async fn clear_entity_publications(

@@ -243,8 +243,12 @@ Publishing records the current actor and timestamp. Entity-content changes withd
 approval in every channel by clearing those fields, unless the entity's pinned
 blueprint revision names one of the actor's workspace role codes in
 `[publication].retain_on_edit_roles`. The exemption retains approval only; it does
-not grant mutation or publication authority. Context changes always withdraw
-approval for their channel. Publication has no effect on internal catalog reads or
+not grant mutation or publication authority, and it never bypasses a channel's
+checks: after a retained edit the repository re-evaluates the gate of every
+channel the entity is published to and withdraws the publications that now fail
+(`reason = "checks_failed"`). Context changes and deletion always withdraw
+approval for their channel, and entity deletion withdraws every channel's
+approval before the rows are removed. Publication has no effect on internal catalog reads or
 relationships. A channel exporter can select only rows with a populated
 `published_at` and resolve the entity's current values at export time; the database
 does not retain publication snapshots or relationship dependencies.

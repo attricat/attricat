@@ -264,6 +264,7 @@ impl RepositoryError {
             | Self::ReservedContextCode
             | Self::InvalidCode
             | Self::InvalidTeam(_)
+            | Self::InvalidPublicationChannel(_)
             | Self::InvalidContextData
             | Self::InvalidContext
             | Self::DefaultContextProtected
