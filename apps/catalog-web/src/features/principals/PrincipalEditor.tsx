@@ -33,7 +33,7 @@ export const PrincipalEditor = ({
   // A reference is unknown only once the directory has loaded without it. A
   // failed background refetch keeps the loaded directory usable.
   const loadFailed = directory.isLoadingError;
-  const unknown = Boolean(value) && !selected && directory.isSuccess;
+  const unknown = Boolean(value) && !selected && directory.data !== undefined;
   return (
     <Autocomplete
       disabled={disabled}

@@ -109,9 +109,15 @@ impl CircuitBreaker {
                 );
                 metrics::counter!("catalog_query_cache_redis_circuit_opened_total").increment(1);
             }
-            // Already open: a failed trial starts another cooldown.
+            // Already open: a failed trial starts another cooldown. A success
+            // may have closed the breaker since the exchange failed; leave it
+            // closed then.
             Err(_) => {
-                self.open_until.fetch_max(reopen_at, Ordering::AcqRel);
+                let _ =
+                    self.open_until
+                        .try_update(Ordering::AcqRel, Ordering::Acquire, |open_until| {
+                            (open_until != 0).then(|| open_until.max(reopen_at))
+                        });
             }
         }
     }

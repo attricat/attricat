@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { getDirectory } from './api';
@@ -30,11 +30,12 @@ const renderValue = (value: unknown) => {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return render(
+  render(
     <QueryClientProvider client={client}>
       <PrincipalValue value={value} />
     </QueryClientProvider>,
   );
+  return client;
 };
 
 afterEach(() => {
@@ -85,5 +86,20 @@ describe('PrincipalValue', () => {
       await screen.findByText('Users and teams could not be loaded'),
     ).toBeTruthy();
     expect(screen.queryByText(/Unknown user or team/)).toBeNull();
+  });
+
+  it('keeps an unknown reference unknown when a background refetch fails', async () => {
+    vi.mocked(getDirectory)
+      .mockResolvedValueOnce(directory)
+      .mockRejectedValue(new Error('Directory down'));
+    const client = renderValue(`user:${missing}`);
+    const unknown = `Unknown user or team (user:${missing})`;
+    expect(await screen.findByText(unknown)).toBeTruthy();
+    await client.refetchQueries();
+    await waitFor(() =>
+      expect(client.getQueryCache().getAll()[0]?.state.status).toBe('error'),
+    );
+    expect(screen.getByText(unknown)).toBeTruthy();
+    expect(screen.queryByText('Loading…')).toBeNull();
   });
 });

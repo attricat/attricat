@@ -39,7 +39,7 @@ export const PrincipalValue = ({ value }: { value: unknown }) => {
       );
     return (
       <Typography color="text.secondary" variant="body2">
-        {directory.isSuccess
+        {directory.data !== undefined
           ? t('principals.unknown', { value: String(value) })
           : t('principals.loading')}
       </Typography>

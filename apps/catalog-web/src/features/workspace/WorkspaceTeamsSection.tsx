@@ -160,15 +160,19 @@ export const WorkspaceTeamsSection = ({
     mutationFn: (team: Team) => deleteTeam(team.id),
     onSuccess: async () => {
       await client.invalidateQueries({ queryKey: principalQueryKeys.all() });
-      closeDelete();
+      hideDelete();
     },
   });
   const openDelete = (team: Team) => {
     remove.reset();
     setDeleting({ team, open: true });
   };
-  const closeDelete = () =>
+  const hideDelete = () =>
     setDeleting((current) => current && { ...current, open: false });
+  // The dialog stays open while a delete runs, so its error is shown.
+  const closeDelete = () => {
+    if (!remove.isPending) hideDelete();
+  };
   if (!canManage)
     return (
       <Alert severity="error">{t('workspace.notAuthorizedMembers')}</Alert>
@@ -267,7 +271,9 @@ export const WorkspaceTeamsSection = ({
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={closeDelete}>{t('workspace.cancel')}</Button>
+          <Button disabled={remove.isPending} onClick={closeDelete}>
+            {t('workspace.cancel')}
+          </Button>
           <Button
             color="error"
             disabled={remove.isPending || !deleting?.open}

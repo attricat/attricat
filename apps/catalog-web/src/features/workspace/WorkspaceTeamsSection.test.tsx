@@ -178,4 +178,28 @@ describe('WorkspaceTeamsSection', () => {
     await screen.findByRole('dialog');
     await waitFor(() => expect(screen.queryByText('Team in use')).toBeNull());
   });
+
+  it('keeps the dialog open while a delete runs so its error is seen', async () => {
+    let reject: (error: Error) => void = () => {};
+    vi.mocked(deleteTeam).mockImplementation(
+      () =>
+        new Promise((_, rejectDelete) => {
+          reject = rejectDelete;
+        }),
+    );
+    renderSection();
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Delete team Quality' }),
+    );
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: 'Delete team' }),
+    );
+    const cancel = within(dialog).getByRole('button', { name: 'Cancel' });
+    await waitFor(() => expect(cancel.hasAttribute('disabled')).toBe(true));
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    reject(new Error('Team in use'));
+    expect(await within(dialog).findByText('Team in use')).toBeTruthy();
+    expect(screen.getByRole('dialog')).toBe(dialog);
+  });
 });
