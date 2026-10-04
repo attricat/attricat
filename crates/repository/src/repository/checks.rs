@@ -11,7 +11,8 @@ use super::record_values::{
 use super::references::{ReferenceQuery, Referrers, referencing_entity_ids};
 use super::status::StatusChange;
 use super::structural_constraints::{
-    HierarchyField, HierarchyWalk, enforced_unique_keys, key_hash, walk_hierarchy,
+    EnforcedUniqueKey, HierarchyField, HierarchyWalk, enforced_unique_keys, key_hash,
+    walk_hierarchy,
 };
 use super::*;
 use catalog_validation::predicate::{
@@ -84,6 +85,8 @@ pub(crate) struct CheckScope {
     workspace_id: Uuid,
     pub tree: ContextTree,
     pub now: chrono::DateTime<Utc>,
+    /// The first subject family's enforced unique keys, read on first use.
+    unique_keys: tokio::sync::OnceCell<(Uuid, Vec<EnforcedUniqueKey>)>,
 }
 
 impl CheckScope {
@@ -102,6 +105,7 @@ impl CheckScope {
             workspace_id,
             tree,
             now: Utc::now(),
+            unique_keys: tokio::sync::OnceCell::new(),
         }
     }
 
@@ -259,15 +263,27 @@ async fn duplicates(
         return Ok(Vec::new());
     };
     let is_default = scope.tree.default_context()?.id == context_id;
-    let declared = enforced_unique_keys(conn, scope.workspace_id, subject.blueprint_id)
-        .await?
-        .into_iter()
-        .find(|declared| {
-            declared.case_sensitive == case_sensitive
-                && (declared.scope == "context" || is_default)
-                && declared.attributes.len() == key.len()
-                && declared.attributes.iter().all(|code| key.contains(code))
-        });
+    let memo = scope
+        .unique_keys
+        .get_or_try_init(|| async {
+            enforced_unique_keys(&mut *conn, scope.workspace_id, subject.blueprint_id)
+                .await
+                .map(|keys| (subject.blueprint_id, keys))
+        })
+        .await?;
+    let other_family;
+    let keys = if memo.0 == subject.blueprint_id {
+        &memo.1
+    } else {
+        other_family = enforced_unique_keys(conn, scope.workspace_id, subject.blueprint_id).await?;
+        &other_family
+    };
+    let declared = keys.iter().find(|declared| {
+        declared.case_sensitive == case_sensitive
+            && (declared.scope == "context" || is_default)
+            && declared.attributes.len() == key.len()
+            && declared.attributes.iter().all(|code| key.contains(code))
+    });
     if let Some(declared) = declared {
         let ordered: Vec<Value> = declared
             .attributes
@@ -591,20 +607,36 @@ fn record_violation(
     });
 }
 
-async fn run_jobs(
+/// Evaluates several job groups with one evaluation per context and returns
+/// each group's violations, recorded as if that group were evaluated alone.
+async fn run_job_groups<const N: usize>(
     conn: &mut PgConnection,
     scope: &CheckScope,
     subject: &RecordValues,
-    jobs: &BTreeMap<Uuid, Vec<Job<'_>>>,
-) -> Result<Vec<CheckViolation>, RepositoryError> {
-    let mut violations = Vec::new();
-    for (context_id, jobs) in jobs {
-        let predicates: Vec<&Predicate> = jobs.iter().map(|job| job.predicate).collect();
+    groups: [&BTreeMap<Uuid, Vec<Job<'_>>>; N],
+) -> Result<[Vec<CheckViolation>; N], RepositoryError> {
+    let mut contexts: BTreeMap<Uuid, Vec<(usize, &Job<'_>)>> = BTreeMap::new();
+    for (group, jobs) in groups.iter().enumerate() {
+        for (context_id, jobs) in jobs.iter() {
+            contexts
+                .entry(*context_id)
+                .or_default()
+                .extend(jobs.iter().map(|job| (group, job)));
+        }
+    }
+    let mut violations: [Vec<CheckViolation>; N] = std::array::from_fn(|_| Vec::new());
+    for (context_id, jobs) in &contexts {
+        let predicates: Vec<&Predicate> = jobs.iter().map(|(_, job)| job.predicate).collect();
         let outcomes =
             evaluate_in_context(conn, scope, subject, *context_id, &[], &predicates).await?;
-        for (job, outcome) in jobs.iter().zip(outcomes) {
+        for ((group, job), outcome) in jobs.iter().zip(outcomes) {
             if let Err(failure) = outcome {
-                record_violation(&mut violations, job, scope.code(*context_id), failure);
+                record_violation(
+                    &mut violations[*group],
+                    job,
+                    scope.code(*context_id),
+                    failure,
+                );
             }
         }
     }
@@ -627,11 +659,11 @@ impl CatalogRepository {
         subject: &RecordValues,
         changes: &[StatusChange],
     ) -> Result<(), RepositoryError> {
-        let checks = entity_schema
+        // A malformed entity check is reported before a malformed rule.
+        entity_schema
             .map(predicate::entity_checks)
             .transpose()
-            .map_err(RepositoryError::InvalidBlueprintDefinition)?
-            .unwrap_or_default();
+            .map_err(RepositoryError::InvalidBlueprintDefinition)?;
         let rules = enabled_rules(
             transaction,
             self.workspace_id.0,
@@ -639,6 +671,33 @@ impl CatalogRepository {
             subject.blueprint_version,
         )
         .await?;
+        self.enforce_declarative_checks_with(
+            transaction,
+            entity_schema,
+            tree,
+            subject,
+            changes,
+            &rules,
+        )
+        .await
+    }
+
+    /// [`Self::enforce_declarative_checks`] with the revision's enabled rules
+    /// already loaded.
+    async fn enforce_declarative_checks_with(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        entity_schema: Option<&Value>,
+        tree: &ContextTree,
+        subject: &RecordValues,
+        changes: &[StatusChange],
+        rules: &[EnabledRule],
+    ) -> Result<(), RepositoryError> {
+        let checks = entity_schema
+            .map(predicate::entity_checks)
+            .transpose()
+            .map_err(RepositoryError::InvalidBlueprintDefinition)?
+            .unwrap_or_default();
         let enforcing: Vec<_> = rules
             .iter()
             .filter(|rule| rule.compiled.enforcement.is_some())
@@ -706,17 +765,23 @@ impl CatalogRepository {
             }
         }
 
-        let violations = run_jobs(transaction, &scope, subject, &check_jobs).await?;
-        if !violations.is_empty() {
-            return Err(RepositoryError::EntityCheckFailed(violations));
+        // One evaluation per context; failures keep their precedence:
+        // entity checks, then transition conditions, then rules.
+        let [checks, conditions, rules] = run_job_groups(
+            transaction,
+            &scope,
+            subject,
+            [&check_jobs, &condition_jobs_by_context, &rule_jobs],
+        )
+        .await?;
+        if !checks.is_empty() {
+            return Err(RepositoryError::EntityCheckFailed(checks));
         }
-        let violations = run_jobs(transaction, &scope, subject, &condition_jobs_by_context).await?;
-        if !violations.is_empty() {
-            return Err(RepositoryError::TransitionConditionsUnmet(violations));
+        if !conditions.is_empty() {
+            return Err(RepositoryError::TransitionConditionsUnmet(conditions));
         }
-        let violations = run_jobs(transaction, &scope, subject, &rule_jobs).await?;
-        if !violations.is_empty() {
-            return Err(RepositoryError::RuleViolation(violations));
+        if !rules.is_empty() {
+            return Err(RepositoryError::RuleViolation(rules));
         }
         Ok(())
     }
@@ -745,18 +810,17 @@ impl CatalogRepository {
             .transpose()
             .map_err(RepositoryError::InvalidBlueprintDefinition)?
             .unwrap_or_default();
+        let rules = enabled_rules(
+            transaction,
+            self.workspace_id.0,
+            entity.blueprint_id,
+            entity.blueprint_version,
+        )
+        .await?;
         let reads_tags = checks
             .iter()
             .any(|check| check.predicate.reads_subject_tags())
-            || enabled_rules(
-                transaction,
-                self.workspace_id.0,
-                entity.blueprint_id,
-                entity.blueprint_version,
-            )
-            .await?
-            .iter()
-            .any(|rule| {
+            || rules.iter().any(|rule| {
                 rule.compiled
                     .enforcement
                     .as_ref()
@@ -775,8 +839,15 @@ impl CatalogRepository {
         )
         .await?
         .ok_or(RepositoryError::NotFound("entity"))?;
-        self.enforce_declarative_checks(transaction, entity_schema.as_ref(), &tree, &record, &[])
-            .await
+        self.enforce_declarative_checks_with(
+            transaction,
+            entity_schema.as_ref(),
+            &tree,
+            &record,
+            &[],
+            &rules,
+        )
+        .await
     }
 
     /// Transition conditions and enforcing rules that the saved state plus the
