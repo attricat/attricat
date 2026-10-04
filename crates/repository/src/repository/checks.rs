@@ -945,7 +945,7 @@ pub(super) async fn transition_unmet(
 impl CatalogRepository {
     /// Enforces entity-schema checks, status transition conditions and
     /// enforcing rules on the transaction's final state. Every write that
-    /// changes attribute values calls it through `validate_entity_schema`,
+    /// changes attribute values calls it through `validate_entity_schema_with`,
     /// with the write's own status `changes`: system transitions (approval
     /// voids) are not guarded. Extension annotation patches, which change
     /// only system tags and metadata, call it through

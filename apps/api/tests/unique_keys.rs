@@ -570,7 +570,10 @@ value_type = "string"
     assert_eq!(
         current_values(&client, &base_url, &copy).await,
         vec![json!("Shirt")]
-||||||| parent of 701ffd5 (Index context unique keys under the exclusive family lock)
+    );
+
+    server.abort();
+}
 
 const DEFAULT_CONTEXT: &str = "00000000-0000-4000-8000-000000000001";
 

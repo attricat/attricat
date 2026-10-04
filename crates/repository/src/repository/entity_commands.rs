@@ -1428,15 +1428,6 @@ impl CatalogRepository {
     }
 
     /// The shared validation step of every entity write; see [`Revalidation`].
-    pub(super) async fn validate_entity_schema(
-        &self,
-        transaction: &mut Transaction<'_, Postgres>,
-        entity: &Entity,
-    ) -> Result<(), RepositoryError> {
-        self.validate_entity_schema_with(transaction, entity, Revalidation::Write)
-            .await
-    }
-
     pub(super) async fn validate_entity_schema_with(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
@@ -1508,7 +1499,7 @@ impl CatalogRepository {
 
     /// The validation tail for writes that change stored values without the
     /// update seam (file references, reusable attribute attachment):
-    /// [`Self::validate_entity_schema`] with its status side effects, then the
+    /// [`Self::validate_entity_schema_with`] with its status side effects, then the
     /// rebuilt preview. Returns the stored entity.
     pub(super) async fn revalidate_entity(
         &self,

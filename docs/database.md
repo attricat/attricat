@@ -403,7 +403,7 @@ repository reports as `409 unique_key_conflict` naming the committed holder.
 Repository code owns everything else, inside the write transaction:
 
 - Every value write rebuilds the written entity's rows from the entity
-  validation step every write path runs (`validate_entity_schema`), after
+  validation step every write path runs (`validate_entity_schema_in`), after
   taking a shared per-family advisory lock. Entity deletion removes its rows.
 - Publication takes the same lock exclusively, then re-indexes the family when
   the latest published revision's keys changed, reporting existing duplicates
