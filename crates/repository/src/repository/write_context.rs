@@ -16,8 +16,12 @@ use sqlx::{PgConnection, Postgres, Transaction};
 use tokio::sync::OnceCell;
 use uuid::Uuid;
 
+use std::sync::Mutex;
+
 use super::{
-    Entity, RepositoryError, record_values::ContextTree, validate_attribute_selector_code,
+    CatalogRepository, Entity, RepositoryError,
+    record_values::{ContextTree, RecordState, RecordValues, load_record},
+    validate_attribute_selector_code,
 };
 
 /// One attribute that applies to the entity: a column of its blueprint
@@ -46,12 +50,21 @@ impl WriteAttribute {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub(super) struct WriteContext {
     pub tree: ContextTree,
     attributes: Vec<WriteAttribute>,
     /// Read on first use by a relationship write.
     family: OnceCell<FamilyConstraints>,
+    /// State derived from the entity's values, shared by the validators of
+    /// one write. Every value write through this context clears it.
+    derived: Mutex<Derived>,
+}
+
+#[derive(Debug, Default)]
+struct Derived {
+    preview: Option<Value>,
+    after: Option<Option<RecordValues>>,
 }
 
 /// Relationship constraints of the entity's blueprint family. They follow
@@ -77,7 +90,48 @@ impl WriteContext {
             tree,
             attributes,
             family: OnceCell::new(),
+            derived: Mutex::default(),
         })
+    }
+
+    fn derived(&self) -> std::sync::MutexGuard<'_, Derived> {
+        self.derived
+            .lock()
+            .expect("write context lock is not poisoned")
+    }
+
+    /// Forgets state derived from values; call after writing a value.
+    pub(super) fn values_changed(&self) {
+        *self.derived() = Derived::default();
+    }
+
+    /// The entity's preview projection for its current values.
+    pub(super) async fn preview(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        entity_id: Uuid,
+    ) -> Result<Value, RepositoryError> {
+        if let Some(preview) = self.derived().preview.clone() {
+            return Ok(preview);
+        }
+        let preview = CatalogRepository::build_preview_projection(transaction, entity_id).await?;
+        self.derived().preview = Some(preview.clone());
+        Ok(preview)
+    }
+
+    /// The entity's current values, as `load_record(.., RecordState::After)`.
+    pub(super) async fn after_record(
+        &self,
+        connection: &mut PgConnection,
+        workspace_id: Uuid,
+        entity_id: Uuid,
+    ) -> Result<Option<RecordValues>, RepositoryError> {
+        if let Some(record) = self.derived().after.clone() {
+            return Ok(record);
+        }
+        let record = load_record(connection, workspace_id, entity_id, RecordState::After).await?;
+        self.derived().after = Some(record.clone());
+        Ok(record)
     }
 
     pub(super) async fn family_constraints(

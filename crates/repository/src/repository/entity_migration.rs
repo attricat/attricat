@@ -691,7 +691,7 @@ impl CatalogRepository {
             Revalidation::Write,
         )
         .await?;
-        let preview = Self::build_preview_projection(&mut transaction, entity.id).await?;
+        let preview = write.preview(&mut transaction, entity.id).await?;
         let target_entity = self
             .store_preview(&mut transaction, entity.id, preview)
             .await?;

@@ -803,7 +803,7 @@ impl CatalogRepository {
         };
         self.validate_entity_schema_in(&mut transaction, &write, &entity, Revalidation::Write)
             .await?;
-        let preview = Self::build_preview_projection(&mut transaction, entity.id).await?;
+        let preview = write.preview(&mut transaction, entity.id).await?;
         self.store_preview(&mut transaction, entity.id, preview)
             .await?;
         let after = self

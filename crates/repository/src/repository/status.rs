@@ -198,9 +198,10 @@ impl CatalogRepository {
         transaction: &mut Transaction<'_, Postgres>,
         entity: &Entity,
         attributes: &[StatusAttribute],
-        tree: &ContextTree,
+        write: &WriteContext,
     ) -> Result<Vec<StatusChange>, RepositoryError> {
-        let after = Self::build_preview_projection(transaction, entity.id).await?;
+        let tree = &write.tree;
+        let after = write.preview(transaction, entity.id).await?;
         let before = entity.projections.get("preview").unwrap_or(&Value::Null);
         let mut changes = Vec::new();
         for (_, code, schema, fallback) in attributes {
@@ -257,13 +258,12 @@ impl CatalogRepository {
         entity: &Entity,
         write: &WriteContext,
     ) -> Result<Vec<StatusChange>, RepositoryError> {
-        let tree = &write.tree;
         let attributes = write.status_attributes();
         if attributes.is_empty() {
             return Ok(Vec::new());
         }
         let changes = self
-            .status_changes(transaction, entity, &attributes, tree)
+            .status_changes(transaction, entity, &attributes, write)
             .await?;
         let actor = self.acting_principal();
         for change in &changes {
@@ -276,7 +276,7 @@ impl CatalogRepository {
                 return Err(error);
             }
         }
-        self.check_status_locks(transaction, entity, &attributes, tree)
+        self.check_status_locks(transaction, entity, &attributes, write)
             .await?;
         Ok(changes)
     }
@@ -394,8 +394,9 @@ impl CatalogRepository {
         transaction: &mut Transaction<'_, Postgres>,
         entity: &Entity,
         attributes: &[StatusAttribute],
-        tree: &ContextTree,
+        write: &WriteContext,
     ) -> Result<(), RepositoryError> {
+        let tree = &write.tree;
         let locks = Self::active_locks(entity, attributes, tree)?;
         if locks.is_empty() {
             return Ok(());
@@ -403,9 +404,12 @@ impl CatalogRepository {
         let before = self
             .record_values(transaction, entity, RecordState::Before)
             .await?;
-        let after = self
-            .record_values(transaction, entity, RecordState::After)
-            .await?;
+        let after = write
+            .after_record(transaction, self.workspace_id.0, entity.id)
+            .await?
+            .unwrap_or_else(|| {
+                RecordValues::empty(entity.id, entity.blueprint_id, entity.blueprint_version)
+            });
         let all_codes = attribute_codes(&[&before, &after]);
         for (context, status_code, status, coverage) in locks {
             let codes: Vec<&str> = match &coverage {
@@ -553,7 +557,7 @@ impl CatalogRepository {
             return Ok(());
         }
         let changes = self
-            .status_changes(transaction, entity, &attributes, tree)
+            .status_changes(transaction, entity, &attributes, write)
             .await?;
         let actor = self.acting_principal();
         for change in &changes {
@@ -596,9 +600,12 @@ impl CatalogRepository {
         if !needs_content {
             return Ok(());
         }
-        let content = self
-            .record_values(transaction, entity, RecordState::After)
-            .await?;
+        let content = write
+            .after_record(transaction, self.workspace_id.0, entity.id)
+            .await?
+            .unwrap_or_else(|| {
+                RecordValues::empty(entity.id, entity.blueprint_id, entity.blueprint_version)
+            });
         // New approvals supersede the previous decision for that status and context.
         for change in &changes {
             let Some(approval) = status_approval(&change.schema, &change.after) else {
@@ -656,7 +663,7 @@ impl CatalogRepository {
             )
             .await?;
         }
-        self.void_changed_approvals(transaction, entity, &attributes, tree, &content)
+        self.void_changed_approvals(transaction, entity, &attributes, write, &content)
             .await?;
         for change in &changes {
             if let Some(days) = status_retention_days(&change.schema, &change.after) {
@@ -688,9 +695,10 @@ impl CatalogRepository {
         transaction: &mut Transaction<'_, Postgres>,
         entity: &Entity,
         attributes: &[StatusAttribute],
-        tree: &ContextTree,
+        write: &WriteContext,
         content: &RecordValues,
     ) -> Result<(), RepositoryError> {
+        let tree = &write.tree;
         let approvals = sqlx::query_as::<_, (Uuid, String, Uuid, String, bool, Vec<String>, String)>(
             "SELECT id, attribute_code, context_id, status, covers_all, covered_attributes, content_digest FROM entity_approvals WHERE workspace_id = $1 AND entity_id = $2 AND ended_at IS NULL",
         )
@@ -756,14 +764,15 @@ impl CatalogRepository {
         }
         voided.sort_by_key(|(depth, ..)| *depth);
         for (_, (attribute_id, code, _, fallback), context, status, void_to) in voided {
-            let projection = Self::build_preview_projection(transaction, entity.id).await?;
+            let projection = write.preview(transaction, entity.id).await?;
             let path = tree.path(context.id, true)?;
             let current = effective_projection(&projection, tree, &path, fallback != "none", &code);
             if current != Value::String(status.clone()) {
                 continue;
             }
-            self.insert_value(
+            self.insert_value_in(
                 transaction,
+                write,
                 entity,
                 NewAttributeValue::Scalar {
                     attribute_id: Some(attribute_id),

@@ -329,7 +329,7 @@ impl CatalogRepository {
         if attributes.is_empty() {
             return Ok(());
         }
-        let after = Self::build_preview_projection(transaction, entity.id).await?;
+        let after = write.preview(transaction, entity.id).await?;
         let before = entity.projections.get("preview").unwrap_or(&Value::Null);
         let Some(contexts) = after.as_object() else {
             return Ok(());

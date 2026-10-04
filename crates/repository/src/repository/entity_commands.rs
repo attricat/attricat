@@ -4,7 +4,7 @@ use super::extension_catalog_data::{
     ExtensionCatalogIntentStatus, MAX_EXTENSION_BATCH_INTENTS, MAX_EXTENSION_BATCH_KEY_BYTES,
     MAX_EXTENSION_INTENT_KEY_BYTES,
 };
-use super::record_values::{ContextTree, RecordState, RecordValues, load_record};
+use super::record_values::{ContextTree, RecordValues};
 use super::values::{NativeValue, ValueType};
 use super::write_context::WriteContext;
 use super::*;
@@ -208,7 +208,7 @@ impl CatalogRepository {
             .await?;
         self.validate_entity_schema_in(transaction, &write, &entity, Revalidation::Write)
             .await?;
-        let preview = Self::build_preview_projection(transaction, entity.id).await?;
+        let preview = write.preview(transaction, entity.id).await?;
         let entity = self.store_preview(transaction, entity.id, preview).await?;
         let after = self.entity_audit_snapshot(transaction, entity.id).await?;
         let changes = Self::audit_changes(entity.id, Vec::new(), after, false);
@@ -440,7 +440,7 @@ impl CatalogRepository {
             .await?;
         self.validate_entity_schema_in(transaction, &write, &entity, Revalidation::Write)
             .await?;
-        let preview = Self::build_preview_projection(transaction, entity.id).await?;
+        let preview = write.preview(transaction, entity.id).await?;
         let entity = self.store_preview(transaction, entity.id, preview).await?;
         let after = self.entity_audit_snapshot(transaction, entity_id).await?;
         let changes = Self::audit_changes(entity_id, before, after, false);
@@ -651,7 +651,7 @@ impl CatalogRepository {
         self.validate_entity_schema_in(&mut transaction, &write, &entity, Revalidation::Write)
             .await?;
 
-        let preview = Self::build_preview_projection(&mut transaction, entity_id).await?;
+        let preview = write.preview(&mut transaction, entity_id).await?;
         sqlx::query(
             r#"UPDATE entities
                SET projections = jsonb_set(projections, '{preview}', $2, true), updated_at = now()
@@ -894,7 +894,7 @@ impl CatalogRepository {
         if scalars.len() > 1 && distinct_keys == scalars.len() {
             let (positions, prepared): (Vec<_>, Vec<_>) = scalars.into_iter().unzip();
             let written = self
-                .write_scalar_values(transaction, entity, prepared)
+                .write_scalar_values(transaction, write, entity, prepared)
                 .await?;
             for (position, value) in positions.into_iter().zip(written) {
                 inserted[position] = Some(value);
@@ -1030,6 +1030,7 @@ impl CatalogRepository {
         entity: &Entity,
         prepared: PreparedValue,
     ) -> Result<AttributeValue, RepositoryError> {
+        write.values_changed();
         let PreparedValue {
             attribute_id,
             attribute_code,
@@ -1110,9 +1111,11 @@ impl CatalogRepository {
     async fn write_scalar_values(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
+        write: &WriteContext,
         entity: &Entity,
         prepared: Vec<PreparedValue>,
     ) -> Result<Vec<AttributeValue>, RepositoryError> {
+        write.values_changed();
         let attribute_ids: Vec<Uuid> = prepared.iter().map(|value| value.attribute_id).collect();
         let context_ids: Vec<Uuid> = prepared.iter().map(|value| value.context_id).collect();
         self.archive_current_scalar_values(transaction, entity.id, &attribute_ids, &context_ids)
@@ -1206,6 +1209,7 @@ impl CatalogRepository {
             return Err(RepositoryError::AttributeKindMismatch);
         }
         write.ensure_editable(context_id, &attribute.context_editable)?;
+        write.values_changed();
         self.archive_current_value(transaction, entity.id, attribute.id, context_id, None)
             .await?;
         Ok(())
@@ -1360,16 +1364,12 @@ impl CatalogRepository {
         .bind(entity.blueprint_version)
         .fetch_one(&mut **transaction)
         .await?;
-        let record = load_record(
-            transaction,
-            self.workspace_id.0,
-            entity.id,
-            RecordState::After,
-        )
-        .await?
-        .unwrap_or_else(|| {
-            RecordValues::empty(entity.id, entity.blueprint_id, entity.blueprint_version)
-        });
+        let record = write
+            .after_record(transaction, self.workspace_id.0, entity.id)
+            .await?
+            .unwrap_or_else(|| {
+                RecordValues::empty(entity.id, entity.blueprint_id, entity.blueprint_version)
+            });
         if let Some(entity_schema) = &entity_schema {
             validate_json_entity_schema(tree, &record, entity_schema)?;
         }
@@ -1392,8 +1392,10 @@ impl CatalogRepository {
         transaction: &mut Transaction<'_, Postgres>,
         entity: &Entity,
     ) -> Result<Entity, RepositoryError> {
-        self.validate_entity_schema(transaction, entity).await?;
-        let preview = Self::build_preview_projection(transaction, entity.id).await?;
+        let write = WriteContext::load(transaction, self.workspace_id.0, entity).await?;
+        self.validate_entity_schema_in(transaction, &write, entity, Revalidation::Write)
+            .await?;
+        let preview = write.preview(transaction, entity.id).await?;
         self.store_preview(transaction, entity.id, preview).await
     }
 
@@ -1630,6 +1632,7 @@ impl CatalogRepository {
         // The caller holds the entity lock and resolved the attribute from
         // the same write context.
         let entity_id = entity.id;
+        write.values_changed();
         if active {
             let attribute = write
                 .by_id(attribute_id)
