@@ -180,6 +180,14 @@ struct PublicationMutation<'a> {
     reason: Option<&'a str>,
 }
 
+/// The outcome of an entity edit by an actor holding one of the blueprint's
+/// `retain_on_edit_roles`: the publications stay, except in the channels
+/// whose checks the edited entity now fails.
+pub(crate) struct RetainedPublication {
+    pub(crate) role_code: String,
+    pub(crate) withdrawn_context_ids: Vec<Uuid>,
+}
+
 impl CatalogRepository {
     pub async fn list_publication_channels(
         &self,
@@ -557,7 +565,7 @@ impl CatalogRepository {
         tx: &mut Transaction<'_, Postgres>,
         entity_id: Uuid,
         reason: &str,
-    ) -> Result<Option<String>, RepositoryError> {
+    ) -> Result<Option<RetainedPublication>, RepositoryError> {
         let Some(actor_id) = self
             .audit_context
             .as_ref()
@@ -595,29 +603,31 @@ impl CatalogRepository {
         .bind(&roles)
         .fetch_optional(&mut **tx)
         .await?;
-        match retained_role {
-            None => {
-                self.clear_entity_publications(tx, entity_id, reason)
-                    .await?
-            }
-            Some(_) => {
-                self.withdraw_failing_publications(tx, entity_id, (blueprint_id, blueprint_version))
-                    .await?
-            }
-        }
-        Ok(retained_role)
+        let Some(role_code) = retained_role else {
+            self.clear_entity_publications(tx, entity_id, reason)
+                .await?;
+            return Ok(None);
+        };
+        let withdrawn_context_ids = self
+            .withdraw_failing_publications(tx, entity_id, (blueprint_id, blueprint_version))
+            .await?;
+        Ok(Some(RetainedPublication {
+            role_code,
+            withdrawn_context_ids,
+        }))
     }
 
     /// Re-evaluates the gate of every channel the entity is published to
     /// after a retained edit, and withdraws the publications whose channel
     /// checks now fail with reason `checks_failed`. A retained edit keeps a
-    /// publication only where the channel would still accept it.
+    /// publication only where the channel would still accept it. Returns the
+    /// withdrawn channel context ids in ascending order.
     async fn withdraw_failing_publications(
         &self,
         tx: &mut Transaction<'_, Postgres>,
         entity_id: Uuid,
         revision: (Uuid, i64),
-    ) -> Result<(), RepositoryError> {
+    ) -> Result<Vec<Uuid>, RepositoryError> {
         let workspace_id = self.workspace_id.0;
         let channels = sqlx::query_as::<_, Db<PublicationChannel>>(&format!(
             "{CHANNEL_SELECT} AND EXISTS (SELECT 1 FROM entity_channel_publications p WHERE p.workspace_id = c.workspace_id AND p.entity_id = $2 AND p.context_id = c.context_id AND p.published_at IS NOT NULL) ORDER BY c.context_id"
@@ -644,9 +654,9 @@ impl CatalogRepository {
             }
         }
         if failing.is_empty() {
-            return Ok(());
+            return Ok(Vec::new());
         }
-        let contexts: Vec<Uuid> = sqlx::query_scalar(
+        let mut contexts: Vec<Uuid> = sqlx::query_scalar(
             "UPDATE entity_channel_publications SET published_at = NULL, published_by_user_id = NULL WHERE workspace_id = $1 AND entity_id = $2 AND context_id = ANY($3) AND published_at IS NOT NULL RETURNING context_id",
         )
         .bind(workspace_id)
@@ -654,9 +664,10 @@ impl CatalogRepository {
         .bind(&failing)
         .fetch_all(&mut **tx)
         .await?;
+        contexts.sort_unstable();
         let events = contexts
-            .into_iter()
-            .map(|context_id| {
+            .iter()
+            .map(|&context_id| {
                 self.publication_event(
                     ENTITY_UNPUBLISHED_V1,
                     entity_id,
@@ -667,7 +678,8 @@ impl CatalogRepository {
                 )
             })
             .collect();
-        self.enqueue_events(tx, events).await
+        self.enqueue_events(tx, events).await?;
+        Ok(contexts)
     }
 
     pub(crate) async fn clear_entity_publications(

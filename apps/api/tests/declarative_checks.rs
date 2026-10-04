@@ -1057,6 +1057,27 @@ async fn retained_edits_withdraw_publications_whose_channel_checks_now_fail(pool
     assert_eq!(unpublished.len(), 1, "{unpublished:?}");
     assert_eq!(unpublished[0]["context_id"], channels[0].as_str());
     assert_eq!(unpublished[0]["reason"], "checks_failed");
+    // The edit's event and audit row name the channels it withdrew.
+    let expected = json!({
+        "disposition": "retained",
+        "role_code": "owner",
+        "withdrawn_context_ids": [channels[0]],
+    });
+    let updated: Value = sqlx::query_scalar(
+        "SELECT metadata FROM domain_events WHERE aggregate_id = $1 AND event_type = 'entity.updated.v1' ORDER BY sequence DESC LIMIT 1",
+    )
+    .bind(entity_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(updated["publication"], expected, "{updated}");
+    let audit: Value = sqlx::query_scalar(
+        "SELECT metadata FROM audit_events WHERE metadata -> 'publication' ->> 'disposition' = 'retained' ORDER BY occurred_at DESC LIMIT 1",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(audit["publication"], expected, "{audit}");
     server.abort();
 }
 

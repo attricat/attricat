@@ -1241,31 +1241,21 @@ impl CatalogRepository {
         mut event: NewDomainEvent,
     ) -> Result<(), RepositoryError> {
         self.ensure_task_fence(transaction).await?;
-        let retained_role = self
+        let retained = self
             .reconcile_entity_publication(transaction, event.aggregate_id, "entity_changed")
             .await?;
-        let publication_metadata = match retained_role {
-            Some(role_code) => {
-                event.metadata["publication"] = serde_json::json!({
-                    "disposition": "retained",
-                    "role_code": role_code,
-                });
-                serde_json::json!({
-                    "disposition": "retained",
-                    "role_code": event.metadata["publication"]["role_code"],
-                })
-            }
-            None => {
-                event.metadata["publication"] = serde_json::json!({
-                    "disposition": "withdrawn",
-                    "reason": "entity_changed",
-                });
-                serde_json::json!({
-                    "disposition": "withdrawn",
-                    "reason": "entity_changed",
-                })
-            }
+        let publication_metadata = match retained {
+            Some(retained) => serde_json::json!({
+                "disposition": "retained",
+                "role_code": retained.role_code,
+                "withdrawn_context_ids": retained.withdrawn_context_ids,
+            }),
+            None => serde_json::json!({
+                "disposition": "withdrawn",
+                "reason": "entity_changed",
+            }),
         };
+        event.metadata["publication"] = publication_metadata.clone();
         if let Some(audit_event_id) = self
             .write_audit_event_with_publication_metadata(transaction, Some(publication_metadata))
             .await?

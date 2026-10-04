@@ -83,6 +83,14 @@ Core types are constants in `api::domain_events` and currently include:
     publication was withdrawn.
   - `context_changed`: the channel context was changed or deleted.
   - `entity_deleted`: the entity was deleted.
+
+  An entity edit also records its publication outcome under `publication` in
+  the edit event's `metadata` and in its audit row's metadata. It is either
+  `{"disposition": "withdrawn", "reason": "entity_changed"}` or
+  `{"disposition": "retained", "role_code": …, "withdrawn_context_ids": [...]}`,
+  where `role_code` is the actor's retaining role and `withdrawn_context_ids`
+  lists, in ascending order, the channels whose publication the edit withdrew
+  with `checks_failed` (empty when every publication was kept).
 - `entity.annotations_changed.v1`, emitted when an extension (or an operator
   repair) changes one extension's annotation namespace. Its payload names the
   entity, blueprint revision, `extension_id`, new `revision`, and the tags and
