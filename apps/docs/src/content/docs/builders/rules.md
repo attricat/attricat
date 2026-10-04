@@ -222,6 +222,8 @@ POST /rules/{id}/versions/{version}/enable
 {"accept_existing_violations": true}
 ```
 
+A dry run stops after 10,000 entities. When the blueprint revision has more, the dry run can't vouch for the rest, so enabling still fails with `409 rule_dry_run_required` unless you send `accept_existing_violations` as above.
+
 An entity that already violates an enforcing rule cannot be saved until a save fixes the violation.
 
 ## Work with findings

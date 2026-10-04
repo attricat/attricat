@@ -795,6 +795,18 @@ async fn enforcing_rules_dry_run_before_enabling_and_reject_writes(pool: PgPool)
     .await;
     assert_eq!(status, StatusCode::ACCEPTED, "{body}");
     drain_rule_tasks(&pool).await;
+    // A dry run that stopped at the candidate cap does not cover every entity.
+    sqlx::query("UPDATE rule_runs SET truncated = true WHERE dry_run")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (status, body) = post(&client, enable.clone(), json!({})).await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["error"]["code"], "rule_dry_run_required");
+    sqlx::query("UPDATE rule_runs SET truncated = false WHERE dry_run")
+        .execute(&pool)
+        .await
+        .unwrap();
     let (status, body) = post(&client, enable.clone(), json!({})).await;
     assert_eq!(status, StatusCode::CONFLICT, "{body}");
     assert_eq!(body["error"]["code"], "rule_has_existing_violations");

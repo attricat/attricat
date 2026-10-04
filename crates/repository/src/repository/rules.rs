@@ -298,7 +298,8 @@ impl CatalogRepository {
     /// The enable gate shared by every path that enables a rule revision: it
     /// must be published, and an enforcing rule whose blueprint revision has
     /// live entities needs a completed full dry run of that revision; existing
-    /// violations must be accepted explicitly.
+    /// violations, and a dry run that stopped at the candidate cap, must be
+    /// accepted explicitly.
     pub(super) async fn ensure_rule_enable_allowed(
         &self,
         tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
@@ -317,15 +318,9 @@ impl CatalogRepository {
             let has_entities: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM entities WHERE workspace_id=$1 AND blueprint_id=$2 AND blueprint_version=$3 AND deleted_at IS NULL)")
                 .bind(ws).bind(blueprint_id).bind(blueprint_version).fetch_one(&mut **tx).await?;
             if has_entities {
-                let violations: Option<i64> = sqlx::query_scalar("SELECT findings_created FROM rule_runs WHERE workspace_id=$1 AND rule_id=$2 AND rule_version=$3 AND dry_run AND scope_entity_id IS NULL AND status='completed' ORDER BY completed_at DESC LIMIT 1")
+                let latest: Option<(i64, bool)> = sqlx::query_as("SELECT findings_created,truncated FROM rule_runs WHERE workspace_id=$1 AND rule_id=$2 AND rule_version=$3 AND dry_run AND scope_entity_id IS NULL AND status='completed' ORDER BY completed_at DESC LIMIT 1")
                     .bind(ws).bind(id).bind(version).fetch_optional(&mut **tx).await?;
-                match violations {
-                    None => return Err(RepositoryError::RuleDryRunRequired),
-                    Some(count) if count > 0 && !accept_existing_violations => {
-                        return Err(RepositoryError::RuleHasExistingViolations(count));
-                    }
-                    Some(_) => {}
-                }
+                dry_run_enable_gate(latest, accept_existing_violations)?;
             }
         }
         Ok(())
@@ -798,6 +793,7 @@ impl CatalogRepository {
         results: Vec<RuleCandidateResult>,
         next_cursor: Option<Uuid>,
         done: bool,
+        truncated: bool,
     ) -> Result<bool, RepositoryError> {
         let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
@@ -876,8 +872,8 @@ impl CatalogRepository {
                 }
             }
         }
-        sqlx::query("UPDATE rule_runs SET candidate_cursor=$2,candidates_evaluated=candidates_evaluated+$3,findings_created=findings_created+$4,findings_resolved=findings_resolved+$5,status=CASE WHEN $6 THEN 'completed' ELSE 'pending' END,completed_at=CASE WHEN $6 THEN clock_timestamp() ELSE completed_at END,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$7")
-            .bind(run.id).bind(next_cursor).bind(results.len() as i64).bind(created).bind(resolved).bind(done).bind(ws).execute(&mut *tx).await?;
+        sqlx::query("UPDATE rule_runs SET candidate_cursor=$2,candidates_evaluated=candidates_evaluated+$3,findings_created=findings_created+$4,findings_resolved=findings_resolved+$5,status=CASE WHEN $6 THEN 'completed' ELSE 'pending' END,completed_at=CASE WHEN $6 THEN clock_timestamp() ELSE completed_at END,truncated=$8,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$7")
+            .bind(run.id).bind(next_cursor).bind(results.len() as i64).bind(created).bind(resolved).bind(done).bind(ws).bind(truncated).execute(&mut *tx).await?;
         tx.commit().await?;
         Ok(done)
     }
@@ -1034,6 +1030,24 @@ impl CatalogRepository {
     }
 }
 
+/// Decides the enable gate from the latest completed full dry run, given as
+/// its violation count and whether it stopped at the candidate cap. A
+/// truncated dry run missed candidates, so it counts only when existing
+/// violations are accepted.
+fn dry_run_enable_gate(
+    latest: Option<(i64, bool)>,
+    accept_existing_violations: bool,
+) -> Result<(), RepositoryError> {
+    match latest {
+        None => Err(RepositoryError::RuleDryRunRequired),
+        Some((_, true)) if !accept_existing_violations => Err(RepositoryError::RuleDryRunRequired),
+        Some((count, _)) if count > 0 && !accept_existing_violations => {
+            Err(RepositoryError::RuleHasExistingViolations(count))
+        }
+        Some(_) => Ok(()),
+    }
+}
+
 /// The `rule_findings.severity` code, spelled as in rule definitions.
 fn severity_code(severity: &catalog_rules::Severity) -> &'static str {
     match severity {
@@ -1056,5 +1070,35 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
         }
         tx.commit().await?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn enable_gate_requires_a_complete_dry_run_or_accepted_violations() {
+        assert!(matches!(
+            dry_run_enable_gate(None, true),
+            Err(RepositoryError::RuleDryRunRequired)
+        ));
+        assert!(dry_run_enable_gate(Some((0, false)), false).is_ok());
+        assert!(matches!(
+            dry_run_enable_gate(Some((3, false)), false),
+            Err(RepositoryError::RuleHasExistingViolations(3))
+        ));
+        assert!(dry_run_enable_gate(Some((3, false)), true).is_ok());
+        // A dry run that stopped at the candidate cap never proves the
+        // remaining entities pass.
+        assert!(matches!(
+            dry_run_enable_gate(Some((0, true)), false),
+            Err(RepositoryError::RuleDryRunRequired)
+        ));
+        assert!(matches!(
+            dry_run_enable_gate(Some((3, true)), false),
+            Err(RepositoryError::RuleDryRunRequired)
+        ));
+        assert!(dry_run_enable_gate(Some((0, true)), true).is_ok());
     }
 }

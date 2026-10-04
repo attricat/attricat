@@ -98,8 +98,15 @@ impl TaskHandler for RuleTaskHandler {
             return Ok(TaskOutcome::Complete);
         };
         match evaluate_page(&scoped, &run).await {
-            Ok((results, next, done)) => match scoped
-                .checkpoint_rule_page_task(&task, &run, results, next, done)
+            Ok(page) => match scoped
+                .checkpoint_rule_page_task(
+                    &task,
+                    &run,
+                    page.results,
+                    page.next_cursor,
+                    page.done,
+                    page.truncated,
+                )
                 .await
             {
                 Ok(outcome) if outcome => Ok(TaskOutcome::Complete),
@@ -144,17 +151,33 @@ fn task_error(error: RepositoryError) -> TaskHandlerError {
     }
 }
 
+/// One evaluated candidate page.
+struct EvaluatedPage {
+    results: Vec<RuleCandidateResult>,
+    next_cursor: Option<Uuid>,
+    done: bool,
+    /// The run stopped at the candidate cap while candidates remained.
+    truncated: bool,
+}
+
 async fn evaluate_page(
     repo: &CatalogRepository,
     run: &ClaimedRuleRun,
-) -> Result<(Vec<RuleCandidateResult>, Option<Uuid>, bool), RepositoryError> {
+) -> Result<EvaluatedPage, RepositoryError> {
     let compiled: catalog_rules::CompiledRule =
         serde_json::from_value(run.compiled_plan.clone())
             .map_err(|error| RepositoryError::InvalidRuleDefinition(error.to_string()))?;
     let remaining =
         (catalog_rules::MAX_CANDIDATES_PER_RUN as i64 - run.candidates_evaluated).max(0);
     if remaining == 0 {
-        return Ok((Vec::new(), run.candidate_cursor, true));
+        let truncated = run.scope_entity_id.is_none()
+            && candidates_remain(repo, run, run.candidate_cursor).await?;
+        return Ok(EvaluatedPage {
+            results: Vec::new(),
+            next_cursor: run.candidate_cursor,
+            done: true,
+            truncated,
+        });
     }
     let pool = repo.pool_for_runtime();
     let candidates: Vec<Uuid> = sqlx::query_scalar(
@@ -172,11 +195,36 @@ async fn evaluate_page(
         .evaluate_rule_candidates(run.context_id, &compiled, &candidates)
         .await?;
     let page_size = PAGE_SIZE.min(remaining) as usize;
-    let done = candidates.len() < page_size
-        || run.scope_entity_id.is_some()
-        || run.candidates_evaluated + candidates.len() as i64
-            >= catalog_rules::MAX_CANDIDATES_PER_RUN as i64;
-    Ok((results, candidates.last().copied(), done))
+    let exhausted = candidates.len() < page_size || run.scope_entity_id.is_some();
+    let capped = run.candidates_evaluated + candidates.len() as i64
+        >= catalog_rules::MAX_CANDIDATES_PER_RUN as i64;
+    let next_cursor = candidates.last().copied();
+    // A run that reaches the cap with a full page may have missed candidates;
+    // an enforcing rule cannot be enabled on such a dry run.
+    let truncated = !exhausted && capped && candidates_remain(repo, run, next_cursor).await?;
+    Ok(EvaluatedPage {
+        results,
+        next_cursor,
+        done: exhausted || capped,
+        truncated,
+    })
+}
+
+/// Whether the run's blueprint revision has live candidates after `cursor`.
+async fn candidates_remain(
+    repo: &CatalogRepository,
+    run: &ClaimedRuleRun,
+    cursor: Option<Uuid>,
+) -> Result<bool, RepositoryError> {
+    Ok(sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM entities WHERE workspace_id=$1 AND blueprint_id=$2 AND blueprint_version=$3 AND deleted_at IS NULL AND ($4::uuid IS NULL OR id>$4))",
+    )
+    .bind(repo.workspace_id_for_runtime())
+    .bind(run.blueprint_id)
+    .bind(run.blueprint_version)
+    .bind(cursor)
+    .fetch_one(&repo.pool_for_runtime())
+    .await?)
 }
 
 /// The only rule schedule coordinator. It never claims rule runs; task-worker

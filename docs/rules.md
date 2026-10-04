@@ -116,8 +116,12 @@ a completed full dry run (no `entity_id`) of that exact revision:
    target a published revision that is not enabled.
 3. `POST /rules/{rule_id}/versions/2/enable`.
 
-Without that run, enabling returns `409 rule_dry_run_required`. If the latest
-completed dry run found violations, it returns
+Without that run, enabling returns `409 rule_dry_run_required`. A dry run
+stops after 10,000 candidates; when more remained, the run is recorded as
+truncated and enabling also returns `409 rule_dry_run_required` unless the
+request sets `accept_existing_violations`, because the dry run cannot prove the
+remaining entities pass. If the latest completed dry run found violations, it
+returns
 `409 rule_has_existing_violations` with `error.details.existing_violations`
 (the count). Fix those entities and dry-run again, or enable with
 `{"accept_existing_violations": true}`; the violating entities then cannot be

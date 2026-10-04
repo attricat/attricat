@@ -222,6 +222,8 @@ POST /rules/{id}/versions/{version}/enable
 {"accept_existing_violations": true}
 ```
 
+Przebieg próbny zatrzymuje się po 10 000 encji. Gdy wersja Schematu ma ich więcej, przebieg nie obejmuje pozostałych, więc włączenie nadal kończy się błędem `409 rule_dry_run_required`, chyba że wyślesz `accept_existing_violations`, jak powyżej.
+
 Encji, która już narusza egzekwowaną regułę, nie można zapisać, dopóki zapis nie usunie naruszenia.
 
 ## Pracuj z ustaleniami
