@@ -46,6 +46,8 @@ import {
   statusLocks,
   statusTransitionAllowed,
 } from '../status';
+import { checkViolationError, violationFieldErrors } from '../checkViolations';
+import { CheckViolationsAlert } from './CheckViolationsAlert';
 import type { StatusTransitionAccess } from '../recordControls';
 import { EntityFormAttributeEditor } from './EntityFormAttributeEditor';
 
@@ -101,6 +103,7 @@ type EntityFormProps = {
   migrationReviewMessages?: Readonly<Record<string, string>>;
   requiredAttributes?: readonly string[];
   entityId?: string;
+  /** Load or save failure; check violations are placed on their fields. */
   error?: Error | null;
   onLoadBlueprint?: (code: string, version?: number) => void;
   lockedBlueprint?: boolean;
@@ -173,6 +176,32 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
       },
     );
     const fieldEditors = viewFieldEditors(fieldComponents, editableAttributes);
+    const checks = checkViolationError(error);
+    // A field's server violation is cleared once the user edits that field.
+    const [editedAfterError, setEditedAfterError] = useState<{
+      error: unknown;
+      codes: readonly string[];
+    }>({ error: undefined, codes: [] });
+    const editedCodes =
+      editedAfterError.error === error ? editedAfterError.codes : [];
+    const serverViolations = checks
+      ? violationFieldErrors(
+          checks.violations,
+          editableAttributes.map((attribute) => attribute.code),
+        )
+      : undefined;
+    const serverFieldErrors = Object.fromEntries(
+      Object.entries(serverViolations?.fieldErrors ?? {}).filter(
+        ([code]) => !editedCodes.includes(code),
+      ),
+    );
+    const markEdited = (code: string) => {
+      if (!checks || editedCodes.includes(code)) return;
+      setEditedAfterError((current) => ({
+        error,
+        codes: current.error === error ? [...current.codes, code] : [code],
+      }));
+    };
     const lockedAttributes = statusLocks(
       blueprint ? [...blueprint.attributes, ...reusableAttributes] : [],
       savedValues,
@@ -338,7 +367,7 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
       statusSavedValues: savedValues,
       lockedAttributes,
       statusTransitions,
-      fieldErrors,
+      fieldErrors: { ...serverFieldErrors, ...fieldErrors },
       highlightedAttributes,
       migrationReviewMessages,
       resolvedValues,
@@ -401,6 +430,7 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
                         ...field.state.value,
                         [attribute.code]: nextValue,
                       };
+                      markEdited(attribute.code);
                       validateFields(nextFields);
                       field.handleChange(nextFields);
                     }}
@@ -447,9 +477,17 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
               }}
             </form.Field>
           )}
-          {(error || formError) && (
-            <Alert severity="error">{error?.message ?? formError}</Alert>
+          {checks ? (
+            <CheckViolationsAlert
+              title={checks.message}
+              violations={serverViolations?.unplaced ?? []}
+            />
+          ) : (
+            (error || formError) && (
+              <Alert severity="error">{error?.message ?? formError}</Alert>
+            )
           )}
+          {checks && formError && <Alert severity="error">{formError}</Alert>}
           {footerActions}
           {showSubmitButton && (
             <Button

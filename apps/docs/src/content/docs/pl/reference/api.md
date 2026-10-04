@@ -22,7 +22,7 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 ## Konwencje
 
 - Żądania i odpowiedzi są w formacie JSON, chyba że trasa stanowi inaczej. Udane puste odpowiedzi mają kod `204`.
-- Błędy zwracają status HTTP i treść w postaci `{"error": {"code": "entity_schema_mismatch", "message": "…"}}`. Dopasowuj po `code`, a nie po komunikacie. Niektóre błędy dodają obiekt `error.details` z danymi, na podstawie których możesz działać, np. encją, która już ma dany klucz unikalny.
+- Błędy zwracają status HTTP i treść w postaci `{"error": {"code": "entity_schema_mismatch", "message": "…"}}`. Dopasowuj po `code`, a nie po komunikacie. Niektóre błędy dodają obiekt `error.details` z danymi, na podstawie których możesz działać, np. encją, która już ma dany klucz unikalny, lub kontrolami, które nie przeszły; zobacz niżej.
 - `401` oznacza brak ważnych danych uwierzytelniających; `403` oznacza, że dane uwierzytelniające nie mają uprawnienia lub zakresu.
 - `422` oznacza, że żądanie zostało zrozumiane, ale jest nieprawidłowe, np. schemat się nie kompiluje albo wartość nie spełnia swojego schematu walidacji.
 - `409` oznacza konflikt z bieżącym stanem, np. przekroczenie limitu krotności relacji.
@@ -47,6 +47,26 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | `file_processing` | 409 | Plik nie jest jeszcze gotowy do pobrania. |
 | `approval_already_decided` | 409 | Wywołanie narzędzia przez agenta zostało już zatwierdzone lub odrzucone. |
 | `service_unavailable` | 503 | Dla tras agentów: nie skonfigurowano dostawcy AI. |
+| `entity_check_failed` | 422 | Kontrola z `x-attricat-checks` nie przechodzi w którymś kontekście. |
+| `transition_conditions_unmet` | 422 | Warunki przejścia statusu nie są spełnione. |
+| `rule_violation` | 422 | Po zapisie encja naruszałaby egzekwowaną regułę. |
+| `publication_checks_failed` | 422 | Kontrole wymagane przez kanał nie przechodzą. `details.context` to kod kanału. |
+| `invalid_rule_definition` | 422 | TOML reguły jest nieprawidłowy lub nie pasuje do wersji schematu. |
+| `rule_dry_run_required` | 409 | Włączenie egzekwowanej reguły wymaga najpierw ukończonego pełnego przebiegu próbnego tej wersji. |
+| `rule_has_existing_violations` | 409 | Przebieg próbny znalazł naruszenia. `details.existing_violations` podaje ich liczbę. |
+
+Cztery błędy kontroli 422 wymieniają do 50 naruszeń w `error.details.violations`:
+
+```json
+{"error": {"code": "transition_conditions_unmet", "message": "…", "details": {"violations": [
+  {"source": "transition_condition", "code": "approver-set", "message": "Set an approver before release",
+   "contexts": ["default"], "attributes": ["approved_by"],
+   "transition": {"attribute_code": "status", "from": "review", "to": "released"},
+   "evidence": {"attribute_code": "approved_by"}}
+]}}}
+```
+
+`source` to `entity_check`, `transition_condition`, `rule` lub (tylko przy publikacji) `entity_schema`. `contexts` zawiera kody kontekstów, w których kontrola nie przeszła, a `attributes` atrybuty encji, których dotyczy naruszenie, do wyróżnienia pól. Reguły dodają `severity`; niepowodzenia publikacji zbiorczej dodają `evidence.entity_id`. Zobacz [Walidacja](/pl/builders/validation/#błędy-i-ich-naprawa).
 
 ## Trasy
 
@@ -91,6 +111,7 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | `POST` | `/v1/entities/{id}/blueprint-migration/preview` | Sprawdza migrację do bieżącej wersji. |
 | `POST` | `/v1/entities/{id}/blueprint-migration` | Migruje. |
 | `POST` | `/v1/entities/{id}/reusable-attributes`, `/v1/entities/{id}/reusable-attribute-groups/{group_id}` | Dołącza atrybut lub grupę atrybutów wielokrotnego użytku. |
+| `GET` | `/v1/entities/{id}/status-transitions?context_id=…` | Zadeklarowane przejścia z zapisanego statusu w jednym kontekście (bez parametru: kontekst domyślny): `{"items": [{attribute_code, from, to, code, allowed, denial_code, denial_reason, unmet}]}`. `denial_code` to `status_transition_forbidden`, `status_separation_of_duties` lub `transition_conditions_unmet`; `unmet` wymienia niespełnione warunki i egzekwowane reguły jako naruszenia. |
 
 ### Zmiany wsadowe
 
@@ -179,10 +200,11 @@ Pobieranie zwraca `409 file_processing`, dopóki plik nie ma stanu `ready`.
 | `GET` | `/contexts/{code}` | Odczyt po kodzie. |
 | `PUT`, `DELETE` | `/contexts/id/{id}` | Aktualizuje lub usuwa. |
 | `GET` | `/publication-channels` | Konteksty będące kanałami. |
-| `PUT` | `/publication-channels/{context_id}` | `{"enabled": true}`, aby uczynić kontekst kanałem. |
+| `PUT` | `/publication-channels/{context_id}` | `{"enabled": true}`, aby uczynić kontekst kanałem. Opcjonalne `required_rule_codes` (do 32 kodów reguł) i `require_valid_entity` ustawiają kontrole wymagane przed publikacją; pominięte pola zachowują bieżącą wartość. |
 | `GET`, `POST` | `/v1/entities/{id}/publications` | Stan publikacji lub publikacja z `{"context_id": "…"}`. |
 | `POST` | `/v1/entities/{id}/publications/unpublish` | Wycofuje publikację z jednego kanału. |
 | `POST` | `/v1/entities/{id}/publications/publish-all` | Publikuje we wszystkich kanałach. |
+| `GET` | `/v1/entities/{id}/publications/readiness` | Dla każdego włączonego kanału: `{context_id, context_code, ready, violations}`. |
 | `POST` | `/blueprints/{id}/versions/{version}/entity-publications`, `…/publish-all` | Publikuje wszystkie encje danej wersji. |
 
 ### Zapisane wyszukiwania
@@ -215,8 +237,8 @@ Zobacz [Tłumaczenie etykiet](/pl/builders/translations/).
 | `POST` | `/rules/validate` | Weryfikuje TOML reguły. |
 | `GET`, `POST` | `/rules` | Wyświetla lub tworzy reguły. |
 | `GET` | `/rules/{id}` | Odczytuje regułę. |
-| `POST` | `/rules/{id}/versions/{version}/publish`, `/enable`; `/rules/{id}/disable` | Cykl życia. |
-| `POST` | `/rules/{id}/run-now` | `{"entity_id": null, "dry_run": false, "idempotency_key": "…"}` |
+| `POST` | `/rules/{id}/versions/{version}/publish`, `/enable`; `/rules/{id}/disable` | Cykl życia. `/enable` przyjmuje opcjonalne `{"accept_existing_violations": true}` dla egzekwowanej reguły, której przebieg próbny znalazł naruszenia. |
+| `POST` | `/rules/{id}/run-now` | `{"entity_id": null, "dry_run": false, "idempotency_key": "…"}`. Przebieg próbny może dodać `"version": 2`, aby objąć opublikowaną wersję, która nie jest włączona; domyślnie dotyczy wersji włączonej albo najnowszej opublikowanej. |
 | `GET` | `/rule-runs`, `/rule-findings` | Uruchomienia i ustalenia. |
 | `POST` | `/rule-runs/{id}/replay`, `/rule-findings/{id}/acknowledge` | Ponawia martwą wiadomość; potwierdza ustalenie. |
 | `POST` | `/workflows/validate` | Weryfikuje TOML przepływu pracy. |

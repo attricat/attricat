@@ -278,12 +278,63 @@ impl ApiError {
         Self::bad_request("query parameters are invalid")
     }
 }
+impl ApiError {
+    /// A blocking check failure: `422` with `details.violations` listing each
+    /// failed check, condition or rule and the attributes involved.
+    fn check_failure(
+        code: &'static str,
+        message: &str,
+        violations: &[crate::repository::CheckViolation],
+        context: Option<&str>,
+    ) -> Self {
+        let mut details = serde_json::json!({ "violations": violations });
+        if let Some(context) = context {
+            details["context"] = serde_json::json!(context);
+        }
+        Self {
+            status: StatusCode::UNPROCESSABLE_ENTITY,
+            code,
+            message: message.to_owned(),
+            details: Some(details),
+        }
+    }
+}
 impl From<RepositoryError> for ApiError {
     fn from(error: RepositoryError) -> Self {
         // Preserve the cause only for server errors, not expected conflicts or
         // validation failures, while keeping it out of the HTTP response.
         let cause = error.to_string();
         let response = match error {
+            RepositoryError::EntityCheckFailed(ref violations) => {
+                Self::check_failure("entity_check_failed", &cause, violations, None)
+            }
+            RepositoryError::TransitionConditionsUnmet(ref violations) => {
+                Self::check_failure("transition_conditions_unmet", &cause, violations, None)
+            }
+            RepositoryError::RuleViolation(ref violations) => {
+                Self::check_failure("rule_violation", &cause, violations, None)
+            }
+            RepositoryError::PublicationChecksFailed {
+                ref context,
+                ref violations,
+            } => Self::check_failure(
+                "publication_checks_failed",
+                &cause,
+                violations,
+                Some(context),
+            ),
+            RepositoryError::RuleDryRunRequired => Self {
+                status: StatusCode::CONFLICT,
+                code: "rule_dry_run_required",
+                message: error.to_string(),
+                details: None,
+            },
+            RepositoryError::RuleHasExistingViolations(count) => Self {
+                status: StatusCode::CONFLICT,
+                code: "rule_has_existing_violations",
+                message: error.to_string(),
+                details: Some(serde_json::json!({ "existing_violations": count })),
+            },
             RepositoryError::StaleEntity => Self {
                 status: StatusCode::CONFLICT,
                 code: "stale_entity",

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { request } from '../../api/request';
-import { uuidSchema } from './schemas';
+import { checkViolationSchema, uuidSchema } from './schemas';
 
 const statusTransitionAccessSchema = z.object({
   attribute_code: z.string(),
@@ -9,9 +9,15 @@ const statusTransitionAccessSchema = z.object({
   code: z.string().nullable(),
   allowed: z.boolean(),
   denial_code: z
-    .enum(['status_transition_forbidden', 'status_separation_of_duties'])
+    .enum([
+      'status_transition_forbidden',
+      'status_separation_of_duties',
+      'transition_conditions_unmet',
+    ])
     .nullable(),
   denial_reason: z.string().nullable(),
+  /** Unmet transition conditions and enforcing rules, as check violations. */
+  unmet: z.array(checkViolationSchema).optional(),
 });
 export type StatusTransitionAccess = z.infer<
   typeof statusTransitionAccessSchema

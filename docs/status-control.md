@@ -54,6 +54,58 @@ value_schema = '''{
 - An unchanged status is allowed. Requiredness remains an entity-schema
   constraint; a transition does not override it.
 
+## Transition conditions
+
+An edge may list `conditions` that must hold for the change to be accepted.
+A condition has the same shape as an [entity check](json-schema-validation.md#declarative-checks):
+a `code`, an optional `message` and a `predicate`.
+
+```json
+{ "from": "open", "to": "closed", "conditions": [
+  { "code": "has-root-cause", "message": "Record the root cause before closing",
+    "predicate": { "type": "required", "attribute_code": "root_cause" } },
+  { "code": "no-open-actions",
+    "predicate": { "type": "referenced_by", "blueprint_code": "corrective_action",
+      "relationship_code": "nonconformance", "max": 0,
+      "predicate": { "type": "one_of", "attribute_code": "status", "values": ["open"] } } }
+] }
+```
+
+- At most 16 conditions per edge, with unique codes. Each `from`/`to` edge is
+  declared once. Only synchronous-safe predicates are allowed (`stale`,
+  `unique` and `acyclic` are rejected). Conditions are type-checked against
+  the blueprint's attributes when it is saved.
+- Conditions are evaluated on the transaction's final state, so values saved
+  in the same write count: set `root_cause` and `status = "closed"` together.
+  They are evaluated in every context where the status changes.
+- Unchanged statuses and graphs without `transitions` have no conditions.
+- Entity checks run first, then conditions, then enforcing rules that guard the
+  transition ([rules](rules.md#enforcement)). Unmet conditions reject the whole
+  write with `422 transition_conditions_unmet`; `error.details.violations`
+  lists every unmet condition with `source = "transition_condition"`,
+  `transition: {attribute_code, from, to}`, `contexts` and `attributes`.
+
+### Available destinations
+
+`GET /v1/entities/{id}/status-transitions?context_id=` (described under
+[controlled records](#controlled-records)) also evaluates each declared edge's
+conditions and the enforcing rules that guard it, on the saved state plus the
+edge's destination. Each item has `unmet` in the violation shape. When the
+caller may take the edge but `unmet` is not empty, `allowed` is `false`,
+`denial_code` is `transition_conditions_unmet` and `denial_reason` joins the
+unmet messages:
+
+```json
+{ "items": [{
+  "attribute_code": "status", "from": "open", "to": "closed", "code": null,
+  "allowed": false, "denial_code": "transition_conditions_unmet",
+  "denial_reason": "Record the root cause",
+  "unmet": [{ "source": "transition_condition", "code": "has-root-cause", "…": "…" }]
+}] }
+```
+
+Unsaved form edits are not considered.
+
 ## Display and editing
 
 Entity fields and compact value renderers display a labelled chip. Plain-text
@@ -161,7 +213,8 @@ edges behave as before. Every effective change is recorded in
 `GET /v1/entities/{entity_id}/status-transitions?context_id=…` returns the
 declared edges from the saved effective status in that context (default context
 when omitted), each with `allowed`, `denial_code` and `denial_reason` for the
-caller. The status control disables denied edges and shows the reason; the
+caller, and `unmet` transition conditions and enforcing rules (see
+[available destinations](#available-destinations)). The status control disables denied edges and shows the reason; the
 server remains authoritative.
 
 ### Locks

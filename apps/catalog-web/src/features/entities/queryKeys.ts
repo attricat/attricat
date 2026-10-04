@@ -37,6 +37,8 @@ export const entityQueryKeys = {
   publications: () => ['entity-publications'] as const,
   publication: (entityId: string) =>
     [...entityQueryKeys.publications(), entityId] as const,
+  publicationReadiness: (entityId: string) =>
+    [...entityQueryKeys.publication(entityId), 'readiness'] as const,
   migrationPreview: (entityId: string) =>
     ['entity-migration-preview', entityId] as const,
   resolvedPreviews: (entityId: string) =>

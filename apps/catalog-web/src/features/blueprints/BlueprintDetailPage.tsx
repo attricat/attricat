@@ -19,6 +19,7 @@ import {
 import { MigrationBatchStatus } from './MigrationBatchStatus';
 import { PublishBlueprintDialog } from './PublishBlueprintDialog';
 import { PublishBlueprintEntitiesDialog } from './PublishBlueprintEntitiesDialog';
+import { ApiErrorAlert } from '../entities/components/CheckViolationsAlert';
 import { blueprintQueryKeys } from './queryKeys';
 import { RevisionHistory } from './RevisionHistory';
 import { SafeMigrationDialog } from './SafeMigrationDialog';
@@ -54,6 +55,7 @@ export const BlueprintDetailPage = ({
       onPublished: closeDialog,
     },
   );
+  const entityActionError = safeMigration.error ?? publishEntities.error;
   const revisions = useQuery({
     queryKey: blueprintQueryKeys.revisions(blueprintId),
     queryFn: () => listBlueprintRevisions(blueprintId),
@@ -169,10 +171,8 @@ export const BlueprintDetailPage = ({
               <MigrationBatchStatus batches={migration.migrationBatches} />
             </Box>
           )}
-          {(safeMigration.isError || publishEntities.isError) && (
-            <Alert severity="error" sx={{ mt: 2 }}>
-              {safeMigration.error?.message ?? publishEntities.error?.message}
-            </Alert>
+          {entityActionError && (
+            <ApiErrorAlert error={entityActionError} sx={{ mt: 2 }} />
           )}
           <PublishBlueprintEntitiesDialog
             blueprint={blueprint}

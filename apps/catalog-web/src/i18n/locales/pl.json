@@ -403,8 +403,15 @@
       "published": "Opublikowano",
       "publishedDetails": "Opublikowano {{publishedAt}} przez {{publishedBy}}",
       "channelDisabled": "To nie jest kanał eksportu",
-      "channelDisabledDescription": "Włącz ten kontekst jako kanał eksportu w Zarządzanie > Eksporty przed publikacją."
-    }
+      "channelDisabledDescription": "Włącz ten kontekst jako kanał eksportu w Zarządzanie > Eksporty przed publikacją.",
+      "notReady": "Niegotowe",
+      "channelsNotReady": "Niegotowe dla: {{channels}}"
+    },
+    "checks": {
+      "violationInContexts": "{{message}} (konteksty: {{contexts}})",
+      "publicationBlocked": "Publikację w kanale {{context}} blokują niespełnione kontrole."
+    },
+    "statusConditionsUnmet": "Zablokowane: {{conditions}}"
   },
   "exports": {
     "title": "Eksporty",
@@ -416,7 +423,11 @@
     "enabled": "Włączony",
     "disabled": "Wyłączony",
     "openInExplore": "Otwórz w przeglądarce",
-    "noContexts": "Brak dostępnych kontekstów."
+    "noContexts": "Brak dostępnych kontekstów.",
+    "publicationChecks": "Kontrole publikacji",
+    "requireValidEntity": "Wymagaj poprawnej encji",
+    "requiredRules": "Wymagane reguły",
+    "requiredRulesHelp": "Kody włączonych reguł, które muszą być spełnione przed publikacją (najwyżej {{max}})."
   },
   "blueprints": {
     "blueprint": "Schemat",

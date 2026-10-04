@@ -34,7 +34,7 @@ entity_schema = '''{ "type": "object", "required": ["title"] }'''
 | `attributes` | tablica tabel | Tak | Co najmniej jeden atrybut. Zobacz [Atrybuty](#atrybuty). |
 | `includes` | tablica tabel | Nie | Domieszki, z których ten schemat pobiera atrybuty. Zobacz [Dołączenia](#dołączenia). |
 | `views` | tabela | Encja: tak | Układy dla aplikacji webowej. Schematy encji muszą definiować `views.dropdown_option`. Zobacz [Widoki](#widoki). |
-| `entity_schema` | ciąg znaków (JSON) | Nie | JSON Schema dla całej encji. Tylko schematy encji. Zobacz [Walidacja](/pl/builders/validation/). |
+| `entity_schema` | ciąg znaków (JSON) | Nie | JSON Schema dla całej encji, opcjonalnie z [`x-attricat-checks`](#kontrole-encji). Tylko schematy encji. Zobacz [Walidacja](/pl/builders/validation/). |
 | `publication` | tabela | Nie | Zasady ponownego zatwierdzania publikacji. Zobacz [Publikacja](#publikacja). |
 | `rules` | tablica tabel | Nie | Reguły jakości danych należące do tego schematu. Zobacz [Reguły](/pl/builders/rules/). |
 | `unique_keys` | tablica tabel | Nie | Klucze biznesowe, których wartości muszą być unikalne. Tylko schematy encji. Zobacz [Klucze unikalne](#klucze-unikalne). |
@@ -65,7 +65,7 @@ value_type = "string"
 | `readonly` | wartość logiczna | `false` | Pokazuje pole w aplikacji webowej, ale uniemożliwia jego edycję w niej. API, CLI, agenci, przepływy pracy i rozszerzenia nadal mogą je zapisywać. Używaj dla wartości, którymi zarządza integracja. |
 | `tags` | tablica ciągów znaków | `[]` | Dowolne metadane. Muszą być unikalne i niepuste. Niektóre tagi ukrywają atrybut w aplikacji webowej; zobacz [Tagi widoczności](#tagi-widoczności). |
 | `default_value` | zgodny z typem | Nieustawiony | Wartość zapisywana w kontekście domyślnym, gdy encja zostaje utworzona bez niej. Tylko typy skalarne. |
-| `value_schema` | ciąg znaków (JSON) | Nieustawiony | JSON Schema dla jednej wartości. Tylko typy skalarne. Zobacz [Walidacja](/pl/builders/validation/). |
+| `value_schema` | ciąg znaków (JSON) | Nieustawiony | JSON Schema dla jednej wartości. Tylko typy skalarne. Schemat atrybutu `string` może zawierać adnotację `x-attricat-status` z [warunkami przejść](#warunki-przejść). Zobacz [Walidacja](/pl/builders/validation/). |
 
 ### Typy wartości
 
@@ -383,7 +383,105 @@ Nie przyznaje to żadnych uprawnień. Zobacz [Publikowanie](/pl/guides/publishin
 
 ## Reguły
 
-Tabele `[[rules]]` używają składni reguł opisanej w [Reguły](/pl/builders/rules/), bez `format_version`. Kody reguł muszą być unikalne w obrębie schematu, a predykaty `required` i `stale` muszą wskazywać atrybut schematu.
+Tabele `[[rules]]` używają składni reguł opisanej w [Reguły](/pl/builders/rules/), bez `format_version`. Kody reguł muszą być unikalne w obrębie schematu, a typy ich [predykatów](#predykaty) są sprawdzane względem atrybutów schematu.
+
+```toml
+[[rules]]
+code = "released-documents-approved"
+name = "Released documents have an approver"
+severity = "error"
+triggers = [{ type = "event", event_type = "entity.updated.v1" }]
+predicate = { type = "required", attribute_code = "approved_by" }
+
+[rules.enforcement]
+on_save = false
+
+[[rules.enforcement.transitions]]
+attribute_code = "status"
+from = "review"
+to = "released"
+```
+
+| Klucz | Typ | Domyślnie | Opis |
+| --- | --- | --- | --- |
+| `enforcement.on_save` | wartość logiczna | `false` | Odrzuca każdy zapis, po którym encja narusza regułę. |
+| `enforcement.transitions` | tablica tabel | `[]` | Do 16 chronionych zmian statusu, każda z `attribute_code`, opcjonalnym `from` oraz `to`. |
+
+Tabela `enforcement` wymaga `on_save = true` lub co najmniej jednego przejścia, wagi (`severity`) `error` lub `critical` oraz predykatu bez `stale`, `unique` i `acyclic`. `attribute_code` każdego przejścia musi być atrybutem statusu, a `from` i `to` muszą być kodami z jego `enum`. Naruszenia zwracają `422 rule_violation`. Zobacz [Egzekwowanie reguły](/pl/builders/rules/#egzekwowanie-reguły).
+
+## Predykaty
+
+Reguły, kontrole encji, warunki przejść i kontrole kanałów publikacji używają jednego języka predykatów. Predykat to tabela (w TOML) lub obiekt (w JSON) rozróżniany kluczem `type`. Jest **spełniony**, gdy dane są poprawne. Nieznane klucze są odrzucane.
+
+| `type` | Klucze | Spełniony, gdy |
+| --- | --- | --- |
+| `required` | `attribute_code` | Atrybut ma wartość. Relacja musi mieć co najmniej jeden cel. |
+| `stale` | `attribute_code`, `max_age_seconds` (od 1 do 31536000) | Wartość zmieniła się w ciągu `max_age_seconds`. Tylko reguły zgłaszające ustalenia. |
+| `has_tag` | `tag` | Encja ma tag systemowy. |
+| `missing_tag` | `tag` | Encja nie ma tagu systemowego. |
+| `compare` | `attribute_code`, `op` oraz dokładnie jeden z kluczy `other_attribute_code`, `subject_attribute_code` lub `value` | Porównanie jest prawdziwe. |
+| `one_of` | `attribute_code`, `values` (od 1 do 100) | Wartość jest jedną z `values`. Nie dotyczy relacji ani plików. |
+| `relative_date` | `attribute_code`, `op` (`lt`, `lte`, `gt`, `gte`), `offset_days` (od -36500 do 36500, domyślnie `0`) | Data lub data z godziną spełnia porównanie z bieżącym czasem przesuniętym o `offset_days`. |
+| `unique` | `attribute_codes` (od 1 do 4 atrybutów typu string, number, integer, boolean, date lub datetime) | Żadna inna aktywna encja schematu nie ma tych samych wartości w tym samym kontekście. Tylko reguły zgłaszające ustalenia. |
+| `linked` | `relationship_code`, `quantifier` (`all`, `any`, `none`; domyślnie `all`), `predicate` | `all`: każdy powiązany rekord spełnia `predicate` (prawda, gdy nie ma powiązań). `any`: co najmniej jeden go spełnia. `none`: żaden go nie spełnia. |
+| `referenced_by` | `blueprint_code`, `relationship_code`, opcjonalnie `predicate`, `min` i/lub `max` (od 0 do 1000) | Liczba rekordów `blueprint_code`, których relacja `relationship_code` wskazuje ten rekord i które spełniają `predicate`, mieści się między `min` a `max`. `max = 0` oznacza „żaden”. |
+| `acyclic` | `relationship_code` | Podążanie za relacją nigdy nie wraca do rekordu. Tylko reguły zgłaszające ustalenia. |
+| `all_of` | `predicates` (od 1 do 16) | Każdy zagnieżdżony predykat jest spełniony. |
+| `any_of` | `predicates` (od 1 do 16) | Co najmniej jeden zagnieżdżony predykat jest spełniony. |
+
+Operatory `compare`:
+
+| `op` | Dotyczy |
+| --- | --- |
+| `eq`, `ne` | Każdego typu oprócz plików. Relacje są równe, gdy mają ten sam zbiór celów. |
+| `lt`, `lte`, `gt`, `gte` | `number`, `integer`, `date`, `datetime`. |
+| `disjoint` | Dwóch relacji bez wspólnego celu. |
+
+- Obie strony muszą mieć zgodne typy: liczbę z liczbą lub liczbą całkowitą, datę z datą. Dosłowna wartość `value` musi pasować do typu atrybutu; daty i daty z godziną zapisuj jako łańcuchy znaków, np. `"2026-01-31"`. Relację można porównać tylko z inną relacją.
+- `compare` z brakującym operandem jest spełniony; tak samo `one_of` i `relative_date` na pustym atrybucie. Połącz je z `required`, jeśli wartość musi istnieć.
+- Wewnątrz `linked` i `referenced_by` klucze `attribute_code` i `other_attribute_code` dotyczą drugiego rekordu, a `subject_attribute_code` — sprawdzanego rekordu. Poza nimi `subject_attribute_code` jest odrzucany.
+- `linked` i `referenced_by` przechodzą o jeden krok: ich zagnieżdżony predykat nie może używać `linked`, `referenced_by`, `unique`, `acyclic` ani `stale`.
+- Predykat może mieć najwyżej 4 poziomy zagnieżdżenia i najwyżej 32 części.
+- W trakcie działania `linked` nie przechodzi przy ponad 200 powiązanych rekordach na relację, `referenced_by` przy ponad 1000 rekordach wskazujących, a `acyclic`, gdy nie zdoła zakończyć sprawdzania w obrębie 1000 rekordów.
+
+`stale`, `unique` i `acyclic` służą tylko do zgłaszania ustaleń, ponieważ nie da się ich sprawdzić w ramach jednego zapisu. Są odrzucane w egzekwowanych regułach, kontrolach encji i warunkach przejść.
+
+### Kontrole encji
+
+`x-attricat-checks` to tablica wewnątrz `entity_schema`:
+
+```toml
+entity_schema = '''
+{
+  "type": "object",
+  "x-attricat-checks": [
+    { "code": "valid-range", "message": "Valid until must not be before valid from",
+      "predicate": { "type": "compare", "attribute_code": "valid_until", "op": "gte", "other_attribute_code": "valid_from" } }
+  ]
+}
+'''
+```
+
+| Klucz | Typ | Wymagany | Opis |
+| --- | --- | --- | --- |
+| `code` | kod | Tak | Unikalny w obrębie tablicy. |
+| `message` | ciąg znaków | Nie | Od 1 do 500 znaków. Zastępuje wygenerowany komunikat. |
+| `predicate` | obiekt | Tak | [Predykat](#predykaty) z wyjątkiem `stale`, `unique` i `acyclic`. |
+
+Najwyżej 32 kontrole. Niepowodzenie zwraca `422 entity_check_failed`. Zobacz [Walidacja](/pl/builders/validation/#porównuj-atrybuty-za-pomocą-kontroli).
+
+### Warunki przejść
+
+Krawędź w `transitions` adnotacji `x-attricat-status` może mieć `conditions`, czyli tablicę do 16 kontroli z tymi samymi kluczami co [kontrole encji](#kontrole-encji):
+
+```json
+{ "from": "review", "to": "released", "conditions": [
+  { "code": "approver-set", "message": "Set an approver before release",
+    "predicate": { "type": "required", "attribute_code": "approved_by" } }
+] }
+```
+
+Każda para `from`/`to` może wystąpić tylko raz. Niespełnione warunki zwracają `422 transition_conditions_unmet`. Zobacz [Warunki przejść](/pl/builders/validation/#warunki-przejść).
 
 ## Klucze unikalne
 
@@ -455,6 +553,7 @@ Kilka reguł kompilacji, które łatwo przeoczyć:
 - Schemat encji bez `views.dropdown_option` jest odrzucany.
 - `entity_schema` w domieszce jest odrzucany.
 - `entity_schema` może wskazywać tylko atrybuty, które schemat posiada, w swoich kluczach najwyższego poziomu `required`, `properties`, `dependentRequired` i `dependentSchemas`.
+- Predykaty w `x-attricat-checks`, warunkach przejść (`conditions`) i `[[rules]]` muszą wskazywać atrybuty, które schemat posiada, o typach pasujących do predykatu. Porównanie porządkujące na łańcuchu znaków albo porównanie daty z liczbą jest odrzucane.
 - `target_blueprint`, `target_blueprints`, `acyclic` i `tree` w atrybucie innym niż relacja są odrzucane.
 - `unique_keys` w domieszce, klucz wskazujący nieznany atrybut, atrybut `json`, plikowy lub relację z wieloma celami, a także klucz wymieniający atrybut dwa razy są odrzucane.
 - `from` musi mieć postać `alias.code`, gdzie `code` odpowiada kodowi samego atrybutu.

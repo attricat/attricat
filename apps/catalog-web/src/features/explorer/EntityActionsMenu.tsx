@@ -1,7 +1,12 @@
-import { Menu, MenuItem } from '@mui/material';
+import { ListItemText, Menu, MenuItem } from '@mui/material';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { EntityItem, EntityPublicationStatus } from '../entities/api';
+import type {
+  EntityItem,
+  EntityPublicationReadiness,
+  EntityPublicationStatus,
+} from '../entities/api';
+import { publicationReadinessText } from '../entities/checkViolations';
 import { useActionDialogStore } from '../extensions/actionDialogStore';
 import { ExtensionPopoverOutlet } from '../extensions/ExtensionOutlet';
 import { selectionSources } from '../extensions/constants';
@@ -24,6 +29,8 @@ type Props = {
   publicationContextId: string | undefined;
   publish: () => void;
   publishing: boolean;
+  /** Check readiness of the publication channel; publishing waits for it. */
+  readiness?: EntityPublicationReadiness;
   duplicate: () => void;
   duplicating: boolean;
   unpublish: () => void;
@@ -43,6 +50,7 @@ export const EntityActionsMenu = ({
   publicationContextId,
   publish,
   publishing,
+  readiness,
   duplicate,
   duplicating,
   unpublish,
@@ -95,13 +103,20 @@ export const EntityActionsMenu = ({
       {canPublish && publicationContextId && publication && (
         <>
           <MenuItem
-            disabled={publishing}
+            disabled={publishing || readiness?.ready === false}
             onClick={() => {
               onClose();
               publish();
             }}
           >
-            {t('entities.publish')}
+            {readiness?.ready === false ? (
+              <ListItemText
+                primary={t('entities.publish')}
+                secondary={publicationReadinessText(readiness)}
+              />
+            ) : (
+              t('entities.publish')
+            )}
           </MenuItem>
           {publication.status !== publicationStatuses.notPublished && (
             <MenuItem

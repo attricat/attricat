@@ -586,6 +586,13 @@ pub(super) async fn list_entity_publications(
 ) -> Result<Json<Vec<crate::model::EntityPublicationStatus>>, ApiError> {
     Ok(Json(repository.publication_statuses(entity_id).await?))
 }
+/// Readiness of the entity for each enabled channel's required checks.
+pub(super) async fn entity_publication_readiness(
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    ApiPath(entity_id): ApiPath<Uuid>,
+) -> Result<Json<Vec<crate::repository::PublicationReadiness>>, ApiError> {
+    Ok(Json(repository.publication_readiness(entity_id).await?))
+}
 pub(super) async fn publish_entity(
     State(state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,

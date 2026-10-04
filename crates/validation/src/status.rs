@@ -1,4 +1,5 @@
 //! Versioned status metadata attached to a string attribute's JSON Schema.
+use crate::predicate::{Check, MAX_TRANSITION_CONDITIONS, Usage, validate_checks};
 use serde_json::Value;
 use std::collections::HashSet;
 
@@ -156,6 +157,14 @@ pub fn status_configuration_schema() -> Value {
             "type": "string", "minLength": 1, "maxLength": 257, "pattern": ATTRIBUTE_SELECTOR_PATTERN
         }}
     ]});
+    let conditions = serde_json::json!({"type": "array", "maxItems": MAX_TRANSITION_CONDITIONS, "items": {
+        "type": "object", "additionalProperties": false, "required": ["code", "predicate"],
+        "properties": {
+            "code": code,
+            "message": {"type": "string", "minLength": 1, "maxLength": crate::predicate::MAX_MESSAGE_LENGTH},
+            "predicate": {"type": "object", "required": ["type"], "properties": {"type": {"type": "string"}}}
+        }
+    }});
     serde_json::json!({
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "title": "Attricat status control v1",
@@ -187,7 +196,8 @@ pub fn status_configuration_schema() -> Value {
                     "roles": {"type": "array", "minItems": 1, "maxItems": 20, "uniqueItems": true, "items": {
                         "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-z][a-z0-9_-]*$"
                     }},
-                    "separate_from": {"type": "array", "minItems": 1, "maxItems": 20, "uniqueItems": true, "items": code}
+                    "separate_from": {"type": "array", "minItems": 1, "maxItems": 20, "uniqueItems": true, "items": code},
+                    "conditions": conditions
                 }
             }}
         }
@@ -243,6 +253,7 @@ pub fn validate_status_definition(schema: &Value) -> Result<(), String> {
             if !pairs.insert((edge["from"].to_string(), edge["to"].to_string())) {
                 return Err("status transitions must declare each from/to pair once".into());
             }
+            edge_conditions(edge)?;
         }
         let edge_codes: HashSet<_> = edges
             .iter()
@@ -281,6 +292,61 @@ pub fn validate_status_definition(schema: &Value) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// One declared edge with its optional conditions.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TransitionEdge {
+    pub from: Option<String>,
+    pub to: Option<String>,
+    pub conditions: Vec<Check>,
+}
+
+fn edge_conditions(edge: &Value) -> Result<Vec<Check>, String> {
+    let Some(conditions) = edge.get("conditions") else {
+        return Ok(Vec::new());
+    };
+    let conditions: Vec<Check> = serde_json::from_value(conditions.clone())
+        .map_err(|error| format!("invalid status transition conditions: {error}"))?;
+    validate_checks(
+        &conditions,
+        None,
+        Usage::Enforced,
+        MAX_TRANSITION_CONDITIONS,
+    )
+    .map_err(|message| format!("invalid status transition conditions: {message}"))?;
+    Ok(conditions)
+}
+
+/// Declared transition edges, or `None` when transitions are unrestricted.
+pub fn transition_edges(schema: &Value) -> Option<Vec<TransitionEdge>> {
+    let edges = schema.get(STATUS_KEY)?.get("transitions")?.as_array()?;
+    Some(
+        edges
+            .iter()
+            .map(|edge| TransitionEdge {
+                from: edge["from"].as_str().map(str::to_owned),
+                to: edge["to"].as_str().map(str::to_owned),
+                conditions: edge_conditions(edge).unwrap_or_default(),
+            })
+            .collect(),
+    )
+}
+
+/// Conditions of the edge taken from `before` to `after`. Unchanged values
+/// and unrestricted graphs have none.
+pub fn transition_conditions(schema: &Value, before: &Value, after: &Value) -> Vec<Check> {
+    if before == after {
+        return Vec::new();
+    }
+    transition_edges(schema)
+        .unwrap_or_default()
+        .into_iter()
+        .find(|edge| {
+            edge.from.as_deref() == before.as_str() && edge.to.as_deref() == after.as_str()
+        })
+        .map(|edge| edge.conditions)
+        .unwrap_or_default()
 }
 
 /// The `(code, label)` pairs of a status annotation, in option order. Labels
@@ -463,6 +529,35 @@ mod tests {
         ] {
             assert!(validate_status_definition(&s).is_err(), "{name}");
         }
+    }
+
+    #[test]
+    fn edges_carry_strict_conditions() {
+        let mut s = schema();
+        s[STATUS_KEY]["transitions"][2]["conditions"] = json!([
+            {"code": "has-owner", "message": "Assign an owner", "predicate": {"type": "required", "attribute_code": "owner"}}
+        ]);
+        assert!(validate_status_definition(&s).is_ok());
+        assert_eq!(
+            transition_conditions(&s, &json!("live"), &json!("done"))[0].code,
+            "has-owner"
+        );
+        assert!(transition_conditions(&s, &json!("draft"), &json!("live")).is_empty());
+        assert!(transition_conditions(&s, &json!("done"), &json!("done")).is_empty());
+        for invalid in [
+            json!([{"code": "x", "predicate": {"type": "unique", "attribute_codes": ["a"]}}]),
+            json!([{"code": "x", "predicate": {"type": "required"}}]),
+            json!([{"code": "x", "when": 1, "predicate": {"type": "required", "attribute_code": "a"}}]),
+        ] {
+            s[STATUS_KEY]["transitions"][2]["conditions"] = invalid.clone();
+            assert!(validate_status_definition(&s).is_err(), "{invalid}");
+        }
+        let mut duplicate = schema();
+        duplicate[STATUS_KEY]["transitions"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({"from": "live", "to": "done", "conditions": []}));
+        assert!(validate_status_definition(&duplicate).is_err());
     }
 
     #[test]

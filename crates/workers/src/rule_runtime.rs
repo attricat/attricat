@@ -10,8 +10,7 @@ use crate::{
     task_worker::{TaskHandler, TaskHandlerError, TaskOutcome},
 };
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
-use serde_json::{Value, json};
+use chrono::Utc;
 use std::{sync::Arc, time::Duration};
 use tokio::sync::watch;
 use uuid::Uuid;
@@ -160,8 +159,8 @@ async fn evaluate_page(
         return Ok((Vec::new(), run.candidate_cursor, true));
     }
     let pool = repo.pool_for_runtime();
-    let candidates: Vec<Candidate> = sqlx::query_as(
-        "SELECT id,system_tags FROM entities WHERE workspace_id=$1 AND blueprint_id=$2 AND blueprint_version=$3 AND deleted_at IS NULL AND ($4::uuid IS NULL OR id>$4) AND ($5::uuid IS NULL OR id=$5) ORDER BY id LIMIT $6",
+    let candidates: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM entities WHERE workspace_id=$1 AND blueprint_id=$2 AND blueprint_version=$3 AND deleted_at IS NULL AND ($4::uuid IS NULL OR id>$4) AND ($5::uuid IS NULL OR id=$5) ORDER BY id LIMIT $6",
     )
     .bind(repo.workspace_id_for_runtime())
     .bind(run.blueprint_id)
@@ -171,85 +170,15 @@ async fn evaluate_page(
     .bind(PAGE_SIZE.min(remaining))
     .fetch_all(&pool)
     .await?;
-    let mut results = Vec::with_capacity(candidates.len());
-    for candidate in &candidates {
-        let (failed, message, evidence) = predicate_failure(
-            &pool,
-            repo.workspace_id_for_runtime(),
-            run,
-            candidate,
-            &compiled.predicate,
-        )
+    let results = repo
+        .evaluate_rule_candidates(run.context_id, &compiled, &candidates)
         .await?;
-        results.push(RuleCandidateResult {
-            entity_id: candidate.id,
-            failed,
-            message,
-            evidence,
-            evaluation_key: compiled.raw_definition_hash.clone(),
-            severity: format!("{:?}", compiled.severity).to_lowercase(),
-        });
-    }
     let page_size = PAGE_SIZE.min(remaining) as usize;
     let done = candidates.len() < page_size
         || run.scope_entity_id.is_some()
         || run.candidates_evaluated + candidates.len() as i64
             >= catalog_rules::MAX_CANDIDATES_PER_RUN as i64;
-    Ok((
-        results,
-        candidates.last().map(|candidate| candidate.id),
-        done,
-    ))
-}
-
-#[derive(sqlx::FromRow)]
-struct Candidate {
-    id: Uuid,
-    system_tags: Vec<String>,
-}
-
-async fn predicate_failure(
-    pool: &sqlx::PgPool,
-    ws: Uuid,
-    run: &ClaimedRuleRun,
-    candidate: &Candidate,
-    predicate: &catalog_rules::Predicate,
-) -> Result<(bool, String, Value), RepositoryError> {
-    match predicate {
-        catalog_rules::Predicate::HasTag { tag } => Ok((
-            !candidate.system_tags.iter().any(|item| item == tag),
-            format!("Entity is missing required system tag '{tag}'"),
-            json!({"tag":tag}),
-        )),
-        catalog_rules::Predicate::MissingTag { tag } => Ok((
-            candidate.system_tags.iter().any(|item| item == tag),
-            format!("Entity has prohibited system tag '{tag}'"),
-            json!({"tag":tag}),
-        )),
-        catalog_rules::Predicate::Required { attribute_code } => {
-            let present: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM attribute_values av JOIN attributes a ON a.id=av.attribute_id WHERE av.workspace_id=$1 AND av.entity_id=$2 AND a.code=$3 AND a.blueprint_id=$4 AND a.blueprint_version=$5 AND av.latest AND av.active AND av.context_id IS NOT DISTINCT FROM $6)")
-                .bind(ws).bind(candidate.id).bind(attribute_code).bind(run.blueprint_id).bind(run.blueprint_version).bind(run.context_id).fetch_one(pool).await?;
-            Ok((
-                !present,
-                format!("Required attribute '{attribute_code}' has no value"),
-                json!({"attribute_code":attribute_code,"context_id":run.context_id}),
-            ))
-        }
-        catalog_rules::Predicate::Stale {
-            attribute_code,
-            max_age_seconds,
-        } => {
-            let changed: Option<DateTime<Utc>> = sqlx::query_scalar("SELECT max(av.created_at) FROM attribute_values av JOIN attributes a ON a.id=av.attribute_id WHERE av.workspace_id=$1 AND av.entity_id=$2 AND a.code=$3 AND a.blueprint_id=$4 AND a.blueprint_version=$5 AND av.latest AND av.active AND av.context_id IS NOT DISTINCT FROM $6")
-                .bind(ws).bind(candidate.id).bind(attribute_code).bind(run.blueprint_id).bind(run.blueprint_version).bind(run.context_id).fetch_one(pool).await?;
-            let stale = changed
-                .is_none_or(|time| (Utc::now() - time).num_seconds() > *max_age_seconds as i64);
-            Ok((
-                stale,
-                format!("Attribute '{attribute_code}' is older than {max_age_seconds} seconds"),
-                json!({"attribute_code":attribute_code,"last_changed_at":changed,"max_age_seconds":max_age_seconds}),
-            ))
-        }
-    }
+    Ok((results, candidates.last().copied(), done))
 }
 
 /// The only rule schedule coordinator. It never claims rule runs; task-worker

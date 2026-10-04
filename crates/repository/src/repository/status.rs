@@ -31,13 +31,23 @@ struct ContextNode {
 }
 
 /// One effective status change in one context.
-struct StatusChange {
-    attribute_code: String,
-    schema: Value,
-    context_id: Uuid,
-    context_code: String,
-    before: Value,
-    after: Value,
+pub(super) struct StatusChange {
+    pub(super) attribute_code: String,
+    pub(super) schema: Value,
+    pub(super) context_id: Uuid,
+    pub(super) context_code: String,
+    pub(super) before: Value,
+    pub(super) after: Value,
+}
+
+impl StatusChange {
+    pub(super) fn transition(&self) -> super::checks::CheckTransition {
+        super::checks::CheckTransition {
+            attribute_code: self.attribute_code.clone(),
+            from: self.before.as_str().map(str::to_owned),
+            to: self.after.as_str().map(str::to_owned),
+        }
+    }
 }
 
 /// Whether the current principal may take one declared edge, for the status control.
@@ -48,10 +58,13 @@ pub struct StatusTransitionAccess {
     pub to: Option<String>,
     pub code: Option<String>,
     pub allowed: bool,
-    /// Stable error code the write would return: `status_transition_forbidden`
-    /// or `status_separation_of_duties`.
+    /// Stable error code the write would return: `status_transition_forbidden`,
+    /// `status_separation_of_duties` or `transition_conditions_unmet`.
     pub denial_code: Option<&'static str>,
     pub denial_reason: Option<String>,
+    /// Transition conditions and enforcing rules that the saved state plus
+    /// this destination would not satisfy.
+    pub unmet: Vec<super::CheckViolation>,
 }
 
 /// One recorded approval decision.
@@ -323,6 +336,21 @@ impl CatalogRepository {
             }
         }
         Ok(changes)
+    }
+
+    /// Effective status changes of the transaction, for declarative checks.
+    pub(super) async fn effective_status_changes(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        entity: &Entity,
+    ) -> Result<Vec<StatusChange>, RepositoryError> {
+        let attributes = Self::status_attributes(transaction, entity).await?;
+        if attributes.is_empty() {
+            return Ok(Vec::new());
+        }
+        let contexts = self.status_contexts(transaction).await?;
+        self.status_changes(transaction, entity, &attributes, &contexts)
+            .await
     }
 
     /// Run once on the final transaction state, using the locked entity's saved
@@ -1063,20 +1091,35 @@ impl CatalogRepository {
                         Some(actor),
                     )
                     .await?;
-                let denial_code = denial.as_ref().map(|error| match error {
+                let mut denial_code = denial.as_ref().map(|error| match error {
                     RepositoryError::StatusSeparationOfDuties { .. } => {
                         "status_separation_of_duties"
                     }
                     _ => "status_transition_forbidden",
                 });
+                let mut denial_reason = denial.map(|error| error.to_string());
+                let unmet = self
+                    .transition_unmet(&mut transaction, &entity, &change)
+                    .await?;
+                if denial_code.is_none() && !unmet.is_empty() {
+                    denial_code = Some("transition_conditions_unmet");
+                    denial_reason = Some(
+                        unmet
+                            .iter()
+                            .map(|violation| violation.message.clone())
+                            .collect::<Vec<_>>()
+                            .join("; "),
+                    );
+                }
                 access.push(StatusTransitionAccess {
                     attribute_code: code.clone(),
                     from: current.as_str().map(str::to_owned),
                     to: change.after.as_str().map(str::to_owned),
                     code: requirements.code.clone(),
-                    allowed: denial.is_none(),
+                    allowed: denial_code.is_none(),
                     denial_code,
-                    denial_reason: denial.map(|error| error.to_string()),
+                    denial_reason,
+                    unmet,
                 });
             }
         }

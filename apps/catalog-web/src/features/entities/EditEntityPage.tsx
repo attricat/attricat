@@ -21,6 +21,7 @@ import { useReusableAttributeAttachment } from './components/useReusableAttribut
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { valuesForForm } from './entityForm';
+import { checkViolationError } from './checkViolations';
 import { statusParentContexts } from './status';
 import { entityQueryKeys } from './queryKeys';
 import { invalidateEntity } from './invalidateEntity';
@@ -85,7 +86,12 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
       ? currentBlueprint.data.blueprint.version >
         (entityForm.data.entity.blueprint_version ?? Infinity)
       : undefined;
-  const error = entityForm.error ?? update.error ?? reusable.error;
+  // Check violations are shown on the form fields they involve.
+  const updateChecksFailed = Boolean(checkViolationError(update.error));
+  const error =
+    entityForm.error ??
+    (updateChecksFailed ? null : update.error) ??
+    reusable.error;
   // A cached snapshot is useful for headings, but must not become the editor's
   // concurrency baseline before the opening refresh has completed.
   const editorReady = entityForm.isFetchedAfterMount;
@@ -190,6 +196,7 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
               />
             }
             entityId={entityId}
+            error={updateChecksFailed ? update.error : null}
             defaultContextId={defaultContextId}
             formId={EDIT_ENTITY_FORM_ID}
             footerActions={

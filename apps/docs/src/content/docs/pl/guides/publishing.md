@@ -35,6 +35,25 @@ acli entity publication publish-all <entity-id>
 acli blueprint publish-entities-all <blueprint-id> <version>
 ```
 
+## Wymagaj kontroli przed publikacją
+
+Kanał może odrzucać encje, które nie są gotowe, na przykład portal dostawców, do którego nigdy nie może trafić produkt bez SKU lub z wygasłym certyfikatem. W **Zarządzanie → Eksporty** ustaw **Kontrole publikacji** kanału: **Wymagane reguły** i **Wymagaj poprawnej encji**. Przez API:
+
+```http
+PUT /publication-channels/{context_id}
+{"enabled": true, "required_rule_codes": ["has-sku", "certificate-valid"], "require_valid_entity": true}
+```
+
+- `required_rule_codes` zawiera do 32 kodów [reguł jakości danych](/pl/builders/rules/). Wymieniona reguła dotyczy encji, gdy reguła o tym kodzie jest włączona dla wersji schematu encji i nie jest powiązana z innym kontekstem. Reguły, które nie mają zastosowania, są pomijane. Działa każdy predykat, także `unique` i `stale`.
+- `require_valid_entity` ponownie sprawdza schemat encji i jego [kontrole](/pl/builders/validation/#porównuj-atrybuty-za-pomocą-kontroli) w kontekście kanału. Wychwytuje to problemy, które pojawiają się bez edycji, np. kontrolę `relative_date` daty wygaśnięcia.
+- Oba pola są opcjonalne. Pominięcie pola zachowuje jego bieżące ustawienie. `GET /publication-channels` je pokazuje.
+
+Kontrole są oceniane na bieżąco, w kontekście kanału, w chwili publikacji. Nie korzystają z zapisanych ustaleń, więc poprawka liczy się od razu.
+
+Jeśli kontrola nie przejdzie, nic nie zostaje opublikowane, a żądanie zwraca `422 publication_checks_failed`. `error.details.context` to kod kanału, a `error.details.violations` wymienia reguły i kontrole, które nie przeszły, w tym samym formacie co [błędy walidacji](/pl/builders/validation/#błędy-i-ich-naprawa). Dotyczy to działań **Opublikuj**, **Opublikuj we wszystkich kanałach** oraz publikowania wszystkich encji schematu. Przy publikacji zbiorczej jedna encja, która nie przejdzie kontroli, powoduje odrzucenie całego żądania, a `evidence.entity_id` każdego naruszenia wskazuje encję.
+
+Sekcja **Publikacja** na stronie encji oznacza etykietą **Niegotowe** kanały, w których encji nie można jeszcze opublikować. Aby sprawdzić gotowość przez API bez publikowania, wywołaj `GET /v1/entities/{id}/publications/readiness`. Zwraca każdy włączony kanał z polami `ready` i `violations`. Popraw wskazane atrybuty lub powiązane rekordy, o których mówią komunikaty, i opublikuj ponownie.
+
 ## Co cofa publikację
 
 Domyślnie każda zmiana encji cofa wszystkie jej publikacje w kanałach: zmiany wartości, relacji, plików, metadanych systemowych i aktualizacje schematu.

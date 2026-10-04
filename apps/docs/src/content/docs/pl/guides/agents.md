@@ -79,7 +79,7 @@ Schematy mogą ograniczać, kto wykonuje przejście statusu, blokować sfinalizo
 
 ## Gdzie widać zmiany
 
-Zmiany wprowadzone przez agenta przechodzą tę samą walidację i audyt co Twoje edycje. Na stronie **Zmiany** encji oraz w **Zarządzanie → Aktywność / dziennik audytu** widać uruchomienie agenta, narzędzie, decyzję o zatwierdzeniu i osobę, która zatwierdziła zmianę.
+Zmiany wprowadzone przez agenta przechodzą tę samą walidację i audyt co Twoje edycje. Jeśli zatwierdzoną zmianę odrzuci kontrola (`entity_check_failed`), warunek przejścia statusu (`transition_conditions_unmet`), egzekwowana reguła (`rule_violation`) lub kontrole wymagane przez kanał (`publication_checks_failed`), nic nie zostaje zapisane. Agent wyjaśnia, które kontrole nie przeszły, i proponuje poprawioną zmianę, która ponownie wymaga Twojego zatwierdzenia. Aby wyjaśnić, dlaczego opcja statusu jest zablokowana lub encji nie można jeszcze opublikować, agent może odczytać przejścia statusu i gotowość encji do publikacji. Na stronie **Zmiany** encji oraz w **Zarządzanie → Aktywność / dziennik audytu** widać uruchomienie agenta, narzędzie, decyzję o zatwierdzeniu i osobę, która zatwierdziła zmianę.
 
 ## Dane wysyłane do dostawcy
 

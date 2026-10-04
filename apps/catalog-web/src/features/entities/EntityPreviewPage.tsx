@@ -19,6 +19,7 @@ import { DeleteEntityDialog } from './components/DeleteEntityDialog';
 import { RelationshipPickerActionBar } from './components/RelationshipPickerActionBar';
 import { RecordControlsPanel } from './components/RecordControlsPanel';
 import { useEntityPublications } from './components/useEntityPublications';
+import { ApiErrorAlert } from './components/CheckViolationsAlert';
 import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
 import {
   duplicateEntity,
@@ -65,7 +66,8 @@ export const EntityPreviewPage = ({
     queryKey: authQueryKeys.session(),
     queryFn: currentSession,
   });
-  const publications = useEntityPublications(entityId, contextId);
+  const canPublish = session.data?.capabilities?.entities_publish === true;
+  const publications = useEntityPublications(entityId, contextId, canPublish);
   const duplicate = useMutation({
     mutationFn: () => duplicateEntity(entityId),
     onSuccess: (entity) => {
@@ -146,11 +148,7 @@ export const EntityPreviewPage = ({
           view={blueprint.data.blueprint.views.detail}
         />
       )}
-      {actionError && (
-        <Alert severity="error" sx={{ mt: 3 }}>
-          {actionError.message}
-        </Alert>
-      )}
+      {actionError && <ApiErrorAlert error={actionError} sx={{ mt: 3 }} />}
       {blueprint.data && resolved.data && (
         <ExtensionOutlet
           context={{
@@ -188,7 +186,9 @@ export const EntityPreviewPage = ({
         }
         onDelete={() => setDeleteOpen(true)}
         publication={publications.publication}
-        canPublish={session.data?.capabilities?.entities_publish === true}
+        canPublish={canPublish}
+        readiness={publications.readiness}
+        notReadyChannels={publications.notReadyChannels}
         onPublish={publications.publish}
         onPublishAll={publications.publishAll}
         onUnpublish={publications.unpublish}

@@ -25,7 +25,145 @@ type = "required"
 attribute_code = "title"
 ```
 
-The initial predicates are `required`, `stale`, `has_tag`, and `missing_tag`. Schedules are six-field UTC cron expressions. Event triggers accept only catalog entity and value event types; post-import is a reserved declarative trigger shape. Rules can be attached to a published blueprint revision and optionally to a context.
+Schedules are six-field UTC cron expressions. Event triggers accept only catalog entity and value event types; post-import is a reserved declarative trigger shape. Rules can be attached to a published blueprint revision and optionally to a context.
+
+## Predicates
+
+Rules share one declarative predicate engine with entity-schema checks
+(`x-attricat-checks`), status transition conditions and publication channel
+gates; see [JSON Schema Validation](json-schema-validation.md#declarative-checks).
+A predicate *holds* when the data is acceptable; a rule reports a finding when
+it does not. Predicates are tagged by `type`, unknown fields are rejected, and
+the predicate is type-checked against the blueprint revision's attributes when
+the rule is created or the blueprint is compiled (`422 invalid_rule_definition`
+or `invalid_blueprint_definition`).
+
+| `type` | Fields | Holds when |
+| --- | --- | --- |
+| `required` | `attribute_code` | The attribute has a value; a relationship has at least one target. |
+| `stale` | `attribute_code`, `max_age_seconds` (1–31536000) | The current value changed within the age limit. Rules only. |
+| `has_tag` / `missing_tag` | `tag` | The entity has / does not have the system tag. |
+| `compare` | `attribute_code`, `op`, exactly one of `other_attribute_code`, `subject_attribute_code`, `value` | The comparison is true. |
+| `one_of` | `attribute_code`, `values` (1–100) | The value is one of the listed values, such as status codes. Not for relationships or files. |
+| `relative_date` | `attribute_code`, `op` (`lt`, `lte`, `gt`, `gte`), `offset_days` (−36500–36500, default 0) | A date/datetime compares with now + `offset_days`. |
+| `unique` | `attribute_codes` (1–4) | No other live entity of the same blueprint revision has the same values. String, number, integer, boolean, date and datetime only. Rules only. |
+| `linked` | `relationship_code`, `quantifier` (`all` default, `any`, `none`), `predicate` | `all`: every linked record satisfies the predicate (holds with no links); `any`: at least one does; `none`: none does. |
+| `referenced_by` | `blueprint_code`, `relationship_code`, optional `predicate`, `min` and/or `max` (≤ 1000) | The number of `blueprint_code` records whose `relationship_code` targets this record and that match `predicate` is within the bounds. |
+| `acyclic` | `relationship_code` | Following the relationship never returns to the record. Rules only. |
+| `all_of` / `any_of` | `predicates` (1–16) | Every / at least one nested predicate holds. |
+
+- `compare` operators are `eq`, `ne`, `lt`, `lte`, `gt`, `gte` and `disjoint`.
+  Ordering applies only to `number`, `integer`, `date` and `datetime`; strings
+  and booleans support `eq`/`ne`. Relationships compare target sets: `eq`/`ne`
+  (same set) and `disjoint` (no common target). Files cannot be compared, and
+  both sides must have compatible types. Write dates as `"2026-01-31"` strings.
+- A comparison with a missing operand holds. Combine it with `required` when a
+  value must exist.
+- `subject_attribute_code` is available only inside `linked` or
+  `referenced_by` and names an attribute of the record being checked.
+- `linked` and `referenced_by` follow one hop. Their nested predicate cannot use
+  `linked`, `referenced_by`, `unique`, `acyclic` or `stale`. Attributes not
+  declared on a linked record are missing. More than 200 linked records per
+  relationship, or more than 1000 referencing records, fail the predicate.
+  `acyclic` stops after 1000 visited entities. `referenced_by` counts only
+  live records in the same context.
+- Predicates nest at most 4 deep with at most 32 parts.
+- `stale`, `unique` and `acyclic` are *rules only*: they are not safe for
+  synchronous evaluation and cannot be used by enforcing rules, entity checks or
+  transition conditions.
+
+Expiry, with a schedule trigger so findings open as dates pass:
+
+```toml
+[rules.predicate]
+type = "relative_date"
+attribute_code = "certificate_expires_on"
+op = "gt"
+offset_days = 30
+```
+
+No open corrective actions reference this nonconformance:
+
+```toml
+[rules.predicate]
+type = "referenced_by"
+blueprint_code = "corrective_action"
+relationship_code = "nonconformance"
+max = 0
+predicate = { type = "one_of", attribute_code = "status", values = ["open", "in_progress"] }
+```
+
+## Contexts
+
+A rule without a context evaluates the entity in every context and fails if
+any context fails; the finding evidence lists the failing context codes as
+`contexts`. A rule with a context evaluates only that context, with values
+resolved through its parent chain.
+
+## Dependent records
+
+Event-triggered rules whose predicate uses `linked` or `referenced_by` also
+re-run for dependents when a linked or referencing entity changes: entities of
+the rule's blueprint revision that link to the changed entity, and the entities
+a changed record of the `referenced_by` blueprint points to. At most 100
+dependents run per rule and event. Changing a linked record is never rejected
+because of another record's checks; the dependent receives a finding, and an
+entity check or enforcing rule blocks the dependent's next save.
+
+## Enforcement
+
+By default a rule only reports findings. `[rules.enforcement]` also rejects
+writes while the rule is violated:
+
+```toml
+[rules.enforcement]
+on_save = true                       # reject any write that leaves the entity violating the rule
+
+[[rules.enforcement.transitions]]    # and/or guard status transitions
+attribute_code = "status"
+from = "review"                      # optional; omit to guard every change into `to`
+to = "released"
+```
+
+- Enforcement requires `error` or `critical` severity, `on_save` or at least one
+  transition (at most 16), and a synchronous-safe predicate. Blueprint
+  compilation checks that each transition attribute is a status attribute and
+  that `from`/`to` are its codes.
+- Enforcing rules run after entity checks and transition conditions on every
+  write path, on the transaction's final state. Transition guards evaluate the
+  state the transition produces. A context-scoped rule enforces only in its
+  context; otherwise every context is checked.
+- A violation returns `422 rule_violation` with `error.details.violations`
+  (`source = "rule"`, `severity`, and `transition` for a guarded transition).
+- An entity that already violates an `on_save` rule cannot be saved until the
+  same save fixes the violation.
+
+### Dry run before enabling
+
+Enabling an enforcing revision whose blueprint revision has live entities needs
+a completed full dry run (no `entity_id`) of that exact revision:
+
+1. Publish the revision.
+2. `POST /rules/{rule_id}/run-now` with
+   `{"dry_run": true, "idempotency_key": "...", "version": 2}`. Dry runs may
+   target a published revision that is not enabled.
+3. `POST /rules/{rule_id}/versions/2/enable`.
+
+Without that run, enabling returns `409 rule_dry_run_required`. If the latest
+completed dry run found violations, it returns
+`409 rule_has_existing_violations` with `error.details.existing_violations`
+(the count). Fix those entities and dry-run again, or enable with
+`{"accept_existing_violations": true}`; the violating entities then cannot be
+saved until fixed. Revisions without enforcement enable as before.
+
+## Publication channels
+
+A publication channel can require rules by code
+(`PUT /publication-channels/{context_id}` with `required_rule_codes`). Required
+rules are the enabled rules of the entity's blueprint revision with that code,
+excluding rules scoped to another context; any predicate is allowed, including
+rules-only ones. They are evaluated live in the channel context when publishing
+and fail with `422 publication_checks_failed`. See [API](api.md#declarative-check-errors).
 
 ## Runtime guarantees
 
@@ -45,11 +183,15 @@ The initial predicates are `required`, `stale`, `has_tag`, and `missing_tag`. Sc
 - `GET|POST /rules`
 - `GET /rules/{rule_id}`
 - `POST /rules/{rule_id}/versions/{version}/publish`
-- `POST /rules/{rule_id}/versions/{version}/enable`
+- `POST /rules/{rule_id}/versions/{version}/enable`, with an optional body `{ "accept_existing_violations": true }` for enforcing revisions
 - `POST /rules/{rule_id}/disable`
-- `POST /rules/{rule_id}/run-now` with `{ "entity_id": "optional UUID", "dry_run": false, "idempotency_key": "..." }`
+- `POST /rules/{rule_id}/run-now` with `{ "entity_id": "optional UUID", "dry_run": false, "idempotency_key": "...", "version": 2 }`; `version` is optional. A normal run uses the enabled revision (`version`, if given, must match it). A dry run uses `version`, else the enabled revision, else the latest published revision.
 - `GET /rule-runs`, `POST /rule-runs/{run_id}/replay`, `GET /rule-findings?entity_id=...`
 - `POST /rule-findings/{finding_id}/acknowledge`
+
+Errors: `422 invalid_rule_definition`, `409 rule_dry_run_required`,
+`409 rule_has_existing_violations`. Writes rejected by an enforcing rule return
+`422 rule_violation`.
 
 ## Rules installed by solution packs
 

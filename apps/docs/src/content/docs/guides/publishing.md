@@ -35,6 +35,25 @@ acli entity publication publish-all <entity-id>
 acli blueprint publish-entities-all <blueprint-id> <version>
 ```
 
+## Require checks before publication
+
+A channel can refuse entities that are not ready, for example a supplier portal that must never receive a product without an SKU or with an expired certificate. In **Manage → Exports**, set the channel's **Publication checks**: **Required rules** and **Require a valid entity**. With the API:
+
+```http
+PUT /publication-channels/{context_id}
+{"enabled": true, "required_rule_codes": ["has-sku", "certificate-valid"], "require_valid_entity": true}
+```
+
+- `required_rule_codes` lists up to 32 [data quality rule](/builders/rules/) codes. A listed rule applies to an entity when a rule with that code is enabled for the entity's blueprint revision and is not attached to a different context. Rules that do not apply are skipped. Any predicate works, including `unique` and `stale`.
+- `require_valid_entity` re-checks the blueprint's entity schema and its [checks](/builders/validation/#compare-attributes-with-checks) in the channel context. This catches problems that appear without an edit, such as a `relative_date` check on an expiry date.
+- Both are optional. Leaving one out keeps its current setting. `GET /publication-channels` shows them.
+
+Checks are evaluated live, in the channel context, when someone publishes. They do not use stored findings, so a fix counts immediately.
+
+If a check fails, nothing is published and the request returns `422 publication_checks_failed`. `error.details.context` is the channel code, and `error.details.violations` lists the failing rules and checks in the same shape as [validation errors](/builders/validation/#errors-and-how-to-fix-them). This applies to **Publish**, **Publish to all channels**, and publishing all entities of a blueprint. In the bulk case, one failing entity rejects the whole request, and each violation's `evidence.entity_id` names the entity.
+
+The entity page's **Publication** section marks channels the entity is **Not ready** for. To check readiness from the API without publishing, call `GET /v1/entities/{id}/publications/readiness`. It returns each enabled channel with `ready` and its `violations`. Fix the listed attributes, or the linked records the messages name, then publish again.
+
 ## What withdraws a publication
 
 By default, any change to an entity withdraws all of its channel publications: values, relationships, files, system metadata, and blueprint upgrades.

@@ -27,9 +27,25 @@ The form tells you where each value comes from:
 
 Saving validates the whole entity in every context. If a change would make any context invalid, nothing is saved and the form points to the problem. See [Validation](/builders/validation/).
 
+The blueprint can also have checks, such as "valid until must not be before valid from" or "every facility belongs to this supplier", and your workspace can enforce data quality rules. When one fails, the message names the check or rule and says what is wrong. Change the fields it mentions, in the contexts it lists, and save again. If it points to a linked record, such as a facility that is not approved, fix or replace that record first.
+
 ### Unsaved drafts
 
 The edit form keeps your unsaved changes for the browser tab. If you reload or come back, Attricat offers **Restore draft** or **Discard draft**. A draft is cleared once you save. Drafts never contain passwords or files.
+
+## Change a status
+
+A status field, such as *Draft*, *In review*, or *Released*, is a select. A blueprint can limit which statuses can follow the current one and can set conditions for a change. You might not be able to choose or save a status for one of these reasons:
+
+- **The option is disabled.** The blueprint does not allow that change from the current status. For example, a released document may have to go back to *Draft* before it can be reviewed again. Move through the allowed statuses instead.
+- **The option is disabled and shows *Blocked*** with the unmet conditions. The change is allowed, but the saved entity does not meet its conditions yet. Fix what they ask for and save, then choose the status.
+- **Saving is rejected** with a message such as *status transition conditions are not met: Set an approver before release (approver-set)*. The change is allowed, but the values you are saving do not meet its conditions. A similar message starting *enforcing rules are violated* means a data quality rule guards the change. Nothing is saved.
+
+To recover, read the listed conditions and fix what they ask for. Missing values can go in the same save as the status change: fill in the approver and choose *Released* together. Some conditions depend on other records, for example "every corrective action is closed"; update those records first, then change the status again.
+
+Conditions are checked in every context where the status changes. If the status is inherited, a change in the default context must satisfy the conditions in every child context too.
+
+To see which statuses are available and why others are blocked, without trying to save, call `GET /v1/entities/{id}/status-transitions` with an optional `context_id`. Each transition shows `allowed`, a `denial_reason` when blocked, and the `unmet` conditions.
 
 ## Relationships
 

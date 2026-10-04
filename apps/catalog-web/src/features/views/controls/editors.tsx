@@ -107,7 +107,9 @@ export const MarkdownFieldEditor = ({
 /**
  * Single select for a status attribute. Destinations the transition graph
  * forbids from the saved `baseline` are disabled; an empty selection inherits
- * `inheritedValue` (or clears the status when nothing is inherited).
+ * `inheritedValue` (or clears the status when nothing is inherited). For a
+ * saved entity, `destinations` from the API also disables destinations whose
+ * transition conditions are unmet and explains why.
  */
 export const StatusEditor = ({
   attribute,
@@ -197,9 +199,15 @@ export const StatusEditor = ({
               <ListItemText
                 primary={statusOptionLabel(option)}
                 secondary={
-                  denied.denial_code === 'status_separation_of_duties'
-                    ? t('entities.statusSeparationOfDuties')
-                    : t('entities.statusTransitionNotPermitted')
+                  denied.denial_code === 'transition_conditions_unmet'
+                    ? t('entities.statusConditionsUnmet', {
+                        conditions: (denied.unmet ?? [])
+                          .map((violation) => violation.message)
+                          .join(' '),
+                      })
+                    : denied.denial_code === 'status_separation_of_duties'
+                      ? t('entities.statusSeparationOfDuties')
+                      : t('entities.statusTransitionNotPermitted')
                 }
               />
             ) : (

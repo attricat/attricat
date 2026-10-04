@@ -34,7 +34,7 @@ entity_schema = '''{ "type": "object", "required": ["title"] }'''
 | `attributes` | array of tables | Yes | At least one attribute. See [Attributes](#attributes). |
 | `includes` | array of tables | No | Mixins this blueprint pulls attributes from. See [Includes](#includes). |
 | `views` | table | Entity: yes | Layouts for the web app. Entity blueprints must define `views.dropdown_option`. See [Views](#views). |
-| `entity_schema` | string (JSON) | No | JSON Schema for the whole entity. Entity blueprints only. See [Validation](/builders/validation/). |
+| `entity_schema` | string (JSON) | No | JSON Schema for the whole entity, optionally with [`x-attricat-checks`](#entity-checks). Entity blueprints only. See [Validation](/builders/validation/). |
 | `publication` | table | No | Publication reapproval policy. See [Publication](#publication). |
 | `rules` | array of tables | No | Data-quality rules owned by this blueprint. See [Rules](/builders/rules/). |
 | `unique_keys` | array of tables | No | Business keys whose values must be unique. Entity blueprints only. See [Unique keys](#unique-keys). |
@@ -65,7 +65,7 @@ value_type = "string"
 | `readonly` | boolean | `false` | Shows the field in the web app but prevents editing it there. The API, CLI, agents, workflows, and extensions can still write it. Use it for values owned by an integration. |
 | `tags` | array of strings | `[]` | Free-form metadata. Must be unique and non-empty. Some tags hide the attribute in the web app; see [Visibility tags](#visibility-tags). |
 | `default_value` | matches the type | Unset | Value stored in the default context when an entity is created without one. Scalar types only. |
-| `value_schema` | string (JSON) | Unset | JSON Schema for one value. Scalar types only. See [Validation](/builders/validation/). |
+| `value_schema` | string (JSON) | Unset | JSON Schema for one value. Scalar types only. A `string` attribute's schema can carry an `x-attricat-status` annotation with [transition conditions](#transition-conditions). See [Validation](/builders/validation/). |
 
 ### Value types
 
@@ -383,7 +383,105 @@ This does not grant any permission. See [Publishing](/guides/publishing/).
 
 ## Rules
 
-`[[rules]]` tables use the rule syntax described in [Rules](/builders/rules/), without `format_version`. Rule codes must be unique within the blueprint, and `required` and `stale` predicates must name an attribute of the blueprint.
+`[[rules]]` tables use the rule syntax described in [Rules](/builders/rules/), without `format_version`. Rule codes must be unique within the blueprint, and their [predicates](#predicates) are type-checked against the blueprint's attributes.
+
+```toml
+[[rules]]
+code = "released-documents-approved"
+name = "Released documents have an approver"
+severity = "error"
+triggers = [{ type = "event", event_type = "entity.updated.v1" }]
+predicate = { type = "required", attribute_code = "approved_by" }
+
+[rules.enforcement]
+on_save = false
+
+[[rules.enforcement.transitions]]
+attribute_code = "status"
+from = "review"
+to = "released"
+```
+
+| Key | Type | Default | Description |
+| --- | --- | --- | --- |
+| `enforcement.on_save` | boolean | `false` | Reject every write that leaves the entity violating the rule. |
+| `enforcement.transitions` | array of tables | `[]` | Up to 16 guarded status changes, each with `attribute_code`, optional `from`, and `to`. |
+
+An `enforcement` table needs `on_save = true` or at least one transition, `severity` `error` or `critical`, and a predicate without `stale`, `unique`, or `acyclic`. Each transition's `attribute_code` must be a status attribute, and `from` and `to` must be codes of its `enum`. Violations return `422 rule_violation`. See [Enforce a rule](/builders/rules/#enforce-a-rule).
+
+## Predicates
+
+Rules, entity checks, transition conditions, and publication channel checks share one predicate language. A predicate is a table (in TOML) or object (in JSON) tagged by `type`. It **holds** when the data is acceptable. Unknown keys are rejected.
+
+| `type` | Keys | Holds when |
+| --- | --- | --- |
+| `required` | `attribute_code` | The attribute has a value. A relationship needs at least one target. |
+| `stale` | `attribute_code`, `max_age_seconds` (1 to 31536000) | The value changed within `max_age_seconds`. Reporting rules only. |
+| `has_tag` | `tag` | The entity has the system tag. |
+| `missing_tag` | `tag` | The entity does not have the system tag. |
+| `compare` | `attribute_code`, `op`, and exactly one of `other_attribute_code`, `subject_attribute_code`, or `value` | The comparison is true. |
+| `one_of` | `attribute_code`, `values` (1 to 100) | The value is one of `values`. Not for relationships or files. |
+| `relative_date` | `attribute_code`, `op` (`lt`, `lte`, `gt`, `gte`), `offset_days` (-36500 to 36500, default `0`) | The date or datetime compares true with the current time plus `offset_days`. |
+| `unique` | `attribute_codes` (1 to 4 string, number, integer, boolean, date, or datetime attributes) | No other live entity of the blueprint has the same values in the same context. Reporting rules only. |
+| `linked` | `relationship_code`, `quantifier` (`all`, `any`, `none`; default `all`), `predicate` | `all`: every linked record satisfies `predicate` (true with no links). `any`: at least one does. `none`: none does. |
+| `referenced_by` | `blueprint_code`, `relationship_code`, optional `predicate`, `min` and/or `max` (0 to 1000) | The number of `blueprint_code` records whose `relationship_code` targets this record, and that satisfy `predicate`, is between `min` and `max`. `max = 0` means "none". |
+| `acyclic` | `relationship_code` | Following the relationship never returns to the record. Reporting rules only. |
+| `all_of` | `predicates` (1 to 16) | Every nested predicate holds. |
+| `any_of` | `predicates` (1 to 16) | At least one nested predicate holds. |
+
+`compare` operators:
+
+| `op` | Applies to |
+| --- | --- |
+| `eq`, `ne` | Any type except files. Relationships are equal when they have the same set of targets. |
+| `lt`, `lte`, `gt`, `gte` | `number`, `integer`, `date`, `datetime`. |
+| `disjoint` | Two relationships with no target in common. |
+
+- Both sides must have compatible types: a number with a number or integer, a date with a date. A literal `value` must match the attribute's type; write dates and datetimes as strings, such as `"2026-01-31"`. A relationship can only be compared with another relationship.
+- A `compare` with a missing operand holds, and so do `one_of` and `relative_date` on an empty attribute. Combine them with `required` when a value must exist.
+- Inside `linked` and `referenced_by`, `attribute_code` and `other_attribute_code` refer to the other record, and `subject_attribute_code` refers to the record being checked. `subject_attribute_code` is rejected elsewhere.
+- `linked` and `referenced_by` follow one hop: their nested predicate cannot use `linked`, `referenced_by`, `unique`, `acyclic`, or `stale`.
+- A predicate nests at most 4 levels deep and has at most 32 parts.
+- At run time, `linked` fails above 200 linked records per relationship, `referenced_by` above 1,000 referring records, and `acyclic` when it cannot finish within 1,000 records.
+
+`stale`, `unique`, and `acyclic` are reporting-only because they cannot be checked within a single save. They are rejected in enforcing rules, entity checks, and transition conditions.
+
+### Entity checks
+
+`x-attricat-checks` is an array inside `entity_schema`:
+
+```toml
+entity_schema = '''
+{
+  "type": "object",
+  "x-attricat-checks": [
+    { "code": "valid-range", "message": "Valid until must not be before valid from",
+      "predicate": { "type": "compare", "attribute_code": "valid_until", "op": "gte", "other_attribute_code": "valid_from" } }
+  ]
+}
+'''
+```
+
+| Key | Type | Required | Description |
+| --- | --- | --- | --- |
+| `code` | code | Yes | Unique within the array. |
+| `message` | string | No | 1 to 500 characters. Replaces the generated message. |
+| `predicate` | object | Yes | A [predicate](#predicates), except `stale`, `unique`, and `acyclic`. |
+
+At most 32 checks. Failures return `422 entity_check_failed`. See [Validation](/builders/validation/#compare-attributes-with-checks).
+
+### Transition conditions
+
+An edge in an `x-attricat-status` annotation's `transitions` can carry `conditions`, an array of up to 16 checks with the same keys as [entity checks](#entity-checks):
+
+```json
+{ "from": "review", "to": "released", "conditions": [
+  { "code": "approver-set", "message": "Set an approver before release",
+    "predicate": { "type": "required", "attribute_code": "approved_by" } }
+] }
+```
+
+Each `from`/`to` pair may appear only once. Unmet conditions return `422 transition_conditions_unmet`. See [Conditions on transitions](/builders/validation/#conditions-on-transitions).
 
 ## Unique keys
 
@@ -455,6 +553,7 @@ A few compile-time rules that are easy to miss:
 - An entity blueprint without `views.dropdown_option` is rejected.
 - `entity_schema` on a mixin is rejected.
 - `entity_schema` may only name attributes the blueprint has in its top-level `required`, `properties`, `dependentRequired`, and `dependentSchemas`.
+- Predicates in `x-attricat-checks`, transition `conditions`, and `[[rules]]` must name attributes the blueprint has, with types that suit the predicate. An ordering comparison on a string, or a comparison of a date with a number, is rejected.
 - `target_blueprint`, `target_blueprints`, `acyclic`, and `tree` on a non-relationship attribute are rejected.
 - `unique_keys` on a mixin, a key naming an unknown, `json`, file, or many-target relationship attribute, or a key listing an attribute twice is rejected.
 - `from` must be `alias.code` where `code` matches the attribute's own code.

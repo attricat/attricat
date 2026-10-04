@@ -137,6 +137,8 @@ impl CatalogRepository {
         if !valid_blueprint {
             return Err(RepositoryError::BlueprintNotPublished);
         }
+        Self::validate_rule_attributes(tx, &compiled, input.blueprint_id, input.blueprint_version)
+            .await?;
         if let Some(context_id) = input.context_id {
             let exists: bool = sqlx::query_scalar(
                 "SELECT EXISTS(SELECT 1 FROM attribute_contexts WHERE id=$1 AND workspace_id=$2)",
@@ -195,6 +197,7 @@ impl CatalogRepository {
                 "rule code, blueprint revision, and context cannot change across revisions".into(),
             ));
         }
+        Self::validate_rule_attributes(&mut tx, &compiled, blueprint_id, blueprint_version).await?;
         let plan = serde_json::to_value(&compiled)
             .map_err(|e| RepositoryError::InvalidRuleDefinition(e.to_string()))?;
         sqlx::query("INSERT INTO rules(id,workspace_id,blueprint_id,blueprint_version,context_id,code,name,version,definition,definition_hash,compiled_plan) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)").bind(id).bind(ws).bind(blueprint_id).bind(blueprint_version).bind(context_id).bind(&compiled.code).bind(&compiled.name).bind(version+1).bind(input.definition).bind(&compiled.raw_definition_hash).bind(plan).execute(&mut *tx).await?;
@@ -234,8 +237,63 @@ impl CatalogRepository {
         if sqlx::query("UPDATE rules SET status='published',published_at=COALESCE(published_at,now()) WHERE workspace_id=$1 AND id=$2 AND version=$3").bind(ws).bind(id).bind(version).execute(&mut **tx).await?.rows_affected()==0{return Err(RepositoryError::NotFound("rule revision"));}
         Ok(())
     }
+    /// Type-checks a standalone rule against its blueprint revision's attributes.
+    async fn validate_rule_attributes(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        compiled: &catalog_rules::CompiledRule,
+        blueprint_id: Uuid,
+        blueprint_version: i64,
+    ) -> Result<(), RepositoryError> {
+        let types: std::collections::HashMap<String, String> = sqlx::query_as(
+            "SELECT code, value_type FROM attributes WHERE blueprint_id=$1 AND blueprint_version=$2 AND deleted_at IS NULL",
+        )
+        .bind(blueprint_id)
+        .bind(blueprint_version)
+        .fetch_all(&mut **tx)
+        .await?
+        .into_iter()
+        .collect();
+        catalog_rules::validate_against_attributes(compiled, &types)
+            .map_err(|error| RepositoryError::InvalidRuleDefinition(error.to_string()))
+    }
+
     pub async fn enable_rule(&self, id: Uuid, version: i64) -> Result<Rule, RepositoryError> {
+        self.enable_rule_with(id, version, crate::model::EnableRule::default())
+            .await
+    }
+
+    /// Enables a published revision. An enforcing rule first needs a
+    /// completed full dry run of that revision, unless its blueprint revision
+    /// has no live entities; existing violations must be accepted explicitly.
+    pub async fn enable_rule_with(
+        &self,
+        id: Uuid,
+        version: i64,
+        options: crate::model::EnableRule,
+    ) -> Result<Rule, RepositoryError> {
+        let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
+        let target: Option<(serde_json::Value, Uuid, i64)> = sqlx::query_as("SELECT compiled_plan,blueprint_id,blueprint_version FROM rules WHERE workspace_id=$1 AND id=$2 AND version=$3 AND status='published'").bind(ws).bind(id).bind(version).fetch_optional(&mut *tx).await?;
+        let Some((target_plan, blueprint_id, blueprint_version)) = target else {
+            return Err(RepositoryError::RuleNotPublished);
+        };
+        let target_rule: catalog_rules::CompiledRule = serde_json::from_value(target_plan)
+            .map_err(|error| RepositoryError::InvalidRuleDefinition(error.to_string()))?;
+        if target_rule.enforcement.is_some() {
+            let has_entities: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM entities WHERE workspace_id=$1 AND blueprint_id=$2 AND blueprint_version=$3 AND deleted_at IS NULL)")
+                .bind(ws).bind(blueprint_id).bind(blueprint_version).fetch_one(&mut *tx).await?;
+            if has_entities {
+                let violations: Option<i64> = sqlx::query_scalar("SELECT findings_created FROM rule_runs WHERE workspace_id=$1 AND rule_id=$2 AND rule_version=$3 AND dry_run AND scope_entity_id IS NULL AND status='completed' ORDER BY completed_at DESC LIMIT 1")
+                    .bind(ws).bind(id).bind(version).fetch_optional(&mut *tx).await?;
+                match violations {
+                    None => return Err(RepositoryError::RuleDryRunRequired),
+                    Some(count) if count > 0 && !options.accept_existing_violations => {
+                        return Err(RepositoryError::RuleHasExistingViolations(count));
+                    }
+                    Some(_) => {}
+                }
+            }
+        }
         self.enable_rule_in_transaction(&mut tx, id, version)
             .await?;
         self.commit_mutation(tx).await?;
@@ -312,9 +370,22 @@ impl CatalogRepository {
         }
         let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
+        // Only dry runs may target a published revision that is not enabled,
+        // so an enforcing rule can report existing violations before enabling.
         let version: Option<i64> = sqlx::query_scalar(
-            "SELECT r.version FROM rules r JOIN rule_lifecycles l ON l.rule_id=r.id AND l.workspace_id=r.workspace_id WHERE r.workspace_id=$1 AND r.id=$2 AND r.status='published' AND l.enabled_version=r.version FOR SHARE OF l",
-        ).bind(ws).bind(rule_id).fetch_optional(&mut *tx).await?;
+            "SELECT r.version FROM rules r JOIN rule_lifecycles l ON l.rule_id=r.id AND l.workspace_id=r.workspace_id WHERE r.workspace_id=$1 AND r.id=$2 AND r.status='published' AND (CASE WHEN $3 THEN ($4::bigint IS NULL AND l.enabled_version IS NOT DISTINCT FROM r.version) OR r.version=$4 ELSE l.enabled_version=r.version AND ($4::bigint IS NULL OR r.version=$4) END) FOR SHARE OF l",
+        ).bind(ws).bind(rule_id).bind(input.dry_run).bind(input.version).fetch_optional(&mut *tx).await?;
+        let version = match version {
+            Some(version) => Some(version),
+            None if input.dry_run && input.version.is_none() => sqlx::query_scalar(
+                "SELECT max(version) FROM rules WHERE workspace_id=$1 AND id=$2 AND status='published'",
+            )
+            .bind(ws)
+            .bind(rule_id)
+            .fetch_one(&mut *tx)
+            .await?,
+            None => None,
+        };
         let Some(version) = version else {
             return Err(RepositoryError::RuleNotPublished);
         };
@@ -365,7 +436,66 @@ impl CatalogRepository {
                 inserted += 1;
             }
         }
+        inserted += self.fan_out_dependent_rule_runs(&mut tx, event).await?;
         tx.commit().await?;
+        Ok(inserted)
+    }
+
+    /// A change to a linked or referencing record can invalidate another
+    /// entity's `linked` or `referenced_by` predicate. Event-triggered rules
+    /// re-evaluate those dependents (at most 100 per rule and event), so the
+    /// change is reported as a finding rather than rejected.
+    async fn fan_out_dependent_rule_runs(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        event: &DomainEvent,
+    ) -> Result<u64, RepositoryError> {
+        const MAX_DEPENDENTS: i64 = 100;
+        let ws = self.workspace_id.0;
+        let rows: Vec<(Uuid, i64, serde_json::Value, Uuid, i64)> = sqlx::query_as("SELECT r.id,r.version,r.compiled_plan,r.blueprint_id,r.blueprint_version FROM rules r JOIN rule_lifecycles l ON l.rule_id=r.id AND l.workspace_id=r.workspace_id WHERE r.workspace_id=$1 AND r.status='published' AND l.enabled_version=r.version AND $2 > COALESCE(l.activation_sequence,0) FOR SHARE OF l").bind(ws).bind(event.sequence).fetch_all(&mut **tx).await?;
+        let event_blueprint: Option<String> = sqlx::query_scalar("SELECT b.code FROM entities e JOIN blueprints b ON b.id=e.blueprint_id AND b.version=e.blueprint_version WHERE e.workspace_id=$1 AND e.id=$2")
+            .bind(ws).bind(event.aggregate_id).fetch_optional(&mut **tx).await?;
+        let mut inserted = 0;
+        for (rule_id, version, plan, blueprint_id, blueprint_version) in rows {
+            let compiled: catalog_rules::CompiledRule = serde_json::from_value(plan)
+                .map_err(|error| RepositoryError::InvalidRuleDefinition(error.to_string()))?;
+            if !compiled.triggers.iter().any(|trigger| matches!(trigger, catalog_rules::Trigger::Event { event_type } if event_type == &event.event_type)) {
+                continue;
+            }
+            let requirements =
+                catalog_validation::predicate::Requirements::for_predicates([&compiled.predicate]);
+            let mut dependents: Vec<Uuid> = Vec::new();
+            for relationship in &requirements.linked {
+                dependents.extend(sqlx::query_scalar::<_, Uuid>("SELECT DISTINCT av.entity_id FROM attribute_values av JOIN attributes a ON a.id=av.attribute_id AND a.code=$3 AND a.blueprint_id=$4 AND a.blueprint_version=$5 JOIN entities e ON e.id=av.entity_id AND e.workspace_id=$1 AND e.deleted_at IS NULL AND e.blueprint_id=$4 AND e.blueprint_version=$5 WHERE av.relationship_target_entity_id=$2 AND av.active LIMIT $6")
+                    .bind(ws).bind(event.aggregate_id).bind(relationship).bind(blueprint_id).bind(blueprint_version).bind(MAX_DEPENDENTS).fetch_all(&mut **tx).await?);
+            }
+            for (blueprint_code, relationship) in &requirements.referenced_by {
+                if event_blueprint.as_deref() != Some(blueprint_code.as_str()) {
+                    continue;
+                }
+                dependents.extend(sqlx::query_scalar::<_, Uuid>("SELECT DISTINCT av.relationship_target_entity_id FROM attribute_values av JOIN attributes a ON a.id=av.attribute_id AND a.code=$3 JOIN entities t ON t.id=av.relationship_target_entity_id AND t.workspace_id=$1 AND t.deleted_at IS NULL AND t.blueprint_id=$4 AND t.blueprint_version=$5 WHERE av.entity_id=$2 AND av.active LIMIT $6")
+                    .bind(ws).bind(event.aggregate_id).bind(relationship).bind(blueprint_id).bind(blueprint_version).bind(MAX_DEPENDENTS).fetch_all(&mut **tx).await?);
+            }
+            dependents.sort();
+            dependents.dedup();
+            dependents.retain(|dependent| *dependent != event.aggregate_id);
+            dependents.truncate(MAX_DEPENDENTS as usize);
+            for dependent in dependents {
+                let run_id: Option<Uuid> = sqlx::query_scalar("INSERT INTO rule_runs(id,workspace_id,rule_id,rule_version,source,scope_entity_id,idempotency_key) VALUES($1,$2,$3,$4,'event',$5,$6) ON CONFLICT(workspace_id,rule_id,rule_version,source,idempotency_key) DO NOTHING RETURNING id")
+                    .bind(Uuid::new_v4()).bind(ws).bind(rule_id).bind(version).bind(dependent).bind(format!("{}:{dependent}", event.id)).fetch_optional(&mut **tx).await?;
+                if let Some(run_id) = run_id {
+                    self.enqueue_rule_task(
+                        tx,
+                        ws,
+                        run_id,
+                        Some(event.correlation_id),
+                        Some(event.id),
+                    )
+                    .await?;
+                    inserted += 1;
+                }
+            }
+        }
         Ok(inserted)
     }
     /// Materialize due cron occurrences as durable runs. The occurrence timestamp is the
@@ -682,6 +812,74 @@ impl CatalogRepository {
         self.replay_task(&mut tx, task_id).await?;
         tx.commit().await?;
         Ok(true)
+    }
+}
+
+impl CatalogRepository {
+    /// Evaluates a rule for a candidate page with the shared predicate
+    /// engine. A rule without a context checks every resolved context and
+    /// fails when any of them fails.
+    pub async fn evaluate_rule_candidates(
+        &self,
+        context_id: Option<Uuid>,
+        rule: &catalog_rules::CompiledRule,
+        candidates: &[Uuid],
+    ) -> Result<Vec<RuleCandidateResult>, RepositoryError> {
+        let ws = self.workspace_id.0;
+        let mut conn = self.pool.acquire().await?;
+        let scope = super::checks::CheckScope::load(&mut conn, ws).await?;
+        let contexts = context_id
+            .map(|context| vec![context])
+            .unwrap_or_else(|| scope.context_ids());
+        let mut entities = super::checks::load_entities(&mut conn, ws, candidates).await?;
+        let severity = serde_json::to_value(&rule.severity)
+            .ok()
+            .and_then(|value| value.as_str().map(str::to_owned))
+            .unwrap_or_default();
+        let mut results = Vec::with_capacity(candidates.len());
+        for entity_id in candidates {
+            let Some(subject) = entities.remove(entity_id) else {
+                continue;
+            };
+            let mut failure: Option<catalog_validation::predicate::Failure> = None;
+            let mut failing_contexts = Vec::new();
+            for context in &contexts {
+                let outcome = super::checks::evaluate_in_context(
+                    &mut conn,
+                    &scope,
+                    &subject,
+                    *context,
+                    &[],
+                    &[&rule.predicate],
+                )
+                .await?
+                .remove(0);
+                if let Err(error) = outcome {
+                    failing_contexts.push(scope.code(*context));
+                    failure.get_or_insert(error);
+                }
+            }
+            let (failed, message, mut evidence) = match failure {
+                Some(failure) => (true, failure.message, failure.evidence),
+                None => (
+                    false,
+                    catalog_validation::predicate::describe_predicate(&rule.predicate),
+                    serde_json::json!({}),
+                ),
+            };
+            if let Some(object) = evidence.as_object_mut() {
+                object.insert("contexts".into(), serde_json::json!(failing_contexts));
+            }
+            results.push(RuleCandidateResult {
+                entity_id: *entity_id,
+                failed,
+                message,
+                evidence,
+                evaluation_key: rule.raw_definition_hash.clone(),
+                severity: severity.clone(),
+            });
+        }
+        Ok(results)
     }
 }
 

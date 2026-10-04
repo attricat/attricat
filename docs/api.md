@@ -5,8 +5,9 @@ and file, asset, and metrics routes return their documented content types.
 Failures return a JSON `error` object with a machine-readable code and message,
 alongside the HTTP status. Some failures add an `error.details` object with
 machine-readable context, such as the entity holding a conflicting unique key
-(see [Structural constraint errors](#structural-constraint-errors)). Use the
-[CLI](cli.md) for shell automation.
+(see [Structural constraint errors](#structural-constraint-errors)) or the
+failed checks (see [Declarative check errors](#declarative-check-errors)). Use
+the [CLI](cli.md) for shell automation.
 
 ## Authorization
 
@@ -89,7 +90,8 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `GET` | `/extensions/runtime` | Return enabled, client-safe extension contributions, their stable keys, host-computed display order, navigation group, and route target for host-owned navigation links (`entities.read`). Pass a published entity `blueprint_id` and `blueprint_version` together to overlay that revision's entity-owned extension outlets while retaining global workspace rules. |
 | `GET`, `POST` | `/rules` | List or create versioned blueprint-owned declarative rules (`rules.read` / `rules.manage`). |
 | `POST` | `/rules/validate` | Structurally validate a strict rule TOML definition (`rules.manage`). |
-| `POST` | `/rules/{rule_id}/run-now` | Enqueue an idempotent bounded manual or dry run (`rules.manage`). |
+| `POST` | `/rules/{rule_id}/run-now` | Enqueue an idempotent bounded manual or dry run (`rules.manage`). Optional `version` selects a published revision; only dry runs may target a revision that is not enabled. |
+| `POST` | `/rules/{rule_id}/versions/{version}/enable` | Enable a published revision (`rules.manage`). Optional body `{ "accept_existing_violations": true }`; enforcing revisions first need a completed full dry run. See [Rules](rules.md#dry-run-before-enabling). |
 | `GET` | `/rule-runs`, `/rule-findings` | Read run diagnostics and active/resolved findings (`rules.read`). |
 | `POST` | `/extensions/{extension_id}/{contribution_id}/command` | Validate a bounded, manifest-declared client-mediated extension command against the enabled exact release and grants (`entities.write`). |
 | `POST` | `/extensions/{extension_id}/{contribution_id}/operations` | Start an interactive extension operation from a selection-aware contribution for the signed-in user. The body is `{release_id, operation_id, input, idempotency_key, selection: {blueprint_id, blueprint_version, context_id, entity_ids}}`; every entity must be saved, belong to the one revision, and be readable by the caller, otherwise the whole request is rejected. A retried identical request returns the same `run_id`; reusing the key with different input or selection returns `409 idempotency_key_reused`. |
@@ -174,12 +176,13 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `GET`, `POST` | `/v1/entities/{id}/publications` | List channel publication status or publish to `{ "context_id": "…" }`. |
 | `POST` | `/v1/entities/{id}/publications/unpublish` | Unpublish from `{ "context_id": "…" }`. |
 | `POST` | `/v1/entities/{id}/publications/publish-all` | Publish atomically to every enabled channel. |
-| `GET` | `/v1/entities/{id}/status-transitions` | Declared status edges from the saved status in `?context_id=` and whether the caller may take each. See [status control](status-control.md#controlled-records). |
+| `GET` | `/v1/entities/{id}/status-transitions` | Declared status edges from the saved status in `?context_id=`, whether the caller may take each, and `unmet` transition conditions and enforcing rules (`denial_code` `transition_conditions_unmet`). See [status control](status-control.md#controlled-records). |
 | `GET` | `/v1/entities/{id}/approvals` | Approval decisions with content digests and void reasons. |
 | `GET` | `/v1/entities/{id}/retention-holds` | Retention holds on the entity's files. |
 | `GET`, `POST` | `/files/{id}/retention-holds` | List holds, or place an explicit hold (`files.hold`). |
 | `POST` | `/files/{id}/retention-holds/{hold_id}/release` | Release an explicit hold early (`files.hold`). |
-| `GET`, `PUT` | `/publication-channels`, `/publication-channels/{context_id}` | List enabled channel contexts or enable/disable one. |
+| `GET` | `/v1/entities/{id}/publications/readiness` | Evaluate each enabled channel's required checks without publishing: `[{ "context_id", "context_code", "ready", "violations" }]`. |
+| `GET`, `PUT` | `/publication-channels`, `/publication-channels/{context_id}` | List channel contexts or update one with `{ "enabled": true, "required_rule_codes": ["has-sku"], "require_valid_entity": true }`. The two check fields are optional; omitting one keeps its current value. |
 | `POST` | `/entities/{entity_id}/file-attributes/{attribute_code}/uploads` | Stream one or more multipart file parts to a file attribute. |
 | `GET` | `/files/{file_id}` | Read safe file metadata and generated variant metadata. |
 | `GET` | `/files/{file_id}/download` | Download the original through the API, with one safe byte range. |
@@ -193,6 +196,52 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `GET` | `/data-health/relationships` | Read relationship metrics. |
 | `GET` | `/data-health/storage` | Read storage metrics. |
 | `POST` | `/data-health/refresh` | Clear cached data-health responses. |
+
+### Publication channel checks
+
+A channel can require checks before an entity is published to it:
+
+- `required_rule_codes` (at most 32 unique codes): enabled rules of the
+  entity's blueprint revision with those codes, evaluated live in the channel
+  context. Rules scoped to another context do not apply; any predicate is
+  allowed.
+- `require_valid_entity`: re-runs the entity JSON schema (at most 10 errors,
+  `source = "entity_schema"`, `code = "entity_schema"`) and `x-attricat-checks`
+  in the channel context, which catches inherited or date-dependent failures
+  such as expiry.
+
+Publishing to one channel, to all channels, or blueprint bulk publication
+returns `422 publication_checks_failed` with `details.context` (the channel's
+context code) and `details.violations`. A bulk request is rejected as a whole
+and each violation's `evidence.entity_id` names the failing entity. Use the
+readiness route to check beforehand.
+
+### Declarative check errors
+
+`entity_check_failed`, `transition_conditions_unmet`, `rule_violation` and
+`publication_checks_failed` return `422` with:
+
+```json
+{ "error": { "code": "transition_conditions_unmet", "message": "…",
+  "details": { "violations": [{
+    "source": "transition_condition", "code": "has-root-cause",
+    "message": "Record the root cause before closing",
+    "contexts": ["default"], "attributes": ["root_cause"],
+    "transition": { "attribute_code": "status", "from": "open", "to": "closed" },
+    "evidence": { "attribute_code": "root_cause" } }] } } }
+```
+
+`source` is `entity_check`, `transition_condition`, `rule` or `entity_schema`;
+`severity` is present for rules; `transition` for conditions and
+transition-guarding rules; `context` only for publication errors. At most 50
+violations are reported. Fix the listed `attributes` (or the linked records in
+`evidence`) and retry; for conditions, read the status-transitions route. See
+[JSON Schema Validation](json-schema-validation.md#error-details).
+
+Enabling an enforcing rule can return `409 rule_dry_run_required` (run
+`run-now` with `"dry_run": true` and the `version` first) or
+`409 rule_has_existing_violations` with `details.existing_violations` (a count;
+fix the entities or pass `accept_existing_violations`).
 
 ### Entity change and value-history pagination
 

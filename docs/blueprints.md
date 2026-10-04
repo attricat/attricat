@@ -594,6 +594,76 @@ JSON Schema Draft 2020-12 and are enforced by the API before values are stored.
 See [JSON Schema Validation](json-schema-validation.md) for authoring syntax,
 context behavior, and error handling.
 
+## Declarative checks, conditions, and rules
+
+One predicate engine (`required`, `has_tag`, `missing_tag`, `compare`,
+`one_of`, `relative_date`, `linked`, `referenced_by`, `all_of`, `any_of`, plus
+rules-only `stale`, `unique`, `acyclic`) is used in three places. Each is
+type-checked against the blueprint's attributes when it is saved.
+
+Entity checks reject saves. Put them in `entity_schema` under
+`x-attricat-checks` (at most 32; `code`, optional `message`, `predicate`):
+
+```toml
+entity_schema = '''{
+  "x-attricat-checks": [
+    {"code": "valid-range", "message": "Valid until must not be before valid from",
+     "predicate": {"type": "compare", "attribute_code": "valid_until", "op": "gte", "other_attribute_code": "valid_from"}},
+    {"code": "facility-of-supplier",
+     "predicate": {"type": "linked", "relationship_code": "facility",
+       "predicate": {"type": "compare", "attribute_code": "supplier", "op": "eq", "subject_attribute_code": "supplier"}}}
+  ]
+}'''
+```
+
+Inside `linked`, `attribute_code` refers to the linked record and
+`subject_attribute_code` to the entity being saved. Changes to a linked record
+are not rejected; event-triggered rules report affected entities as findings.
+
+Transition conditions guard status edges. Add `conditions` (at most 16, same
+shape) to an edge in `x-attricat-status.transitions`:
+
+```toml
+value_schema = '''{"type": "string", "enum": ["open", "closed"],
+  "x-attricat-status": {"version": 1,
+    "options": [{"code": "open", "label": "Open"}, {"code": "closed", "label": "Closed"}],
+    "transitions": [{"from": null, "to": "open"},
+      {"from": "open", "to": "closed", "conditions": [
+        {"code": "has-root-cause", "predicate": {"type": "required", "attribute_code": "root_cause"}}]}]}}'''
+```
+
+Rules (`[[rules]]`) report findings and can also enforce. Enforcement needs
+`severity = "error"` or `"critical"` and a predicate without `stale`, `unique`
+or `acyclic`; transition attributes must be status attributes with those codes:
+
+```toml
+[[rules]]
+code = "release-needs-approver"
+name = "Released items have an approver"
+severity = "error"
+
+[[rules.triggers]]
+type = "manual"
+
+[rules.predicate]
+type = "required"
+attribute_code = "approver"
+
+[rules.enforcement]
+
+[[rules.enforcement.transitions]]
+attribute_code = "status"
+from = "review"
+to = "released"
+```
+
+Failures return `422 entity_check_failed`, `transition_conditions_unmet` or
+`rule_violation` with `error.details.violations`. See
+[JSON Schema Validation](json-schema-validation.md#declarative-checks),
+[Status attributes](status-control.md#transition-conditions), and
+[Rules](rules.md) for every field, limit, and the dry run required before an
+enforcing rule is enabled.
+
 ## Entity migration status
 
 When a published entity blueprint revision is storage-compatible with its

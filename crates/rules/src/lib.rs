@@ -1,5 +1,8 @@
 //! Strict, inert rule definition parsing. Candidate selection and evaluation are host-owned.
-use catalog_validation::is_valid_code;
+use catalog_validation::{
+    is_valid_code,
+    predicate::{AttributeTypes, Usage, validate_predicate},
+};
 use cron::Schedule;
 use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::{Deserialize, Serialize};
@@ -28,6 +31,7 @@ pub struct RuleDefinition {
     pub severity: Severity,
     pub triggers: Vec<Trigger>,
     pub predicate: Predicate,
+    pub enforcement: Option<Enforcement>,
 }
 
 /// How prominently findings from this rule are reported.
@@ -49,23 +53,59 @@ pub enum Trigger {
     PostImport,
 }
 
-/// A deliberately small predicate set. It cannot express SQL, templates, calls, or selectors.
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum Predicate {
-    Required {
-        attribute_code: String,
-    },
-    Stale {
-        attribute_code: String,
-        max_age_seconds: u64,
-    },
-    HasTag {
-        tag: String,
-    },
-    MissingTag {
-        tag: String,
-    },
+/// Rules use the shared declarative predicate engine. Predicates cannot
+/// express SQL, templates, calls or selectors.
+pub use catalog_validation::predicate::{CompareOp, Predicate, Quantifier};
+
+/// Synchronous enforcement of an error-severity rule. Enforcing rules reject
+/// violating writes with `422 rule_violation` instead of only reporting findings.
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct Enforcement {
+    /// Reject every write that leaves the entity violating the rule.
+    #[serde(default)]
+    pub on_save: bool,
+    /// Reject the listed status transitions while the rule is violated.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[schemars(length(max = 16))]
+    pub transitions: Vec<TransitionSelector>,
+}
+
+/// A status change that the rule guards. The predicate is evaluated on the
+/// state the transition would produce.
+#[derive(Clone, Debug, Deserialize, JsonSchema, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct TransitionSelector {
+    /// Status attribute code.
+    #[schemars(regex(pattern = catalog_validation::CODE_PATTERN), extend("x-attricat-reference" = "attribute"))]
+    pub attribute_code: String,
+    /// Source status code. Omit to guard every change into `to`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(regex(pattern = catalog_validation::CODE_PATTERN))]
+    pub from: Option<String>,
+    /// Destination status code.
+    #[schemars(regex(pattern = catalog_validation::CODE_PATTERN))]
+    pub to: String,
+}
+
+impl Enforcement {
+    /// Whether this rule guards the change of `attribute` from `before` to `after`.
+    pub fn guards_transition(
+        &self,
+        attribute: &str,
+        before: Option<&str>,
+        after: Option<&str>,
+    ) -> bool {
+        before != after
+            && self.transitions.iter().any(|selector| {
+                selector.attribute_code == attribute
+                    && Some(selector.to.as_str()) == after
+                    && selector
+                        .from
+                        .as_deref()
+                        .is_none_or(|from| Some(from) == before)
+            })
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -76,6 +116,8 @@ pub struct CompiledRule {
     pub severity: Severity,
     pub triggers: Vec<Trigger>,
     pub predicate: Predicate,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enforcement: Option<Enforcement>,
     pub raw_definition_hash: String,
 }
 
@@ -94,7 +136,10 @@ struct Raw {
     /// One to eight events that evaluate the rule.
     #[schemars(length(min = 1, max = 8))]
     triggers: Vec<RawTrigger>,
-    predicate: RawPredicate,
+    predicate: Predicate,
+    /// Reject violating saves or status transitions. Requires `error` or
+    /// `critical` severity and a predicate that is safe for synchronous evaluation.
+    enforcement: Option<Enforcement>,
 }
 /// When the rule is evaluated.
 #[derive(Deserialize, JsonSchema)]
@@ -119,39 +164,6 @@ enum RawTrigger {
     /// Evaluated after an import finishes.
     PostImport,
 }
-/// The condition that produces a finding.
-#[derive(Deserialize, JsonSchema)]
-#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
-enum RawPredicate {
-    /// Reports entities without a value for the attribute.
-    Required {
-        /// Attribute that must have a value.
-        #[schemars(regex(pattern = catalog_validation::CODE_PATTERN), extend("x-attricat-reference" = "attribute"))]
-        attribute_code: String,
-    },
-    /// Reports entities whose attribute value has not changed within the age limit.
-    Stale {
-        /// Attribute whose last change is checked.
-        #[schemars(regex(pattern = catalog_validation::CODE_PATTERN), extend("x-attricat-reference" = "attribute"))]
-        attribute_code: String,
-        /// Maximum value age in seconds, from 1 to 31536000 (one year).
-        #[schemars(range(min = 1, max = 31_536_000))]
-        max_age_seconds: u64,
-    },
-    /// Reports entities with the tag.
-    HasTag {
-        /// Tag of at most 128 bytes.
-        #[schemars(length(min = 1, max = 128))]
-        tag: String,
-    },
-    /// Reports entities without the tag.
-    MissingTag {
-        /// Tag of at most 128 bytes.
-        #[schemars(length(min = 1, max = 128))]
-        tag: String,
-    },
-}
-
 pub fn parse(source: &str) -> Result<RuleDefinition, RuleError> {
     let raw: Raw = toml::from_str(source)?;
     if raw.format_version != 1 {
@@ -189,43 +201,79 @@ pub fn parse(source: &str) -> Result<RuleDefinition, RuleError> {
             }
         })
         .collect::<Result<Vec<_>, _>>()?;
-    let predicate = match raw.predicate {
-        RawPredicate::Required { attribute_code } => {
-            code(&attribute_code, "predicate attribute_code")?;
-            Predicate::Required { attribute_code }
-        }
-        RawPredicate::Stale {
-            attribute_code,
-            max_age_seconds,
-        } => {
-            code(&attribute_code, "predicate attribute_code")?;
-            if !(1..=31_536_000).contains(&max_age_seconds) {
-                return Err(RuleError::Invalid(
-                    "stale max_age_seconds must be between 1 and 31536000".into(),
-                ));
-            }
-            Predicate::Stale {
-                attribute_code,
-                max_age_seconds,
-            }
-        }
-        RawPredicate::HasTag { tag } => {
-            validate_tag(&tag)?;
-            Predicate::HasTag { tag }
-        }
-        RawPredicate::MissingTag { tag } => {
-            validate_tag(&tag)?;
-            Predicate::MissingTag { tag }
-        }
+    let usage = if raw.enforcement.is_some() {
+        Usage::Enforced
+    } else {
+        Usage::Finding
     };
+    validate_predicate(&raw.predicate, None, usage).map_err(RuleError::Invalid)?;
+    if let Some(enforcement) = &raw.enforcement {
+        validate_enforcement(enforcement, &raw.severity)?;
+    }
     Ok(RuleDefinition {
         format_version: raw.format_version,
         code: raw.code,
         name: raw.name,
         severity: raw.severity,
         triggers,
-        predicate,
+        predicate: raw.predicate,
+        enforcement: raw.enforcement,
     })
+}
+
+fn validate_enforcement(enforcement: &Enforcement, severity: &Severity) -> Result<(), RuleError> {
+    if !matches!(severity, Severity::Error | Severity::Critical) {
+        return Err(RuleError::Invalid(
+            "enforcing rules require error or critical severity".into(),
+        ));
+    }
+    if !enforcement.on_save && enforcement.transitions.is_empty() {
+        return Err(RuleError::Invalid(
+            "enforcement needs on_save or at least one transition".into(),
+        ));
+    }
+    if enforcement.transitions.len() > 16 {
+        return Err(RuleError::Invalid(
+            "enforcement allows at most 16 transitions".into(),
+        ));
+    }
+    for selector in &enforcement.transitions {
+        code(&selector.attribute_code, "enforcement attribute_code")?;
+        code(&selector.to, "enforcement transition to")?;
+        if let Some(from) = &selector.from {
+            code(from, "enforcement transition from")?;
+        }
+    }
+    Ok(())
+}
+
+/// Type-checks a rule against the attribute types of its blueprint revision.
+pub fn validate_against_attributes(
+    rule: &CompiledRule,
+    attributes: &dyn AttributeTypes,
+) -> Result<(), RuleError> {
+    let usage = if rule.enforcement.is_some() {
+        Usage::Enforced
+    } else {
+        Usage::Finding
+    };
+    validate_predicate(&rule.predicate, Some(attributes), usage).map_err(RuleError::Invalid)?;
+    for selector in rule
+        .enforcement
+        .iter()
+        .flat_map(|enforcement| &enforcement.transitions)
+    {
+        if attributes
+            .attribute_type(&selector.attribute_code)
+            .is_none()
+        {
+            return Err(RuleError::Invalid(format!(
+                "unknown enforcement attribute '{}'",
+                selector.attribute_code
+            )));
+        }
+    }
+    Ok(())
 }
 /// Compiles an inline `[[rules]]` blueprint table. Blueprint ownership supplies
 /// the format version, so embedding cannot relax the standalone rule contract.
@@ -274,6 +322,7 @@ pub fn compile(source: &str) -> Result<CompiledRule, RuleError> {
         severity: rule.severity,
         triggers: rule.triggers,
         predicate: rule.predicate,
+        enforcement: rule.enforcement,
         raw_definition_hash: raw_hash(source),
     })
 }
@@ -304,15 +353,6 @@ fn non_empty(value: &str, name: &str) -> Result<(), RuleError> {
         Ok(())
     }
 }
-fn validate_tag(value: &str) -> Result<(), RuleError> {
-    if value.trim().is_empty() || value.len() > 128 {
-        Err(RuleError::Invalid(
-            "tag must be a non-empty string no longer than 128 bytes".into(),
-        ))
-    } else {
-        Ok(())
-    }
-}
 const ENTITY_EVENTS: &[&str] = &[
     "entity.created.v1",
     "entity.updated.v1",
@@ -338,5 +378,42 @@ mod tests {
                 .is_err()
         );
         assert!(parse(&REQUIRED.replace("type='required'", "type='sql'")).is_err());
+    }
+    #[test]
+    fn parses_new_predicates_and_enforcement() {
+        let range = REQUIRED.replace(
+            "type='required'\nattribute_code='title'",
+            "type='compare'\nattribute_code='valid_from'\nop='lte'\nother_attribute_code='valid_until'\n[enforcement]\non_save=true\n[[enforcement.transitions]]\nattribute_code='status'\nto='released'",
+        );
+        let rule = compile(&range).unwrap();
+        let enforcement = rule.enforcement.unwrap();
+        assert!(enforcement.on_save);
+        assert!(enforcement.guards_transition("status", Some("draft"), Some("released")));
+        assert!(!enforcement.guards_transition("status", Some("released"), Some("released")));
+        let expiry = REQUIRED.replace(
+            "type='required'\nattribute_code='title'",
+            "type='relative_date'\nattribute_code='expires_on'\nop='gt'\noffset_days=30",
+        );
+        assert!(parse(&expiry).is_ok());
+        let duplicate = REQUIRED.replace(
+            "type='required'\nattribute_code='title'",
+            "type='unique'\nattribute_codes=['sku']",
+        );
+        assert!(parse(&duplicate).is_ok());
+        // Only synchronous-safe predicates can enforce, and only at error severity.
+        assert!(parse(&format!("{duplicate}\n[enforcement]\non_save=true")).is_err());
+        assert!(parse(&range.replace("severity='error'", "severity='warning'")).is_err());
+        assert!(parse(&format!("{REQUIRED}\n[enforcement]")).is_err());
+    }
+    #[test]
+    fn stored_plans_without_enforcement_still_load() {
+        let plan = serde_json::json!({
+            "format_version": 1, "code": "x", "name": "x", "severity": "error",
+            "triggers": [{"type": "manual"}],
+            "predicate": {"type": "required", "attribute_code": "title"},
+            "raw_definition_hash": "h"
+        });
+        let rule: CompiledRule = serde_json::from_value(plan).unwrap();
+        assert!(rule.enforcement.is_none());
     }
 }

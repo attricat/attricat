@@ -28,8 +28,12 @@ import { useTranslation } from 'react-i18next';
 import { RouterIconButton } from '../../../components/RouterLink';
 import { EntityToolbar } from './EntityToolbar';
 import { EntitySchemaStatus } from './EntitySchemaStatus';
-import type { EntityPublicationStatus } from '../schemas';
+import type {
+  EntityPublicationReadiness,
+  EntityPublicationStatus,
+} from '../schemas';
 import { ENTITY_EXTENSION_DRAWER_ID, publicationStatuses } from '../constants';
+import { publicationReadinessText } from '../checkViolations';
 import { compactIconSize } from '../../../components/iconSizes';
 import { useInstantFormat } from '../../../time/useInstantFormat';
 
@@ -47,6 +51,10 @@ type Props = {
   onDelete: () => void;
   publication?: EntityPublicationStatus;
   canPublish: boolean;
+  /** Check readiness of the selected context's channel. */
+  readiness?: EntityPublicationReadiness;
+  /** Enabled channels whose checks currently fail. */
+  notReadyChannels?: readonly EntityPublicationReadiness[];
   onPublish: () => void;
   onPublishAll: () => void;
   onUnpublish: () => void;
@@ -67,6 +75,8 @@ export const EntityPreviewToolbar = ({
   onDelete,
   publication,
   canPublish,
+  readiness,
+  notReadyChannels = [],
   onPublish,
   onPublishAll,
   onUnpublish,
@@ -79,6 +89,8 @@ export const EntityPreviewToolbar = ({
   const [publishMenuAnchor, setPublishMenuAnchor] =
     useState<HTMLElement | null>(null);
   const closePublishMenu = () => setPublishMenuAnchor(null);
+  const notReady = readiness?.ready === false;
+  const readinessText = readiness && publicationReadinessText(readiness);
   return (
     <EntityToolbar label={t('entities.entityPreview')}>
       <Tooltip title={t('entities.editEntity')}>
@@ -158,6 +170,15 @@ export const EntityPreviewToolbar = ({
           />
         </Tooltip>
       )}
+      {publication && notReady && (
+        <Tooltip enterTouchDelay={0} title={readinessText}>
+          <Chip
+            color="warning"
+            label={t('entities.publication.notReady')}
+            size="small"
+          />
+        </Tooltip>
+      )}
       {canPublish && (
         <>
           <Tooltip
@@ -193,6 +214,7 @@ export const EntityPreviewToolbar = ({
           >
             {publication && (
               <MenuItem
+                disabled={notReady}
                 onClick={() => {
                   closePublishMenu();
                   onPublish();
@@ -205,7 +227,7 @@ export const EntityPreviewToolbar = ({
                     <RefreshCwIcon size={compactIconSize} />
                   )}
                 </ListItemIcon>
-                <ListItemText>
+                <ListItemText secondary={notReady ? readinessText : undefined}>
                   {publication.status === publicationStatuses.notPublished
                     ? t('entities.publish')
                     : t('entities.republish')}
@@ -213,6 +235,7 @@ export const EntityPreviewToolbar = ({
               </MenuItem>
             )}
             <MenuItem
+              disabled={notReadyChannels.length > 0}
               onClick={() => {
                 closePublishMenu();
                 onPublishAll();
@@ -221,7 +244,19 @@ export const EntityPreviewToolbar = ({
               <ListItemIcon>
                 <GlobeIcon size={compactIconSize} />
               </ListItemIcon>
-              <ListItemText>{t('entities.publishAllChannels')}</ListItemText>
+              <ListItemText
+                secondary={
+                  notReadyChannels.length > 0
+                    ? t('entities.publication.channelsNotReady', {
+                        channels: notReadyChannels
+                          .map((channel) => channel.context_code)
+                          .join(', '),
+                      })
+                    : undefined
+                }
+              >
+                {t('entities.publishAllChannels')}
+              </ListItemText>
             </MenuItem>
             {publication?.status === publicationStatuses.published && (
               <MenuItem

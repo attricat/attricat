@@ -14,6 +14,19 @@
         }
       ]
     },
+    "CompareOp": {
+      "description": "Comparison operator. `lt`–`gte` order numbers, dates and datetimes;\n`eq`/`ne` compare any scalar or relationship target set; `disjoint`\nrequires two relationship target sets without a common target.",
+      "enum": [
+        "eq",
+        "ne",
+        "lt",
+        "lte",
+        "gt",
+        "gte",
+        "disjoint"
+      ],
+      "type": "string"
+    },
     "ComponentReference": {
       "additionalProperties": false,
       "properties": {
@@ -110,6 +123,26 @@
       ],
       "type": "object"
     },
+    "Enforcement": {
+      "additionalProperties": false,
+      "description": "Synchronous enforcement of an error-severity rule. Enforcing rules reject\nviolating writes with `422 rule_violation` instead of only reporting findings.",
+      "properties": {
+        "on_save": {
+          "default": false,
+          "description": "Reject every write that leaves the entity violating the rule.",
+          "type": "boolean"
+        },
+        "transitions": {
+          "description": "Reject the listed status transitions while the rule is violated.",
+          "items": {
+            "$ref": "#/$defs/TransitionSelector"
+          },
+          "maxItems": 16,
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
     "ExtensionOutletLayout": {
       "additionalProperties": false,
       "description": "Host-owned per-blueprint extension layout. It is declarative data only;\ncontribution keys cannot select DOM nodes or invoke extension code.",
@@ -181,6 +214,372 @@
       ],
       "type": "object"
     },
+    "Predicate": {
+      "description": "A requirement on one record. A predicate *holds* when the data is\nacceptable; a rule reports a finding, a check rejects a save and a\ntransition condition blocks a transition when it does not hold.\n\nComparisons with a missing operand hold: combine them with `required`\nwhen a value must exist.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "description": "The attribute has a value. Relationships need at least one target.",
+          "properties": {
+            "attribute_code": {
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "type": "string",
+              "x-attricat-reference": "attribute"
+            },
+            "type": {
+              "const": "required",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "attribute_code"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The attribute's current value changed within the age limit. Rules only.",
+          "properties": {
+            "attribute_code": {
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "type": "string",
+              "x-attricat-reference": "attribute"
+            },
+            "max_age_seconds": {
+              "description": "Maximum value age in seconds, from 1 to 31536000 (one year).",
+              "format": "uint64",
+              "maximum": 31536000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "type": {
+              "const": "stale",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "attribute_code",
+            "max_age_seconds"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The entity has the system tag.",
+          "properties": {
+            "tag": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": {
+              "const": "has_tag",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "tag"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The entity does not have the system tag.",
+          "properties": {
+            "tag": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": {
+              "const": "missing_tag",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "tag"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Compares an attribute with another attribute or a literal value. Set\nexactly one of `other_attribute_code`, `subject_attribute_code`\n(inside `linked` or `referenced_by` only) and `value`.",
+          "properties": {
+            "attribute_code": {
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "type": "string",
+              "x-attricat-reference": "attribute"
+            },
+            "op": {
+              "$ref": "#/$defs/CompareOp"
+            },
+            "other_attribute_code": {
+              "description": "Another attribute of the same record.",
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "subject_attribute_code": {
+              "description": "An attribute of the record being checked, when comparing from a linked record.",
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "const": "compare",
+              "type": "string"
+            },
+            "value": {
+              "description": "A literal string, number or boolean. Write dates as `\"2026-01-31\"` strings."
+            }
+          },
+          "required": [
+            "type",
+            "attribute_code",
+            "op"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The attribute's value is one of the listed values, such as status codes.",
+          "properties": {
+            "attribute_code": {
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "type": "string",
+              "x-attricat-reference": "attribute"
+            },
+            "type": {
+              "const": "one_of",
+              "type": "string"
+            },
+            "values": {
+              "items": true,
+              "maxItems": 100,
+              "minItems": 1,
+              "type": "array"
+            }
+          },
+          "required": [
+            "type",
+            "attribute_code",
+            "values"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Compares a date or datetime attribute with now plus `offset_days`.",
+          "properties": {
+            "attribute_code": {
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "type": "string",
+              "x-attricat-reference": "attribute"
+            },
+            "offset_days": {
+              "default": 0,
+              "description": "Days added to the current time; negative values look back.",
+              "format": "int64",
+              "maximum": 36500,
+              "minimum": -36500,
+              "type": "integer"
+            },
+            "op": {
+              "$ref": "#/$defs/CompareOp",
+              "description": "One of `lt`, `lte`, `gt`, `gte`."
+            },
+            "type": {
+              "const": "relative_date",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "attribute_code",
+            "op"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "No other live entity of the blueprint revision has the same values. Rules only.",
+          "properties": {
+            "attribute_codes": {
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 4,
+              "minItems": 1,
+              "type": "array"
+            },
+            "type": {
+              "const": "unique",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "attribute_codes"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Checks the records linked through a relationship attribute (one hop).",
+          "properties": {
+            "predicate": {
+              "$ref": "#/$defs/Predicate",
+              "description": "Evaluated on each linked record. Cannot follow further links."
+            },
+            "quantifier": {
+              "$ref": "#/$defs/Quantifier",
+              "default": "all"
+            },
+            "relationship_code": {
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "type": "string",
+              "x-attricat-reference": "attribute"
+            },
+            "type": {
+              "const": "linked",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "relationship_code",
+            "predicate"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Counts records of another blueprint whose relationship targets this\nrecord and that match the optional predicate. Set `min`, `max` or both.",
+          "properties": {
+            "blueprint_code": {
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "type": "string"
+            },
+            "max": {
+              "format": "uint32",
+              "maximum": 1000,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "min": {
+              "format": "uint32",
+              "maximum": 1000,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "predicate": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Predicate"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "relationship_code": {
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "type": "string"
+            },
+            "type": {
+              "const": "referenced_by",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "blueprint_code",
+            "relationship_code"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Following the relationship from this record never returns to it. Rules only.",
+          "properties": {
+            "relationship_code": {
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "type": "string",
+              "x-attricat-reference": "attribute"
+            },
+            "type": {
+              "const": "acyclic",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "relationship_code"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Every nested predicate holds.",
+          "properties": {
+            "predicates": {
+              "items": {
+                "$ref": "#/$defs/Predicate"
+              },
+              "maxItems": 16,
+              "minItems": 1,
+              "type": "array"
+            },
+            "type": {
+              "const": "all_of",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "predicates"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "At least one nested predicate holds.",
+          "properties": {
+            "predicates": {
+              "items": {
+                "$ref": "#/$defs/Predicate"
+              },
+              "maxItems": 16,
+              "minItems": 1,
+              "type": "array"
+            },
+            "type": {
+              "const": "any_of",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "predicates"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "PublicationPolicy": {
       "additionalProperties": false,
       "properties": {
@@ -195,6 +594,26 @@
         }
       },
       "type": "object"
+    },
+    "Quantifier": {
+      "description": "How many linked records must satisfy a `linked` predicate.",
+      "oneOf": [
+        {
+          "const": "all",
+          "description": "Every linked record satisfies the predicate. Holds with no links.",
+          "type": "string"
+        },
+        {
+          "const": "any",
+          "description": "At least one linked record satisfies the predicate.",
+          "type": "string"
+        },
+        {
+          "const": "none",
+          "description": "No linked record satisfies the predicate.",
+          "type": "string"
+        }
+      ]
     },
     "RawAttributeDeclaration": {
       "additionalProperties": false,
@@ -448,103 +867,6 @@
       ],
       "type": "object"
     },
-    "RawPredicate": {
-      "description": "The condition that produces a finding.",
-      "oneOf": [
-        {
-          "additionalProperties": false,
-          "description": "Reports entities without a value for the attribute.",
-          "properties": {
-            "attribute_code": {
-              "description": "Attribute that must have a value.",
-              "pattern": "^[A-Za-z0-9_-]+$",
-              "type": "string",
-              "x-attricat-reference": "attribute"
-            },
-            "type": {
-              "const": "required",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type",
-            "attribute_code"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "description": "Reports entities whose attribute value has not changed within the age limit.",
-          "properties": {
-            "attribute_code": {
-              "description": "Attribute whose last change is checked.",
-              "pattern": "^[A-Za-z0-9_-]+$",
-              "type": "string",
-              "x-attricat-reference": "attribute"
-            },
-            "max_age_seconds": {
-              "description": "Maximum value age in seconds, from 1 to 31536000 (one year).",
-              "format": "uint64",
-              "maximum": 31536000,
-              "minimum": 1,
-              "type": "integer"
-            },
-            "type": {
-              "const": "stale",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type",
-            "attribute_code",
-            "max_age_seconds"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "description": "Reports entities with the tag.",
-          "properties": {
-            "tag": {
-              "description": "Tag of at most 128 bytes.",
-              "maxLength": 128,
-              "minLength": 1,
-              "type": "string"
-            },
-            "type": {
-              "const": "has_tag",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type",
-            "tag"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "description": "Reports entities without the tag.",
-          "properties": {
-            "tag": {
-              "description": "Tag of at most 128 bytes.",
-              "maxLength": 128,
-              "minLength": 1,
-              "type": "string"
-            },
-            "type": {
-              "const": "missing_tag",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type",
-            "tag"
-          ],
-          "type": "object"
-        }
-      ]
-    },
     "RawTrigger": {
       "description": "When the rule is evaluated.",
       "oneOf": [
@@ -673,6 +995,36 @@
       },
       "required": [
         "field"
+      ],
+      "type": "object"
+    },
+    "TransitionSelector": {
+      "additionalProperties": false,
+      "description": "A status change that the rule guards. The predicate is evaluated on the\nstate the transition would produce.",
+      "properties": {
+        "attribute_code": {
+          "description": "Status attribute code.",
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "type": "string",
+          "x-attricat-reference": "attribute"
+        },
+        "from": {
+          "description": "Source status code. Omit to guard every change into `to`.",
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "to": {
+          "description": "Destination status code.",
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "attribute_code",
+        "to"
       ],
       "type": "object"
     },
@@ -1499,12 +1851,23 @@
             "pattern": "^[A-Za-z0-9_-]+$",
             "type": "string"
           },
+          "enforcement": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Enforcement"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Reject violating saves or status transitions. Requires `error` or\n`critical` severity and a predicate that is safe for synchronous evaluation."
+          },
           "name": {
             "description": "Human-readable rule name.",
             "type": "string"
           },
           "predicate": {
-            "$ref": "#/$defs/RawPredicate"
+            "$ref": "#/$defs/Predicate"
           },
           "severity": {
             "$ref": "#/$defs/Severity"

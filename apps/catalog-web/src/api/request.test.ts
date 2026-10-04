@@ -34,6 +34,22 @@ describe('API request helper', () => {
     } satisfies Partial<ApiRequestError>);
   });
 
+  it('preserves structured API error details', async () => {
+    const details = { violations: [{ code: 'valid-range' }] };
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 422,
+      json: () =>
+        Promise.resolve({
+          error: { code: 'entity_check_failed', message: 'Failed', details },
+        }),
+    });
+
+    await expect(
+      request('/api/example', z.object({ id: z.string() })),
+    ).rejects.toMatchObject({ code: 'entity_check_failed', details });
+  });
+
   it('validates successful JSON responses with the provided schema', async () => {
     fetchMock.mockResolvedValue({
       ok: true,

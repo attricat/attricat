@@ -26,6 +26,7 @@ import {
   migrateEntityRequestSchema,
   updateEntityRequestSchema,
   entityPublicationStatusSchema,
+  entityPublicationReadinessSchema,
   uuidSchema,
 } from './schemas';
 
@@ -34,11 +35,13 @@ export type {
   Attribute,
   Blueprint,
   BlueprintWithAttributes,
+  CheckViolation,
   ComponentReference,
   Entity,
   EntityAuditChange,
   EntityFormResponse,
   EntityMigrationPreview,
+  EntityPublicationReadiness,
   EntityPublicationStatus,
   FormAttributeValue,
   EntityItem,
@@ -244,6 +247,16 @@ export const getEntityPublications = (id: string, signal?: AbortSignal) =>
   request(
     `/api/v1/entities/${encodeURIComponent(uuidSchema.parse(id))}/publications`,
     z.array(entityPublicationStatusSchema),
+    signal === undefined ? undefined : { signal },
+  );
+/** Whether the entity passes each enabled channel's publication checks. */
+export const getEntityPublicationReadiness = (
+  id: string,
+  signal?: AbortSignal,
+) =>
+  request(
+    `/api/v1/entities/${encodeURIComponent(uuidSchema.parse(id))}/publications/readiness`,
+    z.array(entityPublicationReadinessSchema),
     signal === undefined ? undefined : { signal },
   );
 export const publishEntity = (id: string, contextId: string) =>

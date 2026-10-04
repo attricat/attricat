@@ -256,6 +256,25 @@ Put `entity_schema` with the other top-level keys, before the first `[[attribute
 
 Attricat checks the schema in every context after every change. A write that would leave any context invalid is rejected with `422 entity_schema_mismatch` and nothing is saved.
 
+JSON Schema cannot compare two attributes. For rules like "a sale price must be lower than the price", add a named check to the same schema under `x-attricat-checks`:
+
+```toml
+entity_schema = '''
+{
+  "type": "object",
+  "required": ["title", "sku"],
+  "x-attricat-checks": [
+    { "code": "sale-below-price", "message": "The sale price must be lower than the price",
+      "predicate": { "type": "compare", "attribute_code": "sale_price", "op": "lt", "other_attribute_code": "price" } }
+  ]
+}
+'''
+```
+
+A failing check is rejected with `422 entity_check_failed`. Checks can also look at linked records. See [Validation](/builders/validation/#compare-attributes-with-checks).
+
+A [status](/builders/validation/#statuses) attribute can restrict which changes are allowed, and each allowed change can have [conditions](/builders/validation/#conditions-on-transitions), such as "an approver is set" before `review` becomes `released`. A change whose conditions are unmet is rejected with `422 transition_conditions_unmet`.
+
 ## Step 9: share attributes with a mixin
 
 When several blueprints need the same fields, such as SEO metadata, put them in a mixin:
@@ -381,7 +400,7 @@ Two practices save trouble later:
 
 A blueprint can also carry:
 
-- [Rules](/builders/rules/) that flag data-quality problems, such as a missing title.
+- [Rules](/builders/rules/) that flag data-quality problems, such as a missing title, and can [enforce](/builders/rules/#enforce-a-rule) them on save or on status changes.
 - [Status attributes](/builders/validation/#statuses) with allowed transitions and [translated labels](/builders/translations/#status-labels).
 - A [publication policy](/guides/publishing/#keep-publication-after-trusted-edits) that lets trusted roles edit without withdrawing channel approvals.
 - [Connector jobs](/reference/blueprint/#connector-jobs) that import or export entities through a connector extension.
