@@ -24,11 +24,7 @@ fn workflow_event_path<'a>(value: &'a Value, path: &str) -> Option<&'a Value> {
 }
 
 fn bounded_error(message: &str) -> String {
-    let mut end = message.len().min(MAX_TARGET_ERROR_BYTES);
-    while !message.is_char_boundary(end) {
-        end -= 1;
-    }
-    message[..end].to_owned()
+    message[..message.floor_char_boundary(MAX_TARGET_ERROR_BYTES)].to_owned()
 }
 
 /// The accumulated effect of one or more local actions on one locked entity.
@@ -48,88 +44,46 @@ impl WorkflowEntityChange {
         action: &catalog_workflow::Action,
         event: &crate::domain_events::DomainEvent,
     ) -> Result<(), RepositoryError> {
-        let patch = match action {
-            catalog_workflow::Action::SystemTagsAdd { tags } => TagMetadataPatch {
-                add_tags: tags.clone(),
-                ..TagMetadataPatch::default()
-            },
-            catalog_workflow::Action::SystemTagsRemove { tags } => TagMetadataPatch {
-                remove_tags: tags.clone(),
-                ..TagMetadataPatch::default()
-            },
-            catalog_workflow::Action::SystemMetadataMerge { values } => TagMetadataPatch {
-                set_metadata: values.clone(),
-                ..TagMetadataPatch::default()
-            },
-            catalog_workflow::Action::SystemMetadataDelete { keys } => TagMetadataPatch {
-                remove_metadata: keys.clone(),
-                ..TagMetadataPatch::default()
-            },
-            action => return self.stage_value(action, event),
-        };
-        let mut tags = self
-            .system_tags
-            .clone()
-            .unwrap_or_else(|| entity.system_tags.clone());
-        let mut metadata = self
-            .system_metadata
-            .as_ref()
-            .unwrap_or(&entity.system_metadata)
-            .as_object()
-            .cloned()
-            .ok_or(RepositoryError::InvalidSystemMetadata)?;
-        apply_tag_metadata_patch(&mut tags, &mut metadata, &patch);
-        if matches!(
-            action,
-            catalog_workflow::Action::SystemTagsAdd { .. }
-                | catalog_workflow::Action::SystemTagsRemove { .. }
-        ) {
-            self.system_tags = Some(tags);
-        } else {
-            self.system_metadata = Some(Value::Object(metadata));
-        }
-        Ok(())
-    }
-
-    fn stage_value(
-        &mut self,
-        action: &catalog_workflow::Action,
-        event: &crate::domain_events::DomainEvent,
-    ) -> Result<(), RepositoryError> {
+        use catalog_workflow::Action;
         match action {
-            catalog_workflow::Action::AttributeWrite {
+            Action::SystemTagsAdd { tags } => self.patch_tags(
+                entity,
+                TagMetadataPatch {
+                    add_tags: tags.clone(),
+                    ..TagMetadataPatch::default()
+                },
+            ),
+            Action::SystemTagsRemove { tags } => self.patch_tags(
+                entity,
+                TagMetadataPatch {
+                    remove_tags: tags.clone(),
+                    ..TagMetadataPatch::default()
+                },
+            ),
+            Action::SystemMetadataMerge { values } => self.patch_metadata(
+                entity,
+                TagMetadataPatch {
+                    set_metadata: values.clone(),
+                    ..TagMetadataPatch::default()
+                },
+            )?,
+            Action::SystemMetadataDelete { keys } => self.patch_metadata(
+                entity,
+                TagMetadataPatch {
+                    remove_metadata: keys.clone(),
+                    ..TagMetadataPatch::default()
+                },
+            )?,
+            Action::AttributeWrite {
                 attribute_code,
                 value,
-            } => {
-                let value = match value {
-                    catalog_workflow::ScalarSource::Fixed { fixed } => fixed.clone(),
-                    catalog_workflow::ScalarSource::Event { event_field } => {
-                        workflow_event_path(&event.payload, event_field)
-                            .cloned()
-                            .ok_or_else(|| {
-                                RepositoryError::InvalidWorkflowDefinition(
-                                    "event field missing".into(),
-                                )
-                            })?
-                    }
-                };
-                if !(value.is_string()
-                    || value.is_number()
-                    || value.is_boolean()
-                    || value.is_null())
-                {
-                    return Err(RepositoryError::InvalidWorkflowDefinition(
-                        "event field must resolve to a scalar".into(),
-                    ));
-                }
-                self.values.push(NewAttributeValue::Scalar {
-                    attribute_id: None,
-                    attribute_code: Some(attribute_code.clone()),
-                    context_id: None,
-                    value,
-                });
-            }
-            _ => {
+            } => self.values.push(NewAttributeValue::Scalar {
+                attribute_id: None,
+                attribute_code: Some(attribute_code.clone()),
+                context_id: None,
+                value: scalar_source_value(value, event)?,
+            }),
+            Action::ReferencingEntitiesUpdate { .. } => {
                 return Err(RepositoryError::InvalidWorkflowDefinition(
                     "referencing_entities_update is not a local entity action".into(),
                 ));
@@ -137,6 +91,63 @@ impl WorkflowEntityChange {
         }
         Ok(())
     }
+
+    fn patch_tags(&mut self, entity: &Entity, patch: TagMetadataPatch) {
+        let tags = self
+            .system_tags
+            .get_or_insert_with(|| entity.system_tags.clone());
+        apply_tag_metadata_patch(tags, &mut Map::new(), &patch);
+    }
+
+    fn patch_metadata(
+        &mut self,
+        entity: &Entity,
+        patch: TagMetadataPatch,
+    ) -> Result<(), RepositoryError> {
+        let mut metadata = self
+            .system_metadata
+            .as_ref()
+            .unwrap_or(&entity.system_metadata)
+            .as_object()
+            .cloned()
+            .ok_or(RepositoryError::InvalidSystemMetadata)?;
+        apply_tag_metadata_patch(&mut Vec::new(), &mut metadata, &patch);
+        self.system_metadata = Some(Value::Object(metadata));
+        Ok(())
+    }
+}
+
+/// Resolves an attribute write's value, which must be a JSON scalar.
+fn scalar_source_value(
+    source: &catalog_workflow::ScalarSource,
+    event: &crate::domain_events::DomainEvent,
+) -> Result<Value, RepositoryError> {
+    let value = match source {
+        catalog_workflow::ScalarSource::Fixed { fixed } => fixed.clone(),
+        catalog_workflow::ScalarSource::Event { event_field } => {
+            workflow_event_path(&event.payload, event_field)
+                .cloned()
+                .ok_or_else(|| {
+                    RepositoryError::InvalidWorkflowDefinition("event field missing".into())
+                })?
+        }
+    };
+    if value.is_array() || value.is_object() {
+        return Err(RepositoryError::InvalidWorkflowDefinition(
+            "event field must resolve to a scalar".into(),
+        ));
+    }
+    Ok(value)
+}
+
+/// One `referencing_entities_update` action of a claimed run, applied to
+/// each entity that references the trigger entity.
+struct ReferencingAction<'a> {
+    run: &'a super::ClaimedWorkflowRun,
+    action_index: i32,
+    relationship_attribute: &'a str,
+    actions: &'a [catalog_workflow::Action],
+    event: &'a crate::domain_events::DomainEvent,
 }
 
 impl CatalogRepository {
@@ -158,12 +169,14 @@ impl CatalogRepository {
         {
             return self
                 .execute_workflow_referencing_action(
-                    run,
-                    action_index,
-                    relationship_attribute,
+                    &ReferencingAction {
+                        run,
+                        action_index,
+                        relationship_attribute,
+                        actions,
+                        event,
+                    },
                     *max_targets,
-                    actions,
-                    event,
                 )
                 .await;
         }
@@ -320,14 +333,15 @@ impl CatalogRepository {
     /// own marker is written only after every current target has settled.
     async fn execute_workflow_referencing_action(
         &self,
-        run: &super::ClaimedWorkflowRun,
-        action_index: i32,
-        relationship_attribute: &str,
+        action: &ReferencingAction<'_>,
         max_targets: u32,
-        actions: &[catalog_workflow::Action],
-        event: &crate::domain_events::DomainEvent,
     ) -> Result<super::WorkflowActionResult, RepositoryError> {
-        let trigger_entity_id = event.aggregate_id;
+        let ReferencingAction {
+            run,
+            action_index,
+            relationship_attribute,
+            ..
+        } = *action;
         let mut transaction = self.pool.begin().await?;
         if !self.fence_workflow_action(&mut transaction, run).await? {
             transaction.commit().await?;
@@ -347,7 +361,7 @@ impl CatalogRepository {
         let targets = self
             .referencing_entities(
                 &mut transaction,
-                trigger_entity_id,
+                action.event.aggregate_id,
                 relationship_attribute,
                 None,
                 i64::from(max_targets) + 1,
@@ -387,25 +401,14 @@ impl CatalogRepository {
         pending.dedup();
         let mut failures = Vec::new();
         for target in &pending {
-            match self
-                .update_referencing_entity(
-                    run,
-                    action_index,
-                    *target,
-                    trigger_entity_id,
-                    relationship_attribute,
-                    actions,
-                    event,
-                )
-                .await
-            {
+            match self.update_referencing_entity(action, *target).await {
                 Ok(true) => {}
                 Ok(false) => return Ok(super::WorkflowActionResult::Cancelled),
                 // A lost task lease is not a target failure: stop immediately.
                 Err(error @ RepositoryError::Task(_)) => return Err(error),
                 Err(error) => {
                     let message = bounded_error(&error.to_string());
-                    self.record_referencing_target_failure(run, action_index, *target, &message)
+                    self.record_referencing_target_failure(action, *target, &message)
                         .await?;
                     failures.push((*target, message));
                 }
@@ -435,19 +438,16 @@ impl CatalogRepository {
     /// Returns `false` when the run was cancelled or disabled. A target that no
     /// longer exists or no longer references the trigger entity is recorded as
     /// `skipped`; it is never written.
-    #[allow(clippy::too_many_arguments)]
     async fn update_referencing_entity(
         &self,
-        run: &super::ClaimedWorkflowRun,
-        action_index: i32,
+        action: &ReferencingAction<'_>,
         entity_id: Uuid,
-        trigger_entity_id: Uuid,
-        relationship_attribute: &str,
-        actions: &[catalog_workflow::Action],
-        event: &crate::domain_events::DomainEvent,
     ) -> Result<bool, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
-        if !self.fence_workflow_action(&mut transaction, run).await? {
+        if !self
+            .fence_workflow_action(&mut transaction, action.run)
+            .await?
+        {
             transaction.commit().await?;
             return Ok(false);
         }
@@ -462,8 +462,8 @@ impl CatalogRepository {
             Some(_) => !self
                 .referencing_entities(
                     &mut transaction,
-                    trigger_entity_id,
-                    relationship_attribute,
+                    action.event.aggregate_id,
+                    action.relationship_attribute,
                     Some(entity_id),
                     1,
                 )
@@ -479,8 +479,8 @@ impl CatalogRepository {
                SET status = EXCLUDED.status, attempts = t.attempts + 1, last_error = NULL, updated_at = clock_timestamp()
                WHERE t.status = 'failed'"#,
         )
-        .bind(run.run.id)
-        .bind(action_index)
+        .bind(action.run.run.id)
+        .bind(action.action_index)
         .bind(entity_id)
         .bind(self.workspace_id.0)
         .bind(status)
@@ -489,7 +489,7 @@ impl CatalogRepository {
         if marker.rows_affected() == 1
             && let Some(entity) = entity.filter(|_| references)
         {
-            self.apply_workflow_actions(&mut transaction, entity, actions, event)
+            self.apply_workflow_actions(&mut transaction, entity, action.actions, action.event)
                 .await?;
         } else {
             self.ensure_task_fence(&mut transaction).await?;
@@ -502,8 +502,7 @@ impl CatalogRepository {
     /// so partial failures stay visible while the run retries.
     async fn record_referencing_target_failure(
         &self,
-        run: &super::ClaimedWorkflowRun,
-        action_index: i32,
+        action: &ReferencingAction<'_>,
         entity_id: Uuid,
         message: &str,
     ) -> Result<(), RepositoryError> {
@@ -516,8 +515,8 @@ impl CatalogRepository {
                SET attempts = t.attempts + 1, last_error = EXCLUDED.last_error, updated_at = clock_timestamp()
                WHERE t.status = 'failed'"#,
         )
-        .bind(run.run.id)
-        .bind(action_index)
+        .bind(action.run.run.id)
+        .bind(action.action_index)
         .bind(entity_id)
         .bind(self.workspace_id.0)
         .bind(message)
