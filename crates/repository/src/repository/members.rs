@@ -125,6 +125,10 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
             if !active || !verified {
                 return Err(RepositoryError::InvitationInvalid);
             }
+            // One live password-setup link per account, as issue_lifecycle_token
+            // enforces; an earlier invitation can still be accepted after setup.
+            Self::revoke_outstanding_lifecycle_tokens(&mut tx, user_id, Some("password_setup"))
+                .await?;
             sqlx::query("INSERT INTO user_lifecycle_action_tokens (id, user_id, purpose, token_digest, issued_security_version, issued_credential_version, expires_at) VALUES ($1,$2,'password_setup',$3,$4,0,$5)")
                 .bind(Uuid::new_v4()).bind(user_id).bind(&action_digest).bind(security_version).bind(expires_at).execute(&mut *tx).await?;
             sqlx::query("INSERT INTO workspace_invitation_onboarding (invitation_id, workspace_id, user_id, action_token_digest) VALUES ($1,$2,$3,$4)")
@@ -148,7 +152,7 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
             return Err(RepositoryError::InvitationInvalid);
         }
         let mut tx: Transaction<'_, Postgres> = self.pool.begin().await?;
-        let row = sqlx::query("SELECT i.id invitation_id, i.workspace_id, i.role_id, i.scope_type, i.scope_target_id, o.user_id, u.security_version FROM workspace_invitations i JOIN workspace_invitation_onboarding o ON o.invitation_id = i.id AND o.workspace_id = i.workspace_id JOIN user_lifecycle_action_tokens a ON a.token_digest = o.action_token_digest AND a.user_id = o.user_id AND a.purpose = 'password_setup' JOIN users u ON u.id = o.user_id WHERE i.token_digest = $1 AND o.action_token_digest = $2 AND i.accepted_at IS NULL AND i.revoked_at IS NULL AND i.expires_at > clock_timestamp() AND a.consumed_at IS NULL AND a.revoked_at IS NULL AND a.expires_at > clock_timestamp() AND a.issued_security_version = u.security_version AND u.state = 'active' AND u.email_verified_at IS NOT NULL FOR UPDATE OF i, o, a, u")
+        let row = sqlx::query("SELECT i.id invitation_id, i.workspace_id, i.role_id, i.scope_type, i.scope_target_id, o.user_id, u.security_version FROM workspace_invitations i JOIN workspace_invitation_onboarding o ON o.invitation_id = i.id AND o.workspace_id = i.workspace_id JOIN user_lifecycle_action_tokens a ON a.token_digest = o.action_token_digest AND a.user_id = o.user_id AND a.purpose = 'password_setup' JOIN users u ON u.id = o.user_id LEFT JOIN local_password_credentials c ON c.user_id = o.user_id WHERE i.token_digest = $1 AND o.action_token_digest = $2 AND i.accepted_at IS NULL AND i.revoked_at IS NULL AND i.expires_at > clock_timestamp() AND a.consumed_at IS NULL AND a.revoked_at IS NULL AND a.expires_at > clock_timestamp() AND a.issued_security_version = u.security_version AND a.issued_credential_version = coalesce(c.credential_version, 0) AND u.state = 'active' AND u.email_verified_at IS NOT NULL FOR UPDATE OF i, o, a, u")
             .bind(invitation_digest).bind(action_digest).fetch_optional(&mut *tx).await?.ok_or(RepositoryError::InvitationInvalid)?;
         let user_id: Uuid = row.try_get("user_id")?;
         let workspace_id: Uuid = row.try_get("workspace_id")?;
@@ -157,8 +161,13 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
         if !action_consumed {
             return Err(RepositoryError::InvitationInvalid);
         }
-        sqlx::query("INSERT INTO local_password_credentials (user_id, password_hash, credential_version) VALUES ($1,$2,1)")
-            .bind(user_id).bind(password_hash).execute(&mut *tx).await?;
+        // A credential set concurrently (another workspace's onboarding) makes
+        // this link invalid rather than a primary-key failure.
+        let credential_created = sqlx::query("INSERT INTO local_password_credentials (user_id, password_hash, credential_version) VALUES ($1,$2,1) ON CONFLICT (user_id) DO NOTHING")
+            .bind(user_id).bind(password_hash).execute(&mut *tx).await?.rows_affected() == 1;
+        if !credential_created {
+            return Err(RepositoryError::InvitationInvalid);
+        }
         let membership_id: Uuid = sqlx::query_scalar("INSERT INTO workspace_memberships (id, workspace_id, user_id, state) VALUES ($1,$2,$3,'active') ON CONFLICT (workspace_id,user_id) DO UPDATE SET state = 'active', updated_at = clock_timestamp() RETURNING id")
             .bind(Uuid::new_v4()).bind(workspace_id).bind(user_id).fetch_one(&mut *tx).await?;
         sqlx::query("INSERT INTO role_grants (id, workspace_id, membership_id, role_id, scope_type, scope_target_id) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (workspace_id,membership_id,role_id,scope_type,scope_target_id) DO NOTHING")
@@ -249,7 +258,10 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
         workspace_id: Uuid,
     ) -> Result<(), sqlx::Error> {
         sqlx::query("UPDATE browser_sessions SET revoked_at = clock_timestamp() WHERE user_id = $1 AND workspace_id = $2 AND revoked_at IS NULL").bind(user_id).bind(workspace_id).execute(&mut **tx).await?;
-        sqlx::query("UPDATE user_lifecycle_action_tokens SET revoked_at = clock_timestamp() WHERE user_id = $1 AND revoked_at IS NULL").bind(user_id).execute(&mut **tx).await?;
+        // Lifecycle tokens are account-wide; only this workspace's pending
+        // onboarding link belongs to the access being revoked. Password reset,
+        // email verification and other workspaces' onboarding are untouched.
+        sqlx::query("UPDATE user_lifecycle_action_tokens a SET revoked_at = clock_timestamp() FROM workspace_invitation_onboarding o WHERE a.user_id = $1 AND a.purpose = 'password_setup' AND a.consumed_at IS NULL AND a.revoked_at IS NULL AND o.workspace_id = $2 AND o.user_id = a.user_id AND o.action_token_digest = a.token_digest").bind(user_id).bind(workspace_id).execute(&mut **tx).await?;
         Ok(())
     }
 
