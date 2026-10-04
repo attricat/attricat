@@ -132,7 +132,9 @@ The plan shows them as `required_rule_codes` (the rules' physical codes) and
 `require_valid_entity`, and orders channel actions after rule actions. A
 channel whose required rule cannot be created or found is
 `dependency_not_creatable`. Apply writes the channel through the same
-validated path as an ordinary channel update.
+validated path as an ordinary channel update. A required rule that is
+installed disabled is ignored by the channel gate until it is enabled, because
+the gate uses only enabled rules.
 
 A mapped context is used as it is; its data and parent are not changed. If the
 pack declares it as a channel, a channel whose enabled state and required

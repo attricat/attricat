@@ -92,7 +92,7 @@ acli solution-pack plan --file pack.tar.zst --prefix example \
   --map-context contexts/poland=PL
 ```
 
-A channel can require some of the pack's rules, or a valid entity, before an entity is published there; the plan summary lists them (`required_rule_codes`, `require_valid_entity`). The channel is planned after those rules.
+A channel can require some of the pack's rules, or a valid entity, before an entity is published there; the plan summary lists them (`required_rule_codes`, `require_valid_entity`). The channel is planned after those rules. A channel whose required rule can't be created or found is blocked as `dependency_not_creatable`. A required rule that is installed disabled doesn't count toward the channel's checks until you enable it.
 
 A mapped context is used as it is. If the pack wants it as a channel, an existing channel that matches exactly, including its required checks, is `satisfied` and a missing one is created. A channel whose settings differ, for example one that is switched off when the pack expects it on, is a `publication_channel_mismatch` conflict: change the channel yourself or skip the mapping. Rules, saved searches, and sample values that belong to the pack's context use the created or mapped context.
 
@@ -130,7 +130,7 @@ Checks are informational. A false result does not undo resources or block an oth
 
 ## Retry and recovery
 
-Retry interrupted or resumable failed applications with the same plan ID. The server verifies completed steps and continues pending steps without duplication; each context, channel, rule, workflow, and saved search is created together with the record of its step. A started application can resume after plan expiry, subject to its own retention deadline.
+Retry interrupted or resumable failed applications with the same plan ID. The server verifies completed steps and continues pending steps without duplication; each context, channel, rule, workflow, and saved search is created together with the record of its step. A started application can resume after plan expiry, subject to its own retention deadline. If a blueprint the plan created has gained entities by the time a resumed application reaches an enforcing rule for it, that step fails with `rule_dry_run_required`; dry-run the rule and enable it yourself.
 
 If workspace changes make a plan stale, review completed steps and diagnostics before creating another plan. If a later step fails permanently, earlier successful writes remain in the workspace; Attricat does not roll them back.
 
@@ -148,6 +148,8 @@ Unchanged exact published blueprints and unchanged assets can be reused; new res
 ## Optional sample data
 
 Add `--include-sample-data` during planning only after reviewing the warning. Samples are created against published blueprints and receive a visible **Sample** badge. Their values are set in the default context, or in one of the pack's contexts when the pack says so. Samples can also attach files bundled in the pack, such as images or PDFs; planning uploads them to ordinary file storage, and they appear on the sample entities as ordinary files. Attricat checks each file's type and the attribute's file rules, but cannot tell whether its content is fictional. They are ordinary entities: creation emits audit records and `entity.created.v1` events, may run enabled workflows/extensions, and may cause external effects. Values can remain in ordinary audit/event history after temporary pack staging is removed.
+
+Inspection rejects a pack whose samples set a status or a user or team assignment attribute. It also rejects a pack in which two samples of one blueprint share a unique-key value. A sample that collides with an existing entity of a mapped or reused blueprint, for example on a unique key, fails its apply step.
 
 The first plan with samples selected reserves that exact combination of release, archive, and dataset. A second plan cannot select the same combination, even after expiry or abandonment; changing the prefix does not reset the reservation. Retry the original plan. If it expires before application starts, coordinate a new release with the publisher.
 

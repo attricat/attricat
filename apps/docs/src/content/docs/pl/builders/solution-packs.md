@@ -92,7 +92,7 @@ acli solution-pack plan --file pack.tar.zst --prefix example \
   --map-context contexts/poland=PL
 ```
 
-Kanał może wymagać spełnienia niektórych reguł pakietu lub poprawności encji, zanim encja zostanie w nim opublikowana; podsumowanie planu je wymienia (`required_rule_codes`, `require_valid_entity`). Kanał jest planowany po tych regułach.
+Kanał może wymagać spełnienia niektórych reguł pakietu lub poprawności encji, zanim encja zostanie w nim opublikowana; podsumowanie planu je wymienia (`required_rule_codes`, `require_valid_entity`). Kanał jest planowany po tych regułach. Kanał, którego wymaganej reguły nie da się utworzyć ani znaleźć, jest blokowany jako `dependency_not_creatable`. Wymagana reguła zainstalowana jako wyłączona nie jest uwzględniana w kontrolach kanału, dopóki jej nie włączysz.
 
 Wskazany kontekst jest używany bez zmian. Jeśli pakiet oczekuje, że będzie kanałem, istniejący kanał o dokładnie takich samych ustawieniach, łącznie z wymaganymi sprawdzeniami, ma status `satisfied`, a brakujący zostanie utworzony. Kanał o innych ustawieniach, na przykład wyłączony, gdy pakiet oczekuje włączonego, powoduje konflikt `publication_channel_mismatch`: zmień kanał samodzielnie albo nie wskazuj tego kontekstu. Reguły, zapisane wyszukiwania i wartości przykładowe przypisane do kontekstu pakietu używają utworzonego lub wskazanego kontekstu.
 
@@ -130,7 +130,7 @@ Kontrole są informacyjne. Negatywny wynik nie cofa zasobów ani nie blokuje uko
 
 ## Ponawianie i odzyskiwanie
 
-Jeśli stosowanie pakietu zostało przerwane lub zakończyło się błędem, który pozwala na wznowienie, ponów je z tym samym identyfikatorem planu. Serwer sprawdza ukończone kroki i kontynuuje pozostałe bez tworzenia duplikatów; każdy kontekst, kanał, reguła, przepływ pracy i zapisane wyszukiwanie powstaje razem z zapisem swojego kroku. Rozpoczęte stosowanie można wznowić po wygaśnięciu planu, dopóki nie upłynie termin przechowywania jego danych.
+Jeśli stosowanie pakietu zostało przerwane lub zakończyło się błędem, który pozwala na wznowienie, ponów je z tym samym identyfikatorem planu. Serwer sprawdza ukończone kroki i kontynuuje pozostałe bez tworzenia duplikatów; każdy kontekst, kanał, reguła, przepływ pracy i zapisane wyszukiwanie powstaje razem z zapisem swojego kroku. Rozpoczęte stosowanie można wznowić po wygaśnięciu planu, dopóki nie upłynie termin przechowywania jego danych. Jeśli Schemat utworzony przez plan zyska encje, zanim wznowione stosowanie dojdzie do egzekwowanej reguły tego Schematu, ten krok kończy się błędem `rule_dry_run_required`; uruchom regułę w trybie próbnym i włącz ją samodzielnie.
 
 Jeśli zmiany w obszarze roboczym unieważniły plan, przejrzyj ukończone kroki i diagnostykę przed utworzeniem kolejnego. Jeśli późniejszy krok zakończy się trwałym błędem, wcześniejsze udane zapisy pozostają w obszarze roboczym; Attricat ich nie wycofuje.
 
@@ -148,6 +148,8 @@ Niezmienione, dokładnie zgodne opublikowane Schematy i niezmienione zasoby graf
 ## Opcjonalne dane przykładowe
 
 Dodaj `--include-sample-data` podczas planowania dopiero po przeczytaniu ostrzeżenia. Encje przykładowe powstają na podstawie opublikowanych Schematów i otrzymują widoczne oznaczenie danych przykładowych. Ich wartości trafiają do kontekstu domyślnego albo, jeśli tak przewiduje pakiet, do jednego z jego kontekstów. Encje przykładowe mogą też mieć dołączone pliki z pakietu, na przykład obrazy lub dokumenty PDF; planowanie przesyła je do zwykłego magazynu plików, a na encjach przykładowych pojawiają się jako zwykłe pliki. Attricat sprawdza typ każdego pliku i reguły plików atrybutu, ale nie potrafi ocenić, czy jego treść jest fikcyjna. Są zwykłymi encjami: ich tworzenie zapisuje audyt i zdarzenia `entity.created.v1`, może uruchamiać aktywne przepływy pracy lub rozszerzenia i powodować skutki w systemach zewnętrznych. Wartości mogą pozostać w historii audytu i zdarzeń po usunięciu tymczasowych danych pakietu.
+
+Sprawdzanie (`inspect`) odrzuca pakiet, którego encje przykładowe ustawiają status albo atrybut przypisania użytkownika lub zespołu. Odrzuca też pakiet, w którym dwie encje przykładowe jednego Schematu mają tę samą wartość klucza unikalnego. Encja przykładowa kolidująca z istniejącą encją wskazanego lub ponownie użytego Schematu, na przykład w kluczu unikalnym, powoduje błąd swojego kroku stosowania.
 
 Pierwszy plan z danymi przykładowymi rezerwuje dokładnie tę kombinację wydania, archiwum i zestawu danych. Drugi plan nie może wybrać tej samej kombinacji, nawet po wygaśnięciu lub porzuceniu pierwszego; zmiana prefiksu nie usuwa rezerwacji. Ponawiaj oryginalny plan. Jeśli wygaśnie przed rozpoczęciem stosowania, uzgodnij nowe wydanie z wydawcą.
 

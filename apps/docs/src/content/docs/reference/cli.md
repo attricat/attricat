@@ -323,7 +323,7 @@ acli connector-job run <job-id> --idempotency-key <key>
 
 ```sh
 acli solution-pack inspect --file pack.tar.zst
-acli solution-pack plan --file pack.tar.zst --prefix <prefix> --blueprint-publication draft|publish [--include-sample-data] [--map key=code] [--map-asset key=uuid] [--map-context key=code] [--from-application <id>]
+acli solution-pack plan --file pack.tar.zst --prefix <prefix> --blueprint-publication draft|publish [--include-sample-data] [--map key=code ... --map-asset key=uuid ... --map-context key=code ... | --from-application <id>]
 acli solution-pack plan show <plan-id>
 acli solution-pack apply <plan-id>
 acli solution-pack applications list | show <id> | abandon <id>
