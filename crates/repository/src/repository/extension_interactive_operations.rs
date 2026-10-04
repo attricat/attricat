@@ -380,7 +380,7 @@ impl CatalogRepository {
                 "selection must contain saved entities from one blueprint revision".into(),
             ));
         }
-        self.ensure_principal_may_all(
+        self.ensure_principal_may(
             &mut transaction,
             input.actor,
             "entities.read",
@@ -551,7 +551,7 @@ impl CatalogRepository {
         .bind(self.workspace_id.0)
         .fetch_all(&mut *connection)
         .await?;
-        self.ensure_principal_may_all(&mut connection, actor, "entities.read", &members)
+        self.ensure_principal_may(&mut connection, actor, "entities.read", &members)
             .await
     }
 

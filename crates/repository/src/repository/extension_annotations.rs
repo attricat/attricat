@@ -453,7 +453,7 @@ impl CatalogRepository {
     ) -> Result<i64, RepositoryError> {
         patch.validate(authority)?;
         patch.validate_qualified_tags(extension_id)?;
-        self.ensure_actor_may(&mut *transaction, "entities.read", entity_id)
+        self.ensure_actor_may(&mut *transaction, "entities.read", &[entity_id])
             .await?;
         // Row lock first, as on every generic entity write, then the claim's
         // namespace lock.

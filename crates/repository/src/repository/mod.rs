@@ -1,3 +1,24 @@
+//! Workspace-scoped catalog persistence.
+//!
+//! # Lock order
+//!
+//! Transactions that write entities take their locks in this order, skipping
+//! any they do not need, so concurrent writers cannot deadlock:
+//!
+//! 1. Workflow execution only: the workflow lifecycle row, then the run row.
+//! 2. The workspace relationship lock
+//!    ([`CatalogRepository::lock_relationship_cardinality_writes`]), taken
+//!    by every write that changes relationship values and by context
+//!    reparenting.
+//! 3. A legacy extension upsert's lookup lock.
+//! 4. Entity rows. A transaction that locks several takes them in ID order.
+//! 5. Extension annotation namespace locks, in sorted name order.
+//!
+//! The entity seams (`create_entity_in_transaction`,
+//! `update_entity_in_transaction`, `delete_entity_in_transaction`) take the
+//! locks they need themselves; re-taking a lock the transaction already
+//! holds is a no-op, so a caller that pre-locks must only respect the order.
+
 use std::{collections::HashSet, num::NonZeroI64, str::FromStr};
 
 use catalog_validation::is_valid_code;
@@ -955,24 +976,10 @@ impl CatalogRepository {
     }
 
     /// Rechecks the interactive actor's live membership, grant scope and token
-    /// permission for one entity. Repositories without an actor are governed
-    /// by their caller's authorization and are not restricted here.
+    /// permission for every entity; see [`Self::ensure_principal_may`].
+    /// Repositories without an actor are governed by their caller's
+    /// authorization and are not restricted here.
     pub(crate) async fn ensure_actor_may(
-        &self,
-        connection: &mut sqlx::PgConnection,
-        permission: &str,
-        entity_id: Uuid,
-    ) -> Result<(), RepositoryError> {
-        let Some(actor) = self.authorization_actor else {
-            return Ok(());
-        };
-        self.ensure_principal_may(connection, actor, permission, entity_id)
-            .await
-    }
-
-    /// Rechecks the interactive actor for several entities at once; see
-    /// [`Self::ensure_principal_may_all`].
-    pub(crate) async fn ensure_actor_may_all(
         &self,
         connection: &mut sqlx::PgConnection,
         permission: &str,
@@ -981,39 +988,15 @@ impl CatalogRepository {
         let Some(actor) = self.authorization_actor else {
             return Ok(());
         };
-        self.ensure_principal_may_all(connection, actor, permission, entity_ids)
+        self.ensure_principal_may(connection, actor, permission, entity_ids)
             .await
     }
 
-    /// Checks one principal's current grant and, for a token, its live token
-    /// permission against one entity.
+    /// Checks, in one query, that a principal's current grants and, for a
+    /// token, its live token permission cover every entity. A workspace
+    /// grant authorizes IDs that do not exist, so callers still verify
+    /// existence themselves.
     pub(crate) async fn ensure_principal_may(
-        &self,
-        connection: &mut sqlx::PgConnection,
-        actor: AuthorizationActor,
-        permission: &str,
-        entity_id: Uuid,
-    ) -> Result<(), RepositoryError> {
-        if Self::principal_may_on(
-            connection,
-            actor,
-            self.workspace_id.0,
-            permission,
-            Some(entity_id),
-            None,
-        )
-        .await?
-        {
-            Ok(())
-        } else {
-            Err(RepositoryError::ActorNotAuthorized)
-        }
-    }
-
-    /// [`Self::ensure_principal_may`] for every entity in one query. A
-    /// workspace grant authorizes IDs that do not exist, so callers still
-    /// verify existence themselves.
-    pub(crate) async fn ensure_principal_may_all(
         &self,
         connection: &mut sqlx::PgConnection,
         actor: AuthorizationActor,
@@ -1715,7 +1698,7 @@ pub(crate) enum GrantCodes<'a> {
     Roles(&'a [String]),
 }
 
-impl GrantCodes<'_> {
+impl<'a> GrantCodes<'a> {
     /// The `grants(scope_type, scope_target_id)` CTE for user `$1` in
     /// workspace `$2`, matching the codes bound as `$3`: active user,
     /// membership and workspace only.
@@ -1733,10 +1716,11 @@ impl GrantCodes<'_> {
         )
     }
 
-    fn codes(&self) -> Vec<String> {
-        match self {
-            Self::Permission(permission) => vec![(*permission).to_owned()],
-            Self::Roles(roles) => roles.to_vec(),
+    /// The codes to bind as `$3`.
+    fn codes(&self) -> Vec<&'a str> {
+        match *self {
+            Self::Permission(permission) => vec![permission],
+            Self::Roles(roles) => roles.iter().map(String::as_str).collect(),
         }
     }
 }

@@ -336,7 +336,7 @@ impl CatalogRepository {
         };
         if let Some(permission) = &requirements.permission {
             match self
-                .ensure_principal_may(transaction, actor, permission, entity.id)
+                .ensure_principal_may(transaction, actor, permission, &[entity.id])
                 .await
             {
                 Ok(()) => {}

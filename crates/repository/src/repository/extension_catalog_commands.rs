@@ -447,7 +447,7 @@ impl CatalogRepository {
             self.lock_relationship_cardinality_writes(transaction)
                 .await?;
         }
-        self.ensure_actor_may(transaction, "entities.write", entity_id)
+        self.ensure_actor_may(transaction, "entities.write", &[entity_id])
             .await?;
         // A run bound to a user may link only to entities that user can read,
         // whether or not they are in the run's selection.
@@ -467,7 +467,7 @@ impl CatalogRepository {
             .collect::<BTreeSet<_>>()
             .into_iter()
             .collect();
-        self.ensure_actor_may_all(transaction, "entities.read", &targets)
+        self.ensure_actor_may(transaction, "entities.read", &targets)
             .await?;
         let (entity, changes, event) = self
             .update_entity_in_transaction(

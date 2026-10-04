@@ -143,6 +143,13 @@ impl CatalogRepository {
         } else {
             validate_system_annotations(&system_tags, &system_metadata)?;
         }
+        // Do not expose an entity before its initial values and derived preview
+        // agree; otherwise a concurrent reader can observe a partial create.
+        if writes_relationship_values(&values) {
+            self.lock_relationship_cardinality_writes(transaction)
+                .await?;
+        }
+        // Namespace locks come after the relationship lock, as on updates.
         self.ensure_annotation_namespaces_unchanged(
             transaction,
             &[],
@@ -151,12 +158,6 @@ impl CatalogRepository {
             &system_metadata,
         )
         .await?;
-        // Do not expose an entity before its initial values and derived preview
-        // agree; otherwise a concurrent reader can observe a partial create.
-        if writes_relationship_values(&values) {
-            self.lock_relationship_cardinality_writes(transaction)
-                .await?;
-        }
         let entity = self
             .insert_entity(
                 transaction,
