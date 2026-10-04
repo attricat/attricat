@@ -32,17 +32,7 @@ context_editable = "default"
 "#;
 
 async fn entity(client: &Client, base_url: &str, blueprint: &str) -> String {
-    client
-        .post(format!("{base_url}/v1/entities"))
-        .json(&json!({ "blueprint": { "code": blueprint }, "values": [] }))
-        .send()
-        .await
-        .unwrap()
-        .error_for_status()
-        .unwrap()
-        .json::<Value>()
-        .await
-        .unwrap()["id"]
+    create_entity_with(client, base_url, blueprint, json!([])).await["id"]
         .as_str()
         .unwrap()
         .to_owned()

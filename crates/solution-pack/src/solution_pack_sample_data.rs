@@ -113,7 +113,10 @@ pub fn valid_sample_file_path(path: &str) -> bool {
 /// files are not scanned for content; only their type is verified.
 pub fn validate_sample_file_bytes(media_type: &str, bytes: &[u8]) -> Result<(), String> {
     if bytes.is_empty() || bytes.len() > MAX_SAMPLE_FILE_BYTES {
-        return Err("sample file must be non-empty and at most 8 MiB".into());
+        return Err(format!(
+            "sample file must be non-empty and at most {} MiB",
+            MAX_SAMPLE_FILE_BYTES / (1024 * 1024)
+        ));
     }
     // The same sniffer as ordinary uploads; sample media types never need
     // the file name to disambiguate.
@@ -846,36 +849,11 @@ pub(crate) fn validate_sample_unique_keys(
             } else {
                 &paths[..1]
             };
-            'context: for (context, path) in scoped {
-                let mut components = Vec::with_capacity(key.attributes.len());
-                for code in &key.attributes {
-                    let Some(attribute) = attributes.get(code.as_str()) else {
-                        continue 'context;
-                    };
-                    let mut found = None;
-                    for (index, source) in path.iter().enumerate() {
-                        if let Some(value) = values.get(&(code.as_str(), *source)) {
-                            if index > 0 && attribute.context_fallback == "none" {
-                                break;
-                            }
-                            found = Some(value.clone());
-                            break;
-                        }
-                    }
-                    // Defaults are written in the default context.
-                    let found = found.or_else(|| {
-                        attribute
-                            .default_value
-                            .clone()
-                            .filter(|_| path.len() == 1 || attribute.context_fallback != "none")
-                    });
-                    let Some(component) = found.and_then(|value| {
-                        sample_key_component(&value, &attribute.value_type, key.case_sensitive)
-                    }) else {
-                        continue 'context;
-                    };
-                    components.push(component);
-                }
+            for (context, path) in scoped {
+                let Some(components) = unique_key_components(key, &attributes, &values, path)
+                else {
+                    continue;
+                };
                 let family = blueprint.key();
                 if let Some(other) = seen.insert(
                     (family, key.code.as_str(), *context, components),
@@ -892,6 +870,51 @@ pub(crate) fn validate_sample_unique_keys(
         }
     }
     Ok(())
+}
+
+/// A sample's normalized unique-key components in one context path, or `None`
+/// when a component has no value there and so the key does not apply.
+fn unique_key_components(
+    key: &catalog_blueprint::UniqueKeyDefinition,
+    attributes: &HashMap<&str, &catalog_blueprint::EffectiveAttribute>,
+    values: &HashMap<(&str, Option<&str>), Value>,
+    path: &[Option<&str>],
+) -> Option<Vec<Value>> {
+    key.attributes
+        .iter()
+        .map(|code| {
+            let attribute = attributes.get(code.as_str())?;
+            let value = context_path_value(attribute, values, path)?;
+            sample_key_component(&value, &attribute.value_type, key.case_sensitive)
+        })
+        .collect()
+}
+
+/// The value an attribute resolves to in a context path: the nearest
+/// declared value, unless the attribute does not fall back to parent
+/// contexts, then its default. Defaults are written in the default context.
+fn context_path_value(
+    attribute: &catalog_blueprint::EffectiveAttribute,
+    values: &HashMap<(&str, Option<&str>), Value>,
+    path: &[Option<&str>],
+) -> Option<Value> {
+    let falls_back = attribute.context_fallback != "none";
+    let nearest = path.iter().enumerate().find_map(|(index, source)| {
+        values
+            .get(&(attribute.code.as_str(), *source))
+            .map(|value| (index, value))
+    });
+    match nearest {
+        Some((index, _)) if index > 0 && !falls_back => None,
+        Some((_, value)) => Some(value.clone()),
+        None => None,
+    }
+    .or_else(|| {
+        attribute
+            .default_value
+            .clone()
+            .filter(|_| path.len() == 1 || falls_back)
+    })
 }
 
 #[cfg(test)]

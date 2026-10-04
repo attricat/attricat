@@ -4,6 +4,7 @@ import {
   getEntityPublicationReadiness,
   getEntityPublications,
   getEntityRetentionHolds,
+  getStatusTransitions,
 } from './api';
 import { entityQueryKeys } from './queryKeys';
 
@@ -34,4 +35,14 @@ export const entityRetentionHoldsOptions = (entityId: string) =>
   queryOptions({
     queryKey: entityQueryKeys.retentionHolds(entityId),
     queryFn: ({ signal }) => getEntityRetentionHolds(entityId, signal),
+  });
+
+/** The caller's access to declared status edges from the saved status. */
+export const entityStatusTransitionsOptions = (
+  entityId: string,
+  contextId: string | null,
+) =>
+  queryOptions({
+    queryKey: entityQueryKeys.statusTransitions(entityId, contextId),
+    queryFn: ({ signal }) => getStatusTransitions(entityId, contextId, signal),
   });

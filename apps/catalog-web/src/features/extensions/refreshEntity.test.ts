@@ -77,15 +77,18 @@ describe('extension entity refresh', () => {
     expect(client.getQueryCache().getAll()).toHaveLength(0);
   });
 
-  it('invalidates entity-scoped findings and publications', async () => {
+  it('invalidates entity-scoped findings, publications and record controls', async () => {
     const client = new QueryClient();
     const findings = ruleQueryKeys.findings('current');
     const publication = entityQueryKeys.publication('current');
+    const approvals = entityQueryKeys.approvals('current');
     client.setQueryData(findings, []);
     client.setQueryData(publication, []);
+    client.setQueryData(approvals, []);
     await refreshEntity(client, 'current');
     expect(client.getQueryState(findings)?.isInvalidated).toBe(true);
     expect(client.getQueryState(publication)?.isInvalidated).toBe(true);
+    expect(client.getQueryState(approvals)?.isInvalidated).toBe(true);
     client.clear();
   });
 

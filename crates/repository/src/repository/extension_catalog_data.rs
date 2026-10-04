@@ -374,7 +374,7 @@ impl CatalogRepository {
                 blueprint_version,
                 attribute_id,
                 value,
-                super::entity_commands::ExtensionLookupMode::Read,
+                super::extension_catalog_commands::ExtensionLookupMode::Read,
             )
             .await?
         else {

@@ -5,9 +5,7 @@ use super::{
     error::ApiError,
     extractors::{ApiJson, ApiPath, ApiQuery},
 };
-use crate::repository::{
-    AuthorizationActor, EntityApproval, FileRetentionHold, StatusTransitionAccess,
-};
+use crate::repository::{EntityApproval, FileRetentionHold, StatusTransitionAccess};
 use axum::{Json, http::StatusCode};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -32,16 +30,12 @@ pub(super) struct PlaceHold {
 
 pub(super) async fn status_transitions(
     ScopedRepository(repository): ScopedRepository,
-    AuthenticatedPrincipal(user_id, token_id): AuthenticatedPrincipal,
+    principal: AuthenticatedPrincipal,
     ApiPath(entity_id): ApiPath<Uuid>,
     ApiQuery(query): ApiQuery<TransitionQuery>,
 ) -> Result<Json<Items<StatusTransitionAccess>>, ApiError> {
     let items = repository
-        .status_transition_access(
-            entity_id,
-            query.context_id,
-            AuthorizationActor { user_id, token_id },
-        )
+        .status_transition_access(entity_id, query.context_id, principal.actor())
         .await?;
     Ok(Json(Items { items }))
 }

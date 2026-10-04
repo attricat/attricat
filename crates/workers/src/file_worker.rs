@@ -356,7 +356,8 @@ impl FileWorker {
     }
 
     /// Marks unreferenced files without an active retention hold for delayed
-    /// deletion and creates one durable purge job. Repeated runs are harmless and never delete before grace.
+    /// deletion and creates one durable purge job. Repeated runs are harmless
+    /// and never delete before grace.
     pub async fn reconcile(&self) -> Result<(), RepositoryError> {
         let grace = i64::try_from(self.config.delete_grace.as_secs()).unwrap_or(i64::MAX);
         let marked = self

@@ -1,5 +1,15 @@
 #![allow(dead_code, unused_imports)]
 
+mod database;
+mod extension_fixtures;
+mod members;
+mod requests;
+
+pub use database::*;
+pub use extension_fixtures::*;
+pub use members::*;
+pub use requests::*;
+
 use std::{net::SocketAddr, sync::Arc};
 
 use tokio::sync::Mutex;
@@ -220,6 +230,10 @@ pub async fn start_session_server(pool: PgPool) -> (String, JoinHandle<()>) {
 
 pub const BOOTSTRAP_WORKSPACE_ID: &str = "00000000-0000-4000-8000-000000000002";
 pub const BOOTSTRAP_OWNER_ID: &str = "00000000-0000-4000-8000-000000000201";
+
+pub fn bootstrap_workspace_id() -> Uuid {
+    BOOTSTRAP_WORKSPACE_ID.parse().unwrap()
+}
 
 pub async fn start_server_with_data_health_cache_ttl(
     pool: PgPool,

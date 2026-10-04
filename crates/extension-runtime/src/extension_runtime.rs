@@ -3,8 +3,8 @@
 //! Components get no WASI context, filesystem, environment, clocks, sockets, or
 //! pre-opened descriptors. The only imports are the versioned WIT functions in
 //! the `wit*/catalog-extension.wit` packages (`wit-host` is the unified,
-//! evolving ABI; the others are frozen legacy worlds); every call is checked against the immutable
-//! release manifest and invocation-time grants.
+//! evolving ABI; the others are frozen legacy worlds). Every call is checked
+//! against the immutable release manifest and invocation-time grants.
 
 use std::{
     collections::{HashMap, VecDeque},
@@ -44,9 +44,10 @@ use crate::{
     },
     model::{AppendAttributeValues, NewAttributeValue},
     repository::{
-        CatalogRepository, ClaimedTask, DeliveryState, ExtensionCatalogBatch,
-        ExtensionCatalogIntent, ExtensionCatalogPageRequest, ExtensionConfigurationScope,
-        ExtensionOperationArtifact, ExtensionRuntimeInstallation, SystemRepository,
+        CatalogRepository, ClaimedExtensionOperationRun, ClaimedTask, DeliveryState,
+        ExtensionCatalogBatch, ExtensionCatalogIntent, ExtensionCatalogPageRequest,
+        ExtensionConfigurationScope, ExtensionOperationArtifact, ExtensionRuntimeInstallation,
+        SystemRepository,
     },
     storage::{ObjectStore, ObjectStoreError, StoredObject},
     task_queue::TaskKind,
@@ -83,108 +84,14 @@ mod host_connector {
         exports: { default: async },
     });
 }
-/// Validates the checkpoint and progress JSON a batch returned. Both must be
-/// objects within the host JSON bound, and the checkpoint must also fit the
-/// run's declared checkpoint budget.
-fn validate_batch_result(
-    checkpoint: &str,
-    progress: &str,
-    max_checkpoint_bytes: u64,
-) -> Result<(Value, Value), ExtensionRuntimeError> {
-    let next: Value = serde_json::from_str(checkpoint).map_err(|_| {
-        ExtensionRuntimeError::Runtime("operation returned invalid checkpoint".into())
-    })?;
-    let progress: Value = serde_json::from_str(progress).map_err(|_| {
-        ExtensionRuntimeError::Runtime("operation returned invalid progress".into())
-    })?;
-    let checkpoint_bytes = serde_json::to_vec(&next).map_or(usize::MAX, |v| v.len());
-    if !next.is_object()
-        || !progress.is_object()
-        || checkpoint_bytes > MAX_HOST_JSON_BYTES
-        || checkpoint_bytes > max_checkpoint_bytes as usize
-        || serde_json::to_vec(&progress).map_or(true, |v| v.len() > MAX_HOST_JSON_BYTES)
-    {
-        return Err(ExtensionRuntimeError::Runtime(
-            "operation returned oversized or non-object checkpoint".into(),
-        ));
-    }
-    Ok((next, progress))
-}
-
-/// Runs the released operation-batch lifecycle against one world's
-/// `catalog:host/operations` bindings: cancel, or prepare/start on the first
-/// batch, then process, validate, checkpoint and finish when done. Each world
-/// has its own bindgen types, so this is a macro rather than a generic fn.
-/// Evaluates to `Result<(checkpoint, progress, done), ExtensionRuntimeError>`.
-macro_rules! run_operation_batch {
-    (
-        $store:expr,
-        $operations:expr,
-        $request:expr,
-        checkpoint: $checkpoint:expr,
-        max_checkpoint_bytes: $max_checkpoint_bytes:expr,
-        lifecycle_started: $lifecycle_started:expr,
-        cancelling: $cancelling:expr $(,)?
-    ) => {
-        async {
-            let store = $store;
-            let operations = $operations;
-            let mut request = $request;
-            let wasm_error =
-                |error: wasmtime::Error| ExtensionRuntimeError::Runtime(error.to_string());
-            if $cancelling {
-                operations
-                    .call_cancel(&mut *store, &request)
-                    .await
-                    .map_err(wasm_error)?
-                    .map_err(ExtensionRuntimeError::Runtime)?;
-                return Ok((($checkpoint).clone(), json!({"cancelled": true}), true));
-            }
-            if !$lifecycle_started {
-                operations
-                    .call_prepare(&mut *store, &request)
-                    .await
-                    .map_err(wasm_error)?
-                    .map_err(ExtensionRuntimeError::Runtime)?;
-                operations
-                    .call_start(&mut *store, &request)
-                    .await
-                    .map_err(wasm_error)?
-                    .map_err(ExtensionRuntimeError::Runtime)?;
-            }
-            let result = operations
-                .call_process_batch(&mut *store, &request)
-                .await
-                .map_err(wasm_error)?
-                .map_err(ExtensionRuntimeError::Runtime)?;
-            let (next, progress) = validate_batch_result(
-                &result.checkpoint,
-                &result.progress,
-                $max_checkpoint_bytes,
-            )?;
-            request.checkpoint = result.checkpoint;
-            operations
-                .call_checkpoint(&mut *store, &request)
-                .await
-                .map_err(wasm_error)?
-                .map_err(ExtensionRuntimeError::Runtime)?;
-            if result.done {
-                operations
-                    .call_finish(&mut *store, &request)
-                    .await
-                    .map_err(wasm_error)?
-                    .map_err(ExtensionRuntimeError::Runtime)?;
-            }
-            Ok((next, progress, result.done))
-        }
-        .await
-    };
-}
 
 #[cfg(test)]
 mod abi_evolution_tests;
 mod interactive;
+mod operation_batch;
 mod unified;
+
+use operation_batch::run_operation_batch;
 mod host_v11 {
     wasmtime::component::bindgen!({
         path: "wit-next",
@@ -196,6 +103,8 @@ mod host_v11 {
 
 const MAX_HOST_MESSAGE_BYTES: usize = 16 * 1024;
 const MAX_HOST_JSON_BYTES: usize = 64 * 1024;
+/// The recorded ABI of runs bound to the released 1.4 connector world.
+const CONNECTOR_OPERATION_ABI: &str = "1.4.0";
 const MAX_CACHED_COMPONENTS: usize = 64;
 const MAX_WRITE_VALUES: usize = 100;
 const EPOCH_TICK_INTERVAL: Duration = Duration::from_millis(10);
@@ -386,192 +295,118 @@ impl ExtensionRuntime {
         Ok(component)
     }
 
-    /// Invokes a v1.1 component command after its HTTP broker has resolved a
-    /// locked enabled-release snapshot.
-    /// Executes one bounded v1.2 operation batch. The component is selected by
-    /// the run's immutable release snapshot; no current-installation lookup can
-    /// substitute upgraded code.
-    #[allow(clippy::too_many_arguments)]
+    /// Executes one bounded operation batch. The component and its ABI come
+    /// from the run's immutable release snapshot, so no current-installation
+    /// lookup can substitute upgraded code.
     async fn invoke_operation_batch(
         &self,
-        abi_version: &str,
         installation: &ExtensionRuntimeInstallation,
         repository: CatalogRepository,
-        run_id: uuid::Uuid,
-        operation_handler: &str,
-        configuration: &Value,
-        input: &Value,
-        checkpoint: &Value,
-        batch_key: &str,
-        max_checkpoint_bytes: u64,
-        lifecycle_started: bool,
+        run: &ClaimedExtensionOperationRun,
         cancelling: bool,
     ) -> Result<(Value, Value, bool), ExtensionRuntimeError> {
+        let abi_version = run.abi_version.as_str();
         if crate::extensions::is_unified_abi_version(abi_version) {
             return self
-                .invoke_unified_batch(
-                    installation,
-                    repository,
-                    run_id,
-                    operation_handler,
-                    configuration,
-                    input,
-                    checkpoint,
-                    batch_key,
-                    max_checkpoint_bytes,
-                    lifecycle_started,
-                    cancelling,
-                )
+                .invoke_unified_batch(installation, repository, run, cancelling)
                 .await;
         }
         if abi_version == crate::repository::INTERACTIVE_OPERATION_ABI {
             return self
-                .invoke_interactive_batch(
-                    installation,
-                    repository,
-                    run_id,
-                    operation_handler,
-                    configuration,
-                    input,
-                    checkpoint,
-                    batch_key,
-                    max_checkpoint_bytes,
-                    lifecycle_started,
-                    cancelling,
-                )
+                .invoke_interactive_batch(installation, repository, run, cancelling)
                 .await;
         }
-        if abi_version == "1.4.0" {
+        if abi_version == CONNECTOR_OPERATION_ABI {
             return self
-                .invoke_connector_batch(
-                    installation,
-                    repository,
-                    run_id,
-                    operation_handler,
-                    configuration,
-                    input,
-                    checkpoint,
-                    batch_key,
-                    max_checkpoint_bytes,
-                    lifecycle_started,
-                    cancelling,
-                )
+                .invoke_connector_batch(installation, repository, run, cancelling)
                 .await;
         }
         let component = self.component(installation).await?;
-        let request = host_operations::exports::catalog::host::operations::OperationRequest {
-            run_id: run_id.to_string(),
-            operation_id: operation_handler.to_owned(),
-            configuration: serde_json::to_string(configuration)
-                .map_err(|e| ExtensionRuntimeError::Runtime(e.to_string()))?,
-            input: serde_json::to_string(input)
-                .map_err(|e| ExtensionRuntimeError::Runtime(e.to_string()))?,
-            checkpoint: serde_json::to_string(checkpoint)
-                .map_err(|e| ExtensionRuntimeError::Runtime(e.to_string()))?,
-            batch_key: batch_key.to_owned(),
-        };
-        let mut store = Store::new(
-            &self.engine,
-            OperationState::new(
-                self.config.max_memory_bytes,
-                installation.clone(),
-                repository.clone(),
-                self.object_store.clone(),
-                run_id,
-            ),
-        );
-        store.limiter(|state| &mut state.limits);
-        store
-            .set_fuel(self.config.fuel)
-            .map_err(|e| ExtensionRuntimeError::Runtime(e.to_string()))?;
-        store.set_epoch_deadline(epoch_deadline(self.config.invocation_timeout));
+        // The 1.2/1.3 world predates batch-keyed host writes.
+        let mut store =
+            self.operation_store(self.operation_state(installation, repository, run.id))?;
         let mut linker = Linker::new(&self.engine);
         host_operations::CatalogExtensionOperation::add_to_linker::<
             OperationState,
             HasSelf<OperationState>,
         >(&mut linker, |state| state)
-        .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))?;
+        .map_err(runtime_error)?;
         let bindings = host_operations::CatalogExtensionOperation::instantiate_async(
             &mut store, &component, &linker,
         )
         .await
-        .map_err(|e| ExtensionRuntimeError::Runtime(e.to_string()))?;
-        run_operation_batch!(
+        .map_err(runtime_error)?;
+        run_operation_batch(
             &mut store,
             bindings.catalog_host_operations(),
-            request,
-            checkpoint: checkpoint,
-            max_checkpoint_bytes: max_checkpoint_bytes,
-            lifecycle_started: lifecycle_started,
-            cancelling: cancelling,
+            run,
+            cancelling,
         )
+        .await
     }
 
-    #[allow(clippy::too_many_arguments)]
     async fn invoke_connector_batch(
         &self,
         installation: &ExtensionRuntimeInstallation,
         repository: CatalogRepository,
-        run_id: uuid::Uuid,
-        operation_handler: &str,
-        configuration: &Value,
-        input: &Value,
-        checkpoint: &Value,
-        batch_key: &str,
-        max_checkpoint_bytes: u64,
-        lifecycle_started: bool,
+        run: &ClaimedExtensionOperationRun,
         cancelling: bool,
     ) -> Result<(Value, Value, bool), ExtensionRuntimeError> {
         let component = self.component(installation).await?;
-        let request = host_connector::exports::catalog::host::operations::OperationRequest {
-            run_id: run_id.to_string(),
-            operation_id: operation_handler.to_owned(),
-            configuration: serde_json::to_string(configuration)
-                .map_err(|e| ExtensionRuntimeError::Runtime(e.to_string()))?,
-            input: serde_json::to_string(input)
-                .map_err(|e| ExtensionRuntimeError::Runtime(e.to_string()))?,
-            checkpoint: serde_json::to_string(checkpoint)
-                .map_err(|e| ExtensionRuntimeError::Runtime(e.to_string()))?,
-            batch_key: batch_key.to_owned(),
-        };
-        let mut store = Store::new(
-            &self.engine,
-            OperationState::new(
-                self.config.max_memory_bytes,
-                installation.clone(),
-                repository.clone(),
-                self.object_store.clone(),
-                run_id,
-            )
-            .with_batch_key(batch_key),
-        );
-        store.limiter(|state| &mut state.limits);
-        store
-            .set_fuel(self.config.fuel)
-            .map_err(|e| ExtensionRuntimeError::Runtime(e.to_string()))?;
-        store.set_epoch_deadline(epoch_deadline(self.config.invocation_timeout));
+        let mut store = self.operation_store(
+            self.operation_state(installation, repository, run.id)
+                .with_batch_key(&run.batch_key),
+        )?;
         let mut linker = Linker::new(&self.engine);
         host_connector::CatalogExtensionOperation::add_to_linker::<
             OperationState,
             HasSelf<OperationState>,
         >(&mut linker, |state| state)
-        .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))?;
+        .map_err(runtime_error)?;
         let bindings = host_connector::CatalogExtensionOperation::instantiate_async(
             &mut store, &component, &linker,
         )
         .await
-        .map_err(|e| ExtensionRuntimeError::Runtime(e.to_string()))?;
-        run_operation_batch!(
+        .map_err(runtime_error)?;
+        run_operation_batch(
             &mut store,
             bindings.catalog_host_operations(),
-            request,
-            checkpoint: checkpoint,
-            max_checkpoint_bytes: max_checkpoint_bytes,
-            lifecycle_started: lifecycle_started,
-            cancelling: cancelling,
+            run,
+            cancelling,
+        )
+        .await
+    }
+
+    fn operation_state(
+        &self,
+        installation: &ExtensionRuntimeInstallation,
+        repository: CatalogRepository,
+        run_id: Uuid,
+    ) -> OperationState {
+        OperationState::new(
+            self.config.max_memory_bytes,
+            installation.clone(),
+            repository,
+            self.object_store.clone(),
+            run_id,
         )
     }
 
+    /// A sandboxed store for one operation batch, with the memory limiter,
+    /// fuel and epoch deadline applied.
+    fn operation_store(
+        &self,
+        state: OperationState,
+    ) -> Result<Store<OperationState>, ExtensionRuntimeError> {
+        let mut store = Store::new(&self.engine, state);
+        store.limiter(|state| &mut state.limits);
+        store.set_fuel(self.config.fuel).map_err(runtime_error)?;
+        store.set_epoch_deadline(epoch_deadline(self.config.invocation_timeout));
+        Ok(store)
+    }
+
+    /// Invokes a v1.1 component command after its HTTP broker has resolved a
+    /// locked enabled-release snapshot.
     pub async fn invoke_command(
         &self,
         installation: &ExtensionRuntimeInstallation,
@@ -735,6 +570,17 @@ impl ExtensionRuntime {
             Err(error) => Err(ExtensionRuntimeError::Runtime(error.to_string())),
         }
     }
+}
+
+fn operation_task_error(error: impl ToString) -> TaskHandlerError {
+    TaskHandlerError {
+        code: "operation",
+        message: error.to_string(),
+    }
+}
+
+fn runtime_error(error: impl ToString) -> ExtensionRuntimeError {
+    ExtensionRuntimeError::Runtime(error.to_string())
 }
 
 fn epoch_deadline(timeout: Duration) -> u64 {
@@ -1721,10 +1567,7 @@ impl ExtensionOperationTaskHandler {
         repository
             .fail_extension_operation_for_revoked_initiator(task)
             .await
-            .map_err(|error| TaskHandlerError {
-                code: "operation",
-                message: error.to_string(),
-            })?;
+            .map_err(operation_task_error)?;
         counter!("catalog_extension_operations_total", "outcome" => "initiator_revoked")
             .increment(1);
         Ok(TaskOutcome::DeadLettered)
@@ -1750,10 +1593,7 @@ impl TaskHandler for ExtensionOperationTaskHandler {
         for key in repository
             .abort_stale_extension_operation_artifacts()
             .await
-            .map_err(|error| TaskHandlerError {
-                code: "operation",
-                message: error.to_string(),
-            })?
+            .map_err(operation_task_error)?
         {
             if self.runtime.object_store.delete(&key).await.is_ok() {
                 let _ = repository
@@ -1764,10 +1604,7 @@ impl TaskHandler for ExtensionOperationTaskHandler {
         let Some(run) = repository
             .begin_extension_operation_task(&task)
             .await
-            .map_err(|e| TaskHandlerError {
-                code: "operation",
-                message: e.to_string(),
-            })?
+            .map_err(operation_task_error)?
         else {
             return Ok(TaskOutcome::Complete);
         };
@@ -1776,10 +1613,7 @@ impl TaskHandler for ExtensionOperationTaskHandler {
         let Some(installation) = repository
             .runtime_extension_installation(&run.extension_id, run.installed_release_id)
             .await
-            .map_err(|e| TaskHandlerError {
-                code: "operation",
-                message: e.to_string(),
-            })?
+            .map_err(operation_task_error)?
         else {
             // Disable, upgrade, grant change, and quarantine never switch an
             // in-flight run to a different release. It remains resumable only
@@ -1787,10 +1621,7 @@ impl TaskHandler for ExtensionOperationTaskHandler {
             repository
                 .pause_extension_operation_task(&task)
                 .await
-                .map_err(|error| TaskHandlerError {
-                    code: "operation",
-                    message: error.to_string(),
-                })?;
+                .map_err(operation_task_error)?;
             return Ok(TaskOutcome::Reschedule {
                 at: chrono::Utc::now() + chrono::Duration::seconds(30),
             });
@@ -1798,48 +1629,31 @@ impl TaskHandler for ExtensionOperationTaskHandler {
         let cancellation_requested = repository
             .extension_operation_cancellation_requested(&task)
             .await
-            .map_err(|error| TaskHandlerError {
-                code: "operation",
-                message: error.to_string(),
-            })?;
+            .map_err(operation_task_error)?;
         // An interactive run acts only while its initiator remains an active
         // member; it never continues under the installer's grants alone. A
         // cancellation the initiator requested is still delivered so the
         // extension can clean up; its host calls recheck access and fail.
-        let initiator_revoked =
-            match repository
-                .interactive_run_scope(run.id)
+        let initiator_revoked = match repository
+            .interactive_run_scope(run.id)
+            .await
+            .map_err(operation_task_error)?
+        {
+            Some(scope) => !repository
+                .interactive_actor_active(scope.actor)
                 .await
-                .map_err(|error| TaskHandlerError {
-                    code: "operation",
-                    message: error.to_string(),
-                })? {
-                Some(scope) => !repository
-                    .interactive_actor_active(scope.actor)
-                    .await
-                    .map_err(|error| TaskHandlerError {
-                        code: "operation",
-                        message: error.to_string(),
-                    })?,
-                None => false,
-            };
+                .map_err(operation_task_error)?,
+            None => false,
+        };
         if initiator_revoked && !cancellation_requested {
             return self.fail_for_revoked_initiator(&repository, &task).await;
         }
         let (checkpoint, progress, done) = match self
             .runtime
             .invoke_operation_batch(
-                &run.abi_version,
                 &installation,
                 repository.clone(),
-                run.id,
-                &run.operation_handler,
-                &run.configuration,
-                &run.input,
-                &run.checkpoint,
-                &run.batch_key,
-                run.max_checkpoint_bytes,
-                run.lifecycle_started,
+                &run,
                 cancellation_requested,
             )
             .await
@@ -1852,10 +1666,7 @@ impl TaskHandler for ExtensionOperationTaskHandler {
                 repository
                     .fail_extension_operation_task(&task, &error.to_string())
                     .await
-                    .map_err(|failure| TaskHandlerError {
-                        code: "operation",
-                        message: failure.to_string(),
-                    })?;
+                    .map_err(operation_task_error)?;
                 counter!("catalog_extension_operations_total", "outcome" => "failed").increment(1);
                 histogram!("catalog_extension_operation_duration_seconds", "outcome" => "failed")
                     .record(operation_started.elapsed().as_secs_f64());
@@ -1872,49 +1683,24 @@ impl TaskHandler for ExtensionOperationTaskHandler {
             repository
                 .extension_operation_cancellation_requested(&task)
                 .await
-                .map_err(|error| TaskHandlerError {
-                    code: "operation",
-                    message: error.to_string(),
-                })?
+                .map_err(operation_task_error)?
         };
         if cancellation_delivered {
             if !cancellation_requested {
                 self.runtime
-                    .invoke_operation_batch(
-                        &run.abi_version,
-                        &installation,
-                        repository.clone(),
-                        run.id,
-                        &run.operation_handler,
-                        &run.configuration,
-                        &run.input,
-                        &run.checkpoint,
-                        &run.batch_key,
-                        run.max_checkpoint_bytes,
-                        run.lifecycle_started,
-                        true,
-                    )
+                    .invoke_operation_batch(&installation, repository.clone(), &run, true)
                     .await
-                    .map_err(|error| TaskHandlerError {
-                        code: "operation",
-                        message: error.to_string(),
-                    })?;
+                    .map_err(operation_task_error)?;
             }
             repository
                 .mark_extension_operation_cancellation_delivered(&task)
                 .await
-                .map_err(|error| TaskHandlerError {
-                    code: "operation",
-                    message: error.to_string(),
-                })?;
+                .map_err(operation_task_error)?;
         }
         let terminal = repository
             .checkpoint_extension_operation_task(&task, &run, checkpoint, progress, done)
             .await
-            .map_err(|e| TaskHandlerError {
-                code: "operation",
-                message: e.to_string(),
-            })?;
+            .map_err(operation_task_error)?;
         let outcome = if terminal { "completed" } else { "rescheduled" };
         counter!("catalog_extension_operations_total", "outcome" => outcome).increment(1);
         histogram!("catalog_extension_operation_duration_seconds", "outcome" => outcome)

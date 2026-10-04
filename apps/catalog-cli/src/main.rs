@@ -1149,12 +1149,9 @@ enum ExtensionRunCommand {
         extension_id: Option<String>,
     },
     /// Show status, outcome and downloadable outputs of one run.
-    Show {
-        run_id: Uuid,
-    },
-    Cancel {
-        run_id: Uuid,
-    },
+    Show { run_id: Uuid },
+    /// Request cancellation of a run that has not finished.
+    Cancel { run_id: Uuid },
     /// Download an output of a completed run.
     Download {
         run_id: Uuid,
@@ -3582,74 +3579,43 @@ async fn solution_pack_plan_upload(
     requested_asset_maps: &[String],
     requested_context_maps: &[String],
 ) -> Result<String, CliError> {
-    let mut seen = std::collections::BTreeSet::new();
-    let mut parsed = Vec::with_capacity(requested_maps.len());
-    for requested in requested_maps {
-        let (key, code) = requested
-            .split_once('=')
-            .ok_or_else(|| CliError::Input("--map must be LOGICAL_KEY=EXISTING_CODE".to_owned()))?;
-        let safe_code = !code.is_empty()
-            && code.len() <= 128
-            && code.as_bytes()[0].is_ascii_lowercase()
-            && code
-                .bytes()
-                .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
-            && !code.ends_with('_');
-        if !key.starts_with("blueprints/") || key.len() > 128 || !safe_code {
-            return Err(CliError::Input(format!(
-                "invalid --map value '{requested}'"
-            )));
-        }
-        if !seen.insert(key.to_owned()) {
-            return Err(CliError::Input(format!("duplicate --map key '{key}'")));
-        }
-        parsed.push(serde_json::json!({"key": key, "code": code}).to_string());
-    }
-
-    let mut seen_assets = std::collections::BTreeSet::new();
-    let mut parsed_assets = Vec::with_capacity(requested_asset_maps.len());
-    for requested in requested_asset_maps {
-        let (key, id) = requested.split_once('=').ok_or_else(|| {
-            CliError::Input("--map-asset must be LOGICAL_KEY=ASSET_UUID".to_owned())
-        })?;
-        let id = Uuid::parse_str(id)
-            .map_err(|_| CliError::Input(format!("invalid --map-asset value '{requested}'")))?;
-        if !key.starts_with("assets/") || key.len() > 128 {
-            return Err(CliError::Input(format!(
-                "invalid --map-asset value '{requested}'"
-            )));
-        }
-        if !seen_assets.insert(key.to_owned()) {
-            return Err(CliError::Input(format!(
-                "duplicate --map-asset key '{key}'"
-            )));
-        }
-        parsed_assets.push(serde_json::json!({"key": key, "id": id}).to_string());
-    }
-
-    let mut seen_contexts = std::collections::BTreeSet::new();
-    let mut parsed_contexts = Vec::with_capacity(requested_context_maps.len());
-    for requested in requested_context_maps {
-        let (key, code) = requested.split_once('=').ok_or_else(|| {
-            CliError::Input("--map-context must be LOGICAL_KEY=EXISTING_CODE".to_owned())
-        })?;
-        let safe_code = !code.is_empty()
-            && code.len() <= 128
-            && code
-                .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'));
-        if !key.starts_with("contexts/") || key.len() > 128 || !safe_code {
-            return Err(CliError::Input(format!(
-                "invalid --map-context value '{requested}'"
-            )));
-        }
-        if !seen_contexts.insert(key.to_owned()) {
-            return Err(CliError::Input(format!(
-                "duplicate --map-context key '{key}'"
-            )));
-        }
-        parsed_contexts.push(serde_json::json!({"key": key, "code": code}).to_string());
-    }
+    let blueprint_maps = parse_pack_mappings(
+        requested_maps,
+        "--map",
+        "blueprints/",
+        "EXISTING_CODE",
+        |code| {
+            let valid = !code.is_empty()
+                && code.len() <= 128
+                && code.as_bytes()[0].is_ascii_lowercase()
+                && code
+                    .bytes()
+                    .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+                && !code.ends_with('_');
+            valid.then(|| json!({ "code": code }))
+        },
+    )?;
+    let asset_maps = parse_pack_mappings(
+        requested_asset_maps,
+        "--map-asset",
+        "assets/",
+        "ASSET_UUID",
+        |id| Uuid::parse_str(id).ok().map(|id| json!({ "id": id })),
+    )?;
+    let context_maps = parse_pack_mappings(
+        requested_context_maps,
+        "--map-context",
+        "contexts/",
+        "EXISTING_CODE",
+        |code| {
+            let valid = !code.is_empty()
+                && code.len() <= 128
+                && code
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'));
+            valid.then(|| json!({ "code": code }))
+        },
+    )?;
 
     let length = fs::metadata(archive)
         .map_err(|error| CliError::Input(format!("cannot read {}: {error}", archive.display())))?
@@ -3664,14 +3630,14 @@ async fn solution_pack_plan_upload(
             .mime_str("application/zstd")
             .map_err(|error| CliError::Input(error.to_string()))?;
     let mut form = reqwest::multipart::Form::new().part("archive", archive_part);
-    for mapping in parsed {
-        form = form.text("blueprint_map", mapping);
-    }
-    for mapping in parsed_assets {
-        form = form.text("asset_map", mapping);
-    }
-    for mapping in parsed_contexts {
-        form = form.text("context_map", mapping);
+    for (field, mappings) in [
+        ("blueprint_map", blueprint_maps),
+        ("asset_map", asset_maps),
+        ("context_map", context_maps),
+    ] {
+        for mapping in mappings {
+            form = form.text(field, mapping);
+        }
     }
     raw_response(
         client
@@ -3683,6 +3649,38 @@ async fn solution_pack_plan_upload(
             .map_err(|error| CliError::Transport(error.to_string()))?,
     )
     .await
+}
+
+/// Parses `LOGICAL_KEY=VALUE` solution-pack mapping flags into the JSON parts
+/// the plan endpoint accepts. Keys must start with `key_prefix` and appear
+/// once; `parse_value` returns the part's value fields, or `None` when the
+/// value is invalid.
+fn parse_pack_mappings(
+    requested: &[String],
+    flag: &str,
+    key_prefix: &str,
+    value_name: &str,
+    parse_value: impl Fn(&str) -> Option<Value>,
+) -> Result<Vec<String>, CliError> {
+    let mut seen = std::collections::BTreeSet::new();
+    requested
+        .iter()
+        .map(|requested| {
+            let (key, value) = requested.split_once('=').ok_or_else(|| {
+                CliError::Input(format!("{flag} must be LOGICAL_KEY={value_name}"))
+            })?;
+            let invalid = || CliError::Input(format!("invalid {flag} value '{requested}'"));
+            if !key.starts_with(key_prefix) || key.len() > 128 {
+                return Err(invalid());
+            }
+            let mut part = parse_value(value).ok_or_else(invalid)?;
+            if !seen.insert(key) {
+                return Err(CliError::Input(format!("duplicate {flag} key '{key}'")));
+            }
+            part["key"] = json!(key);
+            Ok(part.to_string())
+        })
+        .collect()
 }
 
 async fn multipart_upload(

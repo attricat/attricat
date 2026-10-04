@@ -50,25 +50,14 @@ tree = true
 context_editable = "default"
 "#;
 
-fn scalar(code: &str, value: Value) -> Value {
-    json!({"kind": "scalar", "attribute_code": code, "context_id": null, "value": value})
-}
-
 async fn released(client: &Client, base_url: &str, label: &str) -> Value {
-    client
-        .post(format!("{base_url}/v1/entities"))
-        .json(&json!({
-            "blueprint": { "code": "eb_revision" },
-            "values": [scalar("label", json!(label)), scalar("status", json!("released"))],
-        }))
-        .send()
-        .await
-        .unwrap()
-        .error_for_status()
-        .unwrap()
-        .json()
-        .await
-        .unwrap()
+    create_entity_with(
+        client,
+        base_url,
+        "eb_revision",
+        json!([scalar("label", label), scalar("status", "released")]),
+    )
+    .await
 }
 
 async fn batch(client: &Client, base_url: &str, operations: Value) -> reqwest::Response {
@@ -81,16 +70,7 @@ async fn batch(client: &Client, base_url: &str, operations: Value) -> reqwest::R
 }
 
 async fn form(client: &Client, base_url: &str, id: &str) -> Value {
-    client
-        .get(format!("{base_url}/v1/entities/{id}"))
-        .send()
-        .await
-        .unwrap()
-        .error_for_status()
-        .unwrap()
-        .json()
-        .await
-        .unwrap()
+    get_json(client, format!("{base_url}/v1/entities/{id}")).await
 }
 
 fn value_of(form: &Value, code: &str) -> Value {
@@ -107,13 +87,6 @@ fn value_of(form: &Value, code: &str) -> Value {
             }
         })
         .unwrap_or(Value::Null)
-}
-
-async fn count(pool: &PgPool, sql: &str) -> i64 {
-    sqlx::query_scalar::<_, i64>(sql)
-        .fetch_one(pool)
-        .await
-        .unwrap()
 }
 
 #[sqlx::test]
@@ -374,44 +347,19 @@ async fn every_operation_is_authorized_against_its_own_entity(pool: PgPool) {
     let granted = released(&client, &base_url, "A").await;
     let other = released(&client, &base_url, "B").await;
 
-    let editor_id = Uuid::new_v4();
-    let membership_id = Uuid::new_v4();
-    let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
-    sqlx::query("INSERT INTO users (id, email) VALUES ($1, 'batch-editor@example.test')")
-        .bind(editor_id)
-        .execute(&pool)
-        .await
-        .unwrap();
-    sqlx::query(
-        "INSERT INTO workspace_memberships (id, workspace_id, user_id) VALUES ($1, $2, $3)",
+    let (editor_id, membership_id) = add_workspace_user(&pool).await;
+    grant_role(
+        &pool,
+        membership_id,
+        EDITOR_ROLE_ID,
+        GrantScope::Entity(granted["id"].as_str().unwrap().parse().unwrap()),
     )
-    .bind(membership_id)
-    .bind(workspace_id)
-    .bind(editor_id)
-    .execute(&pool)
-    .await
-    .unwrap();
-    sqlx::query("INSERT INTO role_grants (id, workspace_id, membership_id, role_id, scope_type, scope_target_id) VALUES ($1, $2, $3, '00000000-0000-4000-8000-000000000103', 'entity', $4)")
-        .bind(Uuid::new_v4())
-        .bind(workspace_id)
-        .bind(membership_id)
-        .bind(granted["id"].as_str().unwrap().parse::<Uuid>().unwrap())
-        .execute(&pool)
-        .await
-        .unwrap();
-    let editor = |operations: Value| {
-        Client::new()
-            .post(format!("{base_url}/v1/entities/batch"))
-            .header("x-catalog-user-id", editor_id.to_string())
-            .header("x-catalog-workspace-id", BOOTSTRAP_WORKSPACE_ID)
-            .json(&json!({ "operations": operations }))
-            .send()
-    };
+    .await;
+    let editor_client = client_for(editor_id);
+    let editor = |operations: Value| batch(&editor_client, &base_url, operations);
     let update = |entity: &Value, label: &str| json!({"op": "update", "entity_id": entity["id"], "values": [scalar("label", json!(label))]});
 
-    let forbidden = editor(json!([update(&granted, "A2"), update(&other, "B2")]))
-        .await
-        .unwrap();
+    let forbidden = editor(json!([update(&granted, "A2"), update(&other, "B2")])).await;
     assert_eq!(forbidden.status(), StatusCode::FORBIDDEN);
     assert_eq!(
         value_of(
@@ -420,11 +368,9 @@ async fn every_operation_is_authorized_against_its_own_entity(pool: PgPool) {
         ),
         "A"
     );
-    let allowed = editor(json!([update(&granted, "A2")])).await.unwrap();
+    let allowed = editor(json!([update(&granted, "A2")])).await;
     assert_eq!(allowed.status(), StatusCode::OK);
-    let create = editor(json!([{"op": "create", "blueprint": {"code": "eb_revision"}}]))
-        .await
-        .unwrap();
+    let create = editor(json!([{"op": "create", "blueprint": {"code": "eb_revision"}}])).await;
     assert_eq!(
         create.status(),
         StatusCode::FORBIDDEN,

@@ -132,6 +132,9 @@ export type ActionDialogRequest = {
   context: SelectionContext;
 };
 
+const holds = (contribution: ExtensionContribution, capability: string) =>
+  contribution.capabilities.includes(capability);
+
 const payloadObject = (payload: unknown) => payload as Record<string, unknown>;
 
 const handleStorage = async (
@@ -217,8 +220,7 @@ const handleOperation = async (
   dependencies: BrokerDependencies,
 ) => {
   const { contribution } = dependencies;
-  const can = (capability: string) =>
-    contribution.capabilities.includes(capability);
+  const can = (capability: string) => holds(contribution, capability);
   if (
     method === extensionBrokerMethods.operationsStart &&
     can(extensionCapabilities.operationsStart)
@@ -291,8 +293,7 @@ export const handleBrokerRequest = async (
   dependencies: BrokerDependencies,
 ): Promise<unknown> => {
   const { contribution } = dependencies;
-  const can = (capability: string) =>
-    contribution.capabilities.includes(capability);
+  const can = (capability: string) => holds(contribution, capability);
   if (typeof method !== 'string')
     throw new Error(extensionProtocolErrors.requestDenied);
   if (

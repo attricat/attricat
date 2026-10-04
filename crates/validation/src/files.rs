@@ -1,6 +1,10 @@
 //! File type detection and attribute file-policy checks shared by uploads and
 //! the files that solution-pack samples bundle.
 
+const DOCX_MIME: &str = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const XLSX_MIME: &str = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const PPTX_MIME: &str = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+
 /// MIME types accepted by every upload entry point. Attribute policies may
 /// further restrict this set by MIME group, extension, size, or image-only.
 pub const SUPPORTED_UPLOAD_MIME_TYPES: &[&str] = &[
@@ -10,9 +14,9 @@ pub const SUPPORTED_UPLOAD_MIME_TYPES: &[&str] = &[
     "image/webp",
     "application/pdf",
     "text/plain",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    DOCX_MIME,
+    XLSX_MIME,
+    PPTX_MIME,
 ];
 
 pub fn is_supported_upload_mime(mime: &str) -> bool {
@@ -43,15 +47,9 @@ pub fn detect_mime(signature: &[u8], filename: &str, valid_text: bool) -> Option
         Some("application/pdf")
     } else if signature.starts_with(b"PK\x03\x04") {
         match extension(filename).as_deref() {
-            Some("docx") => {
-                Some("application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-            }
-            Some("xlsx") => {
-                Some("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-            }
-            Some("pptx") => {
-                Some("application/vnd.openxmlformats-officedocument.presentationml.presentation")
-            }
+            Some("docx") => Some(DOCX_MIME),
+            Some("xlsx") => Some(XLSX_MIME),
+            Some("pptx") => Some(PPTX_MIME),
             _ => None,
         }
     } else if valid_text {

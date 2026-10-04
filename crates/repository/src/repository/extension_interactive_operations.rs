@@ -5,7 +5,7 @@
 //! authorization grant: the initiator's current access is checked again by
 //! every selection read, catalog write and artifact download.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use chrono::{DateTime, Duration, Utc};
 use serde::Serialize;
@@ -81,6 +81,28 @@ struct InteractiveRunRow {
     cancelled_at: Option<DateTime<Utc>>,
 }
 
+/// Execution status of an interactive run. The extension's domain outcome is
+/// reported separately, in its progress.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InteractiveRunStatus {
+    Queued,
+    Running,
+    Cancelling,
+    Cancelled,
+    Completed,
+    Failed,
+}
+
+/// Why a [`InteractiveRunStatus::Failed`] run failed, safe to show its user.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InteractiveRunFailure {
+    /// The initiator lost access to the workspace while the run was queued.
+    AccessRevoked,
+    ExtensionFailed,
+}
+
 /// End-user projection of an interactive run. It omits input, configuration,
 /// checkpoints, storage keys and component diagnostics.
 #[derive(Clone, Debug, Serialize)]
@@ -91,11 +113,9 @@ pub struct InteractiveRun {
     pub operation_id: String,
     #[serde(skip)]
     pub actor_user_id: Option<Uuid>,
-    /// Execution status: `queued`, `running`, `cancelling`, `cancelled`,
-    /// `completed` or `failed`. The extension's domain outcome is in progress.
-    pub status: &'static str,
+    pub status: InteractiveRunStatus,
     pub progress: Value,
-    pub failure: Option<&'static str>,
+    pub failure: Option<InteractiveRunFailure>,
     pub can_cancel: bool,
     pub selection_count: i64,
     pub blueprint_id: Option<Uuid>,
@@ -121,25 +141,30 @@ impl From<InteractiveRunRow> for InteractiveRun {
     fn from(row: InteractiveRunRow) -> Self {
         let started = row.lifecycle_started || row.attempts > 0;
         let status = match row.status.as_str() {
-            "completed" => "completed",
-            "cancelled" => "cancelled",
-            "dead_letter" => "failed",
-            _ if row.cancellation_requested => "cancelling",
-            "leased" => "running",
-            _ if started => "running",
-            _ => "queued",
+            "completed" => InteractiveRunStatus::Completed,
+            "cancelled" => InteractiveRunStatus::Cancelled,
+            "dead_letter" => InteractiveRunStatus::Failed,
+            _ if row.cancellation_requested => InteractiveRunStatus::Cancelling,
+            "leased" => InteractiveRunStatus::Running,
+            _ if started => InteractiveRunStatus::Running,
+            _ => InteractiveRunStatus::Queued,
         };
-        let failure = (status == "failed").then_some(match row.last_error_code.as_deref() {
-            Some(INITIATOR_ACCESS_REVOKED) => "access_revoked",
-            _ => "extension_failed",
-        });
+        let failure = (status == InteractiveRunStatus::Failed).then_some(
+            match row.last_error_code.as_deref() {
+                Some(INITIATOR_ACCESS_REVOKED) => InteractiveRunFailure::AccessRevoked,
+                _ => InteractiveRunFailure::ExtensionFailed,
+            },
+        );
         Self {
             id: row.id,
             extension_id: row.extension_id,
             contribution_id: row.contribution_id,
             operation_id: row.operation_id,
             actor_user_id: row.actor_user_id,
-            can_cancel: matches!(status, "queued" | "running"),
+            can_cancel: matches!(
+                status,
+                InteractiveRunStatus::Queued | InteractiveRunStatus::Running
+            ),
             status,
             progress: row.progress,
             failure,
@@ -157,6 +182,19 @@ impl From<InteractiveRunRow> for InteractiveRun {
             outputs_expired: row.outputs_expired,
         }
     }
+}
+
+/// Saved state of one readable selection member, with the calling
+/// extension's annotation revision.
+#[derive(FromRow)]
+struct SelectionMember {
+    id: Uuid,
+    blueprint_id: Uuid,
+    blueprint_version: i64,
+    updated_at: DateTime<Utc>,
+    system_tags: Vec<String>,
+    system_metadata: Value,
+    annotation_revision: i64,
 }
 
 type RunScopeRow = (
@@ -294,11 +332,7 @@ impl CatalogRepository {
         let interactive = operation.interactive.as_ref().ok_or_else(|| {
             RepositoryError::InvalidExtension("operation is not exposed for interactive use".into())
         })?;
-        let unique = input
-            .entity_ids
-            .iter()
-            .collect::<std::collections::HashSet<_>>()
-            .len();
+        let unique = input.entity_ids.iter().collect::<HashSet<_>>().len();
         if input.entity_ids.is_empty()
             || input.entity_ids.len() > interactive.max_selection as usize
             || unique != input.entity_ids.len()
@@ -346,7 +380,7 @@ impl CatalogRepository {
                 "selection must contain saved entities from one blueprint revision".into(),
             ));
         }
-        self.ensure_principal_may_all(
+        self.ensure_principal_may(
             &mut transaction,
             input.actor,
             "entities.read",
@@ -388,17 +422,15 @@ impl CatalogRepository {
             }
             return Box::pin(self.start_interactive_operation_attempt(input, true)).await;
         };
-        for (position, entity_id) in input.entity_ids.iter().enumerate() {
-            sqlx::query(
-                "INSERT INTO extension_operation_run_entities(operation_run_id,workspace_id,position,entity_id) VALUES($1,$2,$3,$4)",
-            )
-            .bind(run_id)
-            .bind(self.workspace_id.0)
-            .bind(position as i32)
-            .bind(entity_id)
-            .execute(&mut *transaction)
-            .await?;
-        }
+        // Positions are zero-based, in request order.
+        sqlx::query(
+            "INSERT INTO extension_operation_run_entities(operation_run_id,workspace_id,position,entity_id) SELECT $1,$2,(selection.ordinality-1)::int,selection.entity_id FROM unnest($3::uuid[]) WITH ORDINALITY AS selection(entity_id,ordinality)",
+        )
+        .bind(run_id)
+        .bind(self.workspace_id.0)
+        .bind(&input.entity_ids)
+        .execute(&mut *transaction)
+        .await?;
         self.enqueue_task(
             &mut transaction,
             TaskInsert {
@@ -420,9 +452,9 @@ impl CatalogRepository {
         Ok(run_id)
     }
 
-    /// The initiator's recent interactive runs, newest first.
-    /// The actor's recent runs whose whole selection they can still read;
-    /// like the detail view, a run with any unreadable member is hidden.
+    /// The initiator's recent interactive runs, newest first, whose whole
+    /// selection they can still read; like the detail view, a run with any
+    /// unreadable member is hidden.
     pub async fn interactive_extension_runs(
         &self,
         actor: AuthorizationActor,
@@ -519,7 +551,7 @@ impl CatalogRepository {
         .bind(self.workspace_id.0)
         .fetch_all(&mut *connection)
         .await?;
-        self.ensure_principal_may_all(&mut connection, actor, "entities.read", &members)
+        self.ensure_principal_may(&mut connection, actor, "entities.read", &members)
             .await
     }
 
@@ -664,67 +696,68 @@ impl CatalogRepository {
         let read_at: DateTime<Utc> = sqlx::query_scalar("SELECT clock_timestamp()")
             .fetch_one(&self.pool)
             .await?;
-        // One authorization query for the page; the connection is released
-        // before the entity reads below, which acquire their own, so a run
-        // never holds two pool connections.
-        let readable = {
-            let page: Vec<Uuid> = scope
-                .entity_ids
-                .iter()
-                .skip(start)
-                .take(limit as usize)
-                .copied()
-                .collect();
+        let page: Vec<Uuid> = scope
+            .entity_ids
+            .iter()
+            .skip(start)
+            .take(limit as usize)
+            .copied()
+            .collect();
+        // Authorization and saved state for the whole page in two queries.
+        // The connection is released before the per-entity value resolution
+        // below, which acquires its own, so a run never holds two pool
+        // connections.
+        let (readable, saved) = {
             let mut connection = self.pool.acquire().await?;
-            Self::principal_entity_ids_on(
+            let readable = Self::principal_entity_ids_on(
                 &mut connection,
                 scope.actor,
                 self.workspace_id.0,
                 "entities.read",
                 &page,
             )
+            .await?;
+            let readable_ids: Vec<Uuid> = page
+                .iter()
+                .copied()
+                .filter(|id| readable.contains(id))
+                .collect();
+            let saved: HashMap<Uuid, SelectionMember> = sqlx::query_as::<_, SelectionMember>(
+                "SELECT e.id, e.blueprint_id, e.blueprint_version, e.updated_at, e.system_tags, e.system_metadata, COALESCE(r.revision, 0) AS annotation_revision FROM entities e LEFT JOIN entity_extension_annotation_revisions r ON r.workspace_id=e.workspace_id AND r.entity_id=e.id AND r.extension_id=$3 WHERE e.workspace_id=$1 AND e.id = ANY($2) AND e.deleted_at IS NULL",
+            )
+            .bind(self.workspace_id.0)
+            .bind(&readable_ids)
+            .bind(extension_id)
+            .fetch_all(&mut *connection)
             .await?
+            .into_iter()
+            .map(|member| (member.id, member))
+            .collect();
+            (readable, saved)
         };
         let mut entities = Vec::new();
         let mut bytes = 0;
         let mut next = None;
-        for (position, entity_id) in scope
-            .entity_ids
-            .iter()
-            .enumerate()
-            .skip(start)
-            .take(limit as usize)
-        {
-            let item = if !readable.contains(entity_id) {
-                json!({"position": position, "entity_id": entity_id, "status": "unavailable"})
-            } else {
-                match (
-                    self.get_entity(*entity_id).await?,
-                    self.resolved_preview(*entity_id, context_id, 0).await?,
-                ) {
-                    (Some(entity), Some(resolved)) if entity.deleted_at.is_none() => {
-                        let revision: i64 = sqlx::query_scalar(
-                            "SELECT revision FROM entity_extension_annotation_revisions WHERE workspace_id=$1 AND entity_id=$2 AND extension_id=$3",
-                        )
-                        .bind(self.workspace_id.0)
-                        .bind(entity_id)
-                        .bind(extension_id)
-                        .fetch_optional(&self.pool)
-                        .await?
-                        .unwrap_or(0);
-                        json!({
-                            "position": position,
-                            "entity_id": entity_id,
-                            "status": "available",
-                            "blueprint_id": entity.blueprint_id,
-                            "blueprint_version": entity.blueprint_version,
-                            "updated_at": entity.updated_at,
-                            "values": resolved.values,
-                            "annotations": own_annotations(extension_id, &entity.system_tags, &entity.system_metadata, revision),
-                        })
-                    }
-                    _ => json!({"position": position, "entity_id": entity_id, "status": "deleted"}),
+        for (position, entity_id) in (start..).zip(&page) {
+            let resolved = match saved.get(entity_id) {
+                Some(_) => self.resolved_preview(*entity_id, context_id, 0).await?,
+                None => None,
+            };
+            let item = match (saved.get(entity_id), resolved) {
+                _ if !readable.contains(entity_id) => {
+                    json!({"position": position, "entity_id": entity_id, "status": "unavailable"})
                 }
+                (Some(member), Some(resolved)) => json!({
+                    "position": position,
+                    "entity_id": entity_id,
+                    "status": "available",
+                    "blueprint_id": member.blueprint_id,
+                    "blueprint_version": member.blueprint_version,
+                    "updated_at": member.updated_at,
+                    "values": resolved.values,
+                    "annotations": own_annotations(extension_id, &member.system_tags, &member.system_metadata, member.annotation_revision),
+                }),
+                _ => json!({"position": position, "entity_id": entity_id, "status": "deleted"}),
             };
             let mut size = serde_json::to_vec(&item).map_or(usize::MAX, |value| value.len());
             let item = if size > SELECTION_PAGE_BUDGET_BYTES {
@@ -783,27 +816,33 @@ mod tests {
 
     #[test]
     fn execution_status_is_separate_from_domain_outcome() {
-        assert_eq!(InteractiveRun::from(row("pending")).status, "queued");
+        assert_eq!(
+            InteractiveRun::from(row("pending")).status,
+            InteractiveRunStatus::Queued
+        );
         let mut started = row("pending");
         started.lifecycle_started = true;
-        assert_eq!(InteractiveRun::from(started).status, "running");
+        assert_eq!(
+            InteractiveRun::from(started).status,
+            InteractiveRunStatus::Running
+        );
         let mut cancelling = row("leased");
         cancelling.cancellation_requested = true;
         let cancelling = InteractiveRun::from(cancelling);
-        assert_eq!(cancelling.status, "cancelling");
+        assert_eq!(cancelling.status, InteractiveRunStatus::Cancelling);
         assert!(!cancelling.can_cancel);
         let completed = InteractiveRun::from(row("completed"));
-        assert_eq!(completed.status, "completed");
+        assert_eq!(completed.status, InteractiveRunStatus::Completed);
         assert!(completed.outputs_expire_at.is_some());
         let mut revoked = row("dead_letter");
         revoked.last_error_code = Some(INITIATOR_ACCESS_REVOKED.into());
         assert_eq!(
             InteractiveRun::from(revoked).failure,
-            Some("access_revoked")
+            Some(InteractiveRunFailure::AccessRevoked)
         );
         assert_eq!(
             InteractiveRun::from(row("dead_letter")).failure,
-            Some("extension_failed")
+            Some(InteractiveRunFailure::ExtensionFailed)
         );
     }
 }

@@ -4,11 +4,10 @@ import { useTranslation } from 'react-i18next';
 import { RouterButton } from '../../components/RouterLink';
 import { smallIconSize } from '../../components/iconSizes';
 import { ExtensionRunIcon } from '../../components/systemIcons';
-import { Timestamp } from '../../time/Timestamp';
 import { runSkeletonCount, runSkeletonHeight } from './constants';
 import {
+  ExtensionRunHeader,
   ExtensionRunProgress,
-  ExtensionRunStatusChip,
 } from './ExtensionRunSummary';
 import { extensionRunListOptions } from './queryOptions';
 import type { ExtensionRun } from './schemas';
@@ -20,29 +19,15 @@ const RunCard = ({ run }: { run: ExtensionRun }) => {
       component="li"
       sx={{ display: 'flex', flexDirection: 'column', gap: 3, p: 5 }}
     >
-      <Stack direction="row" spacing={3} sx={{ alignItems: 'flex-start' }}>
-        <Box sx={{ color: 'text.secondary', display: 'flex', pt: 0.25 }}>
-          <ExtensionRunIcon aria-hidden size={smallIconSize} />
-        </Box>
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography
-            component="h3"
-            sx={{ overflowWrap: 'anywhere' }}
-            variant="subtitle1"
-          >
-            {run.operation_id}
-          </Typography>
-          <Typography color="text.secondary" variant="body2">
-            {run.extension_id}
-          </Typography>
-        </Box>
-        <ExtensionRunStatusChip status={run.status} />
-      </Stack>
-      <Typography color="text.secondary" variant="body2">
-        {t('extensionRuns.entityCount', { count: run.selection_count })}
-        {' · '}
-        <Timestamp style="dateTime" value={run.created_at} />
-      </Typography>
+      <ExtensionRunHeader
+        heading={{ component: 'h3', variant: 'subtitle1' }}
+        icon={
+          <Box sx={{ color: 'text.secondary', display: 'flex', pt: 0.25 }}>
+            <ExtensionRunIcon aria-hidden size={smallIconSize} />
+          </Box>
+        }
+        run={run}
+      />
       <ExtensionRunProgress run={run} />
       <Box>
         <RouterButton
