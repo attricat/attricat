@@ -638,6 +638,8 @@ pub enum RepositoryError {
     InvalidPublicationChannel(String),
     #[error("rule revision must be published before it can be enabled")]
     RuleNotPublished,
+    #[error("rule has no enabled revision to run; enable it first, or start a dry run")]
+    RuleNotEnabled,
     #[error("workflow revision must be published before it can be enabled")]
     WorkflowNotPublished,
     #[error("blueprint revision is not published")]

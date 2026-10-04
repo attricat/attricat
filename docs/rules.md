@@ -169,7 +169,8 @@ and fail with `422 publication_checks_failed`. See [API](api.md#errors).
 - `GET /rule-runs`, `POST /rule-runs/{run_id}/replay`, `GET /rule-findings?entity_id=...`
 - `POST /rule-findings/{finding_id}/acknowledge`
 
-Errors: `422 invalid_rule_definition`, `409 rule_dry_run_required`,
+Errors: `422 invalid_rule_definition`, `422 rule_not_enabled` (a normal
+`run-now` while no revision is enabled), `409 rule_dry_run_required`,
 `409 rule_has_existing_violations`. Writes rejected by an enforcing rule return
 `422 rule_violation`.
 

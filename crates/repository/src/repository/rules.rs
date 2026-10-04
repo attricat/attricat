@@ -413,7 +413,20 @@ impl CatalogRepository {
             None => None,
         };
         let Some(version) = version else {
-            return Err(RepositoryError::RuleNotPublished);
+            // A normal run needs the enabled revision; only report a missing
+            // publication when there is no published revision to enable.
+            let published: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM rules WHERE workspace_id=$1 AND id=$2 AND status='published')",
+            )
+            .bind(ws)
+            .bind(rule_id)
+            .fetch_one(&mut *tx)
+            .await?;
+            return Err(if published && !input.dry_run {
+                RepositoryError::RuleNotEnabled
+            } else {
+                RepositoryError::RuleNotPublished
+            });
         };
         if let Some(entity_id) = input.entity_id {
             let matches: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM entities e JOIN rules r ON r.id=$3 AND r.workspace_id=$1 AND r.version=$4 WHERE e.id=$2 AND e.workspace_id=$1 AND e.deleted_at IS NULL AND e.blueprint_id=r.blueprint_id AND e.blueprint_version=r.blueprint_version)")

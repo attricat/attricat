@@ -86,6 +86,7 @@ error_codes! {
     RelationshipTargetTypeMismatch = "relationship_target_type_mismatch",
     RuleDryRunRequired = "rule_dry_run_required",
     RuleHasExistingViolations = "rule_has_existing_violations",
+    RuleNotEnabled = "rule_not_enabled",
     RuleNotPublished = "rule_not_published",
     RuleViolation = "rule_violation",
     SolutionPackApplicationFailed = "solution_pack_application_failed",
@@ -439,6 +440,7 @@ impl RepositoryError {
             Self::BlueprintNotPublished => plain(Unprocessable, Code::BlueprintNotPublished),
             Self::WorkflowNotPublished => plain(Unprocessable, Code::WorkflowNotPublished),
             Self::RuleNotPublished => plain(Unprocessable, Code::RuleNotPublished),
+            Self::RuleNotEnabled => plain(Unprocessable, Code::RuleNotEnabled),
             Self::Database(sqlx::Error::Database(database_error))
                 if database_error.is_unique_violation() =>
             {

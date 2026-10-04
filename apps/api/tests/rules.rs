@@ -333,3 +333,41 @@ async fn rule_page_continuation_yields_without_failure_budget(pool: PgPool) {
     assert!(first["id"].is_string());
     server.abort();
 }
+
+#[sqlx::test]
+async fn manual_run_of_a_disabled_rule_explains_it_is_not_enabled(pool: PgPool) {
+    let (base_url, server, rule_id, _) = setup_rule(&pool).await;
+    let client = authenticated_client();
+    client
+        .post(format!("{base_url}/rules/{rule_id}/disable"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+
+    let refused = client
+        .post(format!("{base_url}/rules/{rule_id}/run-now"))
+        .json(&json!({"dry_run": false, "idempotency_key": "disabled"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(refused.status(), 422);
+    let body: Value = refused.json().await.unwrap();
+    assert_eq!(body["error"]["code"], "rule_not_enabled");
+    assert_eq!(
+        body["error"]["message"],
+        "rule has no enabled revision to run; enable it first, or start a dry run"
+    );
+
+    // Dry runs may still evaluate the latest published revision.
+    client
+        .post(format!("{base_url}/rules/{rule_id}/run-now"))
+        .json(&json!({"dry_run": true, "idempotency_key": "disabled-dry"}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    server.abort();
+}
