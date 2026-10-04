@@ -4,22 +4,14 @@
 
 mod support;
 
-use std::{io::Cursor, path::PathBuf, process::Command, sync::Arc, time::Duration};
+use std::sync::Arc;
 
 use api::{
-    extension_installer::ExtensionInstaller,
-    extension_runtime::{ExtensionOperationTaskHandler, ExtensionRuntime, ExtensionRuntimeConfig},
-    model::{CreateBlueprint, NewAttributeValue},
+    extension_runtime::{ExtensionRuntime, ExtensionRuntimeConfig},
     repository::CatalogRepository,
     storage::FakeObjectStore,
-    task_worker::{TaskHandler, TaskOutcome},
 };
-use catalog_domain::task_queue::TaskKind;
-use reqwest::StatusCode;
-use support::{
-    BOOTSTRAP_WORKSPACE_ID, Value, authenticated_client, json, start_server_with_object_store,
-};
-use uuid::Uuid;
+use support::*;
 
 const EXTENSION: &str = "acme.unified";
 const BLUEPRINT: &str = r#"
@@ -46,53 +38,11 @@ const PERMISSIONS: &[&str] = &[
     "client.operations.read",
 ];
 
-fn workspace() -> Uuid {
-    BOOTSTRAP_WORKSPACE_ID.parse().unwrap()
-}
-
 fn unified_component() -> Vec<u8> {
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(|path| path.parent())
-        .unwrap()
-        .to_owned();
-    assert!(
-        Command::new("cargo")
-            .current_dir(&root)
-            .args([
-                "build",
-                "-p",
-                "catalog-unified-test-component",
-                "--target",
-                "wasm32-unknown-unknown",
-                "--release",
-            ])
-            .status()
-            .unwrap()
-            .success()
-    );
-    let core =
-        root.join("target/wasm32-unknown-unknown/release/catalog_unified_test_component.wasm");
-    let component = root.join("target/unified-test.component.wasm");
-    assert!(
-        Command::new("wasm-tools")
-            .args(["component", "new"])
-            .arg(core)
-            .args(["-o"])
-            .arg(&component)
-            .status()
-            .unwrap()
-            .success()
-    );
-    std::fs::read(component).unwrap()
-}
-
-fn append_file(tar: &mut tar::Builder<&mut Vec<u8>>, path: &str, bytes: &[u8]) {
-    let mut header = tar::Header::new_gnu();
-    header.set_size(bytes.len() as u64);
-    header.set_mode(0o644);
-    header.set_cksum();
-    tar.append_data(&mut header, path, bytes).unwrap();
+    build_test_component(
+        "catalog-unified-test-component",
+        "unified-test.component.wasm",
+    )
 }
 
 fn manifest() -> Value {
@@ -132,49 +82,11 @@ fn manifest() -> Value {
 
 fn archive(server: &[u8]) -> Vec<u8> {
     let manifest = serde_json::to_vec(&manifest()).unwrap();
-    let mut tar_bytes = Vec::new();
-    {
-        let mut tar = tar::Builder::new(&mut tar_bytes);
-        append_file(&mut tar, "manifest.json", &manifest);
-        append_file(&mut tar, "server.wasm", server);
-        append_file(&mut tar, "client.js", b"export const mount = () => {};");
-        tar.finish().unwrap();
-    }
-    zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
-}
-
-async fn drain_operations(repository: &CatalogRepository, store: Arc<FakeObjectStore>) {
-    let runtime = ExtensionRuntime::new(store, ExtensionRuntimeConfig::default()).unwrap();
-    let handler = ExtensionOperationTaskHandler::new(repository.clone(), runtime);
-    for _ in 0..10 {
-        let Some(task) = repository
-            .claim_task_for_kinds(
-                "unified-test",
-                Duration::from_secs(30),
-                &[TaskKind::ExtensionOperationRunV1],
-            )
-            .await
-            .unwrap()
-        else {
-            return;
-        };
-        match handler.handle(task.clone()).await.unwrap() {
-            TaskOutcome::Reschedule { .. } => repository
-                .reschedule_task_at(
-                    task.id,
-                    &task.lease_owner,
-                    task.lease_token,
-                    chrono::Utc::now(),
-                )
-                .await
-                .unwrap(),
-            TaskOutcome::Complete => repository
-                .complete_task(task.id, &task.lease_owner, task.lease_token)
-                .await
-                .unwrap(),
-            _ => {}
-        }
-    }
+    tar_zst(&[
+        ("manifest.json", &manifest),
+        ("server.wasm", server),
+        ("client.js", b"export const mount = () => {};"),
+    ])
 }
 
 #[test]
@@ -199,26 +111,18 @@ fn legacy_ranges_cannot_combine_commands_and_interactive_operations() {
 #[sqlx::test(migrations = "./migrations")]
 async fn one_unified_component_serves_commands_and_interactive_operations(pool: sqlx::PgPool) {
     let repository = CatalogRepository::system(pool.clone())
-        .for_workspace(workspace())
+        .for_workspace(bootstrap_workspace_id())
         .await
         .unwrap();
     let store = Arc::new(FakeObjectStore::available());
-    ExtensionInstaller::new(repository.clone(), store.clone())
-        .install("test", &archive(&unified_component()))
-        .await
-        .unwrap();
-    for capability in PERMISSIONS {
-        repository
-            .grant_extension(EXTENSION, "capability", capability)
-            .await
-            .unwrap();
-    }
-    repository.enable_extension(EXTENSION).await.unwrap();
-    let release = repository
-        .installed_extension(EXTENSION)
-        .await
-        .unwrap()
-        .installed_release_id;
+    let release = install_extension(
+        &repository,
+        store.clone(),
+        EXTENSION,
+        &archive(&unified_component()),
+        PERMISSIONS,
+    )
+    .await;
 
     // Commands run through the handler export; run-bound imports are linked
     // but fail outside an operation run.
@@ -254,37 +158,10 @@ async fn one_unified_component_serves_commands_and_interactive_operations(pool: 
 
     // Interactive operations run through the operations export of the same
     // component, with direct api catalog access denied inside the run.
-    let blueprint = repository
-        .create_blueprint(CreateBlueprint {
-            definition: BLUEPRINT.into(),
-        })
-        .await
-        .unwrap();
-    let blueprint = (blueprint.blueprint.id, blueprint.blueprint.version);
-    repository
-        .publish_blueprint_revision(blueprint.0, blueprint.1)
-        .await
-        .unwrap();
+    let blueprint = published_blueprint(&repository, BLUEPRINT).await;
     let mut entities = Vec::new();
     for title in ["First", "Second"] {
-        entities.push(
-            repository
-                .create_entity_with_values(
-                    blueprint.0,
-                    blueprint.1,
-                    vec![NewAttributeValue::Scalar {
-                        attribute_id: None,
-                        attribute_code: Some("title".into()),
-                        context_id: None,
-                        value: json!(title),
-                    }],
-                    vec![],
-                    json!({}),
-                )
-                .await
-                .unwrap()
-                .id,
-        );
+        entities.push(titled_entity(&repository, blueprint, title).await);
     }
     let (base, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
     let response = authenticated_client()
@@ -311,7 +188,7 @@ async fn one_unified_component_serves_commands_and_interactive_operations(pool: 
         .parse()
         .unwrap();
 
-    drain_operations(&repository, store.clone()).await;
+    drain_extension_operations(&repository, store.clone()).await;
 
     let (status, abi_version, checkpoint): (String, String, Value) = sqlx::query_as(
         "SELECT status, abi_version, checkpoint FROM extension_operation_runs WHERE id=$1",

@@ -1,11 +1,6 @@
 mod support;
 
-use std::{
-    io::Cursor,
-    path::{Path, PathBuf},
-    process::Command,
-    sync::Arc,
-};
+use std::{io::Cursor, path::Path, sync::Arc};
 
 use api::{
     agent_tools::execute_read,
@@ -18,7 +13,10 @@ use api::{
     storage::{FakeObjectStore, ObjectStore},
 };
 use async_trait::async_trait;
-use support::{Value, authenticated_client, json, start_server_with_object_store};
+use support::{
+    Value, append_file, authenticated_client, bootstrap_workspace_id, build_test_component,
+    is_published, json, publish_in_channel, start_server_with_object_store,
+};
 use uuid::Uuid;
 
 const ARTIFACT_BYTES: &[u8] = b"server bytes";
@@ -170,78 +168,17 @@ fn release_archive(version: &str, dependencies: Value, artifact_bytes: &[u8]) ->
 }
 
 fn artifact_stream_component() -> Vec<u8> {
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(|path| path.parent())
-        .expect("API crate is below workspace root")
-        .to_owned();
-    assert!(
-        Command::new("cargo")
-            .current_dir(&root)
-            .args([
-                "build",
-                "-p",
-                "catalog-artifact-test-component",
-                "--target",
-                "wasm32-unknown-unknown",
-                "--release",
-            ])
-            .status()
-            .expect("cargo must be available for the component fixture")
-            .success()
-    );
-    let core =
-        root.join("target/wasm32-unknown-unknown/release/catalog_artifact_test_component.wasm");
-    let component = root.join("target/artifact-stream-test.component.wasm");
-    assert!(
-        Command::new("wasm-tools")
-            .args(["component", "new"])
-            .arg(core)
-            .args(["-o"])
-            .arg(&component)
-            .status()
-            .expect("wasm-tools must be available for the component fixture")
-            .success()
-    );
-    std::fs::read(component).expect("component fixture must be readable")
+    build_test_component(
+        "catalog-artifact-test-component",
+        "artifact-stream-test.component.wasm",
+    )
 }
 
 fn transfer_test_component() -> Vec<u8> {
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(|path| path.parent())
-        .unwrap()
-        .to_owned();
-    assert!(
-        Command::new("cargo")
-            .current_dir(&root)
-            .args([
-                "build",
-                "-p",
-                "catalog-extension-transfer-test-component",
-                "--target",
-                "wasm32-unknown-unknown",
-                "--release",
-            ])
-            .status()
-            .unwrap()
-            .success()
-    );
-    let core = root.join(
-        "target/wasm32-unknown-unknown/release/catalog_extension_transfer_test_component.wasm",
-    );
-    let component = root.join("target/transfer-test.component.wasm");
-    assert!(
-        Command::new("wasm-tools")
-            .args(["component", "new"])
-            .arg(core)
-            .args(["-o"])
-            .arg(&component)
-            .status()
-            .unwrap()
-            .success()
-    );
-    std::fs::read(component).unwrap()
+    build_test_component(
+        "catalog-extension-transfer-test-component",
+        "transfer-test.component.wasm",
+    )
 }
 
 fn transfer_test_archive(component: &[u8]) -> Vec<u8> {
@@ -449,14 +386,6 @@ fn client_release_archive_with_navigation(extension_id: &str) -> Vec<u8> {
         tar.finish().unwrap();
     }
     zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
-}
-
-fn append_file(tar: &mut tar::Builder<&mut Vec<u8>>, path: &str, bytes: &[u8]) {
-    let mut header = tar::Header::new_gnu();
-    header.set_size(bytes.len() as u64);
-    header.set_mode(0o644);
-    header.set_cksum();
-    tar.append_data(&mut header, path, bytes).unwrap();
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -758,9 +687,8 @@ value_type = "string"
 
 #[sqlx::test(migrations = "./migrations")]
 async fn extension_intents_use_unique_keys_and_withdraw_publications(pool: sqlx::PgPool) {
-    let workspace_id = Uuid::from_u128(0x00000000000040008000000000000002);
     let repository = CatalogRepository::system(pool.clone())
-        .for_workspace(workspace_id)
+        .for_workspace(bootstrap_workspace_id())
         .await
         .unwrap()
         .for_extension("acme.sync");
@@ -831,33 +759,8 @@ async fn extension_intents_use_unique_keys_and_withdraw_publications(pool: sqlx:
         })
         .await
         .unwrap();
-    sqlx::query(
-        "INSERT INTO publication_channels(workspace_id,context_id,enabled) VALUES($1,$2,true)",
-    )
-    .bind(workspace_id)
-    .bind(channel.id)
-    .execute(&pool)
-    .await
-    .unwrap();
-    let publisher_id = Uuid::new_v4();
-    sqlx::query("INSERT INTO users(id,email) VALUES($1,$2)")
-        .bind(publisher_id)
-        .bind(format!("{publisher_id}@example.test"))
-        .execute(&pool)
-        .await
-        .unwrap();
-    sqlx::query("INSERT INTO entity_channel_publications(workspace_id,entity_id,context_id,published_at,published_by_user_id) VALUES($1,$2,$3,now(),$4)")
-        .bind(workspace_id).bind(entity_id).bind(channel.id).bind(publisher_id).execute(&pool).await.unwrap();
-    let published = || async {
-        sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS (SELECT 1 FROM entity_channel_publications WHERE entity_id=$1 AND published_at IS NOT NULL)",
-        )
-        .bind(entity_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap()
-    };
-    assert!(published().await);
+    publish_in_channel(&pool, entity_id, channel.id).await;
+    assert!(is_published(&pool, entity_id).await);
 
     // The declared key resolves the lookup with its normalization, so a
     // differently cased and spaced value updates the same entity.
@@ -873,7 +776,7 @@ async fn extension_intents_use_unique_keys_and_withdraw_publications(pool: sqlx:
     );
     assert_eq!(updated[0].entity_id, Some(entity_id));
     assert!(
-        !published().await,
+        !is_published(&pool, entity_id).await,
         "an extension update withdraws publication"
     );
     let title: String = sqlx::query_scalar(

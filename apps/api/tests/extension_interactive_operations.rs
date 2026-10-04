@@ -1,26 +1,17 @@
 mod support;
 
-use std::{io::Cursor, path::PathBuf, process::Command, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use api::{
-    extension_installer::ExtensionInstaller,
-    extension_runtime::{ExtensionOperationTaskHandler, ExtensionRuntime, ExtensionRuntimeConfig},
-    model::{CreateAttributeContext, CreateBlueprint, NewAttributeValue, RelationshipTargets},
+    model::{CreateAttributeContext, RelationshipTargets},
     repository::{
         AuthorizationActor, CatalogRepository, ExtensionCatalogBatch, ExtensionCatalogIntent,
         ExtensionCatalogIntentStatus, InteractiveRunFailure, InteractiveRunScope,
         InteractiveRunStatus, RepositoryError, StartExtensionOperation,
     },
     storage::FakeObjectStore,
-    task_worker::{TaskHandler, TaskOutcome},
 };
-use catalog_domain::task_queue::TaskKind;
-use reqwest::{Client, StatusCode};
-use support::{
-    BOOTSTRAP_OWNER_ID, BOOTSTRAP_WORKSPACE_ID, Value, authenticated_client, json,
-    start_server_with_object_store,
-};
-use uuid::Uuid;
+use support::*;
 
 const EXTENSION: &str = "acme.interactive";
 const DOCUMENT_BLUEPRINT: &str = r#"
@@ -47,7 +38,6 @@ fields = ["title"]
 code = "title"
 value_type = "string"
 "#;
-const VIEWER_ROLE: &str = "00000000-0000-4000-8000-000000000104";
 const PERMISSIONS: &[&str] = &[
     "catalog.read",
     "catalog.annotations.write",
@@ -59,53 +49,11 @@ const PERMISSIONS: &[&str] = &[
     "client.operations.cancel",
 ];
 
-fn workspace() -> Uuid {
-    BOOTSTRAP_WORKSPACE_ID.parse().unwrap()
-}
-
 fn interactive_component() -> Vec<u8> {
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(|path| path.parent())
-        .unwrap()
-        .to_owned();
-    assert!(
-        Command::new("cargo")
-            .current_dir(&root)
-            .args([
-                "build",
-                "-p",
-                "catalog-interactive-test-component",
-                "--target",
-                "wasm32-unknown-unknown",
-                "--release",
-            ])
-            .status()
-            .unwrap()
-            .success()
-    );
-    let core =
-        root.join("target/wasm32-unknown-unknown/release/catalog_interactive_test_component.wasm");
-    let component = root.join("target/interactive-test.component.wasm");
-    assert!(
-        Command::new("wasm-tools")
-            .args(["component", "new"])
-            .arg(core)
-            .args(["-o"])
-            .arg(&component)
-            .status()
-            .unwrap()
-            .success()
-    );
-    std::fs::read(component).unwrap()
-}
-
-fn append_file(tar: &mut tar::Builder<&mut Vec<u8>>, path: &str, bytes: &[u8]) {
-    let mut header = tar::Header::new_gnu();
-    header.set_size(bytes.len() as u64);
-    header.set_mode(0o644);
-    header.set_cksum();
-    tar.append_data(&mut header, path, bytes).unwrap();
+    build_test_component(
+        "catalog-interactive-test-component",
+        "interactive-test.component.wasm",
+    )
 }
 
 fn archive(extension_id: &str, server: &[u8]) -> Vec<u8> {
@@ -139,15 +87,11 @@ fn archive(extension_id: &str, server: &[u8]) -> Vec<u8> {
         ]
     }))
     .unwrap();
-    let mut tar_bytes = Vec::new();
-    {
-        let mut tar = tar::Builder::new(&mut tar_bytes);
-        append_file(&mut tar, "manifest.json", &manifest);
-        append_file(&mut tar, "server.wasm", server);
-        append_file(&mut tar, "client.js", b"export const mount = () => {};");
-        tar.finish().unwrap();
-    }
-    zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
+    tar_zst(&[
+        ("manifest.json", &manifest),
+        ("server.wasm", server),
+        ("client.js", b"export const mount = () => {};"),
+    ])
 }
 
 async fn install(
@@ -155,55 +99,14 @@ async fn install(
     store: Arc<FakeObjectStore>,
     server: &[u8],
 ) -> Uuid {
-    ExtensionInstaller::new(repository.clone(), store)
-        .install("test", &archive(EXTENSION, server))
-        .await
-        .unwrap();
-    for capability in PERMISSIONS {
-        repository
-            .grant_extension(EXTENSION, "capability", capability)
-            .await
-            .unwrap();
-    }
-    repository.enable_extension(EXTENSION).await.unwrap();
-    repository
-        .installed_extension(EXTENSION)
-        .await
-        .unwrap()
-        .installed_release_id
-}
-
-async fn published_blueprint(repository: &CatalogRepository, definition: &str) -> (Uuid, i64) {
-    let blueprint = repository
-        .create_blueprint(CreateBlueprint {
-            definition: definition.into(),
-        })
-        .await
-        .unwrap();
-    repository
-        .publish_blueprint_revision(blueprint.blueprint.id, blueprint.blueprint.version)
-        .await
-        .unwrap();
-    (blueprint.blueprint.id, blueprint.blueprint.version)
-}
-
-async fn entity(repository: &CatalogRepository, blueprint: (Uuid, i64), title: &str) -> Uuid {
-    repository
-        .create_entity_with_values(
-            blueprint.0,
-            blueprint.1,
-            vec![NewAttributeValue::Scalar {
-                attribute_id: None,
-                attribute_code: Some("title".into()),
-                context_id: None,
-                value: json!(title),
-            }],
-            vec![],
-            json!({}),
-        )
-        .await
-        .unwrap()
-        .id
+    install_extension(
+        repository,
+        store,
+        EXTENSION,
+        &archive(EXTENSION, server),
+        PERMISSIONS,
+    )
+    .await
 }
 
 fn start_body(release: Uuid, key: &str, blueprint: (Uuid, i64), entities: &[Uuid]) -> Value {
@@ -221,79 +124,26 @@ fn start_body(release: Uuid, key: &str, blueprint: (Uuid, i64), entities: &[Uuid
     })
 }
 
+struct ScopedViewer {
+    user: Uuid,
+    membership: Uuid,
+    grant: Uuid,
+}
+
 /// Adds a member whose only grant is a viewer role scoped to one entity.
-async fn entity_scoped_viewer(pool: &sqlx::PgPool, entity_id: Uuid) -> (Uuid, Uuid) {
-    let user = Uuid::new_v4();
-    let membership = Uuid::new_v4();
-    sqlx::query("INSERT INTO users (id, email) VALUES ($1, $2)")
-        .bind(user)
-        .bind(format!("viewer-{user}@example.test"))
-        .execute(pool)
-        .await
-        .unwrap();
-    sqlx::query(
-        "INSERT INTO workspace_memberships (id, workspace_id, user_id) VALUES ($1, $2, $3)",
+async fn entity_scoped_viewer(pool: &sqlx::PgPool, entity_id: Uuid) -> ScopedViewer {
+    let (user, membership) = add_workspace_user(pool).await;
+    let grant = grant_role(
+        pool,
+        membership,
+        VIEWER_ROLE_ID,
+        GrantScope::Entity(entity_id),
     )
-    .bind(membership)
-    .bind(workspace())
-    .bind(user)
-    .execute(pool)
-    .await
-    .unwrap();
-    let grant = Uuid::new_v4();
-    sqlx::query("INSERT INTO role_grants (id, workspace_id, membership_id, role_id, scope_type, scope_target_id) VALUES ($1, $2, $3, $4::uuid, 'entity', $5)")
-        .bind(grant)
-        .bind(workspace())
-        .bind(membership)
-        .bind(VIEWER_ROLE)
-        .bind(entity_id)
-        .execute(pool)
-        .await
-        .unwrap();
-    (user, grant)
-}
-
-fn client_for(user: Uuid) -> Client {
-    let mut headers = reqwest::header::HeaderMap::new();
-    headers.insert("x-catalog-user-id", user.to_string().parse().unwrap());
-    headers.insert(
-        "x-catalog-workspace-id",
-        BOOTSTRAP_WORKSPACE_ID.parse().unwrap(),
-    );
-    Client::builder().default_headers(headers).build().unwrap()
-}
-
-async fn drain_operations(repository: &CatalogRepository, store: Arc<FakeObjectStore>) {
-    let runtime = ExtensionRuntime::new(store, ExtensionRuntimeConfig::default()).unwrap();
-    let handler = ExtensionOperationTaskHandler::new(repository.clone(), runtime);
-    for _ in 0..10 {
-        let Some(task) = repository
-            .claim_task_for_kinds(
-                "interactive-test",
-                Duration::from_secs(30),
-                &[TaskKind::ExtensionOperationRunV1],
-            )
-            .await
-            .unwrap()
-        else {
-            return;
-        };
-        match handler.handle(task.clone()).await.unwrap() {
-            TaskOutcome::Reschedule { .. } => repository
-                .reschedule_task_at(
-                    task.id,
-                    &task.lease_owner,
-                    task.lease_token,
-                    chrono::Utc::now(),
-                )
-                .await
-                .unwrap(),
-            TaskOutcome::Complete => repository
-                .complete_task(task.id, &task.lease_owner, task.lease_token)
-                .await
-                .unwrap(),
-            _ => {}
-        }
+    .await;
+    ScopedViewer {
+        user,
+        membership,
+        grant,
     }
 }
 
@@ -302,14 +152,14 @@ async fn interactive_run_reads_its_selection_and_annotates_through_the_v15_world
     pool: sqlx::PgPool,
 ) {
     let repository = CatalogRepository::system(pool.clone())
-        .for_workspace(workspace())
+        .for_workspace(bootstrap_workspace_id())
         .await
         .unwrap();
     let store = Arc::new(FakeObjectStore::available());
     let release = install(&repository, store.clone(), &interactive_component()).await;
     let blueprint = published_blueprint(&repository, DOCUMENT_BLUEPRINT).await;
-    let first = entity(&repository, blueprint, "First").await;
-    let second = entity(&repository, blueprint, "Second").await;
+    let first = titled_entity(&repository, blueprint, "First").await;
+    let second = titled_entity(&repository, blueprint, "Second").await;
     let (base, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
     let start_url = format!("{base}/extensions/{EXTENSION}/bulk/operations");
 
@@ -416,7 +266,7 @@ async fn interactive_run_reads_its_selection_and_annotates_through_the_v15_world
     assert_eq!(detail["artifacts"], json!([]));
     assert!(detail.get("input").is_none());
 
-    drain_operations(&repository, store.clone()).await;
+    drain_extension_operations(&repository, store.clone()).await;
 
     let detail = authenticated_client()
         .get(format!("{base}/extension-runs/{run_id}"))
@@ -509,17 +359,18 @@ async fn interactive_run_reads_its_selection_and_annotates_through_the_v15_world
 #[sqlx::test(migrations = "./migrations")]
 async fn interactive_runs_are_authorized_per_entity_and_fail_closed(pool: sqlx::PgPool) {
     let repository = CatalogRepository::system(pool.clone())
-        .for_workspace(workspace())
+        .for_workspace(bootstrap_workspace_id())
         .await
         .unwrap();
     let store = Arc::new(FakeObjectStore::available());
     let release = install(&repository, store.clone(), &interactive_component()).await;
     let blueprint = published_blueprint(&repository, DOCUMENT_BLUEPRINT).await;
     let other_blueprint = published_blueprint(&repository, OTHER_BLUEPRINT).await;
-    let visible = entity(&repository, blueprint, "Visible").await;
-    let hidden = entity(&repository, blueprint, "Hidden").await;
-    let foreign = entity(&repository, other_blueprint, "Foreign").await;
-    let (viewer, grant) = entity_scoped_viewer(&pool, visible).await;
+    let visible = titled_entity(&repository, blueprint, "Visible").await;
+    let hidden = titled_entity(&repository, blueprint, "Hidden").await;
+    let foreign = titled_entity(&repository, other_blueprint, "Foreign").await;
+    let scoped_viewer = entity_scoped_viewer(&pool, visible).await;
+    let viewer = scoped_viewer.user;
     let (base, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
     let start_url = format!("{base}/extensions/{EXTENSION}/bulk/operations");
 
@@ -720,7 +571,7 @@ async fn interactive_runs_are_authorized_per_entity_and_fail_closed(pool: sqlx::
 
     // Frozen membership is not permission: losing the entity grant hides the run.
     sqlx::query("DELETE FROM role_grants WHERE id=$1")
-        .bind(grant)
+        .bind(scoped_viewer.grant)
         .execute(&pool)
         .await
         .unwrap();
@@ -747,28 +598,14 @@ async fn interactive_runs_are_authorized_per_entity_and_fail_closed(pool: sqlx::
         .unwrap();
     assert_eq!(listed, json!([]));
     // An initiator who is also an operator keeps operator access to the run.
-    let operator_role = Uuid::new_v4();
-    sqlx::query("INSERT INTO roles (id, code, workspace_id) VALUES ($1, 'run-operator', $2)")
-        .bind(operator_role)
-        .bind(workspace())
-        .execute(&pool)
-        .await
-        .unwrap();
-    sqlx::query(
-        "INSERT INTO role_permissions (role_id, permission_code) VALUES ($1, 'extensions.manage')",
+    let operator_role = create_role(&pool, "run-operator", &["extensions.manage"]).await;
+    grant_role(
+        &pool,
+        scoped_viewer.membership,
+        operator_role,
+        GrantScope::Workspace,
     )
-    .bind(operator_role)
-    .execute(&pool)
-    .await
-    .unwrap();
-    sqlx::query("INSERT INTO role_grants (id, workspace_id, membership_id, role_id, scope_type, scope_target_id) SELECT $1, $2, id, $3, 'workspace', $2 FROM workspace_memberships WHERE user_id=$4")
-        .bind(Uuid::new_v4())
-        .bind(workspace())
-        .bind(operator_role)
-        .bind(viewer)
-        .execute(&pool)
-        .await
-        .unwrap();
+    .await;
     let as_operator = client_for(viewer)
         .get(format!("{base}/extension-runs/{viewer_run}"))
         .send()
@@ -790,7 +627,7 @@ async fn interactive_runs_are_authorized_per_entity_and_fail_closed(pool: sqlx::
         .execute(&pool)
         .await
         .unwrap();
-    drain_operations(&repository, store).await;
+    drain_extension_operations(&repository, store).await;
     let run = repository
         .interactive_extension_run(viewer_run.parse().unwrap())
         .await
@@ -856,12 +693,12 @@ value_type = "string"
 #[sqlx::test(migrations = "./migrations")]
 async fn annotation_tag_changes_run_tag_checks(pool: sqlx::PgPool) {
     let repository = CatalogRepository::system(pool.clone())
-        .for_workspace(workspace())
+        .for_workspace(bootstrap_workspace_id())
         .await
         .unwrap();
     let extension = repository.for_extension("acme.docs");
     let blueprint = published_blueprint(&repository, TAG_CHECKED_BLUEPRINT).await;
-    let item = entity(&repository, blueprint, "Item").await;
+    let item = titled_entity(&repository, blueprint, "Item").await;
     let tag = |key: &str, tag: &str| ExtensionCatalogIntent::Annotate {
         intent_key: key.into(),
         entity_id: item,
@@ -898,12 +735,12 @@ async fn extension_annotation_namespaces_are_patched_and_protected_on_every_writ
     pool: sqlx::PgPool,
 ) {
     let repository = CatalogRepository::system(pool.clone())
-        .for_workspace(workspace())
+        .for_workspace(bootstrap_workspace_id())
         .await
         .unwrap();
     let extension = repository.for_extension("acme.docs");
     let blueprint = published_blueprint(&repository, DOCUMENT_BLUEPRINT).await;
-    let first = entity(&repository, blueprint, "First").await;
+    let first = titled_entity(&repository, blueprint, "First").await;
 
     let applied = extension
         .execute_extension_catalog_batch(batch("b1", vec![annotate("a1", first, Some(0))]))
@@ -1050,7 +887,7 @@ async fn extension_annotation_namespaces_are_patched_and_protected_on_every_writ
 #[sqlx::test(migrations = "./migrations")]
 async fn legacy_annotations_require_explicit_namespace_adoption(pool: sqlx::PgPool) {
     let repository = CatalogRepository::system(pool.clone())
-        .for_workspace(workspace())
+        .for_workspace(bootstrap_workspace_id())
         .await
         .unwrap();
     let store = Arc::new(FakeObjectStore::available());
@@ -1157,18 +994,18 @@ async fn legacy_annotations_require_explicit_namespace_adoption(pool: sqlx::PgPo
 #[sqlx::test(migrations = "./migrations")]
 async fn generic_writes_serialize_with_namespace_claims(pool: sqlx::PgPool) {
     let repository = CatalogRepository::system(pool.clone())
-        .for_workspace(workspace())
+        .for_workspace(bootstrap_workspace_id())
         .await
         .unwrap();
     let blueprint = published_blueprint(&repository, DOCUMENT_BLUEPRINT).await;
-    let entity = entity(&repository, blueprint, "Race").await;
+    let entity = titled_entity(&repository, blueprint, "Race").await;
     // Stand in for a first claim of `acme.race` that is still counting
     // existing data under that name.
     let mut claim = pool.begin().await.unwrap();
     sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
         .bind(format!(
             "extension-annotation-namespace:{}:acme.race",
-            workspace()
+            bootstrap_workspace_id()
         ))
         .execute(&mut *claim)
         .await
@@ -1204,7 +1041,19 @@ async fn generic_writes_serialize_with_namespace_claims(pool: sqlx::PgPool) {
             )
             .await
     });
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    let blocked = wait_until(|| async {
+        sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS (SELECT 1 FROM pg_locks WHERE locktype = 'advisory' AND NOT granted)",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+    })
+    .await;
+    assert!(
+        blocked,
+        "the touching write must wait for the namespace claim"
+    );
     assert!(!touching.is_finished());
     claim.rollback().await.unwrap();
     tokio::time::timeout(Duration::from_secs(10), touching)
@@ -1217,14 +1066,14 @@ async fn generic_writes_serialize_with_namespace_claims(pool: sqlx::PgPool) {
 #[sqlx::test(migrations = "./migrations")]
 async fn replay_is_refused_after_the_run_context_is_deleted(pool: sqlx::PgPool) {
     let repository = CatalogRepository::system(pool.clone())
-        .for_workspace(workspace())
+        .for_workspace(bootstrap_workspace_id())
         .await
         .unwrap();
     let store = Arc::new(FakeObjectStore::available());
     let release = install(&repository, store.clone(), &interactive_component()).await;
     let blueprint = published_blueprint(&repository, DOCUMENT_BLUEPRINT).await;
-    let member = entity(&repository, blueprint, "Replay").await;
-    let (viewer, _) = entity_scoped_viewer(&pool, member).await;
+    let member = titled_entity(&repository, blueprint, "Replay").await;
+    let viewer = entity_scoped_viewer(&pool, member).await.user;
     let context = repository
         .create_context(CreateAttributeContext {
             code: "replay_context".into(),
@@ -1257,7 +1106,7 @@ async fn replay_is_refused_after_the_run_context_is_deleted(pool: sqlx::PgPool) 
         .execute(&pool)
         .await
         .unwrap();
-    drain_operations(&repository, store).await;
+    drain_extension_operations(&repository, store).await;
     let failed = repository
         .interactive_extension_run(run_id)
         .await
@@ -1284,13 +1133,13 @@ async fn replay_is_refused_after_the_run_context_is_deleted(pool: sqlx::PgPool) 
 #[sqlx::test(migrations = "./migrations")]
 async fn selection_pages_hold_at_most_one_pool_connection(pool: sqlx::PgPool) {
     let repository = CatalogRepository::system(pool.clone())
-        .for_workspace(workspace())
+        .for_workspace(bootstrap_workspace_id())
         .await
         .unwrap();
     let blueprint = published_blueprint(&repository, DOCUMENT_BLUEPRINT).await;
-    let first = entity(&repository, blueprint, "First").await;
-    let second = entity(&repository, blueprint, "Second").await;
-    let (viewer, _) = entity_scoped_viewer(&pool, first).await;
+    let first = titled_entity(&repository, blueprint, "First").await;
+    let second = titled_entity(&repository, blueprint, "Second").await;
+    let viewer = entity_scoped_viewer(&pool, first).await.user;
     // With a single connection, holding one while acquiring another would
     // wait for the acquire timeout and fail.
     let bounded = sqlx::postgres::PgPoolOptions::new()
@@ -1300,7 +1149,7 @@ async fn selection_pages_hold_at_most_one_pool_connection(pool: sqlx::PgPool) {
         .await
         .unwrap();
     let bounded_repository = CatalogRepository::system(bounded)
-        .for_workspace(workspace())
+        .for_workspace(bootstrap_workspace_id())
         .await
         .unwrap();
     let scope = InteractiveRunScope {
@@ -1344,37 +1193,36 @@ target_blueprint = "interactive_other_item"
 cardinality = "many"
 target_cardinality = "many"
 "#;
-const EDITOR_ROLE: &str = "00000000-0000-4000-8000-000000000103";
-
-/// Adds a role grant scoped to one entity to an existing member.
-async fn grant_on_entity(pool: &sqlx::PgPool, user: Uuid, role: &str, entity_id: Uuid) {
-    sqlx::query("INSERT INTO role_grants (id, workspace_id, membership_id, role_id, scope_type, scope_target_id) SELECT $1, $2, id, $3::uuid, 'entity', $4 FROM workspace_memberships WHERE user_id=$5")
-        .bind(Uuid::new_v4())
-        .bind(workspace())
-        .bind(role)
-        .bind(entity_id)
-        .bind(user)
-        .execute(pool)
-        .await
-        .unwrap();
-}
-
 #[sqlx::test(migrations = "./migrations")]
 async fn interactive_links_require_read_access_to_every_target(pool: sqlx::PgPool) {
     let repository = CatalogRepository::system(pool.clone())
-        .for_workspace(workspace())
+        .for_workspace(bootstrap_workspace_id())
         .await
         .unwrap();
     let store = Arc::new(FakeObjectStore::available());
     install(&repository, store, b"server").await;
     let targets = published_blueprint(&repository, OTHER_BLUEPRINT).await;
     let linking = published_blueprint(&repository, LINKING_BLUEPRINT).await;
-    let source = entity(&repository, linking, "Source").await;
-    let readable = entity(&repository, targets, "Readable").await;
-    let hidden = entity(&repository, targets, "Hidden").await;
-    let (user, _) = entity_scoped_viewer(&pool, source).await;
-    grant_on_entity(&pool, user, EDITOR_ROLE, source).await;
-    grant_on_entity(&pool, user, VIEWER_ROLE, readable).await;
+    let source = titled_entity(&repository, linking, "Source").await;
+    let readable = titled_entity(&repository, targets, "Readable").await;
+    let hidden = titled_entity(&repository, targets, "Hidden").await;
+    let ScopedViewer {
+        user, membership, ..
+    } = entity_scoped_viewer(&pool, source).await;
+    grant_role(
+        &pool,
+        membership,
+        EDITOR_ROLE_ID,
+        GrantScope::Entity(source),
+    )
+    .await;
+    grant_role(
+        &pool,
+        membership,
+        VIEWER_ROLE_ID,
+        GrantScope::Entity(readable),
+    )
+    .await;
     let scope = InteractiveRunScope {
         actor: AuthorizationActor {
             user_id: user,
