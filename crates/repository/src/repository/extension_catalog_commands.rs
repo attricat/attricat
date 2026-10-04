@@ -283,6 +283,12 @@ impl CatalogRepository {
                         .await
                     }
                     None => {
+                        // A new entity has no current targets, so each
+                        // declared set is written as plain relationship values.
+                        let values = values
+                            .into_iter()
+                            .chain(relationships.into_iter().flat_map(relationship_values))
+                            .collect();
                         self.apply_extension_catalog_create(
                             transaction,
                             blueprint_id,
@@ -487,6 +493,26 @@ impl CatalogRepository {
             .await?;
         Ok(entity.id)
     }
+}
+
+/// One relationship value per distinct target of a set.
+fn relationship_values(set: RelationshipTargets) -> impl Iterator<Item = NewAttributeValue> {
+    let RelationshipTargets {
+        attribute_id,
+        attribute_code,
+        context_id,
+        target_entity_ids,
+    } = set;
+    target_entity_ids
+        .into_iter()
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .map(move |target_entity_id| NewAttributeValue::Relationship {
+            attribute_id,
+            attribute_code: attribute_code.clone(),
+            context_id,
+            target_entity_id,
+        })
 }
 
 fn extension_intent_key(intent: &ExtensionCatalogIntent) -> &str {
