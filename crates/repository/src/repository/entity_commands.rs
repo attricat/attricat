@@ -590,6 +590,10 @@ impl CatalogRepository {
             return Err(RepositoryError::StaleEntity);
         }
         self.ensure_entity_deletable(transaction, &entity).await?;
+        // Withdraw live publications through the shared helper so consumers
+        // receive `entity.unpublished`, then drop the entity's rows.
+        self.clear_entity_publications(transaction, entity_id, "entity_deleted")
+            .await?;
         sqlx::query(
             "DELETE FROM entity_channel_publications WHERE workspace_id = $1 AND entity_id = $2",
         )
