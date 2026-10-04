@@ -9,7 +9,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-use chrono::{DateTime, Utc};
 use image::{DynamicImage, GenericImageView, ImageEncoder, ImageReader};
 use metrics::{counter, gauge};
 use sha2::Digest;
@@ -17,6 +16,7 @@ use sqlx::{PgPool, Row};
 use tracing::{Instrument, info_span};
 use uuid::Uuid;
 
+use crate::repository::{CatalogRepository, RepositoryError, SystemRepository};
 use crate::storage::{ObjectStore, ObjectStoreError, StoredObject};
 
 const DEFAULT_MAX_PIXELS: u64 = 40_000_000;
@@ -98,6 +98,7 @@ pub struct ClaimedJob {
 
 pub struct FileWorker {
     pool: PgPool,
+    repository: SystemRepository,
     store: Arc<dyn ObjectStore>,
     config: WorkerConfig,
     last_reconciled: Mutex<Option<Instant>>,
@@ -107,6 +108,7 @@ pub struct FileWorker {
 impl FileWorker {
     pub fn new(pool: PgPool, store: Arc<dyn ObjectStore>, config: WorkerConfig) -> Self {
         Self {
+            repository: CatalogRepository::system(pool.clone()),
             pool,
             store,
             config,
@@ -150,7 +152,7 @@ impl FileWorker {
         ))
     }
 
-    pub async fn run_once(&self) -> Result<bool, sqlx::Error> {
+    pub async fn run_once(&self) -> Result<bool, RepositoryError> {
         // Reconciliation is maintenance, not part of every job claim. Avoid
         // rescanning the file population before each item in a busy queue.
         let should_reconcile = {
@@ -191,7 +193,7 @@ impl FileWorker {
                 Ok(()) => self.complete(&job).await?,
                 Err(error) => self.fail(&job, &error.to_string()).await?,
             }
-            Ok::<(), sqlx::Error>(())
+            Ok::<(), RepositoryError>(())
         }
         .instrument(span);
         tokio::pin!(operation);
@@ -337,22 +339,14 @@ impl FileWorker {
     }
 
     async fn purge(&self, job: &ClaimedJob) -> Result<(), WorkerError> {
-        let row = sqlx::query("SELECT original_key FROM files WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NOT NULL AND purge_after <= now() AND NOT EXISTS (SELECT 1 FROM attribute_file_references r WHERE r.workspace_id = files.workspace_id AND r.file_id = files.id) AND NOT EXISTS (SELECT 1 FROM workspace_memberships m WHERE m.workspace_id = files.workspace_id AND m.avatar_file_id = files.id) AND NOT EXISTS (SELECT 1 FROM file_retention_holds h WHERE h.workspace_id = files.workspace_id AND h.file_id = files.id AND h.released_at IS NULL AND h.held_until > now())")
-            .bind(job.file_id).bind(job.workspace_id).fetch_optional(&self.pool).await?;
-        let Some(row) = row else {
+        let Some(keys) = self
+            .repository
+            .purgeable_file_objects(job.workspace_id, job.file_id)
+            .await?
+        else {
             return Ok(());
         };
-        let original: String = row.try_get("original_key")?;
-        self.store
-            .delete(&original)
-            .await
-            .map_err(WorkerError::Storage)?;
-        let variants: Vec<String> =
-            sqlx::query_scalar("SELECT object_key FROM file_variants WHERE file_id = $1")
-                .bind(job.file_id)
-                .fetch_all(&self.pool)
-                .await?;
-        for key in variants {
+        for key in keys {
             self.store
                 .delete(&key)
                 .await
@@ -363,65 +357,15 @@ impl FileWorker {
 
     /// Marks unreferenced files without an active retention hold for delayed
     /// deletion and creates one durable purge job. Repeated runs are harmless and never delete before grace.
-    pub async fn reconcile(&self) -> Result<(), sqlx::Error> {
+    pub async fn reconcile(&self) -> Result<(), RepositoryError> {
         let grace = i64::try_from(self.config.delete_grace.as_secs()).unwrap_or(i64::MAX);
-        let mut transaction = self.pool.begin().await?;
-
-        // Attachment creation locks its file before recording the attachment.
-        // Lock candidates first (and skip an in-progress attachment) so the
-        // reference check and deletion decision share that same lock. This
-        // serializes the two transactions: an attachment that gets the lock
-        // first is retained; a file reconciliation that gets it first makes a
-        // later attachment fail its existing live-file authorization check.
-        let candidates: Vec<Uuid> = sqlx::query_scalar(
-            r#"SELECT f.id FROM files f
-            WHERE f.deleted_at IS NULL
-              AND (f.attachment_expires_at IS NULL OR f.attachment_expires_at <= now())
-              AND NOT EXISTS (SELECT 1 FROM attribute_file_references r WHERE r.workspace_id = f.workspace_id AND r.file_id = f.id)
-              AND NOT EXISTS (SELECT 1 FROM conversation_message_attachments a WHERE a.workspace_id = f.workspace_id AND a.file_id = f.id)
-              AND NOT EXISTS (SELECT 1 FROM workspace_memberships m WHERE m.workspace_id = f.workspace_id AND m.avatar_file_id = f.id)
-              AND NOT EXISTS (SELECT 1 FROM file_retention_holds h WHERE h.workspace_id = f.workspace_id AND h.file_id = f.id AND h.released_at IS NULL AND h.held_until > now())
-            ORDER BY f.id
-            LIMIT 256 FOR UPDATE SKIP LOCKED"#,
-        )
-        .fetch_all(&mut *transaction)
-        .await?;
-        let marked = if candidates.is_empty() {
-            0
-        } else {
-            sqlx::query(r#"UPDATE files f SET status = 'deleted', deleted_at = now(), purge_after = now() + make_interval(secs => $1), updated_at = now()
-                WHERE f.id = ANY($2)
-                  AND f.deleted_at IS NULL
-                  AND (f.attachment_expires_at IS NULL OR f.attachment_expires_at <= now())
-                  AND NOT EXISTS (SELECT 1 FROM attribute_file_references r WHERE r.workspace_id = f.workspace_id AND r.file_id = f.id)
-                  AND NOT EXISTS (SELECT 1 FROM conversation_message_attachments a WHERE a.workspace_id = f.workspace_id AND a.file_id = f.id)
-              AND NOT EXISTS (SELECT 1 FROM workspace_memberships m WHERE m.workspace_id = f.workspace_id AND m.avatar_file_id = f.id)
-              AND NOT EXISTS (SELECT 1 FROM file_retention_holds h WHERE h.workspace_id = f.workspace_id AND h.file_id = f.id AND h.released_at IS NULL AND h.held_until > now())"#)
-                .bind(grace)
-                .bind(&candidates)
-                .execute(&mut *transaction)
-                .await?
-                .rows_affected()
-        };
-        transaction.commit().await?;
+        let marked = self
+            .repository
+            .mark_unreferenced_files_deleted(grace)
+            .await?;
         metrics::counter!("catalog_file_reconciliation_total", "outcome" => "success").increment(1);
         metrics::counter!("catalog_file_reconciliation_files_marked_total").increment(marked);
-        // Lock a bounded batch while inserting. A concurrent SELECT can still
-        // use an older snapshot, so the unique index is the final safeguard
-        // against duplicate purge jobs; ON CONFLICT handles that race.
-        let mut transaction = self.pool.begin().await?;
-        let due: Vec<(Uuid, Uuid, DateTime<Utc>)> = sqlx::query_as(r#"SELECT f.workspace_id, f.id, f.purge_after FROM files f
-            WHERE f.deleted_at IS NOT NULL AND f.purge_after <= now()
-              AND NOT EXISTS (SELECT 1 FROM file_processing_jobs j WHERE j.file_id = f.id AND j.kind = 'purge' AND j.status IN ('queued','running','retryable','completed'))
-            ORDER BY f.purge_after, f.id
-            LIMIT 256 FOR UPDATE OF f SKIP LOCKED"#)
-            .fetch_all(&mut *transaction).await?;
-        let mut due_count = 0;
-        for (workspace_id, file_id, available_at) in due {
-            due_count += sqlx::query("INSERT INTO file_processing_jobs (id, workspace_id, file_id, kind, status, available_at) VALUES ($1,$2,$3,'purge','queued',$4) ON CONFLICT DO NOTHING")
-                .bind(Uuid::new_v4()).bind(workspace_id).bind(file_id).bind(available_at).execute(&mut *transaction).await?.rows_affected();
-        }
-        transaction.commit().await?;
+        let due_count = self.repository.queue_due_file_purges().await?;
         metrics::counter!("catalog_file_purge_jobs_queued_total").increment(due_count);
         tracing::info!(
             files_marked = marked,
@@ -516,6 +460,8 @@ enum WorkerError {
     LeaseLost,
     #[error(transparent)]
     Database(#[from] sqlx::Error),
+    #[error(transparent)]
+    Repository(#[from] RepositoryError),
     #[error(transparent)]
     Storage(#[from] ObjectStoreError),
     #[error("image processing failed: {0}")]

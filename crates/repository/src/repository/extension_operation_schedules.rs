@@ -4,6 +4,7 @@
 use chrono::{DateTime, Duration, Utc};
 use serde::Serialize;
 use serde_json::Value;
+use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
 use super::{CatalogRepository, RepositoryError, StartExtensionOperation};
@@ -138,24 +139,32 @@ impl CatalogRepository {
             &serde_json::json!({}),
         )?;
         let id = Uuid::new_v4();
-        // Validate the file now; occurrence creation revalidates its ready state.
+        // Validate the file now; occurrence creation revalidates its ready
+        // state. The file stays locked until the schedule that references it
+        // commits, so reconciliation cannot reclaim it in between.
+        let mut transaction = self.pool.begin().await?;
         if !input
             .source_reference
             .as_object()
             .is_some_and(|v| v.is_empty())
         {
-            self.validate_extension_operation_schedule_file(&input.source_reference)
-                .await?;
+            self.validate_extension_operation_schedule_file(
+                &mut transaction,
+                &input.source_reference,
+            )
+            .await?;
         }
-        sqlx::query_as(&format!("INSERT INTO extension_operation_schedules(id,workspace_id,extension_id,installed_release_id,operation_id,input,configuration_snapshot,source_reference,destination_reference,interval_seconds,next_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,clock_timestamp()+($10*interval '1 second')) RETURNING {PROJECTION}"))
+        let schedule = sqlx::query_as(&format!("INSERT INTO extension_operation_schedules(id,workspace_id,extension_id,installed_release_id,operation_id,input,configuration_snapshot,source_reference,destination_reference,interval_seconds,next_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,clock_timestamp()+($10*interval '1 second')) RETURNING {PROJECTION}"))
             .bind(id).bind(self.extension_workspace()).bind(&input.extension_id).bind(input.release_id)
             .bind(&input.operation_id).bind(input.input).bind(installation.configuration).bind(input.source_reference).bind(input.destination_reference)
-            .bind(input.interval_seconds).fetch_one(&self.pool).await
-            .map_err(Into::into)
+            .bind(input.interval_seconds).fetch_one(&mut *transaction).await?;
+        transaction.commit().await?;
+        Ok(schedule)
     }
 
     async fn validate_extension_operation_schedule_file(
         &self,
+        transaction: &mut Transaction<'_, Postgres>,
         source: &Value,
     ) -> Result<(), RepositoryError> {
         let file: Uuid = source["input_file_id"]
@@ -163,9 +172,9 @@ impl CatalogRepository {
             .ok_or_else(|| invalid("invalid input file"))?
             .parse()
             .map_err(|_| invalid("invalid input file"))?;
-        let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM files WHERE id=$1 AND workspace_id=$2 AND status='ready' AND deleted_at IS NULL)")
-            .bind(file).bind(self.extension_workspace()).fetch_one(&self.pool).await?;
-        if !exists {
+        let exists: Option<Uuid> = sqlx::query_scalar("SELECT id FROM files WHERE id=$1 AND workspace_id=$2 AND status='ready' AND deleted_at IS NULL FOR UPDATE")
+            .bind(file).bind(self.extension_workspace()).fetch_optional(&mut **transaction).await?;
+        if exists.is_none() {
             return Err(invalid("input file is not ready in this workspace"));
         }
         Ok(())

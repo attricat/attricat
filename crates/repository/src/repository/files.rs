@@ -648,3 +648,118 @@ impl CatalogRepository {
             .ok_or(RepositoryError::InvalidContext)
     }
 }
+
+/// Every source that can still read a workspace file's stored bytes, as a
+/// predicate over a `files f` row. Reconciliation marks a live file deleted
+/// only while this holds, and a purge job removes objects only while it still
+/// holds, so a new kind of file reference must be added here and nowhere else.
+///
+/// Extension input artifacts copy the file's object key rather than its ID, so
+/// a pending or leased run keeps the original object alive until it finishes.
+const FILE_UNREFERENCED: &str = r#"(f.attachment_expires_at IS NULL OR f.attachment_expires_at <= now())
+  AND NOT EXISTS (SELECT 1 FROM attribute_file_references r WHERE r.workspace_id = f.workspace_id AND r.file_id = f.id)
+  AND NOT EXISTS (SELECT 1 FROM conversation_message_attachments a WHERE a.workspace_id = f.workspace_id AND a.file_id = f.id)
+  AND NOT EXISTS (SELECT 1 FROM workspace_memberships m WHERE m.workspace_id = f.workspace_id AND m.avatar_file_id = f.id)
+  AND NOT EXISTS (SELECT 1 FROM file_retention_holds h WHERE h.workspace_id = f.workspace_id AND h.file_id = f.id AND h.released_at IS NULL AND h.held_until > now())
+  AND NOT EXISTS (SELECT 1 FROM blueprint_connector_jobs j WHERE j.workspace_id = f.workspace_id AND j.input_file_id = f.id)
+  AND NOT EXISTS (SELECT 1 FROM extension_operation_schedules s WHERE s.workspace_id = f.workspace_id AND s.source_reference->>'input_file_id' = f.id::text)
+  AND NOT EXISTS (SELECT 1 FROM extension_operation_artifacts x JOIN extension_operation_runs run ON run.id = x.operation_run_id AND run.workspace_id = x.workspace_id WHERE x.workspace_id = f.workspace_id AND x.direction = 'input' AND x.object_key = f.original_key AND run.status IN ('pending', 'leased'))"#;
+
+/// Upper bound on files marked, or purge jobs queued, by one reconciliation.
+const RECONCILE_BATCH: i64 = 256;
+
+impl SystemRepository {
+    /// Marks a bounded batch of unreferenced live files deleted, to be purged
+    /// after `grace_seconds`. Returns how many files were marked.
+    ///
+    /// Every writer that adds a file reference locks the live file row first.
+    /// Locking candidates here (skipping a file whose reference is being
+    /// written) makes the reference check and the deletion share that lock: a
+    /// reference committed first retains the file, and a reference attempted
+    /// after this commit fails its own live-file check.
+    pub async fn mark_unreferenced_files_deleted(
+        &self,
+        grace_seconds: i64,
+    ) -> Result<u64, RepositoryError> {
+        let mut transaction = self.pool.begin().await?;
+        let candidates: Vec<Uuid> = sqlx::query_scalar(&format!(
+            "SELECT f.id FROM files f WHERE f.deleted_at IS NULL AND {FILE_UNREFERENCED} ORDER BY f.id LIMIT $1 FOR UPDATE OF f SKIP LOCKED"
+        ))
+        .bind(RECONCILE_BATCH)
+        .fetch_all(&mut *transaction)
+        .await?;
+        if candidates.is_empty() {
+            return Ok(0);
+        }
+        let marked = sqlx::query(&format!(
+            "UPDATE files f SET status = 'deleted', deleted_at = now(), purge_after = now() + make_interval(secs => $1), updated_at = now() WHERE f.id = ANY($2) AND f.deleted_at IS NULL AND {FILE_UNREFERENCED}"
+        ))
+        .bind(grace_seconds)
+        .bind(&candidates)
+        .execute(&mut *transaction)
+        .await?
+        .rows_affected();
+        transaction.commit().await?;
+        Ok(marked)
+    }
+
+    /// Queues one purge job for each deleted file whose grace period has
+    /// passed. Returns how many jobs were queued.
+    pub async fn queue_due_file_purges(&self) -> Result<u64, RepositoryError> {
+        // Lock a bounded batch while inserting. A concurrent SELECT can still
+        // use an older snapshot, so the unique index is the final safeguard
+        // against duplicate purge jobs; ON CONFLICT handles that race.
+        let mut transaction = self.pool.begin().await?;
+        let due: Vec<(Uuid, Uuid, DateTime<Utc>)> = sqlx::query_as(
+            r#"SELECT f.workspace_id, f.id, f.purge_after FROM files f
+            WHERE f.deleted_at IS NOT NULL AND f.purge_after <= now()
+              AND NOT EXISTS (SELECT 1 FROM file_processing_jobs j WHERE j.file_id = f.id AND j.kind = 'purge' AND j.status IN ('queued','running','retryable','completed'))
+            ORDER BY f.purge_after, f.id
+            LIMIT $1 FOR UPDATE OF f SKIP LOCKED"#,
+        )
+        .bind(RECONCILE_BATCH)
+        .fetch_all(&mut *transaction)
+        .await?;
+        let mut queued = 0;
+        for (workspace_id, file_id, available_at) in due {
+            queued += sqlx::query("INSERT INTO file_processing_jobs (id, workspace_id, file_id, kind, status, available_at) VALUES ($1,$2,$3,'purge','queued',$4) ON CONFLICT DO NOTHING")
+                .bind(Uuid::new_v4())
+                .bind(workspace_id)
+                .bind(file_id)
+                .bind(available_at)
+                .execute(&mut *transaction)
+                .await?
+                .rows_affected();
+        }
+        transaction.commit().await?;
+        Ok(queued)
+    }
+
+    /// Returns the object keys (original first, then variants) of a deleted
+    /// file whose grace period has passed and that is still unreferenced, or
+    /// `None` when its bytes must be kept.
+    pub async fn purgeable_file_objects(
+        &self,
+        workspace_id: Uuid,
+        file_id: Uuid,
+    ) -> Result<Option<Vec<String>>, RepositoryError> {
+        let original: Option<String> = sqlx::query_scalar(&format!(
+            "SELECT f.original_key FROM files f WHERE f.id = $1 AND f.workspace_id = $2 AND f.deleted_at IS NOT NULL AND f.purge_after <= now() AND {FILE_UNREFERENCED}"
+        ))
+        .bind(file_id)
+        .bind(workspace_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        let Some(original) = original else {
+            return Ok(None);
+        };
+        let variants: Vec<String> = sqlx::query_scalar(
+            "SELECT object_key FROM file_variants WHERE file_id = $1 AND workspace_id = $2 ORDER BY kind",
+        )
+        .bind(file_id)
+        .bind(workspace_id)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(Some(std::iter::once(original).chain(variants).collect()))
+    }
+}
