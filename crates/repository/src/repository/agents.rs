@@ -577,6 +577,40 @@ impl CatalogRepository {
         Ok(call)
     }
 
+    /// [`Self::complete_agent_tool_call`] and the tool result message, in one
+    /// fenced transaction.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn complete_agent_tool_call_with_message(
+        &self,
+        tool_call_id: Uuid,
+        result: Result<Value, Value>,
+        conversation_id: Uuid,
+        run_id: Uuid,
+        content: Value,
+        attachment_ids: &[Uuid],
+    ) -> Result<(AgentToolCall, ConversationMessage), RepositoryError> {
+        let (result, error, state) = match result {
+            Ok(value) => (Some(value), None, "completed"),
+            Err(value) => (None, Some(value), "failed"),
+        };
+        let mut tx = self.pool.begin().await?;
+        self.ensure_task_fence(&mut tx).await?;
+        let call = sqlx::query_as("UPDATE agent_tool_calls call SET result = $3, error = $4, state = CASE WHEN call.state = 'rejected' THEN 'rejected' ELSE $5 END, completed_at = now() FROM agent_runs run WHERE call.id = $1 AND call.run_id = run.id AND run.workspace_id = $2 AND call.state IN ('approved', 'pending_approval', 'rejected') RETURNING call.id, call.run_id, call.sequence, call.provider_call_id, call.tool_name, call.arguments, call.change_summary, call.result, call.error, call.state, call.decided_by_user_id, call.decided_at, call.created_at, call.completed_at")
+            .bind(tool_call_id).bind(self.workspace_id.0).bind(result).bind(error).bind(state).fetch_optional(&mut *tx).await?.ok_or(RepositoryError::InvalidAgentState("tool call cannot be completed"))?;
+        let message = self
+            .append_conversation_message_in_tx(
+                &mut tx,
+                conversation_id,
+                Some(run_id),
+                "tool",
+                content,
+                attachment_ids,
+            )
+            .await?;
+        tx.commit().await?;
+        Ok((call, message))
+    }
+
     pub async fn append_run_event(
         &self,
         run_id: Uuid,

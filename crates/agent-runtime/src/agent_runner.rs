@@ -1,5 +1,6 @@
 //! Durable single-run orchestration.
 use std::{
+    collections::HashMap,
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -91,8 +92,18 @@ pub async fn run_claimed(
         run_id,
         conversation_id,
         0,
+        &mut RunMemo::default(),
     )
     .await
+}
+
+/// State one run reuses across its provider rounds. Conversation messages are
+/// append-only, so a message converted for the provider (including inlined
+/// attachments read from object storage) never needs converting again.
+#[derive(Default)]
+struct RunMemo {
+    messages: HashMap<Uuid, ChatMessage>,
+    initiator: Option<(Uuid, Uuid)>,
 }
 
 async fn drive(
@@ -102,6 +113,7 @@ async fn drive(
     run_id: Uuid,
     conversation_id: Uuid,
     rounds: u8,
+    memo: &mut RunMemo,
 ) -> Result<(), RunError> {
     if rounds >= MAX_TOOL_CALL_ROUNDS {
         fail_run(
@@ -129,7 +141,16 @@ async fn drive(
         tool_calls: None,
     }];
     for message in messages {
-        request.push(request_message(repository, object_store, message).await);
+        let id = message.id;
+        let converted = match memo.messages.get(&id) {
+            Some(converted) => converted.clone(),
+            None => {
+                let converted = request_message(repository, object_store, message).await;
+                memo.messages.insert(id, converted.clone());
+                converted
+            }
+        };
+        request.push(converted);
     }
     let pending = Arc::new(Mutex::new(String::new()));
     let stream_pending = pending.clone();
@@ -266,7 +287,14 @@ async fn drive(
                 "pending_approval",
             )
             .await?;
-        let (actor, workspace) = repository.agent_run_initiator(run_id).await?;
+        let (actor, workspace) = match memo.initiator {
+            Some(initiator) => initiator,
+            None => {
+                let initiator = repository.agent_run_initiator(run_id).await?;
+                memo.initiator = Some(initiator);
+                initiator
+            }
+        };
         let file_attachments = if matches!(call.function.name.as_str(), "view_image" | "read_file")
         {
             arguments
@@ -286,12 +314,12 @@ async fn drive(
             Ok(value) => value.clone(),
             Err(value) => value.clone(),
         };
-        repository.complete_agent_tool_call(tool.id, result).await?;
         repository
-            .append_conversation_message_with_attachments(
+            .complete_agent_tool_call_with_message(
+                tool.id,
+                result,
                 conversation_id,
-                Some(run_id),
-                "tool",
+                run_id,
                 json!({"tool_call_id":call.id,"name":call.function.name,"result":result_message}),
                 if result_message.get("code").is_some() {
                     &[]
@@ -315,6 +343,7 @@ async fn drive(
             run_id,
             conversation_id,
             rounds + 1,
+            memo,
         ))
         .await;
     }
