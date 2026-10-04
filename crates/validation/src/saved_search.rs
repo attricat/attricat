@@ -8,6 +8,8 @@ pub const MAX_STATE_BYTES: usize = 32 * 1024;
 pub const MAX_FILTERS: usize = 20;
 pub const MAX_SELECTED_IDS: usize = 100;
 pub const MAX_BLUEPRINT_BYTES: usize = 256;
+/// Longest Explorer field path, in bytes.
+pub const MAX_FIELD_PATH_BYTES: usize = 512;
 /// Explorer follows at most three relationship hops before the leaf field.
 pub const MAX_RELATIONSHIP_HOPS: usize = 3;
 /// Top-level state fields, named like the Explorer URL keys.
@@ -170,7 +172,9 @@ pub fn normalize_state(state: &Value) -> Value {
 /// checks the hop limit. Every segment must be a valid code.
 pub fn field_path(path: &str) -> Result<Vec<&str>, String> {
     let segments = path.split('.').collect::<Vec<_>>();
-    if path.len() > 512 || !segments.iter().all(|segment| crate::is_valid_code(segment)) {
+    if path.len() > MAX_FIELD_PATH_BYTES
+        || !segments.iter().all(|segment| crate::is_valid_code(segment))
+    {
         return Err(format!("field '{path}' is not a valid attribute path"));
     }
     if segments.len() > MAX_RELATIONSHIP_HOPS + 1 {

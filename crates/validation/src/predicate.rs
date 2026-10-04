@@ -27,6 +27,12 @@ pub const MAX_ONE_OF_VALUES: usize = 100;
 pub const MAX_UNIQUE_ATTRIBUTES: usize = 4;
 pub const MAX_OFFSET_DAYS: i64 = 36_500;
 pub const MAX_MESSAGE_LENGTH: usize = 500;
+/// Longest system tag, in bytes.
+pub const MAX_TAG_LENGTH: usize = 128;
+/// Longest check code, in bytes.
+pub const MAX_CHECK_CODE_LENGTH: usize = 128;
+/// Longest `stale` age: one year.
+pub const MAX_STALE_AGE_SECONDS: u64 = 31_536_000;
 
 /// Comparison operator. `lt`–`gte` order numbers, dates and datetimes;
 /// `eq`/`ne` compare any scalar or relationship target set; `disjoint`
@@ -44,9 +50,23 @@ pub enum CompareOp {
 }
 
 impl CompareOp {
+    /// The serialized operator name.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Eq => "eq",
+            Self::Ne => "ne",
+            Self::Lt => "lt",
+            Self::Lte => "lte",
+            Self::Gt => "gt",
+            Self::Gte => "gte",
+            Self::Disjoint => "disjoint",
+        }
+    }
+
     fn is_ordering(self) -> bool {
         matches!(self, Self::Lt | Self::Lte | Self::Gt | Self::Gte)
     }
+
     fn phrase(self) -> &'static str {
         match self {
             Self::Eq => "equal to",
@@ -92,17 +112,17 @@ pub enum Predicate {
         #[schemars(regex(pattern = crate::CODE_PATTERN), extend("x-attricat-reference" = "attribute"))]
         attribute_code: String,
         /// Maximum value age in seconds, from 1 to 31536000 (one year).
-        #[schemars(range(min = 1, max = 31_536_000))]
+        #[schemars(range(min = 1, max = MAX_STALE_AGE_SECONDS))]
         max_age_seconds: u64,
     },
     /// The entity has the system tag.
     HasTag {
-        #[schemars(length(min = 1, max = 128))]
+        #[schemars(length(min = 1, max = MAX_TAG_LENGTH))]
         tag: String,
     },
     /// The entity does not have the system tag.
     MissingTag {
-        #[schemars(length(min = 1, max = 128))]
+        #[schemars(length(min = 1, max = MAX_TAG_LENGTH))]
         tag: String,
     },
     /// Compares an attribute with another attribute or a literal value. Set
@@ -128,7 +148,7 @@ pub enum Predicate {
     OneOf {
         #[schemars(regex(pattern = crate::CODE_PATTERN), extend("x-attricat-reference" = "attribute"))]
         attribute_code: String,
-        #[schemars(length(min = 1, max = 100))]
+        #[schemars(length(min = 1, max = MAX_ONE_OF_VALUES))]
         values: Vec<Value>,
     },
     /// Compares a date or datetime attribute with now plus `offset_days`.
@@ -139,12 +159,12 @@ pub enum Predicate {
         op: CompareOp,
         /// Days added to the current time; negative values look back.
         #[serde(default)]
-        #[schemars(range(min = -36_500, max = 36_500))]
+        #[schemars(range(min = -MAX_OFFSET_DAYS, max = MAX_OFFSET_DAYS))]
         offset_days: i64,
     },
     /// No other live entity of the blueprint revision has the same values. Rules only.
     Unique {
-        #[schemars(length(min = 1, max = 4))]
+        #[schemars(length(min = 1, max = MAX_UNIQUE_ATTRIBUTES))]
         attribute_codes: Vec<String>,
     },
     /// Checks the records linked through a relationship attribute (one hop).
@@ -166,10 +186,10 @@ pub enum Predicate {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         predicate: Option<Box<Predicate>>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[schemars(range(max = 1_000))]
+        #[schemars(range(max = MAX_REFERENCING_RECORDS))]
         min: Option<u32>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[schemars(range(max = 1_000))]
+        #[schemars(range(max = MAX_REFERENCING_RECORDS))]
         max: Option<u32>,
     },
     /// Following the relationship from this record never returns to it. Rules only.
@@ -179,12 +199,12 @@ pub enum Predicate {
     },
     /// Every nested predicate holds.
     AllOf {
-        #[schemars(length(min = 1, max = 16))]
+        #[schemars(length(min = 1, max = MAX_BRANCHES))]
         predicates: Vec<Predicate>,
     },
     /// At least one nested predicate holds.
     AnyOf {
-        #[schemars(length(min = 1, max = 16))]
+        #[schemars(length(min = 1, max = MAX_BRANCHES))]
         predicates: Vec<Predicate>,
     },
 }
@@ -199,7 +219,7 @@ pub struct Check {
     pub code: String,
     /// Message shown when the check fails. Defaults to a generated message.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[schemars(length(min = 1, max = 500))]
+    #[schemars(length(min = 1, max = MAX_MESSAGE_LENGTH))]
     pub message: Option<String>,
     pub predicate: Predicate,
 }
@@ -250,16 +270,22 @@ enum Category {
     File,
 }
 
-fn category(value_type: &str) -> Category {
-    match value_type {
-        "number" | "integer" => Category::Number,
-        "date" => Category::Date,
-        "datetime" => Category::Datetime,
-        "relationship" => Category::Set,
-        "string" => Category::Text,
-        "boolean" => Category::Boolean,
-        "file" => Category::File,
-        _ => Category::Other,
+impl Category {
+    fn of(value_type: &str) -> Self {
+        match value_type {
+            "number" | "integer" => Self::Number,
+            "date" => Self::Date,
+            "datetime" => Self::Datetime,
+            "relationship" => Self::Set,
+            "string" => Self::Text,
+            "boolean" => Self::Boolean,
+            "file" => Self::File,
+            _ => Self::Other,
+        }
+    }
+
+    fn is_orderable(self) -> bool {
+        matches!(self, Self::Number | Self::Date | Self::Datetime)
     }
 }
 
@@ -296,7 +322,7 @@ pub fn validate_checks(
     }
     let mut codes = HashSet::new();
     for check in checks {
-        if !crate::is_valid_code(&check.code) || check.code.len() > 128 {
+        if !crate::is_valid_code(&check.code) || check.code.len() > MAX_CHECK_CODE_LENGTH {
             return Err(format!("invalid check code '{}'", check.code));
         }
         if !codes.insert(check.code.as_str()) {
@@ -363,13 +389,17 @@ fn walk(
         } => {
             rules_only("stale")?;
             attribute(scope.current, attribute_code)?;
-            if !(1..=31_536_000).contains(max_age_seconds) {
-                return Err("stale max_age_seconds must be between 1 and 31536000".into());
+            if !(1..=MAX_STALE_AGE_SECONDS).contains(max_age_seconds) {
+                return Err(format!(
+                    "stale max_age_seconds must be between 1 and {MAX_STALE_AGE_SECONDS}"
+                ));
             }
         }
         Predicate::HasTag { tag } | Predicate::MissingTag { tag } => {
-            if tag.trim().is_empty() || tag.len() > 128 {
-                return Err("tag must be a non-empty string no longer than 128 bytes".into());
+            if tag.trim().is_empty() || tag.len() > MAX_TAG_LENGTH {
+                return Err(format!(
+                    "tag must be a non-empty string no longer than {MAX_TAG_LENGTH} bytes"
+                ));
             }
         }
         Predicate::Compare {
@@ -378,65 +408,19 @@ fn walk(
             other_attribute_code,
             subject_attribute_code,
             value,
-        } => {
-            let left = attribute(scope.current, attribute_code)?.map(category);
-            let operands = usize::from(other_attribute_code.is_some())
-                + usize::from(subject_attribute_code.is_some())
-                + usize::from(value.is_some());
-            if operands != 1 {
-                return Err(
-                    "compare needs exactly one of other_attribute_code, subject_attribute_code or value"
-                        .into(),
-                );
-            }
-            if subject_attribute_code.is_some() && !scope.nested {
-                return Err(
-                    "subject_attribute_code is only available inside linked or referenced_by"
-                        .into(),
-                );
-            }
-            let right = if let Some(code) = other_attribute_code {
-                if code == attribute_code {
-                    return Err("compare needs two different attributes".into());
-                }
-                attribute(scope.current, code)?.map(category)
-            } else if let Some(code) = subject_attribute_code {
-                attribute(scope.subject, code)?.map(category)
-            } else {
-                None
-            };
-            for side in [left, right].into_iter().flatten() {
-                if side == Category::File {
-                    return Err("file attributes cannot be compared".into());
-                }
-                if op.is_ordering()
-                    && !matches!(side, Category::Number | Category::Date | Category::Datetime)
-                {
-                    return Err(format!(
-                        "'{}' orders only numbers, dates and datetimes",
-                        serde_name(op)
-                    ));
-                }
-                if *op == CompareOp::Disjoint && side != Category::Set {
-                    return Err("'disjoint' compares relationship attributes only".into());
-                }
-            }
-            if let (Some(left), Some(right)) = (left, right)
-                && left != right
-            {
-                return Err(format!(
-                    "'{attribute_code}' and the compared attribute have incompatible types"
-                ));
-            }
-            if let Some(value) = value {
-                literal(value, left, *op)?;
-            }
-        }
+        } => validate_compare(
+            scope,
+            attribute_code,
+            *op,
+            other_attribute_code.as_deref(),
+            subject_attribute_code.as_deref(),
+            value.as_ref(),
+        )?,
         Predicate::OneOf {
             attribute_code,
             values,
         } => {
-            let kind = attribute(scope.current, attribute_code)?.map(category);
+            let kind = attribute(scope.current, attribute_code)?.map(Category::of);
             if matches!(kind, Some(Category::Set | Category::File)) {
                 return Err("one_of does not apply to relationship or file attributes".into());
             }
@@ -452,7 +436,7 @@ fn walk(
             op,
             offset_days,
         } => {
-            let kind = attribute(scope.current, attribute_code)?.map(category);
+            let kind = attribute(scope.current, attribute_code)?.map(Category::of);
             if kind.is_some_and(|kind| !matches!(kind, Category::Date | Category::Datetime)) {
                 return Err("relative_date needs a date or datetime attribute".into());
             }
@@ -478,7 +462,7 @@ fn walk(
                     return Err(format!("duplicate unique attribute '{code}'"));
                 }
                 if attribute(scope.current, code)?
-                    .map(category)
+                    .map(Category::of)
                     .is_some_and(|kind| {
                         matches!(kind, Category::Set | Category::File | Category::Other)
                     })
@@ -514,27 +498,7 @@ fn walk(
             if scope.nested {
                 return Err("referenced_by follows one relationship hop only".into());
             }
-            for code in [blueprint_code, relationship_code] {
-                if !crate::is_valid_code(code) {
-                    return Err(format!("invalid code '{code}'"));
-                }
-            }
-            match (min, max) {
-                (None, None) => return Err("referenced_by needs min, max or both".into()),
-                (Some(min), Some(max)) if min > max => {
-                    return Err("referenced_by min cannot exceed max".into());
-                }
-                _ => {}
-            }
-            if [min, max]
-                .into_iter()
-                .flatten()
-                .any(|bound| *bound as usize > MAX_REFERENCING_RECORDS)
-            {
-                return Err(format!(
-                    "referenced_by bounds cannot exceed {MAX_REFERENCING_RECORDS}"
-                ));
-            }
+            validate_referenced_by(blueprint_code, relationship_code, *min, *max)?;
             if let Some(predicate) = predicate {
                 walk_nested(predicate, scope, depth, nodes, usage)?;
             }
@@ -549,6 +513,96 @@ fn walk(
                 walk(predicate, scope, depth + 1, nodes, usage)?;
             }
         }
+    }
+    Ok(())
+}
+
+fn validate_compare(
+    scope: Scope<'_>,
+    attribute_code: &str,
+    op: CompareOp,
+    other_attribute_code: Option<&str>,
+    subject_attribute_code: Option<&str>,
+    value: Option<&Value>,
+) -> Result<(), String> {
+    let left = attribute(scope.current, attribute_code)?.map(Category::of);
+    let operands = usize::from(other_attribute_code.is_some())
+        + usize::from(subject_attribute_code.is_some())
+        + usize::from(value.is_some());
+    if operands != 1 {
+        return Err(
+            "compare needs exactly one of other_attribute_code, subject_attribute_code or value"
+                .into(),
+        );
+    }
+    if subject_attribute_code.is_some() && !scope.nested {
+        return Err(
+            "subject_attribute_code is only available inside linked or referenced_by".into(),
+        );
+    }
+    let right = if let Some(code) = other_attribute_code {
+        if code == attribute_code {
+            return Err("compare needs two different attributes".into());
+        }
+        attribute(scope.current, code)?.map(Category::of)
+    } else if let Some(code) = subject_attribute_code {
+        attribute(scope.subject, code)?.map(Category::of)
+    } else {
+        None
+    };
+    for side in [left, right].into_iter().flatten() {
+        if side == Category::File {
+            return Err("file attributes cannot be compared".into());
+        }
+        if op.is_ordering() && !side.is_orderable() {
+            return Err(format!(
+                "'{}' orders only numbers, dates and datetimes",
+                op.as_str()
+            ));
+        }
+        if op == CompareOp::Disjoint && side != Category::Set {
+            return Err("'disjoint' compares relationship attributes only".into());
+        }
+    }
+    if let (Some(left), Some(right)) = (left, right)
+        && left != right
+    {
+        return Err(format!(
+            "'{attribute_code}' and the compared attribute have incompatible types"
+        ));
+    }
+    if let Some(value) = value {
+        literal(value, left, op)?;
+    }
+    Ok(())
+}
+
+fn validate_referenced_by(
+    blueprint_code: &str,
+    relationship_code: &str,
+    min: Option<u32>,
+    max: Option<u32>,
+) -> Result<(), String> {
+    for code in [blueprint_code, relationship_code] {
+        if !crate::is_valid_code(code) {
+            return Err(format!("invalid code '{code}'"));
+        }
+    }
+    match (min, max) {
+        (None, None) => return Err("referenced_by needs min, max or both".into()),
+        (Some(min), Some(max)) if min > max => {
+            return Err("referenced_by min cannot exceed max".into());
+        }
+        _ => {}
+    }
+    if [min, max]
+        .into_iter()
+        .flatten()
+        .any(|bound| bound as usize > MAX_REFERENCING_RECORDS)
+    {
+        return Err(format!(
+            "referenced_by bounds cannot exceed {MAX_REFERENCING_RECORDS}"
+        ));
     }
     Ok(())
 }
@@ -571,13 +625,6 @@ fn walk_nested(
         nodes,
         usage,
     )
-}
-
-fn serde_name(op: &CompareOp) -> String {
-    serde_json::to_value(op)
-        .ok()
-        .and_then(|value| value.as_str().map(str::to_owned))
-        .unwrap_or_default()
 }
 
 fn attribute<'a>(
@@ -752,9 +799,7 @@ impl Predicate {
             _ => {}
         }
     }
-}
 
-impl Predicate {
     /// Blueprint codes the predicate names, such as the source blueprint of
     /// `referenced_by`. Installers use this to resolve and rewrite them.
     pub fn blueprint_codes_mut(&mut self) -> Vec<&mut String> {
@@ -1005,19 +1050,18 @@ fn evaluate_on(predicate: &Predicate, current: &Record, input: &Evaluation<'_>) 
             value,
         } => {
             let left = current.values.get(attribute_code);
-            let (right, right_label) = if let Some(code) = other_attribute_code {
-                (current.values.get(code), format!("'{code}'"))
+            let right = if let Some(code) = other_attribute_code {
+                current.values.get(code)
             } else if let Some(code) = subject_attribute_code {
-                (
-                    input.subject.values.get(code),
-                    format!("'{code}' of this record"),
-                )
+                input.subject.values.get(code)
             } else {
-                (
-                    value.as_ref(),
-                    value.as_ref().map(Value::to_string).unwrap_or_default(),
-                )
+                value.as_ref()
             };
+            let right_label = compare_operand_label(
+                other_attribute_code.as_deref(),
+                subject_attribute_code.as_deref(),
+                value.as_ref(),
+            );
             let (Some(left), Some(right)) = (
                 left.filter(|value| present(Some(value))),
                 right.filter(|value| present(Some(value))),
@@ -1043,14 +1087,7 @@ fn evaluate_on(predicate: &Predicate, current: &Record, input: &Evaluation<'_>) 
             values,
         } => match current.values.get(attribute_code) {
             Some(value) if present(Some(value)) && !values.contains(value) => Err((
-                format!(
-                    "'{attribute_code}' must be one of {}",
-                    values
-                        .iter()
-                        .map(Value::to_string)
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                ),
+                format!("'{attribute_code}' must be one of {}", join_values(values)),
                 json!({ "attribute_code": attribute_code, "value": value }),
             )),
             _ => Ok(()),
@@ -1133,118 +1170,21 @@ fn evaluate_on(predicate: &Predicate, current: &Record, input: &Evaluation<'_>) 
             relationship_code,
             quantifier,
             predicate,
-        } => {
-            let empty = RecordSet::default();
-            let set = input
-                .related
-                .linked
-                .get(relationship_code)
-                .unwrap_or(&empty);
-            if set.truncated {
-                return Err((
-                    format!(
-                        "'{relationship_code}' has more than {MAX_LINKED_RECORDS} linked records to check"
-                    ),
-                    json!({ "relationship_code": relationship_code, "limit": MAX_LINKED_RECORDS }),
-                ));
-            }
-            let mut matching = Vec::new();
-            let mut failing = Vec::new();
-            let mut first_failure = None;
-            for record in &set.records {
-                match evaluate_on(predicate, record, input) {
-                    Ok(()) => matching.push(record.id.clone()),
-                    Err((message, _)) => {
-                        first_failure.get_or_insert(message);
-                        failing.push(record.id.clone());
-                    }
-                }
-            }
-            let describe = || {
-                first_failure
-                    .clone()
-                    .unwrap_or_else(|| describe_predicate(predicate))
-            };
-            let result = match quantifier {
-                Quantifier::All if !failing.is_empty() => Some(format!(
-                    "Every '{relationship_code}' record must satisfy the check: {}",
-                    describe()
-                )),
-                Quantifier::Any if matching.is_empty() => Some(format!(
-                    "At least one '{relationship_code}' record must satisfy the check: {}",
-                    describe_predicate(predicate)
-                )),
-                Quantifier::None if !matching.is_empty() => Some(format!(
-                    "No '{relationship_code}' record may satisfy: {}",
-                    describe_predicate(predicate)
-                )),
-                _ => None,
-            };
-            match result {
-                None => Ok(()),
-                Some(message) => Err((
-                    message,
-                    json!({
-                        "relationship_code": relationship_code,
-                        "quantifier": quantifier,
-                        "failing_entity_ids": if *quantifier == Quantifier::None { &matching } else { &failing },
-                    }),
-                )),
-            }
-        }
+        } => evaluate_linked(relationship_code, *quantifier, predicate, input),
         Predicate::ReferencedBy {
             blueprint_code,
             relationship_code,
             predicate,
             min,
             max,
-        } => {
-            let key = (blueprint_code.clone(), relationship_code.clone());
-            let empty = RecordSet::default();
-            let set = input.related.referenced_by.get(&key).unwrap_or(&empty);
-            if set.truncated {
-                return Err((
-                    format!(
-                        "More than {MAX_REFERENCING_RECORDS} '{blueprint_code}' records reference this one; the check cannot be evaluated"
-                    ),
-                    json!({ "blueprint_code": blueprint_code, "relationship_code": relationship_code, "limit": MAX_REFERENCING_RECORDS }),
-                ));
-            }
-            let matching: Vec<_> = set
-                .records
-                .iter()
-                .filter(|record| {
-                    predicate
-                        .as_ref()
-                        .is_none_or(|predicate| evaluate_on(predicate, record, input).is_ok())
-                })
-                .map(|record| record.id.clone())
-                .collect();
-            let count = matching.len() as u32;
-            let what = predicate
-                .as_ref()
-                .map(|predicate| format!(" matching {}", describe_predicate(predicate)))
-                .unwrap_or_default();
-            let failure = match (min, max) {
-                (_, Some(0)) if count > 0 => Some(format!(
-                    "No '{blueprint_code}' record{what} may reference this record through '{relationship_code}' (found {count})"
-                )),
-                (_, Some(max)) if count > *max => Some(format!(
-                    "At most {max} '{blueprint_code}' records{what} may reference this record through '{relationship_code}' (found {count})"
-                )),
-                (Some(min), _) if count < *min => Some(format!(
-                    "At least {min} '{blueprint_code}' records{what} must reference this record through '{relationship_code}' (found {count})"
-                )),
-                _ => None,
-            };
-            match failure {
-                None => Ok(()),
-                Some(message) => Err((
-                    message,
-                    json!({ "blueprint_code": blueprint_code, "relationship_code": relationship_code, "count": count, "min": min, "max": max, "matching_entity_ids": matching }),
-                )),
-            }
-        }
+        } => evaluate_referenced_by(
+            blueprint_code,
+            relationship_code,
+            predicate.as_deref(),
+            *min,
+            *max,
+            input,
+        ),
         Predicate::AllOf { predicates } => {
             for predicate in predicates {
                 evaluate_on(predicate, current, input)?;
@@ -1267,6 +1207,118 @@ fn evaluate_on(predicate: &Predicate, current: &Record, input: &Evaluation<'_>) 
     }
 }
 
+fn evaluate_linked(
+    relationship_code: &str,
+    quantifier: Quantifier,
+    predicate: &Predicate,
+    input: &Evaluation<'_>,
+) -> Outcome {
+    let empty = RecordSet::default();
+    let set = input
+        .related
+        .linked
+        .get(relationship_code)
+        .unwrap_or(&empty);
+    if set.truncated {
+        return Err((
+            format!(
+                "'{relationship_code}' has more than {MAX_LINKED_RECORDS} linked records to check"
+            ),
+            json!({ "relationship_code": relationship_code, "limit": MAX_LINKED_RECORDS }),
+        ));
+    }
+    let mut matching = Vec::new();
+    let mut failing = Vec::new();
+    let mut first_failure = None;
+    for record in &set.records {
+        match evaluate_on(predicate, record, input) {
+            Ok(()) => matching.push(record.id.clone()),
+            Err((message, _)) => {
+                first_failure.get_or_insert(message);
+                failing.push(record.id.clone());
+            }
+        }
+    }
+    let result = match quantifier {
+        Quantifier::All if !failing.is_empty() => Some(format!(
+            "Every '{relationship_code}' record must satisfy the check: {}",
+            first_failure.unwrap_or_else(|| describe_predicate(predicate))
+        )),
+        Quantifier::Any if matching.is_empty() => Some(format!(
+            "At least one '{relationship_code}' record must satisfy the check: {}",
+            describe_predicate(predicate)
+        )),
+        Quantifier::None if !matching.is_empty() => Some(format!(
+            "No '{relationship_code}' record may satisfy: {}",
+            describe_predicate(predicate)
+        )),
+        _ => None,
+    };
+    match result {
+        None => Ok(()),
+        Some(message) => Err((
+            message,
+            json!({
+                "relationship_code": relationship_code,
+                "quantifier": quantifier,
+                "failing_entity_ids": if quantifier == Quantifier::None { &matching } else { &failing },
+            }),
+        )),
+    }
+}
+
+fn evaluate_referenced_by(
+    blueprint_code: &str,
+    relationship_code: &str,
+    predicate: Option<&Predicate>,
+    min: Option<u32>,
+    max: Option<u32>,
+    input: &Evaluation<'_>,
+) -> Outcome {
+    let key = (blueprint_code.to_owned(), relationship_code.to_owned());
+    let empty = RecordSet::default();
+    let set = input.related.referenced_by.get(&key).unwrap_or(&empty);
+    if set.truncated {
+        return Err((
+            format!(
+                "More than {MAX_REFERENCING_RECORDS} '{blueprint_code}' records reference this one; the check cannot be evaluated"
+            ),
+            json!({ "blueprint_code": blueprint_code, "relationship_code": relationship_code, "limit": MAX_REFERENCING_RECORDS }),
+        ));
+    }
+    let matching: Vec<_> = set
+        .records
+        .iter()
+        .filter(|record| {
+            predicate.is_none_or(|predicate| evaluate_on(predicate, record, input).is_ok())
+        })
+        .map(|record| record.id.clone())
+        .collect();
+    let count = matching.len() as u32;
+    let what = predicate
+        .map(|predicate| format!(" matching {}", describe_predicate(predicate)))
+        .unwrap_or_default();
+    let failure = match (min, max) {
+        (_, Some(0)) if count > 0 => Some(format!(
+            "No '{blueprint_code}' record{what} may reference this record through '{relationship_code}' (found {count})"
+        )),
+        (_, Some(max)) if count > max => Some(format!(
+            "At most {max} '{blueprint_code}' records{what} may reference this record through '{relationship_code}' (found {count})"
+        )),
+        (Some(min), _) if count < min => Some(format!(
+            "At least {min} '{blueprint_code}' records{what} must reference this record through '{relationship_code}' (found {count})"
+        )),
+        _ => None,
+    };
+    match failure {
+        None => Ok(()),
+        Some(message) => Err((
+            message,
+            json!({ "blueprint_code": blueprint_code, "relationship_code": relationship_code, "count": count, "min": min, "max": max, "matching_entity_ids": matching }),
+        )),
+    }
+}
+
 /// A short description of what a predicate requires, used in messages.
 pub fn describe_predicate(predicate: &Predicate) -> String {
     match predicate {
@@ -1284,29 +1336,17 @@ pub fn describe_predicate(predicate: &Predicate) -> String {
             subject_attribute_code,
             value,
         } => {
-            let right = other_attribute_code
-                .as_ref()
-                .map(|code| format!("'{code}'"))
-                .or_else(|| {
-                    subject_attribute_code
-                        .as_ref()
-                        .map(|code| format!("'{code}' of this record"))
-                })
-                .or_else(|| value.as_ref().map(Value::to_string))
-                .unwrap_or_default();
+            let right = compare_operand_label(
+                other_attribute_code.as_deref(),
+                subject_attribute_code.as_deref(),
+                value.as_ref(),
+            );
             format!("'{attribute_code}' {} {right}", op.phrase())
         }
         Predicate::OneOf {
             attribute_code,
             values,
-        } => format!(
-            "'{attribute_code}' in {}",
-            values
-                .iter()
-                .map(Value::to_string)
-                .collect::<Vec<_>>()
-                .join(", ")
-        ),
+        } => format!("'{attribute_code}' in {}", join_values(values)),
         Predicate::RelativeDate {
             attribute_code,
             op,
@@ -1335,6 +1375,27 @@ pub fn describe_predicate(predicate: &Predicate) -> String {
             .collect::<Vec<_>>()
             .join(" or "),
     }
+}
+
+/// How messages name the right-hand side of a `compare` predicate.
+fn compare_operand_label(
+    other_attribute_code: Option<&str>,
+    subject_attribute_code: Option<&str>,
+    value: Option<&Value>,
+) -> String {
+    match (other_attribute_code, subject_attribute_code, value) {
+        (Some(code), ..) => format!("'{code}'"),
+        (None, Some(code), _) => format!("'{code}' of this record"),
+        (None, None, value) => value.map(Value::to_string).unwrap_or_default(),
+    }
+}
+
+fn join_values(values: &[Value]) -> String {
+    values
+        .iter()
+        .map(Value::to_string)
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 fn ordering_holds(op: CompareOp, ordering: std::cmp::Ordering) -> bool {
