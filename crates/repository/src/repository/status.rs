@@ -73,7 +73,7 @@ pub struct StatusTransitionAccess {
     pub allowed: bool,
     /// Stable error code the write would return: `status_transition_forbidden`,
     /// `status_separation_of_duties` or `transition_conditions_unmet`.
-    pub denial_code: Option<&'static str>,
+    pub denial_code: Option<super::ErrorCode>,
     pub denial_reason: Option<String>,
     /// Transition conditions and enforcing rules that the saved state plus
     /// this destination would not satisfy.
@@ -376,7 +376,7 @@ impl CatalogRepository {
         };
         if let Some(permission) = &requirements.permission {
             match self
-                .ensure_principal_may(transaction, actor, permission, entity.id)
+                .ensure_principal_may(transaction, actor, permission, &[entity.id])
                 .await
             {
                 Ok(()) => {}
@@ -1070,7 +1070,7 @@ impl CatalogRepository {
                 let unmet =
                     transition_unmet(&mut transaction, &scope, &subject, &rules, &change).await?;
                 if denial_code.is_none() && !unmet.is_empty() {
-                    denial_code = Some(super::TRANSITION_CONDITIONS_UNMET);
+                    denial_code = Some(super::ErrorCode::TransitionConditionsUnmet);
                     denial_reason = Some(
                         unmet
                             .iter()

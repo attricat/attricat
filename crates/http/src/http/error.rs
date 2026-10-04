@@ -280,7 +280,7 @@ impl From<RepositoryError> for ApiError {
         }
         Self {
             status,
-            code: description.code,
+            code: description.code.as_str(),
             message: description.message,
             details: description.details,
         }

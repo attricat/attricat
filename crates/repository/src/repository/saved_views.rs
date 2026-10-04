@@ -19,6 +19,15 @@ pub struct SavedView {
     pub updated_at: DateTime<Utc>,
 }
 
+/// A saved explorer search to insert.
+pub(super) struct NewSavedView<'a> {
+    pub owner_user_id: Uuid,
+    pub name: Option<&'a str>,
+    pub description: Option<&'a str>,
+    pub visibility: &'a str,
+    pub state: &'a Value,
+}
+
 const FIELDS: &str =
     "id,owner_user_id,kind,name,description,visibility,state,created_at,updated_at";
 
@@ -95,11 +104,13 @@ impl CatalogRepository {
             .create_saved_view_in_transaction(
                 &mut tx,
                 Uuid::new_v4(),
-                actor,
-                name,
-                description,
-                visibility,
-                state,
+                &NewSavedView {
+                    owner_user_id: actor,
+                    name,
+                    description,
+                    visibility,
+                    state,
+                },
             )
             .await?;
         tx.commit().await?;
@@ -109,16 +120,11 @@ impl CatalogRepository {
     /// Inserts a saved view with a caller-chosen ID in the caller's
     /// transaction. The state must already be validated and normalized with
     /// [`catalog_validation::saved_search`].
-    #[allow(clippy::too_many_arguments)]
     pub(super) async fn create_saved_view_in_transaction(
         &self,
         tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         id: Uuid,
-        actor: Uuid,
-        name: Option<&str>,
-        description: Option<&str>,
-        visibility: &str,
-        state: &Value,
+        view: &NewSavedView<'_>,
     ) -> Result<SavedView, RepositoryError> {
         let query = format!(
             "INSERT INTO saved_views (id,workspace_id,owner_user_id,kind,name,description,visibility,state,state_hash) VALUES ($1,$2,$3,'explorer_search',$4,$5,$6,$7,$8) RETURNING {FIELDS}"
@@ -126,12 +132,12 @@ impl CatalogRepository {
         Ok(sqlx::query_as(&query)
             .bind(id)
             .bind(self.workspace_id_for_runtime())
-            .bind(actor)
-            .bind(name)
-            .bind(description)
-            .bind(visibility)
-            .bind(state)
-            .bind(state_hash(state))
+            .bind(view.owner_user_id)
+            .bind(view.name)
+            .bind(view.description)
+            .bind(view.visibility)
+            .bind(view.state)
+            .bind(state_hash(view.state))
             .fetch_one(&mut **tx)
             .await?)
     }

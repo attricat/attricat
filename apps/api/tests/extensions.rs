@@ -460,6 +460,96 @@ fn append_file(tar: &mut tar::Builder<&mut Vec<u8>>, path: &str, bytes: &[u8]) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
+async fn extension_catalog_upsert_create_writes_declared_relationships(pool: sqlx::PgPool) {
+    let repository = CatalogRepository::system(pool.clone())
+        .for_workspace(Uuid::from_u128(0x00000000000040008000000000000002))
+        .await
+        .unwrap()
+        .for_extension("acme.sync");
+    let blueprint = repository
+        .create_blueprint(CreateBlueprint {
+            definition: r#"
+format_version = 1
+code = "extension_linked_item"
+name = "Extension linked item"
+kind = "entity"
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["external_id"]
+[[attributes]]
+code = "external_id"
+value_type = "string"
+[[attributes]]
+code = "related"
+value_type = "relationship"
+target_blueprint = "extension_linked_item"
+"#
+            .into(),
+        })
+        .await
+        .unwrap();
+    repository
+        .publish_blueprint_revision(blueprint.blueprint.id, blueprint.blueprint.version)
+        .await
+        .unwrap();
+    let external_id = blueprint
+        .attributes
+        .iter()
+        .find(|attribute| attribute.code == "external_id")
+        .unwrap()
+        .id;
+    let upsert = |key: &str, related: Vec<Uuid>| ExtensionCatalogBatch {
+        batch_key: key.into(),
+        dry_run: false,
+        intents: vec![ExtensionCatalogIntent::Upsert {
+            intent_key: "item".into(),
+            blueprint_id: blueprint.blueprint.id,
+            blueprint_version: blueprint.blueprint.version,
+            lookup_attribute_id: external_id,
+            lookup_value: key.into(),
+            relationships: vec![api::model::RelationshipTargets {
+                attribute_id: None,
+                attribute_code: Some("related".into()),
+                context_id: None,
+                target_entity_ids: related,
+            }],
+            system_tags: vec![],
+            system_metadata: json!({}),
+            values: vec![NewAttributeValue::Scalar {
+                attribute_id: Some(external_id),
+                attribute_code: None,
+                context_id: None,
+                value: json!(key),
+            }],
+        }],
+    };
+    let target = repository
+        .execute_extension_catalog_batch(upsert("target", Vec::new()))
+        .await
+        .unwrap()[0]
+        .entity_id
+        .unwrap();
+    let created = repository
+        .execute_extension_catalog_batch(upsert("source", vec![target, target]))
+        .await
+        .unwrap();
+    assert_eq!(
+        created[0].status,
+        ExtensionCatalogIntentStatus::Applied,
+        "{:?}",
+        created[0].error
+    );
+    let targets: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT relationship_target_entity_id FROM attribute_values WHERE entity_id = $1 AND active AND relationship_target_entity_id IS NOT NULL",
+    )
+    .bind(created[0].entity_id.unwrap())
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(targets, vec![target]);
+}
+
+#[sqlx::test(migrations = "./migrations")]
 async fn extension_catalog_upsert_is_idempotent_and_emits_a_change_feed(pool: sqlx::PgPool) {
     let repository = CatalogRepository::system(pool.clone())
         .for_workspace(Uuid::from_u128(0x00000000000040008000000000000002))

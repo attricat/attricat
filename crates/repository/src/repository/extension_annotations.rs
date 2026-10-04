@@ -15,7 +15,7 @@ use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
 use super::EventPublisher;
-use super::{CatalogRepository, RepositoryError, entity_commands};
+use super::{CatalogRepository, RepositoryError, system_annotations};
 use crate::domain_events::ENTITY_ANNOTATIONS_CHANGED_V1;
 
 /// Maximum add/remove/set/delete operations in one patch.
@@ -100,7 +100,7 @@ impl ExtensionAnnotationPatch {
     /// qualified with the extension's namespace.
     fn validate_qualified_tags(&self, extension_id: &str) -> Result<(), RepositoryError> {
         let limit =
-            entity_commands::MAX_SYSTEM_TAG_BYTES.saturating_sub(tag_prefix(extension_id).len());
+            system_annotations::MAX_SYSTEM_TAG_BYTES.saturating_sub(tag_prefix(extension_id).len());
         if let Some(tag) = self.add_tags.iter().find(|tag| tag.len() > limit) {
             return Err(invalid(format!(
                 "local tag '{tag}' exceeds the {limit} bytes available after this extension's namespace prefix"
@@ -331,6 +331,20 @@ impl CatalogRepository {
         Ok((tags, metadata))
     }
 
+    async fn annotation_namespace_claimed(
+        &self,
+        connection: &mut sqlx::PgConnection,
+        extension_id: &str,
+    ) -> Result<bool, RepositoryError> {
+        Ok(sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM extension_annotation_namespaces WHERE workspace_id=$1 AND extension_id=$2)",
+        )
+        .bind(self.workspace_id.0)
+        .bind(extension_id)
+        .fetch_one(connection)
+        .await?)
+    }
+
     async fn namespace_annotation_count(
         &self,
         connection: &mut sqlx::PgConnection,
@@ -364,14 +378,10 @@ impl CatalogRepository {
         // write of data under the same name.
         self.lock_annotation_namespace(&mut *transaction, extension_id)
             .await?;
-        let claimed: bool = sqlx::query_scalar(
-            "SELECT EXISTS (SELECT 1 FROM extension_annotation_namespaces WHERE workspace_id=$1 AND extension_id=$2)",
-        )
-        .bind(self.workspace_id.0)
-        .bind(extension_id)
-        .fetch_one(&mut **transaction)
-        .await?;
-        if claimed {
+        if self
+            .annotation_namespace_claimed(transaction, extension_id)
+            .await?
+        {
             return Ok(false);
         }
         if !adopt_legacy
@@ -453,7 +463,7 @@ impl CatalogRepository {
     ) -> Result<i64, RepositoryError> {
         patch.validate(authority)?;
         patch.validate_qualified_tags(extension_id)?;
-        self.ensure_actor_may(&mut *transaction, "entities.read", entity_id)
+        self.ensure_actor_may(&mut *transaction, "entities.read", &[entity_id])
             .await?;
         // Row lock first, as on every generic entity write, then the claim's
         // namespace lock.
@@ -502,24 +512,21 @@ impl CatalogRepository {
                 ));
             }
         };
-        let changes = entity_commands::apply_tag_metadata_patch(
+        let changes = system_annotations::apply_tag_metadata_patch(
             &mut tags,
             &mut namespace,
-            &entity_commands::TagMetadataPatch {
+            &system_annotations::TagMetadataPatch {
                 add_tags: qualify(&patch.add_tags),
                 remove_tags: qualify(&patch.remove_tags),
                 set_metadata: patch.set_metadata.clone(),
                 remove_metadata: patch.remove_metadata.clone(),
             },
         );
-        let local = |tags: Vec<String>| -> Vec<String> {
-            tags.into_iter()
-                .map(|tag| tag[prefix.len()..].to_owned())
+        let local = |tags: &[String]| -> Vec<String> {
+            tags.iter()
+                .filter_map(|tag| tag.strip_prefix(&prefix).map(str::to_owned))
                 .collect()
         };
-        let added_tags = local(changes.added_tags.clone());
-        let removed_tags = local(changes.removed_tags.clone());
-        let (set_keys, removed_keys) = (changes.set_keys.clone(), changes.removed_keys.clone());
         if !namespace.is_empty() {
             metadata.insert(extension_id.to_owned(), Value::Object(namespace));
         }
@@ -527,8 +534,8 @@ impl CatalogRepository {
         if changes.is_empty() && replaced_value.is_none() {
             return Ok(revision);
         }
-        entity_commands::validate_system_tag_update(&entity.system_tags, &tags)?;
-        entity_commands::validate_system_metadata(&metadata)?;
+        system_annotations::validate_system_tag_update(&entity.system_tags, &tags)?;
+        system_annotations::validate_system_metadata(&metadata)?;
         self.ensure_task_fence(transaction).await?;
         // Annotation bookkeeping is not catalog data. Leaving `updated_at`
         // unchanged keeps extensions from invalidating their own output and
@@ -557,10 +564,10 @@ impl CatalogRepository {
         let mut summary = json!({
             "extension_id": extension_id,
             "revision": next_revision,
-            "tags_added": added_tags,
-            "tags_removed": removed_tags,
-            "metadata_keys_set": set_keys,
-            "metadata_keys_removed": removed_keys,
+            "tags_added": local(&changes.added_tags),
+            "tags_removed": local(&changes.removed_tags),
+            "metadata_keys_set": changes.set_keys,
+            "metadata_keys_removed": changes.removed_keys,
         });
         if let Some(value) = replaced_value {
             summary["replaced_namespace_value"] = value;
@@ -593,14 +600,10 @@ impl CatalogRepository {
         patch: ExtensionAnnotationPatch,
     ) -> Result<ExtensionAnnotations, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
-        let claimed: bool = sqlx::query_scalar(
-            "SELECT EXISTS (SELECT 1 FROM extension_annotation_namespaces WHERE workspace_id=$1 AND extension_id=$2)",
-        )
-        .bind(self.workspace_id.0)
-        .bind(extension_id)
-        .fetch_one(&mut *transaction)
-        .await?;
-        if !claimed {
+        if !self
+            .annotation_namespace_claimed(&mut transaction, extension_id)
+            .await?
+        {
             return Err(RepositoryError::NotFound("claimed annotation namespace"));
         }
         self.apply_extension_annotation_patch(

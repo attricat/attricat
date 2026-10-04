@@ -6742,11 +6742,13 @@ impl CatalogRepository {
                 self.create_saved_view_in_transaction(
                     tx,
                     step.target_id,
-                    owner,
-                    Some(&payload.name),
-                    payload.description.as_deref(),
-                    "workspace",
-                    &state,
+                    &super::saved_views::NewSavedView {
+                        owner_user_id: owner,
+                        name: Some(&payload.name),
+                        description: payload.description.as_deref(),
+                        visibility: "workspace",
+                        state: &state,
+                    },
                 )
                 .await?;
                 Ok((

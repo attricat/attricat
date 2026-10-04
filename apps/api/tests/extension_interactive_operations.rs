@@ -8,8 +8,8 @@ use api::{
     model::{CreateAttributeContext, CreateBlueprint, NewAttributeValue, RelationshipTargets},
     repository::{
         AuthorizationActor, CatalogRepository, ExtensionCatalogBatch, ExtensionCatalogIntent,
-        ExtensionCatalogIntentStatus, InteractiveRunScope, RepositoryError,
-        StartExtensionOperation,
+        ExtensionCatalogIntentStatus, InteractiveRunFailure, InteractiveRunScope,
+        InteractiveRunStatus, RepositoryError, StartExtensionOperation,
     },
     storage::FakeObjectStore,
     task_worker::{TaskHandler, TaskOutcome},
@@ -796,14 +796,14 @@ async fn interactive_runs_are_authorized_per_entity_and_fail_closed(pool: sqlx::
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(run.status, "failed");
-    assert_eq!(run.failure, Some("access_revoked"));
+    assert_eq!(run.status, InteractiveRunStatus::Failed);
+    assert_eq!(run.failure, Some(InteractiveRunFailure::AccessRevoked));
     let cancelled = repository
         .interactive_extension_run(cancelled_run.parse().unwrap())
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(cancelled.status, "cancelled");
+    assert_eq!(cancelled.status, InteractiveRunStatus::Cancelled);
     let annotated: bool =
         sqlx::query_scalar("SELECT system_metadata ? $2 FROM entities WHERE id=$1")
             .bind(visible)
@@ -1263,7 +1263,7 @@ async fn replay_is_refused_after_the_run_context_is_deleted(pool: sqlx::PgPool) 
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(failed.status, "failed");
+    assert_eq!(failed.status, InteractiveRunStatus::Failed);
     repository.delete_context(context.id).await.unwrap();
 
     let replay = authenticated_client()
@@ -1277,7 +1277,7 @@ async fn replay_is_refused_after_the_run_context_is_deleted(pool: sqlx::PgPool) 
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(run.status, "failed");
+    assert_eq!(run.status, InteractiveRunStatus::Failed);
     server.abort();
 }
 
