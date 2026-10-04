@@ -1066,8 +1066,13 @@ impl CatalogRepository {
         let manifest = self
             .cached_release_manifest(row.installed_release_id)
             .await
-            .map_err(|_| {
-                RepositoryError::InvalidExtension("installed manifest cannot be decoded".into())
+            .map_err(|error| match error {
+                // Only a decode failure is a defective installation; database
+                // errors stay transient.
+                RepositoryError::InvalidExtension(_) => {
+                    RepositoryError::InvalidExtension("installed manifest cannot be decoded".into())
+                }
+                error => error,
             })?;
         manifest
             .validate_configuration(&row.configuration)
