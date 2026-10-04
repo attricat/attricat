@@ -9,6 +9,12 @@ use uuid::Uuid;
 /// One value source's direct value in a context.
 type DirectLookup<'a> = Box<dyn FnMut(&ContextNode) -> Option<Value> + 'a>;
 
+/// See [`CatalogRepository::preview_scope`].
+pub(super) struct PreviewScope {
+    requested_context: AttributeContext,
+    tree: ContextTree,
+}
+
 #[derive(sqlx::FromRow)]
 struct PreviewRelationship {
     source_id: Uuid,
@@ -35,34 +41,49 @@ impl CatalogRepository {
         let attributes = self
             .list_attributes(entity.blueprint_id, entity.blueprint_version)
             .await?;
-        self.resolved_preview_for(&entity, &attributes, context_id, relationship_depth)
+        let scope = self.preview_scope(context_id).await?;
+        self.resolved_preview_for(&entity, &attributes, &scope, relationship_depth)
             .await
             .map(Some)
     }
 
     /// [`Self::resolved_preview`] for an entity and attributes the caller
     /// already loaded.
-    async fn resolved_preview_for(
+    /// The requested context and the workspace context tree, shared by every
+    /// resolved preview of one read.
+    pub(super) async fn preview_scope(
         &self,
-        entity: &Entity,
-        attributes: &[Attribute],
         context_id: Uuid,
-        relationship_depth: u8,
-    ) -> Result<ResolvedEntityPreviewResponse, RepositoryError> {
-        let entity_id = entity.id;
+    ) -> Result<PreviewScope, RepositoryError> {
         let requested_context = self
             .get_context_by_id(context_id)
             .await?
             .ok_or(RepositoryError::InvalidContext)?;
+        let tree = {
+            let mut connection = self.pool.acquire().await?;
+            ContextTree::load(&mut connection, self.workspace_id.0).await?
+        };
+        Ok(PreviewScope {
+            requested_context,
+            tree,
+        })
+    }
+
+    pub(super) async fn resolved_preview_for(
+        &self,
+        entity: &Entity,
+        attributes: &[Attribute],
+        scope: &PreviewScope,
+        relationship_depth: u8,
+    ) -> Result<ResolvedEntityPreviewResponse, RepositoryError> {
+        let entity_id = entity.id;
+        let requested_context = scope.requested_context.clone();
         let preview = entity
             .projections
             .get("preview")
             .and_then(Value::as_object)
             .ok_or(RepositoryError::InvalidPreview)?;
-        let tree = {
-            let mut connection = self.pool.acquire().await?;
-            ContextTree::load(&mut connection, self.workspace_id.0).await?
-        };
+        let tree = &scope.tree;
         let path: Vec<ContextNode> = tree
             .path(requested_context.id, true)?
             .into_iter()
@@ -232,13 +253,9 @@ impl CatalogRepository {
             return Err(RepositoryError::InvalidHierarchyRelationship);
         }
 
+        let scope = self.preview_scope(context_id).await?;
         let resolved = self
-            .resolved_preview_for(
-                &entity,
-                &blueprint.attributes,
-                context_id,
-                relationship_depth,
-            )
+            .resolved_preview_for(&entity, &blueprint.attributes, &scope, relationship_depth)
             .await?;
         let requested_context = resolved.requested_context.code;
         let current_display = display_label(

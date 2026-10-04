@@ -1084,6 +1084,27 @@ impl CatalogRepository {
                 "extension invocation is no longer authorized".into(),
             ));
         };
+        self.emit_extension_event_with(
+            &installation,
+            contract_id,
+            aggregate_kind,
+            aggregate_id,
+            payload,
+        )
+        .await
+    }
+
+    /// [`Self::emit_extension_event`] for a host call that has just refreshed
+    /// its authorized installation snapshot.
+    pub async fn emit_extension_event_with(
+        &self,
+        installation: &ExtensionRuntimeInstallation,
+        contract_id: &str,
+        aggregate_kind: &str,
+        aggregate_id: Uuid,
+        payload: Value,
+    ) -> Result<(), RepositoryError> {
+        let extension_id = installation.extension_id.as_str();
         let contract = installation
             .manifest
             .event_contracts

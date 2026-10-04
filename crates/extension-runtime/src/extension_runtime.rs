@@ -290,6 +290,52 @@ impl ComponentCache {
     }
 }
 
+/// One linker per host world. Linking host functions depends only on the
+/// engine and the world, so it is done once per runtime, not per invocation.
+struct Linkers {
+    v1: Linker<HostState>,
+    v11: Linker<HostState>,
+    unified: Linker<unified::UnifiedState>,
+    operations: Linker<OperationState>,
+    connector: Linker<OperationState>,
+    interactive: Linker<OperationState>,
+}
+
+impl Linkers {
+    fn new(engine: &Engine) -> Result<Self, ExtensionRuntimeError> {
+        let runtime = |error: wasmtime::Error| ExtensionRuntimeError::Runtime(error.to_string());
+        let mut v1 = Linker::new(engine);
+        CatalogExtension::add_to_linker::<HostState, HasSelf<HostState>>(&mut v1, |state| state)
+            .map_err(runtime)?;
+        let mut v11 = Linker::new(engine);
+        host_v11::CatalogExtension::add_to_linker::<HostState, HasSelf<HostState>>(
+            &mut v11,
+            |state| state,
+        )
+        .map_err(runtime)?;
+        let mut operations = Linker::new(engine);
+        host_operations::CatalogExtensionOperation::add_to_linker::<
+            OperationState,
+            HasSelf<OperationState>,
+        >(&mut operations, |state| state)
+        .map_err(runtime)?;
+        let mut connector = Linker::new(engine);
+        host_connector::CatalogExtensionOperation::add_to_linker::<
+            OperationState,
+            HasSelf<OperationState>,
+        >(&mut connector, |state| state)
+        .map_err(runtime)?;
+        Ok(Self {
+            v1,
+            v11,
+            unified: unified::linker(engine)?,
+            operations,
+            connector,
+            interactive: interactive::linker(engine)?,
+        })
+    }
+}
+
 struct ExtensionEpochTicker {
     shutdown: watch::Sender<()>,
 }
@@ -307,6 +353,11 @@ pub struct ExtensionRuntime {
     engine: Arc<Engine>,
     _epoch_ticker: Arc<ExtensionEpochTicker>,
     components: Arc<Mutex<ComponentCache>>,
+    linkers: Arc<Linkers>,
+    /// Pre-instantiated unified components by installed release; linking and
+    /// type-checking imports is done once per release.
+    unified_instances:
+        Arc<Mutex<HashMap<Uuid, wasmtime::component::InstancePre<unified::UnifiedState>>>>,
 }
 
 impl ExtensionRuntime {
@@ -320,6 +371,7 @@ impl ExtensionRuntime {
         wasmtime.epoch_interruption(true);
         let engine = Engine::new(&wasmtime)
             .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))?;
+        let linkers = Arc::new(Linkers::new(&engine)?);
         let engine = Arc::new(engine);
         let (shutdown, mut shutdown_receiver) = watch::channel(());
         let tick_engine = engine.clone();
@@ -337,6 +389,8 @@ impl ExtensionRuntime {
             engine,
             _epoch_ticker: Arc::new(ExtensionEpochTicker { shutdown }),
             components: Arc::new(Mutex::new(ComponentCache::default())),
+            linkers,
+            unified_instances: Arc::new(Mutex::new(HashMap::new())),
         })
     }
 
@@ -486,14 +540,10 @@ impl ExtensionRuntime {
             .set_fuel(self.config.fuel)
             .map_err(|e| ExtensionRuntimeError::Runtime(e.to_string()))?;
         store.set_epoch_deadline(epoch_deadline(self.config.invocation_timeout));
-        let mut linker = Linker::new(&self.engine);
-        host_operations::CatalogExtensionOperation::add_to_linker::<
-            OperationState,
-            HasSelf<OperationState>,
-        >(&mut linker, |state| state)
-        .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))?;
         let bindings = host_operations::CatalogExtensionOperation::instantiate_async(
-            &mut store, &component, &linker,
+            &mut store,
+            &component,
+            &self.linkers.operations,
         )
         .await
         .map_err(|e| ExtensionRuntimeError::Runtime(e.to_string()))?;
@@ -551,14 +601,10 @@ impl ExtensionRuntime {
             .set_fuel(self.config.fuel)
             .map_err(|e| ExtensionRuntimeError::Runtime(e.to_string()))?;
         store.set_epoch_deadline(epoch_deadline(self.config.invocation_timeout));
-        let mut linker = Linker::new(&self.engine);
-        host_connector::CatalogExtensionOperation::add_to_linker::<
-            OperationState,
-            HasSelf<OperationState>,
-        >(&mut linker, |state| state)
-        .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))?;
         let bindings = host_connector::CatalogExtensionOperation::instantiate_async(
-            &mut store, &component, &linker,
+            &mut store,
+            &component,
+            &self.linkers.connector,
         )
         .await
         .map_err(|e| ExtensionRuntimeError::Runtime(e.to_string()))?;
@@ -604,16 +650,13 @@ impl ExtensionRuntime {
             .set_fuel(self.config.fuel)
             .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))?;
         store.set_epoch_deadline(epoch_deadline(self.config.invocation_timeout));
-        let mut linker = Linker::new(&self.engine);
-        host_v11::CatalogExtension::add_to_linker::<HostState, HasSelf<HostState>>(
-            &mut linker,
-            |state| state,
+        let instance = host_v11::CatalogExtension::instantiate_async(
+            &mut store,
+            &component,
+            &self.linkers.v11,
         )
+        .await
         .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))?;
-        let instance =
-            host_v11::CatalogExtension::instantiate_async(&mut store, &component, &linker)
-                .await
-                .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))?;
         let command = host_v11::exports::catalog::host::handler::CommandRequest {
             handler: handler.to_owned(),
             payload: request.to_owned(),
@@ -656,16 +699,13 @@ impl ExtensionRuntime {
             .set_fuel(self.config.fuel)
             .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))?;
         store.set_epoch_deadline(epoch_deadline(self.config.invocation_timeout));
-        let mut linker = Linker::new(&self.engine);
-        host_v11::CatalogExtension::add_to_linker::<HostState, HasSelf<HostState>>(
-            &mut linker,
-            |state| state,
+        let instance = host_v11::CatalogExtension::instantiate_async(
+            &mut store,
+            &component,
+            &self.linkers.v11,
         )
+        .await
         .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))?;
-        let instance =
-            host_v11::CatalogExtension::instantiate_async(&mut store, &component, &linker)
-                .await
-                .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))?;
         let result = instance
             .catalog_host_handler()
             .call_handle_event(&mut store, &to_wit_v11_event(event))
@@ -711,14 +751,10 @@ impl ExtensionRuntime {
             .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))?;
         store.set_epoch_deadline(epoch_deadline(self.config.invocation_timeout));
 
-        let mut linker = Linker::new(&self.engine);
-        CatalogExtension::add_to_linker::<HostState, HasSelf<HostState>>(&mut linker, |state| {
-            state
-        })
-        .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))?;
-        let instance = CatalogExtension::instantiate_async(&mut store, &component, &linker)
-            .await
-            .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))?;
+        let instance =
+            CatalogExtension::instantiate_async(&mut store, &component, &self.linkers.v1)
+                .await
+                .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))?;
         let result = instance
             .catalog_host_handler()
             .call_handle_event(&mut store, &to_wit_event(event))
@@ -956,10 +992,10 @@ impl catalog::host::api::Host for HostState {
         }
         if operation == "events.emit.v1" {
             let input: EventEmit = parse_event_emit_request(&request)?;
+            // The snapshot was refreshed at the start of this host call.
             self.repository
-                .emit_extension_event(
-                    &self.installation.extension_id,
-                    self.installation.installed_release_id,
+                .emit_extension_event_with(
+                    &self.installation,
                     &input.contract_id,
                     &input.aggregate_kind,
                     parse_uuid(&input.aggregate_id, "event aggregate ID")?,
@@ -1154,6 +1190,32 @@ impl host_v11::catalog::host::api::Host for HostState {
 }
 
 impl HostState {
+    /// [`Self::require_active`] for several capabilities with one refresh.
+    async fn require_all_active<'a>(
+        &mut self,
+        capabilities: impl IntoIterator<Item = &'a str>,
+    ) -> Result<(), String> {
+        let capabilities: Vec<&str> = capabilities.into_iter().collect();
+        if capabilities.is_empty() {
+            return Ok(());
+        }
+        let installation = self
+            .repository
+            .runtime_extension_installation(
+                &self.installation.extension_id,
+                self.installation.installed_release_id,
+            )
+            .await
+            .map_err(|_| "extension authorization could not be checked")?
+            .ok_or_else(|| "extension invocation is no longer authorized".to_owned())?;
+        self.installation = installation;
+        for capability in capabilities {
+            self.require(capability)
+                .map_err(|error| error.to_string())?;
+        }
+        Ok(())
+    }
+
     async fn require_active(&mut self, capability: &str) -> Result<(), String> {
         let installation = self
             .repository
@@ -1746,22 +1808,8 @@ impl TaskHandler for ExtensionOperationTaskHandler {
                 message: e.to_string(),
             })?;
         let repository = repository.for_extension_operation_task(&task);
-        // Abandoned streams are temporary only. Completed artifacts are never
-        // selected by this cleanup path and therefore remain immutable.
-        for key in repository
-            .abort_stale_extension_operation_artifacts()
-            .await
-            .map_err(|error| TaskHandlerError {
-                code: "operation",
-                message: error.to_string(),
-            })?
-        {
-            if self.runtime.object_store.delete(&key).await.is_ok() {
-                let _ = repository
-                    .confirm_extension_operation_object_deletion(&key)
-                    .await;
-            }
-        }
+        // Abandoned streams are aborted by the workspace coordinator's
+        // periodic sweep; a run does not repeat that workspace-wide sweep.
         let Some(run) = repository
             .begin_extension_operation_task(&task)
             .await
@@ -1796,13 +1844,8 @@ impl TaskHandler for ExtensionOperationTaskHandler {
                 at: chrono::Utc::now() + chrono::Duration::seconds(30),
             });
         };
-        let cancellation_requested = repository
-            .extension_operation_cancellation_requested(&task)
-            .await
-            .map_err(|error| TaskHandlerError {
-                code: "operation",
-                message: error.to_string(),
-            })?;
+        // Read under the run's row lock when the batch began.
+        let cancellation_requested = run.cancelling;
         // An interactive run acts only while its initiator remains an active
         // member; it never continues under the installer's grants alone. A
         // cancellation the initiator requested is still delivered so the
@@ -3160,9 +3203,7 @@ impl host_connector::catalog::host::catalog_data::Host for OperationState {
         let CatalogCommandRequest::Batch { batch } = input;
         require_operation_batch_key(&batch.batch_key, &self.batch_key)?;
         let mut host = HostState::new(self.installation.clone(), self.repository.clone(), 0);
-        for capability in batch_capabilities(&batch) {
-            host.require_active(capability).await?;
-        }
+        host.require_all_active(batch_capabilities(&batch)).await?;
         let repository = host
             .repository
             .for_extension(&host.installation.extension_id);

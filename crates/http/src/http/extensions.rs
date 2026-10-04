@@ -878,22 +878,30 @@ pub(super) async fn command(
             "invalid extension command request".into(),
         ));
     }
-    let contribution = repository
-        .client_extension_contribution(&extension_id, &contribution_id)
-        .await?;
-    if contribution.installed_release_id != input.release_id
-        || contribution.kind == UiContributionKind::Panel
-        || !contribution
-            .capabilities
-            .iter()
-            .any(|capability| capability == "client.commands")
+    // The authorized runtime snapshot also carries the enabled release's
+    // contributions and capability grants, so one read decides both gates.
+    let Some(installation) = repository
+        .runtime_extension_installation(&extension_id, input.release_id)
+        .await?
+    else {
+        // Report what resolving the contribution alone reports: not found for
+        // a missing contribution, otherwise forbidden.
+        repository
+            .client_extension_contribution(&extension_id, &contribution_id)
+            .await?;
+        return Err(ApiError::forbidden());
+    };
+    let contribution = installation
+        .manifest
+        .ui
+        .iter()
+        .find(|contribution| contribution.id == contribution_id)
+        .ok_or(RepositoryError::NotFound("enabled extension contribution"))?;
+    if contribution.kind == UiContributionKind::Panel
+        || !installation.capability_grants.contains("client.commands")
     {
         return Err(ApiError::forbidden());
     }
-    let installation = repository
-        .runtime_extension_installation(&extension_id, input.release_id)
-        .await?
-        .ok_or_else(ApiError::forbidden)?;
     let command = installation
         .manifest
         .server

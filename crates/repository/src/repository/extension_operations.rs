@@ -339,15 +339,9 @@ impl CatalogRepository {
             transaction.commit().await?;
             return Ok(None);
         }
-        let manifest_value: Value =
-            sqlx::query_scalar("SELECT manifest FROM installed_extension_releases WHERE id=$1")
-                .bind(release)
-                .fetch_one(&mut *transaction)
-                .await?;
-        let manifest: catalog_extension_manifest::Manifest = serde_json::from_value(manifest_value)
-            .map_err(|_| {
-                RepositoryError::InvalidExtension("stored extension manifest is invalid".into())
-            })?;
+        let manifest = self
+            .cached_release_manifest_on(&mut transaction, release)
+            .await?;
         let handler = manifest
             .server
             .as_ref()

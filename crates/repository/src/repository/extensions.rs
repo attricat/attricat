@@ -261,7 +261,7 @@ pub struct ExtensionRuntimeInstallation {
     pub extension_id: String,
     pub installed_release_id: Uuid,
     pub configuration: Value,
-    pub manifest: Manifest,
+    pub manifest: Arc<Manifest>,
     pub capability_grants: HashSet<String>,
     pub host_permission_grants: HashSet<String>,
 }
@@ -299,6 +299,15 @@ pub struct ClientExtensionContribution {
     pub route: Option<String>,
     pub title: Option<String>,
     pub artifact_key: Option<String>,
+}
+
+#[derive(FromRow)]
+struct RuntimeInstallationRow {
+    extension_id: String,
+    installed_release_id: Uuid,
+    configuration: Value,
+    grant_kinds: Vec<String>,
+    grant_ids: Vec<String>,
 }
 
 impl CatalogRepository {
@@ -504,17 +513,54 @@ impl CatalogRepository {
             .await
     }
 
+    /// [`Self::cached_release_manifest`] read on the caller's connection, for
+    /// a caller holding a transaction: it must not wait for a second pool
+    /// connection. Releases are inserted by their own install transaction, so
+    /// any release row visible here is committed and safe to cache.
+    pub(crate) async fn cached_release_manifest_on(
+        &self,
+        connection: &mut sqlx::PgConnection,
+        release_id: Uuid,
+    ) -> Result<Arc<Manifest>, RepositoryError> {
+        let key = CacheKey::new("extension_manifest", &[&release_id]);
+        if let Some(manifest) = self.cache.get::<Manifest>(&key).await {
+            return Ok(manifest);
+        }
+        let raw: Value =
+            sqlx::query_scalar("SELECT manifest FROM installed_extension_releases WHERE id = $1")
+                .bind(release_id)
+                .fetch_one(connection)
+                .await?;
+        let manifest = Arc::new(serde_json::from_value::<Manifest>(raw).map_err(|_| {
+            RepositoryError::InvalidExtension("stored extension manifest is invalid".into())
+        })?);
+        self.cache
+            .insert(key, manifest.clone(), &[], Policy::Immutable)
+            .await;
+        Ok(manifest)
+    }
+
     /// Resolves enabled, policy-compatible manifest contributions without
     /// applying presentation visibility. Artifact and broker authorization and
     /// publication validation must not depend on a layout hiding a contribution.
     pub async fn enabled_client_extension_contributions(
         &self,
     ) -> Result<Vec<ClientExtensionContribution>, RepositoryError> {
+        self.enabled_client_contributions_of(None).await
+    }
+
+    /// [`Self::enabled_client_extension_contributions`], optionally of one
+    /// extension only.
+    async fn enabled_client_contributions_of(
+        &self,
+        extension_id: Option<&str>,
+    ) -> Result<Vec<ClientExtensionContribution>, RepositoryError> {
         // Capability grants are aggregated in the same statement.
         let rows: Vec<(String, Uuid, Value, Vec<String>)> = sqlx::query_as(
-            "SELECT i.extension_id, i.installed_release_id, i.configuration, ARRAY(SELECT g.grant_id FROM extension_grants g WHERE g.installation_id = i.id AND g.grant_kind = 'capability' ORDER BY g.grant_id) FROM extension_installations i JOIN workspaces w ON w.id = i.workspace_id WHERE i.workspace_id = $1 AND i.state = 'enabled' AND w.extensions_enabled ORDER BY i.extension_id",
+            "SELECT i.extension_id, i.installed_release_id, i.configuration, ARRAY(SELECT g.grant_id FROM extension_grants g WHERE g.installation_id = i.id AND g.grant_kind = 'capability' ORDER BY g.grant_id) FROM extension_installations i JOIN workspaces w ON w.id = i.workspace_id WHERE i.workspace_id = $1 AND i.state = 'enabled' AND w.extensions_enabled AND ($2::text IS NULL OR i.extension_id = $2) ORDER BY i.extension_id",
         )
         .bind(self.extension_workspace())
+        .bind(extension_id)
         .fetch_all(&self.pool)
         .await?;
         let mut contributions = Vec::new();
@@ -780,7 +826,7 @@ impl CatalogRepository {
         extension_id: &str,
         contribution_id: &str,
     ) -> Result<ClientExtensionContribution, RepositoryError> {
-        self.enabled_client_extension_contributions()
+        self.enabled_client_contributions_of(Some(extension_id))
             .await?
             .into_iter()
             .find(|contribution| {
@@ -843,18 +889,12 @@ impl CatalogRepository {
         event: &crate::domain_events::DomainEvent,
     ) -> Result<Vec<ExtensionRuntimeInstallation>, RepositoryError> {
         let event_type = &event.event_type;
-        let rows: Vec<(String, Uuid)> = sqlx::query_as(
-            "SELECT i.extension_id, i.installed_release_id FROM extension_installations i JOIN workspaces w ON w.id = i.workspace_id WHERE i.workspace_id = $1 AND i.state = 'enabled' AND w.extensions_enabled",
-        )
-        .bind(self.extension_workspace())
-        .fetch_all(&self.pool)
-        .await?;
         let mut enabled = Vec::new();
-        for (extension_id, installed_release_id) in rows {
-            if let Some(installation) = self
-                .runtime_extension_installation(&extension_id, installed_release_id)
-                .await?
-            {
+        for row in self.runtime_installation_rows(None).await? {
+            if !extension_policy::allows(&row.extension_id, row.installed_release_id) {
+                continue;
+            }
+            if let Some(installation) = self.runtime_installation(row).await? {
                 let subscribed =
                     installation.manifest.server.as_ref().is_some_and(|server| {
                         server.event_handlers.iter().any(|handler| {
@@ -877,19 +917,13 @@ impl CatalogRepository {
     /// contracts and the currently enabled provider release, rather than a
     /// static core-event catalogue.
     pub async fn enabled_extension_event_types(&self) -> Result<Vec<String>, RepositoryError> {
-        let rows: Vec<(String, Uuid)> = sqlx::query_as(
-            "SELECT i.extension_id, i.installed_release_id FROM extension_installations i JOIN workspaces w ON w.id = i.workspace_id WHERE i.workspace_id = $1 AND i.state = 'enabled' AND w.extensions_enabled",
-        )
-        .bind(self.extension_workspace())
-        .fetch_all(&self.pool)
-        .await?;
         let mut installations = HashMap::new();
-        for (extension_id, installed_release_id) in rows {
-            if let Some(installation) = self
-                .runtime_extension_installation(&extension_id, installed_release_id)
-                .await?
-            {
-                installations.insert(extension_id, installation);
+        for row in self.runtime_installation_rows(None).await? {
+            if !extension_policy::allows(&row.extension_id, row.installed_release_id) {
+                continue;
+            }
+            if let Some(installation) = self.runtime_installation(row).await? {
+                installations.insert(installation.extension_id.clone(), installation);
             }
         }
 
@@ -937,6 +971,12 @@ impl CatalogRepository {
     /// before a component runs. The expected release ID prevents a queued
     /// delivery from invoking a replacement release after an upgrade, disable,
     /// grant revocation, or configuration change.
+    ///
+    /// One statement reads the installation, configuration and grants from a
+    /// single snapshot, so an upgrade, disable, configuration change or
+    /// revocation can never produce a mixed result; no row lock or explicit
+    /// transaction is needed for that. Every call reads committed state, so a
+    /// committed revocation applies to the next host call.
     pub async fn runtime_extension_installation(
         &self,
         extension_id: &str,
@@ -945,35 +985,49 @@ impl CatalogRepository {
         if !extension_policy::allows(extension_id, expected_release_id) {
             return Ok(None);
         }
-        // Lock the installation while loading grants so an upgrade, disable,
-        // configuration change, or revocation cannot produce a mixed snapshot.
-        // The transaction commits before the untrusted invocation; lifecycle
-        // operations therefore never wait on component execution.
-        let mut transaction = self.pool.begin().await?;
-        let row: Option<(Uuid, Value, Value)> = sqlx::query_as(
-            "SELECT i.id, i.configuration, r.manifest FROM extension_installations i JOIN installed_extension_releases r ON r.id = i.installed_release_id JOIN workspaces w ON w.id = i.workspace_id WHERE i.workspace_id = $1 AND i.extension_id = $2 AND i.installed_release_id = $3 AND i.state = 'enabled' AND w.extensions_enabled FOR UPDATE OF i",
+        let rows = self
+            .runtime_installation_rows(Some((extension_id, expected_release_id)))
+            .await?;
+        match rows.into_iter().next() {
+            Some(row) => self.runtime_installation(row).await,
+            None => Ok(None),
+        }
+    }
+
+    /// Enabled installations with their configuration and grants, optionally
+    /// only one exact release.
+    async fn runtime_installation_rows(
+        &self,
+        only: Option<(&str, Uuid)>,
+    ) -> Result<Vec<RuntimeInstallationRow>, RepositoryError> {
+        Ok(sqlx::query_as::<_, RuntimeInstallationRow>(
+            "SELECT i.extension_id, i.installed_release_id, i.configuration, ARRAY(SELECT g.grant_kind FROM extension_grants g WHERE g.installation_id = i.id ORDER BY g.grant_kind, g.grant_id) AS grant_kinds, ARRAY(SELECT g.grant_id FROM extension_grants g WHERE g.installation_id = i.id ORDER BY g.grant_kind, g.grant_id) AS grant_ids FROM extension_installations i JOIN workspaces w ON w.id = i.workspace_id WHERE i.workspace_id = $1 AND i.state = 'enabled' AND w.extensions_enabled AND ($2::text IS NULL OR i.extension_id = $2) AND ($3::uuid IS NULL OR i.installed_release_id = $3) ORDER BY i.extension_id",
         )
         .bind(self.extension_workspace())
-        .bind(extension_id)
-        .bind(expected_release_id)
-        .fetch_optional(&mut *transaction)
-        .await?;
-        let Some((installation_id, configuration, manifest_value)) = row else {
-            transaction.commit().await?;
-            return Ok(None);
-        };
-        let manifest: Manifest = serde_json::from_value(manifest_value).map_err(|_| {
-            RepositoryError::InvalidExtension("installed manifest cannot be decoded".into())
-        })?;
+        .bind(only.map(|(extension_id, _)| extension_id))
+        .bind(only.map(|(_, release_id)| release_id))
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
+    /// Checks one installation row against its release manifest: the
+    /// configuration must validate and every declared permission, host
+    /// permission and event contract must be granted.
+    async fn runtime_installation(
+        &self,
+        row: RuntimeInstallationRow,
+    ) -> Result<Option<ExtensionRuntimeInstallation>, RepositoryError> {
+        let manifest = self
+            .cached_release_manifest(row.installed_release_id)
+            .await
+            .map_err(|_| {
+                RepositoryError::InvalidExtension("installed manifest cannot be decoded".into())
+            })?;
         manifest
-            .validate_configuration(&configuration)
+            .validate_configuration(&row.configuration)
             .map_err(|error| RepositoryError::InvalidExtension(error.to_string()))?;
-        let grants: Vec<(String, String)> = sqlx::query_as(
-            "SELECT grant_kind, grant_id FROM extension_grants WHERE installation_id = $1",
-        )
-        .bind(installation_id)
-        .fetch_all(&mut *transaction)
-        .await?;
+        let grants: Vec<(String, String)> =
+            row.grant_kinds.into_iter().zip(row.grant_ids).collect();
         let capability_grants: HashSet<String> = grants
             .iter()
             .filter(|(kind, _)| kind == "capability")
@@ -1003,14 +1057,13 @@ impl CatalogRepository {
                         && id == &event_contract_grant_id(&contract.provider, &contract.contract)
                 })
             });
-        transaction.commit().await?;
         if !authorized {
             return Ok(None);
         }
         Ok(Some(ExtensionRuntimeInstallation {
-            extension_id: extension_id.to_owned(),
-            installed_release_id: expected_release_id,
-            configuration,
+            extension_id: row.extension_id,
+            installed_release_id: row.installed_release_id,
+            configuration: row.configuration,
             manifest,
             capability_grants,
             host_permission_grants,

@@ -5,7 +5,10 @@
 //! authorization grant: the initiator's current access is checked again by
 //! every selection read, catalog write and artifact download.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+
+use crate::persistence_rows::{Db, IntoDomain};
+use catalog_domain::model::{Attribute, Entity};
 
 use chrono::{DateTime, Duration, Utc};
 use serde::Serialize;
@@ -388,17 +391,15 @@ impl CatalogRepository {
             }
             return Box::pin(self.start_interactive_operation_attempt(input, true)).await;
         };
-        for (position, entity_id) in input.entity_ids.iter().enumerate() {
-            sqlx::query(
-                "INSERT INTO extension_operation_run_entities(operation_run_id,workspace_id,position,entity_id) VALUES($1,$2,$3,$4)",
-            )
-            .bind(run_id)
-            .bind(self.workspace_id.0)
-            .bind(position as i32)
-            .bind(entity_id)
-            .execute(&mut *transaction)
-            .await?;
-        }
+        // Positions are the selection order, starting at zero.
+        sqlx::query(
+            "INSERT INTO extension_operation_run_entities(operation_run_id,workspace_id,position,entity_id) SELECT $1, $2, (selected.ordinality - 1)::int, selected.entity_id FROM UNNEST($3::uuid[]) WITH ORDINALITY AS selected(entity_id, ordinality)",
+        )
+        .bind(run_id)
+        .bind(self.workspace_id.0)
+        .bind(&input.entity_ids)
+        .execute(&mut *transaction)
+        .await?;
         self.enqueue_task(
             &mut transaction,
             TaskInsert {
@@ -687,6 +688,55 @@ impl CatalogRepository {
             )
             .await?
         };
+        // The page's readable entities, annotation revisions, attributes per
+        // revision and preview scope are loaded once for the page.
+        let readable_ids: Vec<Uuid> = scope
+            .entity_ids
+            .iter()
+            .skip(start)
+            .take(limit as usize)
+            .filter(|entity_id| readable.contains(entity_id))
+            .copied()
+            .collect();
+        let mut loaded: HashMap<Uuid, Entity> = HashMap::new();
+        let mut revisions: HashMap<Uuid, i64> = HashMap::new();
+        let mut attributes: HashMap<(Uuid, i64), Vec<Attribute>> = HashMap::new();
+        let mut preview_scope = None;
+        if !readable_ids.is_empty() {
+            loaded = sqlx::query_as::<_, Db<Entity>>(
+                "SELECT id, blueprint_id, blueprint_version, projections, system_tags, system_metadata, ('attricat.sample'=ANY(system_tags)) AS is_sample, created_at, updated_at, deleted_at FROM entities WHERE id = ANY($1) AND workspace_id = $2 AND deleted_at IS NULL",
+            )
+            .bind(&readable_ids)
+            .bind(self.workspace_id.0)
+            .fetch_all(&self.pool)
+            .await?
+            .into_iter()
+            .map(|row| {
+                let entity: Entity = row.into_domain();
+                (entity.id, entity)
+            })
+            .collect();
+            revisions = sqlx::query_as::<_, (Uuid, i64)>(
+                "SELECT entity_id, revision FROM entity_extension_annotation_revisions WHERE workspace_id=$1 AND entity_id = ANY($2) AND extension_id=$3",
+            )
+            .bind(self.workspace_id.0)
+            .bind(&readable_ids)
+            .bind(extension_id)
+            .fetch_all(&self.pool)
+            .await?
+            .into_iter()
+            .collect();
+            for entity in loaded.values() {
+                let revision = (entity.blueprint_id, entity.blueprint_version);
+                if let std::collections::hash_map::Entry::Vacant(entry) = attributes.entry(revision)
+                {
+                    entry.insert(self.list_attributes(revision.0, revision.1).await?);
+                }
+            }
+            if !loaded.is_empty() {
+                preview_scope = Some(self.preview_scope(context_id).await?);
+            }
+        }
         let mut entities = Vec::new();
         let mut bytes = 0;
         let mut next = None;
@@ -700,20 +750,17 @@ impl CatalogRepository {
             let item = if !readable.contains(entity_id) {
                 json!({"position": position, "entity_id": entity_id, "status": "unavailable"})
             } else {
-                match (
-                    self.get_entity(*entity_id).await?,
-                    self.resolved_preview(*entity_id, context_id, 0).await?,
-                ) {
-                    (Some(entity), Some(resolved)) if entity.deleted_at.is_none() => {
-                        let revision: i64 = sqlx::query_scalar(
-                            "SELECT revision FROM entity_extension_annotation_revisions WHERE workspace_id=$1 AND entity_id=$2 AND extension_id=$3",
-                        )
-                        .bind(self.workspace_id.0)
-                        .bind(entity_id)
-                        .bind(extension_id)
-                        .fetch_optional(&self.pool)
-                        .await?
-                        .unwrap_or(0);
+                match (loaded.get(entity_id), preview_scope.as_ref()) {
+                    (Some(entity), Some(preview_scope)) => {
+                        let resolved = self
+                            .resolved_preview_for(
+                                entity,
+                                &attributes[&(entity.blueprint_id, entity.blueprint_version)],
+                                preview_scope,
+                                0,
+                            )
+                            .await?;
+                        let revision = revisions.get(entity_id).copied().unwrap_or(0);
                         json!({
                             "position": position,
                             "entity_id": entity_id,

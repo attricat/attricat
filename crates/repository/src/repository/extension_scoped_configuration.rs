@@ -48,11 +48,15 @@ impl CatalogRepository {
         let installation = self
             .require_scoped_configuration_access(extension_id, expected_release_id, scope)
             .await?;
-        let declaration = installation.manifest.scoped_configuration.ok_or_else(|| {
-            RepositoryError::InvalidExtension(
-                "extension does not declare scoped configuration".into(),
-            )
-        })?;
+        let declaration = installation
+            .manifest
+            .scoped_configuration
+            .as_ref()
+            .ok_or_else(|| {
+                RepositoryError::InvalidExtension(
+                    "extension does not declare scoped configuration".into(),
+                )
+            })?;
         validate_schema(&declaration.schema, &configuration)
             .map_err(|error| RepositoryError::InvalidExtension(error.to_string()))?;
         // Lifecycle and grant mutations lock this installation row. Hold that

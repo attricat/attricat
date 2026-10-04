@@ -55,9 +55,7 @@ impl OperationState {
             }
         }
         let mut host = HostState::new(self.installation.clone(), self.repository.clone(), 0);
-        for capability in batch_capabilities(&batch) {
-            host.require_active(capability).await?;
-        }
+        host.require_all_active(batch_capabilities(&batch)).await?;
         let repository = self.repository.for_interactive_run(
             &self.installation.extension_id,
             self.run_id,
@@ -314,14 +312,10 @@ impl ExtensionRuntime {
             .set_fuel(self.config.fuel)
             .map_err(|e| runtime_error(e.to_string()))?;
         store.set_epoch_deadline(epoch_deadline(self.config.invocation_timeout));
-        let mut linker = Linker::new(&self.engine);
-        host_interactive::CatalogExtensionOperation::add_to_linker::<
-            OperationState,
-            HasSelf<OperationState>,
-        >(&mut linker, |state| state)
-        .map_err(|error| runtime_error(error.to_string()))?;
         let bindings = host_interactive::CatalogExtensionOperation::instantiate_async(
-            &mut store, &component, &linker,
+            &mut store,
+            &component,
+            &self.linkers.interactive,
         )
         .await
         .map_err(|e| runtime_error(e.to_string()))?;
@@ -335,4 +329,15 @@ impl ExtensionRuntime {
             cancelling: cancelling,
         )
     }
+}
+
+/// The interactive operation world's linker; built once per runtime.
+pub(super) fn linker(engine: &Engine) -> Result<Linker<OperationState>, ExtensionRuntimeError> {
+    let mut linker = Linker::new(engine);
+    host_interactive::CatalogExtensionOperation::add_to_linker::<
+        OperationState,
+        HasSelf<OperationState>,
+    >(&mut linker, |state| state)
+    .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))?;
+    Ok(linker)
 }

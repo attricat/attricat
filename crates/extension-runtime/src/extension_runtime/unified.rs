@@ -394,18 +394,43 @@ impl ExtensionRuntime {
         store.limiter(|state| &mut state.host.limits);
         store.set_fuel(self.config.fuel).map_err(runtime_error)?;
         store.set_epoch_deadline(epoch_deadline(self.config.invocation_timeout));
-        let mut linker = Linker::new(&self.engine);
-        host_unified::CatalogExtension::add_to_linker::<UnifiedState, HasSelf<UnifiedState>>(
-            &mut linker,
-            |state| state,
-        )
-        .map_err(runtime_error)?;
-        let pre = linker.instantiate_pre(&component).map_err(runtime_error)?;
+        let pre = self.unified_instance_pre(installation, &component)?;
         let instance = pre
             .instantiate_async(&mut store)
             .await
             .map_err(runtime_error)?;
         Ok((store, pre, instance))
+    }
+
+    /// The release's unified component, linked and pre-instantiated once.
+    fn unified_instance_pre(
+        &self,
+        installation: &ExtensionRuntimeInstallation,
+        component: &Component,
+    ) -> Result<wasmtime::component::InstancePre<UnifiedState>, ExtensionRuntimeError> {
+        let release = installation.installed_release_id;
+        if let Some(pre) = self
+            .unified_instances
+            .lock()
+            .expect("unified instance cache is not poisoned")
+            .get(&release)
+        {
+            return Ok(pre.clone());
+        }
+        let pre = self
+            .linkers
+            .unified
+            .instantiate_pre(component)
+            .map_err(runtime_error)?;
+        let mut instances = self
+            .unified_instances
+            .lock()
+            .expect("unified instance cache is not poisoned");
+        if instances.len() >= MAX_CACHED_COMPONENTS {
+            instances.clear();
+        }
+        instances.insert(release, pre.clone());
+        Ok(pre)
     }
 
     async fn unified_handler(
@@ -528,4 +553,15 @@ impl ExtensionRuntime {
             cancelling: cancelling,
         )
     }
+}
+
+/// The unified world's linker; built once per runtime.
+pub(super) fn linker(engine: &Engine) -> Result<Linker<UnifiedState>, ExtensionRuntimeError> {
+    let mut linker = Linker::new(engine);
+    host_unified::CatalogExtension::add_to_linker::<UnifiedState, HasSelf<UnifiedState>>(
+        &mut linker,
+        |state| state,
+    )
+    .map_err(runtime_error)?;
+    Ok(linker)
 }
