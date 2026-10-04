@@ -215,9 +215,15 @@ context_editable = "default"
 - In a tree, a second target returns `409 relationship_cardinality_conflict`,
   also for entities pinned to a revision that allowed several.
 - The check walks edges of every revision of the blueprint family's field
-  (matched by code) in the written context. It runs while the edge is inserted,
-  under the workspace relationship lock every relationship writer holds, so
-  concurrent writes cannot jointly create a cycle.
+  (matched by code), resolved in each context whose value the edge becomes.
+  It runs while the edge is inserted, under the workspace relationship lock
+  every relationship writer holds, so concurrent writes cannot jointly create
+  a cycle.
+- Removing an edge is not checked. For an entity pinned to an older revision
+  that allowed non-default edges, removing its last edge in a context exposes
+  the inherited edge there, which can close a cycle. Publishing a revision
+  that changes the hierarchy, and moving a context to another parent, recheck
+  all edges and report such cycles.
 - The latest published revision decides whether a field is a hierarchy, for
   every entity in the family.
 - Publishing a revision that adds or changes `acyclic`/`tree` checks existing

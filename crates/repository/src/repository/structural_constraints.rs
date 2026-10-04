@@ -602,7 +602,27 @@ impl CatalogRepository {
             .map(|edges| edges.by_context.keys().copied().collect())
             .unwrap_or_default();
         let inherit = context_fallback != "none";
+        // Without edges outside the default context every context resolves
+        // the default graph or, without fallback, a subgraph of it, so the
+        // default walk decides for all of them.
+        let default_only = written == tree.default_context()?.id
+            && !sqlx::query_scalar::<_, bool>(
+                r#"SELECT EXISTS (
+                       SELECT 1 FROM attribute_values av JOIN attributes a ON a.id = av.attribute_id
+                       WHERE av.workspace_id = $1 AND a.blueprint_id = $2 AND a.code = $3
+                         AND av.context_id <> $4
+                         AND av.relationship_target_entity_id IS NOT NULL AND av.active)"#,
+            )
+            .bind(self.workspace_id.0)
+            .bind(entity.blueprint_id)
+            .bind(attribute_code)
+            .bind(written)
+            .fetch_one(&mut **transaction)
+            .await?;
         for context in tree.nodes() {
+            if default_only && context.id != written {
+                continue;
+            }
             let path = tree.path(context.id, inherit)?;
             // The edge becomes this context's value only when no nearer
             // context overrides the field for the source.
