@@ -378,10 +378,12 @@ impl CatalogRepository {
             metrics::histogram!("catalog_entity_migration_relationship_lock_wait_seconds")
                 .record(lock_started.elapsed().as_secs_f64());
         }
+        let entity = self.lock_entity(&mut transaction, entity_id).await?;
+        // Snapshot under the lock so a concurrent writer cannot change the
+        // audited "before" state between the read and this migration.
         let before = self
             .entity_audit_snapshot(&mut transaction, entity_id)
             .await?;
-        let entity = self.lock_entity(&mut transaction, entity_id).await?;
         let source_write =
             WriteContext::load(&mut transaction, self.workspace_id.0, &entity).await?;
         if expected_updated_at.is_some()
