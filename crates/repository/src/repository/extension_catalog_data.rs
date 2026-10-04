@@ -364,14 +364,32 @@ impl CatalogRepository {
                 "lookup value must be 1-512 bytes".into(),
             ));
         }
-        let workspace_id = self.workspace_id.0;
-        Ok(sqlx::query_as::<_, Db<Entity>>(
-            "SELECT e.id,e.blueprint_id,e.blueprint_version,e.projections,e.system_tags,e.system_metadata,('attricat.sample'=ANY(e.system_tags)) AS is_sample,e.created_at,e.updated_at,e.deleted_at \
-             FROM entities e JOIN attribute_values v ON v.entity_id=e.id AND v.workspace_id=e.workspace_id AND v.active \
-             WHERE e.workspace_id=$1 AND e.deleted_at IS NULL AND e.blueprint_id=$2 AND e.blueprint_version=$3 \
-               AND v.attribute_id=$4 AND v.relationship_target_entity_id IS NULL AND v.value_text = $5 LIMIT 2",
-        ).bind(workspace_id).bind(blueprint_id).bind(blueprint_version).bind(attribute_id).bind(value)
-        .fetch_all(&self.pool).await?.into_domain().into_iter().next())
+        // Resolve exactly as an upsert with this lookup would, so a read never
+        // names a different entity than the one a write would update.
+        let mut transaction = self.pool.begin().await?;
+        let Some(entity_id) = self
+            .extension_lookup(
+                &mut transaction,
+                blueprint_id,
+                blueprint_version,
+                attribute_id,
+                value,
+                super::extension_catalog_commands::ExtensionLookupMode::Read,
+            )
+            .await?
+        else {
+            return Ok(None);
+        };
+        let entity = sqlx::query_as::<_, Db<Entity>>(
+            "SELECT id,blueprint_id,blueprint_version,projections,system_tags,system_metadata,('attricat.sample'=ANY(system_tags)) AS is_sample,created_at,updated_at,deleted_at FROM entities WHERE id=$1 AND workspace_id=$2 AND deleted_at IS NULL",
+        )
+        .bind(entity_id)
+        .bind(self.workspace_id.0)
+        .fetch_optional(&mut *transaction)
+        .await?
+        .into_domain();
+        transaction.commit().await?;
+        Ok(entity)
     }
 }
 

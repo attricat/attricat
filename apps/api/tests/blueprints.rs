@@ -311,3 +311,70 @@ cardinality = "one"
     );
     server.abort();
 }
+
+fn blueprint_with_rule(code: &str) -> String {
+    format!(
+        r#"format_version = 1
+code = "{code}"
+name = "{code}"
+kind = "entity"
+
+[[rules]]
+code = "title-required"
+name = "Title required"
+severity = "error"
+[[rules.triggers]]
+type = "manual"
+[rules.predicate]
+type = "required"
+attribute_code = "title"
+
+[[attributes]]
+code = "title"
+value_type = "string"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["title"]
+"#
+    )
+}
+
+#[sqlx::test]
+async fn blueprint_rules_cannot_take_a_rule_code_owned_by_another_blueprint(pool: PgPool) {
+    let repository = api::repository::CatalogRepository::new(
+        pool.clone(),
+        BOOTSTRAP_WORKSPACE_ID.parse().unwrap(),
+    );
+    let first = repository
+        .create_blueprint(api::model::CreateBlueprint {
+            definition: blueprint_with_rule("first_ruled"),
+        })
+        .await
+        .unwrap();
+    // The owning blueprint's next revision extends its own rule family.
+    repository
+        .create_blueprint_revision(
+            first.blueprint.id,
+            api::model::CreateBlueprint {
+                definition: blueprint_with_rule("first_ruled")
+                    .replace("Title required", "Title is required"),
+            },
+        )
+        .await
+        .unwrap();
+    assert!(matches!(
+        repository
+            .create_blueprint(api::model::CreateBlueprint {
+                definition: blueprint_with_rule("second_ruled"),
+            })
+            .await,
+        Err(api::repository::RepositoryError::RuleCodeTaken)
+    ));
+    let families: i64 =
+        sqlx::query_scalar("SELECT count(DISTINCT id) FROM rules WHERE code = 'title-required'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(families, 1);
+}

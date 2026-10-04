@@ -14,6 +14,14 @@ use sha2::Digest;
 use sqlx::{Postgres, Transaction};
 use std::collections::BTreeSet;
 
+/// Whether [`CatalogRepository::extension_lookup`] resolves a read or the
+/// target of an upsert.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum ExtensionLookupMode {
+    Read,
+    Upsert,
+}
+
 impl CatalogRepository {
     /// Applies one bounded extension batch. Each intent receives its own
     /// transaction so a retry may return durable per-intent outcomes without
@@ -264,12 +272,13 @@ impl CatalogRepository {
                         .await?;
                 }
                 let existing = self
-                    .extension_upsert_lookup(
+                    .extension_lookup(
                         transaction,
                         blueprint_id,
                         blueprint_version,
                         lookup_attribute_id,
                         &lookup_value,
+                        ExtensionLookupMode::Upsert,
                     )
                     .await?;
                 match existing {
@@ -304,19 +313,25 @@ impl CatalogRepository {
         }
     }
 
-    /// Finds the entity a legacy upsert updates, locking its row. When the
-    /// lookup attribute alone forms a declared unique key, the key index
-    /// resolves it across every revision of the blueprint family, with the
-    /// key's normalization. Otherwise the lookup is advisory: an exact text
-    /// match among entities pinned to the requested revision.
-    async fn extension_upsert_lookup(
+    /// Finds the entity an extension lookup names, which is the entity a
+    /// legacy upsert with the same lookup updates. When the lookup attribute
+    /// alone forms a declared unique key, the key index resolves it across
+    /// every revision of the blueprint family, with the key's normalization.
+    /// Otherwise the lookup is advisory: an exact text match among entities
+    /// pinned to the requested revision. More than one match is an error.
+    /// [`ExtensionLookupMode::Upsert`] also serializes concurrent upserts of
+    /// the value and locks the matched entity row.
+    pub(super) async fn extension_lookup(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         blueprint_id: Uuid,
         blueprint_version: i64,
         lookup_attribute_id: Uuid,
         lookup_value: &str,
+        mode: ExtensionLookupMode,
     ) -> Result<Option<Uuid>, RepositoryError> {
+        let upsert = mode == ExtensionLookupMode::Upsert;
+        let row_lock = if upsert { " FOR UPDATE OF e" } else { "" };
         let workspace_id = self.workspace_id.0;
         let attribute: Option<(String, String)> = sqlx::query_as(
             "SELECT code, value_type FROM attributes WHERE id = $1 AND workspace_id = $2 AND blueprint_id = $3 AND blueprint_version = $4 AND deleted_at IS NULL",
@@ -351,24 +366,26 @@ impl CatalogRepository {
             let key_hash = super::structural_constraints::key_hash(&Value::Array(vec![component]));
             // Serializes concurrent absent-key upserts of the same key value,
             // so the second one updates rather than conflicting on the index.
-            sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
-                .bind(format!(
-                    "extension-upsert-key:{workspace_id}:{blueprint_id}:{}:{key_hash}",
-                    key.code
-                ))
-                .execute(&mut **transaction)
-                .await?;
+            if upsert {
+                sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+                    .bind(format!(
+                        "extension-upsert-key:{workspace_id}:{blueprint_id}:{}:{key_hash}",
+                        key.code
+                    ))
+                    .execute(&mut **transaction)
+                    .await?;
+            }
             // Workspace keys are indexed in the default context only; for a
             // context key, the default context's value identifies the record.
             let default_context_id = self
                 .resolve_context_id(transaction, None)
                 .await?
                 .ok_or(RepositoryError::InvalidContext)?;
-            sqlx::query_scalar(
+            sqlx::query_scalar(&format!(
                 "SELECT e.id FROM entity_unique_key_values k JOIN entities e ON e.id = k.entity_id AND e.workspace_id = k.workspace_id \
                  WHERE k.workspace_id = $1 AND k.blueprint_id = $2 AND k.key_code = $3 AND k.context_id = $4 AND k.key_hash = $5 AND e.deleted_at IS NULL \
-                 ORDER BY e.id FOR UPDATE OF e LIMIT 2",
-            )
+                 ORDER BY e.id{row_lock} LIMIT 2",
+            ))
             .bind(workspace_id)
             .bind(blueprint_id)
             .bind(&key.code)
@@ -380,16 +397,18 @@ impl CatalogRepository {
             // Without a declared single-attribute unique key nothing prevents
             // duplicates of this value. Serialize the lookup so concurrent
             // absent-key upserts cannot both take the create branch.
-            sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
-                .bind(format!("extension-upsert:{workspace_id}:{blueprint_id}:{blueprint_version}:{lookup_attribute_id}:{lookup_value}"))
-                .execute(&mut **transaction)
-                .await?;
-            sqlx::query_scalar(
+            if upsert {
+                sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+                    .bind(format!("extension-upsert:{workspace_id}:{blueprint_id}:{blueprint_version}:{lookup_attribute_id}:{lookup_value}"))
+                    .execute(&mut **transaction)
+                    .await?;
+            }
+            sqlx::query_scalar(&format!(
                 "SELECT e.id FROM entities e JOIN attribute_values v ON v.entity_id=e.id AND v.workspace_id=e.workspace_id AND v.active \
                  WHERE e.workspace_id=$1 AND e.deleted_at IS NULL AND e.blueprint_id=$2 AND e.blueprint_version=$3 \
                    AND v.attribute_id=$4 AND v.relationship_target_entity_id IS NULL AND v.value_text=$5 \
-                 ORDER BY e.id FOR UPDATE OF e LIMIT 2",
-            )
+                 ORDER BY e.id{row_lock} LIMIT 2",
+            ))
             .bind(workspace_id)
             .bind(blueprint_id)
             .bind(blueprint_version)
@@ -402,7 +421,7 @@ impl CatalogRepository {
             [] => Ok(None),
             [entity_id] => Ok(Some(*entity_id)),
             _ => Err(RepositoryError::InvalidExtension(
-                "upsert lookup matched multiple entities".into(),
+                "lookup matched multiple entities".into(),
             )),
         }
     }

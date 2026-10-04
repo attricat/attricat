@@ -330,6 +330,9 @@ impl CatalogRepository {
             metrics::histogram!("catalog_entity_migration_relationship_lock_wait_seconds")
                 .record(lock_started.elapsed().as_secs_f64());
         }
+        let before = self
+            .entity_audit_snapshot(&mut transaction, entity_id)
+            .await?;
         let entity = self.lock_entity(&mut transaction, entity_id).await?;
         if expected_updated_at.is_some()
             || self
@@ -696,8 +699,15 @@ impl CatalogRepository {
         .bind(self.workspace_id.0)
         .execute(&mut *transaction)
         .await?;
-        self.commit_mutation_with_event(
+        let after = self
+            .entity_audit_snapshot(&mut transaction, entity.id)
+            .await?;
+        let changes = Self::migration_audit_changes(entity.id, before, after);
+        // A migration changes stored values like any entity write: field-level
+        // audit and publication reconciliation go through the shared seam.
+        self.commit_entity_mutation(
             transaction,
+            changes,
             NewDomainEvent {
                 event_type: ENTITY_MIGRATED_V1.to_owned(),
                 aggregate_kind: "entity".to_owned(),

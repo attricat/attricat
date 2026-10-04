@@ -104,9 +104,11 @@ impl CatalogRepository {
                 })
                 .transpose()?;
             if let Some(file) = input_file_id {
-                let ready: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM files WHERE workspace_id=$1 AND id=$2 AND status='ready' AND deleted_at IS NULL)")
-                    .bind(ws).bind(file).fetch_one(&mut **tx).await?;
-                if !ready {
+                // Lock the file so reconciliation cannot reclaim it before
+                // the job that references it commits.
+                let ready: Option<Uuid> = sqlx::query_scalar("SELECT id FROM files WHERE workspace_id=$1 AND id=$2 AND status='ready' AND deleted_at IS NULL FOR UPDATE")
+                    .bind(ws).bind(file).fetch_optional(&mut **tx).await?;
+                if ready.is_none() {
                     return Err(invalid("import input file is not ready"));
                 }
             }

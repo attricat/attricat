@@ -4,11 +4,11 @@
 //! management projections and audit metadata. Snapshots and diagnostics are
 //! recursively redacted before they become durable operator-visible data.
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use crate::task_queue::{TaskInsert, TaskKind};
+use crate::task_queue::{TaskInsert, TaskKind, TaskStatus};
 
 use super::{CatalogRepository, ClaimedTask, RepositoryError};
 
@@ -528,12 +528,24 @@ impl CatalogRepository {
         task: &ClaimedTask,
         error: &str,
     ) -> Result<bool, RepositoryError> {
-        let terminal = task.failures + 1 >= task.max_failures;
         let error = bounded_message(error);
         let mut transaction = self.pool.begin().await?;
         self.for_extension_operation_task(task)
             .ensure_task_fence(&mut transaction)
             .await?;
+        // The envelope's failure budget decides whether the run is retried.
+        let terminal = self
+            .retry_task_at_in_transaction(
+                &mut transaction,
+                task.id,
+                &task.lease_owner,
+                task.lease_token,
+                Utc::now() + Duration::seconds(1),
+                "operation",
+                &error,
+            )
+            .await?
+            == TaskStatus::DeadLetter;
         let changed = sqlx::query(
             "UPDATE extension_operation_runs SET status=CASE WHEN $3 THEN 'dead_letter' ELSE 'pending' END,last_error_code='operation',last_error_message=$4,lease_token=NULL,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='leased' AND lease_token=$5",
         )
@@ -549,21 +561,6 @@ impl CatalogRepository {
             return Err(RepositoryError::InvalidExtension(
                 "operation run lost its lease".into(),
             ));
-        }
-        let task_status = if terminal { "dead_letter" } else { "queued" };
-        let changed = sqlx::query(
-            "UPDATE tasks SET status=$4,failures=failures+1,available_at=CASE WHEN $4='queued' THEN clock_timestamp()+interval '1 second' ELSE available_at END,lease_owner=NULL,lease_token=NULL,lease_until=NULL,last_error_code='operation',last_error_message=$5,failed_at=CASE WHEN $4='dead_letter' THEN clock_timestamp() ELSE failed_at END,updated_at=clock_timestamp() WHERE id=$1 AND status='leased' AND lease_owner=$2 AND lease_token=$3 AND lease_until>clock_timestamp()",
-        )
-        .bind(task.id)
-        .bind(&task.lease_owner)
-        .bind(task.lease_token)
-        .bind(task_status)
-        .bind(&error)
-        .execute(&mut *transaction)
-        .await?
-        .rows_affected();
-        if changed != 1 {
-            return Err(RepositoryError::Task(super::TaskError::LeaseLost));
         }
         transaction.commit().await?;
         Ok(terminal)

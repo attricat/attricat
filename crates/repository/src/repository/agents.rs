@@ -832,8 +832,8 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
                 .bind(run_id).bind(workspace_id).execute(&mut *tx).await?;
             sqlx::query("INSERT INTO agent_run_events (id,run_id,sequence,event_type,payload) VALUES ($1,$2,$3,'status','{\"status\":\"failed\"}'::jsonb),($4,$2,$3+1,'terminal','{\"status\":\"failed\",\"code\":\"interrupted\"}'::jsonb)")
                 .bind(Uuid::new_v4()).bind(run_id).bind(sequence).bind(Uuid::new_v4()).execute(&mut *tx).await?;
-            sqlx::query("UPDATE tasks SET status='succeeded',lease_owner=NULL,lease_token=NULL,lease_until=NULL,completed_at=now(),updated_at=now() WHERE id=$1 AND status='leased' AND lease_owner=$2 AND lease_token=$3 AND lease_until>now()")
-                .bind(task_id).bind(&owner).bind(token).execute(&mut *tx).await?;
+            self.complete_task_in_transaction(&mut tx, task_id, &owner, token)
+                .await?;
             tx.commit().await?;
         }
         Ok(())
