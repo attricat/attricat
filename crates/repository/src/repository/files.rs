@@ -1,5 +1,6 @@
 use super::*;
 use crate::constants::CONVERSATION_ATTACHMENT_LIFETIME_SECONDS;
+use crate::domain_events::{ATTRIBUTE_VALUE_CHANGED_V1, AttributeValueMutationV1};
 use crate::persistence_rows::{Db, IntoDomain};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -29,17 +30,13 @@ impl FilePolicy {
     }
 }
 
-fn publication_disposition_metadata(retained_role: Option<String>) -> serde_json::Value {
-    match retained_role {
-        Some(role_code) => serde_json::json!({
-            "disposition": "retained",
-            "role_code": role_code,
-        }),
-        None => serde_json::json!({
-            "disposition": "withdrawn",
-            "reason": "entity_changed",
-        }),
-    }
+/// A file attribute's local value before and after one write.
+struct FileValueChange<'a> {
+    attribute_id: Uuid,
+    attribute_code: &'a str,
+    context_id: Uuid,
+    before: Vec<Uuid>,
+    after: Vec<Uuid>,
 }
 
 #[derive(Clone, Debug)]
@@ -130,82 +127,28 @@ impl CatalogRepository {
         self.ensure_attribute_unlocked(&mut transaction, &entity, attribute_code, context_id)
             .await?;
 
-        let current_value = sqlx::query_scalar::<_, Uuid>(
-            "SELECT id FROM attribute_values WHERE entity_id = $1 AND attribute_id = $2 AND context_id = $3 AND relationship_target_entity_id IS NULL FOR UPDATE",
-        )
-        .bind(entity_id)
-        .bind(attribute_id)
-        .bind(context_id)
-        .fetch_optional(&mut *transaction)
-        .await?;
-        let current_count =
-            match current_value {
-                Some(value_id) => sqlx::query_scalar::<_, i64>(
-                    "SELECT COUNT(*) FROM attribute_file_references WHERE attribute_value_id = $1",
-                )
-                .bind(value_id)
-                .fetch_one(&mut *transaction)
-                .await?,
-                None => 0,
-            };
+        let current = self
+            .current_file_ids(&mut transaction, entity_id, attribute_id, context_id)
+            .await?;
         if policy.cardinality == "one" && files.len() != 1 {
             return Err(RepositoryError::FileCardinality);
         }
-        if policy.cardinality == "many" && current_count + files.len() as i64 > i32::MAX as i64 {
+        if policy.cardinality == "many" && current.len() + files.len() > i32::MAX as usize {
             return Err(RepositoryError::FileCardinality);
         }
 
-        let value_id = if policy.cardinality == "one" {
-            self.archive_current_value(
-                &mut transaction,
-                entity_id,
-                attribute_id,
-                Some(context_id),
-                None,
-            )
-            .await?;
-            sqlx::query_scalar::<_, Uuid>(
-                "INSERT INTO attribute_values (id, workspace_id, entity_id, attribute_id, context_id, active) VALUES ($1, $2, $3, $4, $5, true) RETURNING id",
-            )
-            .bind(Uuid::new_v4())
-            .bind(self.workspace_id.0)
-            .bind(entity_id)
-            .bind(attribute_id)
-            .bind(context_id)
-            .fetch_one(&mut *transaction)
-            .await?
-        } else if let Some(value_id) = current_value {
-            value_id
+        let mut file_ids = if policy.cardinality == "many" {
+            current.clone()
         } else {
-            sqlx::query_scalar::<_, Uuid>(
-                "INSERT INTO attribute_values (id, workspace_id, entity_id, attribute_id, context_id, active) VALUES ($1, $2, $3, $4, $5, true) RETURNING id",
-            )
-            .bind(Uuid::new_v4())
-            .bind(self.workspace_id.0)
-            .bind(entity_id)
-            .bind(attribute_id)
-            .bind(context_id)
-            .fetch_one(&mut *transaction)
-            .await?
-        };
-        let start_position = if policy.cardinality == "many" {
-            current_count as i32
-        } else {
-            0
+            Vec::new()
         };
         let mut result = Vec::with_capacity(files.len());
-        for (offset, file) in files.into_iter().enumerate() {
+        for file in files {
             let id = Uuid::new_v4();
             let status = "queued".to_owned();
             self.insert_file_in_transaction(&mut transaction, id, &file)
                 .await?;
-            self.insert_attribute_file_reference_in_transaction(
-                &mut transaction,
-                value_id,
-                id,
-                start_position + offset as i32,
-            )
-            .await?;
+            file_ids.push(id);
             result.push(UploadedFile {
                 id,
                 filename: file.display_filename,
@@ -215,16 +158,18 @@ impl CatalogRepository {
                 status,
             });
         }
-        self.revalidate_entity(&mut transaction, &entity).await?;
-        let retained_role = self
-            .reconcile_entity_publication(&mut transaction, entity_id, "entity_changed")
-            .await?;
-        self.write_audit_event_with_publication_metadata(
-            &mut transaction,
-            Some(publication_disposition_metadata(retained_role)),
+        self.replace_file_value(
+            transaction,
+            &entity,
+            FileValueChange {
+                attribute_id,
+                attribute_code,
+                context_id,
+                before: current,
+                after: file_ids,
+            },
         )
         .await?;
-        transaction.commit().await?;
         Ok(FileUploadResult {
             attribute_code: attribute_code.to_owned(),
             context_id,
@@ -281,7 +226,6 @@ impl CatalogRepository {
         expected_file_ids: &[Uuid],
         file_ids: &[Uuid],
     ) -> Result<DateTime<Utc>, RepositoryError> {
-        let workspace_id = self.workspace_id.0;
         let mut transaction = self.pool.begin().await?;
         let entity = self.lock_entity(&mut transaction, entity_id).await?;
         let (attribute_id, policy, context_editable) = self
@@ -294,11 +238,9 @@ impl CatalogRepository {
             .await?;
         self.ensure_attribute_unlocked(&mut transaction, &entity, attribute_code, context_id)
             .await?;
-        let current: Vec<Uuid> = sqlx::query_scalar(
-            "SELECT r.file_id FROM attribute_file_references r JOIN attribute_values v ON v.id = r.attribute_value_id AND v.workspace_id = r.workspace_id WHERE v.entity_id = $1 AND v.attribute_id = $2 AND v.context_id = $3 AND v.workspace_id = $4 ORDER BY r.position, r.file_id",
-        )
-        .bind(entity_id).bind(attribute_id).bind(context_id).bind(workspace_id)
-        .fetch_all(&mut *transaction).await?;
+        let current = self
+            .current_file_ids(&mut transaction, entity_id, attribute_id, context_id)
+            .await?;
         if current != expected_file_ids {
             return Err(RepositoryError::FileReferencesChanged);
         }
@@ -324,43 +266,22 @@ impl CatalogRepository {
             transaction.commit().await?;
             return Ok(entity.updated_at);
         }
-        self.archive_current_value(
-            &mut transaction,
-            entity_id,
-            attribute_id,
-            Some(context_id),
-            None,
-        )
-        .await?;
         // Keep an explicit empty local value: removing every image must not
         // unexpectedly reveal photos inherited from a fallback context.
-        let value_id = Uuid::new_v4();
-        sqlx::query("INSERT INTO attribute_values (id, workspace_id, entity_id, attribute_id, context_id, active) VALUES ($1, $2, $3, $4, $5, true)")
-            .bind(value_id).bind(workspace_id).bind(entity_id).bind(attribute_id).bind(context_id)
-            .execute(&mut *transaction).await?;
-        for (position, file_id) in file_ids.iter().enumerate() {
-            sqlx::query("INSERT INTO attribute_file_references (attribute_value_id, workspace_id, file_id, position) VALUES ($1, $2, $3, $4)")
-                .bind(value_id).bind(workspace_id).bind(file_id).bind(position as i32)
-                .execute(&mut *transaction).await?;
-        }
-        let updated_at: DateTime<Utc> = sqlx::query_scalar(
-            "UPDATE entities SET updated_at = now() WHERE id = $1 AND workspace_id = $2 RETURNING updated_at",
-        )
-        .bind(entity_id)
-        .bind(workspace_id)
-        .fetch_one(&mut *transaction)
-        .await?;
-        self.revalidate_entity(&mut transaction, &entity).await?;
-        let retained_role = self
-            .reconcile_entity_publication(&mut transaction, entity_id, "entity_changed")
+        let updated = self
+            .replace_file_value(
+                transaction,
+                &entity,
+                FileValueChange {
+                    attribute_id,
+                    attribute_code,
+                    context_id,
+                    before: current,
+                    after: file_ids.to_vec(),
+                },
+            )
             .await?;
-        self.write_audit_event_with_publication_metadata(
-            &mut transaction,
-            Some(publication_disposition_metadata(retained_role)),
-        )
-        .await?;
-        transaction.commit().await?;
-        Ok(updated_at)
+        Ok(updated.updated_at)
     }
 
     /// Links an existing workspace file to a file attribute without copying
@@ -385,8 +306,11 @@ impl CatalogRepository {
             .await?;
         self.ensure_attribute_unlocked(&mut transaction, &entity, attribute_code, context_id)
             .await?;
+        // Lock the file so reconciliation, which locks candidates before
+        // marking them deleted, cannot reclaim it before this reference
+        // commits.
         let exists = sqlx::query_scalar::<_, Uuid>(
-            "SELECT id FROM files WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL AND purpose = 'attachment'",
+            "SELECT id FROM files WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL AND purpose = 'attachment' FOR UPDATE",
         )
         .bind(file_id)
         .bind(workspace_id)
@@ -395,82 +319,30 @@ impl CatalogRepository {
         if exists.is_none() {
             return Err(RepositoryError::NotFound("file"));
         }
-        let current_value = sqlx::query_scalar::<_, Uuid>(
-            "SELECT id FROM attribute_values WHERE entity_id = $1 AND attribute_id = $2 AND context_id = $3 AND relationship_target_entity_id IS NULL FOR UPDATE",
-        )
-        .bind(entity_id)
-        .bind(attribute_id)
-        .bind(context_id)
-        .fetch_optional(&mut *transaction)
-        .await?;
-        let count =
-            match current_value {
-                Some(value_id) => sqlx::query_scalar::<_, i64>(
-                    "SELECT COUNT(*) FROM attribute_file_references WHERE attribute_value_id = $1",
-                )
-                .bind(value_id)
-                .fetch_one(&mut *transaction)
-                .await?,
-                None => 0,
-            };
-        if policy.cardinality == "many" && count == i32::MAX as i64 {
+        let current = self
+            .current_file_ids(&mut transaction, entity_id, attribute_id, context_id)
+            .await?;
+        if policy.cardinality == "many" && current.len() >= i32::MAX as usize {
             return Err(RepositoryError::FileCardinality);
         }
-        let value_id = if policy.cardinality == "one" {
-            self.archive_current_value(
-                &mut transaction,
-                entity_id,
+        let mut file_ids = if policy.cardinality == "many" {
+            current.clone()
+        } else {
+            Vec::new()
+        };
+        file_ids.push(file_id);
+        self.replace_file_value(
+            transaction,
+            &entity,
+            FileValueChange {
                 attribute_id,
-                Some(context_id),
-                None,
-            )
-            .await?;
-            sqlx::query_scalar::<_, Uuid>(
-                "INSERT INTO attribute_values (id, workspace_id, entity_id, attribute_id, context_id, active) VALUES ($1, $2, $3, $4, $5, true) RETURNING id",
-            )
-            .bind(Uuid::new_v4())
-            .bind(workspace_id)
-            .bind(entity_id)
-            .bind(attribute_id)
-            .bind(context_id)
-            .fetch_one(&mut *transaction)
-            .await?
-        } else if let Some(value_id) = current_value {
-            value_id
-        } else {
-            sqlx::query_scalar::<_, Uuid>(
-                "INSERT INTO attribute_values (id, workspace_id, entity_id, attribute_id, context_id, active) VALUES ($1, $2, $3, $4, $5, true) RETURNING id",
-            )
-            .bind(Uuid::new_v4())
-            .bind(workspace_id)
-            .bind(entity_id)
-            .bind(attribute_id)
-            .bind(context_id)
-            .fetch_one(&mut *transaction)
-            .await?
-        };
-        let position = if policy.cardinality == "one" {
-            0
-        } else {
-            count as i32
-        };
-        sqlx::query("INSERT INTO attribute_file_references (attribute_value_id, workspace_id, file_id, position) VALUES ($1, $2, $3, $4)")
-            .bind(value_id)
-            .bind(workspace_id)
-            .bind(file_id)
-            .bind(position)
-            .execute(&mut *transaction)
-            .await?;
-        self.revalidate_entity(&mut transaction, &entity).await?;
-        let retained_role = self
-            .reconcile_entity_publication(&mut transaction, entity_id, "entity_changed")
-            .await?;
-        self.write_audit_event_with_publication_metadata(
-            &mut transaction,
-            Some(publication_disposition_metadata(retained_role)),
+                attribute_code,
+                context_id,
+                before: current,
+                after: file_ids,
+            },
         )
         .await?;
-        transaction.commit().await?;
         self.file_metadata(file_id).await
     }
 
@@ -592,6 +464,103 @@ impl CatalogRepository {
             ).bind(file_id).bind(workspace_id).fetch_optional(&self.pool).await?,
         };
         row.ok_or(RepositoryError::NotFound("file"))
+    }
+
+    /// The file IDs of the local value, in position order. The caller holds
+    /// the entity lock, which serializes every writer of its file values.
+    async fn current_file_ids(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        entity_id: Uuid,
+        attribute_id: Uuid,
+        context_id: Uuid,
+    ) -> Result<Vec<Uuid>, RepositoryError> {
+        Ok(sqlx::query_scalar(
+            "SELECT r.file_id FROM attribute_file_references r JOIN attribute_values v ON v.id = r.attribute_value_id AND v.workspace_id = r.workspace_id WHERE v.entity_id = $1 AND v.attribute_id = $2 AND v.context_id = $3 AND v.workspace_id = $4 AND v.relationship_target_entity_id IS NULL ORDER BY r.position, r.file_id",
+        )
+        .bind(entity_id)
+        .bind(attribute_id)
+        .bind(context_id)
+        .bind(self.workspace_id.0)
+        .fetch_all(&mut **transaction)
+        .await?)
+    }
+
+    /// Replaces a file attribute's local value and commits the entity
+    /// mutation. Like [`Self::insert_value`], the previous value row and its
+    /// references are archived, so history keeps every earlier file list,
+    /// even when files are only appended. The change is audited and emitted
+    /// through the shared entity-mutation seam. Returns the stored entity.
+    async fn replace_file_value(
+        &self,
+        mut transaction: Transaction<'_, Postgres>,
+        entity: &Entity,
+        change: FileValueChange<'_>,
+    ) -> Result<Entity, RepositoryError> {
+        let workspace_id = self.workspace_id.0;
+        self.archive_current_value(
+            &mut transaction,
+            entity.id,
+            change.attribute_id,
+            Some(change.context_id),
+            None,
+        )
+        .await?;
+        let value_id = Uuid::new_v4();
+        sqlx::query("INSERT INTO attribute_values (id, workspace_id, entity_id, attribute_id, context_id, active) VALUES ($1, $2, $3, $4, $5, true)")
+            .bind(value_id).bind(workspace_id).bind(entity.id).bind(change.attribute_id).bind(change.context_id)
+            .execute(&mut *transaction).await?;
+        for (position, file_id) in change.after.iter().enumerate() {
+            self.insert_attribute_file_reference_in_transaction(
+                &mut transaction,
+                value_id,
+                *file_id,
+                position as i32,
+            )
+            .await?;
+        }
+        let stored = self.revalidate_entity(&mut transaction, entity).await?;
+        let context_code: String = sqlx::query_scalar(
+            "SELECT code FROM attribute_contexts WHERE id = $1 AND workspace_id = $2",
+        )
+        .bind(change.context_id)
+        .bind(workspace_id)
+        .fetch_one(&mut *transaction)
+        .await?;
+        let file_list = |ids: &[Uuid]| {
+            (!ids.is_empty())
+                .then(|| Value::from(ids.iter().map(Uuid::to_string).collect::<Vec<_>>()))
+        };
+        let before_value = file_list(&change.before);
+        let after_value = file_list(&change.after);
+        let changes = vec![AuditEventChange {
+            entity_id: entity.id,
+            attribute_id: change.attribute_id,
+            attribute_code: change.attribute_code.to_owned(),
+            context_id: Some(change.context_id),
+            context_code: Some(context_code),
+            relationship_target_entity_id: None,
+            change_kind: match (&before_value, &after_value) {
+                (None, _) => "set",
+                (Some(_), None) => "remove",
+                (Some(_), Some(_)) => "replace",
+            },
+            before_value,
+            after_value,
+        }];
+        let event = self.core_event(
+            ATTRIBUTE_VALUE_CHANGED_V1,
+            "entity",
+            entity.id,
+            serde_json::to_value(AttributeValueMutationV1 {
+                entity_id: entity.id,
+                facts: Self::affected_facts(&changes),
+            })
+            .expect("attribute-value-changed payload is serializable"),
+        );
+        self.commit_entity_mutation(transaction, changes, event)
+            .await?;
+        Ok(stored)
     }
 
     pub(super) async fn file_upload_attribute(
