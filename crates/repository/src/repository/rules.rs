@@ -122,6 +122,29 @@ impl CatalogRepository {
             .ok_or(RepositoryError::NotFound("rule"))
     }
 
+    /// Serializes every writer of a rule code in this workspace until the
+    /// transaction ends and returns the families that already use it, as
+    /// `(rule_id, blueprint_id, latest_version)`. A rule code names one family
+    /// per workspace; callers must reject a code owned by another family.
+    pub(super) async fn lock_rule_code(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        code: &str,
+    ) -> Result<Vec<(Uuid, Uuid, i64)>, RepositoryError> {
+        let ws = self.workspace_id.0;
+        sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))")
+            .bind(format!("rule-code:{ws}:{code}"))
+            .execute(&mut **tx)
+            .await?;
+        Ok(sqlx::query_as(
+            "SELECT id, blueprint_id, max(version) FROM rules WHERE workspace_id=$1 AND code=$2 GROUP BY id, blueprint_id",
+        )
+        .bind(ws)
+        .bind(code)
+        .fetch_all(&mut **tx)
+        .await?)
+    }
+
     /// Shared mutation seam for callers that create a rule with a chosen id
     /// as part of a larger transaction, such as seed application.
     pub(super) async fn create_rule_in_transaction(
@@ -151,18 +174,7 @@ impl CatalogRepository {
                 return Err(RepositoryError::InvalidContext);
             }
         }
-        sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))")
-            .bind(format!("rule-code:{ws}:{}", compiled.code))
-            .execute(&mut **tx)
-            .await?;
-        let exists: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM rules WHERE workspace_id=$1 AND code=$2)",
-        )
-        .bind(ws)
-        .bind(&compiled.code)
-        .fetch_one(&mut **tx)
-        .await?;
-        if exists {
+        if !self.lock_rule_code(tx, &compiled.code).await?.is_empty() {
             return Err(RepositoryError::RuleCodeTaken);
         }
         let plan = serde_json::to_value(&compiled)
