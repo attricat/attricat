@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::task_queue::{TaskInsert, TaskKind, TaskStatus};
 
-use super::{CatalogRepository, ClaimedTask, RepositoryError};
+use super::{CatalogRepository, ClaimedTask, RepositoryError, bounded_task_error_message};
 
 const MAX_JSON_BYTES: usize = 64 * 1024;
 const MAX_IDEMPOTENCY_BYTES: usize = 128;
@@ -132,12 +132,13 @@ fn bounded_message(value: &str) -> String {
     // Runtime errors are supplied by untrusted components. Keep structured
     // diagnostics only after applying the same recursive redaction used by
     // management-visible snapshots; opaque trap text is not safe to persist.
+    // The task envelope rejects failure messages over its byte limit, so the
+    // bound is in bytes rather than characters.
     match serde_json::from_str::<Value>(value) {
-        Ok(value) => serde_json::to_string(&redact(&value))
-            .unwrap_or_else(|_| "operation failure (diagnostics redacted)".into())
-            .chars()
-            .take(1024)
-            .collect(),
+        Ok(value) => bounded_task_error_message(
+            &serde_json::to_string(&redact(&value))
+                .unwrap_or_else(|_| "operation failure (diagnostics redacted)".into()),
+        ),
         Err(_) => "operation failure (diagnostics redacted)".into(),
     }
 }
@@ -747,5 +748,13 @@ mod tests {
             bounded_message(r#"{"password":"top-secret","safe":"detail"}"#),
             r#"{"password":"[redacted]","safe":"detail"}"#
         );
+    }
+
+    #[test]
+    fn multibyte_failure_diagnostics_fit_the_task_error_byte_limit() {
+        let message = bounded_message(&json!({"detail": "\u{0105}".repeat(1024)}).to_string());
+        assert!(message.len() <= 1024);
+        assert!(message.starts_with(r#"{"detail":""#));
+        assert!(message.ends_with('\u{0105}'));
     }
 }

@@ -26,6 +26,16 @@ const MAX_LEASE_OWNER_BYTES: usize = 128;
 const MAX_ERROR_CODE_BYTES: usize = 128;
 const MAX_ERROR_MESSAGE_BYTES: usize = 1024;
 
+/// Truncates a task failure message on a UTF-8 boundary so it always fits the
+/// byte limit enforced when a failure is recorded.
+pub fn bounded_task_error_message(message: &str) -> String {
+    let mut end = message.len().min(MAX_ERROR_MESSAGE_BYTES);
+    while !message.is_char_boundary(end) {
+        end -= 1;
+    }
+    message[..end].to_owned()
+}
+
 fn lease_seconds(duration: Duration) -> Result<i64, TaskError> {
     if duration.is_zero() {
         return Err(TaskError::ValueTooLong);

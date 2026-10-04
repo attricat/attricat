@@ -195,7 +195,9 @@ pub use solution_packs::{
     SolutionPackPlan,
 };
 pub use status::{EntityApproval, StatusTransitionAccess};
-pub use tasks::{BackgroundProcessingStatus, ClaimedTask, TaskError, TaskSummary};
+pub use tasks::{
+    BackgroundProcessingStatus, ClaimedTask, TaskError, TaskSummary, bounded_task_error_message,
+};
 pub use teams::{DirectoryTeam, DirectoryUser, Team, WorkspaceDirectory};
 pub use tokens::{AuthenticatedToken, PersonalApiToken};
 pub use upload_intents::AbandonedUpload;

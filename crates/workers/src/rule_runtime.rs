@@ -120,7 +120,7 @@ async fn fail_rule_run(
     task: &crate::repository::ClaimedTask,
     error: RepositoryError,
 ) -> Result<TaskOutcome, TaskHandlerError> {
-    let message = bounded_error_message(&error.to_string());
+    let message = crate::repository::bounded_task_error_message(&error.to_string());
     if scoped
         .fail_rule_run_task(task, &message)
         .await
@@ -135,14 +135,6 @@ async fn fail_rule_run(
             message,
         })
     }
-}
-
-fn bounded_error_message(message: &str) -> String {
-    let mut end = message.len().min(1024);
-    while !message.is_char_boundary(end) {
-        end -= 1;
-    }
-    message[..end].to_owned()
 }
 
 fn task_error(error: RepositoryError) -> TaskHandlerError {

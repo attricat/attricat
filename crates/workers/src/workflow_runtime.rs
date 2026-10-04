@@ -109,7 +109,10 @@ async fn fail_workflow_run(
 ) -> Result<TaskOutcome, TaskHandlerError> {
     if task.failures + 1 >= task.max_failures {
         scoped
-            .dead_letter_workflow_run_task(task, &bounded_error_message(&message))
+            .dead_letter_workflow_run_task(
+                task,
+                &crate::repository::bounded_task_error_message(&message),
+            )
             .await
             .map_err(task_error)?;
         Ok(TaskOutcome::DeadLettered)
@@ -121,14 +124,6 @@ async fn fail_workflow_run(
             message,
         })
     }
-}
-
-fn bounded_error_message(message: &str) -> String {
-    let mut end = message.len().min(1024);
-    while !message.is_char_boundary(end) {
-        end -= 1;
-    }
-    message[..end].to_owned()
 }
 
 fn task_error(error: crate::repository::RepositoryError) -> TaskHandlerError {
