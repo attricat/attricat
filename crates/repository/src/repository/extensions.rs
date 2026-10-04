@@ -548,9 +548,10 @@ impl CatalogRepository {
         &self,
     ) -> Result<Vec<ClientExtensionContribution>, RepositoryError> {
         // Every change to installations, grants, configuration or the
-        // workspace gate advances the extensions generation.
-        if let Some(generations) = self.generations() {
-            let contributions = self
+        // workspace gate advances the extensions generation. The deployment
+        // policy does not, so it is applied to the cached list on every read.
+        let mut contributions = match self.generations() {
+            Some(generations) => self
                 .cache
                 .fetch(
                     CacheKey::new(
@@ -562,17 +563,25 @@ impl CatalogRepository {
                     ),
                     &[],
                     Policy::Generation,
-                    || self.enabled_client_contributions_of(None),
+                    || self.unfiltered_client_contributions_of(None),
                 )
-                .await?;
-            return Ok(contributions.as_ref().clone());
-        }
-        self.enabled_client_contributions_of(None).await
+                .await?
+                .as_ref()
+                .clone(),
+            None => self.unfiltered_client_contributions_of(None).await?,
+        };
+        contributions.retain(|contribution| {
+            extension_policy::allows(
+                &contribution.extension_id,
+                contribution.installed_release_id,
+            )
+        });
+        Ok(contributions)
     }
 
-    /// [`Self::enabled_client_extension_contributions`], optionally of one
-    /// extension only.
-    async fn enabled_client_contributions_of(
+    /// Enabled installations' contributions, optionally of one extension only,
+    /// before the deployment policy is applied.
+    async fn unfiltered_client_contributions_of(
         &self,
         extension_id: Option<&str>,
     ) -> Result<Vec<ClientExtensionContribution>, RepositoryError> {
@@ -586,9 +595,6 @@ impl CatalogRepository {
         .await?;
         let mut contributions = Vec::new();
         for (extension_id, installed_release_id, configuration, capabilities) in rows {
-            if !extension_policy::allows(&extension_id, installed_release_id) {
-                continue;
-            }
             let client_configuration = if capabilities
                 .iter()
                 .any(|capability| capability == "configuration.read")
@@ -597,7 +603,17 @@ impl CatalogRepository {
             } else {
                 json!({})
             };
-            let manifest = self.cached_release_manifest(installed_release_id).await?;
+            let manifest = match self.cached_release_manifest(installed_release_id).await {
+                Ok(manifest) => manifest,
+                // Denying a release must still quarantine a defective
+                // manifest; callers filter that release out anyway.
+                Err(RepositoryError::InvalidExtension(_))
+                    if !extension_policy::allows(&extension_id, installed_release_id) =>
+                {
+                    continue;
+                }
+                Err(error) => return Err(error),
+            };
             let extension_name = manifest.name.clone();
             for contribution in manifest.ui.iter().cloned() {
                 contributions.push(ClientExtensionContribution {
@@ -872,11 +888,13 @@ impl CatalogRepository {
         extension_id: &str,
         contribution_id: &str,
     ) -> Result<ClientExtensionContribution, RepositoryError> {
-        self.enabled_client_contributions_of(Some(extension_id))
+        self.unfiltered_client_contributions_of(Some(extension_id))
             .await?
             .into_iter()
             .find(|contribution| {
-                contribution.extension_id == extension_id && contribution.id == contribution_id
+                contribution.extension_id == extension_id
+                    && contribution.id == contribution_id
+                    && extension_policy::allows(extension_id, contribution.installed_release_id)
             })
             .ok_or(RepositoryError::NotFound("enabled extension contribution"))
     }
