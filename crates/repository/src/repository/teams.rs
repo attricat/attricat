@@ -334,43 +334,89 @@ impl CatalogRepository {
         let Some(contexts) = after.as_object() else {
             return Ok(());
         };
-        for (code, schema) in attributes {
+        // Validate in attribute/context order, stopping at the first schema
+        // failure, then check every referenced principal with one query per
+        // kind. Errors are reported in the same order as checking each value.
+        let mut checked = Vec::new();
+        let mut schema_failure = None;
+        'values: for (code, schema) in &attributes {
             for (context, values) in contexts {
-                let Some(value) = values.get(&code).filter(|value| !value.is_null()) else {
+                let Some(value) = values.get(code).filter(|value| !value.is_null()) else {
                     continue;
                 };
-                if before.get(context).and_then(|values| values.get(&code)) == Some(value) {
+                if before.get(context).and_then(|values| values.get(code)) == Some(value) {
                     continue;
                 }
-                let mismatch = |message: String| RepositoryError::AttributeValueSchemaMismatch {
-                    attribute: code.clone(),
-                    instance_path: String::new(),
-                    message: format!("{message} (context: {context})"),
-                };
-                validate_principal_value(&schema, value).map_err(mismatch)?;
+                if let Err(message) = validate_principal_value(schema, value) {
+                    schema_failure = Some((code.clone(), context.clone(), message));
+                    break 'values;
+                }
                 let reference = value
                     .as_str()
                     .and_then(PrincipalRef::parse)
                     .expect("validated reference");
-                let exists: bool = match reference.kind {
-                    PrincipalKind::User => sqlx::query_scalar(
-                        "SELECT EXISTS (SELECT 1 FROM workspace_memberships m JOIN users u ON u.id = m.user_id WHERE m.workspace_id = $1 AND m.user_id = $2 AND m.state = 'active' AND u.state = 'active')",
-                    ),
-                    PrincipalKind::Team => sqlx::query_scalar(
-                        "SELECT EXISTS (SELECT 1 FROM teams WHERE workspace_id = $1 AND id = $2 AND deleted_at IS NULL)",
-                    ),
-                }
-                .bind(self.workspace_id.0)
-                .bind(reference.id)
-                .fetch_one(&mut **transaction)
-                .await?;
-                if !exists {
-                    return Err(mismatch(match reference.kind {
+                checked.push((code.clone(), context.clone(), reference));
+            }
+        }
+        let ids = |kind: PrincipalKind| {
+            checked
+                .iter()
+                .filter(|(.., reference)| reference.kind == kind)
+                .map(|(.., reference)| reference.id)
+                .collect::<Vec<_>>()
+        };
+        let (users, teams) = (ids(PrincipalKind::User), ids(PrincipalKind::Team));
+        let active_users: HashSet<Uuid> = if users.is_empty() {
+            HashSet::new()
+        } else {
+            sqlx::query_scalar::<_, Uuid>(
+                "SELECT m.user_id FROM workspace_memberships m JOIN users u ON u.id = m.user_id WHERE m.workspace_id = $1 AND m.user_id = ANY($2) AND m.state = 'active' AND u.state = 'active'",
+            )
+            .bind(self.workspace_id.0)
+            .bind(&users)
+            .fetch_all(&mut **transaction)
+            .await?
+            .into_iter()
+            .collect()
+        };
+        let existing_teams: HashSet<Uuid> = if teams.is_empty() {
+            HashSet::new()
+        } else {
+            sqlx::query_scalar::<_, Uuid>(
+                "SELECT id FROM teams WHERE workspace_id = $1 AND id = ANY($2) AND deleted_at IS NULL",
+            )
+            .bind(self.workspace_id.0)
+            .bind(&teams)
+            .fetch_all(&mut **transaction)
+            .await?
+            .into_iter()
+            .collect()
+        };
+        let mismatch = |code: &str, context: &str, message: String| {
+            RepositoryError::AttributeValueSchemaMismatch {
+                attribute: code.to_owned(),
+                instance_path: String::new(),
+                message: format!("{message} (context: {context})"),
+            }
+        };
+        for (code, context, reference) in &checked {
+            let exists = match reference.kind {
+                PrincipalKind::User => active_users.contains(&reference.id),
+                PrincipalKind::Team => existing_teams.contains(&reference.id),
+            };
+            if !exists {
+                return Err(mismatch(
+                    code,
+                    context,
+                    match reference.kind {
                         PrincipalKind::User => "user is not an active workspace member".into(),
                         PrincipalKind::Team => "team does not exist in this workspace".into(),
-                    }));
-                }
+                    },
+                ));
             }
+        }
+        if let Some((code, context, message)) = schema_failure {
+            return Err(mismatch(&code, &context, message));
         }
         Ok(())
     }

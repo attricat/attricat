@@ -9,8 +9,11 @@
 //! Published blueprint attributes are immutable, and entity-scoped attributes
 //! change only under the entity lock the writer already holds.
 
+use std::collections::{BTreeMap, HashSet};
+
 use serde_json::Value;
 use sqlx::{PgConnection, Postgres, Transaction};
+use tokio::sync::OnceCell;
 use uuid::Uuid;
 
 use super::{
@@ -31,6 +34,8 @@ pub(super) struct WriteAttribute {
     pub context_editable: String,
     pub context_fallback: String,
     pub default_value: Option<Value>,
+    /// Attached to the entity itself rather than a blueprint column.
+    pub entity_scoped: bool,
 }
 
 impl WriteAttribute {
@@ -45,6 +50,19 @@ impl WriteAttribute {
 pub(super) struct WriteContext {
     pub tree: ContextTree,
     attributes: Vec<WriteAttribute>,
+    /// Read on first use by a relationship write.
+    family: OnceCell<FamilyConstraints>,
+}
+
+/// Relationship constraints of the entity's blueprint family. They follow
+/// the latest published revision, so they are read once per operation
+/// rather than per relationship target.
+#[derive(Clone, Debug, Default)]
+pub(super) struct FamilyConstraints {
+    /// Hierarchy kind (`tree`, `dag`) per relationship field code.
+    pub hierarchies: BTreeMap<String, String>,
+    /// Field codes some published revision limits to one source per target.
+    pub target_one_codes: HashSet<String>,
 }
 
 impl WriteContext {
@@ -55,7 +73,55 @@ impl WriteContext {
     ) -> Result<Self, RepositoryError> {
         let tree = ContextTree::load(transaction, workspace_id).await?;
         let attributes = Self::load_attributes(transaction, entity).await?;
-        Ok(Self { tree, attributes })
+        Ok(Self {
+            tree,
+            attributes,
+            family: OnceCell::new(),
+        })
+    }
+
+    pub(super) async fn family_constraints(
+        &self,
+        connection: &mut PgConnection,
+        workspace_id: Uuid,
+        blueprint_id: Uuid,
+    ) -> Result<&FamilyConstraints, RepositoryError> {
+        self.family
+            .get_or_try_init(|| async {
+                let hierarchies = sqlx::query_as::<_, (String, String)>(
+                    r#"SELECT a.code, a.hierarchy
+                       FROM attributes a
+                       WHERE a.workspace_id = $1 AND a.hierarchy IS NOT NULL AND a.deleted_at IS NULL
+                         AND (a.blueprint_id, a.blueprint_version) = (
+                             SELECT b.id, b.version FROM blueprints b
+                             WHERE b.workspace_id = $1 AND b.id = $2 AND b.status = 'published' AND b.deleted_at IS NULL
+                             ORDER BY b.version DESC LIMIT 1)"#,
+                )
+                .bind(workspace_id)
+                .bind(blueprint_id)
+                .fetch_all(&mut *connection)
+                .await?
+                .into_iter()
+                .collect();
+                let target_one_codes = sqlx::query_scalar::<_, String>(
+                    "SELECT DISTINCT a.code FROM attributes a JOIN blueprints b ON b.id = a.blueprint_id AND b.version = a.blueprint_version WHERE a.blueprint_id = $1 AND a.target_cardinality = 'one' AND a.workspace_id = $2 AND a.deleted_at IS NULL AND b.status = 'published' AND b.deleted_at IS NULL",
+                )
+                .bind(blueprint_id)
+                .bind(workspace_id)
+                .fetch_all(&mut *connection)
+                .await?
+                .into_iter()
+                .collect();
+                Ok::<_, RepositoryError>(FamilyConstraints {
+                    hierarchies,
+                    target_one_codes,
+                })
+            })
+            .await
+    }
+
+    pub(super) fn by_id(&self, id: Uuid) -> Option<&WriteAttribute> {
+        self.attributes.iter().find(|attribute| attribute.id == id)
     }
 
     async fn load_attributes(
@@ -65,7 +131,8 @@ impl WriteContext {
         Ok(sqlx::query_as::<_, WriteAttribute>(
             r#"SELECT id, code, value_type, value_schema,
                       CASE WHEN cardinality(target_blueprint_codes) > 0 THEN target_blueprint_codes WHEN target_blueprint_code IS NULL THEN '{}'::text[] ELSE ARRAY[target_blueprint_code] END AS target_blueprint_codes,
-                      cardinality, target_cardinality, context_editable, context_fallback, default_value
+                      cardinality, target_cardinality, context_editable, context_fallback, default_value,
+                      entity_id IS NOT NULL AS entity_scoped
                FROM attributes
                WHERE ((blueprint_id = $1 AND blueprint_version = $2) OR entity_id = $3)
                  AND deleted_at IS NULL

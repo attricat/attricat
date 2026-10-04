@@ -750,14 +750,8 @@ impl CatalogRepository {
             // Relationship writes are set operations; sorting target IDs gives
             // every concurrent writer the same target-lock order.
             let targets: BTreeSet<_> = relationship.target_entity_ids.into_iter().collect();
-            for target_id in &targets {
-                self.validate_relationship_target(
-                    &mut transaction,
-                    *target_id,
-                    &target_blueprint_codes,
-                )
+            self.validate_relationship_targets(&mut transaction, &targets, &target_blueprint_codes)
                 .await?;
-            }
 
             let current = self
                 .current_relationship_targets(&mut transaction, entity.id, attribute_id, context_id)
@@ -771,7 +765,8 @@ impl CatalogRepository {
                 values.push(
                     self.insert_relationship_value(
                         &mut transaction,
-                        entity.id,
+                        &write,
+                        &entity,
                         attribute_id,
                         context_id,
                         target_id,
@@ -785,7 +780,8 @@ impl CatalogRepository {
                     values.push(
                         self.insert_relationship_value(
                             &mut transaction,
-                            entity.id,
+                            &write,
+                            &entity,
                             attribute_id,
                             context_id,
                             *target_id,
@@ -831,17 +827,16 @@ impl CatalogRepository {
                 Self::relationship_attribute(write, &relationship)?;
             write.ensure_editable(context_id, &context_editable)?;
             let targets: BTreeSet<_> = relationship.target_entity_ids.into_iter().collect();
-            for target_id in &targets {
-                self.validate_relationship_target(transaction, *target_id, &target_blueprint_codes)
-                    .await?;
-            }
+            self.validate_relationship_targets(transaction, &targets, &target_blueprint_codes)
+                .await?;
             let current = self
                 .current_relationship_targets(transaction, entity.id, attribute_id, context_id)
                 .await?;
             for target_id in current.difference(&targets) {
                 self.insert_relationship_value(
                     transaction,
-                    entity.id,
+                    write,
+                    entity,
                     attribute_id,
                     context_id,
                     *target_id,
@@ -852,7 +847,8 @@ impl CatalogRepository {
             for target_id in targets.difference(&current) {
                 self.insert_relationship_value(
                     transaction,
-                    entity.id,
+                    write,
+                    entity,
                     attribute_id,
                     context_id,
                     *target_id,
@@ -882,7 +878,7 @@ impl CatalogRepository {
             let prepared = Self::prepare_value(write, value)?;
             if prepared.relationship.is_some() {
                 inserted.push(Some(
-                    self.write_prepared_value(transaction, entity, prepared)
+                    self.write_prepared_value(transaction, write, entity, prepared)
                         .await?,
                 ));
             } else {
@@ -908,7 +904,7 @@ impl CatalogRepository {
             // the same write, exactly as one-at-a-time writes do.
             for (position, prepared) in scalars {
                 inserted[position] = Some(
-                    self.write_prepared_value(transaction, entity, prepared)
+                    self.write_prepared_value(transaction, write, entity, prepared)
                         .await?,
                 );
             }
@@ -939,7 +935,7 @@ impl CatalogRepository {
         value: NewAttributeValue,
     ) -> Result<AttributeValue, RepositoryError> {
         let prepared = Self::prepare_value(write, value)?;
-        self.write_prepared_value(transaction, entity, prepared)
+        self.write_prepared_value(transaction, write, entity, prepared)
             .await
     }
 
@@ -1030,6 +1026,7 @@ impl CatalogRepository {
     async fn write_prepared_value(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
+        write: &WriteContext,
         entity: &Entity,
         prepared: PreparedValue,
     ) -> Result<AttributeValue, RepositoryError> {
@@ -1052,6 +1049,7 @@ impl CatalogRepository {
             .await?;
             self.validate_relationship_cardinality(
                 transaction,
+                write,
                 CardinalityCheck {
                     entity,
                     attribute_id,
@@ -1439,6 +1437,40 @@ impl CatalogRepository {
         Ok(())
     }
 
+    /// [`Self::validate_relationship_target`] for a set of targets in one
+    /// query, reporting the first failing target in set order.
+    async fn validate_relationship_targets(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        targets: &BTreeSet<Uuid>,
+        allowed_target_blueprints: &[String],
+    ) -> Result<(), RepositoryError> {
+        if targets.is_empty() {
+            return Ok(());
+        }
+        let ids: Vec<Uuid> = targets.iter().copied().collect();
+        let codes: HashMap<Uuid, String> = sqlx::query_as::<_, (Uuid, String)>(
+            r#"SELECT e.id, b.code FROM entities e JOIN blueprints b ON b.id = e.blueprint_id AND b.version = e.blueprint_version
+               WHERE e.id = ANY($1) AND e.workspace_id = $2 AND e.deleted_at IS NULL"#,
+        )
+        .bind(&ids)
+        .bind(self.workspace_id.0)
+        .fetch_all(&mut **transaction)
+        .await?
+        .into_iter()
+        .collect();
+        for target in &ids {
+            let code = codes
+                .get(target)
+                .ok_or(RepositoryError::NotFound("relationship target entity"))?;
+            // An empty set accepts any entity blueprint.
+            if !allowed_target_blueprints.is_empty() && !allowed_target_blueprints.contains(code) {
+                return Err(RepositoryError::RelationshipTargetTypeMismatch);
+            }
+        }
+        Ok(())
+    }
+
     async fn current_relationship_targets(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
@@ -1483,6 +1515,7 @@ impl CatalogRepository {
     async fn validate_relationship_cardinality(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
+        write: &WriteContext,
         check: CardinalityCheck<'_>,
     ) -> Result<(), RepositoryError> {
         let CardinalityCheck {
@@ -1496,6 +1529,7 @@ impl CatalogRepository {
         } = check;
         self.validate_relationship_hierarchy(
             transaction,
+            write,
             entity,
             attribute_id,
             attribute_code,
@@ -1503,18 +1537,12 @@ impl CatalogRepository {
             target_entity_id,
         )
         .await?;
-        let target_is_one = if target_cardinality == "one" {
-            true
-        } else {
-            sqlx::query_scalar::<_, bool>(
-                "SELECT EXISTS (SELECT 1 FROM attributes a JOIN blueprints b ON b.id = a.blueprint_id AND b.version = a.blueprint_version WHERE a.blueprint_id = $1 AND a.code = $2 AND a.target_cardinality = 'one' AND a.workspace_id = $3 AND a.deleted_at IS NULL AND b.status = 'published' AND b.deleted_at IS NULL)",
-            )
-            .bind(entity.blueprint_id)
-            .bind(attribute_code)
-            .bind(self.workspace_id.0)
-            .fetch_one(&mut **transaction)
-            .await?
-        };
+        let target_is_one = target_cardinality == "one"
+            || write
+                .family_constraints(transaction, self.workspace_id.0, entity.blueprint_id)
+                .await?
+                .target_one_codes
+                .contains(attribute_code);
         if cardinality != "one" && !target_is_one {
             return Ok(());
         }
@@ -1588,35 +1616,34 @@ impl CatalogRepository {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn insert_relationship_value(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
-        entity_id: Uuid,
+        write: &WriteContext,
+        entity: &Entity,
         attribute_id: Uuid,
         context_id: Option<Uuid>,
         target_entity_id: Uuid,
         active: bool,
     ) -> Result<AttributeValue, RepositoryError> {
+        // The caller holds the entity lock and resolved the attribute from
+        // the same write context.
+        let entity_id = entity.id;
         if active {
-            let entity = self.lock_entity(transaction, entity_id).await?;
-            let (attribute_code, cardinality, target_cardinality) = sqlx::query_as::<_, (String, Option<String>, Option<String>)>(
-                "SELECT code, cardinality, target_cardinality FROM attributes WHERE id = $1 AND ((blueprint_id = $2 AND blueprint_version = $3) OR entity_id = $4) AND value_type = 'relationship'",
-            )
-            .bind(attribute_id)
-            .bind(entity.blueprint_id)
-            .bind(entity.blueprint_version)
-            .bind(entity.id)
-            .fetch_optional(&mut **transaction)
-            .await?
-            .ok_or(RepositoryError::AttributeNotApplicable)?;
+            let attribute = write
+                .by_id(attribute_id)
+                .filter(|attribute| attribute.value_type == "relationship")
+                .ok_or(RepositoryError::AttributeNotApplicable)?;
             self.validate_relationship_cardinality(
                 transaction,
+                write,
                 CardinalityCheck {
-                    entity: &entity,
+                    entity,
                     attribute_id,
-                    attribute_code: &attribute_code,
-                    cardinality: cardinality.as_deref().unwrap_or("many"),
-                    target_cardinality: target_cardinality.as_deref().unwrap_or("many"),
+                    attribute_code: &attribute.code,
+                    cardinality: attribute.cardinality.as_deref().unwrap_or("many"),
+                    target_cardinality: attribute.target_cardinality.as_deref().unwrap_or("many"),
                     context_id,
                     target_entity_id,
                 },

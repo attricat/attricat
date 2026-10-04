@@ -33,6 +33,7 @@ use uuid::Uuid;
 use super::record_values::{
     ContextTree, RecordState, RecordValues, Selection, load_records, resolve_on_path,
 };
+use super::write_context::WriteContext;
 use super::{CatalogRepository, RepositoryError};
 use crate::model::Entity;
 
@@ -425,9 +426,11 @@ impl CatalogRepository {
     /// blueprint family's field count; the latest published revision decides
     /// whether the field is a hierarchy. The edge is checked in every context
     /// whose resolved value of the field it becomes.
+    #[allow(clippy::too_many_arguments)]
     pub(super) async fn validate_relationship_hierarchy(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
+        write: &WriteContext,
         entity: &Entity,
         attribute_id: Uuid,
         attribute_code: &str,
@@ -435,21 +438,19 @@ impl CatalogRepository {
         target_entity_id: Uuid,
     ) -> Result<(), RepositoryError> {
         // Entity-scoped reusable attributes are not part of a blueprint field.
-        let Some(context_fallback) = sqlx::query_scalar::<_, String>(
-            "SELECT context_fallback FROM attributes WHERE id = $1 AND workspace_id = $2 AND blueprint_id = $3",
-        )
-        .bind(attribute_id)
-        .bind(self.workspace_id.0)
-        .bind(entity.blueprint_id)
-        .fetch_optional(&mut **transaction)
-        .await?
+        let Some(context_fallback) = write
+            .by_id(attribute_id)
+            .filter(|attribute| !attribute.entity_scoped)
+            .map(|attribute| attribute.context_fallback.clone())
         else {
             return Ok(());
         };
-        let Some(hierarchy) = self
-            .enforced_hierarchies(transaction, entity.blueprint_id)
+        let Some(hierarchy) = write
+            .family_constraints(transaction, self.workspace_id.0, entity.blueprint_id)
             .await?
-            .remove(attribute_code)
+            .hierarchies
+            .get(attribute_code)
+            .cloned()
         else {
             return Ok(());
         };
@@ -490,7 +491,7 @@ impl CatalogRepository {
                 path: vec![entity.id, entity.id],
             });
         }
-        let tree = ContextTree::load(transaction, self.workspace_id.0).await?;
+        let tree = &write.tree;
         let written = match context_id {
             Some(context_id) => context_id,
             None => tree.default_context()?.id,
@@ -522,7 +523,7 @@ impl CatalogRepository {
             if let HierarchyWalk::Cycle(path) = walk_hierarchy(
                 transaction,
                 self.workspace_id.0,
-                &tree,
+                tree,
                 context.id,
                 &field,
                 &[target_entity_id],
