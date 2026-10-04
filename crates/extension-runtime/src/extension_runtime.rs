@@ -22,6 +22,7 @@ use reqwest::{Client, Method, redirect::Policy};
 use url::Url;
 
 use async_trait::async_trait;
+use catalog_repository::round_trips::measure;
 use semver::{Version, VersionReq};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -2079,39 +2080,45 @@ pub fn start_event_delivery_coordinator(
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         loop {
-            for workspace_id in repository.active_workspace_ids().await.unwrap_or_default() {
-                let result = async {
-                    let scoped = repository.for_workspace(workspace_id).await?;
-                    // Incomplete operation output has no committed object key;
-                    // this periodic lifecycle sweep makes interrupted streams
-                    // unavailable even when no subsequent operation task runs.
-                    scoped.expire_extension_operation_storage().await?;
-                    scoped.abort_stale_extension_operation_artifacts().await?;
-                    for key in scoped
-                        .pending_extension_operation_object_deletions()
-                        .await?
-                    {
-                        if object_store.delete(&key).await.is_ok() {
-                            scoped
-                                .confirm_extension_operation_object_deletion(&key)
-                                .await?;
+            measure("worker:extension_coordinator", async {
+                for workspace_id in repository.active_workspace_ids().await.unwrap_or_default() {
+                    let result = async {
+                        let scoped = repository.for_workspace(workspace_id).await?;
+                        // Incomplete operation output has no committed object key;
+                        // this periodic lifecycle sweep makes interrupted streams
+                        // unavailable even when no subsequent operation task runs.
+                        scoped.expire_extension_operation_storage().await?;
+                        scoped.abort_stale_extension_operation_artifacts().await?;
+                        for key in scoped
+                            .pending_extension_operation_object_deletions()
+                            .await?
+                        {
+                            if object_store.delete(&key).await.is_ok() {
+                                scoped
+                                    .confirm_extension_operation_object_deletion(&key)
+                                    .await?;
+                            }
                         }
+                        scoped.produce_due_extension_operation_schedules().await?;
+                        scoped.produce_due_blueprint_connector_jobs().await?;
+                        scoped
+                            .ensure_event_consumer("catalog.extensions.wasm", &[])
+                            .await?;
+                        let event_types = scoped.enabled_extension_event_types().await?;
+                        scoped
+                            .materialize_event_delivery_tasks(
+                                "catalog.extensions.wasm",
+                                &event_types,
+                            )
+                            .await
                     }
-                    scoped.produce_due_extension_operation_schedules().await?;
-                    scoped.produce_due_blueprint_connector_jobs().await?;
-                    scoped
-                        .ensure_event_consumer("catalog.extensions.wasm", &[])
-                        .await?;
-                    let event_types = scoped.enabled_extension_event_types().await?;
-                    scoped
-                        .materialize_event_delivery_tasks("catalog.extensions.wasm", &event_types)
-                        .await
+                    .await;
+                    if let Err(error) = result {
+                        tracing::error!(%error, "extension event-delivery intake failed");
+                    }
                 }
-                .await;
-                if let Err(error) = result {
-                    tracing::error!(%error, "extension event-delivery intake failed");
-                }
-            }
+            })
+            .await;
             tokio::select! {
                 _ = tokio::time::sleep(Duration::from_millis(250)) => {},
                 _ = shutdown.changed() => return,

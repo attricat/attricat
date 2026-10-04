@@ -7,6 +7,7 @@ use std::{
 use catalog_repository::repository::{
     RepositoryError, SystemRepository, ValueHistoryRetentionDays,
 };
+use catalog_repository::round_trips::measure;
 use catalog_storage::{ObjectStore, ObjectStoreError};
 use tokio::sync::watch;
 
@@ -28,7 +29,7 @@ pub fn start(
                 _ = tick.tick() => {
                     tokio::select! {
                         _ = shutdown.changed() => break,
-                        _ = run_once(&repository, store.as_ref(), retention) => {}
+                        _ = measure("worker:maintenance", run_once(&repository, store.as_ref(), retention)) => {}
                     }
                 }
             }

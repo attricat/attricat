@@ -284,7 +284,11 @@ async fn server_timing(
         register_request_timing(id.clone(), timing.clone());
     }
     let started_at = Instant::now();
-    let mut response = next.run(request).instrument(span.clone()).await;
+    let mut response = catalog_repository::round_trips::measure(
+        format!("{method} {route}"),
+        next.run(request).instrument(span.clone()),
+    )
+    .await;
     let status = response.status().as_u16();
     let duration_ms = started_at.elapsed().as_secs_f64() * 1_000.0;
     span.record("status", status)

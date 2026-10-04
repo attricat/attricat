@@ -6,6 +6,7 @@
 use std::{collections::HashSet, env, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
+use catalog_repository::round_trips::measure;
 use uuid::Uuid;
 
 use crate::{
@@ -183,7 +184,12 @@ pub fn start(
         let mut shutdown = shutdown.clone();
         tokio::spawn(async move {
             loop {
-                let delay = match dispatch_handler(&repository, handler.as_ref(), &config).await {
+                let delay = match measure(
+                    format!("worker:event_dispatcher:{}", handler.name()),
+                    dispatch_handler(&repository, handler.as_ref(), &config),
+                )
+                .await
+                {
                     Ok(()) => config.poll_interval,
                     Err(error) => {
                         tracing::error!(handler = handler.name(), %error, "event handler poll failed");

@@ -15,4 +15,5 @@ pub mod extension_registry;
 pub mod file_access;
 mod persistence_rows;
 pub mod repository;
+pub mod round_trips;
 pub mod solution_pack_extensions;

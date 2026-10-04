@@ -8,6 +8,7 @@ use crate::{
     task_worker::{TaskHandler, TaskHandlerError, TaskOutcome},
 };
 use async_trait::async_trait;
+use catalog_repository::round_trips::measure;
 use serde_json::Value;
 use std::{sync::Arc, time::Duration};
 use tokio::sync::watch;
@@ -139,34 +140,38 @@ pub fn start_schedule_coordinator(
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         loop {
-            let (workspaces, delay) = match repository.active_workspace_ids().await {
-                Ok(workspaces) => {
-                    metrics::gauge!("catalog_schedule_coordinator_healthy", "kind" => "workflow")
-                        .set(1.0);
-                    (workspaces, Duration::from_millis(250))
-                }
-                Err(error) => {
-                    metrics::gauge!("catalog_schedule_coordinator_healthy", "kind" => "workflow")
-                        .set(0.0);
-                    tracing::warn!(%error, "workflow scheduler cannot discover workspaces");
-                    (Vec::new(), Duration::from_secs(5))
-                }
-            };
-            for workspace in workspaces {
-                match repository.for_workspace(workspace).await {
-                    Ok(scoped) => {
-                        if let Err(error) = scoped.backfill_workflow_tasks().await {
-                            tracing::error!(%error, "workflow task backfill failed");
-                        }
-                        if let Err(error) = scoped.schedule_workflow_runs().await {
-                            tracing::error!(%error, "workflow schedule poll failed");
-                        }
+            let delay = measure("worker:workflow_schedule", async {
+                let (workspaces, delay) = match repository.active_workspace_ids().await {
+                    Ok(workspaces) => {
+                        metrics::gauge!("catalog_schedule_coordinator_healthy", "kind" => "workflow")
+                            .set(1.0);
+                        (workspaces, Duration::from_millis(250))
                     }
                     Err(error) => {
-                        tracing::error!(%error, "workflow scheduler workspace scope failed")
+                        metrics::gauge!("catalog_schedule_coordinator_healthy", "kind" => "workflow")
+                            .set(0.0);
+                        tracing::warn!(%error, "workflow scheduler cannot discover workspaces");
+                        (Vec::new(), Duration::from_secs(5))
+                    }
+                };
+                for workspace in workspaces {
+                    match repository.for_workspace(workspace).await {
+                        Ok(scoped) => {
+                            if let Err(error) = scoped.backfill_workflow_tasks().await {
+                                tracing::error!(%error, "workflow task backfill failed");
+                            }
+                            if let Err(error) = scoped.schedule_workflow_runs().await {
+                                tracing::error!(%error, "workflow schedule poll failed");
+                            }
+                        }
+                        Err(error) => {
+                            tracing::error!(%error, "workflow scheduler workspace scope failed")
+                        }
                     }
                 }
-            }
+                delay
+            })
+            .await;
             tokio::select! { _ = tokio::time::sleep(delay) => {}, _ = shutdown.changed() => return }
         }
     })

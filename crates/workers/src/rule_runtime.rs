@@ -10,6 +10,7 @@ use crate::{
     task_worker::{TaskHandler, TaskHandlerError, TaskOutcome},
 };
 use async_trait::async_trait;
+use catalog_repository::round_trips::measure;
 use chrono::Utc;
 use std::{sync::Arc, time::Duration};
 use tokio::sync::watch;
@@ -189,32 +190,38 @@ pub fn start_schedule_coordinator(
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         loop {
-            let (workspaces, delay) = match repository.active_workspace_ids().await {
-                Ok(workspaces) => {
-                    metrics::gauge!("catalog_schedule_coordinator_healthy", "kind" => "rule")
-                        .set(1.0);
-                    (workspaces, Duration::from_millis(250))
-                }
-                Err(error) => {
-                    metrics::gauge!("catalog_schedule_coordinator_healthy", "kind" => "rule")
-                        .set(0.0);
-                    tracing::warn!(%error, "rule scheduler cannot discover workspaces");
-                    (Vec::new(), Duration::from_secs(5))
-                }
-            };
-            for workspace in workspaces {
-                match repository.for_workspace(workspace).await {
-                    Ok(scoped) => {
-                        if let Err(error) = scoped.backfill_rule_tasks().await {
-                            tracing::error!(%error, "rule task backfill failed");
+            let delay = measure("worker:rule_schedule", async {
+                let (workspaces, delay) = match repository.active_workspace_ids().await {
+                    Ok(workspaces) => {
+                        metrics::gauge!("catalog_schedule_coordinator_healthy", "kind" => "rule")
+                            .set(1.0);
+                        (workspaces, Duration::from_millis(250))
+                    }
+                    Err(error) => {
+                        metrics::gauge!("catalog_schedule_coordinator_healthy", "kind" => "rule")
+                            .set(0.0);
+                        tracing::warn!(%error, "rule scheduler cannot discover workspaces");
+                        (Vec::new(), Duration::from_secs(5))
+                    }
+                };
+                for workspace in workspaces {
+                    match repository.for_workspace(workspace).await {
+                        Ok(scoped) => {
+                            if let Err(error) = scoped.backfill_rule_tasks().await {
+                                tracing::error!(%error, "rule task backfill failed");
+                            }
+                            if let Err(error) = scoped.schedule_rule_runs().await {
+                                tracing::error!(%error, "rule schedule poll failed");
+                            }
                         }
-                        if let Err(error) = scoped.schedule_rule_runs().await {
-                            tracing::error!(%error, "rule schedule poll failed");
+                        Err(error) => {
+                            tracing::error!(%error, "rule scheduler workspace scope failed")
                         }
                     }
-                    Err(error) => tracing::error!(%error, "rule scheduler workspace scope failed"),
                 }
-            }
+                delay
+            })
+            .await;
             tokio::select! { _ = tokio::time::sleep(delay) => {}, _ = shutdown.changed() => return }
         }
     })

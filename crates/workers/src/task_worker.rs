@@ -12,6 +12,7 @@ use std::{
 };
 
 use async_trait::async_trait;
+use catalog_repository::round_trips::measure;
 use chrono::Utc;
 use metrics::{counter, gauge, histogram};
 use tokio::{sync::watch, task::JoinSet, time};
@@ -155,27 +156,33 @@ async fn run(
         while running.len() < config.concurrency {
             // Claim one registered kind at a time so the lease used at claim
             // is the registered per-kind policy, not a truncated global value.
-            let mut claimed = None;
-            for offset in 0..kinds.len() {
-                let index = (next_kind + offset) % kinds.len();
-                let kind = kinds[index];
-                match repository
-                    .claim_task_for_kinds(&config.worker_id, kind.policy().lease_duration, &[kind])
-                    .await
-                {
-                    Ok(Some(task)) => {
-                        next_kind = (index + 1) % kinds.len();
-                        claimed = Some(task);
-                        break;
-                    }
-                    Ok(None) => {}
-                    Err(error) => {
-                        tracing::warn!(%error, "task claim failed; retrying after backoff");
-                        claim_failed = true;
-                        break;
+            let (claimed, failed) = measure("worker:task_claim", async {
+                for offset in 0..kinds.len() {
+                    let index = (next_kind + offset) % kinds.len();
+                    let kind = kinds[index];
+                    match repository
+                        .claim_task_for_kinds(
+                            &config.worker_id,
+                            kind.policy().lease_duration,
+                            &[kind],
+                        )
+                        .await
+                    {
+                        Ok(Some(task)) => {
+                            next_kind = (index + 1) % kinds.len();
+                            return (Some(task), false);
+                        }
+                        Ok(None) => {}
+                        Err(error) => {
+                            tracing::warn!(%error, "task claim failed; retrying after backoff");
+                            return (None, true);
+                        }
                     }
                 }
-            }
+                (None, false)
+            })
+            .await;
+            claim_failed |= failed;
             let Some(task) = claimed else {
                 break;
             };
@@ -213,7 +220,7 @@ async fn run(
                 }
             }
             _ = metrics_tick.tick() => {
-                if let Err(error) = record_queue_metrics(&repository, &kinds).await {
+                if let Err(error) = measure("worker:task_metrics", record_queue_metrics(&repository, &kinds)).await {
                     tracing::warn!(%error, "could not refresh task queue metrics");
                 }
             }
@@ -302,7 +309,7 @@ async fn execute(repository: SystemRepository, handler: Arc<dyn TaskHandler>, ta
         .unwrap_or(Duration::from_millis(1));
     let mut heartbeat = time::interval(heartbeat_every);
     heartbeat.tick().await;
-    let handled = handler.handle(task.clone());
+    let handled = measure(format!("task:{kind}"), handler.handle(task.clone()));
     tokio::pin!(handled);
     let outcome = loop {
         tokio::select! {

@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use tokio::sync::watch;
 
-use catalog_repository::repository::SystemRepository;
+use catalog_repository::{repository::SystemRepository, round_trips::measure};
 
 /// The documented purge bound is one hour after plan expiry or the application
 /// resumability deadline. The first tick runs immediately at process startup.
@@ -18,7 +18,7 @@ pub fn start(
         loop {
             tokio::select! {
                 _ = shutdown.changed() => return,
-                _ = interval.tick() => run_once(&repository).await,
+                _ = interval.tick() => measure("worker:solution_pack_housekeeping", run_once(&repository)).await,
             }
         }
     })
