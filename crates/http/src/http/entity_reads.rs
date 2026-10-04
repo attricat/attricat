@@ -179,6 +179,7 @@ pub(super) async fn list_previews(
 pub(super) async fn search_entity_previews(
     State(state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    super::auth::AuthenticatedPrincipal(caller, _): super::auth::AuthenticatedPrincipal,
     Extension(timing): Extension<RequestTiming>,
     ApiJson(input): ApiJson<SearchEntitiesRequest>,
 ) -> Result<Response, ApiError> {
@@ -239,7 +240,7 @@ pub(super) async fn search_entity_previews(
         .filter(|v| !v.is_empty());
     let mut filters = Vec::with_capacity(input.filters.len());
     for filter in &input.filters {
-        filters.push(resolve_search_filter(&repository, &search_blueprint, filter).await?);
+        filters.push(resolve_search_filter(&repository, &search_blueprint, filter, caller).await?);
     }
     let mut relationship_filters = Vec::with_capacity(input.relationship_filters.len());
     for filter in &input.relationship_filters {
@@ -577,6 +578,7 @@ async fn resolve_search_filter(
     repository: &crate::repository::CatalogRepository,
     blueprint: &crate::model::BlueprintWithAttributes,
     filter: &SearchFilter,
+    caller: Uuid,
 ) -> Result<EntitySearchFilter, ApiError> {
     let parts: Vec<_> = filter.field.split('.').collect();
     if parts.is_empty() || parts.len() > 4 || parts.iter().any(|part| part.is_empty()) {
@@ -616,7 +618,7 @@ async fn resolve_search_filter(
             .ok_or_else(|| ApiError::not_found("target blueprint"))?;
     }
     let leaf_field = parts[parts.len() - 1];
-    let (attribute_code, value_type, reusable) = match current
+    let (attribute_code, value_type, reusable, value_schema) = match current
         .attributes
         .iter()
         .find(|attribute| attribute.code == leaf_field)
@@ -625,6 +627,7 @@ async fn resolve_search_filter(
             attribute.code.clone(),
             attribute.value_type.as_str().to_owned(),
             false,
+            attribute.value_schema.clone(),
         ),
         None if relationship_path.is_empty() => {
             let reusable = repository
@@ -645,6 +648,7 @@ async fn resolve_search_filter(
                 format!("{}:{}", reusable.namespace, reusable.code),
                 reusable.value_type,
                 true,
+                reusable.value_schema,
             )
         }
         None => {
@@ -655,6 +659,26 @@ async fn resolve_search_filter(
         }
     };
     let value_type = value_type.as_str();
+    // "Assigned to me" matches the caller and each of the caller's teams.
+    if let Some(value) = repository
+        .current_user_filter_value(
+            value_schema.as_ref(),
+            &filter.operator,
+            &filter.value,
+            caller,
+        )
+        .await?
+    {
+        return Ok(EntitySearchFilter {
+            field: filter.field.clone(),
+            relationship_path,
+            leaf_field: attribute_code,
+            reusable,
+            operator: crate::repository::SEARCH_FILTER_EQ_ANY.to_owned(),
+            value_type: value_type.to_owned(),
+            value,
+        });
+    }
     let valid_operator = match value_type {
         "string" => matches!(filter.operator.as_str(), "eq" | "contains" | "starts_with"),
         "number" | "integer" | "date" | "datetime" | "time" => {

@@ -450,7 +450,7 @@ impl CatalogRepository {
                 JOIN attributes a ON a.id = av.attribute_id
                  AND ((a.blueprint_id = e.blueprint_id
                  AND a.blueprint_version = e.blueprint_version)
-                 OR (a.entity_id = e.id AND a.value_schema ? 'x-attricat-status'))
+                 OR (a.entity_id = e.id AND a.value_schema ?| ARRAY['x-attricat-status', 'x-attricat-principal']))
                 JOIN attribute_contexts c ON c.id = av.context_id
                 WHERE av.entity_id = $1
                   AND av.relationship_target_entity_id IS NULL

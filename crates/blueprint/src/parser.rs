@@ -423,6 +423,17 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                             message: "status is only supported on string attributes".into(),
                         });
                     }
+                    if value_schema.as_ref().is_some_and(|schema| {
+                        schema
+                            .get(catalog_validation::principal::PRINCIPAL_KEY)
+                            .is_some()
+                    }) && (value_type != "string" || attribute.default_value.is_some())
+                    {
+                        return Err(BlueprintError::InvalidJsonSchema {
+                            field: format!("attribute '{}'.value_schema", attribute.code),
+                            message: "user or team assignment requires a string attribute without a default_value".into(),
+                        });
+                    }
                     if let (Some(schema), Some(default)) = (&value_schema, &attribute.default_value)
                     {
                         catalog_validation::status::validate_status_transition(

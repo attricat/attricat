@@ -155,6 +155,28 @@ Przyjmuje te same klucze atrybutów co schemat (`value_type`, `value_schema`, `d
 
 Tworzenie i publikowanie atrybutów wielokrotnego użytku wymaga uprawnienia `blueprints.write`. Dołączenie takiego atrybutu do encji wymaga uprawnienia `entities.write` do tej encji.
 
+## Przypisz odpowiedzialność
+
+Zapisuj osobę odpowiedzialną za rekord, na przykład wykonawcę, właściciela czy recenzenta, w **atrybucie użytkownika lub zespołu**, a nie jako dowolny tekst. Dowolny tekst nie sprawdza, czy osoba istnieje i nadal należy do obszaru roboczego, i nie nadaje się do pewnego filtrowania. Atrybut użytkownika lub zespołu to atrybut `string` z adnotacją `x-attricat-principal`, która określa, co przyjmuje:
+
+```toml
+[[attributes]]
+code = "reviewer"
+name = "Recenzent"
+value_type = "string"
+value_schema = '''{
+  "type": "string",
+  "x-attricat-principal": { "version": 1, "kinds": ["user", "team"] }
+}'''
+```
+
+- Formularz pokazuje listę aktywnych członków obszaru roboczego i zespołów, a rekord wyświetla wybraną nazwę. Użyj `"kinds": ["user"]`, gdy odpowiedzialność musi należeć do jednej osoby.
+- Zapis sprawdza, czy nowa wartość to aktywny członek lub istniejący zespół. Rekord przypisany do osoby, która odeszła, zachowuje przypisanie i pokazuje je jako nieaktywne, dopóki ktoś go nie zmieni.
+- W Eksploratorze filtruj atrybut według osoby lub zespołu albo wybierz **Przypisane do mnie (lub moich zespołów)**. Zapisane wyszukiwania z takim filtrem działają dla każdego, kto je otworzy.
+- [Zespołami](/pl/operate/workspaces/#zespoły) zarządza się w **Zarządzanie → Zarządzanie obszarem roboczym → Zespoły**. Przypisanie zapisuje zespół, więc zmiana jego składu nigdy nie zmienia rekordów.
+
+Dokładne zasady opisuje sekcja [Przypisania użytkowników i zespołów](/pl/reference/blueprint/#przypisania-użytkowników-i-zespołów).
+
 ## Tagi systemowe i metadane
 
 Każda encja ma też `system_tags` (zbiór łańcuchów znaków) i `system_metadata` (obiekt JSON do 64 KiB). Znajdują się poza schematem, nie są wersjonowane i nie są pokazywane w widokach. Służą automatyzacji: oznaczaniu partii do przetworzenia, zapisywaniu źródła importu lub oznaczaniu rekordu do przeglądu. Przepływy pracy i reguły mogą je odczytywać i zapisywać. Wyszukiwanie może filtrować po tagach systemowych.

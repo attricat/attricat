@@ -52,6 +52,9 @@ runs the ignored RustFS compatibility test.
   webhook delivery is not implemented.
 - [Authentication and identity adapters](authentication.md): local password
   management and the interface for external identity providers.
+- [Field-level read restrictions](field-level-read-restrictions.md): audit of
+  every read surface (attributes cannot be hidden today) and the design for
+  restricted attributes.
 - [JSON Schema validation](json-schema-validation.md): attribute and entity
   validation contracts.
 

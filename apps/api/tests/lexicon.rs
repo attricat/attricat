@@ -282,3 +282,92 @@ async fn lexicon_entries_round_trip_and_report_coverage(pool: PgPool) {
         404
     );
 }
+
+const STATUS_SCHEMA: &str = r#"{
+  "type": "string",
+  "enum": ["draft", "live"],
+  "x-attricat-status": {
+    "version": 1,
+    "options": [
+      { "code": "draft", "label": "{{Draft|status}}" },
+      { "code": "live", "label": "{{Live}}", "tone": "success" }
+    ]
+  }
+}"#;
+
+#[sqlx::test(migrations = "./migrations")]
+async fn status_option_labels_are_lexicon_references(pool: PgPool) {
+    let (base, _server) = start_server(pool).await;
+    let client = authenticated_client();
+    let blueprint = format!(
+        "{BLUEPRINT}\n[[attributes]]\ncode = \"status\"\nvalue_type = \"string\"\nvalue_schema = '''{STATUS_SCHEMA}'''\n"
+    );
+    let response = client
+        .post(format!("{base}/blueprints"))
+        .json(&json!({"definition": blueprint.replace("{{Live}}", "{{Live")}))
+        .send()
+        .await
+        .unwrap();
+    let body = json_response(response, 422).await;
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("status option 'live' label"),
+        "{body}"
+    );
+    create_blueprint(&client, &base, &blueprint).await;
+
+    // Reusable definitions declare the schema as a TOML table.
+    let reusable = |draft: &str, live: &str| {
+        format!(
+            "code = \"review_state\"\nname = \"{{{{Review state}}}}\"\nvalue_type = \"string\"\n\
+             [value_schema]\ntype = \"string\"\nenum = [\"draft\", \"live\"]\n\
+             [value_schema.x-attricat-status]\nversion = 1\noptions = [\
+             {{ code = \"draft\", label = \"{draft}\" }}, {{ code = \"live\", label = \"{live}\" }}]\n"
+        )
+    };
+    for (draft, status) in [("{{|status}}", 422), ("{{Draft|status}}", 201)] {
+        let response = client
+            .post(format!("{base}/reusable-attributes"))
+            .json(&json!({"definition": reusable(draft, "{{Approved}}")}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(
+            response.status(),
+            status,
+            "{}",
+            response.text().await.unwrap()
+        );
+    }
+
+    let report = json_response(
+        client
+            .get(format!("{base}/lexicon/report"))
+            .query(&[("languages", "pl")])
+            .send()
+            .await
+            .unwrap(),
+        200,
+    )
+    .await;
+    let pl = report["languages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|language| language["language"] == "pl")
+        .unwrap();
+    let untranslated = pl["untranslated"].as_array().unwrap();
+    for (key, context) in [
+        ("Draft", json!("status")),
+        ("Live", Value::Null),
+        ("Approved", Value::Null),
+        ("Review state", Value::Null),
+    ] {
+        assert!(
+            untranslated.contains(&json!({"key": key, "context": context})),
+            "{key}: {untranslated:?}"
+        );
+    }
+}

@@ -1,6 +1,7 @@
 use catalog_lexicon::{Entry, EntryIdentity, Report, UsedReference};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use sqlx::{FromRow, Postgres, Transaction};
 use uuid::Uuid;
 
@@ -239,7 +240,8 @@ impl CatalogRepository {
     }
 
     /// References used by every non-deleted blueprint revision (entities can
-    /// stay pinned to older ones) and reusable attribute name.
+    /// stay pinned to older ones), reusable attribute name, and status option
+    /// label of a reusable attribute revision.
     pub async fn lexicon_references(&self) -> Result<Vec<UsedReference>, RepositoryError> {
         let workspace_id = self.workspace_id_for_runtime();
         let definitions: Vec<String> = sqlx::query_scalar(
@@ -268,6 +270,24 @@ impl CatalogRepository {
                     counted: false,
                 })
         }));
+        let schemas: Vec<Value> = sqlx::query_scalar(
+            "SELECT r.value_schema FROM reusable_attribute_revisions r
+             JOIN reusable_attribute_definitions d ON d.id = r.definition_id
+             WHERE r.workspace_id = $1 AND d.deleted_at IS NULL AND r.value_schema IS NOT NULL",
+        )
+        .bind(workspace_id)
+        .fetch_all(&self.pool)
+        .await?;
+        references.extend(
+            schemas
+                .iter()
+                .flat_map(|schema| catalog_blueprint::status_option_texts("attribute", schema))
+                .flat_map(|text| catalog_lexicon::references(text.text).unwrap_or_default())
+                .map(|reference| UsedReference {
+                    reference,
+                    counted: false,
+                }),
+        );
         Ok(references)
     }
 

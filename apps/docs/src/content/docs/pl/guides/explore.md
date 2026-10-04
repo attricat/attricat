@@ -45,6 +45,8 @@ Otwórz **Informacje o wyszukiwaniu** przy wyniku, aby zobaczyć, dlaczego zosta
 | Łańcuch znaków | Równa się, Zawiera, Zaczyna się od |
 | Liczba, liczba całkowita, data, data i godzina, godzina | Równa się, Większe niż, Większe lub równe, Mniejsze niż, Mniejsze lub równe |
 | Wartość logiczna | Równa się |
+| Status | Równa się, z wyborem spośród etykiet statusu |
+| Użytkownik lub zespół | Równa się osobie lub zespołowi albo **Przypisane do mnie (lub moich zespołów)** |
 
 Możesz też filtrować według atrybutu powiązanej encji, na przykład `brand.name`, przez maksymalnie trzy relacje.
 

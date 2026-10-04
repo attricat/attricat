@@ -784,7 +784,8 @@
       "selectedEntities": "Selected entities (IDs are authoritative; labels are for reference):",
       "entityReference": "- {{label}} — entity_id: {{entityId}}",
       "getEntityInstruction": "Use get_entity for each entity_id before making recommendations or changes."
-    }
+    },
+    "assignedToMe": "Assigned to me (or my teams)"
   },
   "audit": {
     "title": "Activity / Audit log",
@@ -1219,7 +1220,21 @@
     "invitationAccepted": "Invitation accepted. You can now use the workspace.",
     "acceptInvitationFailed": "Could not accept invitation",
     "acceptTitle": "Accept workspace invitation",
-    "acceptInvitation": "Accept invitation"
+    "acceptInvitation": "Accept invitation",
+    "teams": "Teams",
+    "teamsDescription": "Teams group members so a user-or-team attribute can assign work to a team. Assignments store the team, so renaming a team or changing its members never changes records.",
+    "createTeam": "Create team",
+    "editTeam": "Edit",
+    "deleteTeam": "Delete team",
+    "deleteTeamConfirm": "Delete {{team}}? Records assigned to it keep the assignment and show it as deleted, but it can no longer be assigned.",
+    "teamName": "Name",
+    "teamCode": "Code",
+    "teamCodeHelp": "Letters, digits, - and _. The code cannot be changed later.",
+    "teamMembers": "Members",
+    "teamMemberCount_one": "{{count}} member",
+    "teamMemberCount_other": "{{count}} members",
+    "noTeams": "No teams yet.",
+    "saveTeam": "Save team"
   },
   "views": {
     "emailInvalid": "Enter a single email address, for example name@example.com.",
@@ -1518,5 +1533,13 @@
     "download": "Download",
     "cancel": "Cancel run",
     "cancelFailed": "The run could not be cancelled."
+  },
+  "principals": {
+    "loading": "Loading…",
+    "unknown": "Unknown user or team ({{value}})",
+    "inactiveUser": "No longer an active member",
+    "deletedTeam": "Deleted team",
+    "users": "Users",
+    "teams": "Teams"
   }
 }

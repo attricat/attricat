@@ -28,6 +28,7 @@ mod sessions;
 mod solution_packs;
 mod streams;
 mod system;
+mod teams;
 mod tokens;
 mod workflows;
 mod workspace_navigation;
@@ -699,6 +700,12 @@ pub fn router(state: AppState) -> Router {
             post(roles::duplicate),
         )
         .route("/workspace/roles/{role_id}/retire", post(roles::retire))
+        .route("/directory", get(teams::directory))
+        .route("/workspace/teams", get(teams::list).post(teams::create))
+        .route(
+            "/workspace/teams/{team_id}",
+            axum::routing::patch(teams::update).delete(teams::delete),
+        )
         .route("/workspace/members", get(members::list_members))
         .route(
             "/workspace/members/{member_id}",

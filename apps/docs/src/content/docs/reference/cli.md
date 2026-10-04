@@ -272,6 +272,11 @@ acli workspace publication-channel list
 acli workspace publication-channel set <context-id> --enabled true|false
 acli workspace grant-target list <scope-type>
 acli workspace token-permission list
+acli directory
+acli team list
+acli team create --code <code> --name <name> [--member <user-id> …]
+acli team update <team-id> [--name <name>] [--member <user-id> … | --clear-members]
+acli team delete <team-id>
 acli audit list [--occurred-after <t>] [--occurred-before <t>] [--actor-user-id <id>] [--action-category <c>] [--target-type <t>] [--executor-type human|agent]
 ```
 

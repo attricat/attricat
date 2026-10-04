@@ -3,6 +3,8 @@ import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import { attributeLabel } from '../../entities/entityDisplay';
 import {
+  statusCodeLabel,
+  statusOptionLabel,
   statusTransitionAllowed,
   type StatusConfiguration,
 } from '../../entities/status';
@@ -176,9 +178,7 @@ export const StatusEditor = ({
       <MenuItem value="" disabled={!allowed('')}>
         {inheritedValue
           ? t('entities.statusInherit', {
-              value:
-                config.options.find((option) => option.code === inheritedValue)
-                  ?.label ?? inheritedValue,
+              value: statusCodeLabel(config, inheritedValue) ?? inheritedValue,
             })
           : t('entities.notSet')}
       </MenuItem>
@@ -197,7 +197,7 @@ export const StatusEditor = ({
           >
             {denied ? (
               <ListItemText
-                primary={option.label}
+                primary={statusOptionLabel(option)}
                 secondary={
                   denied.denial_code === 'transition_conditions_unmet'
                     ? t('entities.statusConditionsUnmet', {
@@ -211,7 +211,7 @@ export const StatusEditor = ({
                 }
               />
             ) : (
-              option.label
+              statusOptionLabel(option)
             )}
           </MenuItem>
         );

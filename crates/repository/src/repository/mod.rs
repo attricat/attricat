@@ -73,6 +73,7 @@ mod solution_packs;
 mod status;
 mod structural_constraints;
 mod tasks;
+mod teams;
 mod tokens;
 mod upload_intents;
 mod values;
@@ -107,7 +108,8 @@ pub use blueprint_connector_jobs::BlueprintConnectorJob;
 pub use catalog_domain::model::{FileMetadata, FileVariantMetadata};
 pub use domain_events::{EventConsumer, EventDelivery, EventPublisher, FailedEventDelivery};
 pub use entity_search::{
-    EntityRelationshipFilter, EntitySearchFilter, EntitySearchSort, decode_search_cursor,
+    EntityRelationshipFilter, EntitySearchFilter, EntitySearchSort, SEARCH_FILTER_EQ_ANY,
+    decode_search_cursor,
 };
 pub use extension_annotations::{
     ExtensionAnnotationNamespace, ExtensionAnnotationPatch, ExtensionAnnotations,
@@ -158,6 +160,7 @@ pub use solution_packs::{
 };
 pub use status::{EntityApproval, StatusTransitionAccess};
 pub use tasks::{BackgroundProcessingStatus, ClaimedTask, TaskError, TaskSummary};
+pub use teams::{DirectoryTeam, DirectoryUser, Team, WorkspaceDirectory};
 pub use tokens::PersonalApiToken;
 pub use upload_intents::AbandonedUpload;
 pub use workflow_runs::WorkflowRun;
@@ -560,6 +563,8 @@ pub enum RepositoryError {
     BlueprintCodeTaken,
     #[error("catalog code is already in use")]
     CatalogCodeTaken,
+    #[error("invalid team: {0}")]
+    InvalidTeam(String),
     #[error("workflow code is already in use")]
     WorkflowCodeTaken,
     #[error("invalid workflow definition: {0}")]

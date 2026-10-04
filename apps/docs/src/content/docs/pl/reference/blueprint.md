@@ -71,7 +71,7 @@ value_type = "string"
 
 | `value_type` | Przechowywana wartość | Przykład CLI/TOML | Uwagi |
 | --- | --- | --- | --- |
-| `string` | Tekst | `value = "Blue shirt"` | Wyczyszczenie ciągu znaków w kontekście innym niż domyślny usuwa nadpisanie zamiast zapisywać `""`. |
+| `string` | Tekst | `value = "Blue shirt"` | Wyczyszczenie ciągu znaków w kontekście innym niż domyślny usuwa nadpisanie zamiast zapisywać `""`. Może też być [statusem](/pl/builders/validation/#statusy) lub [przypisaniem użytkownika lub zespołu](#przypisania-użytkowników-i-zespołów). |
 | `number` | Liczba dziesiętna | `value = 19.99` | |
 | `integer` | 64-bitowa liczba całkowita | `value = 12` | |
 | `boolean` | `true` lub `false` | `value = true` | |
@@ -81,6 +81,27 @@ value_type = "string"
 | `json` | Dowolna wartość JSON | | Nie można według niej sortować ani używać jej w filtrach przeglądarki encji. Preferuj atrybuty typowane lub relacje. |
 | `relationship` | Powiązania z innymi encjami | | Zobacz [Klucze relacji](#klucze-relacji). |
 | `file` | Przesłane pliki | | Zobacz [Klucze plików](#klucze-plików). |
+
+### Przypisania użytkowników i zespołów
+
+Atrybut `string`, którego `value_schema` ma adnotację `x-attricat-principal`, przechowuje odwołanie do użytkownika lub zespołu obszaru roboczego:
+
+```toml
+[[attributes]]
+code = "assignee"
+value_type = "string"
+value_schema = '''{"type": "string", "x-attricat-principal": {"version": 1, "kinds": ["user", "team"]}}'''
+```
+
+| Klucz | Wartość | Opis |
+| --- | --- | --- |
+| `version` | `1` | Wymagany. |
+| `kinds` | `["user"]`, `["team"]` lub oba | Wymagany. Co przyjmuje atrybut. |
+
+- Wartości mają postać `user:<id>` lub `team:<id>` z identyfikatorem zapisanym małymi literami, pobranym z `acli directory` lub `GET /directory`. Brak wartości oznacza brak przypisania.
+- Schemat musi mieć `"type": "string"` i nie może mieć `enum`, `const`, `pattern` ani `format`. Atrybut nie może mieć `default_value` ani być jednocześnie statusem. Atrybuty wielokrotnego użytku przyjmują tę samą adnotację.
+- Nowa lub zmieniona wartość musi wskazywać aktywnego członka obszaru roboczego lub nieusunięty zespół, w dozwolonym rodzaju. W przeciwnym razie zapis zwraca `422 attribute_value_schema_mismatch`. Niezmienione wartości nie są sprawdzane ponownie.
+- Filtry wyszukiwania porównują zapisaną wartość dokładnie. Wartość `@me` z operatorem `eq` pasuje do wywołującego i do każdego zespołu, do którego należy.
 
 ### Klucze relacji
 

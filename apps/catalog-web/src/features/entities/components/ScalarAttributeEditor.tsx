@@ -12,6 +12,8 @@ import {
   scalarValuePlaceholders,
 } from '../constants';
 import { statusConfiguration } from '../status';
+import { principalConfiguration } from '../../principals/principal';
+import { PrincipalEditor } from '../../principals/PrincipalEditor';
 import type { StatusTransitionAccess } from '../recordControls';
 
 const numeric = (attribute: Attribute) =>
@@ -73,8 +75,9 @@ const BuiltInEditor = ({
 
 /**
  * Editor for one scalar attribute value, shared by the entity form and the
- * blueprint preview sandbox. A status annotation takes precedence, then the
- * view's configured edit component, then the built-in input for the type.
+ * blueprint preview sandbox. A status or user-or-team annotation takes
+ * precedence, then the view's configured edit component, then the built-in
+ * input for the type.
  */
 export const ScalarAttributeEditor = ({
   component,
@@ -101,6 +104,8 @@ export const ScalarAttributeEditor = ({
         transitions={statusTransitions}
       />
     );
+  const principal = principalConfiguration(props.attribute);
+  if (principal) return <PrincipalEditor {...props} config={principal} />;
   const Editor =
     resolveValueEditor(component, props.attribute)?.valueEditor ??
     BuiltInEditor;

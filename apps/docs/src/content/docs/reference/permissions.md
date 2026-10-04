@@ -42,6 +42,16 @@ A blueprint status can require a permission or a role for an individual transiti
 
 Records in a locked status reject changes to locked content with `409 record_locked`, whatever the writer's permissions. Unlocking takes an explicit, permitted correction transition, which is recorded in the audit log.
 
+## Attribute visibility
+
+Permissions apply to whole entities. Anyone who can read an entity can read every attribute value it has, in every context, including value history and the changes it shows. Search, filters, display labels, agent tools, and extensions see the same values. You cannot hide single attributes, such as a valuation or provenance notes, from people who can read the rest of the record.
+
+To keep sensitive details from some people, store them in a separate blueprint linked to the record, and grant `entities.read` on that blueprint only to the people who need it. Keep in mind:
+
+- Grants on a single blueprint do not include search, filters, or saved searches. Those need a workspace-wide grant, and a workspace-wide grant reads every blueprint.
+- Relationship lists and previews on a readable record can show the linked record's display label and values. Keep the sensitive blueprint's fields out of the readable blueprint's views and out of its `dropdown_option` label.
+- Extensions, workflows, and connector exports read all data.
+
 ## Personal API tokens
 
 A token carries its own list of permissions. Each request is allowed only if both the token and its owner's current roles allow it. Granting or revoking roles through a token needs both `members.manage` and `roles.grant` on the token.

@@ -155,6 +155,28 @@ It accepts the same attribute keys as a blueprint (`value_type`, `value_schema`,
 
 Creating and publishing reusable attributes needs `blueprints.write`. Attaching one to an entity needs `entities.write` on that entity.
 
+## Assign responsibility
+
+Store who is responsible for a record, such as an assignee, owner, or reviewer, in a **user or team attribute** rather than free text. Free text cannot check that the person exists or still works in the workspace, and it is not reliable for filtering. A user or team attribute is a `string` attribute with an `x-attricat-principal` annotation that lists what it accepts:
+
+```toml
+[[attributes]]
+code = "reviewer"
+name = "Reviewer"
+value_type = "string"
+value_schema = '''{
+  "type": "string",
+  "x-attricat-principal": { "version": 1, "kinds": ["user", "team"] }
+}'''
+```
+
+- The form shows a picker of active workspace members and teams, and the record shows the chosen name. Use `"kinds": ["user"]` when the responsibility must belong to one person.
+- Saving checks that a new value is an active member or an existing team. A record assigned to someone who has since left keeps the assignment and shows it as no longer active until someone changes it.
+- In the Explorer, filter the attribute by a person or team, or choose **Assigned to me (or my teams)**. Saved searches with that filter work for whoever opens them.
+- [Teams](/operate/workspaces/#teams) are managed under **Manage → Workspace management → Teams**. An assignment stores the team, so changing who belongs to it never touches records.
+
+See [User or team assignments](/reference/blueprint/#user-or-team-assignments) for the exact rules.
+
 ## System tags and metadata
 
 Every entity also has `system_tags` (a set of strings) and `system_metadata` (a JSON object up to 64 KiB). They sit outside the blueprint, are not versioned, and are not shown in views. They exist for automation: marking a batch for processing, recording an import source, or flagging a record for review. Workflows and rules can read and write them. Search can filter by system tags.

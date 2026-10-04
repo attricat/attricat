@@ -1,5 +1,12 @@
 import type { TFunction } from 'i18next';
 import type { Attribute } from '../entities/api';
+import { statusConfiguration, statusLabel } from '../entities/status';
+import { CURRENT_USER_FILTER_VALUE } from '../principals/constants';
+import {
+  principalConfiguration,
+  resolvePrincipal,
+} from '../principals/principal';
+import type { Directory } from '../principals/schemas';
 import type { AttributeFilter } from './search';
 
 export type AttributeFilterOperator = AttributeFilter['operator'];
@@ -34,27 +41,63 @@ export const operatorsForValueType = (
 };
 
 /**
+ * Status codes and user-or-team references are matched exactly, so they offer
+ * equality only.
+ */
+export const operatorsForAttribute = (
+  attribute: Attribute | undefined,
+): AttributeFilterOperator[] =>
+  attribute &&
+  (statusConfiguration(attribute) || principalConfiguration(attribute))
+    ? ['eq']
+    : operatorsForValueType(attribute?.value_type ?? 'string');
+
+/**
  * Attribute filters have no identity of their own and may repeat, so their
  * position is part of the key.
  */
 export const attributeFilterKey = (filter: AttributeFilter, index: number) =>
   `${filter.field}-${filter.operator}-${String(filter.value)}-${index}`;
 
+const principalFilterValueLabel = (
+  t: TFunction,
+  value: unknown,
+  directory: Directory | undefined,
+) =>
+  value === CURRENT_USER_FILTER_VALUE
+    ? t('explorer.assignedToMe')
+    : resolvePrincipal(directory, value)?.label;
+
+/**
+ * The filter value as shown to the user: status codes show their label, and
+ * user-or-team references the name from `directory`.
+ */
 export const attributeFilterValueLabel = (
   t: TFunction,
   filter: AttributeFilter,
+  attribute?: Attribute,
+  directory?: Directory,
 ) =>
   typeof filter.value === 'boolean'
     ? t(filter.value ? 'explorer.true' : 'explorer.false')
-    : String(filter.value);
+    : ((attribute &&
+        (statusLabel(attribute, filter.value) ??
+          (principalConfiguration(attribute)
+            ? principalFilterValueLabel(t, filter.value, directory)
+            : undefined))) ??
+      String(filter.value));
 
 export const attributeFilterLabel = (
   t: TFunction,
   filter: AttributeFilter,
   fieldLabel: string = filter.field,
+  attribute?: Attribute,
+  directory?: Directory,
 ) =>
   t('explorer.attributeFilterPill', {
     field: fieldLabel,
     operator: t(`explorer.filterOperatorSymbols.${filter.operator}`),
-    value: JSON.stringify(attributeFilterValueLabel(t, filter)),
+    value: JSON.stringify(
+      attributeFilterValueLabel(t, filter, attribute, directory),
+    ),
   });

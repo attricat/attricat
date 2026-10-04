@@ -42,6 +42,16 @@ Status w schemacie może wymagać uprawnienia lub roli dla pojedynczego przejśc
 
 Rekordy w zablokowanym statusie odrzucają zmiany zablokowanej treści z `409 record_locked` niezależnie od uprawnień zapisującego. Odblokowanie wymaga jawnego, dozwolonego przejścia korygującego, które jest zapisywane w dzienniku audytu.
 
+## Widoczność atrybutów
+
+Uprawnienia dotyczą całych encji. Kto może odczytać encję, może odczytać każdą wartość jej atrybutów we wszystkich kontekstach, także historię wartości i pokazywane w niej zmiany. Te same wartości widzą wyszukiwanie, filtry, etykiety wyświetlania, narzędzia agenta i rozszerzenia. Nie da się ukryć pojedynczych atrybutów, takich jak wycena czy uwagi o pochodzeniu, przed osobami, które mogą odczytać resztę rekordu.
+
+Aby ukryć poufne dane przed częścią osób, zapisz je w osobnym schemacie powiązanym z rekordem i nadaj `entities.read` dla tego schematu tylko osobom, które ich potrzebują. Pamiętaj, że:
+
+- Przydział dla pojedynczego schematu nie obejmuje wyszukiwania, filtrów ani zapisanych wyszukiwań. Wymagają one przydziału na cały obszar roboczy, a taki przydział pozwala czytać wszystkie schematy.
+- Listy i podglądy relacji w dostępnym rekordzie mogą pokazywać etykietę i wartości powiązanego rekordu. Nie umieszczaj pól poufnego schematu w widokach dostępnego schematu ani w jego etykiecie `dropdown_option`.
+- Rozszerzenia, przepływy pracy i eksporty przez konektory odczytują wszystkie dane.
+
 ## Osobiste tokeny API
 
 Token ma własną listę uprawnień. Każde żądanie jest dozwolone tylko wtedy, gdy pozwalają na nie zarówno token, jak i bieżące role jego właściciela. Przydzielanie lub odbieranie ról za pomocą tokenu wymaga, aby token miał zarówno `members.manage`, jak i `roles.grant`.

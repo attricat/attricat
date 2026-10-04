@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { lexiconText } from '../lexicon/lexicon';
 import type { Attribute, FormAttributeValue } from './api';
 
 export const STATUS_SCHEMA_KEY = 'x-attricat-status';
@@ -135,14 +136,31 @@ export const savedStatusState = (
   };
 };
 
+type StatusOption = StatusConfiguration['options'][number];
+
+/**
+ * An option's label for the UI language. Labels may reference the workspace
+ * lexicon (`{{key}}`) and fall back like other catalog-defined labels.
+ */
+export const statusOptionLabel = (option: StatusOption): string =>
+  lexiconText(option.label);
+
+/** The localized label of a configured status code, if `value` is one. */
+export const statusCodeLabel = (
+  config: StatusConfiguration,
+  value: unknown,
+): string | undefined => {
+  const option = config.options.find((item) => item.code === value);
+  return option && statusOptionLabel(option);
+};
+
 export const statusLabel = (
   attribute: Attribute,
   value: unknown,
-): string | undefined =>
-  statusConfiguration(attribute)?.options.find(
-    (option) => option.code === value,
-  )?.label;
-
+): string | undefined => {
+  const config = statusConfiguration(attribute);
+  return config && statusCodeLabel(config, value);
+};
 /** `all` never covers the status attribute that declares it. */
 export const statusCovers = (
   coverage: StatusCoverage,
@@ -178,7 +196,7 @@ export const statusLocks = (
     if (!option?.lock) continue;
     for (const attribute of attributes)
       if (statusCovers(option.lock, attribute.code, statusAttribute.code))
-        locks[attribute.code] ??= option.label;
+        locks[attribute.code] ??= statusOptionLabel(option);
   }
   return locks;
 };

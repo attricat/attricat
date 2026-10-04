@@ -349,6 +349,28 @@ pub fn transition_conditions(schema: &Value, before: &Value, after: &Value) -> V
         .unwrap_or_default()
 }
 
+/// The `(code, label)` pairs of a status annotation, in option order. Labels
+/// may reference the workspace lexicon (`{{key}}`), like other catalog labels.
+/// Malformed configurations, which definition validation rejects, yield none.
+pub fn status_option_labels(schema: &Value) -> Vec<(&str, &str)> {
+    schema
+        .get(STATUS_KEY)
+        .and_then(|config| config.get("options"))
+        .and_then(Value::as_array)
+        .map(|options| {
+            options
+                .iter()
+                .filter_map(|option| {
+                    Some((
+                        option.get("code")?.as_str()?,
+                        option.get("label")?.as_str()?,
+                    ))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// Missing values are represented by null; clearing requires an explicit edge.
 /// Compare the transaction's original and final effective values, never its
 /// intermediate writes, so a batch cannot traverse several edges in one save.
@@ -538,6 +560,14 @@ mod tests {
         assert!(validate_status_definition(&duplicate).is_err());
     }
 
+    #[test]
+    fn lists_option_labels() {
+        assert_eq!(
+            status_option_labels(&schema()),
+            [("draft", "Draft"), ("live", "Live"), ("done", "Done")]
+        );
+        assert!(status_option_labels(&json!({"type":"string"})).is_empty());
+    }
     #[test]
     fn rejects_invalid_configuration() {
         for (pointer, value) in [
