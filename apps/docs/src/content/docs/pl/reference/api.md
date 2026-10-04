@@ -58,7 +58,7 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | `rule_violation` | 422 | Po zapisie encja naruszałaby egzekwowaną regułę. |
 | `publication_checks_failed` | 422 | Kontrole wymagane przez kanał nie przechodzą. `details.context` to kod kanału. |
 | `invalid_rule_definition` | 422 | TOML reguły jest nieprawidłowy lub nie pasuje do wersji schematu. |
-| `rule_dry_run_required` | 409 | Włączenie egzekwowanej reguły wymaga najpierw ukończonego pełnego przebiegu próbnego tej wersji. |
+| `rule_dry_run_required` | 409 | Włączenie egzekwowanej reguły wymaga najpierw ukończonego pełnego przebiegu próbnego tej wersji. Jeśli ostatni przebieg próbny zatrzymał się na limicie encji, `details` ma postać `{"truncated": true, "existing_violations": …}`. |
 | `rule_has_existing_violations` | 409 | Przebieg próbny znalazł naruszenia. `details.existing_violations` podaje ich liczbę. |
 
 ### Szczegóły błędu
@@ -263,7 +263,7 @@ Zobacz [Tłumaczenie etykiet](/pl/builders/translations/).
 | `GET` | `/rules/{id}` | Odczytuje regułę. |
 | `POST` | `/rules/{id}/versions/{version}/publish`, `/enable`; `/rules/{id}/disable` | Cykl życia. `/enable` przyjmuje opcjonalne `{"accept_existing_violations": true}` dla egzekwowanej reguły, której przebieg próbny znalazł naruszenia. |
 | `POST` | `/rules/{id}/run-now` | `{"entity_id": null, "dry_run": false, "idempotency_key": "…"}`. Przebieg próbny może dodać `"version": 2`, aby objąć opublikowaną wersję, która nie jest włączona; domyślnie dotyczy wersji włączonej albo najnowszej opublikowanej. |
-| `GET` | `/rule-runs`, `/rule-findings` | Uruchomienia i ustalenia. |
+| `GET` | `/rule-runs`, `/rule-findings` | Uruchomienia i ustalenia. Pole `truncated` uruchomienia ma wartość `true`, gdy zatrzymało się ono na limicie encji, zanim sprawdziło wszystkie. |
 | `POST` | `/rule-runs/{id}/replay`, `/rule-findings/{id}/acknowledge` | Ponawia martwą wiadomość; potwierdza ustalenie. |
 | `POST` | `/workflows/validate` | Weryfikuje TOML przepływu pracy. |
 | `GET`, `POST` | `/workflows`, `/workflows/{id}/versions` | Wyświetla lub tworzy przepływy pracy i ich wersje. |

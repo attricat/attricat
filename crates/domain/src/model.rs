@@ -1068,6 +1068,9 @@ pub struct RuleRun {
     pub findings_resolved: i64,
     pub attempts: i32,
     pub last_error: Option<String>,
+    /// The run stopped at its candidate cap with candidates left unchecked.
+    /// A truncated full dry run does not satisfy the enable gate on its own.
+    pub truncated: bool,
     pub completed_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
 }

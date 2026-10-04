@@ -222,7 +222,7 @@ POST /rules/{id}/versions/{version}/enable
 {"accept_existing_violations": true}
 ```
 
-A dry run stops after 10,000 entities. When the blueprint revision has more, the dry run can't vouch for the rest, so enabling still fails with `409 rule_dry_run_required` unless you send `accept_existing_violations` as above.
+A dry run stops after 10,000 entities. When the blueprint revision has more, the dry run can't vouch for the rest, so enabling still fails with `409 rule_dry_run_required` unless you send `accept_existing_violations` as above. In that case the error message says the dry run stopped early, and `details` is `{"truncated": true, "existing_violations": …}` with the violations it found among the entities it checked. Such a run has `"truncated": true` in `GET /rule-runs`.
 
 An entity that already violates an enforcing rule cannot be saved until a save fixes the violation.
 

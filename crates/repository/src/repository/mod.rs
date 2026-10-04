@@ -526,6 +526,10 @@ pub enum RepositoryError {
     #[error("an enforcing rule needs a completed dry run of this revision before it is enabled")]
     RuleDryRunRequired,
     #[error(
+        "the latest dry run stopped at its candidate limit before checking every entity; enable with accept_existing_violations to accept the entities it did not check"
+    )]
+    RuleDryRunTruncated(i64),
+    #[error(
         "the latest dry run found {0} existing violations; fix them or enable with accept_existing_violations"
     )]
     RuleHasExistingViolations(i64),

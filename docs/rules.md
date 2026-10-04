@@ -123,9 +123,12 @@ a completed full dry run (no `entity_id`) of that exact revision:
 
 Without that run, enabling returns `409 rule_dry_run_required`. A dry run
 stops after 10,000 candidates; when more remained, the run is recorded as
-truncated and enabling also returns `409 rule_dry_run_required` unless the
-request sets `accept_existing_violations`, because the dry run cannot prove the
-remaining entities pass. If the latest completed dry run found violations, it
+truncated (`truncated: true` on the run in `GET /rule-runs`) and enabling also
+returns `409 rule_dry_run_required` unless the request sets
+`accept_existing_violations`, because the dry run cannot prove the remaining
+entities pass. That error has its own message and
+`error.details = {"truncated": true, "existing_violations": n}`, where `n`
+counts the violations among the candidates the run did check. If the latest completed dry run found violations, it
 returns
 `409 rule_has_existing_violations` with `error.details.existing_violations`
 (the count). Fix those entities and dry-run again, or enable with

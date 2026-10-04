@@ -58,7 +58,7 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `rule_violation` | 422 | The write leaves the entity violating an enforcing rule. |
 | `publication_checks_failed` | 422 | A channel's required checks fail. `details.context` is the channel code. |
 | `invalid_rule_definition` | 422 | The rule TOML is invalid or does not fit its blueprint revision. |
-| `rule_dry_run_required` | 409 | Enabling an enforcing rule needs a completed full dry run of that revision first. |
+| `rule_dry_run_required` | 409 | Enabling an enforcing rule needs a completed full dry run of that revision first. If the latest dry run stopped at its entity limit, `details` is `{"truncated": true, "existing_violations": …}`. |
 | `rule_has_existing_violations` | 409 | The dry run found violations. `details.existing_violations` is the count. |
 
 ### Error details
@@ -263,7 +263,7 @@ See [Translate labels](/builders/translations/).
 | `GET` | `/rules/{id}` | Read a rule. |
 | `POST` | `/rules/{id}/versions/{version}/publish`, `/enable`; `/rules/{id}/disable` | Lifecycle. `/enable` accepts an optional `{"accept_existing_violations": true}` for an enforcing rule whose dry run found violations. |
 | `POST` | `/rules/{id}/run-now` | `{"entity_id": null, "dry_run": false, "idempotency_key": "…"}`. A dry run may add `"version": 2` to target a published revision that is not enabled; it defaults to the enabled revision, or the latest published one. |
-| `GET` | `/rule-runs`, `/rule-findings` | Runs and findings. |
+| `GET` | `/rule-runs`, `/rule-findings` | Runs and findings. A run's `truncated` is `true` when it stopped at its entity limit before checking every entity. |
 | `POST` | `/rule-runs/{id}/replay`, `/rule-findings/{id}/acknowledge` | Replay a dead letter; acknowledge a finding. |
 | `POST` | `/workflows/validate` | Validate workflow TOML. |
 | `GET`, `POST` | `/workflows`, `/workflows/{id}/versions` | List or create workflows and revisions. |

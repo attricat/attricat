@@ -89,7 +89,7 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `POST` | `/rules/validate` | Structurally validate a strict rule TOML definition (`rules.manage`). |
 | `POST` | `/rules/{rule_id}/run-now` | Enqueue an idempotent bounded manual or dry run (`rules.manage`). Optional `version` selects a published revision; only dry runs may target a revision that is not enabled. |
 | `POST` | `/rules/{rule_id}/versions/{version}/enable` | Enable a published revision (`rules.manage`). Optional body `{ "accept_existing_violations": true }`; enforcing revisions first need a completed full dry run. See [Rules](rules.md#dry-run-before-enabling). |
-| `GET` | `/rule-runs`, `/rule-findings` | Read run diagnostics and active/resolved findings (`rules.read`). |
+| `GET` | `/rule-runs`, `/rule-findings` | Read run diagnostics and active/resolved findings (`rules.read`). A run's `truncated` is `true` when it stopped at its candidate cap with candidates left. |
 | `POST` | `/extensions/{extension_id}/{contribution_id}/command` | Validate a bounded, manifest-declared client-mediated extension command against the enabled exact release and grants (`entities.write`). |
 | `POST` | `/extensions/{extension_id}/{contribution_id}/operations` | Start an interactive extension operation from a selection-aware contribution for the signed-in user. The body is `{release_id, operation_id, input, idempotency_key, selection: {blueprint_id, blueprint_version, context_id, entity_ids}}`; every entity must be saved, belong to the one revision, and be readable by the caller, otherwise the whole request is rejected. A retried identical request returns the same `run_id`; reusing the key with different input or selection returns `409 idempotency_key_reused`. |
 | `GET` | `/extension-runs` | List the signed-in user's 50 most recent interactive extension runs, optionally filtered by `extension_id`. Runs with a selected entity the user can no longer read are omitted. Inputs, configuration and checkpoints are never returned. Every run response, here and on the routes below, includes `initiated_by_me`, which is `true` when the signed-in user started the run. |
@@ -586,7 +586,7 @@ results report the same `code`, `message` and `details`.
 | `409` | `relationship_cardinality_conflict` | `attribute`, `context_id`, `source_entity_id`, `target_entity_id`, `conflicting_source_entity_id` |
 | `409` | `entity_id_taken` | `entity_id` |
 | `409` | `annotation_revision_conflict` | `expected`, `actual` revisions |
-| `409` | `rule_dry_run_required` | none; run `run-now` with `"dry_run": true` and the `version` first |
+| `409` | `rule_dry_run_required` | none when no completed full dry run exists; run `run-now` with `"dry_run": true` and the `version` first. When the latest one was truncated: `truncated: true` and `existing_violations` (found among the candidates it checked), with a distinct message; pass `accept_existing_violations` |
 | `409` | `rule_has_existing_violations` | `existing_violations` (a count); fix the entities or pass `accept_existing_violations` |
 
 A failed [entity batch](#entity-batches) operation keeps that operation's

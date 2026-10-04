@@ -212,6 +212,8 @@ impl RepositoryError {
                 Some(context),
             ),
             Self::RuleDryRunRequired => plain(Conflict, Code::RuleDryRunRequired),
+            Self::RuleDryRunTruncated(count) => plain(Conflict, Code::RuleDryRunRequired)
+                .with_details(json!({ "truncated": true, "existing_violations": count })),
             Self::RuleHasExistingViolations(count) => {
                 plain(Conflict, Code::RuleHasExistingViolations)
                     .with_details(json!({ "existing_violations": count }))

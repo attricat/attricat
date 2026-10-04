@@ -365,6 +365,7 @@ domain_row!(RuleRun {
     findings_resolved,
     attempts,
     last_error,
+    truncated,
     completed_at,
     created_at,
 });

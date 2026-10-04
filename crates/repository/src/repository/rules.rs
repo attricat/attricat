@@ -648,7 +648,7 @@ impl CatalogRepository {
     }
     pub async fn list_rule_runs(&self) -> Result<Vec<RuleRun>, RepositoryError> {
         let ws = self.workspace_id.0;
-        Ok(sqlx::query_as::<_, Db<RuleRun>>("SELECT id,rule_id,rule_version,source,dry_run,scope_entity_id,status,candidate_cursor,candidates_evaluated,findings_created,findings_resolved,attempts,last_error,completed_at,created_at FROM rule_runs WHERE workspace_id=$1 ORDER BY created_at DESC").bind(ws).fetch_all(&self.pool).await?.into_domain())
+        Ok(sqlx::query_as::<_, Db<RuleRun>>("SELECT id,rule_id,rule_version,source,dry_run,scope_entity_id,status,candidate_cursor,candidates_evaluated,findings_created,findings_resolved,attempts,last_error,truncated,completed_at,created_at FROM rule_runs WHERE workspace_id=$1 ORDER BY created_at DESC").bind(ws).fetch_all(&self.pool).await?.into_domain())
     }
     pub async fn list_rule_findings(
         &self,
@@ -664,7 +664,7 @@ impl CatalogRepository {
         offset: i64,
     ) -> Result<(Vec<RuleRun>, bool), RepositoryError> {
         let ws = self.workspace_id.0;
-        let mut rows = sqlx::query_as::<_, Db<RuleRun>>("SELECT id,rule_id,rule_version,source,dry_run,scope_entity_id,status,candidate_cursor,candidates_evaluated,findings_created,findings_resolved,attempts,last_error,completed_at,created_at FROM rule_runs WHERE workspace_id=$1 AND ($2::uuid IS NULL OR rule_id=$2) ORDER BY created_at DESC,id DESC LIMIT $3 OFFSET $4")
+        let mut rows = sqlx::query_as::<_, Db<RuleRun>>("SELECT id,rule_id,rule_version,source,dry_run,scope_entity_id,status,candidate_cursor,candidates_evaluated,findings_created,findings_resolved,attempts,last_error,truncated,completed_at,created_at FROM rule_runs WHERE workspace_id=$1 AND ($2::uuid IS NULL OR rule_id=$2) ORDER BY created_at DESC,id DESC LIMIT $3 OFFSET $4")
             .bind(ws).bind(rule_id).bind(limit + 1).bind(offset).fetch_all(&self.pool).await?;
         let has_more = rows.len() as i64 > limit;
         rows.truncate(limit as usize);
@@ -1079,7 +1079,9 @@ fn dry_run_enable_gate(
 ) -> Result<(), RepositoryError> {
     match latest {
         None => Err(RepositoryError::RuleDryRunRequired),
-        Some((_, true)) if !accept_existing_violations => Err(RepositoryError::RuleDryRunRequired),
+        Some((count, true)) if !accept_existing_violations => {
+            Err(RepositoryError::RuleDryRunTruncated(count))
+        }
         Some((count, _)) if count > 0 && !accept_existing_violations => {
             Err(RepositoryError::RuleHasExistingViolations(count))
         }
@@ -1132,11 +1134,11 @@ mod tests {
         // remaining entities pass.
         assert!(matches!(
             dry_run_enable_gate(Some((0, true)), false),
-            Err(RepositoryError::RuleDryRunRequired)
+            Err(RepositoryError::RuleDryRunTruncated(0))
         ));
         assert!(matches!(
             dry_run_enable_gate(Some((3, true)), false),
-            Err(RepositoryError::RuleDryRunRequired)
+            Err(RepositoryError::RuleDryRunTruncated(3))
         ));
         assert!(dry_run_enable_gate(Some((0, true)), true).is_ok());
     }
