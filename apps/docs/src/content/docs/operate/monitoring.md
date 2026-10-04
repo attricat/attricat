@@ -55,7 +55,8 @@ Useful series:
 | `catalog_value_history_cleanup_total{outcome}` | `failed`. Repeated `budget_exhausted` means each 10-second run ends with old history still left to delete. |
 | `catalog_upload_cleanup_total{outcome}` | `failed`. Failed deletions of abandoned uploads are retried. |
 | `catalog_query_cache_requests_total{namespace,outcome}` | A falling share of `hit` and `remote_hit` against `miss`. |
-| `catalog_query_cache_redis_circuit_opened_total` | Increases: Redis keeps failing and replicas are using memory only. |
+| `catalog_query_cache_redis_connected` | `0` on any replica: it has lost its Redis connection and caches in memory only until it reconnects. |
+| `catalog_query_cache_redis_circuit_opened_total` | Increases: Redis is connected but keeps timing out or dropping commands, so replicas skip it for a few seconds at a time. |
 | `catalog_db_round_trips_per_operation{scope}` | Rising database round trips per request route, task kind or background loop. |
 | `catalog_db_round_trips_total{scope}` | A growing `unscoped` rate, or a background loop whose rate rises while the catalog is idle. |
 

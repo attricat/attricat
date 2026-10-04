@@ -71,7 +71,7 @@ CACHE_BACKEND=redis
 REDIS_URL=rediss://:password@redis.example.com:6380/0
 ```
 
-`rediss://` connects over TLS; `redis://` does not. Redis is never required: if it becomes unreachable, the API keeps working from memory and the database and reconnects on its own. Several Attricat deployments can share one Redis, because every key includes a random identifier of the deployment's database. After restoring a backup, flush Redis; see [Backup and restore](/operate/backup/).
+`rediss://` connects over TLS; `redis://` does not. Redis is never required: if it becomes unreachable, the API keeps working from memory and the database and reconnects on its own. Several Attricat deployments can share one Redis, because every key includes a random identifier of the deployment's database. A copy of a database keeps that identifier, so a deployment that runs on a copy of another one's database, such as staging cloned from production, must use a different `CACHE_KEY_PREFIX` or Redis database. After restoring a backup in place, flush Redis; see [Backup and restore](/operate/backup/).
 
 ## Roll out a new version
 

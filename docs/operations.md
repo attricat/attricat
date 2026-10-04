@@ -39,7 +39,10 @@ when you run more than one:
   required for correctness: if it becomes unreachable, replicas fall back to
   memory and the database and reconnect in the background. Keys are namespaced
   by `CACHE_KEY_PREFIX` and a random identity stored in the database, so
-  several deployments can share one Redis. See [Caching](caching.md).
+  deployments with separately created databases can share one Redis. A
+  database copied from another deployment, such as staging cloned from
+  production, keeps its identity: give the copy a different
+  `CACHE_KEY_PREFIX` or Redis database. See [Caching](caching.md).
 - **Coordinator connections.** The rule-schedule, workflow-schedule and
   extension-intake coordinators each run on one replica, which holds a session
   advisory lock on a dedicated connection outside the pools. Budget up to
@@ -162,11 +165,17 @@ known uploaded file, and a known extension-operation artifact before recording
 success. If any step fails, leave the target quiesced. Never restore only the
 database or only the bucket.
 
-When the deployment uses Redis (`CACHE_BACKEND=redis`), flush the Redis
-database it uses (`FLUSHDB`), or change `CACHE_KEY_PREFIX`, after restoring and
-before starting the API. A restored database keeps its cache identity and its
-older cache generations, so Redis may otherwise serve entries newer than the
-restored data for up to 24 hours.
+When the deployment uses Redis (`CACHE_BACKEND=redis`), a restored database
+keeps its cache identity and its older cache generations, so Redis may
+otherwise serve entries newer than the restored data for up to 24 hours. After
+restoring and before starting the API:
+
+- for a restore in place, flush the Redis database it uses (`FLUSHDB`) or
+  change `CACHE_KEY_PREFIX`;
+- for a copy that runs alongside its source, such as a restore rehearsal or a
+  staging database cloned from production, use a different `CACHE_KEY_PREFIX`
+  or Redis database than the source. Flushing is not enough, because the
+  source keeps writing the same keys.
 
 Use provider-native snapshots when they can guarantee the same quiesced boundary.
 Otherwise, run version-pinned utility containers outside the Attricat image. Keep

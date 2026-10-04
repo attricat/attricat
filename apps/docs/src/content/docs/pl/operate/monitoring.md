@@ -55,7 +55,8 @@ Przydatne serie:
 | `catalog_value_history_cleanup_total{outcome}` | `failed`. Powtarzające się `budget_exhausted` oznacza, że każdy 10-sekundowy przebieg kończy się, zanim usunie całą starą historię. |
 | `catalog_upload_cleanup_total{outcome}` | `failed`. Nieudane usunięcia porzuconych przesłanych plików są ponawiane. |
 | `catalog_query_cache_requests_total{namespace,outcome}` | Malejący udział `hit` i `remote_hit` względem `miss`. |
-| `catalog_query_cache_redis_circuit_opened_total` | Wzrosty: Redis stale zawodzi, a repliki korzystają tylko z pamięci. |
+| `catalog_query_cache_redis_connected` | `0` na którejkolwiek replice: utraciła połączenie z Redis i do jego odnowienia buforuje tylko w pamięci. |
+| `catalog_query_cache_redis_circuit_opened_total` | Wzrosty: Redis jest połączony, ale stale przekracza limit czasu lub gubi polecenia, więc repliki co jakiś czas pomijają go na kilka sekund. |
 | `catalog_db_round_trips_per_operation{scope}` | Rosnąca liczba zapytań do bazy danych na trasę żądania, rodzaj zadania lub pętlę w tle. |
 | `catalog_db_round_trips_total{scope}` | Rosnące tempo dla `unscoped` albo pętla w tle, której tempo rośnie, gdy katalog jest bezczynny. |
 

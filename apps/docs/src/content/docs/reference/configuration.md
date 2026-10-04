@@ -98,9 +98,9 @@ Session lifetime (eight hours), the login rate limit (five failures per workspac
 | `RELATIONSHIP_FACET_MAX_NODES` | `100` | Maximum nodes returned per page of an Explorer relationship facet. |
 | `DATA_HEALTH_CACHE_TTL_SECONDS` | `300` | How long data-health responses are cached. `0` disables the cache. Any recorded catalog change also refreshes them on the next request. |
 | `CACHE_BACKEND` | `memory` | Where cached definitions live: `memory` (each process) or `redis` (shared by every replica, which then also share extension network rate limits). Cached data is always correct with either backend. If Redis is unreachable the API keeps working from memory and reconnects on its own. |
-| `REDIS_URL` | Unset | Redis connection URL. Required when `CACHE_BACKEND` is `redis`. Use `rediss://` for TLS. |
+| `REDIS_URL` | Unset | Redis connection URL. Required when `CACHE_BACKEND` is `redis`. Use `rediss://` (or `valkeys://`) for TLS. |
 | `CACHE_MAX_ENTRIES` | `20000` | Maximum number of in-memory cache entries per process. |
-| `CACHE_KEY_PREFIX` | `attricat` | First part of every Redis key; a random identifier of the database follows it. Change it, or flush Redis, after restoring a backup. |
+| `CACHE_KEY_PREFIX` | `attricat` | First part of every Redis key; a random identifier of the database follows it. A copy of a database keeps that identifier, so a copy that runs alongside its source (such as staging cloned from production) needs a different prefix or Redis database. After restoring a backup in place, change it or flush Redis. |
 | `ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS` | `90` | Days of attribute-value history kept. Every minute the API spends up to 10 seconds deleting older history, at most 1,000 rows per transaction. A failed cleanup is logged and tried again; it does not stop the API. |
 | `BLUEPRINT_MIGRATION_PAGE_SIZE` | `100` | Entities read per page during a background blueprint migration. 1 to 1000. |
 | `BLUEPRINT_MIGRATION_CONCURRENCY` | `4` | Entities migrated at the same time within one migration batch. 1 to 64. |

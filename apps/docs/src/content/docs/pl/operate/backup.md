@@ -27,7 +27,7 @@ Przechowuj dane uwierzytelniające w menedżerze sekretów, a nie w poleceniach,
 1. Utrzymuj środowisko docelowe zatrzymane.
 2. Zweryfikuj każdą sumę kontrolną w manifeście.
 3. Przywróć bazę danych i zasobnik.
-4. Jeśli wdrożenie korzysta z Redis (`CACHE_BACKEND=redis`), wyczyść używaną przez nie bazę Redis (`FLUSHDB`) albo zmień `CACHE_KEY_PREFIX`. W przeciwnym razie API może przez maksymalnie dobę serwować z bufora dane nowsze niż przywrócona baza danych.
+4. Jeśli wdrożenie korzysta z Redis (`CACHE_BACKEND=redis`), ustaw dla przywróconej kopii inny `CACHE_KEY_PREFIX` albo inną bazę Redis niż we wdrożeniu, z którego pochodzi. Przywrócona baza danych zachowuje identyfikator bufora, więc w przeciwnym razie obie korzystają z tych samych wpisów, a API może przez maksymalnie dobę serwować z bufora dane nowsze niż przywrócona baza danych. Wyczyszczenie Redis (`FLUSHDB`) wystarczy tylko przy przywracaniu w miejsce bazy, którą obsługiwał ten Redis; dopóki źródłowe wdrożenie działa, zapisuje te same wpisy ponownie.
 5. Uruchom rolę `migrate` obrazu.
 6. Uruchom API i proces roboczy plików na przywróconej parze.
 7. Poczekaj na obie kontrole gotowości.

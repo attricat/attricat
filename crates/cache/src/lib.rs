@@ -29,6 +29,12 @@ pub use rate_limit::{LocalRateLimiter, RateLimiter, RedisRateLimiter};
 pub use redis_backend::Redis;
 use serde::{Serialize, de::DeserializeOwned};
 
+/// The version of the shared tier's entry format, part of every Redis cache
+/// key. Bump it whenever a cached value's serialized shape or what its loader
+/// returns for a key changes, so a deploy never serves entries the previous
+/// release wrote, which the shared tier may keep for up to a day.
+pub(crate) const CACHE_FORMAT: u32 = 1;
+
 /// A cache key. By convention `namespace:part:part`; the namespace labels
 /// metrics.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -294,8 +300,11 @@ impl QueryCache {
     /// Builds the configured cache and the rate limiter that goes with it.
     ///
     /// `database_identity` identifies the database this process serves; Redis
-    /// keys start with `<key_prefix>:<database_identity>:` so deployments
-    /// and databases that share a Redis never read each other's entries.
+    /// keys start with `<key_prefix>:<database_identity>:` so databases that
+    /// share a Redis never read each other's entries. A copy of a database,
+    /// such as staging cloned from production, keeps its identity, so a copy
+    /// that runs alongside its source needs another `key_prefix` or Redis
+    /// database.
     /// An unreachable Redis is retried in the background while the process
     /// serves from memory: the shared tier is an optimization, never a
     /// dependency. Only an invalid `REDIS_URL` is an error.

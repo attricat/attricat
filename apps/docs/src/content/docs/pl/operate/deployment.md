@@ -71,7 +71,7 @@ CACHE_BACKEND=redis
 REDIS_URL=rediss://:haslo@redis.example.com:6380/0
 ```
 
-`rediss://` łączy się przez TLS, a `redis://` bez niego. Redis nigdy nie jest wymagany: gdy przestanie odpowiadać, API działa dalej z pamięci i bazy danych, a połączenie odnawia samo. Kilka wdrożeń Attricat może korzystać z jednego serwera Redis, bo każdy klucz zawiera losowy identyfikator bazy danych danego wdrożenia. Po przywróceniu kopii zapasowej wyczyść Redis; zobacz [Kopia zapasowa i przywracanie](/pl/operate/backup/).
+`rediss://` łączy się przez TLS, a `redis://` bez niego. Redis nigdy nie jest wymagany: gdy przestanie odpowiadać, API działa dalej z pamięci i bazy danych, a połączenie odnawia samo. Kilka wdrożeń Attricat może korzystać z jednego serwera Redis, bo każdy klucz zawiera losowy identyfikator bazy danych danego wdrożenia. Kopia bazy danych zachowuje ten identyfikator, więc wdrożenie działające na kopii bazy innego wdrożenia, na przykład środowisko testowe sklonowane z produkcji, musi używać innego `CACHE_KEY_PREFIX` albo innej bazy Redis. Po przywróceniu kopii zapasowej w miejsce dotychczasowej bazy wyczyść Redis; zobacz [Kopia zapasowa i przywracanie](/pl/operate/backup/).
 
 ## Wdróż nową wersję
 

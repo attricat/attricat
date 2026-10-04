@@ -27,7 +27,7 @@ Rehearse at least once per release, into a disposable database and bucket:
 1. Keep the target stopped.
 2. Verify every checksum in the manifest.
 3. Restore the database and the bucket.
-4. If the deployment uses Redis (`CACHE_BACKEND=redis`), flush the Redis database it uses (`FLUSHDB`), or change `CACHE_KEY_PREFIX`. Otherwise the API may serve cached data newer than the restored database for up to a day.
+4. If the deployment uses Redis (`CACHE_BACKEND=redis`), give the restored copy a different `CACHE_KEY_PREFIX` or Redis database than the deployment it was copied from. A restored database keeps its cache identity, so otherwise the two share cache entries and the API may serve data newer than the restored database for up to a day. Flushing Redis (`FLUSHDB`) is enough only when you restore in place, replacing the database that Redis served; while the source keeps running, it writes the same entries again.
 5. Run the image's `migrate` role.
 6. Start the API and file worker against the restored pair.
 7. Wait for both readiness checks.

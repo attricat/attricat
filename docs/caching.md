@@ -101,6 +101,12 @@ When you add a cached read:
    needs a migration and must be read by authentication with the others.
 2. Load from the pool, never from a caller's transaction.
 3. Make every value `Serialize + Deserialize`; it may be shared through Redis.
+4. Bump `CACHE_FORMAT` in `crates/cache/src/lib.rs` when you change the
+   serialized shape of a cached value, or what a loader returns for an
+   existing key. The version is part of every Redis cache key
+   (`cache:v<N>:`), so the new release never reads entries the previous one
+   wrote; otherwise Redis could serve them for up to 24 hours after a deploy.
+   A new key namespace does not need a bump.
 
 ## Shared tier (Redis)
 
@@ -111,27 +117,44 @@ share loads. Redis is an optimization, never a dependency:
   and never fail a request.
 - Writes to Redis run in the background, so a slow Redis never delays the
   request that loaded the value.
-- After 5 consecutive failures Redis is skipped for 5 s (a circuit breaker
-  shared by the cache and the rate limiter).
+- After 5 consecutive timeouts or connection failures Redis is skipped for
+  5 s (a circuit breaker shared by the cache and the rate limiter). After the
+  cooldown one command tries Redis while the others keep skipping it; if it
+  succeeds the breaker closes, otherwise another cooldown starts. An error
+  Redis returns for a command, such as `NOPERM`, is logged but does not count.
+- While the client is disconnected, commands skip Redis without waiting. The
+  first disconnect is logged at `warn` and the reconnection at `info`.
 - The client connects in the background and reconnects with a capped
   exponential backoff (100 ms to 5 s), including when Redis is unreachable at
   startup.
 - `Immutable` and `Generation` entries expire from Redis after 24 hours of the
   last write; a `Ttl` entry after `fresh + stale`. A `Ttl` entry copied from
   Redis into L1 keeps its age, so it never outlives its bound.
-- `rediss://` URLs use rustls with the platform root certificates.
+- TLS URLs (`rediss://` and `valkeys://`, and their `-cluster` and
+  `-sentinel` forms) use rustls with the ring provider and the platform root
+  certificates.
 
 Every Redis key starts with `<CACHE_KEY_PREFIX>:<database identity>:` followed
-by `cache:` or `rate:`. The database identity is a random UUID that the API
-stores in the single-row `database_identity` table at startup. Deployments and
-recreated databases that share one Redis therefore never read each other's
-entries, even though generations restart at 0 and the bootstrap workspace ID is
-fixed.
+by `cache:v<CACHE_FORMAT>:` or `rate:`. The database identity is a random UUID
+that the API stores in the single-row `database_identity` table at startup.
+Separately created databases that share one Redis therefore never read each
+other's entries, even though generations restart at 0 and the bootstrap
+workspace ID is fixed.
 
-A restored backup keeps its identity and its old generations, so Redis may
-still hold entries filed under the same keys with newer content. **Flush Redis,
-or change `CACHE_KEY_PREFIX`, after restoring a database.** See
-[Production operations](operations.md).
+A copy of a database keeps its identity and its generations. That includes a
+restored backup and a clone such as a staging database copied from
+production, so both can find entries filed under the same keys with other
+content:
+
+- **A copy that runs alongside its source** (staging cloned from production,
+  a restore rehearsal) must use a different `CACHE_KEY_PREFIX` or a different
+  Redis database (the number in `REDIS_URL`) than the source. Flushing Redis
+  does not help: the source writes the shared keys again.
+- **A restore in place**, which replaces the database a Redis served: flush
+  that Redis database (`FLUSHDB`) or change `CACHE_KEY_PREFIX` before starting
+  the API.
+
+See [Production operations](operations.md).
 
 Extension network rate limits use the same sliding window in Redis (a sorted
 set updated atomically by a Lua script, using the Redis server clock) as in
@@ -143,7 +166,14 @@ limiter, so the limit applies per replica until Redis recovers.
 - `catalog_query_cache_requests_total{namespace,outcome}`: `outcome` is `hit`,
   `remote_hit`, `miss`, `stale` or `stale_reload`.
 - `catalog_query_cache_invalidations_total`: process-local tag evictions.
-- `catalog_query_cache_redis_circuit_opened_total`: times Redis was skipped.
+- `catalog_query_cache_redis_connected`: `1` while the Redis connection is
+  up, `0` while the client is disconnected and reconnecting. Each process
+  reports its own connection.
+- `catalog_query_cache_redis_circuit_opened_total`: times the circuit breaker
+  opened after repeated timeouts or connection failures. It counts openings,
+  not skipped commands; a failed trial after the cooldown does not count
+  again. A disconnect alone does not open the breaker, so watch the gauge for
+  outages.
 
 See [Metrics and traces](api.md#metrics-and-traces) for the rest, including the
 database round-trip metrics the cache is meant to reduce.

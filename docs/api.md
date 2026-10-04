@@ -730,8 +730,11 @@ with a bounded `status` label. The [query cache](caching.md) reports:
   (served from Redis), `miss` (loaded from the database), `stale` (a stale TTL
   value served while another caller reloads) or `stale_reload`;
 - `catalog_query_cache_invalidations_total`: process-local tag evictions;
-- `catalog_query_cache_redis_circuit_opened_total`: times Redis was skipped
-  for a cooldown after repeated failures.
+- `catalog_query_cache_redis_connected`: `1` while this process's Redis
+  connection is up, `0` while it is disconnected and reconnecting;
+- `catalog_query_cache_redis_circuit_opened_total`: times the circuit breaker
+  opened after repeated timeouts or connection failures (once per opening,
+  not per skipped command). A disconnect shows in the gauge, not here.
 
 Database round trips are counted per named scope (an HTTP route, a task kind
 or a worker loop, such as `worker:event_dispatcher:<handler>`) by
