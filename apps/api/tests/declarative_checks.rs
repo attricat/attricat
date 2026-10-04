@@ -977,3 +977,177 @@ async fn channels_require_checks_before_publication(pool: PgPool) {
     assert!(status.is_success(), "{body}");
     server.abort();
 }
+
+const PAGE_ITEM: &str = r#"format_version = 1
+code = "page_item"
+name = "Page item"
+kind = "entity"
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["state"]
+[[attributes]]
+code = "state"
+value_type = "string"
+"#;
+
+const PAGE_ORDER: &str = r#"format_version = 1
+code = "page_order"
+name = "Page order"
+kind = "entity"
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["title"]
+[[attributes]]
+code = "title"
+value_type = "string"
+[[attributes]]
+code = "items"
+value_type = "relationship"
+target_blueprint = "page_item"
+cardinality = "many"
+"#;
+
+const PAGE_NOTE: &str = r#"format_version = 1
+code = "page_note"
+name = "Page note"
+kind = "entity"
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["state"]
+[[attributes]]
+code = "state"
+value_type = "string"
+[[attributes]]
+code = "order"
+value_type = "relationship"
+target_blueprint = "page_order"
+cardinality = "one"
+"#;
+
+/// A rule run reads linked and referencing records for a whole candidate
+/// page at once; each candidate still sees only its own related records.
+#[sqlx::test]
+async fn rule_pages_resolve_related_records_per_candidate(pool: PgPool) {
+    CatalogRepository::system(pool.clone())
+        .ensure_rule_permissions()
+        .await
+        .unwrap();
+    let (base, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    create_blueprint(&client, &base, PAGE_ITEM).await;
+    let orders = create_blueprint(&client, &base, PAGE_ORDER).await;
+    create_blueprint(&client, &base, PAGE_NOTE).await;
+    let item = |state: &'static str| {
+        let client = client.clone();
+        let base = base.clone();
+        async move {
+            entity(
+                &client,
+                &base,
+                "page_item",
+                json!([scalar("state", json!(state))]),
+            )
+            .await
+        }
+    };
+    let ok = item("ok").await;
+    let also_ok = item("ok").await;
+    let bad = item("bad").await;
+    let order = |title: &'static str, items: Vec<&Value>| {
+        let mut values = vec![scalar("title", json!(title))];
+        values.extend(items.into_iter().map(|item| link("items", item)));
+        entity(&client, &base, "page_order", Value::Array(values))
+    };
+    let empty = order("empty", vec![]).await;
+    let open_note = order("open note", vec![&ok]).await;
+    let bad_item = order("bad item", vec![&bad]).await;
+    let closed_note = order("closed note", vec![&ok, &also_ok]).await;
+    let mixed_notes = order("mixed notes", vec![&ok]).await;
+    let note = |state: &'static str, order: &Value| {
+        entity(
+            &client,
+            &base,
+            "page_note",
+            json!([scalar("state", json!(state)), link("order", order)]),
+        )
+    };
+    let reopened = note("open", &open_note).await;
+    note("closed", &closed_note).await;
+    note("open", &mixed_notes).await;
+    note("closed", &mixed_notes).await;
+
+    let definition = rule(
+        "page-related",
+        r#"type = "all_of"
+predicates = [
+  {type = "linked", relationship_code = "items", quantifier = "all", predicate = {type = "one_of", attribute_code = "state", values = ["ok"]}},
+  {type = "referenced_by", blueprint_code = "page_note", relationship_code = "order", max = 0, predicate = {type = "one_of", attribute_code = "state", values = ["open"]}},
+]"#,
+        "",
+    );
+    let (status, created) = create_rule(&client, &base, &orders, &definition).await;
+    assert_eq!(status, StatusCode::CREATED, "{created}");
+    publish_rule(&client, &base, &created).await;
+    let id = created["id"].as_str().unwrap();
+    let rule_id: Uuid = id.parse().unwrap();
+    let (status, body) = post(
+        &client,
+        format!("{base}/rules/{id}/versions/1/enable"),
+        json!({}),
+    )
+    .await;
+    assert!(status.is_success(), "{body}");
+    let run = |key: &'static str| {
+        post(
+            &client,
+            format!("{base}/rules/{id}/run-now"),
+            json!({"dry_run": false, "idempotency_key": key, "version": 1}),
+        )
+    };
+    let (status, body) = run("first").await;
+    assert_eq!(status, StatusCode::ACCEPTED, "{body}");
+    drain_rule_tasks(&pool).await;
+    let open_findings = || async {
+        sqlx::query_scalar::<_, Uuid>(
+            "SELECT entity_id FROM rule_findings WHERE rule_id = $1 AND state = 'open' ORDER BY entity_id",
+        )
+        .bind(rule_id)
+        .fetch_all(&pool)
+        .await
+        .unwrap()
+    };
+    let id_of = |entity: &Value| entity["id"].as_str().unwrap().parse::<Uuid>().unwrap();
+    let mut expected = vec![id_of(&open_note), id_of(&bad_item), id_of(&mixed_notes)];
+    expected.sort();
+    assert_eq!(open_findings().await, expected);
+    // `empty` and `closed_note` pass: no items or notes, or only closed ones.
+    assert!(
+        ![id_of(&empty), id_of(&closed_note)]
+            .iter()
+            .any(|order| expected.contains(order))
+    );
+
+    // Closing the only open note resolves exactly that order's finding.
+    let reopened_id = reopened["id"].as_str().unwrap();
+    let (status, body) = put(
+        &client,
+        format!("{base}/v1/entities/{reopened_id}"),
+        json!({"values": [scalar("state", json!("closed"))]}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (status, body) = run("second").await;
+    assert_eq!(status, StatusCode::ACCEPTED, "{body}");
+    drain_rule_tasks(&pool).await;
+    expected.retain(|entity| *entity != id_of(&open_note));
+    assert_eq!(open_findings().await, expected);
+    let (created_count, resolved_count): (i64, i64) = sqlx::query_as(
+        "SELECT sum(findings_created)::bigint, sum(findings_resolved)::bigint FROM rule_runs WHERE rule_id = $1",
+    )
+    .bind(rule_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!((created_count, resolved_count), (3, 1));
+    server.abort();
+}

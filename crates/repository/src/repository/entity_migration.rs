@@ -12,6 +12,13 @@ use uuid::Uuid;
 
 type AttributeContextKey = (String, Option<Uuid>);
 
+/// The target revision and default context a migration batch previews every
+/// entity against, read once per batch.
+pub(super) struct MigrationTarget {
+    pub target: BlueprintWithAttributes,
+    pub default_context_id: Uuid,
+}
+
 impl CatalogRepository {
     pub async fn preview_entity_migration(
         &self,
@@ -27,14 +34,50 @@ impl CatalogRepository {
         entity_id: Uuid,
         migration_id: Option<Uuid>,
     ) -> Result<EntityMigrationPreview, RepositoryError> {
+        self.preview_entity_migration_against(entity_id, migration_id, None)
+            .await
+    }
+
+    /// The current published revision of `blueprint_id` and the default
+    /// context, for [`Self::preview_entity_migration_against`].
+    pub(super) async fn migration_target(
+        &self,
+        blueprint_id: Uuid,
+    ) -> Result<Option<MigrationTarget>, RepositoryError> {
+        let Some(target) = self.get_current_blueprint(blueprint_id).await? else {
+            return Ok(None);
+        };
+        let default_context_id = sqlx::query_scalar::<_, Uuid>(
+            "SELECT id FROM attribute_contexts WHERE workspace_id = $1 AND code = 'default'",
+        )
+        .bind(self.workspace_id.0)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(Some(MigrationTarget {
+            target,
+            default_context_id,
+        }))
+    }
+
+    /// [`Self::preview_entity_migration_into`] against a preloaded target. A
+    /// target that changes afterwards supersedes the migration when it runs.
+    pub(super) async fn preview_entity_migration_against(
+        &self,
+        entity_id: Uuid,
+        migration_id: Option<Uuid>,
+        preloaded: Option<&MigrationTarget>,
+    ) -> Result<EntityMigrationPreview, RepositoryError> {
         let entity = self
             .get_entity(entity_id)
             .await?
             .ok_or(RepositoryError::NotFound("entity"))?;
-        let target = self
-            .get_current_blueprint(entity.blueprint_id)
-            .await?
-            .ok_or(RepositoryError::NotFound("blueprint"))?;
+        let target = match preloaded {
+            Some(preloaded) => preloaded.target.clone(),
+            None => self
+                .get_current_blueprint(entity.blueprint_id)
+                .await?
+                .ok_or(RepositoryError::NotFound("blueprint"))?,
+        };
         if target.blueprint.version == entity.blueprint_version {
             return Err(RepositoryError::EntityBlueprintCurrent);
         }
@@ -42,12 +85,15 @@ impl CatalogRepository {
             .list_attributes(entity.blueprint_id, entity.blueprint_version)
             .await?;
         let values = self.form_values(entity_id).await?;
-        let default_context_id = sqlx::query_scalar::<_, Uuid>(
-            "SELECT id FROM attribute_contexts WHERE workspace_id = $1 AND code = 'default'",
-        )
-        .bind(self.workspace_id.0)
-        .fetch_one(&self.pool)
-        .await?;
+        let default_context_id = match preloaded {
+            Some(preloaded) => preloaded.default_context_id,
+            None => sqlx::query_scalar::<_, Uuid>(
+                "SELECT id FROM attribute_contexts WHERE workspace_id = $1 AND code = 'default'",
+            )
+            .bind(self.workspace_id.0)
+            .fetch_one(&self.pool)
+            .await?,
+        };
         let target_attributes: HashMap<_, _> = target
             .attributes
             .iter()
@@ -631,19 +677,28 @@ impl CatalogRepository {
         let archived_count = self
             .archive_current_value_ids(&mut transaction, entity.id, &archive_ids)
             .await?;
-        let mut preserved_count = 0_u64;
-        for (target_attribute_id, value_ids) in remap_ids {
-            preserved_count += sqlx::query(
-                "UPDATE attribute_values SET attribute_id = $1 WHERE entity_id = $2 AND workspace_id = $3 AND id = ANY($4)",
+        let (remap_value_ids, remap_attribute_ids): (Vec<Uuid>, Vec<Uuid>) = remap_ids
+            .into_iter()
+            .flat_map(|(target_attribute_id, value_ids)| {
+                value_ids
+                    .into_iter()
+                    .map(move |value_id| (value_id, target_attribute_id))
+            })
+            .unzip();
+        let preserved_count = if remap_value_ids.is_empty() {
+            0
+        } else {
+            sqlx::query(
+                "UPDATE attribute_values av SET attribute_id = remap.attribute_id FROM unnest($1::uuid[], $2::uuid[]) AS remap(id, attribute_id) WHERE av.id = remap.id AND av.entity_id = $3 AND av.workspace_id = $4",
             )
-            .bind(target_attribute_id)
+            .bind(&remap_value_ids)
+            .bind(&remap_attribute_ids)
             .bind(entity.id)
             .bind(self.workspace_id.0)
-            .bind(&value_ids)
             .execute(&mut *transaction)
             .await?
-            .rows_affected();
-        }
+            .rows_affected()
+        };
         let target_entity = sqlx::query_as::<_, Db<Entity>>(
             r#"UPDATE entities SET blueprint_version = $2, updated_at = now()
                WHERE id = $1 AND workspace_id = $3

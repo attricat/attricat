@@ -908,6 +908,60 @@ async fn expire_sample_file_staging(
 }
 
 /// A bundled sample file uploaded under an upload intent while planning.
+/// Sample entity rows of a plan, inserted with their evidence at once.
+#[derive(Default)]
+struct SampleEntityRows {
+    positions: Vec<i32>,
+    logical_keys: Vec<String>,
+    target_ids: Vec<Uuid>,
+    blueprint_logical_keys: Vec<String>,
+    blueprint_ids: Vec<Uuid>,
+    blueprint_versions: Vec<i64>,
+    digests: Vec<String>,
+    scalar_counts: Vec<i32>,
+    relationship_target_counts: Vec<i32>,
+    canonical_inputs: Vec<Value>,
+}
+
+impl SampleEntityRows {
+    async fn insert(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        workspace_id: Uuid,
+        plan_id: Uuid,
+    ) -> Result<(), RepositoryError> {
+        if self.positions.is_empty() {
+            return Ok(());
+        }
+        sqlx::query(
+            r#"WITH rows AS (
+                   SELECT * FROM unnest($3::int[],$4::text[],$5::uuid[],$6::text[],$7::uuid[],$8::bigint[],$9::text[],$10::int[],$11::int[],$12::jsonb[])
+                       WITH ORDINALITY AS r(position,logical_key,target_id,blueprint_logical_key,blueprint_id,blueprint_version,digest,scalar_count,relationship_target_count,canonical_input,ordinal)
+               ), entities AS (
+                   INSERT INTO solution_pack_plan_sample_entities (plan_id,workspace_id,position,logical_key,target_id,blueprint_logical_key,blueprint_id,blueprint_version,canonical_declaration_sha256,scalar_count,relationship_target_count,canonical_input)
+                   SELECT $1,$2,position,logical_key,target_id,blueprint_logical_key,blueprint_id,blueprint_version,digest,scalar_count,relationship_target_count,canonical_input FROM rows ORDER BY ordinal
+               )
+               INSERT INTO solution_pack_plan_sample_evidence (plan_id,workspace_id,position,logical_key,target_id,blueprint_logical_key,blueprint_id,blueprint_version,canonical_declaration_sha256,scalar_count,relationship_target_count)
+               SELECT $1,$2,position,logical_key,target_id,blueprint_logical_key,blueprint_id,blueprint_version,digest,scalar_count,relationship_target_count FROM rows ORDER BY ordinal"#,
+        )
+        .bind(plan_id)
+        .bind(workspace_id)
+        .bind(&self.positions)
+        .bind(&self.logical_keys)
+        .bind(&self.target_ids)
+        .bind(&self.blueprint_logical_keys)
+        .bind(&self.blueprint_ids)
+        .bind(&self.blueprint_versions)
+        .bind(&self.digests)
+        .bind(&self.scalar_counts)
+        .bind(&self.relationship_target_counts)
+        .bind(&self.canonical_inputs)
+        .execute(&mut **tx)
+        .await?;
+        Ok(())
+    }
+}
+
 struct StagedSampleFile {
     path: String,
     file_id: Uuid,
@@ -2286,6 +2340,7 @@ impl CatalogRepository {
                 }
                 return Err(error.into());
             }
+            let mut sample_rows = SampleEntityRows::default();
             for (position, entity_index) in sample.target_first_order.iter().copied().enumerate() {
                 let entity = &sample.declaration.entities[entity_index];
                 let mapping = draft
@@ -2320,24 +2375,41 @@ impl CatalogRepository {
                     .find(|candidate| candidate.logical_key == entity.key)
                     .expect("selected sample mapping exists");
                 let (canonical_input, entity_digest) = canonical_sample_input(pack, entity);
-                sqlx::query("INSERT INTO solution_pack_plan_sample_entities (plan_id,workspace_id,position,logical_key,target_id,blueprint_logical_key,blueprint_id,blueprint_version,canonical_declaration_sha256,scalar_count,relationship_target_count,canonical_input) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)")
-                    .bind(id).bind(workspace_id).bind(position as i32).bind(&entity.key).bind(sample_mapping.target_id)
-                    .bind(&entity.blueprint).bind(mapping.target_id).bind(mapping.target_version.expect("checked"))
-                    .bind(&entity_digest).bind(entity.facts.len() as i32)
-                    .bind(entity.relationships.iter().map(|relationship| relationship.targets.len() as i32).sum::<i32>())
-                    .bind(canonical_input).execute(&mut *tx).await?;
-                sqlx::query("INSERT INTO solution_pack_plan_sample_evidence (plan_id,workspace_id,position,logical_key,target_id,blueprint_logical_key,blueprint_id,blueprint_version,canonical_declaration_sha256,scalar_count,relationship_target_count) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)")
-                    .bind(id).bind(workspace_id).bind(position as i32).bind(&entity.key).bind(sample_mapping.target_id)
-                    .bind(&entity.blueprint).bind(mapping.target_id).bind(mapping.target_version.expect("checked"))
-                    .bind(entity_digest).bind(entity.facts.len() as i32)
-                    .bind(entity.relationships.iter().map(|relationship| relationship.targets.len() as i32).sum::<i32>())
-                    .execute(&mut *tx).await?;
+                sample_rows.positions.push(position as i32);
+                sample_rows.logical_keys.push(entity.key.clone());
+                sample_rows.target_ids.push(sample_mapping.target_id);
+                sample_rows
+                    .blueprint_logical_keys
+                    .push(entity.blueprint.clone());
+                sample_rows.blueprint_ids.push(mapping.target_id);
+                sample_rows
+                    .blueprint_versions
+                    .push(mapping.target_version.expect("checked"));
+                sample_rows.digests.push(entity_digest);
+                sample_rows.scalar_counts.push(entity.facts.len() as i32);
+                sample_rows.relationship_target_counts.push(
+                    entity
+                        .relationships
+                        .iter()
+                        .map(|relationship| relationship.targets.len() as i32)
+                        .sum::<i32>(),
+                );
+                sample_rows.canonical_inputs.push(canonical_input);
             }
-            for file in &staged_sample_files {
-                sqlx::query("INSERT INTO solution_pack_plan_sample_files (plan_id,workspace_id,path,file_id,object_key,filename,media_type,byte_size,sha256) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)")
-                    .bind(id).bind(workspace_id).bind(&file.path).bind(file.file_id).bind(&file.object_key)
-                    .bind(&file.filename).bind(&file.media_type).bind(file.byte_size).bind(&file.sha256)
-                    .execute(&mut *tx).await?;
+            sample_rows.insert(&mut tx, workspace_id, id).await?;
+            if !staged_sample_files.is_empty() {
+                sqlx::query("INSERT INTO solution_pack_plan_sample_files (plan_id,workspace_id,path,file_id,object_key,filename,media_type,byte_size,sha256) SELECT $1,$2,f.path,f.file_id,f.object_key,f.filename,f.media_type,f.byte_size,f.sha256 FROM unnest($3::text[],$4::uuid[],$5::text[],$6::text[],$7::text[],$8::bigint[],$9::text[]) WITH ORDINALITY AS f(path,file_id,object_key,filename,media_type,byte_size,sha256,position) ORDER BY f.position")
+                    .bind(id)
+                    .bind(workspace_id)
+                    .bind(staged_sample_files.iter().map(|file| file.path.as_str()).collect::<Vec<_>>())
+                    .bind(staged_sample_files.iter().map(|file| file.file_id).collect::<Vec<_>>())
+                    .bind(staged_sample_files.iter().map(|file| file.object_key.as_str()).collect::<Vec<_>>())
+                    .bind(staged_sample_files.iter().map(|file| file.filename.as_str()).collect::<Vec<_>>())
+                    .bind(staged_sample_files.iter().map(|file| file.media_type.as_str()).collect::<Vec<_>>())
+                    .bind(staged_sample_files.iter().map(|file| file.byte_size).collect::<Vec<_>>())
+                    .bind(staged_sample_files.iter().map(|file| file.sha256.as_str()).collect::<Vec<_>>())
+                    .execute(&mut *tx)
+                    .await?;
             }
             // Staged files stay claimable for the plan lifetime and the
             // sample application's resumability window.
@@ -2350,19 +2422,31 @@ impl CatalogRepository {
         }
         insert_plan_rows(&mut tx, workspace_id, id, &draft).await?;
         insert_extension_installs(&mut tx, workspace_id, id, &draft, &official_extensions).await?;
-        for mapping in &asset_creates {
-            let asset = pack
-                .presentation_asset(&mapping.logical_key)
-                .expect("create asset was validated");
-            sqlx::query("INSERT INTO solution_pack_plan_asset_objects (plan_id,workspace_id,logical_key,target_id,object_key,media_type,byte_size,sha256,state) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'uploading')")
+        if !asset_creates.is_empty() {
+            let assets: Vec<_> = asset_creates
+                .iter()
+                .map(|mapping| {
+                    (
+                        mapping,
+                        pack.presentation_asset(&mapping.logical_key)
+                            .expect("create asset was validated"),
+                    )
+                })
+                .collect();
+            sqlx::query("INSERT INTO solution_pack_plan_asset_objects (plan_id,workspace_id,logical_key,target_id,object_key,media_type,byte_size,sha256,state) SELECT $1,$2,a.logical_key,a.target_id,a.object_key,a.media_type,a.byte_size,a.sha256,'uploading' FROM unnest($3::text[],$4::uuid[],$5::text[],$6::text[],$7::bigint[],$8::text[]) WITH ORDINALITY AS a(logical_key,target_id,object_key,media_type,byte_size,sha256,position) ORDER BY a.position")
                 .bind(id)
                 .bind(workspace_id)
-                .bind(&mapping.logical_key)
-                .bind(mapping.target_id)
-                .bind(presentation_asset_object_key(workspace_id, id, mapping.target_id))
-                .bind(&asset.media_type)
-                .bind(asset.stored_bytes.len() as i64)
-                .bind(&asset.stored_sha256)
+                .bind(assets.iter().map(|(mapping, _)| mapping.logical_key.as_str()).collect::<Vec<_>>())
+                .bind(assets.iter().map(|(mapping, _)| mapping.target_id).collect::<Vec<_>>())
+                .bind(
+                    assets
+                        .iter()
+                        .map(|(mapping, _)| presentation_asset_object_key(workspace_id, id, mapping.target_id))
+                        .collect::<Vec<_>>(),
+                )
+                .bind(assets.iter().map(|(_, asset)| asset.media_type.as_str()).collect::<Vec<_>>())
+                .bind(assets.iter().map(|(_, asset)| asset.stored_bytes.len() as i64).collect::<Vec<_>>())
+                .bind(assets.iter().map(|(_, asset)| asset.stored_sha256.as_str()).collect::<Vec<_>>())
                 .execute(&mut *tx)
                 .await?;
         }
@@ -2453,14 +2537,21 @@ impl CatalogRepository {
                 }
                 return Err(RepositoryError::SolutionPackAssetStorageUnavailable);
             }
-            sqlx::query("UPDATE solution_pack_plan_asset_objects SET state='staged',updated_at=now() WHERE workspace_id=$1 AND plan_id=$2 AND logical_key=$3 AND state='uploading'")
-                .bind(workspace_id)
-                .bind(id)
-                .bind(&mapping.logical_key)
-                .execute(&self.pool)
-                .await?;
         }
         if !asset_creates.is_empty() {
+            // Every upload was verified above; a failed one cleans them all up,
+            // so the assets are marked staged together.
+            sqlx::query("UPDATE solution_pack_plan_asset_objects SET state='staged',updated_at=now() WHERE workspace_id=$1 AND plan_id=$2 AND logical_key=ANY($3) AND state='uploading'")
+                .bind(workspace_id)
+                .bind(id)
+                .bind(
+                    asset_creates
+                        .iter()
+                        .map(|mapping| mapping.logical_key.as_str())
+                        .collect::<Vec<_>>(),
+                )
+                .execute(&self.pool)
+                .await?;
             let mut finalize = self.pool.begin().await?;
             sqlx::query("UPDATE solution_pack_plans SET ready=$3 WHERE workspace_id=$1 AND id=$2")
                 .bind(workspace_id)
@@ -5669,11 +5760,22 @@ impl CatalogRepository {
             .bind(run_id).bind(workspace_id).bind(application_id).bind(actor_user_id).bind(actor_token_id)
             .bind(request_id).bind(correlation_id).bind(trigger).bind(run.summary.total_count).bind(run.summary.passed_count)
             .bind(run.summary.failed_count).bind(started_at).bind(completed_at).execute(&mut *tx).await?;
-        for result in &run.results {
-            sqlx::query("INSERT INTO solution_pack_check_results (run_id,workspace_id,position,check_key,title,predicate_type,passed,reason_code,summary,evidence,evaluated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)")
-                .bind(run_id).bind(workspace_id).bind(result.position).bind(&result.key).bind(&result.title)
-                .bind(&result.predicate_type).bind(result.passed).bind(&result.reason_code).bind(&result.summary)
-                .bind(&result.evidence).bind(result.evaluated_at).execute(&mut *tx).await?;
+        if !run.results.is_empty() {
+            let results = &run.results;
+            sqlx::query("INSERT INTO solution_pack_check_results (run_id,workspace_id,position,check_key,title,predicate_type,passed,reason_code,summary,evidence,evaluated_at) SELECT $1,$2,r.position,r.check_key,r.title,r.predicate_type,r.passed,r.reason_code,r.summary,r.evidence,r.evaluated_at FROM unnest($3::bigint[],$4::text[],$5::text[],$6::text[],$7::bool[],$8::text[],$9::text[],$10::jsonb[],$11::timestamptz[]) WITH ORDINALITY AS r(position,check_key,title,predicate_type,passed,reason_code,summary,evidence,evaluated_at,ordinal) ORDER BY r.ordinal")
+                .bind(run_id)
+                .bind(workspace_id)
+                .bind(results.iter().map(|result| result.position).collect::<Vec<_>>())
+                .bind(results.iter().map(|result| result.key.as_str()).collect::<Vec<_>>())
+                .bind(results.iter().map(|result| result.title.as_str()).collect::<Vec<_>>())
+                .bind(results.iter().map(|result| result.predicate_type.as_str()).collect::<Vec<_>>())
+                .bind(results.iter().map(|result| result.passed).collect::<Vec<_>>())
+                .bind(results.iter().map(|result| result.reason_code.as_str()).collect::<Vec<_>>())
+                .bind(results.iter().map(|result| result.summary.as_str()).collect::<Vec<_>>())
+                .bind(results.iter().map(|result| &result.evidence).collect::<Vec<_>>())
+                .bind(results.iter().map(|result| result.evaluated_at).collect::<Vec<_>>())
+                .execute(&mut *tx)
+                .await?;
         }
         let mut audit_repository = self.clone();
         if let Some(audit) = audit_repository.audit_context.as_mut() {

@@ -221,6 +221,75 @@ impl EventPublisher for CatalogRepository {
 }
 
 impl CatalogRepository {
+    /// [`EventPublisher::enqueue_event`] for several events: one outbox
+    /// boundary lock and one INSERT. Sequences are allocated in `events`
+    /// order.
+    pub(crate) async fn enqueue_events(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        events: Vec<NewDomainEvent>,
+    ) -> Result<(), RepositoryError> {
+        if events.is_empty() {
+            return Ok(());
+        }
+        let count = events.len();
+        let mut ids = Vec::with_capacity(count);
+        let mut event_types = Vec::with_capacity(count);
+        let mut aggregate_kinds = Vec::with_capacity(count);
+        let mut aggregate_ids = Vec::with_capacity(count);
+        let mut correlation_ids = Vec::with_capacity(count);
+        let mut causation_ids = Vec::with_capacity(count);
+        let mut source_kinds = Vec::with_capacity(count);
+        let mut source_names = Vec::with_capacity(count);
+        let mut metadata = Vec::with_capacity(count);
+        let mut payloads = Vec::with_capacity(count);
+        for mut event in events {
+            super::add_initiating_actor_metadata(&mut event.metadata, self.audit_context.as_ref());
+            event
+                .validate()
+                .map_err(RepositoryError::InvalidDomainEvent)?;
+            ids.push(Uuid::new_v4());
+            event_types.push(event.event_type);
+            aggregate_kinds.push(event.aggregate_kind);
+            aggregate_ids.push(event.aggregate_id);
+            correlation_ids.push(event.correlation_id);
+            causation_ids.push(event.causation_id);
+            source_kinds.push(event.source.kind.as_str().to_owned());
+            source_names.push(event.source.name);
+            metadata.push(event.metadata);
+            payloads.push(event.payload);
+        }
+        let workspace_id = self.workspace_id.0;
+        lock_outbox_boundary(transaction, workspace_id).await?;
+        sqlx::query(
+            r#"INSERT INTO domain_events (
+                    id, workspace_id, event_type, aggregate_kind, aggregate_id,
+                    correlation_id, causation_id, source_kind, source_name, metadata, payload
+                )
+                SELECT e.id, $1, e.event_type, e.aggregate_kind, e.aggregate_id,
+                    e.correlation_id, e.causation_id, e.source_kind, e.source_name, e.metadata, e.payload
+                FROM unnest($2::uuid[], $3::text[], $4::text[], $5::uuid[], $6::uuid[], $7::uuid[],
+                    $8::text[], $9::text[], $10::jsonb[], $11::jsonb[])
+                    WITH ORDINALITY AS e(id, event_type, aggregate_kind, aggregate_id, correlation_id,
+                        causation_id, source_kind, source_name, metadata, payload, position)
+                ORDER BY e.position"#,
+        )
+        .bind(workspace_id)
+        .bind(ids)
+        .bind(event_types)
+        .bind(aggregate_kinds)
+        .bind(aggregate_ids)
+        .bind(correlation_ids)
+        .bind(causation_ids)
+        .bind(source_kinds)
+        .bind(source_names)
+        .bind(metadata)
+        .bind(payloads)
+        .execute(&mut **transaction)
+        .await?;
+        Ok(())
+    }
+
     /// Idempotently registers a consumer. The INSERT's watermark is evaluated
     /// at registration time; replicas racing to register retain the same
     /// durable consumer rather than replaying historical events.

@@ -295,6 +295,8 @@ impl CatalogRepository {
             };
         };
         let mut cursor: Option<(DateTime<Utc>, Uuid)> = None;
+        // Read on the first candidate page; see `preview_entity_migration_against`.
+        let mut target = None;
         loop {
             let candidates = match cursor {
                 Some((created_at, id)) => {
@@ -364,8 +366,12 @@ impl CatalogRepository {
                 .increment(candidates.len() as u64);
             let page_started = std::time::Instant::now();
             let candidate_ids: Vec<_> = candidates.iter().map(|candidate| candidate.id).collect();
+            if target.is_none() {
+                target = Some(self.migration_target(batch.blueprint_id).await?);
+            }
+            let preloaded = target.as_ref().and_then(Option::as_ref);
             let results = stream::iter(candidate_ids)
-                .map(|entity_id| self.process_batch_candidate(&batch, entity_id))
+                .map(|entity_id| self.process_batch_candidate(&batch, preloaded, entity_id))
                 .buffer_unordered(concurrency)
                 .collect::<Vec<_>>()
                 .await;
@@ -404,6 +410,7 @@ impl CatalogRepository {
     async fn process_batch_candidate(
         &self,
         batch: &BlueprintMigrationBatch,
+        target: Option<&super::entity_migration::MigrationTarget>,
         entity_id: Uuid,
     ) -> Result<&'static str, RepositoryError> {
         let migration = self.reserve_batch_migration(batch, entity_id).await?;
@@ -412,7 +419,7 @@ impl CatalogRepository {
                 return Ok("already_terminal");
             }
             "pending" => match self
-                .preview_entity_migration_into(entity_id, Some(migration.id))
+                .preview_entity_migration_against(entity_id, Some(migration.id), target)
                 .await
             {
                 Ok(preview)

@@ -14,6 +14,9 @@ type GatePredicate = (
     catalog_validation::predicate::Predicate,
 );
 
+/// Entities whose current values are loaded at once by bulk publication.
+const PUBLICATION_CHECK_BATCH: usize = 500;
+
 struct PublicationMutation<'a> {
     event_type: &'a str,
     entity_id: Uuid,
@@ -285,6 +288,9 @@ impl CatalogRepository {
             .ok_or(RepositoryError::PublicationActorRequired)?;
         // Gated channels evaluate every entity first; one failure rejects the
         // whole bulk publication with the failing entities in the evidence.
+        // Every entity is locked above and shares the blueprint revision, so
+        // the scope and each channel's checks are read once.
+        let mut scope = None;
         for context_id in &channel_ids {
             let channel = sqlx::query_as::<_, Db<PublicationChannel>>(
                 "SELECT c.context_id, a.code AS context_code, c.enabled, c.required_rule_codes, c.require_valid_entity FROM publication_channels c JOIN attribute_contexts a ON a.workspace_id = c.workspace_id AND a.id = c.context_id WHERE c.workspace_id = $1 AND c.context_id = $2",
@@ -299,20 +305,32 @@ impl CatalogRepository {
             }) else {
                 continue;
             };
+            if entity_ids.is_empty() {
+                continue;
+            }
+            let scope = match &mut scope {
+                Some(scope) => scope,
+                None => scope.insert(super::checks::CheckScope::load(&mut tx, workspace_id).await?),
+            };
+            scope.path(channel.context_id)?;
+            let mut gate = PublicationGate::new(&channel, blueprint_id, blueprint_version);
             let mut failures = Vec::new();
-            for entity_id in &entity_ids {
-                let entity = self.lock_entity(&mut tx, *entity_id).await?;
-                for mut violation in self
-                    .publication_violations(&mut tx, &entity, &channel)
-                    .await?
-                {
-                    if failures.len() >= super::MAX_REPORTED_VIOLATIONS {
-                        break;
+            for chunk in entity_ids.chunks(PUBLICATION_CHECK_BATCH) {
+                let mut subjects =
+                    super::checks::load_entities(&mut tx, workspace_id, chunk).await?;
+                for entity_id in chunk {
+                    let subject = subjects
+                        .remove(entity_id)
+                        .ok_or(RepositoryError::NotFound("entity"))?;
+                    for mut violation in gate.violations(&mut tx, scope, &subject).await? {
+                        if failures.len() >= super::MAX_REPORTED_VIOLATIONS {
+                            break;
+                        }
+                        if let Some(evidence) = violation.evidence.as_object_mut() {
+                            evidence.insert("entity_id".into(), serde_json::json!(entity_id));
+                        }
+                        failures.push(violation);
                     }
-                    if let Some(evidence) = violation.evidence.as_object_mut() {
-                        evidence.insert("entity_id".into(), serde_json::json!(entity_id));
-                    }
-                    failures.push(violation);
                 }
             }
             if !failures.is_empty() {
@@ -323,30 +341,39 @@ impl CatalogRepository {
             }
         }
         let published_at = chrono::Utc::now();
-        for entity_id in &entity_ids {
-            for context_id in &channel_ids {
-                sqlx::query("INSERT INTO entity_channel_publications (workspace_id, entity_id, context_id, published_at, published_by_user_id) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (workspace_id, entity_id, context_id) DO UPDATE SET published_at = EXCLUDED.published_at, published_by_user_id = EXCLUDED.published_by_user_id")
-                    .bind(workspace_id)
-                    .bind(entity_id)
-                    .bind(context_id)
-                    .bind(published_at)
-                    .bind(actor)
-                    .execute(&mut *tx)
-                    .await?;
-                self.enqueue_event(
-                    &mut tx,
-                    self.publication_event(
-                        ENTITY_PUBLISHED_V1,
-                        *entity_id,
-                        *context_id,
-                        Some(published_at),
-                        Some(actor),
-                        Some("blueprint_bulk"),
-                    ),
-                )
+        let (entity_column, context_column): (Vec<Uuid>, Vec<Uuid>) = entity_ids
+            .iter()
+            .flat_map(|entity_id| {
+                channel_ids
+                    .iter()
+                    .map(move |context_id| (*entity_id, *context_id))
+            })
+            .unzip();
+        if !entity_column.is_empty() {
+            sqlx::query("INSERT INTO entity_channel_publications (workspace_id, entity_id, context_id, published_at, published_by_user_id) SELECT $1, publication.entity_id, publication.context_id, $4, $5 FROM unnest($2::uuid[], $3::uuid[]) AS publication(entity_id, context_id) ON CONFLICT (workspace_id, entity_id, context_id) DO UPDATE SET published_at = EXCLUDED.published_at, published_by_user_id = EXCLUDED.published_by_user_id")
+                .bind(workspace_id)
+                .bind(&entity_column)
+                .bind(&context_column)
+                .bind(published_at)
+                .bind(actor)
+                .execute(&mut *tx)
                 .await?;
-            }
         }
+        let events = entity_column
+            .iter()
+            .zip(&context_column)
+            .map(|(entity_id, context_id)| {
+                self.publication_event(
+                    ENTITY_PUBLISHED_V1,
+                    *entity_id,
+                    *context_id,
+                    Some(published_at),
+                    Some(actor),
+                    Some("blueprint_bulk"),
+                )
+            })
+            .collect();
+        self.enqueue_events(&mut tx, events).await?;
         self.write_audit_event(&mut tx).await?;
         tx.commit().await?;
         Ok(BlueprintEntityPublicationSummary {
@@ -545,114 +572,20 @@ impl CatalogRepository {
         entity: &Entity,
         channel: &PublicationChannel,
     ) -> Result<Vec<super::CheckViolation>, RepositoryError> {
-        use super::checks::{self, CheckScope, CheckSource};
+        use super::checks::{self, CheckScope};
         if !channel.require_valid_entity && channel.required_rule_codes.is_empty() {
             return Ok(Vec::new());
         }
         let workspace_id = self.workspace_id.0;
         let scope = CheckScope::load(tx, workspace_id).await?;
-        let path = scope.path(channel.context_id)?;
+        scope.path(channel.context_id)?;
         let subject = checks::load_entities(tx, workspace_id, &[entity.id])
             .await?
             .remove(&entity.id)
             .ok_or(RepositoryError::NotFound("entity"))?;
-        let mut violations = Vec::new();
-        let mut predicates: Vec<GatePredicate> = Vec::new();
-        if channel.require_valid_entity {
-            let entity_schema: Option<Value> = sqlx::query_scalar(
-                "SELECT entity_schema FROM blueprints WHERE id = $1 AND version = $2",
-            )
-            .bind(entity.blueprint_id)
-            .bind(entity.blueprint_version)
-            .fetch_one(&mut **tx)
-            .await?;
-            if let Some(schema) = entity_schema {
-                // The same document the write path validates.
-                let document = subject.schema_document(&path);
-                for error in
-                    catalog_validation::validate_json_schema(&schema, &Value::Object(document))
-                        .map_err(RepositoryError::InvalidBlueprintDefinition)?
-                        .into_iter()
-                        .take(10)
-                {
-                    let attribute = error
-                        .instance_path
-                        .trim_start_matches('/')
-                        .split('/')
-                        .next()
-                        .filter(|segment| !segment.is_empty())
-                        .map(str::to_owned);
-                    violations.push(super::CheckViolation {
-                        source: CheckSource::EntitySchema,
-                        code: "entity_schema".to_owned(),
-                        message: error.message,
-                        contexts: vec![channel.context_code.clone()],
-                        attributes: attribute.into_iter().collect(),
-                        severity: None,
-                        transition: None,
-                        evidence: serde_json::json!({ "instance_path": error.instance_path }),
-                    });
-                }
-                for check in catalog_validation::predicate::entity_checks(&schema)
-                    .map_err(RepositoryError::InvalidBlueprintDefinition)?
-                {
-                    predicates.push((
-                        CheckSource::EntityCheck,
-                        check.code,
-                        check.message,
-                        None,
-                        check.predicate,
-                    ));
-                }
-            }
-        }
-        if !channel.required_rule_codes.is_empty() {
-            for rule in checks::enabled_rules(
-                tx,
-                workspace_id,
-                entity.blueprint_id,
-                entity.blueprint_version,
-            )
-            .await?
-            {
-                if channel.required_rule_codes.contains(&rule.code)
-                    && rule
-                        .context_id
-                        .is_none_or(|context| context == channel.context_id)
-                {
-                    let severity = serde_json::to_value(&rule.compiled.severity)
-                        .ok()
-                        .and_then(|value| value.as_str().map(str::to_owned));
-                    predicates.push((
-                        CheckSource::Rule,
-                        rule.code,
-                        None,
-                        severity,
-                        rule.compiled.predicate,
-                    ));
-                }
-            }
-        }
-        let references: Vec<&catalog_validation::predicate::Predicate> =
-            predicates.iter().map(|item| &item.4).collect();
-        let outcomes =
-            checks::evaluate_in_context(tx, &scope, &subject, channel.context_id, &[], &references)
-                .await?;
-        for ((source, code, message, severity, _), outcome) in predicates.iter().zip(outcomes) {
-            if let Err(failure) = outcome {
-                violations.push(super::CheckViolation {
-                    source: *source,
-                    code: code.clone(),
-                    message: message.clone().unwrap_or(failure.message),
-                    contexts: vec![channel.context_code.clone()],
-                    attributes: failure.attributes,
-                    severity: severity.clone(),
-                    transition: None,
-                    evidence: failure.evidence,
-                });
-            }
-        }
-        Ok(violations)
+        PublicationGate::new(channel, entity.blueprint_id, entity.blueprint_version)
+            .violations(tx, &scope, &subject)
+            .await
     }
 
     async fn commit_publication_mutation(
@@ -722,5 +655,156 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
         }
         tx.commit().await?;
         Ok(())
+    }
+}
+
+/// A channel's required checks for one blueprint revision. The schema, its
+/// entity checks and the enabled rules are read for the first subject and
+/// reused for the rest, in the order a single evaluation reads them.
+struct PublicationGate<'a> {
+    channel: &'a PublicationChannel,
+    blueprint_id: Uuid,
+    blueprint_version: i64,
+    /// The entity schema, once read, with its entity checks once parsed.
+    schema: Option<Option<(Value, Option<Vec<GatePredicate>>)>>,
+    rules: Option<Vec<GatePredicate>>,
+}
+
+impl<'a> PublicationGate<'a> {
+    fn new(channel: &'a PublicationChannel, blueprint_id: Uuid, blueprint_version: i64) -> Self {
+        Self {
+            channel,
+            blueprint_id,
+            blueprint_version,
+            schema: None,
+            rules: None,
+        }
+    }
+
+    async fn violations(
+        &mut self,
+        tx: &mut Transaction<'_, Postgres>,
+        scope: &super::checks::CheckScope,
+        subject: &super::record_values::RecordValues,
+    ) -> Result<Vec<super::CheckViolation>, RepositoryError> {
+        use super::checks::{self, CheckSource};
+        let channel = self.channel;
+        let path = scope.path(channel.context_id)?;
+        let mut violations = Vec::new();
+        let mut predicates: Vec<&GatePredicate> = Vec::new();
+        if channel.require_valid_entity {
+            if self.schema.is_none() {
+                let entity_schema: Option<Value> = sqlx::query_scalar(
+                    "SELECT entity_schema FROM blueprints WHERE id = $1 AND version = $2",
+                )
+                .bind(self.blueprint_id)
+                .bind(self.blueprint_version)
+                .fetch_one(&mut **tx)
+                .await?;
+                self.schema = Some(entity_schema.map(|schema| (schema, None)));
+            }
+            if let Some(Some((schema, schema_checks))) = &mut self.schema {
+                // The same document the write path validates.
+                let document = subject.schema_document(&path);
+                for error in
+                    catalog_validation::validate_json_schema(schema, &Value::Object(document))
+                        .map_err(RepositoryError::InvalidBlueprintDefinition)?
+                        .into_iter()
+                        .take(10)
+                {
+                    let attribute = error
+                        .instance_path
+                        .trim_start_matches('/')
+                        .split('/')
+                        .next()
+                        .filter(|segment| !segment.is_empty())
+                        .map(str::to_owned);
+                    violations.push(super::CheckViolation {
+                        source: CheckSource::EntitySchema,
+                        code: "entity_schema".to_owned(),
+                        message: error.message,
+                        contexts: vec![channel.context_code.clone()],
+                        attributes: attribute.into_iter().collect(),
+                        severity: None,
+                        transition: None,
+                        evidence: serde_json::json!({ "instance_path": error.instance_path }),
+                    });
+                }
+                if schema_checks.is_none() {
+                    *schema_checks = Some(
+                        catalog_validation::predicate::entity_checks(schema)
+                            .map_err(RepositoryError::InvalidBlueprintDefinition)?
+                            .into_iter()
+                            .map(|check| {
+                                (
+                                    CheckSource::EntityCheck,
+                                    check.code,
+                                    check.message,
+                                    None,
+                                    check.predicate,
+                                )
+                            })
+                            .collect(),
+                    );
+                }
+            }
+            if let Some(Some((_, Some(schema_checks)))) = &self.schema {
+                predicates.extend(schema_checks);
+            }
+        }
+        if !channel.required_rule_codes.is_empty() {
+            if self.rules.is_none() {
+                let workspace_id = scope.workspace_id();
+                let mut rules = Vec::new();
+                for rule in checks::enabled_rules(
+                    tx,
+                    workspace_id,
+                    self.blueprint_id,
+                    self.blueprint_version,
+                )
+                .await?
+                {
+                    if channel.required_rule_codes.contains(&rule.code)
+                        && rule
+                            .context_id
+                            .is_none_or(|context| context == channel.context_id)
+                    {
+                        let severity = serde_json::to_value(&rule.compiled.severity)
+                            .ok()
+                            .and_then(|value| value.as_str().map(str::to_owned));
+                        rules.push((
+                            CheckSource::Rule,
+                            rule.code,
+                            None,
+                            severity,
+                            rule.compiled.predicate,
+                        ));
+                    }
+                }
+                self.rules = Some(rules);
+            }
+            predicates.extend(self.rules.iter().flatten());
+        }
+        let references: Vec<&catalog_validation::predicate::Predicate> =
+            predicates.iter().map(|item| &item.4).collect();
+        let outcomes =
+            checks::evaluate_in_context(tx, scope, subject, channel.context_id, &[], &references)
+                .await?;
+        for ((source, code, message, severity, _), outcome) in predicates.into_iter().zip(outcomes)
+        {
+            if let Err(failure) = outcome {
+                violations.push(super::CheckViolation {
+                    source: *source,
+                    code: code.clone(),
+                    message: message.clone().unwrap_or(failure.message),
+                    contexts: vec![channel.context_code.clone()],
+                    attributes: failure.attributes,
+                    severity: severity.clone(),
+                    transition: None,
+                    evidence: failure.evidence,
+                });
+            }
+        }
+        Ok(violations)
     }
 }

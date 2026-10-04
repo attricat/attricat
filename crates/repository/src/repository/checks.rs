@@ -8,7 +8,9 @@
 use super::record_values::{
     ContextTree, RecordState, RecordValues, Selection, load_record, load_records,
 };
-use super::references::{ReferenceQuery, Referrers, referencing_entity_ids};
+use super::references::{
+    ReferenceQuery, Referrers, referencing_entity_ids, referencing_entity_ids_by_target,
+};
 use super::status::StatusChange;
 use super::structural_constraints::{
     EnforcedUniqueKey, HierarchyField, HierarchyWalk, enforced_unique_keys, key_hash,
@@ -118,6 +120,10 @@ impl CheckScope {
         self.tree.code(context_id)
     }
 
+    pub(crate) fn workspace_id(&self) -> Uuid {
+        self.workspace_id
+    }
+
     pub(crate) fn context_ids(&self) -> Vec<Uuid> {
         self.tree.ids()
     }
@@ -149,6 +155,86 @@ fn uuids(value: Option<&Value>) -> Vec<Uuid> {
         .collect()
 }
 
+/// Records a page of subjects shares, read once for every context: linked
+/// and referencing records, which do not depend on the context they are
+/// resolved in. Anything not covered is loaded per subject as before.
+#[derive(Default)]
+pub(crate) struct RelatedPrefetch {
+    /// IDs whose live records were requested; missing ones are not live.
+    requested: std::collections::HashSet<Uuid>,
+    records: BTreeMap<Uuid, RecordValues>,
+    /// Referencing entity IDs by subject and `(blueprint, relationship)`.
+    referencing: std::collections::HashMap<(Uuid, String, String), Vec<Uuid>>,
+}
+
+/// Records loaded at most by one [`prefetch_related`]; beyond this, records
+/// are loaded per subject so a page's memory stays bounded.
+const PREFETCH_MAX_RECORDS: usize = 5_000;
+
+impl RelatedPrefetch {
+    /// The live records of `ids`, or `None` when some were not prefetched.
+    fn records(&self, ids: &[Uuid]) -> Option<BTreeMap<Uuid, &RecordValues>> {
+        ids.iter().all(|id| self.requested.contains(id)).then(|| {
+            ids.iter()
+                .filter_map(|id| self.records.get(id).map(|record| (*id, record)))
+                .collect()
+        })
+    }
+}
+
+/// Prefetches what [`load_related`] reads for `subjects` in `contexts`.
+pub(crate) async fn prefetch_related(
+    conn: &mut PgConnection,
+    scope: &CheckScope,
+    subjects: &BTreeMap<Uuid, RecordValues>,
+    contexts: &[Uuid],
+    requirements: &Requirements,
+) -> Result<RelatedPrefetch, RepositoryError> {
+    let mut prefetch = RelatedPrefetch::default();
+    let mut ids = std::collections::BTreeSet::new();
+    if !requirements.linked.is_empty() {
+        for context_id in contexts {
+            let path = scope.path(*context_id)?;
+            for subject in subjects.values() {
+                let record = subject.record(&path);
+                for relationship in &requirements.linked {
+                    ids.extend(
+                        uuids(record.values.get(relationship))
+                            .into_iter()
+                            .take(MAX_LINKED_RECORDS),
+                    );
+                }
+            }
+        }
+    }
+    let targets: Vec<Uuid> = subjects.keys().copied().collect();
+    for (blueprint_code, relationship) in &requirements.referenced_by {
+        let by_target = referencing_entity_ids_by_target(
+            conn,
+            scope.workspace_id,
+            &targets,
+            relationship,
+            blueprint_code,
+            MAX_REFERENCING_RECORDS as i64 + 1,
+        )
+        .await?;
+        for target in &targets {
+            let referencing = by_target.get(target).cloned().unwrap_or_default();
+            ids.extend(referencing.iter().take(MAX_REFERENCING_RECORDS));
+            prefetch.referencing.insert(
+                (*target, blueprint_code.clone(), relationship.clone()),
+                referencing,
+            );
+        }
+    }
+    if !ids.is_empty() && ids.len() <= PREFETCH_MAX_RECORDS {
+        let ids: Vec<Uuid> = ids.into_iter().collect();
+        prefetch.records = load_entities(conn, scope.workspace_id, &ids).await?;
+        prefetch.requested = ids.into_iter().collect();
+    }
+    Ok(prefetch)
+}
+
 /// Loads the related data a predicate set needs for one subject and context.
 pub(crate) async fn load_related(
     conn: &mut PgConnection,
@@ -157,6 +243,7 @@ pub(crate) async fn load_related(
     record: &Record,
     context_id: Uuid,
     requirements: &Requirements,
+    prefetch: Option<&RelatedPrefetch>,
 ) -> Result<Related, RepositoryError> {
     let path = scope.path(context_id)?;
     let mut related = Related::default();
@@ -164,7 +251,14 @@ pub(crate) async fn load_related(
         let mut ids = uuids(record.values.get(relationship));
         let truncated = ids.len() > MAX_LINKED_RECORDS;
         ids.truncate(MAX_LINKED_RECORDS);
-        let loaded = load_entities(conn, scope.workspace_id, &ids).await?;
+        let loaded;
+        let loaded = match prefetch.and_then(|prefetch| prefetch.records(&ids)) {
+            Some(prefetched) => prefetched,
+            None => {
+                loaded = load_entities(conn, scope.workspace_id, &ids).await?;
+                loaded.iter().map(|(id, record)| (*id, record)).collect()
+            }
+        };
         let records = ids
             .iter()
             .filter_map(|id| loaded.get(id))
@@ -175,22 +269,39 @@ pub(crate) async fn load_related(
             .insert(relationship.clone(), RecordSet { records, truncated });
     }
     for (blueprint_code, relationship) in &requirements.referenced_by {
-        let mut ids = referencing_entity_ids(
-            conn,
-            scope.workspace_id,
-            ReferenceQuery {
-                target: subject.id,
-                attribute_code: relationship,
-                referrers: Referrers::BlueprintCode(blueprint_code),
-                only: None,
-                exclude_target: false,
-                limit: MAX_REFERENCING_RECORDS as i64 + 1,
-            },
-        )
-        .await?;
+        let prefetched = prefetch.and_then(|prefetch| {
+            prefetch
+                .referencing
+                .get(&(subject.id, blueprint_code.clone(), relationship.clone()))
+        });
+        let mut ids = match prefetched {
+            Some(ids) => ids.clone(),
+            None => {
+                referencing_entity_ids(
+                    conn,
+                    scope.workspace_id,
+                    ReferenceQuery {
+                        target: subject.id,
+                        attribute_code: relationship,
+                        referrers: Referrers::BlueprintCode(blueprint_code),
+                        only: None,
+                        exclude_target: false,
+                        limit: MAX_REFERENCING_RECORDS as i64 + 1,
+                    },
+                )
+                .await?
+            }
+        };
         let truncated = ids.len() > MAX_REFERENCING_RECORDS;
         ids.truncate(MAX_REFERENCING_RECORDS);
-        let loaded = load_entities(conn, scope.workspace_id, &ids).await?;
+        let loaded;
+        let loaded = match prefetch.and_then(|prefetch| prefetch.records(&ids)) {
+            Some(prefetched) => prefetched,
+            None => {
+                loaded = load_entities(conn, scope.workspace_id, &ids).await?;
+                loaded.iter().map(|(id, record)| (*id, record)).collect()
+            }
+        };
         let subject_id = Value::String(subject.id.to_string());
         let records = ids
             .iter()
@@ -442,6 +553,22 @@ pub(crate) async fn evaluate_in_context(
     overrides: &[(String, Value)],
     predicates: &[&Predicate],
 ) -> Result<Vec<Result<(), Failure>>, RepositoryError> {
+    evaluate_in_context_with(
+        conn, scope, subject, context_id, overrides, predicates, None,
+    )
+    .await
+}
+
+/// [`evaluate_in_context`] reading related records from a page prefetch.
+pub(crate) async fn evaluate_in_context_with(
+    conn: &mut PgConnection,
+    scope: &CheckScope,
+    subject: &RecordValues,
+    context_id: Uuid,
+    overrides: &[(String, Value)],
+    predicates: &[&Predicate],
+    prefetch: Option<&RelatedPrefetch>,
+) -> Result<Vec<Result<(), Failure>>, RepositoryError> {
     let path = scope.path(context_id)?;
     let mut record = subject.record(&path);
     for (code, value) in overrides {
@@ -452,7 +579,16 @@ pub(crate) async fn evaluate_in_context(
         }
     }
     let requirements = Requirements::for_predicates(predicates.iter().copied());
-    let related = load_related(conn, scope, subject, &record, context_id, &requirements).await?;
+    let related = load_related(
+        conn,
+        scope,
+        subject,
+        &record,
+        context_id,
+        &requirements,
+        prefetch,
+    )
+    .await?;
     let input = Evaluation {
         subject: &record,
         related: &related,

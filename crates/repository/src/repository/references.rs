@@ -72,3 +72,47 @@ pub(crate) async fn referencing_entity_ids(
     .fetch_all(conn)
     .await?)
 }
+
+/// [`referencing_entity_ids`] with [`Referrers::BlueprintCode`] for several
+/// targets in one query: each target's IDs, in ascending order, at most
+/// `limit` each. Targets with no referencing entity are omitted.
+pub(crate) async fn referencing_entity_ids_by_target(
+    conn: &mut PgConnection,
+    workspace_id: Uuid,
+    targets: &[Uuid],
+    attribute_code: &str,
+    blueprint_code: &str,
+    limit: i64,
+) -> Result<std::collections::HashMap<Uuid, Vec<Uuid>>, RepositoryError> {
+    let rows: Vec<(Uuid, Uuid)> = sqlx::query_as(
+        r#"SELECT t.target, r.entity_id
+           FROM unnest($2::uuid[]) AS t(target)
+           CROSS JOIN LATERAL (
+               SELECT DISTINCT av.entity_id
+               FROM attribute_values av
+               JOIN entities e ON e.id = av.entity_id AND e.workspace_id = av.workspace_id AND e.deleted_at IS NULL
+               JOIN attributes a ON a.id = av.attribute_id AND a.code = $3 AND a.deleted_at IS NULL
+                AND ((a.blueprint_id = e.blueprint_id AND a.blueprint_version = e.blueprint_version) OR a.entity_id = e.id)
+               WHERE av.workspace_id = $1 AND av.relationship_target_entity_id = t.target AND av.active
+                 AND EXISTS (
+                     SELECT 1 FROM blueprints b
+                     WHERE b.workspace_id = $1 AND b.id = e.blueprint_id AND b.version = e.blueprint_version AND b.code = $4)
+               ORDER BY av.entity_id
+               LIMIT $5
+           ) r
+           ORDER BY t.target, r.entity_id"#,
+    )
+    .bind(workspace_id)
+    .bind(targets)
+    .bind(attribute_code)
+    .bind(blueprint_code)
+    .bind(limit)
+    .fetch_all(conn)
+    .await?;
+    let mut by_target: std::collections::HashMap<Uuid, Vec<Uuid>> =
+        std::collections::HashMap::new();
+    for (target, entity_id) in rows {
+        by_target.entry(target).or_default().push(entity_id);
+    }
+    Ok(by_target)
+}

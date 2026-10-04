@@ -812,16 +812,56 @@ impl CatalogRepository {
         }
         let mut created = 0_i64;
         let mut resolved = 0_i64;
-        for result in &results {
-            if run.dry_run {
-                created += i64::from(result.failed);
-            } else if result.failed {
-                let inserted: bool = sqlx::query_scalar("INSERT INTO rule_findings(id,workspace_id,rule_id,rule_version,entity_id,context_id,evaluation_key,severity,message,evidence) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(workspace_id,rule_id,entity_id,context_id,evaluation_key) DO UPDATE SET rule_version=EXCLUDED.rule_version,severity=EXCLUDED.severity,message=EXCLUDED.message,evidence=EXCLUDED.evidence,state='open',resolved_at=NULL,resolved_by_run_id=NULL,updated_at=clock_timestamp() RETURNING (xmax=0)")
-                    .bind(Uuid::new_v4()).bind(ws).bind(run.rule_id).bind(run.rule_version).bind(result.entity_id).bind(run.context_id).bind(&result.evaluation_key).bind(&result.severity).bind(&result.message).bind(&result.evidence).fetch_one(&mut *tx).await?;
-                created += i64::from(inserted);
-            } else {
-                resolved += sqlx::query("UPDATE rule_findings SET state='resolved',resolved_at=clock_timestamp(),resolved_by_run_id=$4,updated_at=clock_timestamp() WHERE workspace_id=$1 AND rule_id=$2 AND entity_id=$3 AND context_id IS NOT DISTINCT FROM $5 AND evaluation_key=$6 AND state <> 'resolved'")
-                    .bind(ws).bind(run.rule_id).bind(result.entity_id).bind(run.id).bind(run.context_id).bind(&result.evaluation_key).execute(&mut *tx).await?.rows_affected() as i64;
+        let distinct = results
+            .iter()
+            .map(|result| (result.entity_id, result.evaluation_key.as_str()))
+            .collect::<std::collections::HashSet<_>>()
+            .len()
+            == results.len();
+        if run.dry_run {
+            created = results.iter().map(|result| i64::from(result.failed)).sum();
+        } else if distinct {
+            // Each finding is written by one statement per outcome; one row
+            // per finding key keeps them equivalent to writing in order.
+            let (failed, passed): (Vec<_>, Vec<_>) =
+                results.iter().partition(|result| result.failed);
+            if !failed.is_empty() {
+                created = sqlx::query_scalar("WITH upserted AS (INSERT INTO rule_findings(id,workspace_id,rule_id,rule_version,entity_id,context_id,evaluation_key,severity,message,evidence) SELECT f.id,$1,$2,$3,f.entity_id,$4,f.evaluation_key,f.severity,f.message,f.evidence FROM unnest($5::uuid[],$6::uuid[],$7::text[],$8::text[],$9::text[],$10::jsonb[]) AS f(id,entity_id,evaluation_key,severity,message,evidence) ON CONFLICT(workspace_id,rule_id,entity_id,context_id,evaluation_key) DO UPDATE SET rule_version=EXCLUDED.rule_version,severity=EXCLUDED.severity,message=EXCLUDED.message,evidence=EXCLUDED.evidence,state='open',resolved_at=NULL,resolved_by_run_id=NULL,updated_at=clock_timestamp() RETURNING (xmax=0) AS inserted) SELECT count(*) FILTER (WHERE inserted) FROM upserted")
+                    .bind(ws)
+                    .bind(run.rule_id)
+                    .bind(run.rule_version)
+                    .bind(run.context_id)
+                    .bind(failed.iter().map(|_| Uuid::new_v4()).collect::<Vec<_>>())
+                    .bind(failed.iter().map(|result| result.entity_id).collect::<Vec<_>>())
+                    .bind(failed.iter().map(|result| result.evaluation_key.as_str()).collect::<Vec<_>>())
+                    .bind(failed.iter().map(|result| result.severity.as_str()).collect::<Vec<_>>())
+                    .bind(failed.iter().map(|result| result.message.as_str()).collect::<Vec<_>>())
+                    .bind(failed.iter().map(|result| &result.evidence).collect::<Vec<_>>())
+                    .fetch_one(&mut *tx)
+                    .await?;
+            }
+            if !passed.is_empty() {
+                resolved = sqlx::query("UPDATE rule_findings f SET state='resolved',resolved_at=clock_timestamp(),resolved_by_run_id=$3,updated_at=clock_timestamp() FROM unnest($5::uuid[],$6::text[]) AS p(entity_id,evaluation_key) WHERE f.workspace_id=$1 AND f.rule_id=$2 AND f.entity_id=p.entity_id AND f.context_id IS NOT DISTINCT FROM $4 AND f.evaluation_key=p.evaluation_key AND f.state <> 'resolved'")
+                    .bind(ws)
+                    .bind(run.rule_id)
+                    .bind(run.id)
+                    .bind(run.context_id)
+                    .bind(passed.iter().map(|result| result.entity_id).collect::<Vec<_>>())
+                    .bind(passed.iter().map(|result| result.evaluation_key.as_str()).collect::<Vec<_>>())
+                    .execute(&mut *tx)
+                    .await?
+                    .rows_affected() as i64;
+            }
+        } else {
+            for result in &results {
+                if result.failed {
+                    let inserted: bool = sqlx::query_scalar("INSERT INTO rule_findings(id,workspace_id,rule_id,rule_version,entity_id,context_id,evaluation_key,severity,message,evidence) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(workspace_id,rule_id,entity_id,context_id,evaluation_key) DO UPDATE SET rule_version=EXCLUDED.rule_version,severity=EXCLUDED.severity,message=EXCLUDED.message,evidence=EXCLUDED.evidence,state='open',resolved_at=NULL,resolved_by_run_id=NULL,updated_at=clock_timestamp() RETURNING (xmax=0)")
+                        .bind(Uuid::new_v4()).bind(ws).bind(run.rule_id).bind(run.rule_version).bind(result.entity_id).bind(run.context_id).bind(&result.evaluation_key).bind(&result.severity).bind(&result.message).bind(&result.evidence).fetch_one(&mut *tx).await?;
+                    created += i64::from(inserted);
+                } else {
+                    resolved += sqlx::query("UPDATE rule_findings SET state='resolved',resolved_at=clock_timestamp(),resolved_by_run_id=$4,updated_at=clock_timestamp() WHERE workspace_id=$1 AND rule_id=$2 AND entity_id=$3 AND context_id IS NOT DISTINCT FROM $5 AND evaluation_key=$6 AND state <> 'resolved'")
+                        .bind(ws).bind(run.rule_id).bind(result.entity_id).bind(run.id).bind(run.context_id).bind(&result.evaluation_key).execute(&mut *tx).await?.rows_affected() as i64;
+                }
             }
         }
         sqlx::query("UPDATE rule_runs SET candidate_cursor=$2,candidates_evaluated=candidates_evaluated+$3,findings_created=findings_created+$4,findings_resolved=findings_resolved+$5,status=CASE WHEN $6 THEN 'completed' ELSE 'pending' END,completed_at=CASE WHEN $6 THEN clock_timestamp() ELSE completed_at END,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$7")
@@ -932,6 +972,11 @@ impl CatalogRepository {
             .map(|context| vec![context])
             .unwrap_or_else(|| scope.context_ids());
         let mut entities = super::checks::load_entities(&mut conn, ws, candidates).await?;
+        let requirements =
+            catalog_validation::predicate::Requirements::for_predicates([&rule.predicate]);
+        let prefetch =
+            super::checks::prefetch_related(&mut conn, &scope, &entities, &contexts, &requirements)
+                .await?;
         let severity = serde_json::to_value(&rule.severity)
             .ok()
             .and_then(|value| value.as_str().map(str::to_owned))
@@ -944,13 +989,14 @@ impl CatalogRepository {
             let mut failure: Option<catalog_validation::predicate::Failure> = None;
             let mut failing_contexts = Vec::new();
             for context in &contexts {
-                let outcome = super::checks::evaluate_in_context(
+                let outcome = super::checks::evaluate_in_context_with(
                     &mut conn,
                     &scope,
                     &subject,
                     *context,
                     &[],
                     &[&rule.predicate],
+                    Some(&prefetch),
                 )
                 .await?
                 .remove(0);

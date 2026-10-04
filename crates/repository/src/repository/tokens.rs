@@ -78,10 +78,9 @@ impl CatalogRepository {
         if available != permissions.len() as i64 {
             return Err(RepositoryError::TokenPermissionsUnavailable);
         }
-        sqlx::query("INSERT INTO personal_api_tokens (id, user_id, workspace_id, label, token_digest, expires_at) VALUES ($1, $2, $3, $4, $5, $6)").bind(token_id).bind(user_id).bind(workspace_id).bind(label).bind(digest).bind(expires_at).execute(&mut *tx).await?;
-        for permission in permissions {
-            sqlx::query("INSERT INTO personal_api_token_permissions (token_id, permission_code) VALUES ($1, $2)").bind(token_id).bind(permission).execute(&mut *tx).await?;
-        }
+        // The count check above rejects duplicate permissions, so the token
+        // and its permission rows are inserted by one statement.
+        sqlx::query("WITH token AS (INSERT INTO personal_api_tokens (id, user_id, workspace_id, label, token_digest, expires_at) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id) INSERT INTO personal_api_token_permissions (token_id, permission_code) SELECT token.id, permission FROM token CROSS JOIN unnest($7::text[]) AS permission").bind(token_id).bind(user_id).bind(workspace_id).bind(label).bind(digest).bind(expires_at).bind(permissions).execute(&mut *tx).await?;
         self.commit_mutation(tx).await?;
         Ok(())
     }
