@@ -127,7 +127,8 @@ pub use extension_catalog_data::{
 };
 pub use extension_interactive_operations::{
     INITIATOR_ACCESS_REVOKED, INTERACTIVE_OPERATION_ABI, InteractiveRun, InteractiveRunArtifact,
-    InteractiveRunScope, OPERATION_OUTPUT_RETENTION_DAYS, StartInteractiveOperation,
+    InteractiveRunFailure, InteractiveRunScope, InteractiveRunStatus,
+    OPERATION_OUTPUT_RETENTION_DAYS, StartInteractiveOperation,
 };
 pub use extension_operation_artifacts::{ExtensionOperationArtifact, MAX_OPERATION_ARTIFACT_BYTES};
 pub use extension_operation_http_transfer::{
