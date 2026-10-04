@@ -117,6 +117,8 @@ pub struct AuthenticatedToken {
     pub user_id: Uuid,
     pub workspace_id: Uuid,
     pub permissions: std::collections::HashSet<String>,
+    /// The token workspace's cache generations.
+    pub generations: Option<super::WorkspaceGenerations>,
 }
 
 impl<S: super::RepositoryScope> CatalogRepository<S> {
@@ -128,12 +130,23 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
         // requests only read; at most one update per minute is needed per PAT.
         // The token's permissions come back with the credential so request
         // authorization checks them in memory instead of re-reading the token.
-        let token: Option<(Uuid, Uuid, Uuid, bool, Vec<String>)> = sqlx::query_as(
-            "SELECT t.id, t.user_id, t.workspace_id, (t.last_used_at IS NULL OR t.last_used_at < clock_timestamp() - interval '1 minute'), ARRAY(SELECT p.permission_code FROM personal_api_token_permissions p WHERE p.token_id = t.id) FROM personal_api_tokens t JOIN users u ON u.id = t.user_id WHERE t.token_digest = $1 AND t.revoked_at IS NULL AND (t.expires_at IS NULL OR t.expires_at > clock_timestamp()) AND u.state = 'active'",
+        #[allow(clippy::type_complexity)]
+        let token: Option<(Uuid, Uuid, Uuid, bool, Vec<String>, Option<i64>, Option<i64>, Option<i64>)> = sqlx::query_as(
+            "SELECT t.id, t.user_id, t.workspace_id, (t.last_used_at IS NULL OR t.last_used_at < clock_timestamp() - interval '1 minute'), ARRAY(SELECT p.permission_code FROM personal_api_token_permissions p WHERE p.token_id = t.id), w.catalog_generation, w.contexts_generation, w.extensions_generation FROM personal_api_tokens t JOIN users u ON u.id = t.user_id LEFT JOIN workspaces w ON w.id = t.workspace_id WHERE t.token_digest = $1 AND t.revoked_at IS NULL AND (t.expires_at IS NULL OR t.expires_at > clock_timestamp()) AND u.state = 'active'",
         ).bind(digest).fetch_optional(&self.pool).await?;
-        let Some((id, user, workspace, touch, permissions)) = token else {
+        let Some((id, user, workspace, touch, permissions, catalog, contexts, extensions)) = token
+        else {
             return Ok(None);
         };
+        let generations = catalog.zip(contexts).zip(extensions).map(
+            |((catalog_generation, contexts_generation), extensions_generation)| {
+                super::WorkspaceGenerations {
+                    catalog_generation,
+                    contexts_generation,
+                    extensions_generation,
+                }
+            },
+        );
         if touch {
             sqlx::query("UPDATE personal_api_tokens SET last_used_at = clock_timestamp() WHERE id = $1 AND (last_used_at IS NULL OR last_used_at < clock_timestamp() - interval '1 minute')")
                 .bind(id).execute(&self.pool).await?;
@@ -143,6 +156,7 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
             user_id: user,
             workspace_id: workspace,
             permissions: permissions.into_iter().collect(),
+            generations,
         }))
     }
 

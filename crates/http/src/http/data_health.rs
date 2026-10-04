@@ -160,6 +160,7 @@ impl DataHealthCache {
 
 async fn cached_data_health<T>(
     state: &AppState,
+    repository: &CatalogRepository,
     workspace_id: Uuid,
     key: String,
     load: impl std::future::Future<Output = Result<T, RepositoryError>>,
@@ -169,6 +170,11 @@ where
 {
     let (value, cache_status) = if state.data_health_cache_ttl_seconds > 0 {
         let ttl = Duration::from_secs(state.data_health_cache_ttl_seconds);
+        // Every catalog mutation, from any replica, worker or solution pack,
+        // appends to the workspace outbox. Keying by its high-water mark makes
+        // such a change a cache miss everywhere; the TTL bounds the rest.
+        let sequence = repository.latest_event_sequence().await?;
+        let key = format!("{key}:{sequence}");
         match state.data_health_cache.get(workspace_id, &key, ttl) {
             Ok(value) => (value, "HIT"),
             Err(generation) => {
@@ -214,6 +220,7 @@ pub(super) async fn data_health_summary(
     let days = stale_after_days(query)?;
     cached_data_health(
         &state,
+        &repository,
         workspace_id,
         format!("summary:{days}"),
         repository.data_health_summary(days.into()),
@@ -229,6 +236,7 @@ pub(super) async fn data_health_blueprints(
     let days = stale_after_days(query)?;
     cached_data_health(
         &state,
+        &repository,
         workspace_id,
         format!("blueprints:{days}"),
         repository.data_health_blueprints(days.into()),
@@ -242,6 +250,7 @@ pub(super) async fn data_health_freshness(
 ) -> Result<Response, ApiError> {
     cached_data_health(
         &state,
+        &repository,
         workspace_id,
         "freshness".to_owned(),
         repository.data_health_freshness(),
@@ -255,6 +264,7 @@ pub(super) async fn data_health_completeness(
 ) -> Result<Response, ApiError> {
     cached_data_health(
         &state,
+        &repository,
         workspace_id,
         "completeness".to_owned(),
         repository.data_health_completeness(),
@@ -268,6 +278,7 @@ pub(super) async fn data_health_contexts(
 ) -> Result<Response, ApiError> {
     cached_data_health(
         &state,
+        &repository,
         workspace_id,
         "contexts".to_owned(),
         repository.data_health_contexts(),
@@ -281,6 +292,7 @@ pub(super) async fn data_health_relationships(
 ) -> Result<Response, ApiError> {
     cached_data_health(
         &state,
+        &repository,
         workspace_id,
         "relationships".to_owned(),
         repository.data_health_relationships(),
@@ -294,6 +306,7 @@ pub(super) async fn data_health_storage(
 ) -> Result<Response, ApiError> {
     cached_data_health(
         &state,
+        &repository,
         workspace_id,
         "storage".to_owned(),
         repository.data_health_storage(),

@@ -113,79 +113,92 @@ pub(super) async fn authorize(
     // `token_permissions` is the authenticated token's permission set (None
     // for sessions); `active_principal` is already known for browser sessions,
     // whose validation covers the same user, membership and workspace state.
-    let (principal, workspace, token_id, session_digest, token_permissions, active_principal) =
-        if let Some(secret) = bearer {
-            let digest = sha2::Sha256::digest(secret.as_bytes());
-            let token = state
-                .repository
-                .authenticate_personal_api_token(&digest)
-                .await?
-                .ok_or_else(ApiError::unauthenticated)?;
-            (
-                token.user_id,
-                token.workspace_id,
-                Some(token.id),
-                None,
-                Some(token.permissions),
-                None,
-            )
-        } else if state.allow_trusted_headers {
-            let user_id = request
-                .headers()
-                .get(USER_HEADER)
-                .and_then(|value| value.to_str().ok())
-                .and_then(|value| value.parse().ok())
-                .ok_or_else(ApiError::unauthenticated)?;
-            let workspace_id = request
-                .headers()
-                .get(WORKSPACE_HEADER)
-                .and_then(|value| value.to_str().ok())
-                .and_then(|value| value.parse().ok())
-                .ok_or_else(ApiError::unauthenticated)?;
-            if !state.repository.is_active_user(user_id).await? {
-                return Err(ApiError::unauthenticated());
-            }
-            (user_id, workspace_id, None, None, None, None)
-        } else {
-            let raw_session = cookie_value(
-                request
-                    .headers()
-                    .get("cookie")
-                    .and_then(|value| value.to_str().ok()),
-                SESSION_COOKIE,
-            )
+    let (
+        principal,
+        workspace,
+        token_id,
+        session_digest,
+        token_permissions,
+        active_principal,
+        generations,
+    ) = if let Some(secret) = bearer {
+        let digest = sha2::Sha256::digest(secret.as_bytes());
+        let token = state
+            .repository
+            .authenticate_personal_api_token(&digest)
+            .await?
             .ok_or_else(ApiError::unauthenticated)?;
-            let session_secret = SessionSecret::from_delivery_value(raw_session)
-                .map_err(|_| ApiError::unauthenticated())?;
-            let session_digest = session_secret.digest();
-            let session = state
-                .repository
-                .validate_browser_session(&session_digest)
-                .await?
-                .ok_or_else(ApiError::unauthenticated)?;
-            if !matches!(
-                *request.method(),
-                Method::GET | Method::HEAD | Method::OPTIONS
-            ) {
-                let csrf = request
-                    .headers()
-                    .get(CSRF_HEADER)
-                    .and_then(|value| value.to_str().ok())
-                    .and_then(|value| SessionSecret::from_delivery_value(value.to_owned()).ok())
-                    .ok_or_else(ApiError::csrf_failed)?;
-                if !session.csrf_digest.matches(&csrf) {
-                    return Err(ApiError::csrf_failed());
-                }
+        (
+            token.user_id,
+            token.workspace_id,
+            Some(token.id),
+            None,
+            Some(token.permissions),
+            None,
+            token.generations,
+        )
+    } else if state.allow_trusted_headers {
+        let user_id = request
+            .headers()
+            .get(USER_HEADER)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.parse().ok())
+            .ok_or_else(ApiError::unauthenticated)?;
+        let workspace_id = request
+            .headers()
+            .get(WORKSPACE_HEADER)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.parse().ok())
+            .ok_or_else(ApiError::unauthenticated)?;
+        let (active, generations) = state
+            .repository
+            .active_user_generations(user_id, workspace_id)
+            .await?;
+        if !active {
+            return Err(ApiError::unauthenticated());
+        }
+        (user_id, workspace_id, None, None, None, None, generations)
+    } else {
+        let raw_session = cookie_value(
+            request
+                .headers()
+                .get("cookie")
+                .and_then(|value| value.to_str().ok()),
+            SESSION_COOKIE,
+        )
+        .ok_or_else(ApiError::unauthenticated)?;
+        let session_secret = SessionSecret::from_delivery_value(raw_session)
+            .map_err(|_| ApiError::unauthenticated())?;
+        let session_digest = session_secret.digest();
+        let session = state
+            .repository
+            .validate_browser_session(&session_digest)
+            .await?
+            .ok_or_else(ApiError::unauthenticated)?;
+        if !matches!(
+            *request.method(),
+            Method::GET | Method::HEAD | Method::OPTIONS
+        ) {
+            let csrf = request
+                .headers()
+                .get(CSRF_HEADER)
+                .and_then(|value| value.to_str().ok())
+                .and_then(|value| SessionSecret::from_delivery_value(value.to_owned()).ok())
+                .ok_or_else(ApiError::csrf_failed)?;
+            if !session.csrf_digest.matches(&csrf) {
+                return Err(ApiError::csrf_failed());
             }
-            (
-                session.user_id,
-                session.workspace_id,
-                None,
-                Some(session_digest),
-                None,
-                Some(session.workspace_active),
-            )
-        };
+        }
+        (
+            session.user_id,
+            session.workspace_id,
+            None,
+            Some(session_digest),
+            None,
+            Some(session.workspace_active),
+            Some(session.generations),
+        )
+    };
     // A token's permissions were read with the credential in this request.
     let token_permits = |permission: &str| {
         token_permissions
@@ -276,6 +289,7 @@ pub(super) async fn authorize(
             .repository
             .for_workspace(workspace)
             .await?
+            .with_generations(generations)
             .with_audit_context(audit_context),
     ));
     if let Some(session_digest) = session_digest {

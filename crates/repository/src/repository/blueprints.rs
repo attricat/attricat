@@ -1,3 +1,4 @@
+use super::generations::{Generation, advance_generation};
 use super::values::{NativeValue, ValueType};
 use super::*;
 use crate::domain_events::{
@@ -280,6 +281,15 @@ impl CatalogRepository {
         &self,
         blueprint_id: Uuid,
     ) -> Result<Option<BlueprintWithAttributes>, RepositoryError> {
+        if let Some(latest) = self
+            .latest_published_revision(LatestBy::Id(blueprint_id))
+            .await?
+        {
+            return match latest {
+                Some((id, version)) => self.get_blueprint_revision(id, version).await,
+                None => Ok(None),
+            };
+        }
         let blueprint = sqlx::query_as::<_, Db<Blueprint>>(
             r#"SELECT id, code, name, kind, version, includes, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
                FROM blueprints
@@ -331,6 +341,12 @@ impl CatalogRepository {
         code: &str,
     ) -> Result<Option<BlueprintWithAttributes>, RepositoryError> {
         validate_code(code)?;
+        if let Some(latest) = self.latest_published_revision(LatestBy::Code(code)).await? {
+            return match latest {
+                Some((id, version)) => self.get_blueprint_revision(id, version).await,
+                None => Ok(None),
+            };
+        }
         let blueprint = sqlx::query_as::<_, Db<Blueprint>>(
             r#"SELECT id, code, name, kind, version, includes, views, entity_schema, status, published_at, created_at, updated_at, deleted_at, definition, definition_hash
                FROM blueprints
@@ -516,6 +532,7 @@ impl CatalogRepository {
             .bind(self.workspace_id.0)
             .execute(&mut *transaction)
             .await?;
+            advance_generation(&mut transaction, self.workspace_id.0, Generation::Catalog).await?;
             self.apply_published_structural_constraints(
                 &mut transaction,
                 blueprint_id,
@@ -603,6 +620,7 @@ impl CatalogRepository {
             .fetch_one(&mut **transaction)
             .await?
             .into_domain();
+            advance_generation(transaction, self.workspace_id.0, Generation::Catalog).await?;
             self.apply_published_structural_constraints(
                 transaction,
                 blueprint_id,
@@ -823,6 +841,48 @@ impl CatalogRepository {
             .await
     }
 
+    /// The latest published revision of a family at this request's catalog
+    /// generation (publication advances it), or `None` without generations.
+    async fn latest_published_revision(
+        &self,
+        by: LatestBy<'_>,
+    ) -> Result<Option<Option<(Uuid, i64)>>, RepositoryError> {
+        let Some(generations) = self.generations() else {
+            return Ok(None);
+        };
+        let workspace_id = self.workspace_id.0;
+        let key = match by {
+            LatestBy::Id(id) => CacheKey::new(
+                "blueprint_latest_id",
+                &[&workspace_id, &id, &generations.catalog_generation],
+            ),
+            LatestBy::Code(code) => CacheKey::new(
+                "blueprint_latest_code",
+                &[&workspace_id, &code, &generations.catalog_generation],
+            ),
+        };
+        let latest = self
+            .cache
+            .fetch(key, &[], Policy::Generation, || async {
+                let row: Option<(Uuid, i64)> = match by {
+                    LatestBy::Id(id) => sqlx::query_as(
+                        "SELECT id, version FROM blueprints WHERE id = $1 AND workspace_id = $2 AND status = 'published' AND deleted_at IS NULL ORDER BY version DESC LIMIT 1",
+                    )
+                    .bind(id),
+                    LatestBy::Code(code) => sqlx::query_as(
+                        "SELECT id, version FROM blueprints WHERE code = $1 AND workspace_id = $2 AND status = 'published' AND deleted_at IS NULL ORDER BY version DESC LIMIT 1",
+                    )
+                    .bind(code),
+                }
+                .bind(workspace_id)
+                .fetch_optional(&self.pool)
+                .await?;
+                Ok::<_, RepositoryError>(row)
+            })
+            .await?;
+        Ok(Some(*latest))
+    }
+
     /// A cached published revision, by ID or by code.
     async fn cached_revision(&self, key: &CacheKey) -> Option<Arc<CachedRevision>> {
         self.cache.get::<CachedRevision>(key).await
@@ -916,6 +976,12 @@ impl CatalogRepository {
             table_path_attributes,
         })
     }
+}
+
+#[derive(Clone, Copy)]
+enum LatestBy<'a> {
+    Id(Uuid),
+    Code(&'a str),
 }
 
 /// A published revision's row and attributes.

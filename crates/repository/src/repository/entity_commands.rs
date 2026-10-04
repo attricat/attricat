@@ -4,6 +4,7 @@ use super::extension_catalog_data::{
     ExtensionCatalogIntentStatus, MAX_EXTENSION_BATCH_INTENTS, MAX_EXTENSION_BATCH_KEY_BYTES,
     MAX_EXTENSION_INTENT_KEY_BYTES,
 };
+use super::generations::WritePrefetch;
 use super::record_values::{ContextTree, RecordValues};
 use super::values::{NativeValue, ValueType};
 use super::write_context::WriteContext;
@@ -347,9 +348,12 @@ impl CatalogRepository {
         system_metadata: Option<Value>,
         expected_updated_at: Option<DateTime<Utc>>,
     ) -> Result<Entity, RepositoryError> {
+        // Committed workspace state is prefetched before the transaction
+        // opens; the transaction uses it only at the same generations.
+        let prefetch = self.write_prefetch().await?;
         let mut transaction = self.pool.begin().await?;
         let (entity, changes, event) = self
-            .update_entity_in_transaction(
+            .update_entity_in_transaction_with(
                 &mut transaction,
                 entity_id,
                 UpdateEntityFormRequest {
@@ -360,6 +364,7 @@ impl CatalogRepository {
                     system_tags,
                     system_metadata,
                 },
+                prefetch.as_ref(),
             )
             .await?;
         self.commit_entity_mutation(transaction, changes, event)
@@ -375,6 +380,17 @@ impl CatalogRepository {
         transaction: &mut Transaction<'_, Postgres>,
         entity_id: Uuid,
         input: UpdateEntityFormRequest,
+    ) -> Result<(Entity, Vec<AuditEventChange>, NewDomainEvent), RepositoryError> {
+        self.update_entity_in_transaction_with(transaction, entity_id, input, None)
+            .await
+    }
+
+    async fn update_entity_in_transaction_with(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        entity_id: Uuid,
+        input: UpdateEntityFormRequest,
+        prefetch: Option<&WritePrefetch>,
     ) -> Result<(Entity, Vec<AuditEventChange>, NewDomainEvent), RepositoryError> {
         let UpdateEntityFormRequest {
             expected_updated_at,
@@ -393,11 +409,15 @@ impl CatalogRepository {
         }
         // The row lock serializes writers for an entity. It protects both the
         // one-latest-value invariant and the preview rebuilt from that state.
-        let entity = self.lock_entity(transaction, entity_id).await?;
+        let (entity, generations) = self
+            .lock_entity_with_generations(transaction, entity_id)
+            .await?;
         // Snapshot under the lock so a concurrent writer cannot change the
         // audited "before" state between the read and this mutation.
         let before = self.entity_audit_snapshot(transaction, entity_id).await?;
-        let write = WriteContext::load(transaction, self.workspace_id.0, &entity).await?;
+        let prefetch = prefetch.filter(|prefetch| Some(prefetch.generations) == generations);
+        let write =
+            WriteContext::load_with(transaction, self.workspace_id.0, &entity, prefetch).await?;
         if expected_updated_at.is_some() || Self::has_status_writes(&write, &values, &remove_values)
         {
             Self::check_status_precondition(&write, &entity, expected_updated_at)?;
@@ -1282,6 +1302,48 @@ impl CatalogRepository {
         .ok_or(RepositoryError::NotFound("entity"))
     }
 
+    /// [`Self::lock_entity`] and the workspace's generations as this
+    /// transaction sees them, in one query.
+    pub(super) async fn lock_entity_with_generations(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        entity_id: Uuid,
+    ) -> Result<(Entity, Option<WorkspaceGenerations>), RepositoryError> {
+        #[derive(sqlx::FromRow)]
+        struct Row {
+            #[sqlx(flatten)]
+            entity: Db<Entity>,
+            catalog_generation: Option<i64>,
+            contexts_generation: Option<i64>,
+            extensions_generation: Option<i64>,
+        }
+        let row = sqlx::query_as::<_, Row>(
+            r#"SELECT e.id, e.blueprint_id, e.blueprint_version, e.projections, e.system_tags, e.system_metadata, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.created_at, e.updated_at, e.deleted_at,
+                      w.catalog_generation, w.contexts_generation, w.extensions_generation
+               FROM entities e LEFT JOIN workspaces w ON w.id = e.workspace_id
+               WHERE e.id = $1 AND e.workspace_id = $2 AND e.deleted_at IS NULL FOR UPDATE OF e"#,
+        )
+        .bind(entity_id)
+        .bind(self.workspace_id.0)
+        .fetch_optional(&mut **transaction)
+        .await?
+        .ok_or(RepositoryError::NotFound("entity"))?;
+        let generations = row
+            .catalog_generation
+            .zip(row.contexts_generation)
+            .zip(row.extensions_generation)
+            .map(
+                |((catalog_generation, contexts_generation), extensions_generation)| {
+                    WorkspaceGenerations {
+                        catalog_generation,
+                        contexts_generation,
+                        extensions_generation,
+                    }
+                },
+            );
+        Ok((row.entity.into_domain(), generations))
+    }
+
     async fn insert_entity(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
@@ -1379,9 +1441,10 @@ impl CatalogRepository {
         if let Some(entity_schema) = &entity_schema {
             validate_json_entity_schema(tree, &record, entity_schema)?;
         }
-        self.enforce_declarative_checks(
+        self.enforce_declarative_checks_using(
             transaction,
             entity_schema.as_ref(),
+            write.enabled_rules.as_deref(),
             tree,
             &record,
             &changes,

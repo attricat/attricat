@@ -1,3 +1,4 @@
+use super::generations::{Generation, advance_generation};
 use super::*;
 use crate::persistence_rows::{Db, IntoDomain};
 use crate::{
@@ -235,6 +236,7 @@ impl CatalogRepository {
     ) -> Result<(), RepositoryError> {
         let ws = self.workspace_id.0;
         if sqlx::query("UPDATE rules SET status='published',published_at=COALESCE(published_at,now()) WHERE workspace_id=$1 AND id=$2 AND version=$3").bind(ws).bind(id).bind(version).execute(&mut **tx).await?.rows_affected()==0{return Err(RepositoryError::NotFound("rule revision"));}
+        advance_generation(tx, ws, Generation::Catalog).await?;
         Ok(())
     }
     /// Type-checks a standalone rule against its blueprint revision's attributes.
@@ -328,6 +330,7 @@ impl CatalogRepository {
             return Err(RepositoryError::RuleNotPublished);
         }
         sqlx::query("UPDATE rule_lifecycles SET enabled_version=$3,activation_sequence=(SELECT COALESCE(max(sequence),0) FROM domain_events WHERE workspace_id=$1),enabled_at=now(),disabled_at=NULL,updated_at=now() WHERE workspace_id=$1 AND rule_id=$2").bind(ws).bind(id).bind(version).execute(&mut **tx).await?;
+        advance_generation(tx, ws, Generation::Catalog).await?;
         let plan: serde_json::Value = sqlx::query_scalar(
             "SELECT compiled_plan FROM rules WHERE workspace_id=$1 AND id=$2 AND version=$3",
         )
@@ -356,6 +359,7 @@ impl CatalogRepository {
         let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
         if sqlx::query("UPDATE rule_lifecycles SET enabled_version=NULL,disabled_at=now(),updated_at=now() WHERE workspace_id=$1 AND rule_id=$2").bind(ws).bind(id).execute(&mut *tx).await?.rows_affected()==0{return Err(RepositoryError::NotFound("rule"));}
+        advance_generation(&mut tx, ws, Generation::Catalog).await?;
         sqlx::query("UPDATE rule_runs SET status='cancelled',cancelled_at=clock_timestamp(),lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND rule_id=$2 AND status IN ('pending','leased')").bind(ws).bind(id).execute(&mut *tx).await?;
         let queued_tasks: Vec<Uuid> = sqlx::query_scalar("SELECT t.id FROM tasks t JOIN rule_runs rr ON rr.id=t.subject_id WHERE t.workspace_id=$1 AND t.kind='rule_run.v1' AND t.status='queued' AND rr.rule_id=$2 FOR UPDATE OF t")
             .bind(ws).bind(id).fetch_all(&mut *tx).await?;

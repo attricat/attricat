@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
+use super::generations::{Generation, advance_generation};
 use super::{CatalogRepository, RepositoryError};
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -226,6 +227,7 @@ impl CatalogRepository {
         if updated.rows_affected() != 1 {
             return Err(RepositoryError::NotFound("workspace"));
         }
+        advance_generation(tx, workspace_id, Generation::Catalog).await?;
         Ok(())
     }
 }

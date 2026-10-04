@@ -24,6 +24,8 @@ pub struct ValidBrowserSession {
     /// second round trip; a deleted workspace still authenticates and is
     /// rejected as forbidden.
     pub workspace_active: bool,
+    /// The session workspace's cache generations.
+    pub generations: super::WorkspaceGenerations,
 }
 
 pub struct DiscoveredWorkspace {
@@ -237,7 +239,7 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
         session: &SessionDigest,
     ) -> Result<Option<ValidBrowserSession>, RepositoryError> {
         let row = sqlx::query(
-            "SELECT s.user_id, s.workspace_id, s.csrf_digest, (w.deleted_at IS NULL) AS workspace_active FROM browser_sessions s JOIN users u ON u.id = s.user_id JOIN local_password_credentials c ON c.user_id = u.id JOIN workspace_memberships m ON m.user_id = u.id AND m.workspace_id = s.workspace_id JOIN workspaces w ON w.id = s.workspace_id WHERE s.session_digest = $1 AND s.revoked_at IS NULL AND s.expires_at > clock_timestamp() AND u.state = 'active' AND u.security_version = s.issued_security_version AND c.credential_version = s.issued_credential_version AND m.state = 'active'",
+            "SELECT s.user_id, s.workspace_id, s.csrf_digest, (w.deleted_at IS NULL) AS workspace_active, w.catalog_generation, w.contexts_generation, w.extensions_generation FROM browser_sessions s JOIN users u ON u.id = s.user_id JOIN local_password_credentials c ON c.user_id = u.id JOIN workspace_memberships m ON m.user_id = u.id AND m.workspace_id = s.workspace_id JOIN workspaces w ON w.id = s.workspace_id WHERE s.session_digest = $1 AND s.revoked_at IS NULL AND s.expires_at > clock_timestamp() AND u.state = 'active' AND u.security_version = s.issued_security_version AND c.credential_version = s.issued_credential_version AND m.state = 'active'",
         )
         .bind(session.as_ref())
         .fetch_optional(&self.pool)
@@ -249,6 +251,11 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
                 csrf_digest: SessionDigest::from_slice(&row.try_get::<Vec<u8>, _>("csrf_digest")?)
                     .map_err(|_| sqlx::Error::Protocol("stored csrf digest is invalid".into()))?,
                 workspace_active: row.try_get("workspace_active")?,
+                generations: super::WorkspaceGenerations {
+                    catalog_generation: row.try_get("catalog_generation")?,
+                    contexts_generation: row.try_get("contexts_generation")?,
+                    extensions_generation: row.try_get("extensions_generation")?,
+                },
             })
         })
         .transpose()

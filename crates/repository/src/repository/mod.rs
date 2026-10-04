@@ -59,6 +59,7 @@ mod extension_scoped_configuration;
 mod extension_storage;
 mod extensions;
 mod files;
+mod generations;
 mod health;
 mod leadership;
 mod lexicon;
@@ -156,6 +157,7 @@ pub use extensions::{
     required_extension_grants,
 };
 pub use files::{FileObject, FilePolicy, FileUploadResult, NewUploadedFile};
+pub use generations::WorkspaceGenerations;
 pub use leadership::CoordinatorLeadership;
 pub use members::{WorkspaceInvitation, WorkspaceMember};
 pub use presentation_assets::{MAX_PRESENTATION_ASSET_PAGE_SIZE, PresentationAsset};
@@ -201,6 +203,9 @@ pub struct CatalogRepository<S = WorkspaceScope> {
     authorization_actor: Option<AuthorizationActor>,
     /// Shared by every repository derived from the same composition root.
     pub(crate) cache: QueryCache,
+    /// The workspace's generations as read by this request's authentication.
+    /// Generation-keyed caches are consulted only when this is known.
+    generations: Option<WorkspaceGenerations>,
 }
 
 /// A user, and optionally the personal API token, that initiated an
@@ -681,6 +686,7 @@ impl CatalogRepository {
             extension_id: None,
             authorization_actor: None,
             cache: QueryCache::default(),
+            generations: None,
         }
     }
 
@@ -699,6 +705,7 @@ impl CatalogRepository {
             extension_id: None,
             authorization_actor: None,
             cache: QueryCache::default(),
+            generations: None,
         }
     }
 
@@ -954,6 +961,16 @@ impl<S> CatalogRepository<S> {
 
     pub fn cache(&self) -> &QueryCache {
         &self.cache
+    }
+
+    /// Records the workspace generations this request's authentication read.
+    pub fn with_generations(mut self, generations: Option<WorkspaceGenerations>) -> Self {
+        self.generations = generations;
+        self
+    }
+
+    pub fn generations(&self) -> Option<WorkspaceGenerations> {
+        self.generations
     }
 }
 
@@ -1376,12 +1393,18 @@ pub fn missing_required_fields(message: &str, target_codes: &HashSet<&str>) -> V
 impl<S: RepositoryScope> CatalogRepository<S> {
     /// Explicit provisioning/repair boundary, never part of a catalog read.
     pub async fn initialize_workspace(&self, workspace_id: Uuid) -> Result<(), RepositoryError> {
+        // Creating the default context advances the context generation.
         sqlx::query(
-            r#"INSERT INTO attribute_contexts (id, workspace_id, code, data, parent_id)
-               SELECT $1, id, 'default', '{}'::jsonb, NULL
-               FROM workspaces
-               WHERE id = $2 AND deleted_at IS NULL
-               ON CONFLICT (workspace_id, code) DO NOTHING"#,
+            r#"WITH inserted AS (
+                   INSERT INTO attribute_contexts (id, workspace_id, code, data, parent_id)
+                   SELECT $1, id, 'default', '{}'::jsonb, NULL
+                   FROM workspaces
+                   WHERE id = $2 AND deleted_at IS NULL
+                   ON CONFLICT (workspace_id, code) DO NOTHING
+                   RETURNING workspace_id
+               )
+               UPDATE workspaces SET contexts_generation = contexts_generation + 1
+               WHERE id IN (SELECT workspace_id FROM inserted)"#,
         )
         .bind(Uuid::new_v4())
         .bind(workspace_id)
@@ -1501,6 +1524,33 @@ impl<S: RepositoryScope> CatalogRepository<S> {
             .fetch_one(&self.pool)
             .await
             .map_err(RepositoryError::from)
+    }
+
+    /// [`Self::is_active_user`] and the workspace's cache generations, in
+    /// one query.
+    pub async fn active_user_generations(
+        &self,
+        user_id: Uuid,
+        workspace_id: Uuid,
+    ) -> Result<(bool, Option<WorkspaceGenerations>), RepositoryError> {
+        let (active, catalog, contexts, extensions): (bool, Option<i64>, Option<i64>, Option<i64>) =
+            sqlx::query_as(
+                "SELECT EXISTS (SELECT 1 FROM users WHERE id = $1 AND state = 'active'), w.catalog_generation, w.contexts_generation, w.extensions_generation FROM (SELECT 1) one LEFT JOIN workspaces w ON w.id = $2",
+            )
+            .bind(user_id)
+            .bind(workspace_id)
+            .fetch_one(&self.pool)
+            .await?;
+        let generations = catalog.zip(contexts).zip(extensions).map(
+            |((catalog_generation, contexts_generation), extensions_generation)| {
+                WorkspaceGenerations {
+                    catalog_generation,
+                    contexts_generation,
+                    extensions_generation,
+                }
+            },
+        );
+        Ok((active, generations))
     }
 
     pub async fn is_active_user(&self, user_id: Uuid) -> Result<bool, RepositoryError> {

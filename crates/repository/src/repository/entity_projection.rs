@@ -4,6 +4,7 @@ use super::*;
 use crate::constants::DEFAULT_PREVIEW_RELATIONSHIP_ITEMS;
 use crate::persistence_rows::{Db, IntoDomain};
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 use uuid::Uuid;
 
 /// One value source's direct value in a context.
@@ -12,7 +13,7 @@ type DirectLookup<'a> = Box<dyn FnMut(&ContextNode) -> Option<Value> + 'a>;
 /// See [`CatalogRepository::preview_scope`].
 pub(super) struct PreviewScope {
     requested_context: AttributeContext,
-    tree: ContextTree,
+    tree: std::sync::Arc<ContextTree>,
 }
 
 #[derive(sqlx::FromRow)]
@@ -59,9 +60,12 @@ impl CatalogRepository {
             .get_context_by_id(context_id)
             .await?
             .ok_or(RepositoryError::InvalidContext)?;
-        let tree = {
-            let mut connection = self.pool.acquire().await?;
-            ContextTree::load(&mut connection, self.workspace_id.0).await?
+        let tree = match self.cached_context_tree().await? {
+            Some(tree) => tree,
+            None => {
+                let mut connection = self.pool.acquire().await?;
+                Arc::new(ContextTree::load(&mut connection, self.workspace_id.0).await?)
+            }
         };
         Ok(PreviewScope {
             requested_context,

@@ -9,7 +9,10 @@
 //! Published blueprint attributes are immutable, and entity-scoped attributes
 //! change only under the entity lock the writer already holds.
 
-use std::collections::{BTreeMap, HashSet};
+use std::{
+    collections::{BTreeMap, HashSet},
+    sync::Arc,
+};
 
 use serde_json::Value;
 use sqlx::{PgConnection, Postgres, Transaction};
@@ -20,6 +23,8 @@ use std::sync::Mutex;
 
 use super::{
     CatalogRepository, Entity, RepositoryError,
+    checks::EnabledRule,
+    generations::WritePrefetch,
     record_values::{ContextTree, RecordState, RecordValues, load_record},
     validate_attribute_selector_code,
 };
@@ -52,8 +57,10 @@ impl WriteAttribute {
 
 #[derive(Debug)]
 pub(super) struct WriteContext {
-    pub tree: ContextTree,
+    pub tree: Arc<ContextTree>,
     attributes: Vec<WriteAttribute>,
+    /// The revision's enabled rules, when taken from a matching prefetch.
+    pub enabled_rules: Option<Vec<EnabledRule>>,
     /// Read on first use by a relationship write.
     family: OnceCell<FamilyConstraints>,
     /// State derived from the entity's values, shared by the validators of
@@ -84,10 +91,32 @@ impl WriteContext {
         workspace_id: Uuid,
         entity: &Entity,
     ) -> Result<Self, RepositoryError> {
-        let tree = ContextTree::load(transaction, workspace_id).await?;
+        Self::load_with(transaction, workspace_id, entity, None).await
+    }
+
+    /// [`Self::load`] taking the context tree and enabled rules from
+    /// `prefetch` when the transaction read the same generations.
+    pub(super) async fn load_with(
+        transaction: &mut Transaction<'_, Postgres>,
+        workspace_id: Uuid,
+        entity: &Entity,
+        prefetch: Option<&WritePrefetch>,
+    ) -> Result<Self, RepositoryError> {
+        let tree = match prefetch {
+            Some(prefetch) => prefetch.tree.clone(),
+            None => Arc::new(ContextTree::load(transaction, workspace_id).await?),
+        };
+        let enabled_rules = prefetch.map(|prefetch| {
+            prefetch
+                .rules
+                .get(&(entity.blueprint_id, entity.blueprint_version))
+                .cloned()
+                .unwrap_or_default()
+        });
         let attributes = Self::load_attributes(transaction, entity).await?;
         Ok(Self {
             tree,
+            enabled_rules,
             attributes,
             family: OnceCell::new(),
             derived: Mutex::default(),

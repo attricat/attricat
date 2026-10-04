@@ -20,6 +20,8 @@ impl<S: RepositoryScope> CatalogRepository<S> {
             extension_id: self.extension_id.clone(),
             authorization_actor: self.authorization_actor,
             cache: self.cache.clone(),
+            // Generations belong to the workspace they were read for.
+            generations: None,
         })
     }
 

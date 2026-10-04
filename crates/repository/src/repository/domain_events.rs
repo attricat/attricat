@@ -675,3 +675,15 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
             .await
     }
 }
+
+impl CatalogRepository {
+    /// The highest outbox sequence of this repository's workspace.
+    pub async fn latest_event_sequence(&self) -> Result<i64, RepositoryError> {
+        Ok(sqlx::query_scalar(
+            "SELECT COALESCE(max(sequence), 0) FROM domain_events WHERE workspace_id = $1",
+        )
+        .bind(self.workspace_id.0)
+        .fetch_one(&self.pool)
+        .await?)
+    }
+}

@@ -465,6 +465,7 @@ pub(crate) async fn evaluate_in_context(
 }
 
 /// An enabled rule revision with its compiled plan.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub(crate) struct EnabledRule {
     pub code: String,
     pub context_id: Option<Uuid>,
@@ -495,6 +496,32 @@ pub(crate) async fn enabled_rules(
         })
     })
     .collect()
+}
+
+/// Every enabled rule revision of the workspace, by blueprint revision, in
+/// the order [`enabled_rules`] returns them.
+pub(crate) async fn enabled_rule_sets(
+    conn: &mut PgConnection,
+    workspace_id: Uuid,
+) -> Result<super::generations::EnabledRuleSets, RepositoryError> {
+    let rows = sqlx::query_as::<_, (Uuid, i64, String, Option<Uuid>, Value)>(
+        "SELECT r.blueprint_id, r.blueprint_version, r.code, r.context_id, r.compiled_plan FROM rules r JOIN rule_lifecycles l ON l.rule_id = r.id AND l.workspace_id = r.workspace_id AND l.enabled_version = r.version WHERE r.workspace_id = $1 AND r.status = 'published' ORDER BY r.code",
+    )
+    .bind(workspace_id)
+    .fetch_all(&mut *conn)
+    .await?;
+    let mut sets = super::generations::EnabledRuleSets::new();
+    for (blueprint_id, blueprint_version, code, context_id, plan) in rows {
+        sets.entry((blueprint_id, blueprint_version))
+            .or_default()
+            .push(EnabledRule {
+                code,
+                context_id,
+                compiled: serde_json::from_value(plan)
+                    .map_err(|error| RepositoryError::InvalidRuleDefinition(error.to_string()))?,
+            });
+    }
+    Ok(sets)
 }
 
 /// One predicate to evaluate in one context, with its reporting identity.
@@ -651,6 +678,36 @@ impl CatalogRepository {
     /// voids) are not guarded. Extension annotation patches, which change
     /// only system tags and metadata, call it through
     /// [`Self::enforce_tag_checks`].
+    /// [`Self::enforce_declarative_checks`] with the revision's enabled rules
+    /// when the caller already has them.
+    pub(super) async fn enforce_declarative_checks_using(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        entity_schema: Option<&Value>,
+        rules: Option<&[EnabledRule]>,
+        tree: &ContextTree,
+        subject: &RecordValues,
+        changes: &[StatusChange],
+    ) -> Result<(), RepositoryError> {
+        match rules {
+            Some(rules) => {
+                self.enforce_declarative_checks_with(
+                    transaction,
+                    entity_schema,
+                    tree,
+                    subject,
+                    changes,
+                    rules,
+                )
+                .await
+            }
+            None => {
+                self.enforce_declarative_checks(transaction, entity_schema, tree, subject, changes)
+                    .await
+            }
+        }
+    }
+
     pub(super) async fn enforce_declarative_checks(
         &self,
         transaction: &mut Transaction<'_, Postgres>,

@@ -6,6 +6,7 @@ use crate::domain_events::{
     CONTEXT_CREATED_V1, CONTEXT_DELETED_V1, CONTEXT_UPDATED_V1, ContextCreatedV1, NewDomainEvent,
 };
 
+use super::generations::{Generation, advance_generation};
 use super::{CatalogRepository, RepositoryError, validate_code};
 use crate::model::{AttributeContext, CreateAttributeContext, Entity, UpdateAttributeContext};
 
@@ -89,6 +90,7 @@ impl CatalogRepository {
         .into_domain();
         self.seed_context_unique_keys(transaction, context_id, parent_id)
             .await?;
+        advance_generation(transaction, workspace_id, Generation::Contexts).await?;
         Ok(context)
     }
 
@@ -197,6 +199,7 @@ impl CatalogRepository {
             .bind(id).bind(input.parent_id).bind(input.data).bind(self.workspace_id.0).fetch_optional(&mut *transaction).await?
             .ok_or(RepositoryError::ContextCycle)?
             .into_domain();
+        advance_generation(&mut transaction, self.workspace_id.0, Generation::Contexts).await?;
         let entities = query_as::<_, Db<Entity>>("SELECT id, blueprint_id, blueprint_version, projections, system_tags, system_metadata, ('attricat.sample'=ANY(system_tags)) AS is_sample, created_at, updated_at, deleted_at FROM entities WHERE workspace_id = $1 AND deleted_at IS NULL")
             .bind(self.workspace_id.0)
             .fetch_all(&mut *transaction).await?
@@ -281,6 +284,7 @@ impl CatalogRepository {
         if result.rows_affected() == 0 {
             return Err(RepositoryError::ContextInUse);
         }
+        advance_generation(&mut transaction, self.workspace_id.0, Generation::Contexts).await?;
         self.commit_mutation_with_event(
             transaction,
             context_event(self, CONTEXT_DELETED_V1, &context),

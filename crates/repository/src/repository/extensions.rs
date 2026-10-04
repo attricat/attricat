@@ -19,6 +19,7 @@ use crate::{
     },
 };
 
+use super::generations::{Generation, advance_generation};
 use super::{AuditContext, CatalogRepository, RepositoryError};
 
 fn event_contract_grant_id(provider: &str, contract: &str) -> String {
@@ -277,7 +278,7 @@ pub struct WorkspaceExtensionSecret {
 
 /// Client-safe descriptor for an enabled contribution. It deliberately omits
 /// source identity, grants, server components, and secrets.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct ClientExtensionContribution {
     /// Stable identity used by host-owned layout configuration. Release IDs are
     /// intentionally excluded so a configured placement survives upgrades.
@@ -318,7 +319,7 @@ impl CatalogRepository {
         enabled: bool,
     ) -> Result<(), RepositoryError> {
         let mut transaction = self.pool.begin().await?;
-        sqlx::query("UPDATE workspaces SET extensions_enabled = $2, updated_at = clock_timestamp() WHERE id = $1")
+        sqlx::query("UPDATE workspaces SET extensions_enabled = $2, extensions_generation = extensions_generation + 1, updated_at = clock_timestamp() WHERE id = $1")
             .bind(self.extension_workspace())
             .bind(enabled)
             .execute(&mut *transaction)
@@ -546,6 +547,26 @@ impl CatalogRepository {
     pub async fn enabled_client_extension_contributions(
         &self,
     ) -> Result<Vec<ClientExtensionContribution>, RepositoryError> {
+        // Every change to installations, grants, configuration or the
+        // workspace gate advances the extensions generation.
+        if let Some(generations) = self.generations() {
+            let contributions = self
+                .cache
+                .fetch(
+                    CacheKey::new(
+                        "client_contributions",
+                        &[
+                            &self.extension_workspace(),
+                            &generations.extensions_generation,
+                        ],
+                    ),
+                    &[],
+                    Policy::Generation,
+                    || self.enabled_client_contributions_of(None),
+                )
+                .await?;
+            return Ok(contributions.as_ref().clone());
+        }
         self.enabled_client_contributions_of(None).await
     }
 
@@ -616,13 +637,38 @@ impl CatalogRepository {
         mut contributions: Vec<ClientExtensionContribution>,
         blueprint: Option<(Uuid, i64)>,
     ) -> Result<Vec<ClientExtensionContribution>, RepositoryError> {
-        let layout: Value = sqlx::query_scalar(
-            "SELECT COALESCE(settings->'extension_layout', '{}'::jsonb) FROM workspaces WHERE id = $1",
-        )
-        .bind(self.extension_workspace())
-        .fetch_optional(&self.pool)
-        .await?
-        .unwrap_or_else(|| json!({}));
+        let load_layout = || async {
+            Ok::<Value, RepositoryError>(
+                sqlx::query_scalar(
+                    "SELECT COALESCE(settings->'extension_layout', '{}'::jsonb) FROM workspaces WHERE id = $1",
+                )
+                .bind(self.extension_workspace())
+                .fetch_optional(&self.pool)
+                .await?
+                .unwrap_or_else(|| json!({})),
+            )
+        };
+        // Layout writes advance the extensions generation.
+        let layout: Value = match self.generations() {
+            Some(generations) => self
+                .cache
+                .fetch(
+                    CacheKey::new(
+                        "extension_layout",
+                        &[
+                            &self.extension_workspace(),
+                            &generations.extensions_generation,
+                        ],
+                    ),
+                    &[],
+                    Policy::Generation,
+                    load_layout,
+                )
+                .await?
+                .as_ref()
+                .clone(),
+            None => load_layout().await?,
+        };
         // A published entity revision overlays only its explicitly declared,
         // entity-owned outlets. Global and unspecified workspace defaults remain
         // authoritative.
@@ -772,7 +818,7 @@ impl CatalogRepository {
         layout: &Value,
     ) -> Result<(), RepositoryError> {
         validate_workspace_extension_layout(layout)?;
-        let updated = sqlx::query("UPDATE workspaces SET settings = jsonb_set(settings, '{extension_layout}', $1::jsonb, true), updated_at = clock_timestamp() WHERE id = $2 AND deleted_at IS NULL AND jsonb_typeof(settings) = 'object'")
+        let updated = sqlx::query("UPDATE workspaces SET settings = jsonb_set(settings, '{extension_layout}', $1::jsonb, true), extensions_generation = extensions_generation + 1, updated_at = clock_timestamp() WHERE id = $2 AND deleted_at IS NULL AND jsonb_typeof(settings) = 'object'")
             .bind(layout)
             .bind(workspace_id)
             .execute(&mut **transaction)
@@ -1457,6 +1503,14 @@ impl CatalogRepository {
         extension_id: &str,
     ) -> Result<(), RepositoryError> {
         self.ensure_task_fence(&mut transaction).await?;
+        // Every installation, grant, configuration and lifecycle change
+        // commits through here.
+        advance_generation(
+            &mut transaction,
+            self.extension_workspace(),
+            Generation::Extensions,
+        )
+        .await?;
         if self.audit_context.is_some() {
             self.write_audit_event(&mut transaction).await?;
         } else {
@@ -1574,6 +1628,7 @@ impl CatalogRepository {
         current: &ExtensionInstallation,
         state: ExtensionState,
     ) -> Result<ExtensionInstallation, RepositoryError> {
+        advance_generation(transaction, current.workspace_id, Generation::Extensions).await?;
         sqlx::query_as("UPDATE extension_installations SET state = $2, updated_at = clock_timestamp() WHERE id = $1 RETURNING id, workspace_id, extension_id, installed_release_id, state, configuration, configuration_version, created_at, updated_at")
             .bind(current.id).bind(state.as_str()).fetch_one(&mut **transaction).await.map_err(Into::into)
     }

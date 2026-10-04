@@ -26,7 +26,7 @@ use sqlx::PgConnection;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use uuid::Uuid;
 
-#[derive(Clone, Debug, PartialEq, Eq, sqlx::FromRow)]
+#[derive(Clone, Debug, PartialEq, Eq, sqlx::FromRow, serde::Serialize, serde::Deserialize)]
 pub(crate) struct ContextNode {
     pub id: Uuid,
     pub code: String,
@@ -34,7 +34,7 @@ pub(crate) struct ContextNode {
 }
 
 /// The workspace's context hierarchy, loaded once per operation.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub(crate) struct ContextTree {
     nodes: Vec<ContextNode>,
 }
