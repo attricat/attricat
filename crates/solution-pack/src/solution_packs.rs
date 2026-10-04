@@ -3629,22 +3629,123 @@ pub struct PlanningWorkspaceSnapshot {
     pub seed: SeedWorkspaceSnapshot,
 }
 
+/// The kind of resource a plan maps or acts on. Persisted as the
+/// `resource_kind` of plan mappings, plan actions and application steps.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum PlanResourceKind {
+    Blueprint,
+    PresentationAsset,
+    WorkspaceSetting,
+    Prerequisite,
+    Context,
+    PublicationChannel,
+    Rule,
+    Workflow,
+    SavedSearch,
+    SampleEntity,
+}
+
+impl PlanResourceKind {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Blueprint => "blueprint",
+            Self::PresentationAsset => "presentation_asset",
+            Self::WorkspaceSetting => "workspace_setting",
+            Self::Prerequisite => "prerequisite",
+            Self::Context => "context",
+            Self::PublicationChannel => "publication_channel",
+            Self::Rule => "rule",
+            Self::Workflow => "workflow",
+            Self::SavedSearch => "saved_search",
+            Self::SampleEntity => "sample_entity",
+        }
+    }
+}
+
+/// How a plan mapping chooses its workspace target.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MappingKind {
+    /// An existing workspace resource selected explicitly or by a prerequisite.
+    Existing,
+    /// A resource the plan creates under a generated identity.
+    Create,
+    /// A workspace-wide setting.
+    Workspace,
+    /// A sample entity an earlier application created.
+    Reuse,
+}
+
+impl MappingKind {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Existing => "existing",
+            Self::Create => "create",
+            Self::Workspace => "workspace",
+            Self::Reuse => "reuse",
+        }
+    }
+}
+
+/// What applying a plan does with one resource. Persisted as the `action` of
+/// plan actions.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PlanActionKind {
+    Create,
+    Map,
+    Append,
+    Satisfied,
+    Skip,
+    Conflict,
+    Blocked,
+}
+
+impl PlanActionKind {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Create => "create",
+            Self::Map => "map",
+            Self::Append => "append",
+            Self::Satisfied => "satisfied",
+            Self::Skip => "skip",
+            Self::Conflict => "conflict",
+            Self::Blocked => "blocked",
+        }
+    }
+
+    /// Whether a plan containing this action can be applied.
+    pub const fn is_applicable(self) -> bool {
+        !matches!(self, Self::Conflict | Self::Blocked)
+    }
+
+    /// Whether the resource's target exists once the plan is applied, so
+    /// other resources can depend on it.
+    pub const fn provides_target(self) -> bool {
+        matches!(self, Self::Create | Self::Map)
+    }
+}
+
+/// A planned action and its reason code.
+pub(crate) type Outcome = (PlanActionKind, &'static str);
+
 #[derive(Clone, Debug)]
 pub struct PlannedMapping {
-    pub resource_kind: &'static str,
+    pub resource_kind: PlanResourceKind,
     pub logical_key: String,
     pub target_id: uuid::Uuid,
     pub target_code: String,
     pub target_version: Option<i64>,
-    pub mapping_kind: &'static str,
+    pub mapping_kind: MappingKind,
     pub snapshot: Value,
 }
 
 #[derive(Clone, Debug)]
 pub struct PlannedAction {
-    pub resource_kind: &'static str,
+    pub resource_kind: PlanResourceKind,
     pub logical_key: String,
-    pub action: &'static str,
+    pub action: PlanActionKind,
     pub reason_code: &'static str,
     pub summary: Value,
     pub normalized_payload: Option<Value>,
@@ -3678,6 +3779,19 @@ pub struct SolutionPackPlanDraft {
     /// this plan's exact logical-key mappings. This is repository-only release
     /// evidence and is not itself persisted as an executable payload.
     pub blueprint_canonical_definition_hashes: BTreeMap<String, String>,
+}
+
+impl SolutionPackPlanDraft {
+    /// Whether every action and required extension allows applying the plan.
+    pub fn is_applicable(&self) -> bool {
+        self.actions
+            .iter()
+            .all(|action| action.action.is_applicable())
+            && self
+                .extension_requirements
+                .iter()
+                .all(|requirement| requirement.status != "blocked")
+    }
 }
 
 pub fn evaluate_extension_requirement(
@@ -3889,25 +4003,7 @@ pub fn build_solution_pack_plan(
     workspace: &PlanningWorkspaceSnapshot,
 ) -> Result<SolutionPackPlanDraft, SolutionPackError> {
     validate_plan_prefix(prefix)?;
-
     let manifest = pack.manifest();
-    let resources = manifest
-        .resources
-        .blueprints
-        .iter()
-        .map(|resource| (resource.key.clone(), ("blueprint", resource)))
-        .collect::<BTreeMap<_, _>>();
-
-    let mut dependencies = BTreeMap::<String, BTreeSet<String>>::new();
-    for resource in &manifest.resources.blueprints {
-        dependencies.insert(
-            resource.key.clone(),
-            pack.blueprint(&resource.key)
-                .expect("validated blueprint exists")
-                .dependencies()
-                .clone(),
-        );
-    }
 
     let (prerequisite_mappings, prerequisite_actions, prerequisite_outcomes) = plan_prerequisites(
         pack,
@@ -3916,17 +4012,185 @@ pub fn build_solution_pack_plan(
         workspace.workspace_id,
         &workspace.seed,
     );
+    let mut mappings_by_key = plan_resource_mappings(pack, prefix, publication, workspace)?;
+    let layouts = plan_blueprint_extension_layouts(pack, workspace);
+    let mut blueprints = plan_blueprint_outcomes(
+        pack,
+        publication,
+        workspace,
+        &mappings_by_key,
+        &layouts,
+        &prerequisite_outcomes,
+    )?;
 
-    let mut mappings_by_key = BTreeMap::new();
-    for (logical_key, (kind, _)) in &resources {
+    let created_blueprint_codes = mappings_by_key
+        .values()
+        .filter(|mapping| {
+            mapping.resource_kind == PlanResourceKind::Blueprint
+                && mapping.mapping_kind == MappingKind::Create
+        })
+        .map(|mapping| mapping.target_code.clone())
+        .collect::<BTreeSet<_>>();
+    let (context_mappings, context_actions, planned_contexts) = plan_contexts(
+        pack,
+        prefix,
+        publication,
+        workspace.workspace_id,
+        &workspace.physical_codes,
+        &created_blueprint_codes,
+        &workspace.seed,
+    )?;
+    let (dependent_mappings, dependent_actions) = plan_dependents(&DependentPlanInput {
+        pack,
+        prefix,
+        publication,
+        workspace_id: workspace.workspace_id,
+        seed: &workspace.seed,
+        blueprint_outcomes: &blueprints.outcomes,
+        blueprint_mappings: &mappings_by_key,
+        contexts: &planned_contexts,
+    })?;
+    for mapping in prerequisite_mappings
+        .into_iter()
+        .chain(context_mappings)
+        .chain(dependent_mappings)
+    {
+        mappings_by_key.insert(mapping.logical_key.clone(), mapping);
+    }
+
+    // Prerequisites and contexts come first: blueprints, samples, rules and
+    // saved searches may depend on them.
+    let mut actions = prerequisite_actions;
+    actions.extend(context_actions);
+    actions.extend(plan_blueprint_actions(
+        pack,
+        publication,
+        workspace,
+        &mappings_by_key,
+        &layouts,
+        &mut blueprints,
+    )?);
+    actions.extend(plan_presentation_asset_actions(
+        pack,
+        workspace,
+        &mappings_by_key,
+    ));
+
+    let extension_requirements = manifest
+        .extensions
+        .iter()
+        .map(|requirement| {
+            evaluate_extension_requirement(
+                requirement,
+                pack.configuration_template(&requirement.key),
+                workspace.installed_extensions.get(&requirement.id),
+            )
+        })
+        .collect::<Vec<_>>();
+    if let Some(navigation) = pack.explore_navigation() {
+        let resource = workspace_setting_resource(manifest, EXPLORE_NAVIGATION_KEY);
+        if !workspace.explore_navigation_valid {
+            // The current navigation must be repaired before anything else
+            // about workspace settings can be planned.
+            actions.push(invalid_workspace_setting_action(
+                resource,
+                "explore_navigation",
+                "invalid_current_navigation",
+            ));
+            actions.extend(dependent_actions);
+            return Ok(SolutionPackPlanDraft {
+                ready: false,
+                mappings: mappings_by_key.into_values().collect(),
+                actions,
+                extension_requirements,
+                blueprint_canonical_definition_hashes: blueprints.canonical_definition_hashes,
+            });
+        }
+        actions.push(plan_explore_navigation_action(
+            navigation,
+            resource,
+            publication,
+            workspace,
+            &mappings_by_key,
+            &blueprints.outcomes,
+        ));
+    }
+    if let Some(entries) = pack.lexicon() {
+        actions.push(plan_lexicon_action(
+            entries,
+            workspace_setting_resource(manifest, LEXICON_KEY),
+        ));
+    }
+    if let Some(layout) = pack.extension_layout() {
+        let resource = workspace_setting_resource(manifest, EXTENSION_LAYOUT_KEY);
+        actions.push(if workspace.extension_layout_valid {
+            plan_extension_layout_action(layout, resource, manifest, workspace)
+        } else {
+            invalid_workspace_setting_action(
+                resource,
+                "extension_layout",
+                "invalid_current_extension_layout",
+            )
+        });
+    }
+    actions.extend(dependent_actions);
+
+    let mut draft = SolutionPackPlanDraft {
+        ready: false,
+        mappings: mappings_by_key.into_values().collect(),
+        actions,
+        extension_requirements,
+        blueprint_canonical_definition_hashes: blueprints.canonical_definition_hashes,
+    };
+    draft.ready = draft.is_applicable();
+    Ok(draft)
+}
+
+const EXPLORE_NAVIGATION_KEY: &str = "workspace/explore-navigation";
+const LEXICON_KEY: &str = "workspace/lexicon";
+const EXTENSION_LAYOUT_KEY: &str = "workspace/extension-layout";
+
+fn validated_blueprint<'a>(
+    pack: &'a ValidatedSolutionPack,
+    key: &str,
+) -> &'a SolutionPackBlueprint {
+    pack.blueprint(key).expect("validated blueprint exists")
+}
+
+fn workspace_setting_resource<'a>(
+    manifest: &'a SolutionPackManifest,
+    key: &str,
+) -> &'a SolutionPackResource {
+    manifest
+        .resources
+        .workspace_settings
+        .iter()
+        .find(|resource| resource.key == key)
+        .expect("validated workspace setting has a manifest resource")
+}
+
+/// Maps every blueprint, presentation asset and workspace setting to its
+/// workspace target: an explicit selection or a generated identity.
+fn plan_resource_mappings(
+    pack: &ValidatedSolutionPack,
+    prefix: &str,
+    publication: BlueprintPublication,
+    workspace: &PlanningWorkspaceSnapshot,
+) -> Result<BTreeMap<String, PlannedMapping>, SolutionPackError> {
+    let manifest = pack.manifest();
+    let target_id =
+        |key: &str| deterministic_target_id(workspace.workspace_id, pack, prefix, publication, key);
+    let mut mappings = BTreeMap::new();
+    for resource in &manifest.resources.blueprints {
+        let logical_key = &resource.key;
         let mapping = if let Some(existing) = workspace.existing_blueprints.get(logical_key) {
             PlannedMapping {
-                resource_kind: kind,
+                resource_kind: PlanResourceKind::Blueprint,
                 logical_key: logical_key.clone(),
                 target_id: existing.id,
                 target_code: existing.code.clone(),
                 target_version: Some(existing.version),
-                mapping_kind: "existing",
+                mapping_kind: MappingKind::Existing,
                 snapshot: serde_json::json!({
                     "id": existing.id,
                     "code": existing.code,
@@ -3947,144 +4211,105 @@ pub fn build_solution_pack_plan(
                 ));
             }
             PlannedMapping {
-                resource_kind: kind,
+                resource_kind: PlanResourceKind::Blueprint,
                 logical_key: logical_key.clone(),
-                target_id: deterministic_target_id(
-                    workspace.workspace_id,
-                    pack,
-                    prefix,
-                    publication,
-                    logical_key,
-                ),
-                target_code: generated_code.clone(),
-                target_version: Some(1),
-                mapping_kind: "create",
+                target_id: target_id(logical_key),
                 snapshot: serde_json::json!({"code": generated_code, "version": 1}),
+                target_code: generated_code,
+                target_version: Some(1),
+                mapping_kind: MappingKind::Create,
             }
         };
-        mappings_by_key.insert(logical_key.clone(), mapping);
+        mappings.insert(logical_key.clone(), mapping);
     }
     for resource in &manifest.resources.presentation_assets {
         let validated_asset = pack
             .presentation_asset(&resource.key)
             .expect("validated presentation asset exists");
-        let mapping =
-            if let Some(existing) = workspace.existing_presentation_assets.get(&resource.key) {
-                PlannedMapping {
-                    resource_kind: "presentation_asset",
-                    logical_key: resource.key.clone(),
-                    target_id: existing.id,
-                    target_code: "presentation_asset".to_owned(),
-                    target_version: None,
-                    mapping_kind: "existing",
-                    snapshot: serde_json::json!({
-                        "id": existing.id,
-                        "purpose": existing.purpose,
-                        "media_type": existing.media_type,
-                        "byte_size": existing.byte_size,
-                        "sha256": existing.sha256,
-                        "source_sha256": validated_asset.source_sha256,
-                    }),
-                }
-            } else {
-                PlannedMapping {
-                    resource_kind: "presentation_asset",
-                    logical_key: resource.key.clone(),
-                    target_id: deterministic_target_id(
-                        workspace.workspace_id,
-                        pack,
-                        prefix,
-                        publication,
-                        &resource.key,
-                    ),
-                    target_code: "presentation_asset".to_owned(),
-                    target_version: None,
-                    mapping_kind: "create",
-                    snapshot: serde_json::json!({}),
-                }
-            };
-        mappings_by_key.insert(resource.key.clone(), mapping);
-    }
-    if pack.explore_navigation().is_some() {
-        mappings_by_key.insert(
-            "workspace/explore-navigation".to_owned(),
+        let existing = workspace.existing_presentation_assets.get(&resource.key);
+        let (target_id, mapping_kind, snapshot) = match existing {
+            Some(existing) => (
+                existing.id,
+                MappingKind::Existing,
+                serde_json::json!({
+                    "id": existing.id,
+                    "purpose": existing.purpose,
+                    "media_type": existing.media_type,
+                    "byte_size": existing.byte_size,
+                    "sha256": existing.sha256,
+                    "source_sha256": validated_asset.source_sha256,
+                }),
+            ),
+            None => (
+                target_id(&resource.key),
+                MappingKind::Create,
+                serde_json::json!({}),
+            ),
+        };
+        mappings.insert(
+            resource.key.clone(),
             PlannedMapping {
-                resource_kind: "workspace_setting",
-                logical_key: "workspace/explore-navigation".to_owned(),
-                target_id: workspace.workspace_id,
-                target_code: "explore_navigation".to_owned(),
+                resource_kind: PlanResourceKind::PresentationAsset,
+                logical_key: resource.key.clone(),
+                target_id,
+                target_code: "presentation_asset".to_owned(),
                 target_version: None,
-                mapping_kind: "workspace",
-                snapshot: serde_json::json!({"setting": "explore_navigation"}),
+                mapping_kind,
+                snapshot,
             },
         );
     }
-    if pack.lexicon().is_some() {
-        mappings_by_key.insert(
-            "workspace/lexicon".to_owned(),
+    let settings = [
+        (
+            pack.explore_navigation().is_some(),
+            EXPLORE_NAVIGATION_KEY,
+            "explore_navigation",
+        ),
+        (pack.lexicon().is_some(), LEXICON_KEY, "lexicon"),
+        (
+            pack.extension_layout().is_some(),
+            EXTENSION_LAYOUT_KEY,
+            "extension_layout",
+        ),
+    ];
+    for (_, key, setting) in settings.into_iter().filter(|(declared, ..)| *declared) {
+        mappings.insert(
+            key.to_owned(),
             PlannedMapping {
-                resource_kind: "workspace_setting",
-                logical_key: "workspace/lexicon".to_owned(),
+                resource_kind: PlanResourceKind::WorkspaceSetting,
+                logical_key: key.to_owned(),
                 target_id: workspace.workspace_id,
-                target_code: "lexicon".to_owned(),
+                target_code: setting.to_owned(),
                 target_version: None,
-                mapping_kind: "workspace",
-                snapshot: serde_json::json!({"setting": "lexicon"}),
+                mapping_kind: MappingKind::Workspace,
+                snapshot: serde_json::json!({ "setting": setting }),
             },
         );
     }
-    if pack.extension_layout().is_some() {
-        mappings_by_key.insert(
-            "workspace/extension-layout".to_owned(),
-            PlannedMapping {
-                resource_kind: "workspace_setting",
-                logical_key: "workspace/extension-layout".to_owned(),
-                target_id: workspace.workspace_id,
-                target_code: "extension_layout".to_owned(),
-                target_version: None,
-                mapping_kind: "workspace",
-                snapshot: serde_json::json!({"setting": "extension_layout"}),
-            },
-        );
-    }
+    Ok(mappings)
+}
 
-    // Includes constrain apply order. A published target is
-    // also required before ordinary validation can resolve a relationship table
-    // path. Other relationship references may legitimately be cyclic.
-    let mut ordering_dependencies = BTreeMap::new();
-    for resource in &manifest.resources.blueprints {
-        let blueprint = pack
-            .blueprint(&resource.key)
-            .expect("validated blueprint exists");
-        let mut resource_dependencies = blueprint
-            .includes()
-            .iter()
-            .map(|include| include.key().to_owned())
-            .collect::<BTreeSet<_>>();
-        if publication == BlueprintPublication::Publish {
-            resource_dependencies.extend(blueprint.table_path_dependencies().iter().cloned());
-        }
-        ordering_dependencies.insert(resource.key.clone(), resource_dependencies);
-    }
+/// Per-blueprint extension contributions placed in its views.
+#[derive(Default)]
+struct BlueprintExtensionLayouts {
+    /// Contributions available in the workspace, by blueprint key.
+    allowed: HashMap<String, HashSet<String>>,
+    /// Per-contribution evidence for the action summary, by blueprint key.
+    evidence: HashMap<String, Vec<Value>>,
+    /// The reason a required contribution blocks the blueprint, by key.
+    blocked: HashMap<String, &'static str>,
+}
 
-    let mut generated_code_counts = HashMap::<&str, usize>::new();
-    for (logical_key, (_, resource)) in &resources {
-        if resource.required {
-            *generated_code_counts
-                .entry(&mappings_by_key[logical_key].target_code)
-                .or_default() += 1;
-        }
-    }
-    let mut blueprint_layout_allowed = HashMap::<String, HashSet<String>>::new();
-    let mut blueprint_layout_evidence = HashMap::<String, Vec<Value>>::new();
-    let mut blueprint_layout_blocked = HashMap::<String, &'static str>::new();
+fn plan_blueprint_extension_layouts(
+    pack: &ValidatedSolutionPack,
+    workspace: &PlanningWorkspaceSnapshot,
+) -> BlueprintExtensionLayouts {
+    let manifest = pack.manifest();
+    let mut layouts = BlueprintExtensionLayouts::default();
     for resource in &manifest.resources.blueprints {
-        let blueprint = pack
-            .blueprint(&resource.key)
-            .expect("validated blueprint exists");
         let mut allowed = HashSet::new();
         let mut evidence = Vec::new();
-        for entry in &blueprint.extension_layout {
+        for entry in &validated_blueprint(pack, &resource.key).extension_layout {
             let requirement = extension_requirement_for_contribution(manifest, &entry.contribution);
             let reason = contribution_availability_reason(
                 requirement,
@@ -4095,15 +4320,16 @@ pub fn build_solution_pack_plan(
             let outcome = match reason {
                 None => {
                     allowed.insert(entry.contribution.clone());
-                    "satisfied"
+                    PlanActionKind::Satisfied
                 }
                 Some(_) if requirement.required => {
-                    blueprint_layout_blocked
+                    layouts
+                        .blocked
                         .entry(resource.key.clone())
                         .or_insert("extension_contribution_unavailable");
-                    "blocked"
+                    PlanActionKind::Blocked
                 }
-                Some(_) => "skip",
+                Some(_) => PlanActionKind::Skip,
             };
             evidence.push(serde_json::json!({
                 "contribution": entry.contribution,
@@ -4113,104 +4339,130 @@ pub fn build_solution_pack_plan(
                 "reason_code": reason.unwrap_or("satisfied"),
             }));
         }
-        blueprint_layout_allowed.insert(resource.key.clone(), allowed);
-        blueprint_layout_evidence.insert(resource.key.clone(), evidence);
+        layouts.allowed.insert(resource.key.clone(), allowed);
+        layouts.evidence.insert(resource.key.clone(), evidence);
+    }
+    layouts
+}
+
+/// Blueprint outcomes and the normalized definitions they were decided from.
+struct PlannedBlueprints {
+    outcomes: HashMap<String, Outcome>,
+    /// Normalized create payloads, by blueprint key.
+    payloads: HashMap<String, Value>,
+    canonical_definition_hashes: BTreeMap<String, String>,
+}
+
+fn plan_blueprint_outcomes(
+    pack: &ValidatedSolutionPack,
+    publication: BlueprintPublication,
+    workspace: &PlanningWorkspaceSnapshot,
+    mappings: &BTreeMap<String, PlannedMapping>,
+    layouts: &BlueprintExtensionLayouts,
+    prerequisite_outcomes: &BTreeMap<String, Outcome>,
+) -> Result<PlannedBlueprints, SolutionPackError> {
+    let manifest = pack.manifest();
+    let mut generated_code_counts = HashMap::<&str, usize>::new();
+    for resource in manifest
+        .resources
+        .blueprints
+        .iter()
+        .filter(|resource| resource.required)
+    {
+        *generated_code_counts
+            .entry(&mappings[&resource.key].target_code)
+            .or_default() += 1;
     }
 
-    let mut outcomes = HashMap::<String, (&'static str, &'static str)>::new();
-    let mut blueprint_canonical_definition_hashes = BTreeMap::new();
-    for (logical_key, (_, resource)) in &resources {
-        let mapping = &mappings_by_key[logical_key];
-        let explicitly_mapped = mapping.mapping_kind == "existing";
-        let mapping_compatible = if explicitly_mapped {
+    let mut planned = PlannedBlueprints {
+        outcomes: HashMap::new(),
+        payloads: HashMap::new(),
+        canonical_definition_hashes: BTreeMap::new(),
+    };
+    for resource in &manifest.resources.blueprints {
+        let logical_key = &resource.key;
+        let blueprint = validated_blueprint(pack, logical_key);
+        let mapping = &mappings[logical_key];
+        let normalized = normalized_blueprint_payload(
+            blueprint,
+            mappings,
+            publication,
+            &layouts.allowed[logical_key],
+            workspace,
+            manifest,
+        )?;
+        let canonical_definition_hash = catalog_blueprint::raw_hash(
+            normalized["definition"]
+                .as_str()
+                .expect("normalized blueprint definition is a string"),
+        );
+        let explicitly_mapped = mapping.mapping_kind == MappingKind::Existing;
+        let mapping_compatible = explicitly_mapped && {
             let existing = &workspace.existing_blueprints[logical_key];
-            let normalized = normalized_blueprint_payload(
-                pack.blueprint(logical_key)
-                    .expect("validated blueprint exists"),
-                &mappings_by_key,
-                publication,
-                &blueprint_layout_allowed[logical_key],
-                workspace,
-                manifest,
-            )?;
-            let definition = normalized["definition"]
-                .as_str()
-                .expect("normalized blueprint definition is a string");
-            let canonical_definition_hash = catalog_blueprint::raw_hash(definition);
-            blueprint_canonical_definition_hashes
-                .insert(logical_key.clone(), canonical_definition_hash.clone());
             existing.canonical_definition_hash == canonical_definition_hash
-                && existing.kind
-                    == blueprint_kind_name(
-                        pack.blueprint(logical_key)
-                            .expect("validated blueprint exists")
-                            .kind(),
-                    )
-        } else {
-            let normalized = normalized_blueprint_payload(
-                pack.blueprint(logical_key)
-                    .expect("validated blueprint exists"),
-                &mappings_by_key,
-                publication,
-                &blueprint_layout_allowed[logical_key],
-                workspace,
-                manifest,
-            )?;
-            let definition = normalized["definition"]
-                .as_str()
-                .expect("normalized blueprint definition is a string");
-            blueprint_canonical_definition_hashes
-                .insert(logical_key.clone(), catalog_blueprint::raw_hash(definition));
-            false
+                && existing.kind == blueprint_kind_name(blueprint.kind())
         };
+        planned
+            .canonical_definition_hashes
+            .insert(logical_key.clone(), canonical_definition_hash);
+        planned.payloads.insert(logical_key.clone(), normalized);
+
         let prerequisite_available = resource.reuse.as_ref().map(|reuse| {
             prerequisite_outcomes
                 .get(&reuse.prerequisite)
-                .is_some_and(|(action, _)| *action == "map")
+                .is_some_and(|(action, _)| *action == PlanActionKind::Map)
         });
-        outcomes.insert(
-            logical_key.clone(),
-            if prerequisite_available == Some(false) {
-                ("blocked", "prerequisite_unavailable")
-            } else if prerequisite_available == Some(true) && !explicitly_mapped {
-                ("blocked", "prerequisite_blueprint_unavailable")
-            } else if prerequisite_available == Some(true) && !mapping_compatible {
-                ("conflict", "prerequisite_blueprint_incompatible")
-            } else if prerequisite_available == Some(true)
-                && !blueprint_layout_blocked.contains_key(logical_key)
-            {
-                ("map", "prerequisite_blueprint_match")
-            } else if !resource.required && !explicitly_mapped {
-                ("skip", "optional_not_selected")
-            } else if let Some(reason) = blueprint_layout_blocked.get(logical_key) {
-                ("blocked", *reason)
-            } else if explicitly_mapped && !mapping_compatible {
-                ("conflict", "existing_blueprint_incompatible")
-            } else if explicitly_mapped {
-                ("map", "exact_blueprint_match")
-            } else if generated_code_counts[mapping.target_code.as_str()] > 1 {
-                ("conflict", "duplicate_target_code")
-            } else if workspace.physical_codes.contains(&mapping.target_code) {
-                ("conflict", "target_code_exists")
-            } else if publication == BlueprintPublication::Draft
-                && pack
-                    .blueprint(logical_key)
-                    .is_some_and(|blueprint| !blueprint.table_path_dependencies().is_empty())
-            {
-                ("blocked", "draft_table_path_target_unpublished")
-            } else {
-                ("create", "target_absent")
-            },
-        );
+        let outcome = if prerequisite_available == Some(false) {
+            (PlanActionKind::Blocked, "prerequisite_unavailable")
+        } else if prerequisite_available == Some(true) && !explicitly_mapped {
+            (
+                PlanActionKind::Blocked,
+                "prerequisite_blueprint_unavailable",
+            )
+        } else if prerequisite_available == Some(true) && !mapping_compatible {
+            (
+                PlanActionKind::Conflict,
+                "prerequisite_blueprint_incompatible",
+            )
+        } else if prerequisite_available == Some(true) && !layouts.blocked.contains_key(logical_key)
+        {
+            (PlanActionKind::Map, "prerequisite_blueprint_match")
+        } else if !resource.required && !explicitly_mapped {
+            (PlanActionKind::Skip, "optional_not_selected")
+        } else if let Some(reason) = layouts.blocked.get(logical_key) {
+            (PlanActionKind::Blocked, *reason)
+        } else if explicitly_mapped && !mapping_compatible {
+            (PlanActionKind::Conflict, "existing_blueprint_incompatible")
+        } else if explicitly_mapped {
+            (PlanActionKind::Map, "exact_blueprint_match")
+        } else if generated_code_counts[mapping.target_code.as_str()] > 1 {
+            (PlanActionKind::Conflict, "duplicate_target_code")
+        } else if workspace.physical_codes.contains(&mapping.target_code) {
+            (PlanActionKind::Conflict, "target_code_exists")
+        } else if publication == BlueprintPublication::Draft
+            && !blueprint.table_path_dependencies().is_empty()
+        {
+            (
+                PlanActionKind::Blocked,
+                "draft_table_path_target_unpublished",
+            )
+        } else {
+            (PlanActionKind::Create, "target_absent")
+        };
+        planned.outcomes.insert(logical_key.clone(), outcome);
     }
+
+    // A blueprint whose dependency is not created or mapped cannot be either.
     loop {
-        let newly_blocked = outcomes
+        let newly_blocked = planned
+            .outcomes
             .iter()
-            .filter(|(_, (action, _))| matches!(*action, "create" | "map"))
-            .filter(|(key, _)| {
-                dependencies[*key]
-                    .iter()
-                    .any(|dependency| !matches!(outcomes[dependency].0, "create" | "map"))
+            .filter(|(key, (action, _))| {
+                action.provides_target()
+                    && validated_blueprint(pack, key)
+                        .dependencies()
+                        .iter()
+                        .any(|dependency| !planned.outcomes[dependency].0.provides_target())
             })
             .map(|(key, _)| key.clone())
             .collect::<Vec<_>>();
@@ -4218,76 +4470,68 @@ pub fn build_solution_pack_plan(
             break;
         }
         for key in newly_blocked {
-            outcomes.insert(key, ("blocked", "dependency_not_creatable"));
+            planned
+                .outcomes
+                .insert(key, (PlanActionKind::Blocked, "dependency_not_creatable"));
         }
     }
+    Ok(planned)
+}
 
-    let created_blueprint_codes = mappings_by_key
-        .values()
-        .filter(|mapping| mapping.resource_kind == "blueprint" && mapping.mapping_kind == "create")
-        .map(|mapping| mapping.target_code.clone())
-        .collect::<BTreeSet<_>>();
-    let (context_mappings, context_actions, planned_contexts) = plan_contexts(
-        pack,
-        prefix,
-        publication,
-        workspace.workspace_id,
-        &workspace.physical_codes,
-        &created_blueprint_codes,
-        &workspace.seed,
-    )?;
-    let (dependent_mappings, dependent_actions) = plan_dependents(&DependentPlanInput {
-        pack,
-        prefix,
-        publication,
-        workspace_id: workspace.workspace_id,
-        seed: &workspace.seed,
-        blueprint_outcomes: &outcomes,
-        blueprint_mappings: &mappings_by_key,
-        contexts: &planned_contexts,
-    })?;
-    for mapping in prerequisite_mappings
-        .into_iter()
-        .chain(context_mappings)
-        .chain(dependent_mappings)
-    {
-        mappings_by_key.insert(mapping.logical_key.clone(), mapping);
-    }
+/// Blueprint actions in apply order.
+fn plan_blueprint_actions(
+    pack: &ValidatedSolutionPack,
+    publication: BlueprintPublication,
+    workspace: &PlanningWorkspaceSnapshot,
+    mappings: &BTreeMap<String, PlannedMapping>,
+    layouts: &BlueprintExtensionLayouts,
+    blueprints: &mut PlannedBlueprints,
+) -> Result<Vec<PlannedAction>, SolutionPackError> {
+    let resources = pack
+        .manifest()
+        .resources
+        .blueprints
+        .iter()
+        .map(|resource| (resource.key.as_str(), resource))
+        .collect::<BTreeMap<_, _>>();
 
-    // Existing blueprints already exist, so their outbound publication-time
-    // dependencies impose no creation order. Keep them as dependency targets
-    // for resources that will be created, but clear their own outbound edges.
-    for (key, dependencies) in &mut ordering_dependencies {
-        if outcomes[key].0 != "create" {
-            dependencies.clear();
-        }
-    }
-    let ordered_keys = topological_resource_order(&ordering_dependencies)?;
-    // Prerequisites and contexts come first: blueprints, samples, rules and
-    // saved searches may depend on them.
-    let mut actions = prerequisite_actions;
-    actions.extend(context_actions);
-    for logical_key in ordered_keys {
-        let (kind, resource) = resources
-            .get(&logical_key)
+    // Includes constrain apply order. A published target is also required
+    // before ordinary validation can resolve a relationship table path. Other
+    // relationship references may legitimately be cyclic. Blueprints that are
+    // not created already exist, so their own outbound edges impose no order.
+    let ordering_dependencies = resources
+        .keys()
+        .map(|key| {
+            let blueprint = validated_blueprint(pack, key);
+            let mut dependencies = BTreeSet::new();
+            if blueprints.outcomes[*key].0 == PlanActionKind::Create {
+                dependencies.extend(
+                    blueprint
+                        .includes()
+                        .iter()
+                        .map(|include| include.key().to_owned()),
+                );
+                if publication == BlueprintPublication::Publish {
+                    dependencies.extend(blueprint.table_path_dependencies().iter().cloned());
+                }
+            }
+            ((*key).to_owned(), dependencies)
+        })
+        .collect::<BTreeMap<_, _>>();
+
+    let mut actions = Vec::with_capacity(resources.len());
+    for logical_key in topological_resource_order(&ordering_dependencies)? {
+        let resource = resources
+            .get(logical_key.as_str())
             .expect("dependency graph contains declared resources");
-        let mapping = &mappings_by_key[&logical_key];
-        let (action, reason_code) = outcomes[&logical_key];
-        let reuse = &resource.reuse;
-        let normalized_payload = if action == "create" {
-            Some(normalized_blueprint_payload(
-                pack.blueprint(&logical_key)
-                    .expect("validated blueprint exists"),
-                &mappings_by_key,
-                publication,
-                &blueprint_layout_allowed[&logical_key],
-                workspace,
-                manifest,
-            )?)
+        let mapping = &mappings[&logical_key];
+        let (action, reason_code) = blueprints.outcomes[&logical_key];
+        let normalized_payload = if action == PlanActionKind::Create {
+            blueprints.payloads.remove(&logical_key)
         } else {
             None
         };
-        let preconditions = if action == "map" {
+        let preconditions = if action == PlanActionKind::Map {
             let existing = &workspace.existing_blueprints[&logical_key];
             serde_json::json!([{
                 "kind": "existing_blueprint",
@@ -4300,56 +4544,66 @@ pub fn build_solution_pack_plan(
                 "status": "published",
                 "deleted": false
             }])
-        } else if matches!(action, "create" | "conflict") && mapping.mapping_kind == "create" {
-            serde_json::json!([{"kind": "target_absent", "resource_kind": kind, "code": mapping.target_code}])
+        } else if matches!(action, PlanActionKind::Create | PlanActionKind::Conflict)
+            && mapping.mapping_kind == MappingKind::Create
+        {
+            serde_json::json!([{
+                "kind": "target_absent",
+                "resource_kind": PlanResourceKind::Blueprint,
+                "code": mapping.target_code,
+            }])
         } else {
             serde_json::json!([])
         };
+        let mut summary = serde_json::json!({
+            "target_code": mapping.target_code,
+            "target_version": mapping.target_version,
+            "required": resource.required,
+            "dependencies": validated_blueprint(pack, &logical_key).dependencies(),
+            "extension_layout": layouts.evidence.get(&logical_key).cloned().unwrap_or_default(),
+        });
+        if let Some(reuse) = &resource.reuse {
+            summary["reuse"] = serde_json::json!(reuse);
+        }
         actions.push(PlannedAction {
-            resource_kind: kind,
-            logical_key: logical_key.clone(),
+            resource_kind: PlanResourceKind::Blueprint,
+            logical_key,
             action,
             reason_code,
-            summary: {
-                let mut summary = serde_json::json!({
-                    "target_code": mapping.target_code,
-                    "target_version": mapping.target_version,
-                    "required": resource.required,
-                    "dependencies": dependencies[&logical_key],
-                    "extension_layout": blueprint_layout_evidence.get(&logical_key).cloned().unwrap_or_default(),
-                });
-                if let Some(reuse) = reuse {
-                    summary["reuse"] = serde_json::json!(reuse);
-                }
-                summary
-            },
+            summary,
             normalized_payload,
             preconditions,
         });
     }
+    Ok(actions)
+}
 
-    for resource in &manifest.resources.presentation_assets {
+fn plan_presentation_asset_actions(
+    pack: &ValidatedSolutionPack,
+    workspace: &PlanningWorkspaceSnapshot,
+    mappings: &BTreeMap<String, PlannedMapping>,
+) -> Vec<PlannedAction> {
+    let mut actions = Vec::new();
+    for resource in &pack.manifest().resources.presentation_assets {
         let asset = pack
             .presentation_asset(&resource.key)
             .expect("validated presentation asset exists");
-        let mapping = &mappings_by_key[&resource.key];
+        let mapping = &mappings[&resource.key];
         let existing = workspace.existing_presentation_assets.get(&resource.key);
-        let compatible = existing.is_some_and(|existing| {
-            existing.purpose == asset.purpose
-                && existing.media_type == asset.media_type
-                && existing.byte_size == asset.stored_bytes.len() as i64
-                && existing.sha256 == asset.stored_sha256
-        });
-        let (action, reason_code) = if existing.is_some() && compatible {
-            ("map", "exact_asset_match")
-        } else if existing.is_some() {
-            ("conflict", "existing_asset_incompatible")
-        } else if resource.required {
-            ("create", "target_absent")
-        } else {
-            ("skip", "optional_not_selected")
+        let (action, reason_code) = match existing {
+            Some(existing)
+                if existing.purpose == asset.purpose
+                    && existing.media_type == asset.media_type
+                    && existing.byte_size == asset.stored_bytes.len() as i64
+                    && existing.sha256 == asset.stored_sha256 =>
+            {
+                (PlanActionKind::Map, "exact_asset_match")
+            }
+            Some(_) => (PlanActionKind::Conflict, "existing_asset_incompatible"),
+            None if resource.required => (PlanActionKind::Create, "target_absent"),
+            None => (PlanActionKind::Skip, "optional_not_selected"),
         };
-        let normalized_payload = (action == "create").then(|| {
+        let normalized_payload = (action == PlanActionKind::Create).then(|| {
             serde_json::json!({
                 "purpose": asset.purpose,
                 "media_type": asset.media_type,
@@ -4361,9 +4615,8 @@ pub fn build_solution_pack_plan(
                 "height": asset.height,
             })
         });
-        let preconditions = if action == "map" {
-            let existing = existing.expect("map has existing asset");
-            serde_json::json!([{
+        let preconditions = match (action, existing) {
+            (PlanActionKind::Map, Some(existing)) => serde_json::json!([{
                 "kind": "existing_presentation_asset",
                 "id": existing.id,
                 "purpose": existing.purpose,
@@ -4371,18 +4624,16 @@ pub fn build_solution_pack_plan(
                 "byte_size": existing.byte_size,
                 "sha256": existing.sha256,
                 "source_sha256": asset.source_sha256,
-            }])
-        } else if matches!(action, "create" | "conflict") {
-            serde_json::json!([{
+            }]),
+            (PlanActionKind::Create | PlanActionKind::Conflict, _) => serde_json::json!([{
                 "kind": "target_absent",
-                "resource_kind": "presentation_asset",
+                "resource_kind": PlanResourceKind::PresentationAsset,
                 "code": "presentation_asset",
-            }])
-        } else {
-            serde_json::json!([])
+            }]),
+            _ => serde_json::json!([]),
         };
         actions.push(PlannedAction {
-            resource_kind: "presentation_asset",
+            resource_kind: PlanResourceKind::PresentationAsset,
             logical_key: resource.key.clone(),
             action,
             reason_code,
@@ -4402,265 +4653,240 @@ pub fn build_solution_pack_plan(
             preconditions,
         });
     }
+    actions
+}
 
-    if let Some(navigation) = pack.explore_navigation() {
-        let resource = manifest
-            .resources
-            .workspace_settings
-            .iter()
-            .find(|resource| resource.key == "workspace/explore-navigation")
-            .expect("validated navigation has a manifest resource");
-        if !workspace.explore_navigation_valid {
-            actions.push(PlannedAction {
-                resource_kind: "workspace_setting",
-                logical_key: resource.key.clone(),
-                action: "conflict",
-                reason_code: "invalid_current_navigation",
-                summary: serde_json::json!({
-                    "setting": "explore_navigation",
-                    "required": resource.required,
-                    "entries": [],
-                }),
-                normalized_payload: None,
-                preconditions: serde_json::json!([]),
-            });
-            let extension_requirements = manifest
-                .extensions
-                .iter()
-                .map(|requirement| {
-                    evaluate_extension_requirement(
-                        requirement,
-                        pack.configuration_template(&requirement.key),
-                        workspace.installed_extensions.get(&requirement.id),
-                    )
-                })
-                .collect::<Vec<_>>();
-            actions.extend(dependent_actions);
-            return Ok(SolutionPackPlanDraft {
-                ready: false,
-                mappings: mappings_by_key.into_values().collect(),
-                actions,
-                extension_requirements,
-                blueprint_canonical_definition_hashes,
-            });
-        }
+/// A conflict for a workspace setting whose current value cannot be read.
+fn invalid_workspace_setting_action(
+    resource: &SolutionPackResource,
+    setting: &str,
+    reason_code: &'static str,
+) -> PlannedAction {
+    PlannedAction {
+        resource_kind: PlanResourceKind::WorkspaceSetting,
+        logical_key: resource.key.clone(),
+        action: PlanActionKind::Conflict,
+        reason_code,
+        summary: serde_json::json!({
+            "setting": setting,
+            "required": resource.required,
+            "entries": [],
+        }),
+        normalized_payload: None,
+        preconditions: serde_json::json!([]),
+    }
+}
 
-        let mut evidence = Vec::with_capacity(navigation.entries.len());
-        let mut payload_entries = Vec::with_capacity(navigation.entries.len());
-        let mut unmet_reason = None;
-        let mut visibility_conflict = false;
-        let current_by_code = workspace
-            .explore_navigation
+/// The action for a workspace setting built from per-entry outcomes.
+fn workspace_setting_action(
+    resource: &SolutionPackResource,
+    setting: &str,
+    (action, reason_code): Outcome,
+    evidence: Vec<Value>,
+    payload_entries: Vec<Value>,
+) -> PlannedAction {
+    PlannedAction {
+        resource_kind: PlanResourceKind::WorkspaceSetting,
+        logical_key: resource.key.clone(),
+        action,
+        reason_code,
+        summary: serde_json::json!({
+            "setting": setting,
+            "required": resource.required,
+            "entries": evidence,
+        }),
+        normalized_payload: matches!(action, PlanActionKind::Append | PlanActionKind::Satisfied)
+            .then(|| serde_json::json!({ "entries": payload_entries })),
+        preconditions: serde_json::json!([]),
+    }
+}
+
+fn plan_explore_navigation_action(
+    navigation: &SolutionPackExploreNavigation,
+    resource: &SolutionPackResource,
+    publication: BlueprintPublication,
+    workspace: &PlanningWorkspaceSnapshot,
+    mappings: &BTreeMap<String, PlannedMapping>,
+    blueprint_outcomes: &HashMap<String, Outcome>,
+) -> PlannedAction {
+    let mut evidence = Vec::with_capacity(navigation.entries.len());
+    let mut payload_entries = Vec::with_capacity(navigation.entries.len());
+    let mut unmet_reason = None;
+    let mut visibility_conflict = false;
+    let current_by_code = workspace
+        .explore_navigation
+        .iter()
+        .map(|entry| {
+            let mut roles = entry.visible_to_role_codes.clone();
+            roles.sort();
+            (entry.blueprint_code.as_str(), roles)
+        })
+        .collect::<HashMap<_, _>>();
+    for entry in &navigation.entries {
+        let mapping = &mappings[&entry.blueprint];
+        let roles_available = entry
+            .visible_to_role_codes
             .iter()
-            .map(|entry| {
-                let mut roles = entry.visible_to_role_codes.clone();
-                roles.sort();
-                (entry.blueprint_code.as_str(), roles)
-            })
-            .collect::<HashMap<_, _>>();
-        for entry in &navigation.entries {
-            let mapping = &mappings_by_key[&entry.blueprint];
-            let roles_available = entry
-                .visible_to_role_codes
-                .iter()
-                .all(|role| workspace.role_codes.contains(role));
-            let blueprint_available = outcomes.get(&entry.blueprint).is_some_and(|(action, _)| {
-                *action == "map"
-                    || (*action == "create" && publication == BlueprintPublication::Publish)
-            });
-            let (outcome, reason) = if !roles_available {
-                unmet_reason.get_or_insert("unknown_role_code");
-                ("unmet", "unknown_role_code")
-            } else if let Some(current_roles) = current_by_code.get(mapping.target_code.as_str()) {
-                if *current_roles != entry.visible_to_role_codes {
-                    visibility_conflict = true;
-                    ("conflict", "visibility_mismatch")
-                } else if workspace
-                    .published_entity_codes
-                    .contains(&mapping.target_code)
-                {
-                    ("satisfied", "exact_match")
-                } else {
-                    unmet_reason.get_or_insert("blueprint_not_published");
-                    ("unmet", "blueprint_not_published")
-                }
-            } else if !blueprint_available {
-                let reason = if publication != BlueprintPublication::Publish {
-                    "blueprint_not_published"
-                } else {
-                    "blueprint_not_creatable"
-                };
-                unmet_reason.get_or_insert(reason);
-                ("unmet", reason)
-            } else {
-                ("append", "target_absent")
-            };
-            let evidence_outcome = if !resource.required && matches!(outcome, "unmet" | "conflict")
+            .all(|role| workspace.role_codes.contains(role));
+        let blueprint_available =
+            blueprint_outcomes
+                .get(&entry.blueprint)
+                .is_some_and(|(action, _)| match action {
+                    PlanActionKind::Map => true,
+                    PlanActionKind::Create => publication == BlueprintPublication::Publish,
+                    _ => false,
+                });
+        let (outcome, reason) = if !roles_available {
+            unmet_reason.get_or_insert("unknown_role_code");
+            ("unmet", "unknown_role_code")
+        } else if let Some(current_roles) = current_by_code.get(mapping.target_code.as_str()) {
+            if *current_roles != entry.visible_to_role_codes {
+                visibility_conflict = true;
+                ("conflict", "visibility_mismatch")
+            } else if workspace
+                .published_entity_codes
+                .contains(&mapping.target_code)
             {
-                "skip"
+                ("satisfied", "exact_match")
             } else {
-                outcome
+                unmet_reason.get_or_insert("blueprint_not_published");
+                ("unmet", "blueprint_not_published")
+            }
+        } else if !blueprint_available {
+            let reason = if publication != BlueprintPublication::Publish {
+                "blueprint_not_published"
+            } else {
+                "blueprint_not_creatable"
             };
-            evidence.push(serde_json::json!({
-                "blueprint": entry.blueprint,
+            unmet_reason.get_or_insert(reason);
+            ("unmet", reason)
+        } else {
+            ("append", "target_absent")
+        };
+        let evidence_outcome = if !resource.required && matches!(outcome, "unmet" | "conflict") {
+            "skip"
+        } else {
+            outcome
+        };
+        evidence.push(serde_json::json!({
+            "blueprint": entry.blueprint,
+            "blueprint_code": mapping.target_code,
+            "visible_to_role_codes": entry.visible_to_role_codes,
+            "outcome": evidence_outcome,
+            "reason_code": reason,
+        }));
+        if matches!(outcome, "append" | "satisfied") {
+            payload_entries.push(serde_json::json!({
+                "blueprint_key": entry.blueprint,
                 "blueprint_code": mapping.target_code,
                 "visible_to_role_codes": entry.visible_to_role_codes,
-                "outcome": evidence_outcome,
-                "reason_code": reason,
             }));
-            if matches!(outcome, "append" | "satisfied") {
-                payload_entries.push(serde_json::json!({
-                    "blueprint_key": entry.blueprint,
-                    "blueprint_code": mapping.target_code,
-                    "visible_to_role_codes": entry.visible_to_role_codes,
-                }));
-            }
         }
-        let has_append = evidence.iter().any(|entry| entry["outcome"] == "append");
-        let (action, reason_code, normalized_payload) = if resource.required && visibility_conflict
-        {
-            ("conflict", "visibility_mismatch", None)
-        } else if resource.required
-            && let Some(reason) = unmet_reason
-        {
-            ("blocked", reason, None)
-        } else if payload_entries.is_empty() {
-            ("skip", unmet_reason.unwrap_or("visibility_mismatch"), None)
-        } else if has_append {
-            (
-                "append",
-                "target_absent",
-                Some(serde_json::json!({"entries": payload_entries})),
-            )
-        } else {
-            (
-                "satisfied",
-                "exact_match",
-                Some(serde_json::json!({"entries": payload_entries})),
-            )
-        };
-        actions.push(PlannedAction {
-            resource_kind: "workspace_setting",
-            logical_key: resource.key.clone(),
-            action,
-            reason_code,
-            summary: serde_json::json!({
-                "setting": "explore_navigation",
-                "required": resource.required,
-                "entries": evidence,
-            }),
-            normalized_payload,
-            preconditions: serde_json::json!([]),
-        });
     }
+    let has_append = evidence.iter().any(|entry| entry["outcome"] == "append");
+    let outcome = if resource.required && visibility_conflict {
+        (PlanActionKind::Conflict, "visibility_mismatch")
+    } else if resource.required
+        && let Some(reason) = unmet_reason
+    {
+        (PlanActionKind::Blocked, reason)
+    } else if payload_entries.is_empty() {
+        (
+            PlanActionKind::Skip,
+            unmet_reason.unwrap_or("visibility_mismatch"),
+        )
+    } else if has_append {
+        (PlanActionKind::Append, "target_absent")
+    } else {
+        (PlanActionKind::Satisfied, "exact_match")
+    };
+    workspace_setting_action(
+        resource,
+        "explore_navigation",
+        outcome,
+        evidence,
+        payload_entries,
+    )
+}
 
-    if let Some(entries) = pack.lexicon() {
-        let resource = manifest
-            .resources
-            .workspace_settings
-            .iter()
-            .find(|resource| resource.key == "workspace/lexicon")
-            .expect("validated lexicon has a manifest resource");
-        // Lexicon entries never conflict: apply adds missing entries, updates
-        // ones a pack supplied, and keeps entries the workspace wrote.
-        let languages: BTreeSet<&str> = entries
-            .iter()
-            .map(|entry| entry.language.as_str())
-            .collect();
-        actions.push(PlannedAction {
-            resource_kind: "workspace_setting",
-            logical_key: resource.key.clone(),
-            action: "append",
-            reason_code: "workspace_entries_preserved",
-            summary: serde_json::json!({
-                "setting": "lexicon",
-                "required": resource.required,
-                "languages": languages,
-                "entry_count": entries.len(),
-            }),
-            normalized_payload: Some(serde_json::json!({"entries": entries})),
-            preconditions: serde_json::json!([]),
-        });
+/// Lexicon entries never conflict: apply adds missing entries, updates ones a
+/// pack supplied, and keeps entries the workspace wrote.
+fn plan_lexicon_action(
+    entries: &[catalog_lexicon::Entry],
+    resource: &SolutionPackResource,
+) -> PlannedAction {
+    let languages: BTreeSet<&str> = entries
+        .iter()
+        .map(|entry| entry.language.as_str())
+        .collect();
+    PlannedAction {
+        resource_kind: PlanResourceKind::WorkspaceSetting,
+        logical_key: resource.key.clone(),
+        action: PlanActionKind::Append,
+        reason_code: "workspace_entries_preserved",
+        summary: serde_json::json!({
+            "setting": "lexicon",
+            "required": resource.required,
+            "languages": languages,
+            "entry_count": entries.len(),
+        }),
+        normalized_payload: Some(serde_json::json!({"entries": entries})),
+        preconditions: serde_json::json!([]),
     }
+}
 
-    if let Some(layout) = pack.extension_layout() {
-        let resource = manifest
-            .resources
-            .workspace_settings
-            .iter()
-            .find(|resource| resource.key == "workspace/extension-layout")
-            .expect("validated extension layout has a manifest resource");
-        if !workspace.extension_layout_valid {
-            actions.push(PlannedAction {
-                resource_kind: "workspace_setting",
-                logical_key: resource.key.clone(),
-                action: "conflict",
-                reason_code: "invalid_current_extension_layout",
-                summary: serde_json::json!({
-                    "setting": "extension_layout",
-                    "required": resource.required,
-                    "entries": [],
-                }),
-                normalized_payload: None,
-                preconditions: serde_json::json!([]),
-            });
-        } else {
-            let mut evidence = Vec::with_capacity(layout.entries.len());
-            let mut payload_entries = Vec::new();
-            let mut required_unmet = None;
-            let mut required_conflict = false;
-            let mut has_append = false;
-            for entry in &layout.entries {
-                let requirement =
-                    extension_requirement_for_contribution(manifest, &entry.contribution);
-                let installed = workspace.installed_extensions.get(&requirement.id);
-                let availability = contribution_availability_reason(
-                    requirement,
+fn plan_extension_layout_action(
+    layout: &SolutionPackExtensionLayout,
+    resource: &SolutionPackResource,
+    manifest: &SolutionPackManifest,
+    workspace: &PlanningWorkspaceSnapshot,
+) -> PlannedAction {
+    let mut evidence = Vec::with_capacity(layout.entries.len());
+    let mut payload_entries = Vec::new();
+    let mut required_unmet = None;
+    let mut required_conflict = false;
+    let mut has_append = false;
+    for entry in &layout.entries {
+        let requirement = extension_requirement_for_contribution(manifest, &entry.contribution);
+        let installed = workspace.installed_extensions.get(&requirement.id);
+        let availability = contribution_availability_reason(
+            requirement,
+            &entry.contribution,
+            &entry.outlet,
+            installed,
+        );
+        let (outcome, reason) = match (availability, installed) {
+            (Some(reason), _) if entry.required => {
+                required_unmet.get_or_insert(reason);
+                (PlanActionKind::Blocked, reason)
+            }
+            (Some(reason), _) => (PlanActionKind::Skip, reason),
+            (None, installed) => {
+                let installed = installed.expect("available contribution is installed");
+                let outcome = match classify_extension_layout_placement(
+                    &workspace.extension_layout,
                     &entry.contribution,
                     &entry.outlet,
-                    installed,
-                );
-                let placement = availability.is_none().then(|| {
-                    classify_extension_layout_placement(
-                        &workspace.extension_layout,
-                        &entry.contribution,
-                        &entry.outlet,
-                        entry.hidden,
-                        entry.promoted,
-                    )
-                });
-                let (outcome, reason) = if let Some(reason) = availability {
-                    if entry.required {
-                        required_unmet.get_or_insert(reason);
-                        ("blocked", reason)
-                    } else {
-                        ("skip", reason)
+                    entry.hidden,
+                    entry.promoted,
+                ) {
+                    ExtensionLayoutPlacement::Exact => (PlanActionKind::Satisfied, "exact_match"),
+                    ExtensionLayoutPlacement::Absent => {
+                        has_append = true;
+                        (PlanActionKind::Append, "target_absent")
                     }
-                } else {
-                    match placement.expect("available contribution has placement") {
-                        ExtensionLayoutPlacement::Exact => ("satisfied", "exact_match"),
-                        ExtensionLayoutPlacement::Absent => {
-                            has_append = true;
-                            ("append", "target_absent")
-                        }
-                        ExtensionLayoutPlacement::Conflict if entry.required => {
-                            required_conflict = true;
-                            ("conflict", "placement_mismatch")
-                        }
-                        ExtensionLayoutPlacement::Conflict => ("skip", "placement_mismatch"),
+                    ExtensionLayoutPlacement::Conflict if entry.required => {
+                        required_conflict = true;
+                        (PlanActionKind::Conflict, "placement_mismatch")
+                    }
+                    ExtensionLayoutPlacement::Conflict => {
+                        (PlanActionKind::Skip, "placement_mismatch")
                     }
                 };
-                evidence.push(serde_json::json!({
-                    "contribution": entry.contribution,
-                    "outlet": entry.outlet,
-                    "hidden": entry.hidden,
-                    "promoted": entry.promoted,
-                    "required": entry.required,
-                    "outcome": outcome,
-                    "reason_code": reason,
-                }));
-                if matches!(outcome, "append" | "satisfied") {
-                    let installed = installed.expect("available contribution is installed");
+                if matches!(
+                    outcome.0,
+                    PlanActionKind::Append | PlanActionKind::Satisfied
+                ) {
                     payload_entries.push(serde_json::json!({
                         "contribution": entry.contribution,
                         "outlet": entry.outlet,
@@ -4670,70 +4896,37 @@ pub fn build_solution_pack_plan(
                         "installed_version": installed.version,
                     }));
                 }
+                outcome
             }
-            let (action, reason_code, normalized_payload) = if required_conflict {
-                ("conflict", "placement_mismatch", None)
-            } else if let Some(reason) = required_unmet {
-                ("blocked", reason, None)
-            } else if payload_entries.is_empty() {
-                ("skip", "optional_contributions_unmet", None)
-            } else if has_append {
-                (
-                    "append",
-                    "target_absent",
-                    Some(serde_json::json!({"entries": payload_entries})),
-                )
-            } else {
-                (
-                    "satisfied",
-                    "exact_match",
-                    Some(serde_json::json!({"entries": payload_entries})),
-                )
-            };
-            actions.push(PlannedAction {
-                resource_kind: "workspace_setting",
-                logical_key: resource.key.clone(),
-                action,
-                reason_code,
-                summary: serde_json::json!({
-                    "setting": "extension_layout",
-                    "required": resource.required,
-                    "entries": evidence,
-                }),
-                normalized_payload,
-                preconditions: serde_json::json!([]),
-            });
-        }
+        };
+        evidence.push(serde_json::json!({
+            "contribution": entry.contribution,
+            "outlet": entry.outlet,
+            "hidden": entry.hidden,
+            "promoted": entry.promoted,
+            "required": entry.required,
+            "outcome": outcome,
+            "reason_code": reason,
+        }));
     }
-
-    actions.extend(dependent_actions);
-    let extension_requirements = manifest
-        .extensions
-        .iter()
-        .map(|requirement| {
-            evaluate_extension_requirement(
-                requirement,
-                pack.configuration_template(&requirement.key),
-                workspace.installed_extensions.get(&requirement.id),
-            )
-        })
-        .collect::<Vec<_>>();
-    let ready = actions.iter().all(|action| {
-        matches!(
-            action.action,
-            "create" | "map" | "append" | "satisfied" | "skip"
-        )
-    }) && extension_requirements
-        .iter()
-        .all(|requirement| requirement.status != "blocked");
-
-    Ok(SolutionPackPlanDraft {
-        ready,
-        mappings: mappings_by_key.into_values().collect(),
-        actions,
-        extension_requirements,
-        blueprint_canonical_definition_hashes,
-    })
+    let outcome = if required_conflict {
+        (PlanActionKind::Conflict, "placement_mismatch")
+    } else if let Some(reason) = required_unmet {
+        (PlanActionKind::Blocked, reason)
+    } else if payload_entries.is_empty() {
+        (PlanActionKind::Skip, "optional_contributions_unmet")
+    } else if has_append {
+        (PlanActionKind::Append, "target_absent")
+    } else {
+        (PlanActionKind::Satisfied, "exact_match")
+    };
+    workspace_setting_action(
+        resource,
+        "extension_layout",
+        outcome,
+        evidence,
+        payload_entries,
+    )
 }
 
 fn blueprint_kind_name(kind: BlueprintKind) -> &'static str {
@@ -5632,19 +5825,19 @@ target_blueprint = "blueprints/product"
         };
         assert_eq!(
             action_for(json!({"version":1,"outlets":{}})).action,
-            "append"
+            PlanActionKind::Append
         );
         assert_eq!(
             action_for(json!({"version":1,"outlets":{"navigation":{"order":["acme.shop:nav"],"hidden":[],"promoted":["acme.shop:nav"]}}})).action,
-            "satisfied"
+            PlanActionKind::Satisfied
         );
         assert_eq!(
             action_for(json!({"version":1,"outlets":{"navigation":{"order":[],"hidden":["acme.shop:nav"],"promoted":[]}}})).action,
-            "conflict"
+            PlanActionKind::Conflict
         );
         assert_eq!(
             action_for(json!({"version":1,"outlets":{"navigation":{"order":[],"hidden":[],"promoted":["acme.shop:nav"]}}})).action,
-            "conflict"
+            PlanActionKind::Conflict
         );
         assert_eq!(
             action_for(json!({"version":1,"outlets":{
@@ -5652,7 +5845,7 @@ target_blueprint = "blueprints/product"
                 "entity_action":{"order":["acme.shop:nav"],"hidden":[]}
             }}))
             .action,
-            "conflict"
+            PlanActionKind::Conflict
         );
 
         let unavailable_action = |installed: Option<InstalledExtensionSnapshot>| {
@@ -5705,7 +5898,10 @@ target_blueprint = "blueprints/product"
             (Some(policy_incompatible), "policy_incompatible"),
             (Some(incompatible_version), "incompatible_version"),
         ] {
-            assert_eq!(unavailable_action(candidate), ("blocked", reason));
+            assert_eq!(
+                unavailable_action(candidate),
+                (PlanActionKind::Blocked, reason)
+            );
         }
 
         let optional_layout = br#"{"format_version":1,"kind":"extension_layout","entries":[{"contribution":"acme.shop:nav","outlet":"navigation","required":false}]}"#;
@@ -5741,7 +5937,7 @@ target_blueprint = "blueprints/product"
                 .find(|action| action.logical_key == "workspace/extension-layout")
                 .unwrap()
                 .action,
-            "skip"
+            PlanActionKind::Skip
         );
     }
 
@@ -5763,7 +5959,10 @@ hidden = []
                 .copied(),
             )
             .collect::<Vec<_>>();
-        for (required, expected_action) in [(false, "create"), (true, "blocked")] {
+        for (required, expected_action) in [
+            (false, PlanActionKind::Create),
+            (true, PlanActionKind::Blocked),
+        ] {
             let mut manifest = manifest_value();
             manifest["resources"]["blueprints"][0]["sha256"] = json!(digest(&blueprint));
             manifest["extensions"] = json!([{
@@ -5865,7 +6064,10 @@ hidden = []
                         .unwrap();
                     assert_eq!(
                         (mapped_product.action, mapped_product.reason_code),
-                        ("blocked", "extension_contribution_unavailable")
+                        (
+                            PlanActionKind::Blocked,
+                            "extension_contribution_unavailable"
+                        )
                     );
                     assert_eq!(mapped.extension_requirements[0].status, "satisfied");
                     assert!(!mapped.ready);
@@ -6019,7 +6221,7 @@ hidden = ["acme.shop:a_action"]
         let action = appended.actions.last().unwrap();
         assert_eq!(
             (action.action, action.reason_code),
-            ("append", "target_absent")
+            (PlanActionKind::Append, "target_absent")
         );
         assert!(appended.ready);
 
@@ -6034,7 +6236,10 @@ hidden = ["acme.shop:a_action"]
             &workspace(vec![exact]),
         )
         .unwrap();
-        assert_eq!(satisfied.actions.last().unwrap().action, "satisfied");
+        assert_eq!(
+            satisfied.actions.last().unwrap().action,
+            PlanActionKind::Satisfied
+        );
 
         let conflicting = PlanningExploreNavigationEntry {
             blueprint_code: "ecom_product".to_owned(),
@@ -6047,7 +6252,10 @@ hidden = ["acme.shop:a_action"]
             &workspace(vec![conflicting]),
         )
         .unwrap();
-        assert_eq!(conflicted.actions.last().unwrap().action, "conflict");
+        assert_eq!(
+            conflicted.actions.last().unwrap().action,
+            PlanActionKind::Conflict
+        );
         assert!(!conflicted.ready);
     }
 
@@ -6083,7 +6291,7 @@ hidden = ["acme.shop:a_action"]
             .iter()
             .find(|action| action.logical_key == "workspace/lexicon")
             .unwrap();
-        assert_eq!(action.action, "append");
+        assert_eq!(action.action, PlanActionKind::Append);
         assert_eq!(action.summary["languages"], json!(["en", "pl"]));
         assert_eq!(action.summary["entry_count"], 3);
         assert_eq!(
@@ -6119,7 +6327,10 @@ hidden = ["acme.shop:a_action"]
 
     #[test]
     fn planner_blocks_required_navigation_and_skips_optional_unmet_navigation() {
-        for (required, expected) in [(true, "blocked"), (false, "skip")] {
+        for (required, expected) in [
+            (true, PlanActionKind::Blocked),
+            (false, PlanActionKind::Skip),
+        ] {
             let pack =
                 ValidatedSolutionPack::from_tar_zst(&archive_with_explore_navigation(required))
                     .unwrap();
@@ -6181,7 +6392,7 @@ hidden = ["acme.shop:a_action"]
         )
         .unwrap();
         let action = plan.actions.last().unwrap();
-        assert_eq!(action.action, "append");
+        assert_eq!(action.action, PlanActionKind::Append);
         assert_eq!(action.summary["entries"][1]["outcome"], "skip");
         assert_eq!(
             action.normalized_payload.as_ref().unwrap()["entries"]
@@ -7382,7 +7593,11 @@ value_type = "string"
                 .collect::<Vec<_>>(),
             ["blueprints/category", "blueprints/product"]
         );
-        assert!(plan.actions.iter().all(|action| action.action == "create"));
+        assert!(
+            plan.actions
+                .iter()
+                .all(|action| action.action == PlanActionKind::Create)
+        );
         let product = plan
             .actions
             .iter()
@@ -7561,10 +7776,10 @@ value_type = "string"
         )
         .unwrap();
         assert!(reused.ready);
-        assert_eq!(reused.actions[0].action, "map");
+        assert_eq!(reused.actions[0].action, PlanActionKind::Map);
         assert_eq!(reused.actions[0].reason_code, "exact_blueprint_match");
         assert!(reused.actions[0].normalized_payload.is_none());
-        assert_eq!(reused.mappings[0].mapping_kind, "existing");
+        assert_eq!(reused.mappings[0].mapping_kind, MappingKind::Existing);
         assert_eq!(reused.mappings[0].target_id, existing_id);
         assert_eq!(reused.mappings[0].target_version, Some(7));
         let dependent = reused.actions[1].normalized_payload.as_ref().unwrap()["definition"]
@@ -7603,7 +7818,7 @@ value_type = "string"
         )
         .unwrap();
         assert!(!incompatible.ready);
-        assert_eq!(incompatible.actions[0].action, "conflict");
+        assert_eq!(incompatible.actions[0].action, PlanActionKind::Conflict);
         assert_eq!(
             incompatible.actions[0].reason_code,
             "existing_blueprint_incompatible"
@@ -7732,7 +7947,7 @@ value_type = "string"
         )
         .unwrap();
         assert!(plan.ready);
-        assert_eq!(plan.actions[0].action, "map");
+        assert_eq!(plan.actions[0].action, PlanActionKind::Map);
     }
 
     #[test]
@@ -7774,7 +7989,7 @@ value_type = "string"
             .iter()
             .find(|action| action.logical_key == "blueprints/product")
             .unwrap();
-        assert_eq!(product.action, "conflict");
+        assert_eq!(product.action, PlanActionKind::Conflict);
         assert_eq!(product.reason_code, "target_code_exists");
     }
 
@@ -7816,11 +8031,11 @@ value_type = "string"
             .unwrap();
         assert_eq!(
             (category.action, category.reason_code),
-            ("skip", "optional_not_selected")
+            (PlanActionKind::Skip, "optional_not_selected")
         );
         assert_eq!(
             (product.action, product.reason_code),
-            ("blocked", "dependency_not_creatable")
+            (PlanActionKind::Blocked, "dependency_not_creatable")
         );
         assert!(!plan.ready);
 
@@ -7894,7 +8109,7 @@ value_type = "string"
             .unwrap();
         assert_eq!(
             (mapped_product.action, mapped_product.reason_code),
-            ("blocked", "dependency_not_creatable")
+            (PlanActionKind::Blocked, "dependency_not_creatable")
         );
         assert!(!mapped.ready);
     }
@@ -8095,7 +8310,7 @@ target_blueprint = "blueprints/main"
                 .unwrap();
             assert_eq!(
                 (main_action.action, main_action.reason_code),
-                ("blocked", "dependency_not_creatable"),
+                (PlanActionKind::Blocked, "dependency_not_creatable"),
                 "{case}"
             );
             assert!(!mapped.ready, "{case}");
@@ -8175,7 +8390,10 @@ value_type = "string"
             .unwrap();
         assert_eq!(
             (product_action.action, product_action.reason_code),
-            ("blocked", "draft_table_path_target_unpublished")
+            (
+                PlanActionKind::Blocked,
+                "draft_table_path_target_unpublished"
+            )
         );
         assert!(!draft.ready);
 
@@ -8235,12 +8453,12 @@ target_blueprint = "blueprints/product"
             mapping_graph.insert(
                 key.to_owned(),
                 PlannedMapping {
-                    resource_kind: "blueprint",
+                    resource_kind: PlanResourceKind::Blueprint,
                     logical_key: key.to_owned(),
                     target_id: uuid::Uuid::from_u128(id),
                     target_code: code.to_owned(),
                     target_version: Some(version),
-                    mapping_kind: "existing",
+                    mapping_kind: MappingKind::Existing,
                     snapshot: json!({}),
                 },
             );
@@ -8302,7 +8520,12 @@ target_blueprint = "blueprints/product"
         )
         .unwrap();
         assert!(mapped.ready);
-        assert!(mapped.actions.iter().all(|action| action.action == "map"));
+        assert!(
+            mapped
+                .actions
+                .iter()
+                .all(|action| action.action == PlanActionKind::Map)
+        );
     }
 
     #[test]
@@ -8361,7 +8584,7 @@ target_blueprint = "blueprints/product"
             .unwrap();
         assert_eq!(
             (product.action, product.reason_code),
-            ("conflict", "target_code_exists")
+            (PlanActionKind::Conflict, "target_code_exists")
         );
     }
 
@@ -8663,9 +8886,12 @@ tags = ["reviewed"]
         let plan =
             build_solution_pack_plan(&pack, "ecom", BlueprintPublication::Publish, &workspace)
                 .unwrap();
-        assert_eq!(action(&plan, "blueprints/product").action, "map");
+        assert_eq!(
+            action(&plan, "blueprints/product").action,
+            PlanActionKind::Map
+        );
         let rule = action(&plan, "rules/name-required");
-        assert_eq!(rule.action, "create");
+        assert_eq!(rule.action, PlanActionKind::Create);
         assert_eq!(
             rule.normalized_payload.as_ref().unwrap()["enabled"],
             json!(false)
@@ -8776,7 +9002,7 @@ tags = ["reviewed"]
         let product = mapping(&plan, "blueprints/product");
         assert_eq!(pl.target_code, "ecom_pl");
         let pl_action = action(&plan, "contexts/pl");
-        assert_eq!(pl_action.action, "create");
+        assert_eq!(pl_action.action, PlanActionKind::Create);
         assert_eq!(
             pl_action.normalized_payload.as_ref().unwrap()["parent_id"],
             json!(eu.target_id)
@@ -8793,7 +9019,7 @@ tags = ["reviewed"]
         );
 
         let rule = action(&plan, "rules/name-required");
-        assert_eq!(rule.action, "create");
+        assert_eq!(rule.action, PlanActionKind::Create);
         let payload = rule.normalized_payload.as_ref().unwrap();
         assert_eq!(payload["blueprint_id"], json!(product.target_id));
         assert_eq!(payload["blueprint_version"], json!(1));
@@ -8850,15 +9076,21 @@ tags = ["reviewed"]
         let rule = action(&draft, "rules/name-required");
         assert_eq!(
             (rule.action, rule.reason_code),
-            ("blocked", "blueprint_not_published")
+            (PlanActionKind::Blocked, "blueprint_not_published")
         );
-        assert_eq!(action(&draft, "saved-searches/unnamed").action, "create");
+        assert_eq!(
+            action(&draft, "saved-searches/unnamed").action,
+            PlanActionKind::Create
+        );
 
         let existing_id = uuid::Uuid::from_u128(7);
         for (enabled, expected) in [
-            (Some(true), ("satisfied", "exact_match")),
-            (None, ("create", "target_absent")),
-            (Some(false), ("conflict", "publication_channel_mismatch")),
+            (Some(true), (PlanActionKind::Satisfied, "exact_match")),
+            (None, (PlanActionKind::Create, "target_absent")),
+            (
+                Some(false),
+                (PlanActionKind::Conflict, "publication_channel_mismatch"),
+            ),
         ] {
             let plan = build_solution_pack_plan(
                 &pack,
@@ -8887,14 +9119,14 @@ tags = ["reviewed"]
             let context = action(&plan, "contexts/pl");
             assert_eq!(
                 (context.action, context.reason_code),
-                ("map", "existing_context_selected")
+                (PlanActionKind::Map, "existing_context_selected")
             );
             let channel = action(&plan, "channels/pl");
             assert_eq!((channel.action, channel.reason_code), expected);
             let rule = action(&plan, "rules/name-required");
             assert_eq!(
                 (rule.action, rule.reason_code),
-                ("conflict", "target_code_exists")
+                (PlanActionKind::Conflict, "target_code_exists")
             );
             assert_eq!(
                 action(&plan, "saved-searches/unnamed")
@@ -8915,16 +9147,22 @@ tags = ["reviewed"]
             },
         )
         .unwrap();
-        assert_eq!(action(&conflict, "contexts/eu").action, "conflict");
+        assert_eq!(
+            action(&conflict, "contexts/eu").action,
+            PlanActionKind::Conflict
+        );
         let child = action(&conflict, "contexts/pl");
         assert_eq!(
             (child.action, child.reason_code),
-            ("blocked", "dependency_not_creatable")
+            (PlanActionKind::Blocked, "dependency_not_creatable")
         );
-        assert_eq!(action(&conflict, "rules/name-required").action, "blocked");
+        assert_eq!(
+            action(&conflict, "rules/name-required").action,
+            PlanActionKind::Blocked
+        );
         assert_eq!(
             action(&conflict, "saved-searches/unnamed").action,
-            "blocked"
+            PlanActionKind::Blocked
         );
     }
 
@@ -9201,14 +9439,17 @@ tags = ["reviewed"]
             let prerequisite = action(&plan, "prerequisites/base");
             assert_eq!(
                 (prerequisite.action, prerequisite.reason_code),
-                ("blocked", reason)
+                (PlanActionKind::Blocked, reason)
             );
             let category = action(&plan, "blueprints/category");
             assert_eq!(
                 (category.action, category.reason_code),
-                ("blocked", "prerequisite_unavailable")
+                (PlanActionKind::Blocked, "prerequisite_unavailable")
             );
-            assert_eq!(action(&plan, "blueprints/product").action, "blocked");
+            assert_eq!(
+                action(&plan, "blueprints/product").action,
+                PlanActionKind::Blocked
+            );
         }
 
         let application_id = uuid::Uuid::from_u128(42);
@@ -9229,7 +9470,10 @@ tags = ["reviewed"]
             &seed_workspace(satisfied()),
         )
         .unwrap();
-        assert_eq!(action(&unavailable, "prerequisites/base").action, "map");
+        assert_eq!(
+            action(&unavailable, "prerequisites/base").action,
+            PlanActionKind::Map
+        );
         assert_eq!(
             action(&unavailable, "blueprints/category").reason_code,
             "prerequisite_blueprint_unavailable"
@@ -9264,14 +9508,14 @@ tags = ["reviewed"]
         let category = action(&reused, "blueprints/category");
         assert_eq!(
             (category.action, category.reason_code),
-            ("map", "prerequisite_blueprint_match")
+            (PlanActionKind::Map, "prerequisite_blueprint_match")
         );
         assert_eq!(
             category.summary["reuse"],
             json!({"prerequisite": "prerequisites/base", "blueprint": "blueprints/category"})
         );
         let product = action(&reused, "blueprints/product");
-        assert_eq!(product.action, "create");
+        assert_eq!(product.action, PlanActionKind::Create);
         assert!(
             product.normalized_payload.as_ref().unwrap()["definition"]
                 .as_str()

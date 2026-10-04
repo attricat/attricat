@@ -15,11 +15,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::solution_packs::{
-    BlueprintPublication, MAX_IDENTIFIER_BYTES, MAX_VERSION_REQUIREMENT_BYTES, PlannedAction,
-    PlannedMapping, SolutionPackBlueprint, SolutionPackError, SolutionPackManifest,
-    SolutionPackResource, ValidatedSolutionPack, deterministic_target_id, invalid,
-    is_valid_stable_code, parse_sha256, parse_version_req, resource_code, safe_archive_path,
-    validate_acyclic, validate_pack_id,
+    BlueprintPublication, MAX_IDENTIFIER_BYTES, MAX_VERSION_REQUIREMENT_BYTES, MappingKind,
+    Outcome, PlanActionKind, PlanResourceKind, PlannedAction, PlannedMapping,
+    SolutionPackBlueprint, SolutionPackError, SolutionPackManifest, SolutionPackResource,
+    ValidatedSolutionPack, deterministic_target_id, invalid, is_valid_stable_code, parse_sha256,
+    parse_version_req, resource_code, safe_archive_path, validate_acyclic, validate_pack_id,
 };
 
 pub const MAX_SOLUTION_PACK_RULES: usize = 64;
@@ -978,18 +978,17 @@ pub struct SeedWorkspaceSnapshot {
     pub prerequisites: BTreeMap<String, PrerequisiteResolution>,
 }
 
-pub(crate) type Outcome = (&'static str, &'static str);
-
+/// An optional resource that cannot be applied is skipped instead.
 fn optional_outcome(required: bool, outcome: Outcome) -> Outcome {
-    if !required && matches!(outcome.0, "conflict" | "blocked") {
-        ("skip", outcome.1)
-    } else {
+    if required || outcome.0.is_applicable() {
         outcome
+    } else {
+        (PlanActionKind::Skip, outcome.1)
     }
 }
 
 fn available(outcome: Option<&Outcome>) -> bool {
-    outcome.is_some_and(|(action, _)| matches!(*action, "create" | "map"))
+    outcome.is_some_and(|(action, _)| action.provides_target())
 }
 
 fn physical_code(prefix: &str, key: &str) -> Result<String, SolutionPackError> {
@@ -1002,7 +1001,7 @@ fn physical_code(prefix: &str, key: &str) -> Result<String, SolutionPackError> {
     Ok(code)
 }
 
-fn target_absent(resource_kind: &str, code: &str) -> Value {
+fn target_absent(resource_kind: PlanResourceKind, code: &str) -> Value {
     serde_json::json!([{"kind": "target_absent", "resource_kind": resource_kind, "code": code}])
 }
 
@@ -1039,7 +1038,7 @@ pub(crate) fn plan_prerequisites(
                     "pack_id": prerequisite.id,
                     "pack_version": pack_version,
                 }),
-                ("map", "prerequisite_satisfied"),
+                (PlanActionKind::Map, "prerequisite_satisfied"),
                 serde_json::json!([{
                     "kind": "prerequisite_application",
                     "application_id": application_id,
@@ -1050,28 +1049,28 @@ pub(crate) fn plan_prerequisites(
             PrerequisiteResolution::Missing => (
                 deterministic_target_id(workspace_id, pack, prefix, publication, &prerequisite.key),
                 serde_json::json!({"pack_id": prerequisite.id, "available_versions": []}),
-                ("blocked", "prerequisite_missing"),
+                (PlanActionKind::Blocked, "prerequisite_missing"),
                 serde_json::json!([]),
             ),
             PrerequisiteResolution::Incompatible { versions } => (
                 deterministic_target_id(workspace_id, pack, prefix, publication, &prerequisite.key),
                 serde_json::json!({"pack_id": prerequisite.id, "available_versions": versions}),
-                ("blocked", "prerequisite_incompatible"),
+                (PlanActionKind::Blocked, "prerequisite_incompatible"),
                 serde_json::json!([]),
             ),
         };
         outcomes.insert(prerequisite.key.clone(), outcome);
         mappings.push(PlannedMapping {
-            resource_kind: "prerequisite",
+            resource_kind: PlanResourceKind::Prerequisite,
             logical_key: prerequisite.key.clone(),
             target_id,
             target_code: prerequisite.id.clone(),
             target_version: None,
-            mapping_kind: "existing",
+            mapping_kind: MappingKind::Existing,
             snapshot: snapshot.clone(),
         });
         actions.push(PlannedAction {
-            resource_kind: "prerequisite",
+            resource_kind: PlanResourceKind::Prerequisite,
             logical_key: prerequisite.key.clone(),
             action: outcome.0,
             reason_code: outcome.1,
@@ -1156,49 +1155,49 @@ pub(crate) fn plan_contexts(
         {
             (
                 PlannedMapping {
-                    resource_kind: "context",
+                    resource_kind: PlanResourceKind::Context,
                     logical_key: key.to_owned(),
                     target_id: existing.id,
                     target_code: existing.code.clone(),
                     target_version: None,
-                    mapping_kind: "existing",
+                    mapping_kind: MappingKind::Existing,
                     snapshot: serde_json::json!({"id": existing.id, "code": existing.code}),
                 },
-                ("map", "existing_context_selected"),
+                (PlanActionKind::Map, "existing_context_selected"),
                 None,
                 serde_json::json!([{"kind": "existing_context", "id": existing.id, "code": existing.code}]),
             )
         } else {
             let code = physical_code(prefix, key)?;
             let mapping = PlannedMapping {
-                resource_kind: "context",
+                resource_kind: PlanResourceKind::Context,
                 logical_key: key.to_owned(),
                 target_id: deterministic_target_id(workspace_id, pack, prefix, publication, key),
                 target_code: code.clone(),
                 target_version: None,
-                mapping_kind: "create",
+                mapping_kind: MappingKind::Create,
                 snapshot: serde_json::json!({"code": code}),
             };
             let outcome = if generated[&code] > 1 || blueprint_codes.contains(&code) {
-                ("conflict", "duplicate_target_code")
+                (PlanActionKind::Conflict, "duplicate_target_code")
             } else if physical_codes.contains(&code) {
-                ("conflict", "target_code_exists")
+                (PlanActionKind::Conflict, "target_code_exists")
             } else if parent.is_some_and(|(outcome, _)| !available(Some(outcome))) {
-                ("blocked", "dependency_not_creatable")
+                (PlanActionKind::Blocked, "dependency_not_creatable")
             } else {
-                ("create", "target_absent")
+                (PlanActionKind::Create, "target_absent")
             };
             let payload = serde_json::json!({
                 "code": code,
                 "data": context.data,
                 "parent_id": parent.map(|(_, mapping)| mapping.target_id),
             });
-            let preconditions = target_absent("context", &code);
+            let preconditions = target_absent(PlanResourceKind::Context, &code);
             (mapping, outcome, Some(payload), preconditions)
         };
         let outcome = optional_outcome(resource.required, outcome);
         actions.push(PlannedAction {
-            resource_kind: "context",
+            resource_kind: PlanResourceKind::Context,
             logical_key: key.to_owned(),
             action: outcome.0,
             reason_code: outcome.1,
@@ -1208,8 +1207,8 @@ pub(crate) fn plan_contexts(
                 "parent": context.parent,
                 "publication_channel": context.publication_channel.as_ref().map(|channel| channel.enabled),
             }),
-            normalized_payload: payload.filter(|_| outcome.0 == "create"),
-            preconditions: if matches!(outcome.0, "create" | "conflict" | "map") {
+            normalized_payload: payload.filter(|_| outcome.0 == PlanActionKind::Create),
+            preconditions: if matches!(outcome.0, PlanActionKind::Create | PlanActionKind::Conflict | PlanActionKind::Map) {
                 preconditions
             } else {
                 serde_json::json!([])
@@ -1286,7 +1285,9 @@ pub(crate) fn physical_blueprint_code(
 ) -> Result<String, SolutionPackError> {
     mappings
         .iter()
-        .find(|(key, mapping)| mapping.resource_kind == "blueprint" && resource_code(key) == code)
+        .find(|(key, mapping)| {
+            mapping.resource_kind == PlanResourceKind::Blueprint && resource_code(key) == code
+        })
         .map(|(_, mapping)| mapping.target_code.clone())
         .ok_or_else(|| SolutionPackError::Invalid(format!("blueprint code '{code}' is not mapped")))
 }
@@ -1335,15 +1336,15 @@ pub(crate) fn plan_dependents(
                 .all(|key| input.blueprint_available(key))
             || !input.context_available(rule.context.as_deref())
         {
-            ("blocked", "dependency_not_creatable")
-        } else if blueprint_outcome.is_some_and(|(action, _)| *action == "create")
+            (PlanActionKind::Blocked, "dependency_not_creatable")
+        } else if blueprint_outcome.is_some_and(|(action, _)| *action == PlanActionKind::Create)
             && input.publication != BlueprintPublication::Publish
         {
-            ("blocked", "blueprint_not_published")
+            (PlanActionKind::Blocked, "blueprint_not_published")
         } else if input.seed.rule_codes.contains(&code) {
-            ("conflict", "target_code_exists")
+            (PlanActionKind::Conflict, "target_code_exists")
         } else {
-            ("create", "target_absent")
+            (PlanActionKind::Create, "target_absent")
         };
         let outcome = optional_outcome(resource.required, outcome);
         rule_outcomes.insert(resource.key.clone(), (outcome, code.clone()));
@@ -1353,9 +1354,9 @@ pub(crate) fn plan_dependents(
         // is only enabled there after an operator's dry run, as for any rule.
         let enable_deferred = rule.enabled
             && rule.compiled.enforcement.is_some()
-            && blueprint_outcome.is_some_and(|(action, _)| *action == "map");
+            && blueprint_outcome.is_some_and(|(action, _)| *action == PlanActionKind::Map);
         let enabled = rule.enabled && !enable_deferred;
-        let payload = (outcome.0 == "create")
+        let payload = (outcome.0 == PlanActionKind::Create)
             .then(|| -> Result<Value, SolutionPackError> {
                 Ok(serde_json::json!({
                     "definition": replace_codes(&rule.definition, &code, Some(input.blueprint_mappings))?,
@@ -1367,16 +1368,16 @@ pub(crate) fn plan_dependents(
             })
             .transpose()?;
         mappings.push(PlannedMapping {
-            resource_kind: "rule",
+            resource_kind: PlanResourceKind::Rule,
             logical_key: resource.key.clone(),
             target_id: input.target_id(&resource.key),
             target_code: code.clone(),
             target_version: Some(1),
-            mapping_kind: "create",
+            mapping_kind: MappingKind::Create,
             snapshot: serde_json::json!({"code": code, "version": 1}),
         });
         actions.push(PlannedAction {
-            resource_kind: "rule",
+            resource_kind: PlanResourceKind::Rule,
             logical_key: resource.key.clone(),
             action: outcome.0,
             reason_code: outcome.1,
@@ -1395,8 +1396,8 @@ pub(crate) fn plan_dependents(
                     .expect("rule predicate serializes")["type"],
             }),
             normalized_payload: payload,
-            preconditions: if matches!(outcome.0, "create" | "conflict") {
-                target_absent("rule", &code)
+            preconditions: if matches!(outcome.0, PlanActionKind::Create | PlanActionKind::Conflict) {
+                target_absent(PlanResourceKind::Rule, &code)
             } else {
                 serde_json::json!([])
             },
@@ -1410,12 +1411,12 @@ pub(crate) fn plan_dependents(
             .expect("validated workflow");
         let code = physical_code(input.prefix, &resource.key)?;
         let outcome = if input.seed.workflow_codes.contains(&code) {
-            ("conflict", "target_code_exists")
+            (PlanActionKind::Conflict, "target_code_exists")
         } else {
-            ("create", "target_absent")
+            (PlanActionKind::Create, "target_absent")
         };
         let outcome = optional_outcome(resource.required, outcome);
-        let payload = (outcome.0 == "create")
+        let payload = (outcome.0 == PlanActionKind::Create)
             .then(|| -> Result<Value, SolutionPackError> {
                 Ok(serde_json::json!({
                     "definition": replace_code(&workflow.definition, &code)?,
@@ -1424,16 +1425,16 @@ pub(crate) fn plan_dependents(
             })
             .transpose()?;
         mappings.push(PlannedMapping {
-            resource_kind: "workflow",
+            resource_kind: PlanResourceKind::Workflow,
             logical_key: resource.key.clone(),
             target_id: input.target_id(&resource.key),
             target_code: code.clone(),
             target_version: Some(1),
-            mapping_kind: "create",
+            mapping_kind: MappingKind::Create,
             snapshot: serde_json::json!({"code": code, "version": 1}),
         });
         actions.push(PlannedAction {
-            resource_kind: "workflow",
+            resource_kind: PlanResourceKind::Workflow,
             logical_key: resource.key.clone(),
             action: outcome.0,
             reason_code: outcome.1,
@@ -1447,8 +1448,8 @@ pub(crate) fn plan_dependents(
                 "action_count": workflow.compiled.actions.len(),
             }),
             normalized_payload: payload,
-            preconditions: if matches!(outcome.0, "create" | "conflict") {
-                target_absent("workflow", &code)
+            preconditions: if matches!(outcome.0, PlanActionKind::Create | PlanActionKind::Conflict) {
+                target_absent(PlanResourceKind::Workflow, &code)
             } else {
                 serde_json::json!([])
             },
@@ -1466,14 +1467,14 @@ pub(crate) fn plan_dependents(
             .all(|key| input.blueprint_available(key))
             || !input.context_available(search.context.as_deref())
         {
-            ("blocked", "dependency_not_creatable")
+            (PlanActionKind::Blocked, "dependency_not_creatable")
         } else {
-            ("create", "target_absent")
+            (PlanActionKind::Create, "target_absent")
         };
         let outcome = optional_outcome(resource.required, outcome);
         let blueprint = &input.blueprint_mappings[&search.blueprint];
         let context = input.context_mapping(search.context.as_deref());
-        let payload = (outcome.0 == "create").then(|| {
+        let payload = (outcome.0 == PlanActionKind::Create).then(|| {
             serde_json::json!({
                 "name": search.name,
                 "description": search.description,
@@ -1482,16 +1483,16 @@ pub(crate) fn plan_dependents(
             })
         });
         mappings.push(PlannedMapping {
-            resource_kind: "saved_search",
+            resource_kind: PlanResourceKind::SavedSearch,
             logical_key: resource.key.clone(),
             target_id: input.target_id(&resource.key),
             target_code: "saved_search".to_owned(),
             target_version: None,
-            mapping_kind: "create",
+            mapping_kind: MappingKind::Create,
             snapshot: serde_json::json!({}),
         });
         actions.push(PlannedAction {
-            resource_kind: "saved_search",
+            resource_kind: PlanResourceKind::SavedSearch,
             logical_key: resource.key.clone(),
             action: outcome.0,
             reason_code: outcome.1,
@@ -1504,8 +1505,9 @@ pub(crate) fn plan_dependents(
                 "visibility": "workspace",
             }),
             normalized_payload: payload,
-            preconditions: if matches!(outcome.0, "create" | "conflict") {
-                target_absent("saved_search", "saved_search")
+            preconditions: if matches!(outcome.0, PlanActionKind::Create | PlanActionKind::Conflict)
+            {
+                target_absent(PlanResourceKind::SavedSearch, "saved_search")
             } else {
                 serde_json::json!([])
             },
@@ -1559,13 +1561,13 @@ fn plan_publication_channels(
             .get(&context.key)
             .and_then(|existing| existing.publication_channel.as_ref());
         let outcome = if !available(Some(context_outcome)) || !rules_available {
-            ("blocked", "dependency_not_creatable")
+            (PlanActionKind::Blocked, "dependency_not_creatable")
         } else if existing == Some(&declared) {
-            ("satisfied", "exact_match")
+            (PlanActionKind::Satisfied, "exact_match")
         } else if existing.is_some() {
-            ("conflict", "publication_channel_mismatch")
+            (PlanActionKind::Conflict, "publication_channel_mismatch")
         } else {
-            ("create", "target_absent")
+            (PlanActionKind::Create, "target_absent")
         };
         let outcome = optional_outcome(required, outcome);
         let key = publication_channel_key(&context.key);
@@ -1577,15 +1579,15 @@ fn plan_publication_channels(
             "require_valid_entity": declared.require_valid_entity,
         });
         mappings.push(PlannedMapping {
-            resource_kind: "publication_channel",
+            resource_kind: PlanResourceKind::PublicationChannel,
             logical_key: key.clone(),
             target_id: context_mapping.target_id,
             target_code: context_mapping.target_code.clone(),
             target_version: None,
             mapping_kind: if existing.is_some() {
-                "existing"
+                MappingKind::Existing
             } else {
-                "create"
+                MappingKind::Create
             },
             snapshot: serde_json::json!({
                 "context": context.key,
@@ -1593,7 +1595,7 @@ fn plan_publication_channels(
             }),
         });
         actions.push(PlannedAction {
-            resource_kind: "publication_channel",
+            resource_kind: PlanResourceKind::PublicationChannel,
             logical_key: key,
             action: outcome.0,
             reason_code: outcome.1,
@@ -1607,9 +1609,17 @@ fn plan_publication_channels(
                 "current_enabled": existing.map(|existing| existing.enabled),
                 "required": required,
             }),
-            normalized_payload: matches!(outcome.0, "create" | "satisfied").then_some(payload),
-            preconditions: if matches!(outcome.0, "create" | "conflict") {
-                target_absent("publication_channel", &context_mapping.target_code)
+            normalized_payload: matches!(
+                outcome.0,
+                PlanActionKind::Create | PlanActionKind::Satisfied
+            )
+            .then_some(payload),
+            preconditions: if matches!(outcome.0, PlanActionKind::Create | PlanActionKind::Conflict)
+            {
+                target_absent(
+                    PlanResourceKind::PublicationChannel,
+                    &context_mapping.target_code,
+                )
             } else {
                 serde_json::json!([])
             },
