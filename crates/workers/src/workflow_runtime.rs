@@ -172,19 +172,22 @@ pub fn start_schedule_coordinator(
                             // Pre-cutover rows get task envelopes once per
                             // workspace; afterwards an idle tick only checks
                             // whether any schedule cursor is due.
-                            let first = prepared.insert(workspace, Instant::now()).is_none();
-                            if first && let Err(error) = scoped.backfill_workflow_tasks().await {
-                                tracing::error!(%error, "workflow task backfill failed");
-                            }
+                            // A workspace counts as prepared, and a full pass
+                            // as done, only once they succeed; a failure is
+                            // retried on the next tick.
+                            let last_full = prepared.get(&workspace).copied();
+                            let backfilled = last_full.is_some()
+                                || match scoped.backfill_workflow_tasks().await {
+                                    Ok(_) => true,
+                                    Err(error) => {
+                                        tracing::error!(%error, "workflow task backfill failed");
+                                        false
+                                    }
+                                };
                             // A full pass also creates cursors for schedules
                             // enabled before cursors were created on enable.
-                            let full = first
-                                || prepared
-                                    .get(&workspace)
-                                    .is_some_and(|last| last.elapsed() >= FULL_SCHEDULE_PASS);
-                            if full {
-                                prepared.insert(workspace, Instant::now());
-                            }
+                            let full =
+                                last_full.is_none_or(|last| last.elapsed() >= FULL_SCHEDULE_PASS);
                             let run = if full {
                                 Ok(true)
                             } else {
@@ -195,8 +198,14 @@ pub fn start_schedule_coordinator(
                                 Ok(false) => Ok(()),
                                 Err(error) => Err(error),
                             };
-                            if let Err(error) = result {
-                                tracing::error!(%error, "workflow schedule poll failed");
+                            match result {
+                                Ok(()) if full && backfilled => {
+                                    prepared.insert(workspace, Instant::now());
+                                }
+                                Ok(()) => {}
+                                Err(error) => {
+                                    tracing::error!(%error, "workflow schedule poll failed");
+                                }
                             }
                         }
                         Err(error) => {

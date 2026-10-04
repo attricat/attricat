@@ -215,10 +215,18 @@ pub fn start_schedule_coordinator(
                             // Pre-cutover rows get task envelopes once per
                             // workspace; afterwards an idle tick only checks
                             // whether any schedule cursor is due.
-                            let first = prepared.insert(workspace, Instant::now()).is_none();
-                            if first && let Err(error) = scoped.backfill_rule_tasks().await {
-                                tracing::error!(%error, "rule task backfill failed");
-                            }
+                            // A workspace counts as prepared only once its
+                            // backfill and first full pass succeed; a failure
+                            // is retried on the next tick.
+                            let first = !prepared.contains_key(&workspace);
+                            let backfilled = !first
+                                || match scoped.backfill_rule_tasks().await {
+                                    Ok(_) => true,
+                                    Err(error) => {
+                                        tracing::error!(%error, "rule task backfill failed");
+                                        false
+                                    }
+                                };
                             let run = if first {
                                 Ok(true)
                             } else {
@@ -229,8 +237,14 @@ pub fn start_schedule_coordinator(
                                 Ok(false) => Ok(()),
                                 Err(error) => Err(error),
                             };
-                            if let Err(error) = result {
-                                tracing::error!(%error, "rule schedule poll failed");
+                            match result {
+                                Ok(()) if first && backfilled => {
+                                    prepared.insert(workspace, Instant::now());
+                                }
+                                Ok(()) => {}
+                                Err(error) => {
+                                    tracing::error!(%error, "rule schedule poll failed");
+                                }
                             }
                         }
                         Err(error) => {
