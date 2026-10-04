@@ -20,7 +20,7 @@ use chrono::Utc;
 use serde_json::{Map, Value};
 use sha2::Digest;
 use sqlx::{Postgres, Transaction};
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 #[derive(sqlx::FromRow, Clone)]
 pub(super) struct AuditValueSnapshot {
@@ -33,6 +33,22 @@ pub(super) struct AuditValueSnapshot {
 }
 
 /// How [`CatalogRepository::validate_entity_schema_with`] treats status.
+/// A value resolved against its [`WriteContext`] and validated in memory.
+struct PreparedValue {
+    attribute_id: Uuid,
+    attribute_code: String,
+    context_id: Uuid,
+    relationship: Option<PreparedRelationship>,
+    native: Option<NativeValue>,
+}
+
+struct PreparedRelationship {
+    target_entity_id: Uuid,
+    target_blueprint_codes: Vec<String>,
+    cardinality: String,
+    target_cardinality: String,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Revalidation {
     /// An entity write: status transitions are checked (edges, permissions,
@@ -848,9 +864,11 @@ impl CatalogRepository {
         Ok(())
     }
 
-    /// Inserts `values` in order. Scalar values are validated in memory as
-    /// they are reached and written together afterwards; relationship values
-    /// keep their per-value checks, which read the values already written.
+    /// Inserts `values` in order. Each value is resolved and validated as it
+    /// is reached, so errors keep their input precedence. Relationship values
+    /// are written immediately because their cardinality checks read the
+    /// values already written; scalar values are written together at the end
+    /// with one archive and one insert.
     pub(super) async fn insert_values_in(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
@@ -858,14 +876,47 @@ impl CatalogRepository {
         entity: &Entity,
         values: Vec<NewAttributeValue>,
     ) -> Result<Vec<AttributeValue>, RepositoryError> {
-        let mut inserted = Vec::with_capacity(values.len());
+        let mut inserted: Vec<Option<AttributeValue>> = Vec::with_capacity(values.len());
+        let mut scalars: Vec<(usize, PreparedValue)> = Vec::new();
         for value in values {
-            inserted.push(
-                self.insert_value_in(transaction, write, entity, value)
-                    .await?,
-            );
+            let prepared = Self::prepare_value(write, value)?;
+            if prepared.relationship.is_some() {
+                inserted.push(Some(
+                    self.write_prepared_value(transaction, entity, prepared)
+                        .await?,
+                ));
+            } else {
+                scalars.push((inserted.len(), prepared));
+                inserted.push(None);
+            }
         }
-        Ok(inserted)
+        let distinct_keys = scalars
+            .iter()
+            .map(|(_, value)| (value.attribute_id, value.context_id))
+            .collect::<HashSet<_>>()
+            .len();
+        if scalars.len() > 1 && distinct_keys == scalars.len() {
+            let (positions, prepared): (Vec<_>, Vec<_>) = scalars.into_iter().unzip();
+            let written = self
+                .write_scalar_values(transaction, entity, prepared)
+                .await?;
+            for (position, value) in positions.into_iter().zip(written) {
+                inserted[position] = Some(value);
+            }
+        } else {
+            // A repeated attribute and context archives the earlier value of
+            // the same write, exactly as one-at-a-time writes do.
+            for (position, prepared) in scalars {
+                inserted[position] = Some(
+                    self.write_prepared_value(transaction, entity, prepared)
+                        .await?,
+                );
+            }
+        }
+        Ok(inserted
+            .into_iter()
+            .map(|value| value.expect("every value was written"))
+            .collect())
     }
 
     /// [`Self::insert_value_in`] for a caller without a write context.
@@ -887,74 +938,67 @@ impl CatalogRepository {
         entity: &Entity,
         value: NewAttributeValue,
     ) -> Result<AttributeValue, RepositoryError> {
-        let (attribute_id, attribute_code, context_id, payload, target_entity_id, is_relationship) =
-            match value {
-                NewAttributeValue::Scalar {
-                    attribute_id,
-                    attribute_code,
-                    context_id,
-                    value,
-                } => (attribute_id, attribute_code, context_id, value, None, false),
-                NewAttributeValue::Relationship {
-                    attribute_id,
-                    attribute_code,
-                    context_id,
-                    target_entity_id,
-                } => (
-                    attribute_id,
-                    attribute_code,
-                    context_id,
-                    Value::Null,
-                    Some(target_entity_id),
-                    true,
-                ),
-            };
-        let context_id = Some(write.resolve_context(context_id)?);
+        let prepared = Self::prepare_value(write, value)?;
+        self.write_prepared_value(transaction, entity, prepared)
+            .await
+    }
 
+    /// Resolves a value's context and attribute and validates it without a
+    /// database read: selector, editability, kind, native type and schema.
+    fn prepare_value(
+        write: &WriteContext,
+        value: NewAttributeValue,
+    ) -> Result<PreparedValue, RepositoryError> {
+        let (attribute_id, attribute_code, context_id, payload, target_entity_id) = match value {
+            NewAttributeValue::Scalar {
+                attribute_id,
+                attribute_code,
+                context_id,
+                value,
+            } => (attribute_id, attribute_code, context_id, value, None),
+            NewAttributeValue::Relationship {
+                attribute_id,
+                attribute_code,
+                context_id,
+                target_entity_id,
+            } => (
+                attribute_id,
+                attribute_code,
+                context_id,
+                Value::Null,
+                Some(target_entity_id),
+            ),
+        };
+        let context_id = write.resolve_context(context_id)?;
         let attribute_label = attribute_code.clone();
         let attribute = write.attribute(attribute_id, attribute_code.as_deref())?;
-        let attribute_id = attribute.id;
-        let attribute_code = attribute.code.clone();
-        let value_type = attribute.value_type.clone();
-        let value_schema = attribute.value_schema.clone();
-        let target_blueprint_codes = attribute.target_blueprint_codes.clone();
-        let cardinality = attribute.cardinality.clone();
-        let target_cardinality = attribute.target_cardinality.clone();
-
-        write.ensure_editable(context_id, &attribute.context_editable)?;
-
-        if (value_type == "relationship") != is_relationship {
+        write.ensure_editable(Some(context_id), &attribute.context_editable)?;
+        if (attribute.value_type == "relationship") != target_entity_id.is_some() {
             return Err(RepositoryError::AttributeKindMismatch);
         }
-
+        let attribute_id = attribute.id;
         if let Some(target_entity_id) = target_entity_id {
-            self.validate_relationship_target(
-                transaction,
-                target_entity_id,
-                &target_blueprint_codes,
-            )
-            .await?;
-            self.validate_relationship_cardinality(
-                transaction,
-                CardinalityCheck {
-                    entity,
-                    attribute_id,
-                    attribute_code: &attribute_code,
-                    cardinality: cardinality.as_deref().unwrap_or("many"),
-                    target_cardinality: target_cardinality.as_deref().unwrap_or("many"),
-                    context_id,
+            return Ok(PreparedValue {
+                attribute_id,
+                attribute_code: attribute.code.clone(),
+                context_id,
+                relationship: Some(PreparedRelationship {
                     target_entity_id,
-                },
-            )
-            .await?;
+                    target_blueprint_codes: attribute.target_blueprint_codes.clone(),
+                    cardinality: attribute
+                        .cardinality
+                        .clone()
+                        .unwrap_or_else(|| "many".to_owned()),
+                    target_cardinality: attribute
+                        .target_cardinality
+                        .clone()
+                        .unwrap_or_else(|| "many".to_owned()),
+                }),
+                native: None,
+            });
         }
-
-        let native = if is_relationship {
-            None
-        } else {
-            Some(NativeValue::parse(ValueType::parse(&value_type)?, payload)?)
-        };
-        if let (Some(schema), Some(native)) = (&value_schema, &native)
+        let native = NativeValue::parse(ValueType::parse(&attribute.value_type)?, payload)?;
+        if let Some(schema) = &attribute.value_schema
             && let Some(error) = validate_json_schema(schema, &native.json())
                 .map_err(|message| RepositoryError::AttributeValueSchemaMismatch {
                     attribute: attribute_label
@@ -972,12 +1016,60 @@ impl CatalogRepository {
                 message: error.message,
             });
         }
+        Ok(PreparedValue {
+            attribute_id,
+            attribute_code: attribute.code.clone(),
+            context_id,
+            relationship: None,
+            native: Some(native),
+        })
+    }
+
+    /// Writes one prepared value: relationship target and cardinality checks,
+    /// then archive the current value and insert the new one.
+    async fn write_prepared_value(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        entity: &Entity,
+        prepared: PreparedValue,
+    ) -> Result<AttributeValue, RepositoryError> {
+        let PreparedValue {
+            attribute_id,
+            attribute_code,
+            context_id,
+            relationship,
+            native,
+        } = prepared;
+        let target_entity_id = relationship
+            .as_ref()
+            .map(|relationship| relationship.target_entity_id);
+        if let Some(relationship) = &relationship {
+            self.validate_relationship_target(
+                transaction,
+                relationship.target_entity_id,
+                &relationship.target_blueprint_codes,
+            )
+            .await?;
+            self.validate_relationship_cardinality(
+                transaction,
+                CardinalityCheck {
+                    entity,
+                    attribute_id,
+                    attribute_code: &attribute_code,
+                    cardinality: &relationship.cardinality,
+                    target_cardinality: &relationship.target_cardinality,
+                    context_id: Some(context_id),
+                    target_entity_id: relationship.target_entity_id,
+                },
+            )
+            .await?;
+        }
 
         self.archive_current_value(
             transaction,
             entity.id,
             attribute_id,
-            context_id,
+            Some(context_id),
             target_entity_id,
         )
         .await?;
@@ -1012,6 +1104,92 @@ impl CatalogRepository {
                 .bind(Option::<Value>::None),
         };
         Ok(query.fetch_one(&mut **transaction).await?.into_domain())
+    }
+
+    /// Writes scalar values with distinct `(attribute, context)` keys: one
+    /// statement archives every current value, one inserts every new value.
+    /// Returns the inserted values in input order.
+    async fn write_scalar_values(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        entity: &Entity,
+        prepared: Vec<PreparedValue>,
+    ) -> Result<Vec<AttributeValue>, RepositoryError> {
+        let attribute_ids: Vec<Uuid> = prepared.iter().map(|value| value.attribute_id).collect();
+        let context_ids: Vec<Uuid> = prepared.iter().map(|value| value.context_id).collect();
+        self.archive_current_scalar_values(transaction, entity.id, &attribute_ids, &context_ids)
+            .await?;
+        let ids: Vec<Uuid> = prepared.iter().map(|_| Uuid::new_v4()).collect();
+        let mut text = Vec::with_capacity(prepared.len());
+        let mut number = Vec::with_capacity(prepared.len());
+        let mut integer = Vec::with_capacity(prepared.len());
+        let mut boolean = Vec::with_capacity(prepared.len());
+        let mut date = Vec::with_capacity(prepared.len());
+        let mut datetime = Vec::with_capacity(prepared.len());
+        let mut time = Vec::with_capacity(prepared.len());
+        let mut time_zone = Vec::with_capacity(prepared.len());
+        let mut json = Vec::with_capacity(prepared.len());
+        for value in prepared {
+            let columns = value
+                .native
+                .map(NativeValue::into_columns)
+                .unwrap_or_default();
+            text.push(columns.text);
+            number.push(columns.number);
+            integer.push(columns.integer);
+            boolean.push(columns.boolean);
+            date.push(columns.date);
+            datetime.push(columns.datetime);
+            time.push(columns.time);
+            time_zone.push(columns.time_zone);
+            json.push(columns.json);
+        }
+        let rows = sqlx::query_as::<_, Db<AttributeValue>>(
+            r#"INSERT INTO attribute_values (
+                    id, workspace_id, entity_id, attribute_id, context_id, relationship_target_entity_id, active,
+                    value_text, value_number, value_integer, value_boolean, value_date, value_datetime,
+                    value_time, value_time_zone, value_json
+                )
+                SELECT v.id, $1, $2, v.attribute_id, v.context_id, NULL, true,
+                       v.value_text, v.value_number, v.value_integer, v.value_boolean, v.value_date,
+                       v.value_datetime, v.value_time, v.value_time_zone, v.value_json
+                FROM UNNEST($3::uuid[], $4::uuid[], $5::uuid[], $6::text[], $7::numeric[],
+                            $8::int8[], $9::bool[], $10::date[], $11::timestamptz[], $12::time[],
+                            $13::text[], $14::jsonb[])
+                     AS v(id, attribute_id, context_id, value_text, value_number, value_integer,
+                          value_boolean, value_date, value_datetime, value_time, value_time_zone,
+                          value_json)
+                RETURNING id, entity_id, attribute_id,
+                    'null'::jsonb AS value,
+                    relationship_target_entity_id, context_id, active, created_at"#,
+        )
+        .bind(self.workspace_id.0)
+        .bind(entity.id)
+        .bind(&ids)
+        .bind(&attribute_ids)
+        .bind(&context_ids)
+        .bind(text)
+        .bind(number)
+        .bind(integer)
+        .bind(boolean)
+        .bind(date)
+        .bind(datetime)
+        .bind(time)
+        .bind(time_zone)
+        .bind(json)
+        .fetch_all(&mut **transaction)
+        .await?
+        .into_iter()
+        .map(|row| {
+            let value: AttributeValue = row.into_domain();
+            (value.id, value)
+        })
+        .collect::<HashMap<_, _>>();
+        let mut rows = rows;
+        Ok(ids
+            .iter()
+            .map(|id| rows.remove(id).expect("every inserted value is returned"))
+            .collect())
     }
 
     async fn remove_scalar_value(
@@ -1576,6 +1754,64 @@ impl CatalogRepository {
                 })
             })
             .collect()
+    }
+
+    /// [`Self::archive_current_value`] for many scalar `(attribute, context)`
+    /// keys of one entity in one statement.
+    async fn archive_current_scalar_values(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        entity_id: Uuid,
+        attribute_ids: &[Uuid],
+        context_ids: &[Uuid],
+    ) -> Result<(), RepositoryError> {
+        sqlx::query(
+            r#"WITH keys AS (
+                    SELECT * FROM UNNEST($2::uuid[], $3::uuid[]) AS k(attribute_id, context_id)
+                ), file_references AS MATERIALIZED (
+                    SELECT r.attribute_value_id, r.workspace_id, r.file_id, r.position
+                    FROM attribute_file_references r
+                    JOIN attribute_values av ON av.id = r.attribute_value_id
+                    JOIN keys ON keys.attribute_id = av.attribute_id AND keys.context_id = av.context_id
+                    WHERE av.entity_id = $1
+                      AND av.workspace_id = $4
+                      AND av.relationship_target_entity_id IS NULL
+                ), archived AS (
+                    DELETE FROM attribute_values av
+                    USING keys
+                    WHERE av.entity_id = $1
+                      AND av.workspace_id = $4
+                      AND av.attribute_id = keys.attribute_id
+                      AND av.context_id = keys.context_id
+                      AND av.relationship_target_entity_id IS NULL
+                    RETURNING av.*
+                ), stored AS (
+                    INSERT INTO attribute_value_history (
+                        id, workspace_id, entity_id, attribute_id, context_id, relationship_target_entity_id, active,
+                        value_text, value_number, value_integer, value_boolean, value_date, value_datetime,
+                        value_time, value_time_zone, value_json, created_at
+                    )
+                    SELECT id, workspace_id, entity_id, attribute_id, context_id, relationship_target_entity_id, active,
+                           value_text, value_number, value_integer, value_boolean, value_date, value_datetime,
+                           value_time, value_time_zone, value_json, created_at
+                    FROM archived
+                    RETURNING id, workspace_id, archived_at
+                )
+                INSERT INTO attribute_file_reference_history (
+                    attribute_value_history_id, attribute_value_history_archived_at, workspace_id, file_id, position
+                )
+                SELECT stored.id, stored.archived_at, file_references.workspace_id, file_references.file_id, file_references.position
+                FROM file_references JOIN stored
+                  ON stored.id = file_references.attribute_value_id
+                 AND stored.workspace_id = file_references.workspace_id"#,
+        )
+        .bind(entity_id)
+        .bind(attribute_ids)
+        .bind(context_ids)
+        .bind(self.workspace_id.0)
+        .execute(&mut **transaction)
+        .await?;
+        Ok(())
     }
 
     pub(super) async fn archive_current_value(

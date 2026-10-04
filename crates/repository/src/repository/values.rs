@@ -131,7 +131,39 @@ impl ValueType {
     }
 }
 
+/// One native value split into the `attribute_values` value columns.
+#[derive(Default)]
+pub(super) struct NativeColumns {
+    pub text: Option<String>,
+    pub number: Option<Decimal>,
+    pub integer: Option<i64>,
+    pub boolean: Option<bool>,
+    pub date: Option<NaiveDate>,
+    pub datetime: Option<DateTime<Utc>>,
+    pub time: Option<NaiveTime>,
+    pub time_zone: Option<String>,
+    pub json: Option<Value>,
+}
+
 impl NativeValue {
+    pub(super) fn into_columns(self) -> NativeColumns {
+        let mut columns = NativeColumns::default();
+        match self {
+            Self::Text(value) => columns.text = Some(value),
+            Self::Number(value) => columns.number = Some(value),
+            Self::Integer(value) => columns.integer = Some(value),
+            Self::Boolean(value) => columns.boolean = Some(value),
+            Self::Date(value) => columns.date = Some(value),
+            Self::Datetime(value) => columns.datetime = Some(value),
+            Self::Time(time, time_zone) => {
+                columns.time = Some(time);
+                columns.time_zone = Some(time_zone);
+            }
+            Self::Json(value) => columns.json = Some(value),
+        }
+        columns
+    }
+
     pub(super) fn parse(value_type: ValueType, value: Value) -> Result<Self, RepositoryError> {
         let invalid = || RepositoryError::AttributeValueTypeMismatch;
         match value_type {

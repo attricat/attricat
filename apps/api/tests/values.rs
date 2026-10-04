@@ -548,3 +548,146 @@ tags = ["searchable"]
 
     server.abort();
 }
+
+#[sqlx::test]
+async fn multi_value_writes_archive_each_replaced_value_once(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let blueprint = create_blueprint(
+        &client,
+        &base_url,
+        r#"
+format_version = 1
+code = "batched_product"
+name = "Batched product"
+kind = "entity"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["title"]
+
+[[attributes]]
+code = "title"
+value_type = "string"
+
+[[attributes]]
+code = "price"
+value_type = "number"
+
+[[attributes]]
+code = "stock"
+value_type = "integer"
+
+[[attributes]]
+code = "released_on"
+value_type = "date"
+
+[[attributes]]
+code = "available"
+value_type = "boolean"
+"#,
+    )
+    .await;
+    let entity = create_entity(&client, &base_url, &blueprint).await;
+    let entity_id = entity["id"].as_str().unwrap();
+    let put = |values: Value| {
+        let client = client.clone();
+        let url = format!("{base_url}/v1/entities/{entity_id}");
+        async move {
+            client
+                .put(url)
+                .json(&json!({ "values": values }))
+                .send()
+                .await
+                .unwrap()
+        }
+    };
+    let response = put(json!([
+        { "kind": "scalar", "attribute_code": "title", "value": "First" },
+        { "kind": "scalar", "attribute_code": "price", "value": 1.5 },
+        { "kind": "scalar", "attribute_code": "stock", "value": 3 },
+        { "kind": "scalar", "attribute_code": "released_on", "value": "2026-01-02" },
+        { "kind": "scalar", "attribute_code": "available", "value": true }
+    ]))
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let response = put(json!([
+        { "kind": "scalar", "attribute_code": "title", "value": "Second" },
+        { "kind": "scalar", "attribute_code": "price", "value": 2.25 },
+        { "kind": "scalar", "attribute_code": "stock", "value": 4 }
+    ]))
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let updated: Value = response.json().await.unwrap();
+    let preview = &updated["projections"]["preview"]["default"];
+    assert_eq!(preview["title"], "Second");
+    assert_eq!(preview["price"], 2.25);
+    assert_eq!(preview["stock"], 4);
+    assert_eq!(preview["released_on"], "2026-01-02");
+    assert_eq!(preview["available"], true);
+
+    let entity_uuid: Uuid = entity_id.parse().unwrap();
+    let current: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM attribute_values WHERE entity_id = $1 AND relationship_target_entity_id IS NULL",
+    )
+    .bind(entity_uuid)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(current, 5);
+    let archived: Vec<(String, Option<String>, Option<i64>)> = sqlx::query_as(
+        "SELECT a.code, h.value_text, h.value_integer FROM attribute_value_history h JOIN attributes a ON a.id = h.attribute_id WHERE h.entity_id = $1 ORDER BY a.code",
+    )
+    .bind(entity_uuid)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        archived,
+        vec![
+            ("price".to_owned(), None, None),
+            ("stock".to_owned(), None, Some(3)),
+            ("title".to_owned(), Some("First".to_owned()), None),
+        ]
+    );
+
+    // The same attribute twice in one write keeps one-at-a-time semantics:
+    // the later value wins and the earlier one is archived.
+    let response = put(json!([
+        { "kind": "scalar", "attribute_code": "title", "value": "Third" },
+        { "kind": "scalar", "attribute_code": "stock", "value": 5 },
+        { "kind": "scalar", "attribute_code": "title", "value": "Fourth" }
+    ]))
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let updated: Value = response.json().await.unwrap();
+    assert_eq!(
+        updated["projections"]["preview"]["default"]["title"],
+        "Fourth"
+    );
+    let titles: Vec<String> = sqlx::query_scalar(
+        "SELECT h.value_text FROM attribute_value_history h JOIN attributes a ON a.id = h.attribute_id WHERE h.entity_id = $1 AND a.code = 'title' ORDER BY h.value_text",
+    )
+    .bind(entity_uuid)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(titles, vec!["First", "Second", "Third"]);
+
+    // A later invalid value rejects the whole write.
+    let response = put(json!([
+        { "kind": "scalar", "attribute_code": "title", "value": "Fifth" },
+        { "kind": "scalar", "attribute_code": "stock", "value": "not a number" }
+    ]))
+    .await;
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let title: String = sqlx::query_scalar(
+        "SELECT v.value_text FROM attribute_values v JOIN attributes a ON a.id = v.attribute_id WHERE v.entity_id = $1 AND a.code = 'title'",
+    )
+    .bind(entity_uuid)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(title, "Fourth");
+    server.abort();
+}

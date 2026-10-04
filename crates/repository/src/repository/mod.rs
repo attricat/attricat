@@ -1212,19 +1212,39 @@ impl CatalogRepository {
             .write_audit_event_with_publication_metadata(transaction, Some(publication_metadata))
             .await?
         {
-            for change in changes {
-                sqlx::query("INSERT INTO audit_event_changes (id, audit_event_id, workspace_id, entity_id, attribute_id, attribute_code, context_id, context_code, change_kind, before_value, after_value) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)")
-                    .bind(Uuid::new_v4())
+            if !changes.is_empty() {
+                let mut ids = Vec::with_capacity(changes.len());
+                let mut entity_ids = Vec::with_capacity(changes.len());
+                let mut attribute_ids = Vec::with_capacity(changes.len());
+                let mut attribute_codes = Vec::with_capacity(changes.len());
+                let mut context_ids = Vec::with_capacity(changes.len());
+                let mut context_codes = Vec::with_capacity(changes.len());
+                let mut change_kinds = Vec::with_capacity(changes.len());
+                let mut before_values = Vec::with_capacity(changes.len());
+                let mut after_values = Vec::with_capacity(changes.len());
+                for change in changes {
+                    ids.push(Uuid::new_v4());
+                    entity_ids.push(change.entity_id);
+                    attribute_ids.push(change.attribute_id);
+                    attribute_codes.push(change.attribute_code);
+                    context_ids.push(change.context_id);
+                    context_codes.push(change.context_code);
+                    change_kinds.push(change.change_kind);
+                    before_values.push(change.before_value);
+                    after_values.push(change.after_value);
+                }
+                sqlx::query("INSERT INTO audit_event_changes (id, audit_event_id, workspace_id, entity_id, attribute_id, attribute_code, context_id, context_code, change_kind, before_value, after_value) SELECT id, $2, $3, entity_id, attribute_id, attribute_code, context_id, context_code, change_kind, before_value, after_value FROM UNNEST($1::uuid[], $4::uuid[], $5::uuid[], $6::text[], $7::uuid[], $8::text[], $9::text[], $10::jsonb[], $11::jsonb[]) AS change(id, entity_id, attribute_id, attribute_code, context_id, context_code, change_kind, before_value, after_value)")
+                    .bind(ids)
                     .bind(audit_event_id)
                     .bind(self.workspace_id.0)
-                    .bind(change.entity_id)
-                    .bind(change.attribute_id)
-                    .bind(change.attribute_code)
-                    .bind(change.context_id)
-                    .bind(change.context_code)
-                    .bind(change.change_kind)
-                    .bind(change.before_value)
-                    .bind(change.after_value)
+                    .bind(entity_ids)
+                    .bind(attribute_ids)
+                    .bind(attribute_codes)
+                    .bind(context_ids)
+                    .bind(context_codes)
+                    .bind(change_kinds)
+                    .bind(before_values)
+                    .bind(after_values)
                     .execute(&mut **transaction)
                     .await?;
             }
