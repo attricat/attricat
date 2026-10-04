@@ -1,4 +1,4 @@
-use catalog_blueprint::parse;
+use catalog_blueprint::{BlueprintError, parse};
 
 const BLUEPRINT: &str = r#"
 format_version = 1
@@ -30,10 +30,11 @@ fn parses_embedded_rule_and_rejects_unknown_attribute() {
     let blueprint = parse(BLUEPRINT).expect("embedded rule parses");
     assert_eq!(blueprint.rules.len(), 1);
     assert_eq!(blueprint.rules[0].code, "title-required");
-    assert!(
-        parse(&BLUEPRINT.replace("attribute_code = \"title\"", "attribute_code = \"missing\""))
-            .is_err()
-    );
+    assert!(matches!(
+        parse(&BLUEPRINT.replace("attribute_code = \"title\"", "attribute_code = \"missing\"")),
+        Err(BlueprintError::RuleUnknownAttribute { rule, attribute })
+            if rule == "title-required" && attribute == "missing"
+    ));
 }
 
 const CHECKED: &str = r#"
