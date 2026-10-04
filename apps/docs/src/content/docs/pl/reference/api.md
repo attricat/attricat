@@ -59,6 +59,7 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | `publication_checks_failed` | 422 | Kontrole wymagane przez kanał nie przechodzą. `details.context` to kod kanału. |
 | `invalid_rule_definition` | 422 | TOML reguły jest nieprawidłowy lub nie pasuje do wersji schematu. |
 | `rule_not_enabled` | 422 | Zwykłe ręczne uruchomienie wymaga włączonej wersji. Najpierw włącz regułę albo uruchom przebieg próbny. |
+| `workflow_not_enabled` | 422 | Ręczne uruchomienie przepływu pracy wymaga włączonej wersji. Najpierw włącz przepływ pracy. |
 | `rule_dry_run_required` | 409 | Włączenie egzekwowanej reguły wymaga najpierw ukończonego pełnego przebiegu próbnego tej wersji. Jeśli ostatni przebieg próbny zatrzymał się na limicie encji, `details` ma postać `{"truncated": true, "existing_violations": …}`. |
 | `rule_has_existing_violations` | 409 | Przebieg próbny znalazł naruszenia. `details.existing_violations` podaje ich liczbę. |
 

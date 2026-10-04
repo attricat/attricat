@@ -311,7 +311,20 @@ impl CatalogRepository {
         let mut tx = self.pool.begin().await?;
         let row: Option<(i64, Value)> = sqlx::query_as("SELECT w.version,w.compiled_plan FROM workflows w JOIN workflow_lifecycles l ON l.workflow_id=w.id AND l.workspace_id=w.workspace_id WHERE w.workspace_id=$1 AND w.id=$2 AND w.status='published' AND l.enabled_version=w.version FOR SHARE OF l").bind(ws).bind(workflow_id).fetch_optional(&mut *tx).await?;
         let Some((version, plan)) = row else {
-            return Err(RepositoryError::WorkflowNotPublished);
+            // Only report a missing publication when there is no published
+            // revision to enable.
+            let published: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM workflows WHERE workspace_id=$1 AND id=$2 AND status='published')",
+            )
+            .bind(ws)
+            .bind(workflow_id)
+            .fetch_one(&mut *tx)
+            .await?;
+            return Err(if published {
+                RepositoryError::WorkflowNotEnabled
+            } else {
+                RepositoryError::WorkflowNotPublished
+            });
         };
         let compiled: catalog_workflow::CompiledWorkflow = serde_json::from_value(plan.clone())
             .map_err(|e| RepositoryError::InvalidWorkflowDefinition(e.to_string()))?;

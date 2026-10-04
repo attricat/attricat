@@ -642,6 +642,8 @@ pub enum RepositoryError {
     RuleNotEnabled,
     #[error("workflow revision must be published before it can be enabled")]
     WorkflowNotPublished,
+    #[error("workflow has no enabled revision to run; enable it first")]
+    WorkflowNotEnabled,
     #[error("blueprint revision is not published")]
     BlueprintNotPublished,
     #[error("entity is already on the latest blueprint revision")]

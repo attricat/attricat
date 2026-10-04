@@ -102,6 +102,7 @@ error_codes! {
     TransitionConditionsUnmet = "transition_conditions_unmet",
     UniqueKeyConflict = "unique_key_conflict",
     UniqueKeyDuplicates = "unique_key_duplicates",
+    WorkflowNotEnabled = "workflow_not_enabled",
     WorkflowNotPublished = "workflow_not_published",
 }
 
@@ -439,6 +440,7 @@ impl RepositoryError {
             | Self::RuleCodeTaken => plain(Conflict, Code::Conflict),
             Self::BlueprintNotPublished => plain(Unprocessable, Code::BlueprintNotPublished),
             Self::WorkflowNotPublished => plain(Unprocessable, Code::WorkflowNotPublished),
+            Self::WorkflowNotEnabled => plain(Unprocessable, Code::WorkflowNotEnabled),
             Self::RuleNotPublished => plain(Unprocessable, Code::RuleNotPublished),
             Self::RuleNotEnabled => plain(Unprocessable, Code::RuleNotEnabled),
             Self::Database(sqlx::Error::Database(database_error))

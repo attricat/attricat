@@ -1293,3 +1293,58 @@ fixed = "Reworked""#,
     );
     server.abort();
 }
+
+#[sqlx::test]
+async fn manual_run_of_a_disabled_workflow_explains_it_is_not_enabled(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let blueprint = create_blueprint(
+        &client,
+        &base_url,
+        r#"
+format_version = 1
+code = "disabled_workflow_product"
+name = "Disabled workflow product"
+kind = "entity"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["title"]
+
+[[attributes]]
+code = "title"
+value_type = "string"
+default_value = "untitled"
+"#,
+    )
+    .await;
+    let entity = create_entity(&client, &base_url, &blueprint).await;
+    let workflow_id = enabled_workflow(
+        &client,
+        &base_url,
+        "format_version = 2\ncode = \"disabled_manual\"\nname = \"Disabled manual\"\n[[triggers]]\ntype = \"manual\"\n[[actions]]\ntype = \"system_tags_add\"\ntags = [\"never\"]",
+    )
+    .await;
+    client
+        .post(format!("{base_url}/workflows/{workflow_id}/disable"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+
+    let refused = client
+        .post(format!("{base_url}/workflows/{workflow_id}/run-now"))
+        .json(&json!({"entity_id": entity["id"], "idempotency_key": "disabled"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(refused.status(), 422);
+    let body: Value = refused.json().await.unwrap();
+    assert_eq!(body["error"]["code"], "workflow_not_enabled");
+    assert_eq!(
+        body["error"]["message"],
+        "workflow has no enabled revision to run; enable it first"
+    );
+    server.abort();
+}

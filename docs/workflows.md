@@ -44,7 +44,7 @@ type = "system_tags_add"
 tags = ["reviewed"]
 ```
 
-A manual run is available only to `workflows.manage`, only against the currently enabled published revision, and requires one existing `entity_id`. It accepts no arbitrary payload. `POST /workflows/{workflow_id}/run-now` returns a durable run identifier; diagnostics show source and safe status, never its private trigger snapshot.
+A manual run is available only to `workflows.manage`, only against the currently enabled published revision (otherwise `422 workflow_not_enabled`), and requires one existing `entity_id`. It accepts no arbitrary payload. `POST /workflows/{workflow_id}/run-now` returns a durable run identifier; diagnostics show source and safe status, never its private trigger snapshot.
 
 Schedules are revisioned TOML, not mutable database jobs. They use a six-field cron and **must** explicitly declare `timezone = "UTC"`; local/DST time zones are rejected to eliminate DST duplicate/skipped ambiguity. `target_entity_id` is the single existing entity action target. Schedule actions require fixed attribute values (there are no event facts).
 
