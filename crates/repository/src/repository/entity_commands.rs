@@ -53,6 +53,20 @@ pub(super) struct ChosenIdEntityCreate {
     pub host_sample_marker: bool,
 }
 
+/// One attribute an entity value write targets.
+#[derive(sqlx::FromRow)]
+struct WritableAttribute {
+    id: Uuid,
+    code: String,
+    value_type: String,
+    value_schema: Option<Value>,
+    /// Blueprints a relationship may target; empty accepts any.
+    target_blueprint_codes: Vec<String>,
+    cardinality: Option<String>,
+    target_cardinality: Option<String>,
+    context_editable: String,
+}
+
 struct CardinalityCheck<'a> {
     entity: &'a Entity,
     attribute_id: Uuid,
@@ -707,7 +721,12 @@ impl CatalogRepository {
             let context_id = self
                 .resolve_context_id(&mut transaction, relationship.context_id)
                 .await?;
-            let (attribute_id, target_blueprint_codes, context_editable) = self
+            let WritableAttribute {
+                id: attribute_id,
+                target_blueprint_codes,
+                context_editable,
+                ..
+            } = self
                 .relationship_attribute(&mut transaction, &entity, &relationship)
                 .await?;
             self.validate_context_editable(&mut transaction, context_id, &context_editable)
@@ -793,7 +812,12 @@ impl CatalogRepository {
             let context_id = self
                 .resolve_context_id(transaction, relationship.context_id)
                 .await?;
-            let (attribute_id, target_blueprint_codes, context_editable) = self
+            let WritableAttribute {
+                id: attribute_id,
+                target_blueprint_codes,
+                context_editable,
+                ..
+            } = self
                 .relationship_attribute(transaction, entity, &relationship)
                 .await?;
             self.validate_context_editable(transaction, context_id, &context_editable)
@@ -863,42 +887,18 @@ impl CatalogRepository {
         let context_id = self.resolve_context_id(transaction, context_id).await?;
 
         let attribute_label = attribute_code.clone();
-        let (attribute_id, attribute_code, value_type, value_schema, target_blueprint_codes, cardinality, target_cardinality, context_editable) =
-            match (attribute_id, attribute_code.as_deref()) {
-                (Some(attribute_id), None) => {
-                    sqlx::query_as::<_, (Uuid, String, String, Option<Value>, Vec<String>, Option<String>, Option<String>, String)>(
-                        r#"SELECT id, code, value_type, value_schema, CASE WHEN cardinality(target_blueprint_codes) > 0 THEN target_blueprint_codes WHEN target_blueprint_code IS NULL THEN '{}'::text[] ELSE ARRAY[target_blueprint_code] END AS target_blueprint_codes, cardinality, target_cardinality, context_editable
-                   FROM attributes
-                   WHERE id = $1
-                     AND ((blueprint_id = $2 AND blueprint_version = $3) OR entity_id = $4)
-                     AND deleted_at IS NULL"#,
-                    )
-                    .bind(attribute_id)
-                    .bind(entity.blueprint_id)
-                    .bind(entity.blueprint_version)
-                    .bind(entity.id)
-                    .fetch_optional(&mut **transaction)
-                    .await?
-                }
-                (None, Some(attribute_code)) => {
-                    validate_attribute_selector_code(attribute_code)?;
-                    sqlx::query_as::<_, (Uuid, String, String, Option<Value>, Vec<String>, Option<String>, Option<String>, String)>(
-                        r#"SELECT id, code, value_type, value_schema, CASE WHEN cardinality(target_blueprint_codes) > 0 THEN target_blueprint_codes WHEN target_blueprint_code IS NULL THEN '{}'::text[] ELSE ARRAY[target_blueprint_code] END AS target_blueprint_codes, cardinality, target_cardinality, context_editable
-                   FROM attributes
-                   WHERE code = $1
-                     AND ((blueprint_id = $2 AND blueprint_version = $3) OR entity_id = $4)
-                     AND deleted_at IS NULL"#,
-                    )
-                    .bind(attribute_code)
-                    .bind(entity.blueprint_id)
-                    .bind(entity.blueprint_version)
-                    .bind(entity.id)
-                    .fetch_optional(&mut **transaction)
-                    .await?
-                }
-                _ => return Err(RepositoryError::InvalidAttributeSelector),
-            }
-            .ok_or(RepositoryError::AttributeNotApplicable)?;
+        let WritableAttribute {
+            id: attribute_id,
+            code: attribute_code,
+            value_type,
+            value_schema,
+            target_blueprint_codes,
+            cardinality,
+            target_cardinality,
+            context_editable,
+        } = self
+            .writable_attribute(transaction, entity, attribute_id, attribute_code.as_deref())
+            .await?;
 
         self.validate_context_editable(transaction, context_id, &context_editable)
             .await?;
@@ -1197,34 +1197,60 @@ impl CatalogRepository {
         self.store_preview(transaction, entity.id, preview).await
     }
 
+    /// Resolves an attribute selector (exactly one of ID or code) to one of
+    /// the entity's blueprint-revision or entity-specific attributes.
+    async fn writable_attribute(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        entity: &Entity,
+        attribute_id: Option<Uuid>,
+        attribute_code: Option<&str>,
+    ) -> Result<WritableAttribute, RepositoryError> {
+        match (attribute_id, attribute_code) {
+            (Some(_), None) => {}
+            (None, Some(code)) => validate_attribute_selector_code(code)?,
+            _ => return Err(RepositoryError::InvalidAttributeSelector),
+        }
+        // `target_blueprint_codes` supersedes the single legacy column.
+        sqlx::query_as::<_, WritableAttribute>(
+            r#"SELECT id, code, value_type, value_schema,
+                      CASE WHEN cardinality(target_blueprint_codes) > 0 THEN target_blueprint_codes
+                           WHEN target_blueprint_code IS NULL THEN '{}'::text[]
+                           ELSE ARRAY[target_blueprint_code] END AS target_blueprint_codes,
+                      cardinality, target_cardinality, context_editable
+               FROM attributes
+               WHERE (id = $1 OR code = $2)
+                 AND ((blueprint_id = $3 AND blueprint_version = $4) OR entity_id = $5)
+                 AND deleted_at IS NULL"#,
+        )
+        .bind(attribute_id)
+        .bind(attribute_code)
+        .bind(entity.blueprint_id)
+        .bind(entity.blueprint_version)
+        .bind(entity.id)
+        .fetch_optional(&mut **transaction)
+        .await?
+        .ok_or(RepositoryError::AttributeNotApplicable)
+    }
+
     async fn relationship_attribute(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         entity: &Entity,
         relationship: &RelationshipTargets,
-    ) -> Result<(Uuid, Vec<String>, String), RepositoryError> {
-        let attribute = match (relationship.attribute_id, relationship.attribute_code.as_deref()) {
-            (Some(id), None) => sqlx::query_as::<_, (Uuid, String, Vec<String>, String)>(
-                "SELECT id, value_type, CASE WHEN cardinality(target_blueprint_codes) > 0 THEN target_blueprint_codes WHEN target_blueprint_code IS NULL THEN '{}'::text[] ELSE ARRAY[target_blueprint_code] END AS target_blueprint_codes, context_editable FROM attributes WHERE id = $1 AND ((blueprint_id = $2 AND blueprint_version = $3) OR entity_id = $4) AND deleted_at IS NULL",
-            ).bind(id).bind(entity.blueprint_id).bind(entity.blueprint_version).bind(entity.id).fetch_optional(&mut **transaction).await?,
-            (None, Some(code)) => {
-                validate_attribute_selector_code(code)?;
-                sqlx::query_as::<_, (Uuid, String, Vec<String>, String)>(
-                    "SELECT id, value_type, CASE WHEN cardinality(target_blueprint_codes) > 0 THEN target_blueprint_codes WHEN target_blueprint_code IS NULL THEN '{}'::text[] ELSE ARRAY[target_blueprint_code] END AS target_blueprint_codes, context_editable FROM attributes WHERE code = $1 AND ((blueprint_id = $2 AND blueprint_version = $3) OR entity_id = $4) AND deleted_at IS NULL",
-                )
-                .bind(code)
-                .bind(entity.blueprint_id)
-                .bind(entity.blueprint_version)
-                .bind(entity.id)
-                .fetch_optional(&mut **transaction)
-                .await?
-            }
-            _ => return Err(RepositoryError::InvalidAttributeSelector),
-        }.ok_or(RepositoryError::AttributeNotApplicable)?;
-        if attribute.1 != "relationship" {
+    ) -> Result<WritableAttribute, RepositoryError> {
+        let attribute = self
+            .writable_attribute(
+                transaction,
+                entity,
+                relationship.attribute_id,
+                relationship.attribute_code.as_deref(),
+            )
+            .await?;
+        if attribute.value_type != "relationship" {
             return Err(RepositoryError::AttributeKindMismatch);
         }
-        Ok((attribute.0, attribute.2, attribute.3))
+        Ok(attribute)
     }
 
     async fn validate_relationship_target(
