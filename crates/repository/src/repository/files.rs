@@ -132,24 +132,9 @@ impl CatalogRepository {
         self.ensure_attribute_unlocked(&mut transaction, &entity, attribute_code, context_id)
             .await?;
 
-        let current_value = sqlx::query_scalar::<_, Uuid>(
-            "SELECT id FROM attribute_values WHERE entity_id = $1 AND attribute_id = $2 AND context_id = $3 AND relationship_target_entity_id IS NULL FOR UPDATE",
-        )
-        .bind(entity_id)
-        .bind(attribute_id)
-        .bind(context_id)
-        .fetch_optional(&mut *transaction)
-        .await?;
-        let current_count =
-            match current_value {
-                Some(value_id) => sqlx::query_scalar::<_, i64>(
-                    "SELECT COUNT(*) FROM attribute_file_references WHERE attribute_value_id = $1",
-                )
-                .bind(value_id)
-                .fetch_one(&mut *transaction)
-                .await?,
-                None => 0,
-            };
+        let (current_value, current_count) = self
+            .lock_current_file_value(&mut transaction, entity_id, attribute_id, context_id)
+            .await?;
         if policy.cardinality == "one" && files.len() != 1 {
             return Err(RepositoryError::FileCardinality);
         }
@@ -196,18 +181,13 @@ impl CatalogRepository {
             0
         };
         let mut result = Vec::with_capacity(files.len());
+        let mut references = Vec::with_capacity(files.len());
         for (offset, file) in files.into_iter().enumerate() {
             let id = Uuid::new_v4();
             let status = "queued".to_owned();
             self.insert_file_in_transaction(&mut transaction, id, &file)
                 .await?;
-            self.insert_attribute_file_reference_in_transaction(
-                &mut transaction,
-                value_id,
-                id,
-                start_position + offset as i32,
-            )
-            .await?;
+            references.push((id, start_position + offset as i32));
             result.push(UploadedFile {
                 id,
                 filename: file.display_filename,
@@ -217,6 +197,12 @@ impl CatalogRepository {
                 status,
             });
         }
+        self.insert_attribute_file_references_in_transaction(
+            &mut transaction,
+            value_id,
+            &references,
+        )
+        .await?;
         self.revalidate_entity(&mut transaction, &entity).await?;
         let retained_role = self
             .reconcile_entity_publication(&mut transaction, entity_id, "entity_changed")
@@ -253,6 +239,43 @@ impl CatalogRepository {
         .execute(&mut **transaction).await?;
         sqlx::query("INSERT INTO file_processing_jobs (id, workspace_id, file_id, kind, status) VALUES ($1,$2,$3,'metadata','queued')")
             .bind(Uuid::new_v4()).bind(workspace_id).bind(id).execute(&mut **transaction).await?;
+        Ok(())
+    }
+
+    /// The current local value of a file attribute, locked, and its number of
+    /// file references.
+    async fn lock_current_file_value(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        entity_id: Uuid,
+        attribute_id: Uuid,
+        context_id: Uuid,
+    ) -> Result<(Option<Uuid>, i64), RepositoryError> {
+        let row = sqlx::query_as::<_, (Uuid, i64)>(
+            "SELECT v.id, (SELECT COUNT(*) FROM attribute_file_references r WHERE r.attribute_value_id = v.id) FROM attribute_values v WHERE v.entity_id = $1 AND v.attribute_id = $2 AND v.context_id = $3 AND v.relationship_target_entity_id IS NULL FOR UPDATE OF v",
+        )
+        .bind(entity_id)
+        .bind(attribute_id)
+        .bind(context_id)
+        .fetch_optional(&mut **transaction)
+        .await?;
+        Ok(row.map_or((None, 0), |(id, count)| (Some(id), count)))
+    }
+
+    /// References files from an attribute value at the given positions.
+    pub(super) async fn insert_attribute_file_references_in_transaction(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        value_id: Uuid,
+        references: &[(Uuid, i32)],
+    ) -> Result<(), RepositoryError> {
+        if references.is_empty() {
+            return Ok(());
+        }
+        let (file_ids, positions): (Vec<Uuid>, Vec<i32>) = references.iter().copied().unzip();
+        sqlx::query("INSERT INTO attribute_file_references (attribute_value_id, workspace_id, file_id, position) SELECT $1, $2, file_id, position FROM UNNEST($3::uuid[], $4::int4[]) AS r(file_id, position)")
+            .bind(value_id).bind(self.workspace_id.0).bind(file_ids).bind(positions)
+            .execute(&mut **transaction).await?;
         Ok(())
     }
 
@@ -340,19 +363,22 @@ impl CatalogRepository {
         sqlx::query("INSERT INTO attribute_values (id, workspace_id, entity_id, attribute_id, context_id, active) VALUES ($1, $2, $3, $4, $5, true)")
             .bind(value_id).bind(workspace_id).bind(entity_id).bind(attribute_id).bind(context_id)
             .execute(&mut *transaction).await?;
-        for (position, file_id) in file_ids.iter().enumerate() {
-            sqlx::query("INSERT INTO attribute_file_references (attribute_value_id, workspace_id, file_id, position) VALUES ($1, $2, $3, $4)")
-                .bind(value_id).bind(workspace_id).bind(file_id).bind(position as i32)
-                .execute(&mut *transaction).await?;
-        }
-        let updated_at: DateTime<Utc> = sqlx::query_scalar(
-            "UPDATE entities SET updated_at = now() WHERE id = $1 AND workspace_id = $2 RETURNING updated_at",
+        let references: Vec<(Uuid, i32)> = file_ids
+            .iter()
+            .enumerate()
+            .map(|(position, file_id)| (*file_id, position as i32))
+            .collect();
+        self.insert_attribute_file_references_in_transaction(
+            &mut transaction,
+            value_id,
+            &references,
         )
-        .bind(entity_id)
-        .bind(workspace_id)
-        .fetch_one(&mut *transaction)
         .await?;
-        self.revalidate_entity(&mut transaction, &entity).await?;
+        // Storing the rebuilt preview also sets `updated_at`.
+        let updated_at = self
+            .revalidate_entity(&mut transaction, &entity)
+            .await?
+            .updated_at;
         let retained_role = self
             .reconcile_entity_publication(&mut transaction, entity_id, "entity_changed")
             .await?;
@@ -428,24 +454,9 @@ impl CatalogRepository {
         if exists.is_none() {
             return Err(RepositoryError::NotFound("file"));
         }
-        let current_value = sqlx::query_scalar::<_, Uuid>(
-            "SELECT id FROM attribute_values WHERE entity_id = $1 AND attribute_id = $2 AND context_id = $3 AND relationship_target_entity_id IS NULL FOR UPDATE",
-        )
-        .bind(entity_id)
-        .bind(attribute_id)
-        .bind(context_id)
-        .fetch_optional(&mut **transaction)
-        .await?;
-        let count =
-            match current_value {
-                Some(value_id) => sqlx::query_scalar::<_, i64>(
-                    "SELECT COUNT(*) FROM attribute_file_references WHERE attribute_value_id = $1",
-                )
-                .bind(value_id)
-                .fetch_one(&mut **transaction)
-                .await?,
-                None => 0,
-            };
+        let (current_value, count) = self
+            .lock_current_file_value(transaction, entity_id, attribute_id, context_id)
+            .await?;
         if policy.cardinality == "many" && count == i32::MAX as i64 {
             return Err(RepositoryError::FileCardinality);
         }
