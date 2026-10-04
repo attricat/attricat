@@ -98,7 +98,7 @@ pub use checks::{
     CheckSource, CheckTransition, CheckViolation, MAX_REPORTED_VIOLATIONS, PublicationReadiness,
 };
 pub use entity_comments::{COMMENT_PAGE_SIZE, EntityComment};
-pub use error_codes::{ErrorClass, ErrorDescription, TRANSITION_CONDITIONS_UNMET};
+pub use error_codes::{ErrorClass, ErrorCode, ErrorDescription};
 pub use lexicon::{LexiconEntry, LexiconImportMode, LexiconImportSummary};
 pub use saved_views::SavedView;
 pub use structural_constraints::UniqueKeyDuplicate;
