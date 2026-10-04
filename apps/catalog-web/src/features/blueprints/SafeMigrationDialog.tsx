@@ -8,9 +8,11 @@ import {
   DialogTitle,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import { ApiErrorAlert } from '../../components/CheckViolationsAlert';
 import type { BlueprintMigrationImpact } from './schemas';
 
 export const SafeMigrationDialog = ({
+  error,
   impact,
   isPending,
   onClose,
@@ -19,6 +21,7 @@ export const SafeMigrationDialog = ({
   sourceVersion,
   targetVersion,
 }: {
+  error: Error | null;
   impact: BlueprintMigrationImpact | undefined;
   isPending: boolean;
   onClose: () => void;
@@ -53,6 +56,7 @@ export const SafeMigrationDialog = ({
             {t('blueprints.archiveRemovedValues')}
           </Alert>
         )}
+        {error && <ApiErrorAlert error={error} sx={{ mt: 2 }} />}
       </DialogContent>
       <DialogActions>
         <Button disabled={isPending} onClick={onClose}>

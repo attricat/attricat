@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { expect, it, vi } from 'vitest';
 import '../../i18n';
+import { publishBlueprintRevision } from './api';
 import { blueprintQueryKeys } from './queryKeys';
 import { BlueprintDetailPage } from './BlueprintDetailPage';
 
@@ -18,6 +19,7 @@ vi.mock('./api', async (importOriginal) => ({
   getBlueprintRevision: vi.fn(() => new Promise(() => {})),
   listBlueprintMigrationBatches: vi.fn(() => Promise.resolve([])),
   listBlueprintRevisions: vi.fn(() => Promise.resolve([])),
+  publishBlueprintRevision: vi.fn(),
 }));
 const { outletMount } = vi.hoisted(() => ({ outletMount: vi.fn() }));
 vi.mock('../extensions/ExtensionOutlet', () => ({
@@ -91,4 +93,46 @@ it('gives each blueprint detail instance independent tab IDs', () => {
   const tabs = screen.getAllByRole('tab');
   expect(tabs).toHaveLength(8);
   expect(new Set(tabs.map((tab) => tab.id)).size).toBe(tabs.length);
+});
+
+it('shows a refused publish inside its dialog and clears it on reopen', async () => {
+  vi.mocked(publishBlueprintRevision).mockRejectedValueOnce(
+    new Error('you are not authorized to perform this action'),
+  );
+  const client = new QueryClient({
+    defaultOptions: { queries: { staleTime: Infinity } },
+  });
+  const id = '123e4567-e89b-12d3-a456-426614174000';
+  client.setQueryData(blueprintQueryKeys.revisions(id), [
+    {
+      id,
+      code: 'product',
+      kind: 'entity',
+      name: 'Product',
+      version: 1,
+      status: 'draft',
+      updated_at: null,
+    },
+  ]);
+  render(
+    <QueryClientProvider client={client}>
+      <BlueprintDetailPage blueprintId={id} />
+    </QueryClientProvider>,
+  );
+  const user = userEvent.setup();
+  await user.click(screen.getByRole('button', { name: 'Publish' }));
+  const dialog = screen.getByRole('dialog', { name: 'Publish blueprint?' });
+  await user.click(within(dialog).getByRole('button', { name: 'Publish' }));
+  expect((await within(dialog).findByRole('alert')).textContent).toBe(
+    'you are not authorized to perform this action',
+  );
+
+  await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  await user.click(screen.getByRole('button', { name: 'Publish' }));
+  expect(
+    within(
+      screen.getByRole('dialog', { name: 'Publish blueprint?' }),
+    ).queryByRole('alert'),
+  ).toBeNull();
 });

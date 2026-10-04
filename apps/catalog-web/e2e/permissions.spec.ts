@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import {
   createBlueprint,
   createEntity,
@@ -11,8 +11,8 @@ import {
   type Context,
 } from './helpers';
 
-const refusal = (page: Page) =>
-  page
+const refusal = (scope: Page | Locator) =>
+  scope
     .getByRole('alert')
     .filter({ hasText: 'you are not authorized to perform this action' });
 
@@ -36,19 +36,13 @@ const latestStatus = async (blueprintId: string) => {
   return latest.status;
 };
 
-// The confirmation dialog stays open after the server refuses, so the error
-// is only readable once it is dismissed.
 const attemptPublish = async (page: Page) => {
   await page.getByRole('button', { name: 'Publish', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Publish blueprint?' });
-  const refused = page.waitForResponse(
-    (response) =>
-      response.url().endsWith('/publish') && response.status() === 403,
-  );
   await dialog.getByRole('button', { name: 'Publish', exact: true }).click();
-  await refused;
+  await expect(refusal(dialog)).toBeVisible();
   await dialog.getByRole('button', { name: 'Cancel' }).click();
-  await expect(refusal(page)).toBeVisible();
+  await expect(dialog).toBeHidden();
   await expect(page.getByText('Draft', { exact: true })).toBeVisible();
 };
 

@@ -11,6 +11,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ApiErrorAlert } from '../../components/CheckViolationsAlert';
 import { listPublicationChannels } from '../exports/api';
 import { exportQueryKeys } from '../exports/queryKeys';
 import { allPublicationChannels } from './constants';
@@ -19,12 +20,14 @@ import { lexiconText } from '../lexicon/lexicon';
 
 export const PublishBlueprintEntitiesDialog = ({
   blueprint,
+  error,
   isPending,
   onClose,
   onConfirm,
   open,
 }: {
   blueprint: Blueprint;
+  error: Error | null;
   isPending: boolean;
   onClose: () => void;
   onConfirm: (contextId: string) => void;
@@ -68,6 +71,7 @@ export const PublishBlueprintEntitiesDialog = ({
               </MenuItem>
             ))}
         </TextField>
+        {error && <ApiErrorAlert error={error} sx={{ mt: 2 }} />}
       </DialogContent>
       <DialogActions>
         <Button disabled={isPending} onClick={onClose}>

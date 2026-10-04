@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import { ApiErrorAlert } from '../../components/CheckViolationsAlert';
 import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
 import { blueprintExtensionContextVersion } from './constants';
 import type { Blueprint } from './schemas';
@@ -15,12 +16,14 @@ import { lexiconText } from '../lexicon/lexicon';
 
 export const PublishBlueprintDialog = ({
   blueprint,
+  error,
   isPending,
   onClose,
   onConfirm,
   open,
 }: {
   blueprint: Blueprint;
+  error: Error | null;
   isPending: boolean;
   onClose: () => void;
   onConfirm: () => void;
@@ -53,6 +56,7 @@ export const PublishBlueprintDialog = ({
             />
           </Box>
         )}
+        {error && <ApiErrorAlert error={error} sx={{ mt: 2 }} />}
       </DialogContent>
       <DialogActions>
         <Button disabled={isPending} onClick={onClose}>
