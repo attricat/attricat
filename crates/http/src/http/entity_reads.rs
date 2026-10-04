@@ -103,12 +103,8 @@ pub(super) async fn get_preview(
             state.max_preview_relationship_items
         )));
     }
-    let context = repository
+    let (entity, context) = repository
         .preview(entity_id, depth, limit.into())
-        .await?
-        .ok_or_else(|| ApiError::not_found("entity"))?;
-    let entity = repository
-        .get_entity(entity_id)
         .await?
         .ok_or_else(|| ApiError::not_found("entity"))?;
     Ok(Json(EntityPreviewResponse {
