@@ -439,10 +439,10 @@ impl CatalogRepository {
         input: AttachReusableAttribute,
     ) -> Result<EntityReusableAttribute, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
+        let entity = self.lock_entity(&mut transaction, entity_id).await?;
         let before = self
             .entity_audit_snapshot(&mut transaction, entity_id)
             .await?;
-        let entity = self.lock_entity(&mut transaction, entity_id).await?;
         let attachment_id = self
             .attach_reusable_attribute_in_transaction(
                 &mut transaction,
@@ -469,10 +469,10 @@ impl CatalogRepository {
             .await?
             .ok_or(RepositoryError::NotFound("reusable attribute group"))?;
         let mut transaction = self.pool.begin().await?;
+        let entity = self.lock_entity(&mut transaction, entity_id).await?;
         let before = self
             .entity_audit_snapshot(&mut transaction, entity_id)
             .await?;
-        let entity = self.lock_entity(&mut transaction, entity_id).await?;
         let mut attachment_ids = Vec::with_capacity(group.reusable_attribute_revision_ids.len());
         for revision_id in group.reusable_attribute_revision_ids {
             attachment_ids.push(
