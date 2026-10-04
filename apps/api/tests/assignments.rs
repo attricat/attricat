@@ -227,6 +227,70 @@ async fn assignment_attributes_reference_members_and_teams(pool: PgPool) {
 }
 
 #[sqlx::test]
+async fn reparenting_a_context_keeps_inherited_assignments_of_departed_members(pool: PgPool) {
+    let (base, _server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let owner: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
+    let member = add_member(&pool, "leaver@example.test", "active").await;
+    create_blueprint(&client, &base, DEFINITION).await;
+    let create_context = |code: &str, parent: Value| {
+        client
+            .post(format!("{base}/contexts"))
+            .json(&json!({"code": code, "data": {}, "parent_id": parent}))
+            .send()
+    };
+    let default = json!("00000000-0000-4000-8000-000000000001");
+    let polish: Value = create_context("assign-pl", default.clone())
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let moved: Value = create_context("assign-x", default)
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let mut local = scalar("assignee", format!("user:{member}"));
+    local["context_id"] = polish["id"].clone();
+    post_entity(
+        &client,
+        &base,
+        "task",
+        json!([scalar("assignee", format!("user:{owner}")), local]),
+    )
+    .await
+    .error_for_status()
+    .unwrap();
+    sqlx::query("UPDATE workspace_memberships SET state = 'inactive' WHERE user_id = $1")
+        .bind(member)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    // The moved context now inherits the departed member's assignment.
+    let reparented = client
+        .put(format!(
+            "{base}/contexts/id/{}",
+            moved["id"].as_str().unwrap()
+        ))
+        .json(&json!({"parent_id": polish["id"], "data": {}}))
+        .send()
+        .await
+        .unwrap();
+    assert!(
+        reparented.status().is_success(),
+        "{}",
+        reparented.text().await.unwrap()
+    );
+}
+
+#[sqlx::test]
 async fn assignment_definitions_are_validated(pool: PgPool) {
     let (base, _server) = start_server(pool).await;
     let client = authenticated_client();

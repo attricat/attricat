@@ -12,6 +12,7 @@ use serde_json::Value;
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
+use super::entity_commands::Revalidation;
 use super::{CatalogRepository, RepositoryError};
 use catalog_domain::model::Entity;
 
@@ -149,7 +150,16 @@ impl CatalogRepository {
             validate_team_input(None, name)?;
         }
         let mut transaction = self.pool.begin().await?;
-        Self::team_on(&mut transaction, self.workspace_id.0, id).await?;
+        // The row lock waits for a concurrent delete, so members are never
+        // written to a deleted team.
+        sqlx::query_scalar::<_, Uuid>(
+            "SELECT id FROM teams WHERE workspace_id = $1 AND id = $2 AND deleted_at IS NULL FOR UPDATE",
+        )
+        .bind(self.workspace_id.0)
+        .bind(id)
+        .fetch_optional(&mut *transaction)
+        .await?
+        .ok_or(RepositoryError::NotFound("team"))?;
         if let Some(member_user_ids) = member_user_ids {
             self.replace_team_members(&mut transaction, id, member_user_ids)
                 .await?;
@@ -312,14 +322,18 @@ impl CatalogRepository {
     }
 
     /// Run on the final transaction state. Every assignment value that
-    /// differs from the saved projection must name an active member or an
-    /// existing team. Unchanged values may refer to people who have since
-    /// left, so unrelated edits never fail.
+    /// differs from the saved projection must be a valid reference and, on
+    /// writes, name an active member or an existing team. Unchanged values
+    /// may refer to people who have since left, so unrelated edits never
+    /// fail. A structural revalidation only checks the format: a value that
+    /// a context reparent newly inherits was assigned earlier, and the
+    /// reparent assigns nobody.
     pub(super) async fn validate_principal_values(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         entity: &Entity,
         write: &super::write_context::WriteContext,
+        mode: Revalidation,
     ) -> Result<(), RepositoryError> {
         let attributes = write.principal_attributes();
         if attributes.is_empty() {
@@ -354,6 +368,9 @@ impl CatalogRepository {
                     .ok_or_else(|| mismatch(code, context, "invalid principal reference".into()))?;
                 changed.push((code, context, reference));
             }
+        }
+        if mode == Revalidation::Structural {
+            return Ok(());
         }
         let ids = |kind: PrincipalKind| -> Vec<Uuid> {
             changed

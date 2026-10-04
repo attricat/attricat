@@ -1465,7 +1465,7 @@ impl CatalogRepository {
             }
             Revalidation::Structural => Vec::new(),
         };
-        self.validate_principal_values(transaction, entity, write)
+        self.validate_principal_values(transaction, entity, write, mode)
             .await?;
         if mode == Revalidation::Write {
             self.apply_status_effects_in(transaction, entity, write)
