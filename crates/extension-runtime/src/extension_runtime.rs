@@ -3,8 +3,8 @@
 //! Components get no WASI context, filesystem, environment, clocks, sockets, or
 //! pre-opened descriptors. The only imports are the versioned WIT functions in
 //! the `wit*/catalog-extension.wit` packages (`wit-host` is the unified,
-//! evolving ABI; the others are frozen legacy worlds); every call is checked against the immutable
-//! release manifest and invocation-time grants.
+//! evolving ABI; the others are frozen legacy worlds). Every call is checked
+//! against the immutable release manifest and invocation-time grants.
 
 use std::{
     collections::{HashMap, VecDeque},
@@ -569,6 +569,13 @@ impl ExtensionRuntime {
             ))),
             Err(error) => Err(ExtensionRuntimeError::Runtime(error.to_string())),
         }
+    }
+}
+
+fn operation_task_error(error: impl ToString) -> TaskHandlerError {
+    TaskHandlerError {
+        code: "operation",
+        message: error.to_string(),
     }
 }
 
@@ -1560,10 +1567,7 @@ impl ExtensionOperationTaskHandler {
         repository
             .fail_extension_operation_for_revoked_initiator(task)
             .await
-            .map_err(|error| TaskHandlerError {
-                code: "operation",
-                message: error.to_string(),
-            })?;
+            .map_err(operation_task_error)?;
         counter!("catalog_extension_operations_total", "outcome" => "initiator_revoked")
             .increment(1);
         Ok(TaskOutcome::DeadLettered)
@@ -1589,10 +1593,7 @@ impl TaskHandler for ExtensionOperationTaskHandler {
         for key in repository
             .abort_stale_extension_operation_artifacts()
             .await
-            .map_err(|error| TaskHandlerError {
-                code: "operation",
-                message: error.to_string(),
-            })?
+            .map_err(operation_task_error)?
         {
             if self.runtime.object_store.delete(&key).await.is_ok() {
                 let _ = repository
@@ -1603,10 +1604,7 @@ impl TaskHandler for ExtensionOperationTaskHandler {
         let Some(run) = repository
             .begin_extension_operation_task(&task)
             .await
-            .map_err(|e| TaskHandlerError {
-                code: "operation",
-                message: e.to_string(),
-            })?
+            .map_err(operation_task_error)?
         else {
             return Ok(TaskOutcome::Complete);
         };
@@ -1615,10 +1613,7 @@ impl TaskHandler for ExtensionOperationTaskHandler {
         let Some(installation) = repository
             .runtime_extension_installation(&run.extension_id, run.installed_release_id)
             .await
-            .map_err(|e| TaskHandlerError {
-                code: "operation",
-                message: e.to_string(),
-            })?
+            .map_err(operation_task_error)?
         else {
             // Disable, upgrade, grant change, and quarantine never switch an
             // in-flight run to a different release. It remains resumable only
@@ -1626,10 +1621,7 @@ impl TaskHandler for ExtensionOperationTaskHandler {
             repository
                 .pause_extension_operation_task(&task)
                 .await
-                .map_err(|error| TaskHandlerError {
-                    code: "operation",
-                    message: error.to_string(),
-                })?;
+                .map_err(operation_task_error)?;
             return Ok(TaskOutcome::Reschedule {
                 at: chrono::Utc::now() + chrono::Duration::seconds(30),
             });
@@ -1637,31 +1629,22 @@ impl TaskHandler for ExtensionOperationTaskHandler {
         let cancellation_requested = repository
             .extension_operation_cancellation_requested(&task)
             .await
-            .map_err(|error| TaskHandlerError {
-                code: "operation",
-                message: error.to_string(),
-            })?;
+            .map_err(operation_task_error)?;
         // An interactive run acts only while its initiator remains an active
         // member; it never continues under the installer's grants alone. A
         // cancellation the initiator requested is still delivered so the
         // extension can clean up; its host calls recheck access and fail.
-        let initiator_revoked =
-            match repository
-                .interactive_run_scope(run.id)
+        let initiator_revoked = match repository
+            .interactive_run_scope(run.id)
+            .await
+            .map_err(operation_task_error)?
+        {
+            Some(scope) => !repository
+                .interactive_actor_active(scope.actor)
                 .await
-                .map_err(|error| TaskHandlerError {
-                    code: "operation",
-                    message: error.to_string(),
-                })? {
-                Some(scope) => !repository
-                    .interactive_actor_active(scope.actor)
-                    .await
-                    .map_err(|error| TaskHandlerError {
-                        code: "operation",
-                        message: error.to_string(),
-                    })?,
-                None => false,
-            };
+                .map_err(operation_task_error)?,
+            None => false,
+        };
         if initiator_revoked && !cancellation_requested {
             return self.fail_for_revoked_initiator(&repository, &task).await;
         }
@@ -1683,10 +1666,7 @@ impl TaskHandler for ExtensionOperationTaskHandler {
                 repository
                     .fail_extension_operation_task(&task, &error.to_string())
                     .await
-                    .map_err(|failure| TaskHandlerError {
-                        code: "operation",
-                        message: failure.to_string(),
-                    })?;
+                    .map_err(operation_task_error)?;
                 counter!("catalog_extension_operations_total", "outcome" => "failed").increment(1);
                 histogram!("catalog_extension_operation_duration_seconds", "outcome" => "failed")
                     .record(operation_started.elapsed().as_secs_f64());
@@ -1703,36 +1683,24 @@ impl TaskHandler for ExtensionOperationTaskHandler {
             repository
                 .extension_operation_cancellation_requested(&task)
                 .await
-                .map_err(|error| TaskHandlerError {
-                    code: "operation",
-                    message: error.to_string(),
-                })?
+                .map_err(operation_task_error)?
         };
         if cancellation_delivered {
             if !cancellation_requested {
                 self.runtime
                     .invoke_operation_batch(&installation, repository.clone(), &run, true)
                     .await
-                    .map_err(|error| TaskHandlerError {
-                        code: "operation",
-                        message: error.to_string(),
-                    })?;
+                    .map_err(operation_task_error)?;
             }
             repository
                 .mark_extension_operation_cancellation_delivered(&task)
                 .await
-                .map_err(|error| TaskHandlerError {
-                    code: "operation",
-                    message: error.to_string(),
-                })?;
+                .map_err(operation_task_error)?;
         }
         let terminal = repository
             .checkpoint_extension_operation_task(&task, &run, checkpoint, progress, done)
             .await
-            .map_err(|e| TaskHandlerError {
-                code: "operation",
-                message: e.to_string(),
-            })?;
+            .map_err(operation_task_error)?;
         let outcome = if terminal { "completed" } else { "rescheduled" };
         counter!("catalog_extension_operations_total", "outcome" => outcome).increment(1);
         histogram!("catalog_extension_operation_duration_seconds", "outcome" => outcome)
