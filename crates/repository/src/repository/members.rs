@@ -125,10 +125,12 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
             if !active || !verified {
                 return Err(RepositoryError::InvitationInvalid);
             }
-            // One live password-setup link per account, as issue_lifecycle_token
-            // enforces; an earlier invitation can still be accepted after setup.
-            Self::revoke_outstanding_lifecycle_tokens(&mut tx, user_id, Some("password_setup"))
-                .await?;
+            // Replace standalone setup links and this workspace's earlier
+            // onboarding link. Another workspace's pending onboarding stays
+            // usable until a password is set, which invalidates it through
+            // issued_credential_version; that invitation can still be accepted.
+            sqlx::query("UPDATE user_lifecycle_action_tokens a SET revoked_at = clock_timestamp() WHERE a.user_id = $1 AND a.purpose = 'password_setup' AND a.consumed_at IS NULL AND a.revoked_at IS NULL AND NOT EXISTS (SELECT 1 FROM workspace_invitation_onboarding o WHERE o.user_id = a.user_id AND o.action_token_digest = a.token_digest AND o.workspace_id <> $2)")
+                .bind(user_id).bind(workspace_id).execute(&mut *tx).await?;
             sqlx::query("INSERT INTO user_lifecycle_action_tokens (id, user_id, purpose, token_digest, issued_security_version, issued_credential_version, expires_at) VALUES ($1,$2,'password_setup',$3,$4,0,$5)")
                 .bind(Uuid::new_v4()).bind(user_id).bind(&action_digest).bind(security_version).bind(expires_at).execute(&mut *tx).await?;
             sqlx::query("INSERT INTO workspace_invitation_onboarding (invitation_id, workspace_id, user_id, action_token_digest) VALUES ($1,$2,$3,$4)")

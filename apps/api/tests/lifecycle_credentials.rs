@@ -155,21 +155,32 @@ async fn a_second_onboarding_link_after_password_setup_is_an_invalid_invitation(
         .complete_workspace_onboarding(&[3; 32], &[4; 32], "hash-one")
         .await
         .unwrap();
-    // Even a still-live setup token was issued for an account without a
-    // credential; once one exists, the link no longer applies.
-    sqlx::query(
-        "UPDATE user_lifecycle_action_tokens SET revoked_at = NULL WHERE token_digest = $1",
-    )
-    .bind(vec![2_u8; 32])
-    .execute(&pool)
-    .await
-    .unwrap();
+    // The first workspace's setup token is still live, but it was issued for
+    // an account without a credential; once one exists, the link no longer
+    // applies.
     assert!(matches!(
         repository
             .complete_workspace_onboarding(&[1; 32], &[2; 32], "hash-two")
             .await,
         Err(api::repository::RepositoryError::InvitationInvalid)
     ));
+}
+
+#[sqlx::test]
+async fn an_invitation_to_another_workspace_keeps_a_pending_onboarding_link(pool: PgPool) {
+    let repository = CatalogRepository::system(pool.clone());
+    let email = "pending-elsewhere@example.test";
+    let user = create_user(&pool, email, true).await;
+    let (owner, first, second) = two_owned_workspaces(&pool, "pending-elsewhere").await;
+    invite(&repository, owner, first, email, vec![7; 32], vec![8; 32]).await;
+    invite(&repository, owner, second, email, vec![9; 32], vec![10; 32]).await;
+
+    let completed = repository
+        .complete_workspace_onboarding(&[7; 32], &[8; 32], "hash")
+        .await
+        .unwrap();
+    assert_eq!(completed.user_id, user);
+    assert_eq!(completed.workspace_id, first);
 }
 
 #[sqlx::test]
