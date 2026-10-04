@@ -18,7 +18,8 @@ Resztę zapewniasz i utrzymujesz samodzielnie:
 - **PostgreSQL 18**;
 - prywatny zasobnik (bucket) **zgodny z S3**;
 - serwer **SMTP** z TLS;
-- opcjonalnie kolektor śladów **OTLP** i **Prometheus**.
+- opcjonalnie kolektor śladów **OTLP** i **Prometheus**;
+- opcjonalnie **Redis**, aby kilka replik API współdzieliło bufor.
 
 ## Przypnij obraz
 
@@ -56,6 +57,21 @@ Właściciel loguje się identyfikatorem obszaru roboczego, zwykle `default.loca
 | `GET /health/ready` | PostgreSQL i zasobnik są osiągalne. W przeciwnym razie zwraca `503 not_ready` bez szczegółów. | Sonda gotowości (readiness) i kierowanie ruchu w load balancerze. |
 
 Proces roboczy plików udostępnia te same dwa punkty końcowe na swoim nasłuchu operacyjnym.
+
+## Uruchom kilka replik API
+
+Repliki API mogą współdzielić jedną bazę danych i jeden zasobnik.
+
+**Połączenia z bazą danych.** Poza pulami żądań i zadań każdy proces API może utrzymywać do trzech dodatkowych połączeń z PostgreSQL. Harmonogramy reguł, harmonogramy przepływów pracy i przyjmowanie zadań rozszerzeń działają w danej chwili tylko na jednej replice, która utrzymuje blokadę na własnym połączeniu. Pozostałe repliki co pięć sekund łączą się na chwilę, aby sprawdzić, czy powinny przejąć tę rolę. Uwzględnij te połączenia przy ustalaniu `max_connections` w PostgreSQL. Łącz się z PostgreSQL bezpośrednio albo przez pooler w trybie sesji; tryb transakcyjny PgBouncera nie jest obsługiwany.
+
+**Wspólny bufor (opcjonalnie).** Każda replika buforuje definicje we własnej pamięci, co zawsze jest poprawne. Aby repliki współdzieliły buforowane wartości i limity żądań sieciowych rozszerzeń, uruchom Redis i ustaw:
+
+```sh
+CACHE_BACKEND=redis
+REDIS_URL=rediss://:haslo@redis.example.com:6380/0
+```
+
+`rediss://` łączy się przez TLS, a `redis://` bez niego. Redis nigdy nie jest wymagany: gdy przestanie odpowiadać, API działa dalej z pamięci i bazy danych, a połączenie odnawia samo. Kilka wdrożeń Attricat może korzystać z jednego serwera Redis, bo każdy klucz zawiera losowy identyfikator bazy danych danego wdrożenia. Po przywróceniu kopii zapasowej wyczyść Redis; zobacz [Kopia zapasowa i przywracanie](/pl/operate/backup/).
 
 ## Wdróż nową wersję
 
@@ -111,3 +127,4 @@ scripts/operations.sh rotate-secrets
 - Prywatny zasobnik z danymi uwierzytelniającymi ograniczonymi do `PutObject`, `GetObject`, `DeleteObject` i `HeadBucket`.
 - Nieustawione `CATALOG_E2E_FIXTURE_EMAIL` i `CATALOG_E2E_FIXTURE_PASSWORD`.
 - Przetestowana procedura tworzenia kopii zapasowej i przywracania.
+- Przy kilku replikach API: `max_connections` w PostgreSQL z zapasem do trzech dodatkowych połączeń na proces API, brak poolera w trybie transakcyjnym i opcjonalnie `CACHE_BACKEND=redis`.

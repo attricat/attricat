@@ -27,10 +27,11 @@ Przechowuj dane uwierzytelniające w menedżerze sekretów, a nie w poleceniach,
 1. Utrzymuj środowisko docelowe zatrzymane.
 2. Zweryfikuj każdą sumę kontrolną w manifeście.
 3. Przywróć bazę danych i zasobnik.
-4. Uruchom rolę `migrate` obrazu.
-5. Uruchom API i proces roboczy plików na przywróconej parze.
-6. Poczekaj na obie kontrole gotowości.
-7. Sprawdź znaną encję, znany przesłany plik i znany wynik operacji rozszerzenia.
+4. Jeśli wdrożenie korzysta z Redis (`CACHE_BACKEND=redis`), wyczyść używaną przez nie bazę Redis (`FLUSHDB`) albo zmień `CACHE_KEY_PREFIX`. W przeciwnym razie API może przez maksymalnie dobę serwować z bufora dane nowsze niż przywrócona baza danych.
+5. Uruchom rolę `migrate` obrazu.
+6. Uruchom API i proces roboczy plików na przywróconej parze.
+7. Poczekaj na obie kontrole gotowości.
+8. Sprawdź znaną encję, znany przesłany plik i znany wynik operacji rozszerzenia.
 
 Jeśli którykolwiek krok się nie powiedzie, pozostaw środowisko docelowe zatrzymane i zbadaj problem. Nigdy nie uruchamiaj produkcyjnie środowiska, w którym przywrócono tylko jedną część.
 

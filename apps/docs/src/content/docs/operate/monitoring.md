@@ -38,7 +38,7 @@ Both processes expose Prometheus metrics. Keep them on a private network.
 | API | `GET /metrics` | A session or token with `data_health.read`. |
 | File worker | `GET /metrics` on the operations listener (port 3001) | `Authorization: Bearer $FILE_WORKER_METRICS_TOKEN`. |
 
-Labels are bounded: routes are reported as templates, and no file name, ID, workspace, or URL is ever a label.
+Labels are bounded: routes are reported as templates, and no file name, ID, or URL is ever a label. The only series labelled by workspace is `catalog_event_delivery_queue_depth` (`workspace_id`).
 
 Useful series:
 
@@ -54,6 +54,14 @@ Useful series:
 | `catalog_file_uploads_total`, `catalog_file_downloads_total`, `catalog_object_store_operations_total` | Error outcomes. |
 | `catalog_value_history_cleanup_total{outcome}` | `failed`. Repeated `budget_exhausted` means each 10-second run ends with old history still left to delete. |
 | `catalog_upload_cleanup_total{outcome}` | `failed`. Failed deletions of abandoned uploads are retried. |
+| `catalog_query_cache_requests_total{namespace,outcome}` | A falling share of `hit` and `remote_hit` against `miss`. |
+| `catalog_query_cache_redis_circuit_opened_total` | Increases: Redis keeps failing and replicas are using memory only. |
+| `catalog_db_round_trips_per_operation{scope}` | Rising database round trips per request route, task kind or background loop. |
+| `catalog_db_round_trips_total{scope}` | A growing `unscoped` rate, or a background loop whose rate rises while the catalog is idle. |
+
+The event delivery gauge is refreshed every five seconds. For each consumer with deliveries in a workspace, all four statuses are reported, and statuses without deliveries read `0`.
+
+Each request route, task kind and background loop is a round-trip `scope`. To log the count for every operation, set `RUST_LOG=catalog_repository::round_trips=debug`.
 
 Suggested alerts: page when a readiness gauge is zero for two intervals, when any dead-letter or failed count is above zero, or when failure counters increase. Warn when the oldest queued item is older than five minutes for ten minutes, or a queue grows for fifteen minutes. Alert if metrics disappear for two scrape intervals. Tune thresholds to your import and export volume.
 

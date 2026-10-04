@@ -38,7 +38,7 @@ Oba procesy udostępniają metryki Prometheus. Trzymaj je w sieci prywatnej.
 | API | `GET /metrics` | Sesja lub token z `data_health.read`. |
 | Proces roboczy plików | `GET /metrics` na nasłuchu operacyjnym (port 3001) | `Authorization: Bearer $FILE_WORKER_METRICS_TOKEN`. |
 
-Etykiety mają ograniczony zbiór wartości: trasy są raportowane jako szablony, a nazwa pliku, identyfikator, obszar roboczy ani URL nigdy nie są etykietą.
+Etykiety mają ograniczony zbiór wartości: trasy są raportowane jako szablony, a nazwa pliku, identyfikator ani URL nigdy nie są etykietą. Jedyną serią z etykietą obszaru roboczego jest `catalog_event_delivery_queue_depth` (`workspace_id`).
 
 Przydatne serie:
 
@@ -54,6 +54,14 @@ Przydatne serie:
 | `catalog_file_uploads_total`, `catalog_file_downloads_total`, `catalog_object_store_operations_total` | Wyniki z błędem. |
 | `catalog_value_history_cleanup_total{outcome}` | `failed`. Powtarzające się `budget_exhausted` oznacza, że każdy 10-sekundowy przebieg kończy się, zanim usunie całą starą historię. |
 | `catalog_upload_cleanup_total{outcome}` | `failed`. Nieudane usunięcia porzuconych przesłanych plików są ponawiane. |
+| `catalog_query_cache_requests_total{namespace,outcome}` | Malejący udział `hit` i `remote_hit` względem `miss`. |
+| `catalog_query_cache_redis_circuit_opened_total` | Wzrosty: Redis stale zawodzi, a repliki korzystają tylko z pamięci. |
+| `catalog_db_round_trips_per_operation{scope}` | Rosnąca liczba zapytań do bazy danych na trasę żądania, rodzaj zadania lub pętlę w tle. |
+| `catalog_db_round_trips_total{scope}` | Rosnące tempo dla `unscoped` albo pętla w tle, której tempo rośnie, gdy katalog jest bezczynny. |
+
+Wskaźnik dostarczania zdarzeń jest odświeżany co pięć sekund. Dla każdego odbiorcy, który ma dostarczenia w obszarze roboczym, raportowane są wszystkie cztery statusy, a statusy bez dostarczeń mają wartość `0`.
+
+Każda trasa żądania, rodzaj zadania i pętla w tle to osobny `scope` liczby zapytań. Aby zapisywać tę liczbę w logu dla każdej operacji, ustaw `RUST_LOG=catalog_repository::round_trips=debug`.
 
 Sugerowane alerty: powiadamiaj dyżurnego, gdy wskaźnik gotowości wynosi zero przez dwa interwały, gdy liczba martwych wiadomości lub nieudanych zadań jest większa od zera albo gdy rosną liczniki niepowodzeń. Ostrzegaj, gdy najstarszy element w kolejce jest starszy niż pięć minut przez dziesięć minut lub gdy kolejka rośnie przez piętnaście minut. Alarmuj, jeśli metryki znikną na dwa interwały pobierania. Dostosuj progi do wolumenu importów i eksportów.
 

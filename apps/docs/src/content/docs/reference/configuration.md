@@ -46,7 +46,7 @@ The file worker needs the same `DATABASE_URL` and `S3_*` values plus `FILE_WORKE
 | --- | --- | --- |
 | `DATABASE_URL` | Required | PostgreSQL connection string. Attricat targets PostgreSQL 18. |
 | `DATABASE_REQUEST_POOL_CONNECTIONS` | `10` | Connections in the pool that serves HTTP requests, shared by all workspaces. Integer from 1 to 100. |
-| `DATABASE_TASK_POOL_CONNECTIONS` | `10` | Connections in the pool used by background workers, shared by all workspaces. Integer from 1 to 100. The API logs the total of the request, task, and maintenance pools at startup. |
+| `DATABASE_TASK_POOL_CONNECTIONS` | `10` | Connections in the pool used by background workers, shared by all workspaces. Integer from 1 to 100. The API logs the total of the request, task, and maintenance pools at startup. Each API process may also hold up to three connections outside the pools for background coordinators, and these need session-mode connections: PgBouncer's transaction pooling is not supported. See [Run several API replicas](/operate/deployment/#run-several-api-replicas). |
 | `BIND_ADDR` | `127.0.0.1:3000` | Address the API listens on. The container image sets `0.0.0.0:3000`. |
 | `CATALOG_AUTO_MIGRATE` | `true` | Apply database migrations when the API starts. Set `false` in production and run the image's `migrate` role once before rolling out API replicas. |
 | `WEB_DIST_DIR` | Unset | Directory containing the compiled web app. When set, the API serves the app at `/` and also exposes API routes below `/api`. The container image sets `/srv/attricat/web`. |
@@ -97,9 +97,10 @@ Session lifetime (eight hours), the login rate limit (five failures per workspac
 | `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE` | `50` | Largest page size for incoming-relationship lists. Caps `page_size` in `incoming_relationship_list` view blocks. |
 | `RELATIONSHIP_FACET_MAX_NODES` | `100` | Maximum nodes returned per page of an Explorer relationship facet. |
 | `DATA_HEALTH_CACHE_TTL_SECONDS` | `300` | How long data-health responses are cached. `0` disables the cache. Any recorded catalog change also refreshes them on the next request. |
-| `CACHE_BACKEND` | `memory` | Where cached definitions live: `memory` (each process) or `redis` (shared by every replica, which then also share cache invalidations and extension network rate limits). If Redis is unreachable the API keeps working from memory. |
-| `REDIS_URL` | Unset | Redis connection URL. Required when `CACHE_BACKEND` is `redis`. |
+| `CACHE_BACKEND` | `memory` | Where cached definitions live: `memory` (each process) or `redis` (shared by every replica, which then also share extension network rate limits). Cached data is always correct with either backend. If Redis is unreachable the API keeps working from memory and reconnects on its own. |
+| `REDIS_URL` | Unset | Redis connection URL. Required when `CACHE_BACKEND` is `redis`. Use `rediss://` for TLS. |
 | `CACHE_MAX_ENTRIES` | `20000` | Maximum number of in-memory cache entries per process. |
+| `CACHE_KEY_PREFIX` | `attricat` | First part of every Redis key; a random identifier of the database follows it. Change it, or flush Redis, after restoring a backup. |
 | `ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS` | `90` | Days of attribute-value history kept. Every minute the API spends up to 10 seconds deleting older history, at most 1,000 rows per transaction. A failed cleanup is logged and tried again; it does not stop the API. |
 | `BLUEPRINT_MIGRATION_PAGE_SIZE` | `100` | Entities read per page during a background blueprint migration. 1 to 1000. |
 | `BLUEPRINT_MIGRATION_CONCURRENCY` | `4` | Entities migrated at the same time within one migration batch. 1 to 64. |

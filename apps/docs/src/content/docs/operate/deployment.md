@@ -18,7 +18,8 @@ You provide and operate the rest:
 - **PostgreSQL 18**;
 - a private **S3-compatible** bucket;
 - an **SMTP** server with TLS;
-- optionally an **OTLP** trace collector and **Prometheus**.
+- optionally an **OTLP** trace collector and **Prometheus**;
+- optionally **Redis**, to share a cache between several API replicas.
 
 ## Pin the image
 
@@ -56,6 +57,21 @@ The owner signs in with the workspace identifier, normally `default.local`, then
 | `GET /health/ready` | PostgreSQL and the bucket are reachable. Returns `503 not_ready` without details if not. | Readiness probe and load-balancer routing. |
 
 The file worker serves the same two endpoints on its operations listener.
+
+## Run several API replicas
+
+API replicas can share one database and bucket.
+
+**Database connections.** Besides its request and task pools, each API process may hold up to three more PostgreSQL connections. Rule schedules, workflow schedules and extension intake each run on one replica at a time, which keeps a lock on its own connection. The other replicas briefly connect every five seconds to check whether they should take over. Count these connections when you size PostgreSQL's `max_connections`. Connect directly to PostgreSQL or through a pooler in session mode; PgBouncer's transaction pooling is not supported.
+
+**Shared cache (optional).** Each replica caches definitions in its own memory, which is always correct. To let replicas share cached values and extension network rate limits, run Redis and set:
+
+```sh
+CACHE_BACKEND=redis
+REDIS_URL=rediss://:password@redis.example.com:6380/0
+```
+
+`rediss://` connects over TLS; `redis://` does not. Redis is never required: if it becomes unreachable, the API keeps working from memory and the database and reconnects on its own. Several Attricat deployments can share one Redis, because every key includes a random identifier of the deployment's database. After restoring a backup, flush Redis; see [Backup and restore](/operate/backup/).
 
 ## Roll out a new version
 
@@ -111,3 +127,4 @@ scripts/operations.sh rotate-secrets
 - A private bucket, with credentials limited to `PutObject`, `GetObject`, `DeleteObject`, and `HeadBucket`.
 - `CATALOG_E2E_FIXTURE_EMAIL` and `CATALOG_E2E_FIXTURE_PASSWORD` unset.
 - A tested backup and restore procedure.
+- With several API replicas: PostgreSQL `max_connections` sized for up to three extra connections per API process, no transaction-mode pooler, and optionally `CACHE_BACKEND=redis`.
