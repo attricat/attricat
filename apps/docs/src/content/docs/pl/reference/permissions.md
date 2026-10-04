@@ -10,7 +10,7 @@ Brak zalogowania lub wygasła sesja zwraca `401`. Zalogowana osoba bez uprawnien
 | Uprawnienie | Zakres | owner | admin | editor | viewer |
 | --- | --- | :-: | :-: | :-: | :-: |
 | `workspace.manage` | Cykl życia obszaru roboczego i przeniesienie własności. | ✓ | | | |
-| `members.manage` | Członkowie, zaproszenia i tworzenie użytkowników. | ✓ | ✓ | | |
+| `members.manage` | Członkowie, zaproszenia, tworzenie użytkowników i zespoły (`/workspace/teams`, `acli team`). | ✓ | ✓ | | |
 | `roles.grant` | Przydzielanie i odbieranie ról. Wymagane razem z `members.manage`. | ✓ | ✓ | | |
 | `roles.manage` | Role niestandardowe; ponawianie dostarczeń zdarzeń, które stały się martwymi wiadomościami. | ✓ | ✓ | | |
 | `tokens.manage` | Tworzenie i odwoływanie własnych osobistych tokenów API. | ✓ | ✓ | | |
@@ -19,7 +19,7 @@ Brak zalogowania lub wygasła sesja zwraca `401`. Zalogowana osoba bez uprawnien
 | `blueprints.read` | Schematy i atrybuty wielokrotnego użytku. | ✓ | ✓ | ✓ | ✓ |
 | `blueprints.write` | Tworzenie szkiców i wersji schematów; atrybuty wielokrotnego użytku. | ✓ | ✓ | ✓ | |
 | `blueprints.publish` | Publikowanie wersji schematów. | ✓ | ✓ | | |
-| `entities.read` | Encje, wyszukiwanie, zapisane wyszukiwania, pliki i historia. | ✓ | ✓ | ✓ | ✓ |
+| `entities.read` | Encje, wyszukiwanie, zapisane wyszukiwania, pliki i historia; katalog użytkowników i zespołów do przypisań (`GET /directory`, `acli directory`), który pokazuje imiona i nazwiska oraz adresy e-mail członków. | ✓ | ✓ | ✓ | ✓ |
 | `entities.write` | Tworzenie i edytowanie encji, przesyłanie plików, migrowanie encji, dołączanie atrybutów wielokrotnego użytku, uruchamianie poleceń rozszerzeń z interfejsu. | ✓ | ✓ | ✓ | |
 | `entities.delete` | Usuwanie encji. | ✓ | ✓ | ✓ | |
 | `entities.publish` | Publikowanie encji w kanałach i wycofywanie ich publikacji. | ✓ | ✓ | | |

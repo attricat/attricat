@@ -10,7 +10,7 @@ A missing or expired sign-in returns `401`. A signed-in person without the permi
 | Permission | Allows | owner | admin | editor | viewer |
 | --- | --- | :-: | :-: | :-: | :-: |
 | `workspace.manage` | Workspace lifecycle and ownership transfer. | ✓ | | | |
-| `members.manage` | Members, invitations, and user creation. | ✓ | ✓ | | |
+| `members.manage` | Members, invitations, user creation, and teams (`/workspace/teams`, `acli team`). | ✓ | ✓ | | |
 | `roles.grant` | Granting and revoking roles. Needed together with `members.manage`. | ✓ | ✓ | | |
 | `roles.manage` | Custom roles; replaying dead-letter event deliveries. | ✓ | ✓ | | |
 | `tokens.manage` | Creating and revoking your personal API tokens. | ✓ | ✓ | | |
@@ -19,7 +19,7 @@ A missing or expired sign-in returns `401`. A signed-in person without the permi
 | `blueprints.read` | Blueprints and reusable attributes. | ✓ | ✓ | ✓ | ✓ |
 | `blueprints.write` | Creating blueprint drafts and revisions; reusable attributes. | ✓ | ✓ | ✓ | |
 | `blueprints.publish` | Publishing blueprint revisions. | ✓ | ✓ | | |
-| `entities.read` | Entities, search, saved searches, files, and history. | ✓ | ✓ | ✓ | ✓ |
+| `entities.read` | Entities, search, saved searches, files, and history; the user and team directory for assignments (`GET /directory`, `acli directory`), which lists member names and email addresses. | ✓ | ✓ | ✓ | ✓ |
 | `entities.write` | Creating and editing entities, uploading files, migrating entities, attaching reusable attributes, running extension commands from the UI. | ✓ | ✓ | ✓ | |
 | `entities.delete` | Deleting entities. | ✓ | ✓ | ✓ | |
 | `entities.publish` | Publishing and unpublishing entities to channels. | ✓ | ✓ | | |
