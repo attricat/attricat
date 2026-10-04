@@ -21,6 +21,9 @@ use crate::{
         SolutionPackExtensionError, install_planned_extensions, resolve_official_extensions,
     },
     solution_pack_sample_data::SAMPLE_AUTOMATION_WARNING,
+    solution_pack_seeds::{
+        ContextMappingRequest, MAX_SOLUTION_PACK_CONTEXTS, seed_inspection_summary,
+    },
     solution_packs::{
         BlueprintMappingRequest, BlueprintPublication, MAX_SOLUTION_PACK_ARCHIVE_BYTES,
         MAX_SOLUTION_PACK_BLUEPRINTS, MAX_SOLUTION_PACK_CHECK_RUN_RESPONSE_BYTES,
@@ -38,6 +41,8 @@ pub(super) struct InspectionResponse {
     extensions: Vec<ExtensionRequirementSummary>,
     guidance: GuidanceInspectionSummary,
     sample_data: Option<SampleDataInspectionSummary>,
+    /// Prerequisite seeds, contexts, rules, workflows, and saved searches.
+    seeds: serde_json::Value,
     warnings: Vec<&'static str>,
 }
 
@@ -48,6 +53,7 @@ struct SampleDataInspectionSummary {
     entity_count: usize,
     scalar_fact_count: usize,
     relationship_fact_count: usize,
+    file_count: usize,
     canonical_sha256: String,
 }
 
@@ -279,8 +285,10 @@ pub(super) async fn inspect(
                 entity_count: sample.declaration.entities.len(),
                 scalar_fact_count: sample.scalar_fact_count,
                 relationship_fact_count: sample.relationship_fact_count,
+                file_count: sample.files.len(),
                 canonical_sha256: sample.canonical_sha256.clone(),
             }),
+        seeds: seed_inspection_summary(&pack),
         warnings: pack
             .sample_data()
             .map(|_| vec![SAMPLE_AUTOMATION_WARNING])
@@ -310,8 +318,10 @@ pub(super) async fn create_plan(
     request: Request,
 ) -> Result<(StatusCode, Json<SolutionPackPlan>), ApiError> {
     let Query(query) = query.map_err(ApiError::from_query_rejection)?;
-    let (archive, mappings, asset_mappings) = parse_plan_request(request).await?;
-    if query.from_application.is_some() && (!mappings.is_empty() || !asset_mappings.is_empty()) {
+    let (archive, mappings, asset_mappings, context_mappings) = parse_plan_request(request).await?;
+    if query.from_application.is_some()
+        && (!mappings.is_empty() || !asset_mappings.is_empty() || !context_mappings.is_empty())
+    {
         return Err(ApiError::invalid_input(
             "from_application and explicit mappings are mutually exclusive".into(),
         ));
@@ -332,6 +342,7 @@ pub(super) async fn create_plan(
                 publication: query.blueprint_publication,
                 blueprint_mappings: &mappings,
                 asset_mappings: &asset_mappings,
+                context_mappings: &context_mappings,
                 prior_application_id: query.from_application,
                 include_sample_data: query.include_sample_data,
                 official_extensions: &official_extensions,
@@ -349,6 +360,7 @@ async fn parse_plan_request(
         Bytes,
         Vec<BlueprintMappingRequest>,
         Vec<PresentationAssetMappingRequest>,
+        Vec<ContextMappingRequest>,
     ),
     ApiError,
 > {
@@ -362,7 +374,7 @@ async fn parse_plan_request(
         let bytes = to_bytes(request.into_body(), MAX_SOLUTION_PACK_ARCHIVE_BYTES)
             .await
             .map_err(|_| ApiError::payload_too_large())?;
-        return Ok((bytes, Vec::new(), Vec::new()));
+        return Ok((bytes, Vec::new(), Vec::new(), Vec::new()));
     }
     if !media_type.is_some_and(|value| value.eq_ignore_ascii_case("multipart/form-data")) {
         return Err(ApiError::unsupported_media_type());
@@ -380,6 +392,7 @@ async fn parse_plan_request(
     let mut archive = None;
     let mut mappings = Vec::new();
     let mut asset_mappings = Vec::new();
+    let mut context_mappings = Vec::new();
     let mut metadata_bytes = 0usize;
     while let Some(mut field) = multipart
         .next_field()
@@ -440,6 +453,36 @@ async fn parse_plan_request(
                     )
                 })?);
             }
+            Some("context_map") => {
+                if context_mappings.len() >= MAX_SOLUTION_PACK_CONTEXTS {
+                    return Err(ApiError::invalid_input("too many context mappings".into()));
+                }
+                let mut bytes = Vec::new();
+                while let Some(chunk) = field
+                    .chunk()
+                    .await
+                    .map_err(|error| multipart_error(error, "invalid context mapping part"))?
+                {
+                    if metadata_bytes
+                        .saturating_add(bytes.len())
+                        .saturating_add(chunk.len())
+                        > 64 * 1024
+                    {
+                        return Err(ApiError::invalid_input(
+                            "mapping metadata exceeds the size limit".into(),
+                        ));
+                    }
+                    bytes.extend_from_slice(&chunk);
+                }
+                metadata_bytes += bytes.len();
+                let text = std::str::from_utf8(&bytes)
+                    .map_err(|_| ApiError::invalid_input("context mapping must be UTF-8".into()))?;
+                context_mappings.push(serde_json::from_str(text).map_err(|_| {
+                    ApiError::invalid_input(
+                        "context mapping must be a {key,code} JSON object".into(),
+                    )
+                })?);
+            }
             Some("blueprint_map") => {
                 if mappings.len() >= MAX_SOLUTION_PACK_BLUEPRINTS {
                     return Err(ApiError::invalid_input(
@@ -483,7 +526,7 @@ async fn parse_plan_request(
     let archive = archive.ok_or_else(|| {
         ApiError::invalid_input("multipart request is missing the archive part".into())
     })?;
-    Ok((archive, mappings, asset_mappings))
+    Ok((archive, mappings, asset_mappings, context_mappings))
 }
 
 fn multipart_error(
@@ -790,6 +833,7 @@ mod tests {
                 checks: Vec::new(),
             },
             sample_data: None,
+            seeds: serde_json::json!({}),
             warnings: Vec::new(),
         }
     }

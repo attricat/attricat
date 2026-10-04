@@ -22,7 +22,7 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 ## Conventions
 
 - Requests and responses are JSON unless a route says otherwise. Successful empty responses are `204`.
-- Errors return the HTTP status and a body like `{"error": {"code": "entity_schema_mismatch", "message": "…"}}`. Match on `code`, not on the message.
+- Errors return the HTTP status and a body like `{"error": {"code": "entity_schema_mismatch", "message": "…"}}`. Match on `code`, not on the message. Some errors add an `error.details` object with data you can act on, such as the entity that already holds a unique key.
 - `401` means no valid credential; `403` means the credential lacks the permission or scope.
 - `422` means the request was understood but is invalid, such as a blueprint that does not compile or a value that fails its schema.
 - `409` means a conflict with current state, such as a relationship cardinality limit.
@@ -36,7 +36,13 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `invalid_blueprint_definition` | 422 | The blueprint TOML does not compile. The message says why. |
 | `attribute_value_schema_mismatch` | 422 | A value fails its attribute's `value_schema`. |
 | `entity_schema_mismatch` | 422 | The entity fails its `entity_schema` in some context. |
-| `relationship_cardinality_conflict` | 409 | A relationship write exceeds `cardinality` or `target_cardinality`. |
+| `relationship_cardinality_conflict` | 409 | A relationship write exceeds `cardinality` or `target_cardinality`, or gives an entity in a `tree` a second parent. |
+| `relationship_target_type_mismatch` | 422 | The linked entity's blueprint is not allowed by `target_blueprint` or `target_blueprints`. |
+| `relationship_cycle` | 409 | The link would close a cycle in an `acyclic` or `tree` relationship. `details.path` lists the entity IDs around the cycle. |
+| `unique_key_conflict` | 409 | Another entity already has these values for a unique key. `details` has `key`, `context`, `values`, and `conflicting_entity_id`. |
+| `unique_key_duplicates` | 409 | Publishing a new unique key failed because existing entities share values. `details.duplicates` lists them. |
+| `relationship_hierarchy_violations` | 409 | Publishing `acyclic` or `tree` failed because existing links contain cycles or extra parents. `details` lists them. |
+| `stale_entity` | 409 | `expected_updated_at` no longer matches the entity. Reload it and try again. |
 | `relationship_path_sort_requires_single_result_version` | 422 | Sorting by a related value across several blueprint revisions. |
 | `file_processing` | 409 | The file is not ready to download yet. |
 | `approval_already_decided` | 409 | An agent tool call was already approved or rejected. |
@@ -66,6 +72,7 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | Method | Path | Description |
 | --- | --- | --- |
 | `POST` | `/v1/entities` | Create an entity with values and optional `system_tags` and `system_metadata`. |
+| `POST` | `/v1/entities/batch` | Create, update, and delete several entities at once: all changes are saved, or none are. See [Batch changes](#batch-changes). |
 | `GET`, `PUT` | `/v1/entities/{id}` | Read or update an entity's form: values, relationships, removals, annotations. |
 | `GET`, `DELETE` | `/entities/{id}` | Read or delete an entity. |
 | `POST` | `/v1/entities/search` | Search. See below. |
@@ -84,6 +91,47 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `POST` | `/v1/entities/{id}/blueprint-migration/preview` | Check migration to the current revision. |
 | `POST` | `/v1/entities/{id}/blueprint-migration` | Migrate. |
 | `POST` | `/v1/entities/{id}/reusable-attributes`, `/v1/entities/{id}/reusable-attribute-groups/{group_id}` | Attach a reusable attribute or group. |
+
+### Batch changes
+
+Some changes only make sense together: releasing a new document revision and marking the previous one superseded, or recording a movement and updating the item's current location. Send them as one batch so a failure cannot leave half of the change saved.
+
+```json
+POST /api/v1/entities/batch
+{
+  "operations": [
+    {
+      "op": "create",
+      "entity_id": "5b0b8c55-0c55-4cc5-9a0f-4a4c3d1a2b10",
+      "blueprint": { "code": "document_revision" },
+      "values": [
+        { "kind": "scalar", "attribute_code": "label", "context_id": null, "value": "B" },
+        { "kind": "scalar", "attribute_code": "status", "context_id": null, "value": "released" },
+        { "kind": "relationship", "attribute_code": "previous", "context_id": null,
+          "target_entity_id": "1f7e2d9a-6a3e-4a8a-9d0c-2f8d4f7f9e11" }
+      ]
+    },
+    {
+      "op": "update",
+      "entity_id": "1f7e2d9a-6a3e-4a8a-9d0c-2f8d4f7f9e11",
+      "expected_updated_at": "2026-10-01T09:30:00Z",
+      "values": [
+        { "kind": "scalar", "attribute_code": "status", "context_id": null, "value": "superseded" }
+      ]
+    }
+  ]
+}
+```
+
+- `op` is `create`, `update`, or `delete`. `create` takes the same fields as `POST /v1/entities`, plus an optional `entity_id` you choose so later operations can link to the new entity. `update` takes the same fields as `PUT /v1/entities/{id}`. `delete` takes `entity_id`.
+- `expected_updated_at` on `update` and `delete` is a precondition: if the entity changed since you read it, the batch fails with `409 stale_entity`. Status changes need it, as in a single update.
+- Operations run in order, and each is checked like the equivalent single request when it runs: values, schemas, status transitions, relationship rules, and unique keys. Order them so each is valid at its turn.
+- A batch has 1 to 50 operations and up to 1,000 values, links, and removals. An entity can appear in only one operation.
+- Every operation needs its own permission: `entities.write` on the entity to update it, `entities.delete` to delete it, and workspace-wide `entities.write` to create. If any is missing, nothing runs and the response is `403`.
+
+A successful batch returns `200` with one result per operation, such as `{"op": "update", "entity": {…}}` or `{"op": "delete", "entity_id": "…"}`. Each operation is recorded in the audit log and emits its usual event, but only after the whole batch is saved.
+
+If an operation fails, nothing is saved. The response has that operation's status and error code, the message starts with `operation <index>:`, and `error.details` includes `operation_index` and `entity_id`. Fix that operation and send the whole batch again. The CLI equivalent is `acli entity batch --operations <file>`.
 
 ### Search
 
@@ -176,6 +224,7 @@ See [Translate labels](/builders/translations/).
 | `POST` | `/workflows/{id}/versions/{version}/publish`, `/enable`; `/workflows/{id}/disable` | Lifecycle. |
 | `POST` | `/workflows/{id}/run-now` | Manual run. |
 | `GET` | `/workflow-runs` | Run history. |
+| `GET` | `/workflow-runs/{id}/targets` | Per-record outcomes of a `referencing_entities_update` action. |
 | `POST` | `/workflow-runs/{id}/replay` | Replay a dead letter. |
 
 ### Agents

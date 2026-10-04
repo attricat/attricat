@@ -84,4 +84,37 @@ describe('status presentation and input', () => {
     expect(screen.queryByRole('listbox')).toBeNull();
     expect(onChange).not.toHaveBeenCalled();
   });
+  it('disables and explains edges the server denies to this user', () => {
+    const onChange = vi.fn();
+    render(
+      <StatusEditor
+        config={config}
+        attribute={attribute}
+        value="draft"
+        baseline="draft"
+        inheritedValue={null}
+        transitions={[
+          {
+            attribute_code: 'Status',
+            from: 'draft',
+            to: 'live',
+            code: 'approve',
+            allowed: false,
+            denial_code: 'status_separation_of_duties',
+            denial_reason: 'must differ',
+          },
+        ]}
+        disabled={false}
+        onChange={onChange}
+      />,
+    );
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Status' }));
+    const live = screen.getByRole('option', { name: /Live/ });
+    expect(live.getAttribute('aria-disabled')).toBe('true');
+    expect(
+      screen.getByText('Must be made by someone other than the previous actor'),
+    ).toBeTruthy();
+    fireEvent.click(live);
+    expect(onChange).not.toHaveBeenCalled();
+  });
 });

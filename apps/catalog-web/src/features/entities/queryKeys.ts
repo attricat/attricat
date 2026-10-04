@@ -26,6 +26,14 @@ export const entityQueryKeys = {
   form: (entityId: string) => ['entity-form', entityId] as const,
   preview: (entityId: string) => ['entity-preview', entityId] as const,
   changes: (entityId: string) => ['entity-changes', entityId] as const,
+  recordControls: (entityId: string) =>
+    ['entity-record-controls', entityId] as const,
+  statusTransitions: (entityId: string, contextId: string | null) =>
+    [
+      ...entityQueryKeys.recordControls(entityId),
+      'transitions',
+      contextId,
+    ] as const,
   publications: () => ['entity-publications'] as const,
   publication: (entityId: string) =>
     [...entityQueryKeys.publications(), entityId] as const,

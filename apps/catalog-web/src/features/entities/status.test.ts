@@ -4,6 +4,7 @@ import { LEXICON_NAMESPACE } from '../lexicon/constants';
 import {
   statusConfiguration,
   statusLabel,
+  statusLocks,
   statusParentContexts,
   statusTransitionAllowed,
   savedStatusValue,
@@ -106,5 +107,56 @@ describe('status configuration', () => {
         ['child', ...path],
       ),
     ).toBe('live');
+  });
+});
+
+describe('status locks', () => {
+  const controlled: Attribute = {
+    ...statusAttribute,
+    value_schema: {
+      type: 'string',
+      enum: ['draft', 'live', 'done'],
+      'x-attricat-status': {
+        version: 1,
+        options: [
+          { code: 'draft', label: 'Draft' },
+          { code: 'live', label: 'Live', lock: ['title'] },
+          { code: 'done', label: 'Done', lock: 'all' },
+        ],
+        transitions: [
+          { from: null, to: 'draft' },
+          { from: 'draft', to: 'live', code: 'release', roles: ['reviewer'] },
+          { from: 'live', to: 'done' },
+        ],
+      },
+    },
+  };
+  const attributes: Attribute[] = [
+    controlled,
+    { code: 'title', value_type: 'string' },
+    { code: 'notes', value_type: 'string' },
+  ];
+  const saved = (status: string) => [
+    {
+      kind: 'scalar' as const,
+      attribute_code: 'status',
+      context_id: 'default',
+      value: status,
+    },
+  ];
+
+  it('follows the saved status of the context', () => {
+    expect(statusLocks(attributes, saved('draft'), 'default', [])).toEqual({});
+    expect(statusLocks(attributes, saved('live'), 'default', [])).toEqual({
+      title: 'Live',
+    });
+    expect(statusLocks(attributes, saved('done'), 'default', [])).toEqual({
+      title: 'Done',
+      notes: 'Done',
+    });
+    expect(statusLocks(attributes, saved('done'), 'web', ['default'])).toEqual({
+      title: 'Done',
+      notes: 'Done',
+    });
   });
 });

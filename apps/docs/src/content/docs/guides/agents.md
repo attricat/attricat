@@ -30,12 +30,14 @@ The agent acts as you. It can only see and change what your role allows.
 - preview an entity migration;
 - read data health, rule findings, and workflow runs;
 - view images and read text files in the workspace;
-- read extension operation runs and connector jobs (with `extensions.manage`).
+- read extension operation runs and connector jobs (with `extensions.manage`);
+- explain an entity's status transitions, approvals, and retention holds.
 
 **With your approval** it can:
 
 - create blueprints and blueprint revisions, and publish blueprints;
 - create, update, migrate, and delete entities; set, remove, and restore values; change relationships; link files;
+- apply several entity changes together as one batch;
 - update system tags and metadata;
 - publish and unpublish entities;
 - create, update, and delete contexts;
@@ -53,6 +55,27 @@ When the agent wants to change something, the conversation shows **Approval need
 A decision is final. Approving twice never runs a change twice.
 
 Read proposals carefully. Replacing relationships sets the complete list for that attribute and context; an empty list removes every link.
+
+### Changes to several entities
+
+When one request changes several entities, such as releasing a new revision and superseding the previous one, the agent proposes a single **batch** (`apply_entity_batch`). The approval summary lists every step in order. You approve the batch once, and it is saved completely or not at all: if one step fails, for example because an entity changed in the meantime, nothing is saved and the agent is told which step failed.
+
+## When a change is refused
+
+Blueprints can declare rules the server enforces on every change, including the agent's:
+
+- **Unique keys.** If another entity already has the same part number or document number, the change is refused and the agent is told which entity holds it. It should show you that entity and ask whether to update it or use a different value, not retry.
+- **Hierarchies.** A link that would make an entity its own ancestor, such as a location inside itself, is refused with the path of the loop.
+- **Allowed targets.** A relationship can only link to the blueprints it lists.
+- **Publishing constraints.** Publishing a blueprint that adds a unique key or hierarchy fails if existing entities break it; the agent lists them so you can fix them first.
+
+## Controlled records
+
+Blueprints can restrict who makes a status transition, lock finalized records, and tie approvals to reviewed content. The agent follows the same rules as you:
+
+- A change the rules refuse fails with a clear reason, such as a locked record or a transition you are not permitted to make. The agent explains it rather than retrying, and can show which transitions you may make, who must act, and which correction transition unlocks the record.
+- A transition that must be made by a different person than an earlier one counts you as the person, because the change runs as you when you approve it.
+- If a proposed edit touches approved content, approving it voids the approval and returns the record to an earlier status in the same change.
 
 ## Where changes show up
 

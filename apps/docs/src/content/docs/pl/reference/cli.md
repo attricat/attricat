@@ -244,6 +244,7 @@ acli workflow publish | enable <workflow-id> <version>
 acli workflow disable <workflow-id>
 acli workflow run-now <workflow-id> --entity-id <id> --idempotency-key <key>
 acli workflow run-list
+acli workflow run-targets <run-id>
 acli workflow run-replay <run-id>
 ```
 

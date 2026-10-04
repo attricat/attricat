@@ -54,6 +54,15 @@ attribute/context IDs and codes, relationship target IDs, a change kind, and
 before/after values. A consumer needing current state must read and authorize
 that state itself.
 
+`facts` is the audit before/after diff of the mutation, so it has one entry per
+value that actually changed: an identical re-save yields no fact. Relationship
+attributes produce one fact per added or removed target (`relationship_add` or
+`relationship_remove`). File attributes are excluded: file-reference uploads,
+links, reorders and removals write audit evidence but enqueue no domain event.
+System tags and metadata are not attribute values and produce no facts.
+Workflow event triggers can filter on these facts' `attribute_code` values; see
+[Workflows](workflows.md#changed-attribute-filters).
+
 Core types are constants in `api::domain_events` and currently include:
 
 - `entity.created.v1`, `entity.updated.v1`, `entity.deleted.v1`,

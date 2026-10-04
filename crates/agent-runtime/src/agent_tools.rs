@@ -17,7 +17,7 @@ use crate::{
         DEFAULT_ENTITY_PAGE_SIZE, DEFAULT_PAGE_SIZE, DEFAULT_STALE_AFTER_DAYS, MAX_STALE_AFTER_DAYS,
     },
     file_access::{AllowFileAccess, FileAccessOperation, authorize_file_read},
-    repository::{CatalogRepository, EntitySearchSort, RepositoryError},
+    repository::{AuthorizationActor, CatalogRepository, EntitySearchSort, RepositoryError},
     search_filters::{intersect_ids, resolve_agent_filter, resolve_agent_relationship_filter},
 };
 const BLUEPRINT_AUTHORING_GUIDE: &str = include_str!("../../../docs/blueprints.md");
@@ -82,6 +82,27 @@ pub enum ToolError {
     Forbidden,
     #[error(transparent)]
     Repository(#[from] RepositoryError),
+}
+
+impl ToolError {
+    /// Stable code for the tool result. Controlled-record denials keep their
+    /// API codes so the agent can explain them instead of retrying blindly.
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::Forbidden => "forbidden",
+            Self::Repository(RepositoryError::RecordLocked { .. }) => "record_locked",
+            Self::Repository(RepositoryError::StatusTransitionForbidden(_)) => {
+                "status_transition_forbidden"
+            }
+            Self::Repository(RepositoryError::StatusSeparationOfDuties { .. }) => {
+                "status_separation_of_duties"
+            }
+            Self::Repository(RepositoryError::StatusPreconditionRequired) => {
+                "status_precondition_required"
+            }
+            _ => "tool_error",
+        }
+    }
 }
 
 pub fn definitions() -> Vec<ToolDefinition> {
@@ -218,13 +239,28 @@ pub fn definitions() -> Vec<ToolDefinition> {
         ),
         definition(
             "publish_blueprint",
-            "Publish an existing draft blueprint revision. Use the id and version returned by create_blueprint, create_blueprint_revision, or list_blueprints. This change requires approval.",
+            "Publish an existing draft blueprint revision. Use the id and version returned by create_blueprint, create_blueprint_revision, or list_blueprints. Publishing new unique_keys or an acyclic or tree hierarchy first checks existing entities and fails with unique_key_duplicates or relationship_hierarchy_violations naming the entities to fix. This change requires approval.",
             json!({"type":"object","required":["blueprint_id","version"],"properties":{"blueprint_id":{"type":"string","format":"uuid"},"version":{"type":"integer","minimum":1}},"additionalProperties":false}),
         ),
         definition(
             "create_entity",
-            "Create an entity from an existing blueprint. This change requires approval. blueprint must contain the existing blueprint code and optional version; never embed a blueprint definition here. Scalar values use {kind:'scalar', attribute_code:'...', context_id:null, value:<typed JSON value>}; relationships use {kind:'relationship', attribute_code:'...', context_id:null, target_entity_id:'UUID'}.",
+            "Create an entity from an existing blueprint. This change requires approval. blueprint must contain the existing blueprint code and optional version; never embed a blueprint definition here. Scalar values use {kind:'scalar', attribute_code:'...', context_id:null, value:<typed JSON value>}; relationships use {kind:'relationship', attribute_code:'...', context_id:null, target_entity_id:'UUID'}. Values must respect the blueprint's unique_keys (409 unique_key_conflict names the entity that already holds the key), relationship target blueprints (422 relationship_target_type_mismatch), and acyclic or tree hierarchies (409 relationship_cycle).",
             json!({"type":"object","required":["blueprint"],"properties":{"blueprint":{"type":"object","required":["code"],"properties":{"code":{"type":"string"},"version":{"type":"integer"}},"additionalProperties":false},"values":{"type":"array"},"system_tags":{"type":"array","items":{"type":"string"}},"system_metadata":{"type":"object"}},"additionalProperties":false}),
+        ),
+        definition(
+            "apply_entity_batch",
+            "Apply several entity changes atomically as one approval: every operation commits or none does. Use it whenever a business operation changes more than one entity, such as releasing a new revision and superseding the previous one, or recording a movement and updating the item's current location. Operations run in order; each is {op:'create', entity_id?:'new UUID you choose so later operations can link to it', blueprint:{code, version?}, values?, system_tags?, system_metadata?}, {op:'update', entity_id, expected_updated_at?, values?, relationships?, remove_values?, system_tags?, system_metadata?}, or {op:'delete', entity_id, expected_updated_at?}, with values and relationships shaped as in create_entity and replace_entity_relationships. Status changes are ordinary values and need expected_updated_at from get_entity. Each entity may appear once, in at most 50 operations. Inspect every entity first. If an operation fails, nothing is applied and the error names the operation index. This change requires approval.",
+            json!({"type":"object","required":["operations"],"properties":{"operations":{"type":"array","minItems":1,"maxItems":crate::model::MAX_ENTITY_BATCH_OPERATIONS,"items":{"type":"object","required":["op"],"properties":{
+                "op":{"type":"string","enum":["create","update","delete"]},
+                "entity_id":{"type":"string","format":"uuid"},
+                "blueprint":{"type":"object","required":["code"],"properties":{"code":{"type":"string"},"version":{"type":"integer","minimum":1}},"additionalProperties":false},
+                "expected_updated_at":{"type":"string","format":"date-time"},
+                "values":{"type":"array"},
+                "relationships":{"type":"array","items":{"type":"object","required":["attribute_code","target_entity_ids"],"properties":{"attribute_code":{"type":"string"},"context_id":{"type":["string","null"],"format":"uuid"},"target_entity_ids":{"type":"array","maxItems":100,"items":{"type":"string","format":"uuid"}}},"additionalProperties":false}},
+                "remove_values":{"type":"array","items":{"type":"object","required":["attribute_code"],"properties":{"attribute_code":{"type":"string"},"context_id":{"type":["string","null"],"format":"uuid"}},"additionalProperties":false}},
+                "system_tags":{"type":"array","items":{"type":"string"}},
+                "system_metadata":{"type":"object"}
+            },"additionalProperties":false}}},"additionalProperties":false}),
         ),
         definition(
             "delete_entity",
@@ -233,7 +269,7 @@ pub fn definitions() -> Vec<ToolDefinition> {
         ),
         definition(
             "set_entity_values",
-            "Set scalar attribute values on an existing entity, optionally in a named attribute context. Each value replaces the current value for its attribute and context. Call get_entity and list_contexts first when the entity's current values or context IDs are unknown. This change requires approval.",
+            "Set scalar attribute values on an existing entity, optionally in a named attribute context. Each value replaces the current value for its attribute and context. Call get_entity and list_contexts first when the entity's current values or context IDs are unknown. A value that duplicates another entity's unique key fails with unique_key_conflict naming that entity. This change requires approval.",
             json!({"type":"object","required":["entity_id","values"],"properties":{"entity_id":{"type":"string","format":"uuid"},"values":{"type":"array","minItems":1,"items":{"type":"object","required":["kind","attribute_code","context_id","value"],"properties":{"kind":{"const":"scalar"},"attribute_code":{"type":"string"},"context_id":{"type":["string","null"],"format":"uuid"},"value":{}},"additionalProperties":false}}},"additionalProperties":false}),
         ),
         definition(
@@ -248,7 +284,7 @@ pub fn definitions() -> Vec<ToolDefinition> {
         ),
         definition(
             "replace_entity_relationships",
-            "Replace the complete target set for each specified relationship attribute and context on an entity. An empty target_entity_ids array clears that set. Inspect the entity first and review every target ID; this change requires approval.",
+            "Replace the complete target set for each specified relationship attribute and context on an entity. An empty target_entity_ids array clears that set. Targets must belong to the attribute's target_blueprint_codes, and acyclic or tree relationships reject links that form a cycle (relationship_cycle names the path). Inspect the entity first and review every target ID; this change requires approval.",
             relationship_mutation_parameters(),
         ),
         definition(
@@ -265,6 +301,11 @@ pub fn definitions() -> Vec<ToolDefinition> {
             "preview_entity_migration",
             "Assess an entity's migration to the latest published blueprint without changing it. Returns compatibility status, target version, and issues; inspect before proposing an upgrade.",
             json!({"type":"object","required":["entity_id"],"properties":{"entity_id":{"type":"string","format":"uuid"}},"additionalProperties":false}),
+        ),
+        definition(
+            "get_entity_record_controls",
+            "Explain an entity's controlled-record state: for each status attribute in a context (default when context_id is null), the declared transitions from the current status and whether the initiating user may take each one (denial_code and denial_reason when not), the approval history with content digests and void reasons, and file retention holds with their expiry. Use it to explain record_locked, status_transition_forbidden and status_separation_of_duties errors.",
+            json!({"type":"object","required":["entity_id"],"properties":{"entity_id":{"type":"string","format":"uuid"},"context_id":{"type":["string","null"],"format":"uuid"}},"additionalProperties":false}),
         ),
         definition(
             "get_entity_publications",
@@ -459,12 +500,14 @@ pub fn kind(name: &str) -> Result<ToolKind, ToolError> {
         | "list_saved_searches"
         | "get_saved_search"
         | "get_entity_publications"
+        | "get_entity_record_controls"
         | "preview_entity_migration" => Ok(ToolKind::Read),
         "create_blueprint"
         | "create_blueprint_revision"
         | "publish_blueprint"
         | "create_entity"
         | "delete_entity"
+        | "apply_entity_batch"
         | "set_entity_values"
         | "remove_entity_values"
         | "restore_entity_value"
@@ -514,6 +557,45 @@ pub fn change_summary(name: &str, arguments: &Value) -> Result<String, ToolError
             "Delete entity {}.",
             required_string(arguments, "entity_id")?
         )),
+        "apply_entity_batch" => {
+            let operations = arguments
+                .get("operations")
+                .and_then(Value::as_array)
+                .filter(|operations| !operations.is_empty())
+                .ok_or_else(|| {
+                    ToolError::InvalidArguments("operations must be a non-empty array".into())
+                })?;
+            let steps = operations
+                .iter()
+                .enumerate()
+                .map(|(index, operation)| {
+                    let entity = operation.get("entity_id").and_then(Value::as_str);
+                    Ok(match operation.get("op").and_then(Value::as_str) {
+                        Some("create") => format!(
+                            "{}. create {} entity{}",
+                            index + 1,
+                            required_string(operation, "blueprint.code")?,
+                            entity.map(|id| format!(" {id}")).unwrap_or_default()
+                        ),
+                        Some(op @ ("update" | "delete")) => format!(
+                            "{}. {op} entity {}",
+                            index + 1,
+                            required_string(operation, "entity_id")?
+                        ),
+                        _ => {
+                            return Err(ToolError::InvalidArguments(
+                                "each operation needs op create, update, or delete".into(),
+                            ));
+                        }
+                    })
+                })
+                .collect::<Result<Vec<_>, ToolError>>()?;
+            Ok(format!(
+                "Apply {} changes together; all succeed or none do: {}.",
+                operations.len(),
+                steps.join("; ")
+            ))
+        }
         "set_entity_values" => Ok(format!(
             "Set attribute values on entity {}.",
             required_string(arguments, "entity_id")?
@@ -714,6 +796,25 @@ pub async fn execute_read(
             let preview = repository.preview_entity_migration(parse_uuid(&arguments, "entity_id")?).await?;
             json!({"migration_id":preview.migration_id,"source_version":preview.source_version,
                 "target_version":preview.target.blueprint.version,"status":preview.status,"issues":preview.issues})
+        }
+        "get_entity_record_controls" => {
+            let entity_id = parse_uuid(&arguments, "entity_id")?;
+            let context_id = match arguments.get("context_id") {
+                None | Some(Value::Null) => None,
+                Some(_) => Some(parse_uuid(&arguments, "context_id")?),
+            };
+            let transitions = repository
+                .status_transition_access(
+                    entity_id,
+                    context_id,
+                    AuthorizationActor { user_id: actor, token_id: None },
+                )
+                .await?;
+            json!({
+                "transitions": transitions,
+                "approvals": repository.entity_approvals(entity_id).await?,
+                "retention_holds": repository.entity_retention_holds(entity_id).await?,
+            })
         }
         "get_entity_publications" => serde_json::to_value(
             repository
@@ -1246,6 +1347,15 @@ pub async fn execute_mutation(
                 .delete_entity(parse_uuid(&arguments, "entity_id")?)
                 .await?;
             json!({"deleted": true})
+        }
+        "apply_entity_batch" => {
+            let input: crate::model::EntityBatchRequest = decode(arguments)?;
+            serde_json::to_value(
+                CatalogMutationService::new(repository)
+                    .apply_entity_batch(input)
+                    .await?,
+            )
+            .expect("batch results serialize")
         }
         "set_entity_values" => {
             #[derive(Deserialize)]
@@ -2096,7 +2206,8 @@ async fn read_authorized(
         | "get_entity_changes"
         | "get_value_history"
         | "get_entity_preview_link"
-        | "get_entity_publications" => (
+        | "get_entity_publications"
+        | "get_entity_record_controls" => (
             "entities.read",
             Some(parse_uuid(arguments, "entity_id")?),
             None,
@@ -2188,6 +2299,38 @@ mod tests {
 
     use super::{ToolError, ToolKind, bounded, change_summary, definitions, kind};
     use crate::agents::MAX_TOOL_RESULT_BYTES;
+
+    #[test]
+    fn entity_batches_are_one_approval_with_a_step_by_step_summary() {
+        assert_eq!(kind("apply_entity_batch").unwrap(), ToolKind::Mutation);
+        assert!(
+            definitions()
+                .iter()
+                .any(|tool| tool.function.name == "apply_entity_batch")
+        );
+        let previous = "123e4567-e89b-12d3-a456-426614174001";
+        let next = "123e4567-e89b-12d3-a456-426614174002";
+        assert_eq!(
+            change_summary(
+                "apply_entity_batch",
+                &json!({"operations": [
+                    {"op": "create", "entity_id": next, "blueprint": {"code": "document_revision"}},
+                    {"op": "update", "entity_id": previous, "expected_updated_at": "2026-10-01T00:00:00Z"},
+                ]})
+            )
+            .unwrap(),
+            format!(
+                "Apply 2 changes together; all succeed or none do: 1. create document_revision entity {next}; 2. update entity {previous}."
+            )
+        );
+        for invalid in [
+            json!({"operations": []}),
+            json!({"operations": [{"op": "rename", "entity_id": previous}]}),
+            json!({"operations": [{"op": "update"}]}),
+        ] {
+            assert!(change_summary("apply_entity_batch", &invalid).is_err());
+        }
+    }
 
     #[test]
     fn classifies_every_write_as_an_approval_required_mutation() {

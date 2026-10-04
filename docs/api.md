@@ -3,7 +3,10 @@
 Most API routes exchange JSON over HTTP; successful empty responses use `204`,
 and file, asset, and metrics routes return their documented content types.
 Failures return a JSON `error` object with a machine-readable code and message,
-alongside the HTTP status. Use the [CLI](cli.md) for shell automation.
+alongside the HTTP status. Some failures add an `error.details` object with
+machine-readable context, such as the entity holding a conflicting unique key
+(see [Structural constraint errors](#structural-constraint-errors)). Use the
+[CLI](cli.md) for shell automation.
 
 ## Authorization
 
@@ -164,12 +167,18 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `POST` | `/entities/{id}/relationships/remove` | Remove relationship targets. |
 | `POST` | `/v1/entities/search` | Search a selected blueprint across published revisions by default, or one explicit revision; supports text queries, validated filters, facets, and sorting. |
 | `POST` | `/v1/entities` | Create an entity atomically with form values and optional system annotations. |
+| `POST` | `/v1/entities/batch` | Apply create, update, and delete operations to several entities in one transaction; see [Entity batches](#entity-batches). |
 | `GET`, `PUT` | `/v1/entities/{id}` | Read or update an entity form atomically, including optional system annotations. |
 | `POST` | `/v1/entities/{id}/blueprint-migration/preview` | Assess migration to the highest published revision. |
 | `POST` | `/v1/entities/{id}/blueprint-migration` | Migrate an entity to that revision. |
 | `GET`, `POST` | `/v1/entities/{id}/publications` | List channel publication status or publish to `{ "context_id": "…" }`. |
 | `POST` | `/v1/entities/{id}/publications/unpublish` | Unpublish from `{ "context_id": "…" }`. |
 | `POST` | `/v1/entities/{id}/publications/publish-all` | Publish atomically to every enabled channel. |
+| `GET` | `/v1/entities/{id}/status-transitions` | Declared status edges from the saved status in `?context_id=` and whether the caller may take each. See [status control](status-control.md#controlled-records). |
+| `GET` | `/v1/entities/{id}/approvals` | Approval decisions with content digests and void reasons. |
+| `GET` | `/v1/entities/{id}/retention-holds` | Retention holds on the entity's files. |
+| `GET`, `POST` | `/files/{id}/retention-holds` | List holds, or place an explicit hold (`files.hold`). |
+| `POST` | `/files/{id}/retention-holds/{hold_id}/release` | Release an explicit hold early (`files.hold`). |
 | `GET`, `PUT` | `/publication-channels`, `/publication-channels/{context_id}` | List enabled channel contexts or enable/disable one. |
 | `POST` | `/entities/{entity_id}/file-attributes/{attribute_code}/uploads` | Stream one or more multipart file parts to a file attribute. |
 | `GET` | `/files/{file_id}` | Read safe file metadata and generated variant metadata. |
@@ -205,9 +214,11 @@ HTTP endpoints.
 `POST /solution-packs/inspect` takes an `application/zstd` `.tar.zst` body (at
 most 32 MiB compressed). Its response is at most 512 KiB and contains safe
 manifest metadata, whole-archive SHA-256, blueprint keys, bounded setting
-summaries, normalized presentation-asset digests, and extension requirement
-summaries. Inspection never returns resource bytes, archive paths, or private
-object keys.
+summaries, normalized presentation-asset digests, extension requirement
+summaries, and a `seeds` summary of prerequisite packs, contexts with their
+publication channels, rules and workflows (with their declared enabled state),
+and saved searches. `sample_data.file_count` counts bundled sample files.
+Inspection never returns resource bytes, archive paths, or private object keys.
 
 `POST /solution-packs/plans` requires `prefix` and
 `blueprint_publication=draft|publish` query parameters. Optional
@@ -224,11 +235,20 @@ Without explicit maps, upload the archive as `application/zstd`, including
 when using `from_application`. For explicit reuse, send `multipart/form-data`
 with exactly one streamed `archive` part (`application/zstd`) and repeated
 `blueprint_map` JSON text parts such as
-`{"key":"blueprints/product","code":"shared_product"}` and/or `asset_map`
-parts such as `{"key":"assets/brand-logo","id":"<uuid>"}`. The 32 MiB
+`{"key":"blueprints/product","code":"shared_product"}`, `asset_map`
+parts such as `{"key":"assets/brand-logo","id":"<uuid>"}`, and/or
+`context_map` parts such as `{"key":"contexts/poland","code":"PL"}` selecting an
+existing context for a pack context. The 32 MiB
 compressed archive and structural limits still apply. The archive is not
 retained; asset-create actions privately stage normalized bytes before the
-plan is ready.
+plan is ready, and bundled sample files of a sample-selected plan are uploaded
+to ordinary file storage under upload intents before the plan is saved.
+
+Plans can also contain `prerequisite`, `context`, `publication_channel`,
+`rule`, `workflow`, and `saved_search` actions. Prerequisites are resolved
+against completed applications of the required pack in the workspace; they are
+never installed automatically. See
+[solution-pack operation](solution-packs.md#prerequisite-packs).
 
 The response is at most 1 MiB. It contains safe source/digest metadata,
 optional prior-application identity, ordered release-change evidence, mapping
@@ -418,6 +438,86 @@ Creation and update payloads:
 
 Use `visibility: "private"` or `"workspace"` for named views. For a snapshot, omit `name`, `description` and `visibility` when posting to `/view-state-links`; send `kind` and `state`. Responses include `id`, `owner_user_id`, `kind`, `name`, `description`, `visibility`, `state`, `created_at`, `updated_at`. State uses the Explorer URL field names; see [saved views](saved-views.md) for semantics and limits.
 
+## Entity batches
+
+`POST /v1/entities/batch` applies writes, status transitions, and deletions to
+several entities atomically: either every operation commits, with its audit
+event and domain event, or nothing does.
+
+```json
+{
+  "operations": [
+    {
+      "op": "create",
+      "entity_id": "5b0b8c55-0c55-4cc5-9a0f-4a4c3d1a2b10",
+      "blueprint": { "code": "document_revision" },
+      "values": [
+        { "kind": "scalar", "attribute_code": "label", "context_id": null, "value": "B" },
+        { "kind": "scalar", "attribute_code": "status", "context_id": null, "value": "released" },
+        { "kind": "relationship", "attribute_code": "previous", "context_id": null,
+          "target_entity_id": "1f7e2d9a-6a3e-4a8a-9d0c-2f8d4f7f9e11" }
+      ]
+    },
+    {
+      "op": "update",
+      "entity_id": "1f7e2d9a-6a3e-4a8a-9d0c-2f8d4f7f9e11",
+      "expected_updated_at": "2026-10-01T09:30:00Z",
+      "values": [
+        { "kind": "scalar", "attribute_code": "status", "context_id": null, "value": "superseded" }
+      ]
+    }
+  ]
+}
+```
+
+- `create` takes the `POST /v1/entities` fields plus an optional
+  caller-chosen `entity_id`, so later operations can link to the new entity.
+  An existing ID returns `409 entity_id_taken`.
+- `update` takes the `PUT /v1/entities/{id}` fields (`values`,
+  `relationships`, `remove_values`, `system_tags`, `system_metadata`, and
+  `expected_updated_at`). Status transitions are ordinary values and keep their
+  rules, including the `expected_updated_at` requirement.
+- `delete` takes `entity_id` and an optional `expected_updated_at`; a stale
+  value returns `409 stale_entity`.
+- Operations run in order, each seeing the earlier ones, and each validates as
+  its single-entity endpoint does when it runs: types, schemas, statuses,
+  relationship targets and cardinality, unique keys, and hierarchies. Order
+  operations so each is valid at its turn, for example release a unique value
+  before reusing it.
+- A batch has 1–50 operations and at most 1,000 values, relationship targets,
+  and removals. Each entity appears in at most one operation; combine its
+  changes. Violations return `422 invalid_input`.
+- Every operation is authorized before anything runs: `entities.write` on the
+  entity for updates, `entities.delete` for deletes, and workspace
+  `entities.write` for creates. A personal API token needs each of those
+  permissions. Any denial returns `403` for the whole batch.
+
+The response is `200` with one result per operation, in order:
+
+```json
+{"operations": [{"op": "create", "entity": {}}, {"op": "update", "entity": {}}, {"op": "delete", "entity_id": "…"}]}
+```
+
+When an operation fails, the transaction rolls back and the response keeps
+that operation's status and error code. The message starts with
+`operation <index>:` and `error.details` adds `operation_index` and
+`entity_id` to the operation's own details. Each operation's audit event
+targets its entity and records `metadata.batch` with `operation_index` and
+`operation_count`; all share the request and correlation IDs.
+
+## Structural constraint errors
+
+Blueprint [unique keys and hierarchies](blueprints.md#unique-keys) add these
+errors to entity writes and blueprint publication:
+
+| Status | Code | `error.details` |
+| --- | --- | --- |
+| `409` | `unique_key_conflict` | `key`, `context`, normalized `values`, `conflicting_entity_id` |
+| `409` | `unique_key_duplicates` | `duplicates` (up to 20 `{ key, context, values, entity_ids }`) and `total`; returned by publication |
+| `409` | `relationship_cycle` | `attribute`, and `path`: entity IDs from the written entity back to it |
+| `409` | `relationship_hierarchy_violations` | `attribute`, `cycles`, `multiple_parents`; returned by publication |
+| `422` | `relationship_target_type_mismatch` | none; the target's blueprint is not in the attribute's `target_blueprint_codes` |
+
 ## Entity system annotations
 
 Entities include `system_tags` (an array of unique, non-empty strings) and
@@ -585,7 +685,10 @@ reaches a repository write. Built-in tools include exact blueprint-revision
 inspection and read-only entity migration assessment, plus approved replacement
 or removal of relationship targets. Replacement sets the complete target list
 for each specified attribute/context (an empty list clears it); removal unlinks
-only named targets. The agent must inspect current values first. These tools
+only named targets. `apply_entity_batch` proposes several entity operations
+as one approval and applies them through [entity batches](#entity-batches);
+each operation is authorized for the initiating user when the approved call
+runs. The agent must inspect current values first. These tools
 use the initiating user's `blueprints.read` or entity-scoped permissions:
 `entities.write` for migration assessment and relationship changes, and
 `entities.read` for existing entity inspection. Bounded `get_entity_changes`
@@ -609,7 +712,7 @@ or schedule mutation is exposed to agents.
 
 ## Workflow run operations
 
-`GET /workflow-runs` lists workspace-scoped run diagnostics and requires `workflows.read`. `POST /workflow-runs/{run_id}/replay` requeues only a terminal dead-letter run and requires `workflows.manage`. Neither endpoint exposes internal domain-event payloads.
+`GET /workflow-runs` lists workspace-scoped run diagnostics and requires `workflows.read`. `GET /workflow-runs/{run_id}/targets` (also `workflows.read`) lists the per-entity outcomes of a run's `referencing_entities_update` actions: `action_index`, `entity_id`, `status` (`completed`, `failed`, or `skipped`), `attempts`, the latest bounded `last_error`, and timestamps; an unknown run returns `404`. `POST /workflow-runs/{run_id}/replay` requeues only a terminal dead-letter run and requires `workflows.manage`. Neither endpoint exposes internal domain-event payloads.
 
 ## Background processing status
 

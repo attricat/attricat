@@ -2414,7 +2414,7 @@ value_type = "string"
 }
 
 #[sqlx::test(migrations = "./migrations")]
-async fn context_resources_are_rejected_by_inspection_and_planning(pool: PgPool) {
+async fn legacy_context_declarations_are_rejected_by_inspection_and_planning(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
     let contexts_before: i64 = sqlx::query_scalar("SELECT count(*) FROM attribute_contexts")
@@ -2498,8 +2498,13 @@ async fn valid_inspection_returns_only_safe_summaries_without_persisting(pool: P
             "manifest",
             "resources",
             "sample_data",
+            "seeds",
             "warnings",
         ])
+    );
+    assert_eq!(
+        body["seeds"],
+        json!({"prerequisites":[],"contexts":[],"rules":[],"workflows":[],"saved_searches":[]})
     );
     assert_eq!(body["guidance"]["setup_checklist_items"], 0);
     assert_eq!(body["guidance"]["checks"], json!([]));

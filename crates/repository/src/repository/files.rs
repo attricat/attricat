@@ -91,6 +91,8 @@ impl CatalogRepository {
             .await?;
         self.validate_context_editable(&mut transaction, Some(context_id), &context_editable)
             .await?;
+        self.ensure_attribute_unlocked(&mut transaction, &entity, attribute_code, context_id)
+            .await?;
         transaction.commit().await?;
         Ok(policy)
     }
@@ -111,6 +113,8 @@ impl CatalogRepository {
             .file_upload_context(&mut transaction, context_id)
             .await?;
         self.validate_context_editable(&mut transaction, Some(context_id), &context_editable)
+            .await?;
+        self.ensure_attribute_unlocked(&mut transaction, &entity, attribute_code, context_id)
             .await?;
 
         let current_value = sqlx::query_scalar::<_, Uuid>(
@@ -243,6 +247,8 @@ impl CatalogRepository {
             .await?;
         self.validate_context_editable(&mut transaction, Some(context_id), &context_editable)
             .await?;
+        self.ensure_attribute_unlocked(&mut transaction, &entity, attribute_code, context_id)
+            .await?;
         let current: Vec<Uuid> = sqlx::query_scalar(
             "SELECT r.file_id FROM attribute_file_references r JOIN attribute_values v ON v.id = r.attribute_value_id AND v.workspace_id = r.workspace_id WHERE v.entity_id = $1 AND v.attribute_id = $2 AND v.context_id = $3 AND v.workspace_id = $4 ORDER BY r.position, r.file_id",
         )
@@ -330,6 +336,8 @@ impl CatalogRepository {
             .file_upload_context(&mut transaction, context_id)
             .await?;
         self.validate_context_editable(&mut transaction, Some(context_id), &context_editable)
+            .await?;
+        self.ensure_attribute_unlocked(&mut transaction, &entity, attribute_code, context_id)
             .await?;
         let exists = sqlx::query_scalar::<_, Uuid>(
             "SELECT id FROM files WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL AND purpose = 'attachment'",
@@ -539,7 +547,7 @@ impl CatalogRepository {
         row.ok_or(RepositoryError::NotFound("file"))
     }
 
-    async fn file_upload_attribute(
+    pub(super) async fn file_upload_attribute(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         entity: &Entity,

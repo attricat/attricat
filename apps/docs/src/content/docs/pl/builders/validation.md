@@ -3,11 +3,12 @@ title: Walidacja
 description: Ograniczaj pojedyncze wartości i całe encje za pomocą JSON Schema i dowiedz się, jak walidacja współdziała z kontekstami.
 ---
 
-Attricat waliduje każdy zapis na serwerze, zanim cokolwiek zostanie zapisane. Walidacja pochodzi z trzech źródeł:
+Attricat waliduje każdy zapis na serwerze, zanim cokolwiek zostanie zapisane. Walidacja pochodzi z czterech źródeł:
 
 1. **Typ atrybutu.** Atrybut `number` odrzuca `"abc"`; `date` odrzuca `2026-13-01`.
 2. **`value_schema`** w atrybucie: JSON Schema dla jednej wartości.
 3. **`entity_schema`** w schemacie: JSON Schema dla całej encji.
+4. **`unique_keys`** w schemacie: identyfikatory biznesowe, których dwie encje nie mogą współdzielić. Zobacz [Klucze unikalne](#klucze-unikalne).
 
 Oba schematy walidacji używają JSON Schema Draft 2020-12. Aplikacja internetowa korzysta z tych samych schematów, aby ostrzegać Cię podczas pisania, ale liczy się odpowiedź serwera.
 
@@ -69,6 +70,8 @@ value_schema = '''{
 
 Aplikacja internetowa pokazuje status jako etykietę i edytuje go listą wyboru, w której niedozwolone opcje są wyłączone. Przejścia sprawdza serwer dla każdego zapisu, także z API, CLI, przepływów pracy, przywracania historii i migracji. Porównywane są wartości efektywne, więc wartość odziedziczona z kontekstu nadrzędnego jest punktem wyjścia. Niedozwolona zmiana zwraca `422 attribute_value_schema_mismatch`.
 
+Status może też ograniczać, kto może wykonać poszczególne przejścia, blokować sfinalizowane rekordy i wiązać zatwierdzenia z przejrzaną treścią. Zobacz [Kontroluj cykl życia rekordu](/pl/builders/blueprints/#krok-10-kontroluj-cykl-życia-rekordu).
+
 ## Ogranicz całą encję
 
 `entity_schema` widzi encję jako jeden obiekt JSON. Używaj go dla reguł obejmujących więcej niż jeden atrybut:
@@ -108,6 +111,30 @@ Obiekt walidowany przez Attricat wygląda tak:
 Najwyższego poziomu `required`, `properties`, `dependentRequired` i `dependentSchemas` mogą wskazywać tylko atrybuty, które ma schemat, w tym atrybuty wybrane z domieszek. Literówka w tych miejscach powoduje błąd kompilacji.
 
 `entity_schema` jest dozwolony tylko w schematach encji. Encja, która nie przejdzie walidacji, zwraca `422 entity_schema_mismatch`.
+
+## Klucze unikalne
+
+Schemat walidacji sprawdza jedną encję naraz, więc nie powstrzyma dwóch encji przed otrzymaniem tego samego numeru części. Zadeklaruj zamiast tego klucz unikalny:
+
+```toml
+[[unique_keys]]
+code = "part_number"
+attributes = ["part_number"]
+
+[[unique_keys]]
+code = "document_revision"
+attributes = ["document", "revision_label"]
+```
+
+Drugi klucz jest złożony: dokument może mieć tylko jedną wersję `B`, ale każdy dokument może mieć własną. Klucze mogą łączyć do ośmiu atrybutów skalarnych lub relacji z jednym celem.
+
+- **Porównywanie.** Tekst jest przycinany, ciągi białych znaków stają się jedną spacją, a wielkość liter jest pomijana, więc `ABC-1` i ` abc-1 ` kolidują. Ustaw `case_sensitive = true`, aby porównywać tekst dokładnie. Liczby są porównywane według wartości, a relacje według powiązanej encji.
+- **Brakujące wartości.** Encja bez wartości któregoś atrybutu klucza nie jest sprawdzana względem tego klucza. Jeśli każda encja musi go mieć, oznacz atrybuty jako wymagane w `entity_schema`.
+- **Konteksty.** Domyślnie klucz porównuje wartości z kontekstu domyślnego. Przy `scope = "context"` porównuje wartości wyświetlane w każdym kontekście, także dziedziczone, więc np. slug może być unikalny w każdym rynku.
+- **Równoczesne zapisy.** Baza danych sprawdza klucz w trakcie zapisu. Jeśli dwie osoby zapiszą ten sam numer części w tym samym momencie, jeden zapis się powiedzie, a drugi otrzyma `409 unique_key_conflict` z konfliktową encją w `error.details.conflicting_entity_id`.
+- **Dodanie klucza później.** Publikacja wersji, która dodaje klucz, najpierw sprawdza istniejące encje. Duplikaty powodują błąd publikacji `409 unique_key_duplicates` z listą encji współdzielących każdą wartość. Od publikacji klucz obejmuje każdą encję schematu, także encje na starszych wersjach.
+
+Wszystkie opcje opisuje sekcja [Klucze unikalne](/pl/reference/blueprint/#klucze-unikalne).
 
 ## Walidacja a konteksty
 

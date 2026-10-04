@@ -30,12 +30,14 @@ Agent działa w Twoim imieniu. Widzi i zmienia tylko to, na co pozwala Twoja rol
 - wyświetlać podgląd migracji encji;
 - odczytywać stan danych, ustalenia reguł i uruchomienia przepływów pracy;
 - oglądać obrazy i odczytywać pliki tekstowe w obszarze roboczym;
-- odczytywać uruchomienia operacji rozszerzeń i zadania konektorów (z uprawnieniem `extensions.manage`).
+- odczytywać uruchomienia operacji rozszerzeń i zadania konektorów (z uprawnieniem `extensions.manage`);
+- wyjaśniać przejścia statusów encji, jej zatwierdzenia i blokady retencji.
 
 **Po Twoim zatwierdzeniu** może:
 
 - tworzyć schematy i ich wersje oraz publikować schematy;
 - tworzyć, aktualizować, migrować i usuwać encje; ustawiać, usuwać i przywracać wartości; zmieniać relacje; łączyć pliki;
+- wprowadzać kilka zmian encji razem jako jeden wsad;
 - aktualizować tagi systemowe i metadane;
 - publikować encje i cofać ich publikację;
 - tworzyć, aktualizować i usuwać konteksty;
@@ -53,6 +55,27 @@ Gdy agent chce coś zmienić, rozmowa pokazuje **Wymagane zatwierdzenie** wraz z
 Decyzja jest ostateczna. Dwukrotne zatwierdzenie nigdy nie uruchamia zmiany dwa razy.
 
 Czytaj propozycje uważnie. Zastąpienie relacji ustawia pełną listę dla danego atrybutu i kontekstu; pusta lista usuwa każde powiązanie.
+
+### Zmiany w kilku encjach
+
+Gdy jedna prośba zmienia kilka encji, np. wydanie nowej wersji i zastąpienie poprzedniej, agent proponuje jeden **wsad** (`apply_entity_batch`). Podsumowanie do zatwierdzenia wymienia wszystkie kroki po kolei. Zatwierdzasz wsad raz i zostaje on zapisany w całości albo wcale: jeśli jeden krok się nie powiedzie, np. dlatego, że encja w międzyczasie się zmieniła, nic nie zostaje zapisane, a agent dowiaduje się, który krok zawiódł.
+
+## Gdy zmiana zostaje odrzucona
+
+Schematy mogą deklarować reguły, które serwer egzekwuje przy każdej zmianie, także zmianie agenta:
+
+- **Klucze unikalne.** Jeśli inna encja ma już ten sam numer części lub dokumentu, zmiana zostaje odrzucona, a agent dowiaduje się, która encja go ma. Powinien pokazać Ci tę encję i zapytać, czy ją zaktualizować, czy użyć innej wartości, zamiast ponawiać próbę.
+- **Hierarchie.** Powiązanie, które uczyniłoby encję własnym przodkiem, np. lokalizację wewnątrz niej samej, zostaje odrzucone wraz ze ścieżką pętli.
+- **Dozwolone cele.** Relacja może wskazywać tylko wymienione w niej schematy.
+- **Ograniczenia publikacji.** Publikacja schematu, który dodaje klucz unikalny lub hierarchię, nie powiedzie się, jeśli istniejące encje je naruszają; agent wymienia je, aby można było je najpierw poprawić.
+
+## Rekordy kontrolowane
+
+Schematy mogą ograniczać, kto wykonuje przejście statusu, blokować sfinalizowane rekordy i wiązać zatwierdzenia z przejrzaną treścią. Agent przestrzega tych samych zasad co Ty:
+
+- Zmiana odrzucona przez te zasady kończy się błędem z jasnym powodem, np. zablokowanym rekordem lub przejściem, którego nie możesz wykonać. Agent wyjaśnia go zamiast ponawiać próbę i może pokazać, które przejścia możesz wykonać, kto musi działać i które przejście korygujące odblokowuje rekord.
+- Przy przejściu, które musi wykonać inna osoba niż autor wcześniejszego przejścia, za wykonującego uznaje się Ciebie, ponieważ zatwierdzona przez Ciebie zmiana działa w Twoim imieniu.
+- Jeśli proponowana edycja dotyczy zatwierdzonej treści, to gdy ją zaakceptujesz, zatwierdzenie rekordu zostanie unieważnione, a rekord w tej samej zmianie wróci do wcześniejszego statusu.
 
 ## Gdzie widać zmiany
 

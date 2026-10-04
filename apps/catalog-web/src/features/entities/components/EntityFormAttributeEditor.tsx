@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { savedStatusState } from '../status';
 import type { Attribute, ComponentReference, FormAttributeValue } from '../api';
+import type { StatusTransitionAccess } from '../recordControls';
 import {
   filesForAttribute,
   formatResolvedValue,
@@ -20,6 +21,9 @@ export type EntityFormAttributeEditorContext = {
   entityId?: string;
   existingValues: readonly FormAttributeValue[];
   statusSavedValues?: readonly FormAttributeValue[];
+  /** Locked attribute codes mapped to the label of the status that locks them. */
+  lockedAttributes?: Readonly<Record<string, string>>;
+  statusTransitions?: readonly StatusTransitionAccess[];
   fieldErrors: Record<string, string>;
   highlightedAttributes: readonly string[];
   migrationReviewMessages: Readonly<Record<string, string>>;
@@ -47,6 +51,8 @@ export const EntityFormAttributeEditor = ({
   entityId,
   existingValues,
   statusSavedValues = existingValues,
+  lockedAttributes = {},
+  statusTransitions = [],
   fieldErrors,
   highlightedAttributes,
   migrationReviewMessages,
@@ -67,6 +73,7 @@ export const EntityFormAttributeEditor = ({
     defaultContextId,
   );
   const readonly = attribute.readonly === true;
+  const lockedBy = lockedAttributes[attribute.code];
   const savedStatus = savedStatusState(
     attribute,
     statusSavedValues,
@@ -87,9 +94,11 @@ export const EntityFormAttributeEditor = ({
   };
   const helperText = readonly
     ? t('entities.managedBySystem')
-    : defaultOnly
-      ? t('entities.managedInDefault')
-      : inheritedHelperText();
+    : lockedBy !== undefined
+      ? t('entities.lockedByStatus', { status: lockedBy })
+      : defaultOnly
+        ? t('entities.managedInDefault')
+        : inheritedHelperText();
 
   return (
     <>
@@ -101,9 +110,12 @@ export const EntityFormAttributeEditor = ({
         component={component}
         required={required}
         contextId={contextId}
-        disabled={disabled || readonly || defaultOnly}
+        disabled={disabled || readonly || defaultOnly || lockedBy !== undefined}
         statusBaseline={savedStatus.current}
         inheritedStatus={savedStatus.inherited}
+        statusTransitions={statusTransitions.filter(
+          (edge) => edge.attribute_code === attribute.code,
+        )}
         entityId={entityId}
         files={filesForAttribute(existingValues, attribute.code, contextId)}
         error={fieldErrors[attribute.code]}

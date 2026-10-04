@@ -50,7 +50,7 @@ Some guidelines:
 
 - **One blueprint per vocabulary.** A color is not a category just because both appear on a product. Keep them apart unless they share both meaning and lifecycle.
 - **Name relationships for their meaning.** `materials` and `certifications` read better than a catch-all `tags`. Keep a generic `labels` relationship for annotations that cut across domains.
-- **Keep a stable code** attribute when integrations need one. Relationships themselves always use the entity UUID.
+- **Keep a stable code** attribute when integrations need one, and declare it as a [unique key](/builders/validation/#unique-keys) so it cannot be reused. Relationships themselves always use the entity UUID.
 - **Use a scalar** for values that are intrinsic and not shared: a SKU, a free-text note.
 
 ### Single-select and exclusive links
@@ -67,6 +67,23 @@ cardinality = "one"
 
 Add `target_cardinality = "one"` only when each target may be claimed once, such as a product and its unique barcode record.
 
+### Links to several kinds of entity
+
+A relationship can target any blueprint, one blueprint, or a list of them. Use a list when a link has a clear meaning but more than one kind of target, such as the subject of a compliance assessment:
+
+```toml
+[[attributes]]
+code = "subject"
+value_type = "relationship"
+target_blueprints = ["product", "product_revision", "material", "part"]
+```
+
+Links to other blueprints are rejected, the entity picker lets editors choose which of the listed blueprints to search, and each listed blueprint can show the links with an `incoming_relationship_list`. Prefer one relationship per meaning over one unrestricted relationship.
+
+### Business keys
+
+Part numbers, document numbers, and accession numbers identify an entity to people and other systems. Declare them as [unique keys](/builders/validation/#unique-keys); combine attributes when the identifier is only unique within something else, such as a revision label within its document or a part number within its manufacturer.
+
 ## Hierarchies
 
 Give the classification blueprint a relationship to itself:
@@ -77,8 +94,11 @@ Give the classification blueprint a relationship to itself:
 code = "parent"
 value_type = "relationship"
 target_blueprint = "category"
-cardinality = "one"
+tree = true
+context_editable = "default"
 ```
+
+`tree = true` makes the relationship single-select and rejects any link that would make a category its own ancestor (`409 relationship_cycle`). Use `acyclic = true` instead for structures where an entity may have several targets but must never loop back, such as dependencies or predecessor chains. Both require `context_editable = "default"`, so the hierarchy is the same in every context. Publishing either setting on existing data reports any cycles that already exist.
 
 The Explorer detects self-referencing relationships and turns the facet for `product.categories` into a tree with roll-up counts. Selecting *Shirts* also matches products assigned to its children. See [Explore entities](/guides/explore/#relationship-facets).
 

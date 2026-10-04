@@ -11,6 +11,7 @@ use crate::domain_events::{
     ENTITY_UPDATED_V1, EntityMutationV1, NewDomainEvent, RELATIONSHIP_CHANGED_V1,
     RelationshipMutationV1,
 };
+use crate::model::UpdateEntityFormRequest;
 use crate::persistence_rows::{Db, IntoDomain};
 use catalog_validation::validate_json_schema;
 use chrono::Utc;
@@ -27,17 +28,6 @@ pub(super) struct AuditValueSnapshot {
     context_code: Option<String>,
     relationship_target_entity_id: Option<Uuid>,
     value: Value,
-}
-
-fn workflow_event_path<'a>(value: &'a Value, path: &str) -> Option<&'a Value> {
-    path.split('.').try_fold(value, |value, key| match value {
-        Value::Object(_) => value.get(key),
-        Value::Array(values) => key
-            .parse::<usize>()
-            .ok()
-            .and_then(|index| values.get(index)),
-        _ => None,
-    })
 }
 
 pub(super) struct ChosenIdEntityCreate {
@@ -309,9 +299,6 @@ impl CatalogRepository {
         system_metadata: Option<Value>,
         expected_updated_at: Option<DateTime<Utc>>,
     ) -> Result<Entity, RepositoryError> {
-        if let Some(metadata) = &system_metadata {
-            validate_system_metadata(metadata)?;
-        }
         let mut transaction = self.pool.begin().await?;
         if !relationships.is_empty()
             || values
@@ -321,18 +308,55 @@ impl CatalogRepository {
             self.lock_relationship_cardinality_writes(&mut transaction)
                 .await?;
         }
-        let before = self
-            .entity_audit_snapshot(&mut transaction, entity_id)
+        let (entity, changes, event) = self
+            .update_entity_in_transaction(
+                &mut transaction,
+                entity_id,
+                UpdateEntityFormRequest {
+                    expected_updated_at,
+                    values,
+                    relationships,
+                    remove_values,
+                    system_tags,
+                    system_metadata,
+                },
+            )
             .await?;
+        self.commit_entity_mutation(transaction, changes, event)
+            .await?;
+        Ok(entity)
+    }
+
+    /// Caller-transaction seam for an entity update. Callers writing
+    /// relationships take the workspace relationship lock first and stage the
+    /// returned audit changes and event before committing.
+    pub(super) async fn update_entity_in_transaction(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        entity_id: Uuid,
+        input: UpdateEntityFormRequest,
+    ) -> Result<(Entity, Vec<AuditEventChange>, NewDomainEvent), RepositoryError> {
+        let UpdateEntityFormRequest {
+            expected_updated_at,
+            values,
+            relationships,
+            remove_values,
+            system_tags,
+            system_metadata,
+        } = input;
+        if let Some(metadata) = &system_metadata {
+            validate_system_metadata(metadata)?;
+        }
+        let before = self.entity_audit_snapshot(transaction, entity_id).await?;
         // The row lock serializes writers for an entity. It protects both the
         // one-latest-value invariant and the preview rebuilt from that state.
-        let entity = self.lock_entity(&mut transaction, entity_id).await?;
+        let entity = self.lock_entity(transaction, entity_id).await?;
         if expected_updated_at.is_some()
             || self
-                .has_status_writes(&mut transaction, &entity, &values, &remove_values)
+                .has_status_writes(transaction, &entity, &values, &remove_values)
                 .await?
         {
-            self.check_status_precondition(&mut transaction, &entity, expected_updated_at)
+            self.check_status_precondition(transaction, &entity, expected_updated_at)
                 .await?;
         }
         if let Some(tags) = &system_tags {
@@ -342,7 +366,7 @@ impl CatalogRepository {
             // Whole-field annotation writes may change unrelated tags and keys
             // but never a claimed extension namespace.
             self.ensure_annotation_namespaces_unchanged(
-                &mut transaction,
+                transaction,
                 &entity.system_tags,
                 &entity.system_metadata,
                 system_tags.as_deref().unwrap_or(&entity.system_tags),
@@ -360,27 +384,22 @@ impl CatalogRepository {
             .bind(system_tags)
             .bind(system_metadata)
             .bind(self.workspace_id.0)
-            .execute(&mut *transaction)
+            .execute(&mut **transaction)
             .await?;
         }
         for value in values {
-            self.insert_value(&mut transaction, &entity, value).await?;
+            self.insert_value(transaction, &entity, value).await?;
         }
         for selector in remove_values {
-            self.remove_scalar_value(&mut transaction, &entity, selector)
+            self.remove_scalar_value(transaction, &entity, selector)
                 .await?;
         }
-        self.replace_relationship_sets(&mut transaction, &entity, relationships)
+        self.replace_relationship_sets(transaction, &entity, relationships)
             .await?;
-        self.validate_entity_schema(&mut transaction, &entity)
-            .await?;
-        let preview = Self::build_preview_projection(&mut transaction, entity.id).await?;
-        let entity = self
-            .store_preview(&mut transaction, entity.id, preview)
-            .await?;
-        let after = self
-            .entity_audit_snapshot(&mut transaction, entity_id)
-            .await?;
+        self.validate_entity_schema(transaction, &entity).await?;
+        let preview = Self::build_preview_projection(transaction, entity.id).await?;
+        let entity = self.store_preview(transaction, entity.id, preview).await?;
+        let after = self.entity_audit_snapshot(transaction, entity_id).await?;
         let changes = Self::audit_changes(entity_id, before, after, false);
         let event = self.core_event(
             ENTITY_UPDATED_V1,
@@ -394,213 +413,7 @@ impl CatalogRepository {
             })
             .expect("entity-updated payload is serializable"),
         );
-        self.commit_entity_mutation(transaction, changes, event)
-            .await?;
-        Ok(entity)
-    }
-
-    /// Executes one local workflow action and records its idempotency key in the
-    /// same transaction as the locked entity mutation, audit, and outbox event.
-    /// A reclaimed run therefore observes the key and cannot repeat catalog effects.
-    pub async fn execute_workflow_action(
-        &self,
-        run: &super::ClaimedWorkflowRun,
-        action_index: i32,
-        action: &catalog_workflow::Action,
-        event: &crate::domain_events::DomainEvent,
-    ) -> Result<super::WorkflowActionResult, RepositoryError> {
-        let ws = self.workspace_id.0;
-        let mut transaction = self.pool.begin().await?;
-        // Every path that changes workflow state takes this lock before a run
-        // lock. Keeping that order aligned with disable avoids a run/lifecycle
-        // deadlock while making disable a durable execution fence.
-        let enabled_version: Option<i64> = sqlx::query_scalar::<_, Option<i64>>(
-            "SELECT enabled_version FROM workflow_lifecycles WHERE workflow_id=$1 AND workspace_id=$2 FOR UPDATE",
-        )
-        .bind(run.run.workflow_id)
-        .bind(ws)
-        .fetch_optional(&mut *transaction)
-        .await?
-        .flatten();
-        let status: Option<String> = sqlx::query_scalar(
-            "SELECT status FROM workflow_runs WHERE id=$1 AND workspace_id=$2 FOR UPDATE",
-        )
-        .bind(run.run.id)
-        .bind(ws)
-        .fetch_optional(&mut *transaction)
-        .await?;
-        match status.as_deref() {
-            Some("cancelled") => {
-                self.ensure_task_fence(&mut transaction).await?;
-                transaction.commit().await?;
-                return Ok(super::WorkflowActionResult::Cancelled);
-            }
-            Some("pending") => {}
-            _ => {
-                return Err(RepositoryError::InvalidWorkflowDefinition(
-                    "workflow run is not executable".into(),
-                ));
-            }
-        }
-        // Fence the marker before it can become visible. The same transaction
-        // later fences the catalog effect and outbox/audit writes as well.
-        self.ensure_task_fence(&mut transaction).await?;
-        if enabled_version != Some(run.run.workflow_version) {
-            sqlx::query("UPDATE workflow_runs SET status='cancelled',cancelled_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1 AND status='pending'")
-                .bind(run.run.id)
-                .execute(&mut *transaction)
-                .await?;
-            transaction.commit().await?;
-            return Ok(super::WorkflowActionResult::Cancelled);
-        }
-        let marker = sqlx::query("INSERT INTO workflow_run_actions(run_id,action_index) VALUES($1,$2) ON CONFLICT DO NOTHING")
-            .bind(run.run.id).bind(action_index).execute(&mut *transaction).await?;
-        if marker.rows_affected() == 0 {
-            transaction.commit().await?;
-            return Ok(super::WorkflowActionResult::AlreadyCompleted);
-        }
-
-        // Lock first, then derive desired tags/metadata from current state: event
-        // payloads intentionally contain only immutable facts and are unordered.
-        let entity = self
-            .lock_entity(&mut transaction, event.aggregate_id)
-            .await?;
-        let before = self
-            .entity_audit_snapshot(&mut transaction, event.aggregate_id)
-            .await?;
-        let (values, system_tags, system_metadata) = match action {
-            catalog_workflow::Action::SystemTagsAdd { tags } => {
-                let mut result = entity.system_tags.clone();
-                for tag in tags {
-                    if !result.contains(tag) {
-                        result.push(tag.clone());
-                    }
-                }
-                validate_system_tag_update(&entity.system_tags, &result)?;
-                (Vec::new(), Some(result), None)
-            }
-            catalog_workflow::Action::SystemTagsRemove { tags } => (
-                Vec::new(),
-                Some(
-                    entity
-                        .system_tags
-                        .iter()
-                        .filter(|tag| !tags.contains(*tag))
-                        .cloned()
-                        .collect(),
-                ),
-                None,
-            ),
-            catalog_workflow::Action::SystemMetadataMerge { values } => {
-                let mut metadata = entity
-                    .system_metadata
-                    .as_object()
-                    .cloned()
-                    .ok_or(RepositoryError::InvalidSystemMetadata)?;
-                for (key, value) in values {
-                    metadata.insert(key.clone(), value.clone());
-                }
-                let metadata = Value::Object(metadata);
-                validate_system_metadata(&metadata)?;
-                (Vec::new(), None, Some(metadata))
-            }
-            catalog_workflow::Action::SystemMetadataDelete { keys } => {
-                let mut metadata = entity
-                    .system_metadata
-                    .as_object()
-                    .cloned()
-                    .ok_or(RepositoryError::InvalidSystemMetadata)?;
-                for key in keys {
-                    metadata.remove(key);
-                }
-                (Vec::new(), None, Some(Value::Object(metadata)))
-            }
-            catalog_workflow::Action::AttributeWrite {
-                attribute_code,
-                value,
-            } => {
-                let value = match value {
-                    catalog_workflow::ScalarSource::Fixed { fixed } => fixed.clone(),
-                    catalog_workflow::ScalarSource::Event { event_field } => {
-                        workflow_event_path(&event.payload, event_field)
-                            .cloned()
-                            .ok_or_else(|| {
-                                RepositoryError::InvalidWorkflowDefinition(
-                                    "event field missing".into(),
-                                )
-                            })?
-                    }
-                };
-                if !(value.is_string()
-                    || value.is_number()
-                    || value.is_boolean()
-                    || value.is_null())
-                {
-                    return Err(RepositoryError::InvalidWorkflowDefinition(
-                        "event field must resolve to a scalar".into(),
-                    ));
-                }
-                (
-                    vec![NewAttributeValue::Scalar {
-                        attribute_id: None,
-                        attribute_code: Some(attribute_code.clone()),
-                        context_id: None,
-                        value,
-                    }],
-                    None,
-                    None,
-                )
-            }
-        };
-        if system_tags.is_some() || system_metadata.is_some() {
-            self.ensure_annotation_namespaces_unchanged(
-                &mut transaction,
-                &entity.system_tags,
-                &entity.system_metadata,
-                system_tags.as_deref().unwrap_or(&entity.system_tags),
-                system_metadata.as_ref().unwrap_or(&entity.system_metadata),
-            )
-            .await?;
-            sqlx::query("UPDATE entities SET system_tags=COALESCE($2,system_tags),system_metadata=COALESCE($3,system_metadata),updated_at=now() WHERE id=$1 AND workspace_id=$4")
-                .bind(entity.id).bind(system_tags).bind(system_metadata).bind(ws).execute(&mut *transaction).await?;
-        }
-        for value in values {
-            self.insert_value(&mut transaction, &entity, value).await?;
-        }
-        self.validate_entity_schema(&mut transaction, &entity)
-            .await?;
-        let preview = Self::build_preview_projection(&mut transaction, entity.id).await?;
-        let entity = self
-            .store_preview(&mut transaction, entity.id, preview)
-            .await?;
-        let after = self
-            .entity_audit_snapshot(&mut transaction, entity.id)
-            .await?;
-        let changes = Self::audit_changes(entity.id, before, after, false);
-        let event = self.core_event(
-            ENTITY_UPDATED_V1,
-            "entity",
-            entity.id,
-            serde_json::to_value(EntityMutationV1 {
-                entity_id: entity.id,
-                blueprint_id: entity.blueprint_id,
-                blueprint_version: entity.blueprint_version,
-                facts: Self::affected_facts(&changes),
-            })
-            .expect("entity-updated payload serializes"),
-        );
-        // Revalidate immediately before the durable effect's audit/outbox
-        // completion boundary; this also holds the task row against reclaim.
-        self.ensure_task_fence(&mut transaction).await?;
-        if let Some(audit_event_id) = self.write_audit_event(&mut transaction).await? {
-            for change in changes {
-                sqlx::query("INSERT INTO audit_event_changes (id,audit_event_id,workspace_id,entity_id,attribute_id,attribute_code,context_id,context_code,change_kind,before_value,after_value) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)")
-                    .bind(Uuid::new_v4()).bind(audit_event_id).bind(ws).bind(change.entity_id).bind(change.attribute_id).bind(change.attribute_code).bind(change.context_id).bind(change.context_code).bind(change.change_kind).bind(change.before_value).bind(change.after_value).execute(&mut *transaction).await?;
-            }
-        }
-        self.enqueue_event(&mut transaction, event).await?;
-        transaction.commit().await?;
-        Ok(super::WorkflowActionResult::Executed)
+        Ok((entity, changes, event))
     }
 
     pub async fn entity_audit_changes(
@@ -683,27 +496,47 @@ impl CatalogRepository {
 
     pub async fn delete_entity(&self, entity_id: Uuid) -> Result<(), RepositoryError> {
         let mut transaction = self.pool.begin().await?;
-        let before = self
-            .entity_audit_snapshot(&mut transaction, entity_id)
+        let (changes, event) = self
+            .delete_entity_in_transaction(&mut transaction, entity_id, None)
             .await?;
-        let entity = self.lock_entity(&mut transaction, entity_id).await?;
+        self.commit_entity_mutation(transaction, changes, event)
+            .await?;
+        Ok(())
+    }
+
+    /// Caller-transaction seam for entity deletion with an optional
+    /// optimistic-concurrency precondition.
+    pub(super) async fn delete_entity_in_transaction(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        entity_id: Uuid,
+        expected_updated_at: Option<DateTime<Utc>>,
+    ) -> Result<(Vec<AuditEventChange>, NewDomainEvent), RepositoryError> {
+        let before = self.entity_audit_snapshot(transaction, entity_id).await?;
+        let entity = self.lock_entity(transaction, entity_id).await?;
+        if expected_updated_at.is_some_and(|expected| expected != entity.updated_at) {
+            return Err(RepositoryError::StaleEntity);
+        }
+        self.ensure_entity_deletable(transaction, &entity).await?;
         sqlx::query(
             "DELETE FROM entity_channel_publications WHERE workspace_id = $1 AND entity_id = $2",
         )
         .bind(self.workspace_id.0)
         .bind(entity_id)
-        .execute(&mut *transaction)
+        .execute(&mut **transaction)
         .await?;
         let result = sqlx::query(
             "UPDATE entities SET deleted_at = now(), updated_at = now() WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL",
         )
         .bind(entity_id)
         .bind(self.workspace_id.0)
-        .execute(&mut *transaction)
+        .execute(&mut **transaction)
         .await?;
         if result.rows_affected() == 0 {
             return Err(RepositoryError::NotFound("entity"));
         }
+        self.delete_entity_unique_keys(transaction, entity_id)
+            .await?;
         let changes = Self::audit_changes(entity_id, before, Vec::new(), false);
         let event = self.core_event(
             ENTITY_DELETED_V1,
@@ -717,9 +550,7 @@ impl CatalogRepository {
             })
             .expect("entity-deleted payload is serializable"),
         );
-        self.commit_entity_mutation(transaction, changes, event)
-            .await?;
-        Ok(())
+        Ok((changes, event))
     }
 
     pub async fn append_values(
@@ -862,7 +693,7 @@ impl CatalogRepository {
             let context_id = self
                 .resolve_context_id(&mut transaction, relationship.context_id)
                 .await?;
-            let (attribute_id, target_blueprint_code, context_editable) = self
+            let (attribute_id, target_blueprint_codes, context_editable) = self
                 .relationship_attribute(&mut transaction, &entity, &relationship)
                 .await?;
             self.validate_context_editable(&mut transaction, context_id, &context_editable)
@@ -874,7 +705,7 @@ impl CatalogRepository {
                 self.validate_relationship_target(
                     &mut transaction,
                     *target_id,
-                    target_blueprint_code.as_deref(),
+                    &target_blueprint_codes,
                 )
                 .await?;
             }
@@ -948,19 +779,15 @@ impl CatalogRepository {
             let context_id = self
                 .resolve_context_id(transaction, relationship.context_id)
                 .await?;
-            let (attribute_id, target_blueprint_code, context_editable) = self
+            let (attribute_id, target_blueprint_codes, context_editable) = self
                 .relationship_attribute(transaction, entity, &relationship)
                 .await?;
             self.validate_context_editable(transaction, context_id, &context_editable)
                 .await?;
             let targets: BTreeSet<_> = relationship.target_entity_ids.into_iter().collect();
             for target_id in &targets {
-                self.validate_relationship_target(
-                    transaction,
-                    *target_id,
-                    target_blueprint_code.as_deref(),
-                )
-                .await?;
+                self.validate_relationship_target(transaction, *target_id, &target_blueprint_codes)
+                    .await?;
             }
             let current = self
                 .current_relationship_targets(transaction, entity.id, attribute_id, context_id)
@@ -1022,11 +849,11 @@ impl CatalogRepository {
         let context_id = self.resolve_context_id(transaction, context_id).await?;
 
         let attribute_label = attribute_code.clone();
-        let (attribute_id, attribute_code, value_type, value_schema, target_blueprint_code, cardinality, target_cardinality, context_editable) =
+        let (attribute_id, attribute_code, value_type, value_schema, target_blueprint_codes, cardinality, target_cardinality, context_editable) =
             match (attribute_id, attribute_code.as_deref()) {
                 (Some(attribute_id), None) => {
-                    sqlx::query_as::<_, (Uuid, String, String, Option<Value>, Option<String>, Option<String>, Option<String>, String)>(
-                        r#"SELECT id, code, value_type, value_schema, target_blueprint_code, cardinality, target_cardinality, context_editable
+                    sqlx::query_as::<_, (Uuid, String, String, Option<Value>, Vec<String>, Option<String>, Option<String>, String)>(
+                        r#"SELECT id, code, value_type, value_schema, CASE WHEN cardinality(target_blueprint_codes) > 0 THEN target_blueprint_codes WHEN target_blueprint_code IS NULL THEN '{}'::text[] ELSE ARRAY[target_blueprint_code] END AS target_blueprint_codes, cardinality, target_cardinality, context_editable
                    FROM attributes
                    WHERE id = $1
                      AND ((blueprint_id = $2 AND blueprint_version = $3) OR entity_id = $4)
@@ -1041,8 +868,8 @@ impl CatalogRepository {
                 }
                 (None, Some(attribute_code)) => {
                     validate_attribute_selector_code(attribute_code)?;
-                    sqlx::query_as::<_, (Uuid, String, String, Option<Value>, Option<String>, Option<String>, Option<String>, String)>(
-                        r#"SELECT id, code, value_type, value_schema, target_blueprint_code, cardinality, target_cardinality, context_editable
+                    sqlx::query_as::<_, (Uuid, String, String, Option<Value>, Vec<String>, Option<String>, Option<String>, String)>(
+                        r#"SELECT id, code, value_type, value_schema, CASE WHEN cardinality(target_blueprint_codes) > 0 THEN target_blueprint_codes WHEN target_blueprint_code IS NULL THEN '{}'::text[] ELSE ARRAY[target_blueprint_code] END AS target_blueprint_codes, cardinality, target_cardinality, context_editable
                    FROM attributes
                    WHERE code = $1
                      AND ((blueprint_id = $2 AND blueprint_version = $3) OR entity_id = $4)
@@ -1070,7 +897,7 @@ impl CatalogRepository {
             self.validate_relationship_target(
                 transaction,
                 target_entity_id,
-                target_blueprint_code.as_deref(),
+                &target_blueprint_codes,
             )
             .await?;
             self.validate_relationship_cardinality(
@@ -1286,6 +1113,9 @@ impl CatalogRepository {
     ) -> Result<(), RepositoryError> {
         self.validate_status_values(transaction, entity).await?;
         self.validate_principal_values(transaction, entity).await?;
+        self.apply_status_effects(transaction, entity).await?;
+        // Every value write validates here, so unique keys stay current.
+        self.sync_entity_unique_keys(transaction, entity).await?;
         let entity_schema = sqlx::query_scalar::<_, Option<Value>>(
             "SELECT entity_schema FROM blueprints WHERE id = $1 AND version = $2 AND deleted_at IS NULL",
         )
@@ -1394,15 +1224,15 @@ impl CatalogRepository {
         transaction: &mut Transaction<'_, Postgres>,
         entity: &Entity,
         relationship: &RelationshipTargets,
-    ) -> Result<(Uuid, Option<String>, String), RepositoryError> {
+    ) -> Result<(Uuid, Vec<String>, String), RepositoryError> {
         let attribute = match (relationship.attribute_id, relationship.attribute_code.as_deref()) {
-            (Some(id), None) => sqlx::query_as::<_, (Uuid, String, Option<String>, String)>(
-                "SELECT id, value_type, target_blueprint_code, context_editable FROM attributes WHERE id = $1 AND ((blueprint_id = $2 AND blueprint_version = $3) OR entity_id = $4) AND deleted_at IS NULL",
+            (Some(id), None) => sqlx::query_as::<_, (Uuid, String, Vec<String>, String)>(
+                "SELECT id, value_type, CASE WHEN cardinality(target_blueprint_codes) > 0 THEN target_blueprint_codes WHEN target_blueprint_code IS NULL THEN '{}'::text[] ELSE ARRAY[target_blueprint_code] END AS target_blueprint_codes, context_editable FROM attributes WHERE id = $1 AND ((blueprint_id = $2 AND blueprint_version = $3) OR entity_id = $4) AND deleted_at IS NULL",
             ).bind(id).bind(entity.blueprint_id).bind(entity.blueprint_version).bind(entity.id).fetch_optional(&mut **transaction).await?,
             (None, Some(code)) => {
                 validate_attribute_selector_code(code)?;
-                sqlx::query_as::<_, (Uuid, String, Option<String>, String)>(
-                    "SELECT id, value_type, target_blueprint_code, context_editable FROM attributes WHERE code = $1 AND ((blueprint_id = $2 AND blueprint_version = $3) OR entity_id = $4) AND deleted_at IS NULL",
+                sqlx::query_as::<_, (Uuid, String, Vec<String>, String)>(
+                    "SELECT id, value_type, CASE WHEN cardinality(target_blueprint_codes) > 0 THEN target_blueprint_codes WHEN target_blueprint_code IS NULL THEN '{}'::text[] ELSE ARRAY[target_blueprint_code] END AS target_blueprint_codes, context_editable FROM attributes WHERE code = $1 AND ((blueprint_id = $2 AND blueprint_version = $3) OR entity_id = $4) AND deleted_at IS NULL",
                 )
                 .bind(code)
                 .bind(entity.blueprint_id)
@@ -1423,7 +1253,7 @@ impl CatalogRepository {
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         target_entity_id: Uuid,
-        target_blueprint_code: Option<&str>,
+        allowed_target_blueprints: &[String],
     ) -> Result<(), RepositoryError> {
         let target = sqlx::query_scalar::<_, String>(
             r#"SELECT b.code FROM entities e JOIN blueprints b ON b.id = e.blueprint_id AND b.version = e.blueprint_version
@@ -1434,7 +1264,8 @@ impl CatalogRepository {
         .fetch_optional(&mut **transaction)
         .await?
         .ok_or(RepositoryError::NotFound("relationship target entity"))?;
-        if target_blueprint_code.is_some_and(|expected| expected != target) {
+        // An empty set accepts any entity blueprint.
+        if !allowed_target_blueprints.is_empty() && !allowed_target_blueprints.contains(&target) {
             return Err(RepositoryError::RelationshipTargetTypeMismatch);
         }
         Ok(())
@@ -1495,6 +1326,15 @@ impl CatalogRepository {
             context_id,
             target_entity_id,
         } = check;
+        self.validate_relationship_hierarchy(
+            transaction,
+            entity,
+            attribute_id,
+            attribute_code,
+            context_id,
+            target_entity_id,
+        )
+        .await?;
         let target_is_one = if target_cardinality == "one" {
             true
         } else {
@@ -2328,21 +2168,4 @@ pub(super) fn validate_system_metadata(metadata: &Value) -> Result<(), Repositor
         return Err(RepositoryError::InvalidSystemMetadata);
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod workflow_event_path_tests {
-    use super::workflow_event_path;
-    use serde_json::json;
-
-    #[test]
-    fn resolves_the_compiled_facts_array_path_exactly() {
-        let event = json!({"facts": [{"attribute_code": "title"}]});
-        assert_eq!(
-            workflow_event_path(&event, "facts.0.attribute_code"),
-            Some(&json!("title"))
-        );
-        assert_eq!(workflow_event_path(&event, "facts.title"), None);
-        assert_eq!(workflow_event_path(&event, "facts.1.attribute_code"), None);
-    }
 }

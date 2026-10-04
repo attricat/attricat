@@ -75,7 +75,7 @@ impl CatalogRepository {
         if !parent_exists {
             return Err(RepositoryError::InvalidContext);
         }
-        Ok(query_as::<_, Db<AttributeContext>>(
+        let context = query_as::<_, Db<AttributeContext>>(
             r#"INSERT INTO attribute_contexts (id, workspace_id, code, data, parent_id)
             VALUES ($1, $2, $3, $4, $5) RETURNING id, code, data, parent_id"#,
         )
@@ -86,7 +86,10 @@ impl CatalogRepository {
         .bind(parent_id)
         .fetch_one(&mut **transaction)
         .await?
-        .into_domain())
+        .into_domain();
+        self.seed_context_unique_keys(transaction, context_id, parent_id)
+            .await?;
+        Ok(context)
     }
 
     pub async fn get_context_by_code(

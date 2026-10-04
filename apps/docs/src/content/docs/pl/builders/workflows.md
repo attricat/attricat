@@ -1,11 +1,11 @@
 ---
 title: Przepływy pracy
-description: Automatyzuj małe, audytowalne zmiany jednej encji w odpowiedzi na zdarzenia katalogu, harmonogram lub ręczne wywołanie.
+description: Automatyzuj małe, audytowalne zmiany encji lub rekordów, które się do niej odwołują, w odpowiedzi na zdarzenia katalogu, harmonogram lub ręczne wywołanie.
 ---
 
 Przepływ pracy reaguje na wyzwalacz, stosując krótką listę akcji do jednej encji: dodaje lub usuwa tagi systemowe, aktualizuje metadane systemowe albo zapisuje wartość atrybutu. Przepływy pracy to wersjonowany TOML, podobnie jak Schematy, a każda wprowadzana przez nie zmiana przechodzi zwykłą walidację i trafia do dziennika audytu.
 
-Przepływy pracy nie mają skryptów, pętli, zapytań ani wywołań sieciowych i nie mogą zmienić niczego poza jedną encją, która je wyzwoliła. Do większych zadań napisz [rozszerzenie](/pl/extensions/build/).
+Przepływy pracy nie mają skryptów, pętli, zapytań ani wywołań sieciowych. Zmieniają encję, która je wyzwoliła, a jedną ograniczoną akcją także rekordy, które łączą się z nią przez wskazaną relację. Do większych zadań napisz [rozszerzenie](/pl/extensions/build/).
 
 ## Pierwszy przepływ pracy
 
@@ -18,9 +18,7 @@ name = "Review title changes"
 
 [[triggers]]
 event_type = "attribute_value.changed.v1"
-
-[triggers.facts]
-"facts.0.attribute_code" = "title"
+attributes = ["title"]
 
 [[actions]]
 type = "system_tags_add"
@@ -72,6 +70,27 @@ source_kind = "api"
 
 Akcje przepływu pracy wyzwolonego zdarzeniem dotyczą encji, której dotyczy zdarzenie.
 
+### Reaguj tylko na wybrane atrybuty
+
+`attributes` to lista kodów atrybutów. Wyzwalacz uruchamia wtedy przebieg tylko wtedy, gdy w zdarzeniu zmienił się co najmniej jeden z tych atrybutów, niezależnie od jego miejsca wśród faktów zdarzenia:
+
+```toml
+[[triggers]]
+event_type = "attribute_value.changed.v1"
+attributes = ["body", "revision_notes", "license"]
+
+[[triggers]]
+event_type = "relationship.changed.v1"
+attributes = ["license"]
+```
+
+- Zmiana to fakt w zdarzeniu. Zapisanie wartości identycznej z bieżącą nie tworzy faktu, więc nie uruchamia przebiegu.
+- Jeden zapis może wygenerować `attribute_value.changed.v1`, `relationship.changed.v1` albo `entity.updated.v1`, zależnie od tego, co zawiera. Wymień każdy typ zdarzenia, przez który mogą zmienić się dane atrybuty, jak w przykładzie powyżej.
+- `entity.created.v1` traktuje każdą wartość, z którą powstaje nowa encja, łącznie z domyślnymi, jako zmienioną.
+- **Atrybuty relacji:** dodanie lub usunięcie celu jest zmianą atrybutu relacji. Każdy dodany lub usunięty cel to osobny fakt z `change_kind` równym `relationship_add` lub `relationship_remove`. Zmiany samego powiązanego rekordu są zdarzeniami tamtego rekordu, nie tego.
+- **Atrybuty plikowe:** przesłanie, podłączenie, zmiana kolejności lub usunięcie plików trafia do dziennika audytu, ale nie tworzy zdarzenia, więc atrybut plikowy w `attributes` nigdy nie uruchamia przebiegu. Śledź zmiany plików atrybutem skalarnym, który zmienia się razem z nimi, np. numerem rewizji.
+- `attributes` nie działa z `entity.migrated.v1`, które nie zawiera faktów. Łączy się z `envelope` i `facts`: wszystkie muszą pasować.
+
 ## Wyzwalacze ręczne i harmonogramowe
 
 Przy `format_version = 2` przepływ pracy można też uruchomić ręcznie lub według harmonogramu.
@@ -109,13 +128,50 @@ Przebiegi ręczne i harmonogramowe nie mają zdarzenia, więc ich akcje muszą u
 | `system_metadata_merge` | `values` (tabela wartości skalarnych) | Ustawia klucze w metadanych systemowych. Klucze mogą być ścieżkami z kropkami. |
 | `system_metadata_delete` | `keys` | Usuwa klucze z metadanych systemowych. |
 | `attribute_write` | `attribute_code` i dokładnie jeden z `fixed` lub `event_field` | Zapisuje skalarną wartość atrybutu. `fixed` to literał; `event_field` kopiuje wartość ze zdarzenia, np. `facts.0.after_value`. |
+| `referencing_entities_update` | `relationship_attribute`, opcjonalnie `max_targets` i zagnieżdżone `actions` | Stosuje zagnieżdżone akcje do każdego rekordu, który łączy się z encją wyzwalającą. Zobacz niżej. |
 
-`attribute_write` przestrzega Schematu: obowiązują kontrole typów, schematy wartości i `readonly`.
+`attribute_write` przestrzega Schematu: obowiązują kontrole typów, schematy wartości, `readonly` i [przejścia statusów](/pl/builders/validation/#statusy).
+
+### Aktualizuj rekordy odwołujące się do encji wyzwalającej
+
+Gdy zmienia się licencja, specyfikacja lub skład, zależne od nich rekordy często muszą wrócić do przeglądu. `referencing_entities_update` znajduje każdy istniejący rekord, którego `relationship_attribute` łączy się obecnie z encją wyzwalającą, w dowolnym kontekście, i stosuje do niego zagnieżdżone akcje:
+
+```toml
+format_version = 2
+code = "license-changed"
+name = "Send licensed products back to review"
+
+[[triggers]]
+event_type = "attribute_value.changed.v1"
+attributes = ["terms"]
+
+[[actions]]
+type = "referencing_entities_update"
+relationship_attribute = "license"
+max_targets = 200
+
+[[actions.actions]]
+type = "attribute_write"
+attribute_code = "status"
+fixed = "in_review"
+
+[[actions.actions]]
+type = "system_tags_add"
+tags = ["needs-review"]
+```
+
+- `relationship_attribute` to kod atrybutu relacji w rekordach **odwołujących się**, a nie w encji wyzwalającej.
+- Zagnieżdżone akcje mogą ustawiać statusy i inne atrybuty stałymi wartościami oraz dodawać lub usuwać tagi i metadane systemowe. Nie mogą używać `event_field` ani zawierać kolejnego `referencing_entities_update`.
+- `max_targets` domyślnie wynosi 100, a maksymalnie 500. Jeśli z encją wyzwalającą łączy się więcej rekordów, akcja kończy się błędem, zanim zmieni kolejny rekord. Zwiększ limit lub zawęź relację.
+- Każdy rekord jest aktualizowany osobnym zapisem, z tymi samymi kontrolami co każda inna edycja: schematami, `readonly` i przejściami statusów. Rekord, którego status nie pozwala na dane przejście, kończy się błędem sam; pozostałe rekordy są nadal aktualizowane.
+- Jeśli którykolwiek rekord się nie powiedzie, przebieg jest ponawiany. Ponowienie wraca tylko do rekordów, które się nie powiodły lub do których nie dotarto; już zaktualizowane rekordy nigdy nie są zmieniane dwukrotnie. Rekord, który do tego czasu nie istnieje lub nie łączy się już z encją wyzwalającą, jest pomijany.
+- Wynik dla każdego rekordu, wraz z ostatnim błędem, zobaczysz poleceniem `acli workflow run-targets <run-id>` albo przez `GET /workflow-runs/{id}/targets`. Lista przebiegów pokazuje ogólny błąd przebiegu, gdy stanie się on martwą wiadomością.
+- Zmiany tych rekordów nie uruchamiają przepływów pracy, tak jak każda inna zmiana wprowadzona przez przepływ pracy.
 
 ## Jak działają przebiegi
 
 - Każdy przebieg używa wersji, która była włączona w chwili jego rozpoczęcia, nawet jeśli później zostanie włączona nowsza.
-- Dostarczanie odbywa się co najmniej raz. Każda akcja jest zapisywana wraz z przebiegiem, więc ponowienie nigdy nie zastosuje jej dwukrotnie.
+- Dostarczanie odbywa się co najmniej raz. Każda akcja jest zapisywana wraz z przebiegiem, więc ponowienie nigdy nie zastosuje jej dwukrotnie. Akcja `referencing_entities_update` zapisuje też każdy aktualizowany rekord.
 - Nieudany przebieg jest ponawiany z rosnącymi opóźnieniami i po pięciu próbach staje się martwą wiadomością (dead letter). Odtwórz go z listy przebiegów przepływu pracy albo poleceniem `acli workflow run-replay <run-id>`.
 - Wyłączenie przepływu pracy anuluje jego przebiegi oczekujące w kolejce i trwające.
 - Zmiany wprowadzone przez przepływ pracy domyślnie nie wyzwalają ponownie przepływów pracy, a łańcuchy są ograniczone do głębokości ośmiu.

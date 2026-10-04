@@ -9,9 +9,10 @@ use crate::{
     catalog_service::CatalogMutationService,
     constants::DEFAULT_PAGE_SIZE,
     model::{
-        AppendAttributeValues, AttributeValue, CreateEntityFormRequest, Entity, EntityFormResponse,
-        IncomingRelationshipsPage, IncomingRelationshipsRequest, MigrateEntityRequest,
-        PublicationContextRequest, RelationshipMutation, UpdateEntityFormRequest,
+        AppendAttributeValues, AttributeValue, CreateEntityFormRequest, Entity, EntityBatchRequest,
+        EntityBatchResponse, EntityFormResponse, IncomingRelationshipsPage,
+        IncomingRelationshipsRequest, MigrateEntityRequest, PublicationContextRequest,
+        RelationshipMutation, UpdateEntityFormRequest,
     },
     repository::decode_search_cursor,
 };
@@ -466,6 +467,28 @@ pub(super) async fn create_entity_form(
         .await?;
     invalidate_data_health(&state, &repository);
     Ok((StatusCode::CREATED, Json(entity)))
+}
+/// Applies creates, updates (including status transitions) and deletes to
+/// several entities in one transaction. Every operation is authorized against
+/// its own entity before anything runs.
+pub(super) async fn apply_entity_batch(
+    State(state): State<AppState>,
+    super::auth::AuthenticatedPrincipal(user, token): super::auth::AuthenticatedPrincipal,
+    super::auth::ActiveWorkspace(workspace_id): super::auth::ActiveWorkspace,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    ApiJson(input): ApiJson<EntityBatchRequest>,
+) -> Result<Json<EntityBatchResponse>, ApiError> {
+    if !repository
+        .is_authorized_for_entity_batch(user, workspace_id, token, &input)
+        .await?
+    {
+        return Err(ApiError::forbidden());
+    }
+    let response = CatalogMutationService::new(&repository)
+        .apply_entity_batch(input)
+        .await?;
+    invalidate_data_health(&state, &repository);
+    Ok(Json(response))
 }
 pub(super) async fn duplicate_entity(
     State(state): State<AppState>,

@@ -8,6 +8,12 @@ const codeSchema = z
   .min(1)
   .max(128)
   .regex(/^[A-Za-z0-9_-]+$/);
+const coverageSchema = z.union([
+  z.literal('all'),
+  z.array(z.string().min(1).max(257)).min(1).max(500),
+]);
+/** Attributes locked by a status or covered by its approval. */
+export type StatusCoverage = z.infer<typeof coverageSchema>;
 export const statusConfigurationSchema = z
   .object({
     version: z.literal(1),
@@ -20,6 +26,12 @@ export const statusConfigurationSchema = z
             tone: z
               .enum(['default', 'success', 'warning', 'error', 'info'])
               .optional(),
+            lock: coverageSchema.optional(),
+            approval: z
+              .object({ covers: coverageSchema, void_to: codeSchema })
+              .strict()
+              .optional(),
+            retention_days: z.number().int().min(1).max(36600).optional(),
           })
           .strict(),
       )
@@ -31,6 +43,10 @@ export const statusConfigurationSchema = z
           .object({
             from: codeSchema.nullable(),
             to: codeSchema.nullable(),
+            code: codeSchema.optional(),
+            permission: z.string().max(128).optional(),
+            roles: z.array(z.string().min(1).max(64)).min(1).max(20).optional(),
+            separate_from: z.array(codeSchema).min(1).max(20).optional(),
           })
           .strict(),
       )
@@ -144,4 +160,43 @@ export const statusLabel = (
 ): string | undefined => {
   const config = statusConfiguration(attribute);
   return config && statusCodeLabel(config, value);
+};
+/** `all` never covers the status attribute that declares it. */
+export const statusCovers = (
+  coverage: StatusCoverage,
+  attributeCode: string,
+  statusCode: string,
+) =>
+  coverage === 'all'
+    ? attributeCode !== statusCode
+    : coverage.includes(attributeCode);
+
+/**
+ * Attribute codes made read-only by the saved status of each status attribute
+ * in this context, mapped to that status label. The server enforces the same
+ * lock on every write path; this only explains it in the form.
+ */
+export const statusLocks = (
+  attributes: readonly Attribute[],
+  values: readonly FormAttributeValue[],
+  contextId: string | null,
+  parentContextIds: readonly string[],
+): Record<string, string> => {
+  const locks: Record<string, string> = {};
+  for (const statusAttribute of attributes) {
+    const config = statusConfiguration(statusAttribute);
+    if (!config) continue;
+    const { current } = savedStatusState(
+      statusAttribute,
+      values,
+      contextId,
+      parentContextIds,
+    );
+    const option = config.options.find((item) => item.code === current);
+    if (!option?.lock) continue;
+    for (const attribute of attributes)
+      if (statusCovers(option.lock, attribute.code, statusAttribute.code))
+        locks[attribute.code] ??= statusOptionLabel(option);
+  }
+  return locks;
 };

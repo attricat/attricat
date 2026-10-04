@@ -77,6 +77,7 @@ acli context delete <context-id>
 
 acli entity create --blueprint product --values values.toml [--version <version>] [--context-id <context-id>] [--system-tags <json>] [--system-metadata <json>]
 acli entity get|delete|form <entity-id>
+acli entity batch --operations <json-or-file>
 acli entity list --blueprint <code> --related-from <entity-id> --relationship <attribute-code> [--limit <limit>] [--cursor <cursor>]
 acli entity preview <entity-id> [--relationship-depth <depth>] [--relationship-limit <limit>]
 acli entity resolved-preview <entity-id> --context-id <context-id>
@@ -110,6 +111,7 @@ acli workflow publish|enable <workflow-id> <version>
 acli workflow disable <workflow-id>
 acli workflow run-now <workflow-id> --entity-id <entity-id> --idempotency-key <key>
 acli workflow run-list
+acli workflow run-targets <run-id>
 acli workflow run-replay <run-id>
 
 acli rule list [--blueprint-id <uuid>]
@@ -188,7 +190,7 @@ acli connector-job list <blueprint-id>
 acli connector-job run <job-id> --idempotency-key <key>
 
 acli solution-pack inspect --file pack.tar.zst
-acli solution-pack plan --file pack.tar.zst --prefix ecom --blueprint-publication draft|publish [--include-sample-data] [--map logical_key=existing_code ... --map-asset logical_key=asset_uuid ... | --from-application <uuid>]
+acli solution-pack plan --file pack.tar.zst --prefix ecom --blueprint-publication draft|publish [--include-sample-data] [--map logical_key=existing_code ... --map-asset logical_key=asset_uuid ... --map-context logical_key=existing_code ... | --from-application <uuid>]
 acli solution-pack plan show <plan-id>
 acli solution-pack apply <plan-id>
 acli solution-pack applications list [--limit 25 --offset 0]
@@ -323,13 +325,16 @@ for release pinning, idempotency, and replay semantics.
 sends `context_id` as the optional multipart text field. `extension sideload`,
 `solution-pack inspect`, and solution-pack plan creation stream archives as
 `application/zstd` when no reuse choices are supplied. Repeated
-`solution-pack plan --map logical_key=existing_code` and
-`--map-asset logical_key=asset_uuid` flags use a streamed multipart archive plus
+`solution-pack plan --map logical_key=existing_code`,
+`--map-asset logical_key=asset_uuid`, and `--map-context logical_key=existing_code`
+flags use a streamed multipart archive plus
 bounded mapping metadata. Blueprint mappings accept only exact same-workspace
 published revisions; asset mappings accept only immutable same-workspace
-presentation assets. `--include-sample-data` explicitly selects the pack's
+presentation assets; context mappings select an existing same-workspace context
+that the pack's context, publication channel, rules, saved searches, and sample
+values use instead of a newly created one. `--include-sample-data` explicitly selects the pack's
 optional synthetic sample entities and is omitted by default.
-`solution-pack plan --from-application <uuid>` is mutually exclusive with both
+`solution-pack plan --from-application <uuid>` is mutually exclusive with all
 mapping flag types and keeps the archive as raw `application/zstd`. It explicitly
 selects one completed same-workspace application of the same pack for a strictly
 newer SemVer release; the server never searches history automatically. Unchanged
@@ -400,6 +405,16 @@ atomic form endpoint: scalar values append history, relationship files replace
 the supplied relationship sets, and removal files remove scalar overrides.
 `entity delete` soft-deletes the entity. Its value and relationship history are
 retained, while normal reads and relationship previews no longer expose it.
+
+`entity batch --operations <json-or-file>` sends a JSON array of create,
+update, and delete operations to `POST /v1/entities/batch`. They are applied in
+order in one transaction: all succeed or none do, and a failure names the
+operation index. See [Entity batches](api.md#entity-batches) for the operation
+shapes.
+
+```sh
+acli entity batch --operations release-revision-b.json
+```
 
 ## Blueprint Migrations
 

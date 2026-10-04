@@ -149,6 +149,34 @@ release and retain the resulting external evidence with the release digest.
 Extension package and operation-output keys use immutable `v1` prefixes; new
 representations must retain old readers through the backup retention period.
 
+## File retention holds
+
+The file worker reclaims storage in two steps: reconciliation marks files that
+no attribute value, conversation attachment or avatar references as deleted,
+and a later purge job removes their objects once the delete grace has passed.
+Both steps skip any file with an active row in `file_retention_holds`
+(`released_at IS NULL AND held_until > now()`), so held bytes survive detachment,
+corrections and entity deletion until the hold expires. An expired or released
+hold no longer protects the file; the next reconciliation pass handles it.
+
+Holds are created in two ways:
+
+- **Status holds** (`source = 'status'`): when an entity enters a status option
+  with `retention_days`, the same transaction holds every file referenced by the
+  attributes that status locks, for that many days. They cannot be released
+  early.
+- **Explicit holds** (`source = 'explicit'`): `POST /files/{file_id}/retention-holds`
+  with `{"days": n, "reason": "..."}` (1 to 36,600 days) and
+  `POST /files/{file_id}/retention-holds/{hold_id}/release` require
+  `files.hold`, which owners and admins receive at startup.
+
+`GET /files/{file_id}/retention-holds` and
+`GET /v1/entities/{entity_id}/retention-holds` list holds, including expired and
+released ones, with an `active` flag. Status holds are audited as
+`file.retention_hold.place`; explicit placement and release are audited as
+ordinary request mutations. Backups must keep held objects: a restore that
+drops them breaks the retention promise even if the database rows survive.
+
 ## Recorded release exercise
 
 `scripts/verify-deployment.sh` builds the image, deploys disposable PostgreSQL,

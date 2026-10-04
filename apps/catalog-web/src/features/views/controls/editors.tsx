@@ -1,4 +1,4 @@
-import { MenuItem, Stack, TextField } from '@mui/material';
+import { ListItemText, MenuItem, Stack, TextField } from '@mui/material';
 import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import { attributeLabel } from '../../entities/entityDisplay';
@@ -10,6 +10,7 @@ import {
 } from '../../entities/status';
 import { MarkdownEditor } from '../../markdown/MarkdownEditor';
 import type { ValueEditorProps } from '../components/componentTypes';
+import type { StatusTransitionAccess } from '../../entities/recordControls';
 import { COLOR_PICKER_SEED, parseColor, validateColor } from './color';
 import { validateEmail } from './email';
 import { TextControlEditor } from './TextControl';
@@ -114,6 +115,7 @@ export const StatusEditor = ({
   value,
   baseline,
   inheritedValue,
+  transitions = [],
   disabled,
   error,
   helperText,
@@ -122,13 +124,23 @@ export const StatusEditor = ({
   config: StatusConfiguration;
   baseline: string | null;
   inheritedValue: string | null;
+  /** Server-evaluated access to edges leaving the saved status. */
+  transitions?: readonly StatusTransitionAccess[];
 }) => {
   const { t } = useTranslation();
   const id = useId();
   const known =
     !value || config.options.some((option) => option.code === value);
+  // Permission, role and separation-of-duties checks need the server; the
+  // graph alone cannot say who may take an edge.
+  const denial = (next: string) => {
+    const target = next || inheritedValue;
+    if (target === baseline) return undefined;
+    return transitions.find((edge) => edge.to === target && !edge.allowed);
+  };
   const allowed = (next: string) =>
-    statusTransitionAllowed(config, baseline, next || inheritedValue);
+    statusTransitionAllowed(config, baseline, next || inheritedValue) &&
+    !denial(next);
   const terminal =
     !config.options.some(
       (option) => option.code !== baseline && allowed(option.code),
@@ -173,15 +185,29 @@ export const StatusEditor = ({
           {value}
         </MenuItem>
       )}
-      {config.options.map((option) => (
-        <MenuItem
-          key={option.code}
-          value={option.code}
-          disabled={!allowed(option.code)}
-        >
-          {statusOptionLabel(option)}
-        </MenuItem>
-      ))}
+      {config.options.map((option) => {
+        const denied = denial(option.code);
+        return (
+          <MenuItem
+            key={option.code}
+            value={option.code}
+            disabled={!allowed(option.code)}
+          >
+            {denied ? (
+              <ListItemText
+                primary={statusOptionLabel(option)}
+                secondary={
+                  denied.denial_code === 'status_separation_of_duties'
+                    ? t('entities.statusSeparationOfDuties')
+                    : t('entities.statusTransitionNotPermitted')
+                }
+              />
+            ) : (
+              statusOptionLabel(option)
+            )}
+          </MenuItem>
+        );
+      })}
     </TextField>
   );
 };

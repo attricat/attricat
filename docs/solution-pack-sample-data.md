@@ -37,9 +37,19 @@ acli solution-pack apply <plan-id>
 acli solution-pack applications show <application-id>
 ```
 
-Samples are created against the plan's exact published blueprints in the
-workspace's default context. You cannot select another context or ask the pack
-to create one.
+Samples are created against the plan's exact published blueprints. Values are
+set in the workspace's default context unless the pack sets them in one of its
+own contexts; those values use the context the plan creates or that you map
+with `--map-context` (see [contexts](solution-packs.md#contexts-and-publication-channels)).
+A sample that needs a context the plan cannot create or map stops planning.
+
+Samples can attach files bundled in the archive, such as images, PDFs, or plain
+text documents. Planning uploads each bundled file once to ordinary file storage
+before saving the plan; apply attaches it to the sample entity as an ordinary
+file, which then shows its usual processing status. Inspection reports the
+number of bundled files (`sample_data.file_count`). Attricat checks each file's
+type and the attribute's file policy, but cannot inspect file content for
+copied or private data; review it with the publisher.
 
 ## Recognize and work with samples
 
@@ -77,8 +87,10 @@ their resumability deadline.
 
 Temporary staged sample values are scrubbed on completion, permanent invalidation,
 or abandonment. Unstarted expired plans lose access to staged values at expiry,
-and housekeeping purges those copies within one hour. Ordinary entity, audit,
-and event records remain unchanged.
+and housekeeping purges those copies within one hour. Bundled files that were
+uploaded but never attached are released at the same points and removed by
+ordinary upload cleanup. Ordinary entity, audit, and event records remain
+unchanged.
 
 ## Samples in later releases
 
@@ -94,5 +106,11 @@ automatic recreation.
 There is no pack operation to reset, update, publish, delete, or uninstall a
 sample dataset. Use ordinary authorized entity/resource operations when cleanup
 is appropriate, and respect relationships, business data, and retention policy.
+Deleting a sample entity through ordinary operations removes it from current
+reads together with its values in every context and its attached files, like
+any other entity. Attached files are ordinary files and follow ordinary file
+retention: a stored file is removed only once no attribute value, including
+value history, references it. Contexts the pack created stay in place until you
+delete them.
 An interrupted application can leave completed steps in place; there is no
 whole-dataset rollback.
