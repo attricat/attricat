@@ -515,3 +515,62 @@ async fn gallery_writes_archive_history_and_emit_audited_value_changes(pool: PgP
     assert_eq!(audited, ["set", "replace", "replace"]);
     server.abort();
 }
+
+#[sqlx::test]
+async fn duplicating_a_gallery_writes_its_list_once_without_history(pool: PgPool) {
+    let store = Arc::new(FakeObjectStore::available());
+    let (base, server) = start_server_with_object_store(pool.clone(), store).await;
+    let client = authenticated_client();
+    let bp = blueprint(&client, &base, "ordered = true").await;
+    let entity = create_entity(&client, &base, &bp).await;
+    let entity_id = entity["id"].as_str().unwrap();
+    let url = format!("{base}/entities/{entity_id}/file-attributes/photos");
+    let mut ids = Vec::new();
+    for _ in 0..3 {
+        let uploaded: Value = upload(&client, &url)
+            .await
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        ids.push(uploaded["files"][0]["id"].as_str().unwrap().to_owned());
+    }
+    let reordered = vec![ids[2].clone(), ids[0].clone(), ids[1].clone()];
+    client
+        .put(format!("{url}/references"))
+        .json(&json!({"expected_file_ids": ids, "file_ids": reordered}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+
+    let copy: Value = client
+        .post(format!("{base}/v1/entities/{entity_id}/duplicate"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let copy_id: Uuid = copy["id"].as_str().unwrap().parse().unwrap();
+    let current: Vec<String> = sqlx::query_scalar(
+        "SELECT r.file_id::text FROM attribute_values v JOIN attribute_file_references r ON r.attribute_value_id = v.id WHERE v.entity_id = $1 ORDER BY r.position",
+    )
+    .bind(copy_id)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(current, reordered);
+    let archived: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM attribute_value_history WHERE entity_id = $1")
+            .bind(copy_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(archived, 0);
+    server.abort();
+}

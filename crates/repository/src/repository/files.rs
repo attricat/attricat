@@ -320,7 +320,7 @@ impl CatalogRepository {
                 &entity,
                 attribute_code,
                 context_id,
-                file_id,
+                &[file_id],
             )
             .await?;
         self.replace_file_value(
@@ -335,19 +335,20 @@ impl CatalogRepository {
         self.file_metadata(file_id).await
     }
 
-    /// Adds one file to a file attribute of `entity`, which the caller has
-    /// locked, without revalidating, auditing or committing, so several files
-    /// can be linked in the transaction that created the entity.
-    pub(super) async fn link_file_in_transaction(
+    /// Appends files to a file attribute of `entity`, which the caller has
+    /// locked, in one value write, without revalidating, auditing or
+    /// committing, so the transaction that created the entity can link every
+    /// file of an attribute and context without archiving intermediate lists.
+    pub(super) async fn link_files_in_transaction(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         entity: &Entity,
         attribute_code: &str,
         context_id: Option<Uuid>,
-        file_id: Uuid,
+        file_ids: &[Uuid],
     ) -> Result<(), RepositoryError> {
         let (change, file_ids) = self
-            .prepare_file_link(transaction, entity, attribute_code, context_id, file_id)
+            .prepare_file_link(transaction, entity, attribute_code, context_id, file_ids)
             .await?;
         self.write_file_value(
             transaction,
@@ -359,15 +360,17 @@ impl CatalogRepository {
         .await
     }
 
-    /// Checks that `file_id` can be linked to the attribute and returns the
-    /// change with the current files and the file list after linking.
+    /// Checks that `file_ids` can be linked to the attribute and returns the
+    /// change with the current files and the file list after linking: the
+    /// files appended in order to a many-valued attribute, or replacing the
+    /// value of a single-valued one.
     async fn prepare_file_link<'a>(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         entity: &Entity,
         attribute_code: &'a str,
         context_id: Option<Uuid>,
-        file_id: Uuid,
+        file_ids: &[Uuid],
     ) -> Result<(FileValueChange<'a>, Vec<Uuid>), RepositoryError> {
         let workspace_id = self.workspace_id.0;
         let (attribute_id, policy, context_editable) = self
@@ -378,31 +381,34 @@ impl CatalogRepository {
             .await?;
         self.ensure_attribute_unlocked(transaction, entity, attribute_code, context_id)
             .await?;
-        // Lock the file so reconciliation, which locks candidates before
-        // marking them deleted, cannot reclaim it before this reference
-        // commits.
-        let exists = sqlx::query_scalar::<_, Uuid>(
-            "SELECT id FROM files WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL AND purpose = 'attachment' FOR UPDATE",
+        let mut unique = file_ids.to_vec();
+        unique.sort_unstable();
+        unique.dedup();
+        // Lock the files, in ID order, so reconciliation, which locks
+        // candidates before marking them deleted, cannot reclaim one before
+        // this reference commits.
+        let live = sqlx::query_scalar::<_, Uuid>(
+            "SELECT id FROM files WHERE id = ANY($1) AND workspace_id = $2 AND deleted_at IS NULL AND purpose = 'attachment' ORDER BY id FOR UPDATE",
         )
-        .bind(file_id)
+        .bind(&unique)
         .bind(workspace_id)
-        .fetch_optional(&mut **transaction)
+        .fetch_all(&mut **transaction)
         .await?;
-        if exists.is_none() {
+        if live.len() != unique.len() {
             return Err(RepositoryError::NotFound("file"));
         }
         let current = self
             .current_file_ids(transaction, entity.id, attribute_id, context_id)
             .await?;
-        if policy.cardinality == "many" && current.len() >= i32::MAX as usize {
-            return Err(RepositoryError::FileCardinality);
-        }
-        let mut file_ids = if policy.cardinality == "many" {
+        let mut linked = if policy.cardinality == "many" {
             current.clone()
         } else {
             Vec::new()
         };
-        file_ids.push(file_id);
+        linked.extend_from_slice(file_ids);
+        if linked.len() > i32::MAX as usize || (policy.cardinality == "one" && linked.len() > 1) {
+            return Err(RepositoryError::FileCardinality);
+        }
         Ok((
             FileValueChange {
                 attribute_id,
@@ -411,7 +417,7 @@ impl CatalogRepository {
                 before: current,
                 after: Vec::new(),
             },
-            file_ids,
+            linked,
         ))
     }
 

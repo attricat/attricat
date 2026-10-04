@@ -11,7 +11,7 @@ In the Explorer, choose **Create entity** (or **Create *Blueprint*** when a blue
 
 Values you enter when creating an entity are stored in the default context. Attributes with a `default_value` start filled in.
 
-**Duplicate entity** on an existing entity opens the create form pre-filled with its values.
+**Duplicate entity** on an existing entity creates a copy with its values, relationships, and files, then opens the copy for editing. Values of the blueprint's [unique keys](/reference/blueprint/#unique-keys) are left out, because the copy cannot share them with the original: for a key unique in the whole workspace, the default-context value; for a key unique per context, the values in every context. Fill them in on the copy. If a key attribute is required, duplication fails with a validation error instead.
 
 ## Edit values
 

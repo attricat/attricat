@@ -11,7 +11,7 @@ W Przeglądarce wybierz **Utwórz encję** (lub **Utwórz: *Schemat***, gdy wybr
 
 Wartości wpisane podczas tworzenia encji są zapisywane w kontekście domyślnym. Atrybuty z `default_value` są od początku wypełnione.
 
-**Duplikuj encję** przy istniejącej encji otwiera formularz tworzenia wstępnie wypełniony jej wartościami.
+**Duplikuj encję** przy istniejącej encji tworzy kopię z jej wartościami, relacjami i plikami, a następnie otwiera kopię do edycji. Wartości [kluczy unikalnych](/pl/reference/blueprint/#klucze-unikalne) schematu nie są kopiowane, ponieważ kopia nie może ich współdzielić z oryginałem: dla klucza unikalnego w całym obszarze roboczym pomijana jest wartość z kontekstu domyślnego, a dla klucza unikalnego w kontekście – wartości ze wszystkich kontekstów. Uzupełnij je w kopii. Jeśli atrybut klucza jest wymagany, duplikowanie kończy się błędem walidacji.
 
 ## Edycja wartości
 

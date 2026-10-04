@@ -113,6 +113,7 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | `POST` | `/v1/entities/batch` | Tworzy, aktualizuje i usuwa kilka encji naraz: zapisują się wszystkie zmiany albo żadna. Zobacz [Zmiany wsadowe](#zmiany-wsadowe). |
 | `GET`, `PUT` | `/v1/entities/{id}` | Odczytuje lub aktualizuje formularz encji: wartości, relacje, usunięcia, adnotacje. |
 | `GET`, `DELETE` | `/entities/{id}` | Odczytuje lub usuwa encję. |
+| `POST` | `/v1/entities/{id}/duplicate` | Tworzy kopię encji z jej wartościami, relacjami i plikami. Wartości kluczy unikalnych nie są kopiowane. |
 | `POST` | `/v1/entities/search` | Wyszukiwanie. Zobacz poniżej. |
 | `POST` | `/v1/entities/facets/relationship-tree/children` | Jedna strona elementów podrzędnych fasety relacji, z liczebnościami. |
 | `GET` | `/entities/{id}/preview` | Wartości w poszczególnych kontekstach, z powiązanymi encjami osadzonymi w odpowiedzi. |

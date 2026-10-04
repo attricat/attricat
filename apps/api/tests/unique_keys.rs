@@ -439,3 +439,138 @@ value_type = "string"
 
     server.abort();
 }
+
+async fn current_values(client: &Client, base_url: &str, entity: &Value) -> Vec<Value> {
+    client
+        .get(format!(
+            "{base_url}/entities/{}/values/current",
+            entity["id"].as_str().unwrap()
+        ))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json::<Vec<Value>>()
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|value| value["value"].clone())
+        .collect()
+}
+
+#[sqlx::test]
+async fn duplicating_leaves_out_enforced_key_values(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    create_blueprint(&client, &base_url, PART).await;
+    create_blueprint(
+        &client,
+        &base_url,
+        r#"
+format_version = 1
+code = "uk_listing"
+name = "Listing"
+kind = "entity"
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["slug"]
+[[unique_keys]]
+code = "slug"
+attributes = ["slug"]
+scope = "context"
+[[attributes]]
+code = "slug"
+value_type = "string"
+[[attributes]]
+code = "title"
+value_type = "string"
+"#,
+    )
+    .await;
+    let polish: Value = client
+        .post(format!("{base_url}/contexts"))
+        .json(&json!({ "code": "uk-dup-pl", "data": {} }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let duplicate = |entity: &Value| {
+        client
+            .post(format!(
+                "{base_url}/v1/entities/{}/duplicate",
+                entity["id"].as_str().unwrap()
+            ))
+            .send()
+    };
+
+    // Workspace keys: the default-context key value is left out, other
+    // values are copied, and the copy can take a value of its own.
+    let part: Value = create_entity_with(
+        &client,
+        &base_url,
+        "uk_part",
+        json!([
+            scalar("part_number", json!("P-1")),
+            scalar("description", json!("Bolt")),
+        ]),
+    )
+    .await;
+    let response = duplicate(&part).await.unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let copy: Value = response.json().await.unwrap();
+    assert_eq!(
+        current_values(&client, &base_url, &copy).await,
+        vec![json!("Bolt")]
+    );
+    client
+        .post(format!(
+            "{base_url}/entities/{}/values",
+            copy["id"].as_str().unwrap()
+        ))
+        .json(&json!({ "values": [scalar("part_number", json!("P-2"))] }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+
+    // Context keys: the key's values are left out in every context.
+    let listing: Value = create_entity_with(
+        &client,
+        &base_url,
+        "uk_listing",
+        json!([
+            scalar("slug", json!("shirt")),
+            scalar("title", json!("Shirt")),
+        ]),
+    )
+    .await;
+    client
+        .post(format!(
+            "{base_url}/entities/{}/values",
+            listing["id"].as_str().unwrap()
+        ))
+        .json(&json!({ "values": [{
+            "kind": "scalar", "attribute_code": "slug",
+            "context_id": polish["id"], "value": "koszula",
+        }] }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    let response = duplicate(&listing).await.unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let copy: Value = response.json().await.unwrap();
+    assert_eq!(
+        current_values(&client, &base_url, &copy).await,
+        vec![json!("Shirt")]
+    );
+
+    server.abort();
+}

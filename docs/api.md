@@ -168,6 +168,7 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `POST` | `/v1/entities` | Create an entity atomically with form values and optional system annotations. |
 | `POST` | `/v1/entities/batch` | Apply create, update, and delete operations to several entities in one transaction; see [Entity batches](#entity-batches). |
 | `GET`, `PUT` | `/v1/entities/{id}` | Read or update an entity form atomically, including optional system annotations. |
+| `POST` | `/v1/entities/{id}/duplicate` | Create a copy on the source's blueprint revision; see [Entity duplication](#entity-duplication). |
 | `POST` | `/v1/entities/{id}/blueprint-migration/preview` | Assess migration to the highest published revision. |
 | `POST` | `/v1/entities/{id}/blueprint-migration` | Migrate an entity to that revision. |
 | `GET`, `POST` | `/v1/entities/{id}/publications` | List channel publication status or publish to `{ "context_id": "…" }`. |
@@ -214,6 +215,23 @@ returns `422 publication_checks_failed` with `details.context` (the channel's
 context code) and `details.violations` (see [Errors](#errors)). A bulk request is rejected as a whole
 and each violation's `evidence.entity_id` names the failing entity. Use the
 readiness route to check beforehand.
+
+### Entity duplication
+
+`POST /v1/entities/{id}/duplicate` returns `201` with a new entity on the
+source's blueprint revision. It copies the source's local blueprint values
+(scalars, relationship edges, and file references, in order) in every context,
+and its system tags and metadata except `attricat.sample` and claimed extension
+namespaces. Reusable attributes and publications are not copied. The copy, its
+file references, and its audit event commit in one transaction; each file list
+is written once, so the copy starts with no value history.
+
+Values of the family's enforced `[[unique_keys]]` attributes are left out,
+because the copy could never share them with its source: the default-context
+value for a workspace-scoped key, and every context's values for a
+context-scoped key. A key attribute that `entity_schema` requires therefore makes
+duplication fail with the usual validation error rather than
+`409 unique_key_conflict`.
 
 ### Entity change and value-history pagination
 

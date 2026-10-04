@@ -113,6 +113,7 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `POST` | `/v1/entities/batch` | Create, update, and delete several entities at once: all changes are saved, or none are. See [Batch changes](#batch-changes). |
 | `GET`, `PUT` | `/v1/entities/{id}` | Read or update an entity's form: values, relationships, removals, annotations. |
 | `GET`, `DELETE` | `/entities/{id}` | Read or delete an entity. |
+| `POST` | `/v1/entities/{id}/duplicate` | Create a copy of an entity with its values, relationships, and files. Unique-key values are left out. |
 | `POST` | `/v1/entities/search` | Search. See below. |
 | `POST` | `/v1/entities/facets/relationship-tree/children` | One page of a relationship facet's children, with counts. |
 | `GET` | `/entities/{id}/preview` | Values per context, with related entities inline. |

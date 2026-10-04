@@ -1,6 +1,7 @@
 use super::entity_search::empty_projections;
 use super::generations::WritePrefetch;
 use super::record_values::{ContextTree, RecordValues};
+use super::structural_constraints::{UniqueKeyScope, enforced_unique_keys};
 use super::system_annotations::{
     validate_system_annotations, validate_system_metadata, validate_system_tag_update,
 };
@@ -225,12 +226,31 @@ impl CatalogRepository {
         Ok((entity, changes, event))
     }
 
+    /// Copies an entity's blueprint values, relationships and file
+    /// references into a new entity. Values of enforced `[[unique_keys]]`
+    /// attributes are left out, because the copy could never share them with
+    /// its source: default-context values for workspace-scoped keys and every
+    /// context's values for context-scoped keys.
     pub async fn duplicate_entity(&self, entity_id: Uuid) -> Result<Entity, RepositoryError> {
         let source = self
             .get_entity(entity_id)
             .await?
             .ok_or(RepositoryError::NotFound("entity"))?;
-        let mut file_values = Vec::new();
+        let (default_context_id, key_codes) =
+            self.unique_key_attributes(source.blueprint_id).await?;
+        let copied = |attribute_code: &str, context_id: Option<Uuid>| {
+            key_codes
+                .get(attribute_code)
+                .is_none_or(|scope| match scope {
+                    UniqueKeyScope::Context => false,
+                    UniqueKeyScope::Workspace => {
+                        context_id.is_some_and(|id| id != default_context_id)
+                    }
+                })
+        };
+        // File references are grouped by attribute and context, in order, so
+        // each list is written once instead of archiving every partial list.
+        let mut file_values: Vec<(String, Option<Uuid>, Vec<Uuid>)> = Vec::new();
         let values = self
             .form_values(entity_id)
             .await?
@@ -240,7 +260,7 @@ impl CatalogRepository {
                     attribute_code,
                     context_id,
                     value,
-                } => Some(NewAttributeValue::Scalar {
+                } => copied(&attribute_code, context_id).then_some(NewAttributeValue::Scalar {
                     attribute_id: None,
                     attribute_code: Some(attribute_code),
                     context_id,
@@ -250,18 +270,26 @@ impl CatalogRepository {
                     attribute_code,
                     context_id,
                     target_entity_id,
-                } => Some(NewAttributeValue::Relationship {
-                    attribute_id: None,
-                    attribute_code: Some(attribute_code),
-                    context_id,
-                    target_entity_id,
-                }),
+                } => {
+                    copied(&attribute_code, context_id).then_some(NewAttributeValue::Relationship {
+                        attribute_id: None,
+                        attribute_code: Some(attribute_code),
+                        context_id,
+                        target_entity_id,
+                    })
+                }
                 FormAttributeValue::File {
                     attribute_code,
                     context_id,
                     files,
                 } => {
-                    file_values.push((attribute_code, context_id, files));
+                    let ids = files.into_iter().map(|file| file.id);
+                    match file_values.iter_mut().find(|(code, context, _)| {
+                        *code == attribute_code && *context == context_id
+                    }) {
+                        Some((_, _, list)) => list.extend(ids),
+                        None => file_values.push((attribute_code, context_id, ids.collect())),
+                    }
                     None
                 }
             })
@@ -294,23 +322,48 @@ impl CatalogRepository {
         let entity = if file_values.is_empty() {
             entity
         } else {
-            for (attribute_code, context_id, files) in file_values {
-                for file in files {
-                    self.link_file_in_transaction(
-                        &mut transaction,
-                        &entity,
-                        &attribute_code,
-                        context_id,
-                        file.id,
-                    )
-                    .await?;
-                }
+            for (attribute_code, context_id, file_ids) in file_values {
+                self.link_files_in_transaction(
+                    &mut transaction,
+                    &entity,
+                    &attribute_code,
+                    context_id,
+                    &file_ids,
+                )
+                .await?;
             }
             self.revalidate_entity(&mut transaction, &entity).await?
         };
         self.commit_entity_mutation(transaction, changes, event)
             .await?;
         Ok(entity)
+    }
+
+    /// The workspace's default context and the scope of each attribute code
+    /// that an enforced unique key of the blueprint family covers. An
+    /// attribute in both a workspace and a context key reports `Context`.
+    async fn unique_key_attributes(
+        &self,
+        blueprint_id: Uuid,
+    ) -> Result<(Uuid, HashMap<String, UniqueKeyScope>), RepositoryError> {
+        let mut connection = self.pool.acquire().await?;
+        let default_context_id: Uuid = sqlx::query_scalar(
+            "SELECT id FROM attribute_contexts WHERE workspace_id = $1 AND code = 'default'",
+        )
+        .bind(self.workspace_id.0)
+        .fetch_optional(&mut *connection)
+        .await?
+        .ok_or(RepositoryError::InvalidContext)?;
+        let mut scopes = HashMap::new();
+        for key in enforced_unique_keys(&mut connection, self.workspace_id.0, blueprint_id).await? {
+            for code in key.attributes {
+                let scope = scopes.entry(code).or_insert(key.scope);
+                if key.scope == UniqueKeyScope::Context {
+                    *scope = UniqueKeyScope::Context;
+                }
+            }
+        }
+        Ok((default_context_id, scopes))
     }
 
     pub async fn update_entity_with_values(
