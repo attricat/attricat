@@ -6,7 +6,7 @@
    `pnpm` 11, `just`, `process-compose`, and `watchexec`.
 2. Run `just setup` once. It installs frontend dependencies, creates `.env`
    from `.env.example`, and assigns persistent ports for this worktree.
-3. Run `just dev`. It starts PostgreSQL, Mailpit, Jaeger, and RustFS, then
+3. Run `just dev`. It starts PostgreSQL, Mailpit, Jaeger, RustFS, and Redis, then
    watches the API, file worker, and web app.
 4. Source `.worktree`, then open the worktree-specific `WEB_URL` and
    `JAEGER_UI_URL`. Jaeger shows local API and file-worker traces.
@@ -43,6 +43,8 @@ runs the ignored RustFS compatibility test.
   constraints, contextual inheritance, and stale-edit protection.
 - [Database model](database.md): persisted model, value history, projections,
   contexts, and publication behavior.
+- [Caching](caching.md): the query cache, workspace generations, the optional
+  Redis tier, and the rules a new write path must follow.
 - [Tags, labels, and classifications](classifications.md): model controlled
   vocabularies with entities, relationships, contexts, and hierarchies.
 - [Domain eventing](eventing.md): transactional outbox and delivery semantics.
@@ -82,6 +84,8 @@ runs the ignored RustFS compatibility test.
 - [Web-component event bridge](web-component-events.md): validated host and component DOM events.
 - [Frontend conventions](frontend.md): contributor conventions and tests.
 - [Performance validation](performance-validation.md): compile and Explorer workload measurements.
+- [Database round trips](../perf/round-trips.md): per-operation round-trip baseline
+  and how to measure it.
 
 ## Test The Web App
 

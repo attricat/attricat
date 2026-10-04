@@ -41,6 +41,17 @@ not assign UUID defaults.
 
 Workspaces are the durable tenant boundary. Their UUID and `login_identifier` are immutable; `slug` is a stable unique identifier for administration, not a client-controlled authorization input. Login identifiers are lowercased, 3–253-character domain-like strings, unique, and intentionally have no DNS or host-routing behavior. The bootstrap/default workspace uses UUID `00000000-0000-4000-8000-000000000002`. Bootstrap-owner metadata is retained for the identity/membership bootstrap step.
 
+Three non-negative counters key the [query cache](caching.md). A repository
+write transaction that changes cached state increments the matching counter
+before it commits; authentication reads all three in the query it already runs,
+so a request never uses cached state older than what it read:
+
+| Column | Advanced by |
+| --- | --- |
+| `catalog_generation` | blueprint revision publication, rule publication, enabling and disabling a rule, and Explore navigation writes |
+| `contexts_generation` | creating, updating, and deleting an attribute context |
+| `extensions_generation` | extension installation, upgrade, lifecycle, grant, configuration, and layout changes, and the workspace extensions mode |
+
 Catalog tables carry a required `workspace_id`. Composite foreign keys keep blueprint revisions, attributes, entities, contexts, values, history, relationships, and migration records in the same workspace. Every repository query and mutation binds the server-derived workspace ID explicitly; the application never accepts a tenant ID from a client body or header as authorization input.
 
 ### Identity and seeded RBAC

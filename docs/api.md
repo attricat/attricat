@@ -61,7 +61,7 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `POST` | `/solution-packs/inspect` | Inspect an uploaded archive without applying it (`solution_packs.manage`); see [inspection](#solution-pack-plan-upload). |
 | `GET` | `/presentation-assets` | List immutable private asset metadata (`solution_packs.manage`; `limit` 1–100, `offset` 0–10000). Use IDs for explicit `--map-asset` reuse; direct creation is unavailable. |
 | `GET` | `/presentation-assets/{asset-id}` | Return same-workspace metadata only (`solution_packs.manage`); cross-workspace IDs return `404`. Use `acli presentation-asset show <uuid>`. |
-| `GET` | `/presentation-assets/{asset-id}/content` | Download integrity-verified normalized bytes with private/no-store caching, a digest ETag, and restrictive content headers (`solution_packs.manage`). No create/update/delete endpoint exists. |
+| `GET` | `/presentation-assets/{asset-id}/content` | Download integrity-verified normalized bytes with immutable private caching, a digest ETag, and restrictive content headers (`solution_packs.manage`); see [presentation assets](#presentation-assets). No create/update/delete endpoint exists. |
 | `POST` | `/solution-packs/plans` | Revalidate an uploaded archive and persist an immutable, workspace-scoped dry-run (`solution_packs.manage`). See [plan request and response](#solution-pack-plan-upload). |
 | `GET` | `/solution-packs/plans/{plan-id}` | Read a safe summary of an immutable plan in the authenticated workspace (`solution_packs.manage`). Cross-workspace IDs return `404`. |
 | `POST` | `/solution-packs/plans/{plan-id}/apply` | Start or resume one immutable application without a request body or choice flags (`solution_packs.manage`); see [apply semantics](#solution-pack-plan-upload). |
@@ -80,7 +80,7 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `POST` | `/extensions/{extension_id}/upgrade`, `/enable`, `/disable`, `/quarantine` | Change the installed release or lifecycle state (`extensions.manage`). |
 | `PUT` | `/extensions/{extension_id}/configure` | Update validated installation configuration (`extensions.manage`). |
 | `POST`; `DELETE` | `/extensions/{extension_id}/grants`; `/grants/{grant_kind}/{grant_id}` | Grant or revoke a declared extension permission (`extensions.manage`). |
-| `GET` | `/extensions/{extension_id}/{contribution_id}/artifact` | Fetch a validated client artifact for an enabled release. |
+| `GET` | `/extensions/{extension_id}/{contribution_id}/artifact` | Fetch a validated client artifact for an enabled release, with a release-scoped ETag and `Cache-Control: private, no-cache`. |
 | `POST` | `/extensions/{extension_id}/{contribution_id}/storage/{release_id}` | Perform a bounded client-mediated extension storage operation. |
 | `PUT` | `/workspace/extensions-mode` | Enable or disable extensions for the current workspace (`extensions.manage`). |
 | `GET`, `PUT` | `/workspace/extension-layout` | Read or replace the versioned, host-owned extension outlet layout (`extensions.manage`). Navigation layouts also contain a `promoted` stable-key list; built-ins cannot be referenced. |
@@ -316,9 +316,14 @@ resources.
 Only applied packs create presentation assets. The list and detail routes
 return metadata but never object keys; the content route returns
 integrity-verified bytes with server-owned content type/length, inline
-disposition, digest ETag, `Cache-Control: private, no-store`, `nosniff`, and
-restrictive CSP. Use `acli presentation-asset download <uuid> --output <path>`
-for an authorized download.
+disposition, a sha256 digest ETag,
+`Cache-Control: private, max-age=31536000, immutable`, `nosniff`, and
+restrictive CSP. Assets are insert-only, so the URL never changes content. A
+request whose `If-None-Match` matches the digest returns `304 Not Modified`
+after authorization, without reading object storage. The list and detail
+routes stay `private, no-store`. Use
+`acli presentation-asset download <uuid> --output <path>` for an authorized
+download.
 
 Blueprint creation and revision routes create drafts. Only published revisions
 can create entities or serve as migration targets. See [Blueprint Publication](database.md#blueprint-publication).
@@ -669,8 +674,11 @@ file is `ready`, including after terminal processing failure. A failed job
 records a safe processing error and is retried with bounded exponential backoff;
 an operator can requeue a terminal failed job as described in
 [Configuration](configuration.md). Ready downloads are authorized, proxied
-through the API, private/no-store, and support one `Range: bytes=start-end`
-request.
+through the API, and support one `Range: bytes=start-end` request. They carry
+the file's sha256 digest as the ETag and `Cache-Control: private, no-cache`:
+the browser may keep a copy but must revalidate each use, so revoked access or
+a purged file takes effect at once. A matching `If-None-Match` returns
+`304 Not Modified` after authorization, without reading object storage.
 
 ## Request performance
 
@@ -692,7 +700,9 @@ access is required.
 
 `GET /metrics` serves Prometheus text exposition. All labels are bounded: HTTP
 metrics use method, matched route template, and status; no file ID, object key,
-filename, workspace, or request URL is ever a label. File operation metrics are:
+filename, or request URL is ever a label. Workspace is a label only on
+`catalog_event_delivery_queue_depth` (`workspace_id`, see
+[Eventing](eventing.md#operator-runbook)). File operation metrics are:
 
 - `catalog_file_uploads_total` (`outcome`),
   `catalog_file_downloads_total` (`outcome`), and
@@ -712,8 +722,32 @@ gauge `catalog_file_worker_jobs_queued`;
   `success` or `failed`). Failed deletions retain their durable intent for retry.
 
 Data-health cache decisions are exposed as `catalog_data_health_cache_total`
-with a bounded `status` label. Scrape this endpoint from the private monitoring
-network rather than exposing it publicly.
+with a bounded `status` label. The [query cache](caching.md) reports:
+
+- `catalog_query_cache_requests_total` (`namespace`, `outcome`): one per
+  lookup. `namespace` is the first key segment (such as `context_tree`,
+  `enabled_rules` or `blueprint_revision`); `outcome` is `hit`, `remote_hit`
+  (served from Redis), `miss` (loaded from the database), `stale` (a stale TTL
+  value served while another caller reloads) or `stale_reload`;
+- `catalog_query_cache_invalidations_total`: process-local tag evictions;
+- `catalog_query_cache_redis_circuit_opened_total`: times Redis was skipped
+  for a cooldown after repeated failures.
+
+Database round trips are counted per named scope (an HTTP route, a task kind
+or a worker loop, such as `worker:event_dispatcher:<handler>`) by
+`crates/repository/src/round_trips.rs`. Every completed SQLx statement,
+including `BEGIN` and `COMMIT`, counts once:
+
+- `catalog_db_round_trips_total` (`scope`): statements issued directly in a
+  scope; statements outside any scope use `scope="unscoped"`;
+- `catalog_db_round_trips_per_operation` (`scope`): a histogram of statements
+  per completed operation, nested scopes included.
+
+`RUST_LOG=catalog_repository::round_trips=debug` logs each operation's count.
+See [Database round trips](../perf/round-trips.md) for the measured baseline.
+
+Scrape this endpoint from the private monitoring network rather than exposing
+it publicly.
 
 The API emits structured `tracing` events for startup, database migrations, each
 HTTP request, file uploads, downloads, and worker jobs. Request spans include

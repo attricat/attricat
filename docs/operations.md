@@ -27,6 +27,28 @@ docker compose --env-file deploy/.env.production -f deploy/compose.yml up -d
 The final image runs as uid/gid 10001, has a read-only-compatible filesystem,
 and contains no build toolchain.
 
+## Multiple API replicas
+
+Several `api` replicas can share one database and bucket. Two things change
+when you run more than one:
+
+- **Shared cache (optional).** Each replica caches definitions in its own
+  memory by default, which is always correct. To let replicas share cached
+  values and extension network rate limits, run Redis and set
+  `CACHE_BACKEND=redis` and `REDIS_URL` (`rediss://` for TLS). Redis is never
+  required for correctness: if it becomes unreachable, replicas fall back to
+  memory and the database and reconnect in the background. Keys are namespaced
+  by `CACHE_KEY_PREFIX` and a random identity stored in the database, so
+  several deployments can share one Redis. See [Caching](caching.md).
+- **Coordinator connections.** The rule-schedule, workflow-schedule and
+  extension-intake coordinators each run on one replica, which holds a session
+  advisory lock on a dedicated connection outside the pools. Budget up to
+  three extra PostgreSQL connections per API process, plus a brief connection
+  every 5 seconds per coordinator on the other replicas. Connect to PostgreSQL
+  directly or through a session-mode pooler: PgBouncer transaction pooling is
+  not supported. See
+  [Coordinator leadership](configuration.md#coordinator-leadership).
+
 ## Probes and rollout
 
 API `GET /health/live` (and compatibility `GET /health`) only proves the process
@@ -139,6 +161,12 @@ restored pair. Require both readiness probes and retrieve known database data, a
 known uploaded file, and a known extension-operation artifact before recording
 success. If any step fails, leave the target quiesced. Never restore only the
 database or only the bucket.
+
+When the deployment uses Redis (`CACHE_BACKEND=redis`), flush the Redis
+database it uses (`FLUSHDB`), or change `CACHE_KEY_PREFIX`, after restoring and
+before starting the API. A restored database keeps its cache identity and its
+older cache generations, so Redis may otherwise serve entries newer than the
+restored data for up to 24 hours.
 
 Use provider-native snapshots when they can guarantee the same quiesced boundary.
 Otherwise, run version-pinned utility containers outside the Attricat image. Keep

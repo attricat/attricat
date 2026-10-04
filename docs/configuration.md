@@ -12,7 +12,7 @@ or inaccessible configured bucket.
 | --- | --- | --- | --- |
 | `DATABASE_URL` | Required | API and SQLx | PostgreSQL connection string. |
 | `DATABASE_REQUEST_POOL_CONNECTIONS` | `10` | API | Maximum connections in the single global request/session pool shared by all workspaces. Must be an integer from 1 to 100. |
-| `DATABASE_TASK_POOL_CONNECTIONS` | `10` | API | Maximum connections in the single global task/worker pool shared by all workspaces. Must be an integer from 1 to 100. The API logs the request + task + maintenance total at startup. |
+| `DATABASE_TASK_POOL_CONNECTIONS` | `10` | API | Maximum connections in the single global task/worker pool shared by all workspaces. Must be an integer from 1 to 100. The API logs the request + task + maintenance total at startup. Background coordinators hold up to three further connections outside both pools; see [Coordinator leadership](#coordinator-leadership). |
 | `BIND_ADDR` | `127.0.0.1:3000` | API | Listener address. The production image sets `0.0.0.0:3000`. |
 | `CATALOG_AUTO_MIGRATE` | `true` | API | Applies embedded migrations during API startup. Production deployment sets this `false` and runs the image's singleton `migrate` role first. |
 | `WEB_DIST_DIR` | Unset | API | Optional compiled SPA directory. The production image sets `/srv/attricat/web`; API routes are then also available below `/api`. |
@@ -35,9 +35,10 @@ or inaccessible configured bucket.
 | `PREVIEW_MAX_RELATIONSHIP_ITEMS` | `10` | API | Maximum inline targets per relationship. |
 | `ENTITY_MAX_PAGE_SIZE` | `100` | API | Maximum page size for relationship browsing. |
 | `DATA_HEALTH_CACHE_TTL_SECONDS` | `300` | API | Data-health response cache lifetime. Any recorded catalog change also makes the next request a miss. |
-| `CACHE_BACKEND` | `memory` | API | Query cache backend: `memory` keeps cached definitions in each process; `redis` also shares them between replicas, broadcasts cache invalidations and shares extension network rate limits. Correctness never depends on the backend; an unreachable Redis degrades to memory. |
-| `REDIS_URL` | Unset | API | Redis URL, required when `CACHE_BACKEND=redis`. `just setup` writes the local development Redis URL. |
+| `CACHE_BACKEND` | `memory` | API | Query cache backend: `memory` keeps cached definitions in each process; `redis` also shares cached values and extension network rate limits between replicas. Nothing is invalidated through Redis: correctness never depends on the backend (see [Caching](caching.md)). An unreachable Redis degrades to memory while the API reconnects in the background. |
+| `REDIS_URL` | Unset | API | Redis URL, required when `CACHE_BACKEND=redis`. `redis://` and TLS `rediss://` (rustls, platform root certificates) are supported. `just setup` writes the local development Redis URL. |
 | `CACHE_MAX_ENTRIES` | `20000` | API | Positive maximum number of in-memory query cache entries per process. |
+| `CACHE_KEY_PREFIX` | `attricat` | API | First segment of every Redis key, followed by the database's random identity. Change it, or flush Redis, after restoring a database backup. Must not contain whitespace. |
 | `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE` | `50` | API | Maximum page size for incoming-relationship browsing. |
 | `RELATIONSHIP_FACET_MAX_NODES` | `100` | API | Maximum relationship nodes considered while building Explorer facets. |
 | `ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS` | `90` | API | Number of days of attribute-value history retained; must be a positive signed 64-bit integer. Invalid values stop startup. A periodic worker deletes at most 1,000 rows per transaction, with a 10-second sweep budget every minute. Failures are logged and retried without blocking startup. |
@@ -101,6 +102,25 @@ or inaccessible configured bucket.
 | `CATALOG_E2E_FIXTURE_PASSWORD` | Unset | API test environments | Optional test fixture user password paired with `CATALOG_E2E_FIXTURE_EMAIL`; do not set either in production. |
 | `RUSTFS_PORT` | `9000` | Docker Compose | Worktree-specific host port for the local RustFS S3 API. |
 | `RUSTFS_CONSOLE_PORT` | `9001` | Docker Compose | Worktree-specific host port for the local RustFS console. |
+| `REDIS_PORT` | `6379` | Docker Compose | Worktree-specific host port for the local Redis that `just dev` starts. The API uses it only with `CACHE_BACKEND=redis`. |
+
+## Coordinator leadership
+
+The rule-schedule, workflow-schedule and extension-intake coordinators each run
+on one API replica at a time. Their sweeps are idempotent, so this saves work
+rather than guarding correctness. The leader holds a PostgreSQL session
+advisory lock on a dedicated connection opened outside the request, task and
+maintenance pools; the lock is released when that connection closes, including
+when the process dies.
+
+- Each API process may hold up to three extra connections, one per coordinator
+  it leads. Include them when sizing `max_connections`.
+- A non-leader opens a short-lived connection every 5 seconds per coordinator
+  to try the lock, so a replacement leader takes over within about 5 seconds.
+  The leader checks its lock connection every 30 seconds.
+- Session advisory locks need a session-pinned connection. Point
+  `DATABASE_URL` at PostgreSQL directly or at a pooler in session mode;
+  PgBouncer transaction pooling is not supported.
 
 ## Durable API task queue
 

@@ -12,12 +12,13 @@ catalog-workers → catalog-repository → catalog-solution-pack
                        │                         │
                        ├→ catalog-storage         └→ catalog-extension-manifest
                        ├→ catalog-domain
-                       └→ catalog-events
+                       ├→ catalog-events
+                       └→ catalog-cache ←── catalog-extension-runtime
 ```
 
-Arrows point to dependencies and show key edges, not every edge; both runtime crates also depend directly on the repository and storage.
+Arrows point to dependencies and show key edges, not every edge; both runtime crates also depend directly on the repository and storage, and `apps/api` builds the configured cache.
 
-`catalog-solution-pack` depends on extension manifest contracts, never the reverse. `catalog-storage` is an independent object-store port and S3 adapter. Both the agent runtime and the extension runtime depend on the generic task-handler contract in `catalog-workers`; workers depend on neither. This keeps the graph acyclic while allowing each runtime crate to provide its own task-handler adapter. HTTP depends on the agent runtime for provider-backed endpoints and configuration.
+`catalog-solution-pack` depends on extension manifest contracts, never the reverse. `catalog-storage` is an independent object-store port and S3 adapter. `catalog-cache` is a leaf: it knows nothing about the catalog, and the repository decides what is cached under which key (see [Caching](caching.md)). Both the agent runtime and the extension runtime depend on the generic task-handler contract in `catalog-workers`; workers depend on neither. This keeps the graph acyclic while allowing each runtime crate to provide its own task-handler adapter. HTTP depends on the agent runtime for provider-backed endpoints and configuration.
 
 No library crate may depend on `api`. `apps/api` alone owns process startup, database migration embedding, concrete dependency construction, and the `api` and `file-worker` binary names.
 
@@ -31,6 +32,7 @@ No library crate may depend on `api`. `apps/api` alone owns process startup, dat
 | `catalog-solution-pack` | Solution-pack contracts, archive/sample-data validation, and pure planning | image/archive codecs |
 | `catalog-repository` | SQLx repository, transactional application services, registry and installer coordination | SQLx/Reqwest |
 | `catalog-storage` | Object-store interface, S3 adapter, storage configuration | AWS SDK |
+| `catalog-cache` | Query cache (process-memory L1, optional Redis L2), shared rate limits, cache configuration | Moka/fred |
 | `catalog-workers` | Task/event supervision and workflow/rule/file execution | image/EXIF clients |
 | `catalog-agent-runtime` | Agent provider, tools, execution, and task handler | provider clients |
 | `catalog-extension-runtime` | Wasmtime component host and WIT bindings | Wasmtime |

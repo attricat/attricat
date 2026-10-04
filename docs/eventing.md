@@ -194,12 +194,16 @@ The dispatcher emits Prometheus metrics on the normal `/metrics` endpoint
 - `catalog_event_deliveries_total{outcome="claimed|completed|retry|dead_letter"}`
   counts lifecycle outcomes.
 - `catalog_event_delivery_queue_depth{workspace_id,consumer,status="pending|leased|completed|dead_letter"}`
-  is updated while the dispatcher polls each active workspace.
+  is refreshed every 5 seconds by one dispatcher handler loop per API process,
+  for each active workspace. For every consumer with deliveries in a workspace
+  all four statuses are reported; a status with no deliveries is set to `0`, so
+  a drained queue does not keep its last non-zero depth. This is the only
+  metric with a workspace label.
 
 Alert on a growing `pending` queue, a lease that does not recover after the
-lease period, or new/increasing dead letters. Queue-depth series are only
-reported for statuses observed during polling, so use the dead-letter endpoint
-for a definitive operator list.
+lease period, or new/increasing dead letters. A consumer with no deliveries in
+a workspace reports no series there, so use the dead-letter endpoint for a
+definitive operator list.
 
 1. Check API logs for `event delivery claimed`, handler failures, or dispatcher
    poll errors. Record the handler name, event ID, attempt count, and error.

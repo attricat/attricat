@@ -53,6 +53,10 @@ CATALOG_TOKEN=cat_pat_... just perf load
 
 Save the k6 JSON summary, the generator checkpoint, API git revision, PostgreSQL version/settings, host CPU/RAM, and the selected profile when comparing runs. Keep cold-start and warmed runs separate.
 
+Latency often follows the number of database round trips per request.
+[Database round trips](../perf/round-trips.md) records the per-path baseline and
+how to measure it with the `catalog_db_round_trips_*` metrics.
+
 ## Query plans
 
 For index changes or unexpected latency, capture `EXPLAIN (ANALYZE, BUFFERS)` for the equivalent scalar-sort and relationship-sort selection queries using `just sql`. Relationship sorts use fixed one-, two-, or three-hop SQL: indexed non-null leaf values traverse incoming edges back to sources, while missing paths use a separate source-ID/null phase. Compare index scans, buffers, rows removed, and warm/cold timings before adding another declarative index. Do not put query text, fixture values, UUIDs, or SQL text into `Server-Timing` or the browser inspector.
