@@ -244,10 +244,15 @@ impl CatalogRepository {
         // Cancel queued envelopes in this same lifecycle transaction. Leased
         // tasks remain token-owned until their next action boundary observes
         // the cancelled domain row, so disable never races a stale worker.
-        sqlx::query("UPDATE tasks t SET status='cancelled',cancelled_at=clock_timestamp(),updated_at=clock_timestamp() FROM workflow_runs r WHERE t.workspace_id=$1 AND t.kind='workflow_run.v1' AND t.subject_id=r.id AND r.workspace_id=$1 AND r.workflow_id=$2 AND t.status='queued'")
-            .bind(ws).bind(id).execute(&mut *tx).await?;
-        sqlx::query("UPDATE workflow_runs SET status='cancelled',cancelled_at=clock_timestamp(),updated_at=clock_timestamp() WHERE workspace_id=$1 AND workflow_id=$2 AND status='pending'")
-            .bind(ws).bind(id).execute(&mut *tx).await?;
+        let cancelled: Vec<Uuid> = sqlx::query_scalar("UPDATE workflow_runs SET status='cancelled',cancelled_at=clock_timestamp(),updated_at=clock_timestamp() WHERE workspace_id=$1 AND workflow_id=$2 AND status='pending' RETURNING id")
+            .bind(ws).bind(id).fetch_all(&mut *tx).await?;
+        self.cancel_queued_tasks_for_subjects(
+            &mut tx,
+            ws,
+            crate::task_queue::TaskKind::WorkflowRunV1,
+            &cancelled,
+        )
+        .await?;
         self.commit_mutation(tx).await?;
         self.get_workflow(id)
             .await?

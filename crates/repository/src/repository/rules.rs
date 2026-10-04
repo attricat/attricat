@@ -797,11 +797,8 @@ impl CatalogRepository {
             ));
         }
         if terminal {
-            let changed = sqlx::query("UPDATE tasks SET status='dead_letter',failures=max_failures,lease_owner=NULL,lease_token=NULL,lease_until=NULL,last_error_code='rule_run',last_error_message=$4,failed_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1 AND status='leased' AND lease_owner=$2 AND lease_token=$3 AND lease_until>clock_timestamp()")
-                .bind(task.id).bind(&task.lease_owner).bind(task.lease_token).bind(error).execute(&mut *tx).await?.rows_affected();
-            if changed != 1 {
-                return Err(RepositoryError::Task(super::TaskError::LeaseLost));
-            }
+            self.dead_letter_task_in_transaction(&mut tx, task, "rule_run", error)
+                .await?;
         }
         tx.commit().await?;
         Ok(terminal)

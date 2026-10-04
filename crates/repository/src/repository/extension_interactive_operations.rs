@@ -614,14 +614,12 @@ impl CatalogRepository {
                 "operation run lost its lease".into(),
             ));
         }
-        sqlx::query(
-            "UPDATE tasks SET status='dead_letter',failures=failures+1,lease_owner=NULL,lease_token=NULL,lease_until=NULL,last_error_code=$4,last_error_message='the initiating user no longer has access',failed_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1 AND status='leased' AND lease_owner=$2 AND lease_token=$3",
+        self.dead_letter_task_in_transaction(
+            &mut transaction,
+            task,
+            INITIATOR_ACCESS_REVOKED,
+            "the initiating user no longer has access",
         )
-        .bind(task.id)
-        .bind(&task.lease_owner)
-        .bind(task.lease_token)
-        .bind(INITIATOR_ACCESS_REVOKED)
-        .execute(&mut *transaction)
         .await?;
         transaction.commit().await?;
         Ok(())
