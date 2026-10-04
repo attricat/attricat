@@ -264,6 +264,10 @@ impl CatalogRepository {
         if read_by_active_run {
             return Err(RepositoryError::ContextInUse);
         }
+        // Withdraw live publications through the shared helper so consumers
+        // receive `entity.unpublished`, then drop the channel's rows.
+        self.clear_context_publications(&mut transaction, id)
+            .await?;
         sqlx::query(
             "DELETE FROM entity_channel_publications WHERE workspace_id = $1 AND context_id = $2",
         )
