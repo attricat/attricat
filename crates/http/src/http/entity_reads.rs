@@ -218,6 +218,8 @@ pub(super) async fn search_entity_previews(
         .await?
         .ok_or_else(|| ApiError::not_found("blueprint"))?;
     let (selected, search_blueprint) = match input.blueprint.version {
+        // The latest published revision is the requested one.
+        Some(version) if version == current.blueprint.version => (Some(version), current.clone()),
         Some(version) => {
             let published = repository
                 .get_published_blueprint_by_code_and_version(code, version)
@@ -395,10 +397,15 @@ pub(super) async fn search_entity_previews(
         return Err(ApiError::relationship_sort_requires_single_version());
     }
     let result_blueprint = match effective_source_version {
-        Some(version) if version != current.blueprint.version => repository
-            .get_published_blueprint_by_code_and_version(code, version)
-            .await?
-            .ok_or_else(|| ApiError::not_found("blueprint"))?,
+        Some(version)
+            if version != current.blueprint.version
+                && version != search_blueprint.blueprint.version =>
+        {
+            repository
+                .get_published_blueprint_by_code_and_version(code, version)
+                .await?
+                .ok_or_else(|| ApiError::not_found("blueprint"))?
+        }
         _ => search_blueprint.clone(),
     };
     let sort = resolve_table_sort(
@@ -998,6 +1005,7 @@ pub(super) async fn relationship_tree_facet_children(
         .await?
         .ok_or_else(|| ApiError::not_found("blueprint"))?;
     let published = match input.blueprint.version {
+        Some(v) if v == source.blueprint.version => Some(source.clone()),
         Some(v) => Some(
             repository
                 .get_published_blueprint_by_code_and_version(&input.blueprint.code, v)

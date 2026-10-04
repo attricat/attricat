@@ -665,7 +665,7 @@ pub(super) async fn get_current_values(
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(entity_id): ApiPath<Uuid>,
 ) -> Result<Json<Vec<AttributeValue>>, ApiError> {
-    if repository.get_entity(entity_id).await?.is_none() {
+    if !repository.entity_exists(entity_id).await? {
         return Err(ApiError::not_found("entity"));
     }
     Ok(Json(repository.current_values(entity_id).await?))
@@ -700,7 +700,7 @@ pub(super) async fn get_entity_changes(
     ApiPath(entity_id): ApiPath<Uuid>,
     ApiQuery(query): ApiQuery<HistoryPageQuery>,
 ) -> Result<Json<Value>, ApiError> {
-    if repository.get_entity(entity_id).await?.is_none() {
+    if !repository.entity_exists(entity_id).await? {
         return Err(ApiError::not_found("entity"));
     }
     if query.limit.is_none() && query.offset.is_none() {
@@ -722,7 +722,7 @@ pub(super) async fn get_value_history(
     ApiPath(entity_id): ApiPath<Uuid>,
     ApiQuery(query): ApiQuery<HistoryPageQuery>,
 ) -> Result<Json<Value>, ApiError> {
-    if repository.get_entity(entity_id).await?.is_none() {
+    if !repository.entity_exists(entity_id).await? {
         return Err(ApiError::not_found("entity"));
     }
     if query.limit.is_none() && query.offset.is_none() {

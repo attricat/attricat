@@ -109,24 +109,41 @@ impl CatalogRepository {
     }
 }
 
+/// A valid personal API token and the permissions it carried when it was
+/// authenticated.
+#[derive(Clone, Debug)]
+pub struct AuthenticatedToken {
+    pub id: Uuid,
+    pub user_id: Uuid,
+    pub workspace_id: Uuid,
+    pub permissions: std::collections::HashSet<String>,
+}
+
 impl<S: super::RepositoryScope> CatalogRepository<S> {
     pub async fn authenticate_personal_api_token(
         &self,
         digest: &[u8],
-    ) -> Result<Option<(Uuid, Uuid, Uuid)>, RepositoryError> {
+    ) -> Result<Option<AuthenticatedToken>, RepositoryError> {
         // Credential validity is independent of usage accounting. Normal
         // requests only read; at most one update per minute is needed per PAT.
-        let token: Option<(Uuid, Uuid, Uuid, bool)> = sqlx::query_as(
-            "SELECT t.id, t.user_id, t.workspace_id, (t.last_used_at IS NULL OR t.last_used_at < clock_timestamp() - interval '1 minute') FROM personal_api_tokens t JOIN users u ON u.id = t.user_id WHERE t.token_digest = $1 AND t.revoked_at IS NULL AND (t.expires_at IS NULL OR t.expires_at > clock_timestamp()) AND u.state = 'active'",
+        // The token's permissions come back with the credential so request
+        // authorization checks them in memory instead of re-reading the token.
+        let token: Option<(Uuid, Uuid, Uuid, bool, Vec<String>)> = sqlx::query_as(
+            "SELECT t.id, t.user_id, t.workspace_id, (t.last_used_at IS NULL OR t.last_used_at < clock_timestamp() - interval '1 minute'), ARRAY(SELECT p.permission_code FROM personal_api_token_permissions p WHERE p.token_id = t.id) FROM personal_api_tokens t JOIN users u ON u.id = t.user_id WHERE t.token_digest = $1 AND t.revoked_at IS NULL AND (t.expires_at IS NULL OR t.expires_at > clock_timestamp()) AND u.state = 'active'",
         ).bind(digest).fetch_optional(&self.pool).await?;
-        let Some((id, user, workspace, touch)) = token else {
+        let Some((id, user, workspace, touch, permissions)) = token else {
             return Ok(None);
         };
         if touch {
             sqlx::query("UPDATE personal_api_tokens SET last_used_at = clock_timestamp() WHERE id = $1 AND (last_used_at IS NULL OR last_used_at < clock_timestamp() - interval '1 minute')")
                 .bind(id).execute(&self.pool).await?;
         }
-        Ok(Some((id, user, workspace)))
+        Ok(Some(AuthenticatedToken {
+            id,
+            user_id: user,
+            workspace_id: workspace,
+            permissions: permissions.into_iter().collect(),
+        }))
     }
 
     pub async fn personal_api_token_permissions(

@@ -165,7 +165,7 @@ pub use solution_packs::{
 pub use status::{EntityApproval, StatusTransitionAccess};
 pub use tasks::{BackgroundProcessingStatus, ClaimedTask, TaskError, TaskSummary};
 pub use teams::{DirectoryTeam, DirectoryUser, Team, WorkspaceDirectory};
-pub use tokens::PersonalApiToken;
+pub use tokens::{AuthenticatedToken, PersonalApiToken};
 pub use upload_intents::AbandonedUpload;
 pub use workflow_runs::WorkflowRun;
 pub use workflow_runs::{ClaimedWorkflowRun, WorkflowActionResult, WorkflowRunTarget};

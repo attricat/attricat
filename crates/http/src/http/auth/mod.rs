@@ -11,7 +11,7 @@ use super::{AppState, audit, error::ApiError};
 use crate::{
     account::{SessionDigest, SessionSecret},
     constants::SESSION_COOKIE,
-    repository::{AuthorizationActor, CatalogRepository},
+    repository::CatalogRepository,
 };
 
 mod policy;
@@ -110,68 +110,96 @@ pub(super) async fn authorize(
         // The authentication scheme is case-insensitive (RFC 9110 §11.1).
         .filter(|(scheme, _)| scheme.eq_ignore_ascii_case("bearer"))
         .map(|(_, credentials)| credentials);
-    let (principal, workspace, token_id, session_digest) = if let Some(secret) = bearer {
-        let digest = sha2::Sha256::digest(secret.as_bytes());
-        state
-            .repository
-            .authenticate_personal_api_token(&digest)
-            .await?
-            .map(|(token_id, user_id, workspace_id)| (user_id, workspace_id, Some(token_id), None))
-            .ok_or_else(ApiError::unauthenticated)?
-    } else if state.allow_trusted_headers {
-        let user_id = request
-            .headers()
-            .get(USER_HEADER)
-            .and_then(|value| value.to_str().ok())
-            .and_then(|value| value.parse().ok())
-            .ok_or_else(ApiError::unauthenticated)?;
-        let workspace_id = request
-            .headers()
-            .get(WORKSPACE_HEADER)
-            .and_then(|value| value.to_str().ok())
-            .and_then(|value| value.parse().ok())
-            .ok_or_else(ApiError::unauthenticated)?;
-        if !state.repository.is_active_user(user_id).await? {
-            return Err(ApiError::unauthenticated());
-        }
-        (user_id, workspace_id, None, None)
-    } else {
-        let raw_session = cookie_value(
-            request
+    // `token_permissions` is the authenticated token's permission set (None
+    // for sessions); `active_principal` is already known for browser sessions,
+    // whose validation covers the same user, membership and workspace state.
+    let (principal, workspace, token_id, session_digest, token_permissions, active_principal) =
+        if let Some(secret) = bearer {
+            let digest = sha2::Sha256::digest(secret.as_bytes());
+            let token = state
+                .repository
+                .authenticate_personal_api_token(&digest)
+                .await?
+                .ok_or_else(ApiError::unauthenticated)?;
+            (
+                token.user_id,
+                token.workspace_id,
+                Some(token.id),
+                None,
+                Some(token.permissions),
+                None,
+            )
+        } else if state.allow_trusted_headers {
+            let user_id = request
                 .headers()
-                .get("cookie")
-                .and_then(|value| value.to_str().ok()),
-            SESSION_COOKIE,
-        )
-        .ok_or_else(ApiError::unauthenticated)?;
-        let session_secret = SessionSecret::from_delivery_value(raw_session)
-            .map_err(|_| ApiError::unauthenticated())?;
-        let session_digest = session_secret.digest();
-        let session = state
-            .repository
-            .validate_browser_session(&session_digest)
-            .await?
-            .ok_or_else(ApiError::unauthenticated)?;
-        if !matches!(
-            *request.method(),
-            Method::GET | Method::HEAD | Method::OPTIONS
-        ) {
-            let csrf = request
-                .headers()
-                .get(CSRF_HEADER)
+                .get(USER_HEADER)
                 .and_then(|value| value.to_str().ok())
-                .and_then(|value| SessionSecret::from_delivery_value(value.to_owned()).ok())
-                .ok_or_else(ApiError::csrf_failed)?;
-            if !session.csrf_digest.matches(&csrf) {
-                return Err(ApiError::csrf_failed());
+                .and_then(|value| value.parse().ok())
+                .ok_or_else(ApiError::unauthenticated)?;
+            let workspace_id = request
+                .headers()
+                .get(WORKSPACE_HEADER)
+                .and_then(|value| value.to_str().ok())
+                .and_then(|value| value.parse().ok())
+                .ok_or_else(ApiError::unauthenticated)?;
+            if !state.repository.is_active_user(user_id).await? {
+                return Err(ApiError::unauthenticated());
             }
+            (user_id, workspace_id, None, None, None, None)
+        } else {
+            let raw_session = cookie_value(
+                request
+                    .headers()
+                    .get("cookie")
+                    .and_then(|value| value.to_str().ok()),
+                SESSION_COOKIE,
+            )
+            .ok_or_else(ApiError::unauthenticated)?;
+            let session_secret = SessionSecret::from_delivery_value(raw_session)
+                .map_err(|_| ApiError::unauthenticated())?;
+            let session_digest = session_secret.digest();
+            let session = state
+                .repository
+                .validate_browser_session(&session_digest)
+                .await?
+                .ok_or_else(ApiError::unauthenticated)?;
+            if !matches!(
+                *request.method(),
+                Method::GET | Method::HEAD | Method::OPTIONS
+            ) {
+                let csrf = request
+                    .headers()
+                    .get(CSRF_HEADER)
+                    .and_then(|value| value.to_str().ok())
+                    .and_then(|value| SessionSecret::from_delivery_value(value.to_owned()).ok())
+                    .ok_or_else(ApiError::csrf_failed)?;
+                if !session.csrf_digest.matches(&csrf) {
+                    return Err(ApiError::csrf_failed());
+                }
+            }
+            (
+                session.user_id,
+                session.workspace_id,
+                None,
+                Some(session_digest),
+                None,
+                Some(session.workspace_active),
+            )
+        };
+    // A token's permissions were read with the credential in this request.
+    let token_permits = |permission: &str| {
+        token_permissions
+            .as_ref()
+            .is_none_or(|permissions| permissions.contains(permission))
+    };
+    let is_active_principal = || async {
+        match active_principal {
+            Some(active) => Ok::<bool, ApiError>(active),
+            None => Ok(state
+                .repository
+                .is_active_principal(principal, workspace)
+                .await?),
         }
-        (
-            session.user_id,
-            session.workspace_id,
-            None,
-            Some(session_digest),
-        )
     };
     let matched = request
         .extensions()
@@ -192,47 +220,34 @@ pub(super) async fn authorize(
                 | policy::TargetKind::ExtensionRun
                 | policy::TargetKind::EntityBatch
         );
-        if handler_authorized
-            && !state
-                .repository
-                .is_active_principal(principal, workspace)
-                .await?
-        {
+        if handler_authorized && !is_active_principal().await? {
             return Err(ApiError::forbidden());
         }
-        let actor = AuthorizationActor {
-            user_id: principal,
-            token_id,
-        };
         // Ordinary permission evaluation already checks the live user,
         // membership and workspace; do not repeat those database round trips.
         // Handler-authorized routes resolve their target later and only need
         // the token's permission here.
-        let permitted = if handler_authorized {
-            state
-                .repository
-                .principal_token_permits(actor, workspace, policy.permission)
-                .await?
-        } else {
-            state
-                .repository
-                .principal_may(
-                    actor,
-                    workspace,
-                    policy.permission,
-                    target_id,
-                    target_code.as_deref(),
-                )
-                .await?
-        };
+        let permitted = token_permits(policy.permission)
+            && (handler_authorized
+                || state
+                    .repository
+                    .is_authorized(
+                        principal,
+                        workspace,
+                        policy.permission,
+                        target_id,
+                        target_code.as_deref(),
+                    )
+                    .await?);
         if !permitted {
             return Err(ApiError::forbidden());
         }
         if let Some(extra) = policy::additional_permission(matched)
-            && !state
-                .repository
-                .principal_may(actor, workspace, extra, None, None)
-                .await?
+            && !(token_permits(extra)
+                && state
+                    .repository
+                    .is_authorized(principal, workspace, extra, None, None)
+                    .await?)
         {
             return Err(ApiError::forbidden());
         }
@@ -245,11 +260,7 @@ pub(super) async fn authorize(
             | "/auth/logout"
             | "/auth/renew"
     ) {
-        if !state
-            .repository
-            .is_active_principal(principal, workspace)
-            .await?
-        {
+        if !is_active_principal().await? {
             return Err(ApiError::forbidden());
         }
     } else if !accepting_invitation {

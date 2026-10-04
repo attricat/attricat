@@ -1086,22 +1086,19 @@ pub async fn execute_read(
                 .get_blueprint_by_code(&input.blueprint.code)
                 .await?
                 .ok_or(RepositoryError::NotFound("blueprint"))?;
-            let selected = match input.blueprint.version {
-                Some(version) => Some(
-                    repository
+            let (selected, search_blueprint) = match input.blueprint.version {
+                // The latest published revision is the requested one.
+                Some(version) if version == current.blueprint.version => {
+                    (Some(version), current.clone())
+                }
+                Some(version) => {
+                    let published = repository
                         .get_published_blueprint_by_code_and_version(&input.blueprint.code, version)
                         .await?
-                        .map(|blueprint| blueprint.blueprint.version)
-                        .ok_or(RepositoryError::NotFound("blueprint"))?,
-                ),
-                None => None,
-            };
-            let search_blueprint = match selected {
-                Some(version) => repository
-                    .get_published_blueprint_by_code_and_version(&input.blueprint.code, version)
-                    .await?
-                    .expect("selected version was checked above"),
-                None => current.clone(),
+                        .ok_or(RepositoryError::NotFound("blueprint"))?;
+                    (Some(published.blueprint.version), published)
+                }
+                None => (None, current.clone()),
             };
             let query = input
                 .query
@@ -1172,10 +1169,15 @@ pub async fn execute_read(
                 _ => selected,
             };
             let sort_blueprint = match effective_source_version {
-                Some(version) if version != current.blueprint.version => repository
-                    .get_published_blueprint_by_code_and_version(&input.blueprint.code, version)
-                    .await?
-                    .ok_or(RepositoryError::NotFound("blueprint"))?,
+                Some(version)
+                    if version != current.blueprint.version
+                        && version != search_blueprint.blueprint.version =>
+                {
+                    repository
+                        .get_published_blueprint_by_code_and_version(&input.blueprint.code, version)
+                        .await?
+                        .ok_or(RepositoryError::NotFound("blueprint"))?
+                }
                 _ => search_blueprint.clone(),
             };
             let sort = resolve_agent_search_sort(

@@ -770,46 +770,28 @@ impl CatalogRepository {
                 // declaration remains in the revision even when its provider
                 // is disabled, so ordinary blueprint/entity reads cannot fail
                 // and clients can choose the host-owned read-only fallback.
-                let enabled_manifests = sqlx::query_as::<_, (String, Value)>(
-                    "SELECT i.extension_id, r.manifest FROM extension_installations i JOIN installed_extension_releases r ON r.id = i.installed_release_id JOIN workspaces w ON w.id = i.workspace_id WHERE i.workspace_id = $1 AND i.state = 'enabled' AND w.extensions_enabled",
-                )
-                .bind(self.workspace_id.0)
-                .fetch_all(&self.pool)
-                .await?;
-                for attribute in &mut attributes {
-                    if let Some(metadata) = attribute.extension_type.as_mut()
-                        && let Some(object) = metadata.as_object_mut()
-                    {
-                        let available = object
-                            .get("provider")
-                            .and_then(Value::as_str)
-                            .zip(object.get("type").and_then(Value::as_str))
-                            .zip(object.get("version").and_then(Value::as_str))
-                            .zip(object.get("primitive").and_then(Value::as_str))
-                            .is_some_and(|(((provider, type_id), version), primitive)| {
-                                enabled_manifests
-                                    .iter()
-                                    .any(|(extension_id, raw_manifest)| {
-                                        extension_id == provider
-                                                && serde_json::from_value::<
-                                                    crate::extensions::Manifest,
-                                                >(
-                                                    raw_manifest.clone()
-                                                )
-                                                .ok()
-                                                .is_some_and(|manifest| {
-                                                    manifest.attribute_types.iter().any(
-                                                        |declaration| {
-                                                            declaration.id == type_id
-                                                                && declaration.version == version
-                                                                && declaration.primitive
-                                                                    == primitive
-                                                        },
-                                                    )
-                                                })
-                                    })
-                            });
-                        object.insert("available".to_owned(), Value::Bool(available));
+                if attributes
+                    .iter()
+                    .any(|attribute| attribute.extension_type.is_some())
+                {
+                    let available_types = self.enabled_extension_attribute_types().await?;
+                    for attribute in &mut attributes {
+                        if let Some(metadata) = attribute.extension_type.as_mut()
+                            && let Some(object) = metadata.as_object_mut()
+                        {
+                            let field = |name: &str| {
+                                object.get(name).and_then(Value::as_str).map(str::to_owned)
+                            };
+                            let available = field("provider")
+                                .zip(field("type"))
+                                .zip(field("version"))
+                                .zip(field("primitive"))
+                                .is_some_and(|(((provider, type_id), version), primitive)| {
+                                    available_types
+                                        .contains(&(provider, type_id, version, primitive))
+                                });
+                            object.insert("available".to_owned(), Value::Bool(available));
+                        }
                     }
                 }
                 let table_path_attributes = self
@@ -823,6 +805,42 @@ impl CatalogRepository {
             }
             None => Ok(None),
         }
+    }
+}
+
+impl CatalogRepository {
+    /// `(provider, type, version, primitive)` of every attribute type declared
+    /// by an enabled extension, each manifest decoded once.
+    pub(super) async fn enabled_extension_attribute_types(
+        &self,
+    ) -> Result<HashSet<(String, String, String, String)>, RepositoryError> {
+        let enabled_manifests = sqlx::query_as::<_, (String, Value)>(
+            "SELECT i.extension_id, r.manifest FROM extension_installations i JOIN installed_extension_releases r ON r.id = i.installed_release_id JOIN workspaces w ON w.id = i.workspace_id WHERE i.workspace_id = $1 AND i.state = 'enabled' AND w.extensions_enabled",
+        )
+        .bind(self.workspace_id.0)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(enabled_manifests
+            .into_iter()
+            .filter_map(|(extension_id, raw_manifest)| {
+                serde_json::from_value::<crate::extensions::Manifest>(raw_manifest)
+                    .ok()
+                    .map(|manifest| (extension_id, manifest))
+            })
+            .flat_map(|(extension_id, manifest)| {
+                manifest
+                    .attribute_types
+                    .into_iter()
+                    .map(move |declaration| {
+                        (
+                            extension_id.clone(),
+                            declaration.id,
+                            declaration.version,
+                            declaration.primitive,
+                        )
+                    })
+            })
+            .collect())
     }
 }
 

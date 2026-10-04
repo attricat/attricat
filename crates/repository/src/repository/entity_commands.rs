@@ -532,6 +532,17 @@ impl CatalogRepository {
         .into_domain())
     }
 
+    /// Whether a live entity exists, without loading its projections.
+    pub async fn entity_exists(&self, entity_id: Uuid) -> Result<bool, RepositoryError> {
+        Ok(sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM entities WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL)",
+        )
+        .bind(entity_id)
+        .bind(self.workspace_id.0)
+        .fetch_one(&self.pool)
+        .await?)
+    }
+
     pub async fn delete_entity(&self, entity_id: Uuid) -> Result<(), RepositoryError> {
         let mut transaction = self.pool.begin().await?;
         let (changes, event) = self

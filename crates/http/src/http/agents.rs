@@ -453,6 +453,9 @@ fn stream_failed() -> Event {
         .data("agent run event stream failed")
 }
 
+const STREAM_POLL_MIN: std::time::Duration = std::time::Duration::from_millis(250);
+const STREAM_POLL_MAX: std::time::Duration = std::time::Duration::from_secs(2);
+
 /// Streams durable events in sequence order. Event ids are database UUIDs, so a
 /// reconnecting client can use Last-Event-ID without relying on process memory.
 pub(super) async fn stream_events(
@@ -491,6 +494,8 @@ pub(super) async fn stream_events(
     let events = stream! {
         let mut sequence = after;
         let mut draining = false;
+        // An idle run is polled progressively less often; new events reset it.
+        let mut idle_delay = STREAM_POLL_MIN;
         loop {
             match repository.agent_run_events_after(run_id, sequence).await {
                 Ok(events) if events.is_empty() => {
@@ -503,7 +508,10 @@ pub(super) async fn stream_events(
                             draining = true;
                             continue;
                         }
-                        Ok(_) => tokio::time::sleep(std::time::Duration::from_millis(250)).await,
+                        Ok(_) => {
+                            tokio::time::sleep(idle_delay).await;
+                            idle_delay = (idle_delay * 2).min(STREAM_POLL_MAX);
+                        }
                         Err(error) => {
                             tracing::error!(%error, %run_id, "agent run event stream failed");
                             yield Ok(stream_failed());
@@ -512,6 +520,7 @@ pub(super) async fn stream_events(
                     }
                 }
                 Ok(events) => for event in events {
+                    idle_delay = STREAM_POLL_MIN;
                     sequence = event.sequence;
                     let frame = Event::default()
                         .id(event.id.to_string())
