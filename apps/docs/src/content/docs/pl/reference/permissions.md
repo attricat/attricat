@@ -38,9 +38,7 @@ Brak zalogowania lub wygasła sesja zwraca `401`. Zalogowana osoba bez uprawnien
 
 ## Przejścia statusów
 
-Status w schemacie może wymagać uprawnienia lub roli dla pojedynczego przejścia oraz tego, by wykonała je inna osoba niż ta, która wykonała wcześniejsze przejście. Te kontrole obowiązują dodatkowo do `entities.write` i dotyczą każdego, kto zapisuje dane, także przepływów pracy, rozszerzeń i agentów. Odrzucone przejście zwraca `403` z kodem `status_transition_forbidden` lub `status_separation_of_duties`. Zobacz [Kontroluj cykl życia rekordu](/pl/builders/blueprints/#krok-10-kontroluj-cykl-życia-rekordu).
-
-Rekordy w zablokowanym statusie odrzucają zmiany zablokowanej treści z `409 record_locked` niezależnie od uprawnień zapisującego. Odblokowanie wymaga jawnego, dozwolonego przejścia korygującego, które jest zapisywane w dzienniku audytu.
+Status w schemacie może wymagać do przejścia uprawnienia lub roli albo innej osoby niż ta, która wykonała wcześniejsze przejście, dodatkowo do `entities.write` i dla każdego, kto zapisuje dane; zablokowane rekordy odrzucają zmiany niezależnie od uprawnień zapisującego. Zobacz [Kontroluj cykl życia rekordu](/pl/builders/validation/#kontroluj-cykl-życia-rekordu).
 
 ## Widoczność atrybutów
 

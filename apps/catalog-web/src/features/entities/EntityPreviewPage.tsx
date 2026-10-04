@@ -19,7 +19,7 @@ import { DeleteEntityDialog } from './components/DeleteEntityDialog';
 import { RelationshipPickerActionBar } from './components/RelationshipPickerActionBar';
 import { RecordControlsPanel } from './components/RecordControlsPanel';
 import { useEntityPublications } from './components/useEntityPublications';
-import { ApiErrorAlert } from './components/CheckViolationsAlert';
+import { ApiErrorAlert } from '../../components/CheckViolationsAlert';
 import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
 import {
   duplicateEntity,
@@ -254,7 +254,12 @@ export const EntityPreviewPage = ({
           )}
         </>
       )}
-      {resolved.data && <RecordControlsPanel entityId={entityId} />}
+      {resolved.data && (
+        <RecordControlsPanel
+          attributes={blueprint.data?.attributes ?? []}
+          entityId={entityId}
+        />
+      )}
       {resolved.data && (
         <Suspense
           fallback={<CircularProgress aria-label={t('comments.loading')} />}

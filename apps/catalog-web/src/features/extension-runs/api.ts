@@ -20,8 +20,17 @@ export type StartExtensionRunInput = {
   };
 };
 
+/**
+ * `own` limits a request to runs the signed-in user started, even for an
+ * operator who may see every run. Extension frames always use it.
+ */
+export type ExtensionRunScope = 'visible' | 'own';
+
 const runPath = (runId: string) =>
   `${extensionRunsPath}/${encodeURIComponent(z.uuid().parse(runId))}`;
+
+const scoped = (path: string, scope: ExtensionRunScope) =>
+  scope === 'own' ? `${path}?scope=own` : path;
 
 /** Starts an interactive operation from a selection-aware contribution. */
 export const startExtensionRun = (
@@ -47,11 +56,25 @@ export const listExtensionRuns = (extensionId?: string) =>
     z.array(extensionRunSchema),
   );
 
-export const getExtensionRun = (runId: string) =>
-  request(runPath(runId), extensionRunDetailSchema);
+export const getExtensionRun = (
+  runId: string,
+  scope: ExtensionRunScope = 'visible',
+) => request(scoped(runPath(runId), scope), extensionRunDetailSchema);
 
-export const cancelExtensionRun = (runId: string) =>
-  requestNoContent(`${runPath(runId)}/cancel`, { method: 'POST' });
+export const cancelExtensionRun = (
+  runId: string,
+  scope: ExtensionRunScope = 'visible',
+) =>
+  requestNoContent(scoped(`${runPath(runId)}/cancel`, scope), {
+    method: 'POST',
+  });
 
-export const extensionRunArtifactUrl = (runId: string, artifactId: string) =>
-  `${runPath(runId)}/artifacts/${encodeURIComponent(z.uuid().parse(artifactId))}/download`;
+export const extensionRunArtifactUrl = (
+  runId: string,
+  artifactId: string,
+  scope: ExtensionRunScope = 'visible',
+) =>
+  scoped(
+    `${runPath(runId)}/artifacts/${encodeURIComponent(z.uuid().parse(artifactId))}/download`,
+    scope,
+  );

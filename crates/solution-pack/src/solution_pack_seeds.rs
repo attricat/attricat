@@ -9,6 +9,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use catalog_blueprint::BlueprintKind;
+use catalog_validation::saved_search;
 use semver::VersionReq;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -28,14 +29,8 @@ pub const MAX_SOLUTION_PACK_CONTEXTS: usize = 32;
 pub const MAX_SOLUTION_PACK_PREREQUISITES: usize = 16;
 const MAX_SEED_SOURCE_BYTES: usize = 64 * 1024;
 const MAX_CONTEXT_DATA_BYTES: usize = 4 * 1024;
-const MAX_SAVED_SEARCH_STATE_BYTES: usize = 32 * 1024;
 const MAX_SAVED_SEARCH_NAME_BYTES: usize = 120;
 const MAX_SAVED_SEARCH_DESCRIPTION_BYTES: usize = 500;
-const MAX_SAVED_SEARCH_FILTERS: usize = 20;
-/// Explorer sort fields that are not attribute paths.
-const SYSTEM_SORT_FIELDS: &[&str] = &["blueprint_version", "publication_status"];
-const SAVED_SEARCH_FILTER_OPERATORS: &[&str] =
-    &["eq", "contains", "starts_with", "gt", "gte", "lt", "lte"];
 
 /// Another seed that must already be applied to the workspace. Planning never
 /// installs a prerequisite; it only reuses what a completed application of it
@@ -63,6 +58,9 @@ pub struct SeedRule {
     pub key: String,
     pub code: String,
     pub blueprint: String,
+    /// Other pack blueprints the predicate names, such as `referenced_by`
+    /// sources, by logical key.
+    pub referenced_blueprints: BTreeSet<String>,
     pub context: Option<String>,
     pub enabled: bool,
     /// Native rule TOML without pack-only keys, still using the pack-local code.
@@ -99,10 +97,21 @@ pub struct SeedContext {
     pub code: String,
     pub data: Value,
     pub parent: Option<String>,
-    /// Whether the context is a publication channel, and if so whether that
-    /// channel is enabled.
-    pub publication_channel: Option<bool>,
+    /// The publication channel the context provides, if any.
+    pub publication_channel: Option<SeedPublicationChannel>,
 }
+
+/// A publication channel declared by a pack context.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SeedPublicationChannel {
+    pub enabled: bool,
+    /// Pack rules, by logical key, that must hold before publication.
+    pub required_rules: Vec<String>,
+    pub require_valid_entity: bool,
+}
+
+/// Rules a channel may require, as for an ordinary channel update.
+const MAX_CHANNEL_REQUIRED_RULES: usize = 32;
 
 #[derive(Debug, Default)]
 pub(crate) struct ValidatedSeeds {
@@ -316,6 +325,20 @@ pub(crate) fn validate_seed_content(
         let rule = validate_rule(resource, &files[&resource.path], blueprints, &context_keys)?;
         seeds.rules.insert(resource.key.clone(), rule);
     }
+    for context in seeds.contexts.values() {
+        for rule in context
+            .publication_channel
+            .iter()
+            .flat_map(|channel| &channel.required_rules)
+        {
+            if !seeds.rules.contains_key(rule) {
+                return invalid(format!(
+                    "context '{}' channel requires undeclared rule '{rule}'",
+                    context.key
+                ));
+            }
+        }
+    }
     for resource in &manifest.resources.workflows {
         let workflow = validate_workflow(resource, &files[&resource.path], blueprints)?;
         seeds.workflows.insert(resource.key.clone(), workflow);
@@ -422,28 +445,63 @@ fn validate_context_reference(
     Ok(())
 }
 
-/// Collects every `attribute_code` string in a serialized predicate, so
-/// attribute checks keep working when the predicate set grows.
-fn predicate_attribute_codes(value: &Value, codes: &mut BTreeSet<String>) {
-    match value {
-        Value::Object(object) => {
-            for (field, value) in object {
-                if field == "attribute_code"
-                    && let Some(code) = value.as_str()
-                {
-                    codes.insert(code.to_owned());
-                } else {
-                    predicate_attribute_codes(value, codes);
+/// Resolves the blueprint codes a predicate names (the source blueprint of
+/// `referenced_by`) to pack entity blueprints, by their pack-local code, and
+/// checks the referencing relationship. Returns the blueprints' logical keys.
+pub(crate) fn predicate_blueprint_keys(
+    owner: &str,
+    predicate: &catalog_validation::predicate::Predicate,
+    blueprints: &BTreeMap<String, SolutionPackBlueprint>,
+) -> Result<BTreeSet<String>, SolutionPackError> {
+    use catalog_validation::predicate::Predicate;
+    fn walk(
+        owner: &str,
+        predicate: &Predicate,
+        blueprints: &BTreeMap<String, SolutionPackBlueprint>,
+        keys: &mut BTreeSet<String>,
+    ) -> Result<(), SolutionPackError> {
+        match predicate {
+            Predicate::ReferencedBy {
+                blueprint_code,
+                relationship_code,
+                predicate,
+                ..
+            } => {
+                let source = blueprints
+                    .values()
+                    .find(|blueprint| blueprint.code() == blueprint_code)
+                    .filter(|blueprint| blueprint.kind() == BlueprintKind::Entity)
+                    .ok_or_else(|| {
+                        SolutionPackError::Invalid(format!(
+                            "'{owner}' references blueprint '{blueprint_code}' that is not a pack entity blueprint"
+                        ))
+                    })?;
+                if !source.effective_attributes().iter().any(|attribute| {
+                    &attribute.code == relationship_code && attribute.value_type == "relationship"
+                }) {
+                    return invalid(format!(
+                        "'{owner}' references unknown relationship '{relationship_code}' of '{}'",
+                        source.key()
+                    ));
+                }
+                keys.insert(source.key().to_owned());
+                if let Some(predicate) = predicate {
+                    walk(owner, predicate, blueprints, keys)?;
                 }
             }
-        }
-        Value::Array(values) => {
-            for value in values {
-                predicate_attribute_codes(value, codes);
+            Predicate::Linked { predicate, .. } => walk(owner, predicate, blueprints, keys)?,
+            Predicate::AllOf { predicates } | Predicate::AnyOf { predicates } => {
+                for predicate in predicates {
+                    walk(owner, predicate, blueprints, keys)?;
+                }
             }
+            _ => {}
         }
-        _ => {}
+        Ok(())
     }
+    let mut keys = BTreeSet::new();
+    walk(owner, predicate, blueprints, &mut keys)?;
+    Ok(keys)
 }
 
 fn validate_rule(
@@ -469,26 +527,23 @@ fn validate_rule(
     }
     let target = entity_blueprint(key, &blueprint, blueprints)?;
     validate_context_reference(key, context.as_deref(), contexts)?;
-    let mut attribute_codes = BTreeSet::new();
-    predicate_attribute_codes(
-        &serde_json::to_value(&compiled.predicate).expect("rule predicate serializes"),
-        &mut attribute_codes,
-    );
-    for code in attribute_codes {
-        if !target
-            .effective_attributes()
-            .iter()
-            .any(|attribute| attribute.code == code)
-        {
-            return invalid(format!(
-                "rule '{key}' references unknown attribute '{code}' of '{blueprint}'"
-            ));
-        }
-    }
+    // The same type check as an ordinary rule write against its blueprint.
+    let types = target
+        .effective_attributes()
+        .iter()
+        .map(|attribute| (attribute.code.clone(), attribute.value_type.clone()))
+        .collect::<HashMap<_, _>>();
+    catalog_rules::validate_against_attributes(&compiled, &types).map_err(|error| {
+        SolutionPackError::Invalid(format!(
+            "rule '{key}' is invalid for '{blueprint}': {error}"
+        ))
+    })?;
+    let referenced_blueprints = predicate_blueprint_keys(key, &compiled.predicate, blueprints)?;
     Ok(SeedRule {
         key: key.to_owned(),
         code: compiled.code.clone(),
         blueprint,
+        referenced_blueprints,
         context,
         enabled,
         definition,
@@ -521,20 +576,71 @@ fn validate_workflow(
             "workflow '{key}' cannot seed a schedule trigger because it targets a workspace entity"
         ));
     }
-    for action in &compiled.actions {
-        if let catalog_workflow::Action::AttributeWrite { attribute_code, .. } = action
-            && !blueprints.values().any(|blueprint| {
-                blueprint
-                    .effective_attributes()
-                    .iter()
-                    .any(|attribute| &attribute.code == attribute_code)
-            })
+    let declares = |blueprint: &SolutionPackBlueprint, code: &str| {
+        blueprint
+            .effective_attributes()
+            .iter()
+            .any(|attribute| attribute.code == code)
+    };
+    let all = blueprints.values().collect::<Vec<_>>();
+    for trigger in &compiled.triggers {
+        if let catalog_workflow::Trigger::Event { attributes, .. } = trigger
+            && let Some(code) = attributes
+                .iter()
+                .find(|code| !all.iter().any(|blueprint| declares(blueprint, code)))
         {
             return invalid(format!(
-                "workflow '{key}' writes attribute '{attribute_code}' that no pack blueprint declares"
+                "workflow '{key}' trigger filters attribute '{code}' that no pack blueprint declares"
             ));
         }
     }
+    /// Checks every write, including those nested in a referencing-entities
+    /// update, against the pack blueprints that can hold the written entity.
+    fn validate_actions(
+        key: &str,
+        actions: &[catalog_workflow::Action],
+        candidates: &[&SolutionPackBlueprint],
+        declares: &dyn Fn(&SolutionPackBlueprint, &str) -> bool,
+    ) -> Result<(), SolutionPackError> {
+        for action in actions {
+            match action {
+                catalog_workflow::Action::AttributeWrite { attribute_code, .. }
+                    if !candidates
+                        .iter()
+                        .any(|blueprint| declares(blueprint, attribute_code)) =>
+                {
+                    return invalid(format!(
+                        "workflow '{key}' writes attribute '{attribute_code}' that no pack blueprint declares"
+                    ));
+                }
+                catalog_workflow::Action::ReferencingEntitiesUpdate {
+                    relationship_attribute,
+                    actions,
+                    ..
+                } => {
+                    let referencing = candidates
+                        .iter()
+                        .copied()
+                        .filter(|blueprint| {
+                            blueprint.effective_attributes().iter().any(|attribute| {
+                                &attribute.code == relationship_attribute
+                                    && attribute.value_type == "relationship"
+                            })
+                        })
+                        .collect::<Vec<_>>();
+                    if referencing.is_empty() {
+                        return invalid(format!(
+                            "workflow '{key}' follows relationship '{relationship_attribute}' that no pack blueprint declares"
+                        ));
+                    }
+                    validate_actions(key, actions, &referencing, declares)?;
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+    validate_actions(key, &compiled.actions, &all, &declares)?;
     Ok(SeedWorkflow {
         key: key.to_owned(),
         code: compiled.code.clone(),
@@ -588,151 +694,79 @@ fn validate_saved_search(
     }
     let invalid_state =
         |reason: &str| SolutionPackError::Invalid(format!("saved search '{key}' {reason}"));
-    if serde_json::to_vec(&file.state)
-        .expect("JSON value serializes")
-        .len()
-        > MAX_SAVED_SEARCH_STATE_BYTES
-    {
-        return Err(invalid_state("state exceeds 32 KiB"));
-    }
+    // The same shape every saved-search writer accepts, then pack-only rules.
+    saved_search::validate_state(saved_search::EXPLORER_SEARCH_KIND, &file.state)
+        .map_err(|reason| invalid_state(&reason))?;
     let state = file
         .state
         .as_object()
-        .ok_or_else(|| invalid_state("state must be an object"))?;
-    const KEYS: &[&str] = &[
-        "blueprint",
-        "query",
-        "context",
-        "allVersions",
-        "locked",
-        "sort",
-        "attributeFilters",
-        "relationshipFacets",
-    ];
-    if let Some(unknown) = state.keys().find(|field| !KEYS.contains(&field.as_str())) {
-        return Err(invalid_state(&format!(
-            "state field '{unknown}' cannot be seeded"
-        )));
+        .expect("validated state is an object");
+    if state.contains_key("version") {
+        return Err(invalid_state(
+            "state field 'version' cannot be seeded because it identifies workspace data",
+        ));
     }
-    let blueprint = state
-        .get("blueprint")
-        .and_then(Value::as_str)
-        .ok_or_else(|| invalid_state("state must reference a blueprint"))?
+    let blueprint = state["blueprint"]
+        .as_str()
+        .expect("validated blueprint")
         .to_owned();
     let target = entity_blueprint(key, &blueprint, blueprints)?;
     let mut referenced_blueprints = BTreeSet::from([blueprint.clone()]);
     let context = state
         .get("context")
-        .map(|value| {
-            value
-                .as_str()
-                .map(str::to_owned)
-                .ok_or_else(|| invalid_state("context must be a logical key"))
-        })
-        .transpose()?;
+        .map(|value| value.as_str().expect("validated context").to_owned());
     validate_context_reference(key, context.as_deref(), contexts)?;
-    if state
-        .get("query")
-        .is_some_and(|value| value.as_str().is_none_or(|query| query.trim().is_empty()))
-    {
-        return Err(invalid_state("query must be a non-empty string"));
-    }
-    for flag in ["allVersions", "locked"] {
-        if state.get(flag).is_some_and(|value| !value.is_boolean()) {
-            return Err(invalid_state(&format!("{flag} must be a boolean")));
-        }
-    }
     let by_code = blueprints
         .values()
         .map(|blueprint| (blueprint.code(), blueprint))
         .collect::<HashMap<_, _>>();
-    if let Some(sort) = state.get("sort") {
-        let sort = sort
-            .as_object()
-            .filter(|sort| sort.len() == 2)
-            .ok_or_else(|| invalid_state("sort must contain only field and direction"))?;
-        let field = sort
-            .get("field")
-            .and_then(Value::as_str)
-            .ok_or_else(|| invalid_state("sort field is missing"))?;
-        if !matches!(
-            sort.get("direction").and_then(Value::as_str),
-            Some("asc" | "desc")
-        ) {
-            return Err(invalid_state("sort direction must be asc or desc"));
-        }
-        if !SYSTEM_SORT_FIELDS.contains(&field) {
-            validate_attribute_path(target, field, &by_code, &mut referenced_blueprints)
-                .map_err(|reason| invalid_state(&reason))?;
-        }
+    if let Some(field) = state
+        .get("sort")
+        .and_then(|sort| sort["field"].as_str())
+        .filter(|field| !saved_search::SYSTEM_SORT_FIELDS.contains(field))
+    {
+        validate_attribute_path(target, field, &by_code, &mut referenced_blueprints)
+            .map_err(|reason| invalid_state(&reason))?;
     }
-    if let Some(filters) = state.get("attributeFilters") {
-        let filters = filters
-            .as_array()
-            .filter(|filters| filters.len() <= MAX_SAVED_SEARCH_FILTERS)
-            .ok_or_else(|| invalid_state("attributeFilters must be an array of at most 20"))?;
-        for filter in filters {
-            let filter = filter
-                .as_object()
-                .filter(|filter| {
-                    filter
-                        .keys()
-                        .all(|field| matches!(field.as_str(), "field" | "operator" | "value"))
-                })
-                .ok_or_else(|| invalid_state("attribute filter is invalid"))?;
-            let field = filter
-                .get("field")
-                .and_then(Value::as_str)
-                .ok_or_else(|| invalid_state("attribute filter field is missing"))?;
-            if !filter
-                .get("operator")
-                .and_then(Value::as_str)
-                .is_some_and(|operator| SAVED_SEARCH_FILTER_OPERATORS.contains(&operator))
-                || !filter.get("value").is_some_and(|value| {
-                    value.is_string() || value.is_number() || value.is_boolean()
-                })
-            {
-                return Err(invalid_state(
-                    "attribute filter operator or value is invalid",
-                ));
-            }
-            validate_attribute_path(target, field, &by_code, &mut referenced_blueprints)
-                .map_err(|reason| invalid_state(&reason))?;
-        }
+    for filter in state
+        .get("attributeFilters")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let field = filter["field"].as_str().expect("validated filter field");
+        validate_attribute_path(target, field, &by_code, &mut referenced_blueprints)
+            .map_err(|reason| invalid_state(&reason))?;
     }
-    if let Some(facets) = state.get("relationshipFacets") {
-        let facets = facets
-            .as_array()
-            .filter(|facets| facets.len() <= MAX_SAVED_SEARCH_FILTERS)
-            .ok_or_else(|| invalid_state("relationshipFacets must be an array of at most 20"))?;
-        for facet in facets {
-            let facet = facet
-                .as_object()
-                .filter(|facet| {
-                    facet
-                        .keys()
-                        .all(|field| matches!(field.as_str(), "field" | "targetBlueprint"))
-                })
-                .ok_or_else(|| {
-                    invalid_state("relationship facets cannot seed selected entity IDs")
-                })?;
-            let field = facet
-                .get("field")
-                .and_then(Value::as_str)
-                .ok_or_else(|| invalid_state("relationship facet field is missing"))?;
-            if field.is_empty()
-                || field.len() > 512
-                || !field.split('.').all(catalog_validation::is_valid_code)
+    for facet in state
+        .get("relationshipFacets")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        if facet.get("selectedIds").is_some() {
+            return Err(invalid_state(
+                "relationship facets cannot seed selected entity IDs",
+            ));
+        }
+        let field = facet["field"].as_str().expect("validated facet field");
+        let relationship =
+            validate_relationship_path(target, field, &by_code, &mut referenced_blueprints)
+                .map_err(|reason| invalid_state(&reason))?;
+        if let Some(target) = facet.get("targetBlueprint") {
+            let target = target.as_str().expect("validated targetBlueprint");
+            let target_blueprint = entity_blueprint(key, target, blueprints)?;
+            if !relationship.target_blueprints.is_empty()
+                && !relationship
+                    .target_blueprints
+                    .iter()
+                    .any(|code| code == target_blueprint.code())
             {
-                return Err(invalid_state("relationship facet field is invalid"));
+                return Err(invalid_state(&format!(
+                    "relationship facet '{field}' cannot target '{target}'"
+                )));
             }
-            if let Some(target) = facet.get("targetBlueprint") {
-                let target = target
-                    .as_str()
-                    .ok_or_else(|| invalid_state("targetBlueprint must be a logical key"))?;
-                entity_blueprint(key, target, blueprints)?;
-                referenced_blueprints.insert(target.to_owned());
-            }
+            referenced_blueprints.insert(target.to_owned());
         }
     }
     Ok(SeedSavedSearch {
@@ -746,15 +780,15 @@ fn validate_saved_search(
     })
 }
 
-/// Validates an Explorer attribute path: relationship segments through pack
-/// blueprints ending in an attribute of the last blueprint.
-fn validate_attribute_path(
-    start: &SolutionPackBlueprint,
+/// Follows the relationship hops of an Explorer field path through pack
+/// blueprints, within Explorer's hop limit, and returns the last attribute.
+fn walk_attribute_path<'a>(
+    start: &'a SolutionPackBlueprint,
     path: &str,
-    by_code: &HashMap<&str, &SolutionPackBlueprint>,
+    by_code: &HashMap<&str, &'a SolutionPackBlueprint>,
     referenced: &mut BTreeSet<String>,
-) -> Result<(), String> {
-    let segments = path.split('.').collect::<Vec<_>>();
+) -> Result<&'a catalog_blueprint::EffectiveAttribute, String> {
+    let segments = saved_search::field_path(path)?;
     let mut current = start;
     for (index, segment) in segments.iter().enumerate() {
         let attribute = current
@@ -763,20 +797,57 @@ fn validate_attribute_path(
             .find(|attribute| attribute.code == *segment)
             .ok_or_else(|| format!("field '{path}' references unknown attribute '{segment}'"))?;
         if index + 1 == segments.len() {
-            return Ok(());
+            return Ok(attribute);
         }
+        if attribute.value_type != "relationship" {
+            return Err(format!(
+                "field '{path}' segment '{segment}' is not a relationship"
+            ));
+        }
+        // Explorer follows a relationship only to its single target blueprint.
         let target = attribute
             .target_blueprint
             .as_deref()
-            .filter(|_| attribute.value_type == "relationship")
             .and_then(|code| by_code.get(code))
             .ok_or_else(|| {
-                format!("field '{path}' segment '{segment}' is not a pack relationship")
+                format!("field '{path}' segment '{segment}' does not lead to one pack blueprint")
             })?;
         referenced.insert(target.key().to_owned());
         current = target;
     }
     Err(format!("field '{path}' is empty"))
+}
+
+/// Validates an Explorer attribute path: relationship hops through pack
+/// blueprints ending in an attribute of the last blueprint.
+fn validate_attribute_path(
+    start: &SolutionPackBlueprint,
+    path: &str,
+    by_code: &HashMap<&str, &SolutionPackBlueprint>,
+    referenced: &mut BTreeSet<String>,
+) -> Result<(), String> {
+    walk_attribute_path(start, path, by_code, referenced).map(|_| ())
+}
+
+/// Validates a relationship facet path, which must end in a relationship.
+fn validate_relationship_path<'a>(
+    start: &'a SolutionPackBlueprint,
+    path: &str,
+    by_code: &HashMap<&str, &'a SolutionPackBlueprint>,
+    referenced: &mut BTreeSet<String>,
+) -> Result<&'a catalog_blueprint::EffectiveAttribute, String> {
+    if path.split('.').count() > saved_search::MAX_RELATIONSHIP_HOPS {
+        return Err(format!(
+            "relationship facet '{path}' follows more than {} relationship hops",
+            saved_search::MAX_RELATIONSHIP_HOPS
+        ));
+    }
+    let attribute = walk_attribute_path(start, path, by_code, referenced)?;
+    if attribute.value_type == "relationship" {
+        Ok(attribute)
+    } else {
+        Err(format!("relationship facet '{path}' is not a relationship"))
+    }
 }
 
 #[derive(Deserialize)]
@@ -796,6 +867,10 @@ struct ContextFile {
 #[serde(deny_unknown_fields)]
 struct PublicationChannelDeclaration {
     enabled: bool,
+    #[serde(default)]
+    required_rules: Vec<String>,
+    #[serde(default)]
+    require_valid_entity: bool,
 }
 
 fn validate_context(
@@ -835,7 +910,25 @@ fn validate_context(
         parent: file.parent,
         publication_channel: file
             .publication_channel
-            .map(|declaration| declaration.enabled),
+            .map(|declaration| -> Result<_, SolutionPackError> {
+                let unique = declaration.required_rules.iter().collect::<BTreeSet<_>>();
+                if declaration.required_rules.len() > MAX_CHANNEL_REQUIRED_RULES
+                    || unique.len() != declaration.required_rules.len()
+                {
+                    return invalid(format!(
+                        "context '{key}' channel must require at most {MAX_CHANNEL_REQUIRED_RULES} unique rules"
+                    ));
+                }
+                for rule in &declaration.required_rules {
+                    validate_namespaced_key(rule, "rules")?;
+                }
+                Ok(SeedPublicationChannel {
+                    enabled: declaration.enabled,
+                    required_rules: declaration.required_rules,
+                    require_valid_entity: declaration.require_valid_entity,
+                })
+            })
+            .transpose()?,
     })
 }
 
@@ -848,8 +941,16 @@ pub fn publication_channel_key(context_key: &str) -> String {
 pub struct ExistingContextSnapshot {
     pub id: uuid::Uuid,
     pub code: String,
-    /// `Some(enabled)` when the context is already a publication channel.
-    pub publication_channel_enabled: Option<bool>,
+    /// The publication channel the context already provides, if any.
+    pub publication_channel: Option<ExistingPublicationChannel>,
+}
+
+/// A workspace publication channel's settings.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExistingPublicationChannel {
+    pub enabled: bool,
+    pub required_rule_codes: Vec<String>,
+    pub require_valid_entity: bool,
 }
 
 /// How a prerequisite seed is satisfied by the workspace's completed
@@ -993,7 +1094,8 @@ pub(crate) type PlannedContexts = (
     BTreeMap<String, (Outcome, PlannedMapping)>,
 );
 
-/// Plans contexts (parents first) and their publication channels.
+/// Plans contexts, parents first. Their publication channels are planned
+/// after the rules a channel can require.
 pub(crate) fn plan_contexts(
     pack: &ValidatedSolutionPack,
     prefix: &str,
@@ -1104,7 +1206,7 @@ pub(crate) fn plan_contexts(
                 "target_code": mapping.target_code,
                 "required": resource.required,
                 "parent": context.parent,
-                "publication_channel": context.publication_channel,
+                "publication_channel": context.publication_channel.as_ref().map(|channel| channel.enabled),
             }),
             normalized_payload: payload.filter(|_| outcome.0 == "create"),
             preconditions: if matches!(outcome.0, "create" | "conflict" | "map") {
@@ -1117,65 +1219,6 @@ pub(crate) fn plan_contexts(
         planned.insert(key.to_owned(), (outcome, mapping));
     }
 
-    for context in pack.contexts() {
-        let Some(enabled) = context.publication_channel else {
-            continue;
-        };
-        let required = resources[context.key.as_str()].required;
-        let (context_outcome, context_mapping) = &planned[&context.key];
-        let existing = seed
-            .existing_contexts
-            .get(&context.key)
-            .and_then(|existing| existing.publication_channel_enabled);
-        let outcome = if !available(Some(context_outcome)) {
-            ("blocked", "dependency_not_creatable")
-        } else if existing == Some(enabled) {
-            ("satisfied", "exact_match")
-        } else if existing.is_some() {
-            ("conflict", "publication_channel_mismatch")
-        } else {
-            ("create", "target_absent")
-        };
-        let outcome = optional_outcome(required, outcome);
-        let key = publication_channel_key(&context.key);
-        let payload = serde_json::json!({
-            "context_id": context_mapping.target_id,
-            "context_code": context_mapping.target_code,
-            "enabled": enabled,
-        });
-        mappings.push(PlannedMapping {
-            resource_kind: "publication_channel",
-            logical_key: key.clone(),
-            target_id: context_mapping.target_id,
-            target_code: context_mapping.target_code.clone(),
-            target_version: None,
-            mapping_kind: if existing.is_some() {
-                "existing"
-            } else {
-                "create"
-            },
-            snapshot: serde_json::json!({"context": context.key, "enabled": existing}),
-        });
-        actions.push(PlannedAction {
-            resource_kind: "publication_channel",
-            logical_key: key,
-            action: outcome.0,
-            reason_code: outcome.1,
-            summary: serde_json::json!({
-                "context": context.key,
-                "context_code": context_mapping.target_code,
-                "enabled": enabled,
-                "current_enabled": existing,
-                "required": required,
-            }),
-            normalized_payload: matches!(outcome.0, "create" | "satisfied").then_some(payload),
-            preconditions: if matches!(outcome.0, "create" | "conflict") {
-                target_absent("publication_channel", &context_mapping.target_code)
-            } else {
-                serde_json::json!([])
-            },
-        });
-    }
     Ok((mappings, actions, planned))
 }
 
@@ -1216,12 +1259,59 @@ impl DependentPlanInput<'_> {
 }
 
 fn replace_code(definition: &str, code: &str) -> Result<String, SolutionPackError> {
+    replace_codes(definition, code, None)
+}
+
+/// Visits the blueprint codes named by a TOML predicate, rewriting it only
+/// when a code changes so the authored definition is otherwise preserved.
+pub(crate) fn visit_toml_predicate_blueprint_codes(
+    predicate: &mut toml::Value,
+    visit: &mut dyn FnMut(&mut String) -> Result<(), SolutionPackError>,
+) -> Result<(), SolutionPackError> {
+    let original = serde_json::to_value(&*predicate)
+        .map_err(|_| SolutionPackError::Invalid("predicate is not valid TOML".into()))?;
+    let mut rewritten = original.clone();
+    catalog_validation::predicate::visit_predicate_blueprint_codes(&mut rewritten, visit)?;
+    if rewritten != original {
+        *predicate = toml::Value::try_from(rewritten)
+            .map_err(|_| SolutionPackError::Invalid("predicate is not valid TOML".into()))?;
+    }
+    Ok(())
+}
+
+/// The plan's physical code for a pack blueprint named by its pack-local code.
+pub(crate) fn physical_blueprint_code(
+    mappings: &BTreeMap<String, PlannedMapping>,
+    code: &str,
+) -> Result<String, SolutionPackError> {
+    mappings
+        .iter()
+        .find(|(key, mapping)| mapping.resource_kind == "blueprint" && resource_code(key) == code)
+        .map(|(_, mapping)| mapping.target_code.clone())
+        .ok_or_else(|| SolutionPackError::Invalid(format!("blueprint code '{code}' is not mapped")))
+}
+
+/// Sets a native definition's code and, for a rule, rewrites the blueprint
+/// codes its predicate names to the plan's physical codes.
+fn replace_codes(
+    definition: &str,
+    code: &str,
+    blueprints: Option<&BTreeMap<String, PlannedMapping>>,
+) -> Result<String, SolutionPackError> {
     let mut value: toml::Value = toml::from_str(definition)
         .map_err(|_| SolutionPackError::Invalid("validated definition is invalid".into()))?;
-    value
+    let table = value
         .as_table_mut()
-        .expect("validated definition is a table")
-        .insert("code".into(), toml::Value::String(code.to_owned()));
+        .expect("validated definition is a table");
+    table.insert("code".into(), toml::Value::String(code.to_owned()));
+    if let Some(blueprints) = blueprints
+        && let Some(predicate) = table.get_mut("predicate")
+    {
+        visit_toml_predicate_blueprint_codes(predicate, &mut |code| {
+            *code = physical_blueprint_code(blueprints, code)?;
+            Ok(())
+        })?;
+    }
     toml::to_string(&value)
         .map_err(|_| SolutionPackError::Invalid("validated definition is invalid".into()))
 }
@@ -1231,6 +1321,7 @@ pub(crate) fn plan_dependents(
 ) -> Result<(Vec<PlannedMapping>, Vec<PlannedAction>), SolutionPackError> {
     let mut mappings = Vec::new();
     let mut actions = Vec::new();
+    let mut rule_outcomes = BTreeMap::new();
     let manifest = input.pack.manifest();
 
     for resource in &manifest.resources.rules {
@@ -1238,6 +1329,10 @@ pub(crate) fn plan_dependents(
         let code = physical_code(input.prefix, &resource.key)?;
         let blueprint_outcome = input.blueprint_outcomes.get(&rule.blueprint);
         let outcome = if !input.blueprint_available(&rule.blueprint)
+            || !rule
+                .referenced_blueprints
+                .iter()
+                .all(|key| input.blueprint_available(key))
             || !input.context_available(rule.context.as_deref())
         {
             ("blocked", "dependency_not_creatable")
@@ -1251,16 +1346,23 @@ pub(crate) fn plan_dependents(
             ("create", "target_absent")
         };
         let outcome = optional_outcome(resource.required, outcome);
+        rule_outcomes.insert(resource.key.clone(), (outcome, code.clone()));
         let blueprint = &input.blueprint_mappings[&rule.blueprint];
         let context = input.context_mapping(rule.context.as_deref());
+        // An existing blueprint may have live entities, and an enforcing rule
+        // is only enabled there after an operator's dry run, as for any rule.
+        let enable_deferred = rule.enabled
+            && rule.compiled.enforcement.is_some()
+            && blueprint_outcome.is_some_and(|(action, _)| *action == "map");
+        let enabled = rule.enabled && !enable_deferred;
         let payload = (outcome.0 == "create")
             .then(|| -> Result<Value, SolutionPackError> {
                 Ok(serde_json::json!({
-                    "definition": replace_code(&rule.definition, &code)?,
+                    "definition": replace_codes(&rule.definition, &code, Some(input.blueprint_mappings))?,
                     "blueprint_id": blueprint.target_id,
                     "blueprint_version": blueprint.target_version,
                     "context_id": context.map(|context| context.target_id),
-                    "enabled": rule.enabled,
+                    "enabled": enabled,
                 }))
             })
             .transpose()?;
@@ -1285,7 +1387,9 @@ pub(crate) fn plan_dependents(
                 "blueprint_code": blueprint.target_code,
                 "context": rule.context,
                 "context_code": context.map(|context| context.target_code.clone()),
-                "enabled": rule.enabled,
+                "enabled": enabled,
+                "requested_enabled": rule.enabled,
+                "enable_deferred_reason": enable_deferred.then_some("enforcing_rule_requires_dry_run"),
                 "severity": rule.compiled.severity,
                 "predicate": serde_json::to_value(&rule.compiled.predicate)
                     .expect("rule predicate serializes")["type"],
@@ -1407,11 +1511,114 @@ pub(crate) fn plan_dependents(
             },
         });
     }
+    plan_publication_channels(input, &rule_outcomes, &mut mappings, &mut actions);
     Ok((mappings, actions))
 }
 
-/// Explorer state with physical blueprint and context codes, normalized like
-/// ordinary saved-search writes.
+/// Plans the publication channels of pack contexts, after the rules they
+/// require. A channel is created like an ordinary channel update; an existing
+/// channel must already match exactly.
+fn plan_publication_channels(
+    input: &DependentPlanInput<'_>,
+    rule_outcomes: &BTreeMap<String, (Outcome, String)>,
+    mappings: &mut Vec<PlannedMapping>,
+    actions: &mut Vec<PlannedAction>,
+) {
+    let required_by_key = input
+        .pack
+        .manifest()
+        .resources
+        .contexts
+        .iter()
+        .map(|resource| (resource.key.as_str(), resource.required))
+        .collect::<HashMap<_, _>>();
+    for context in input.pack.contexts() {
+        let Some(channel) = &context.publication_channel else {
+            continue;
+        };
+        let required = required_by_key[context.key.as_str()];
+        let (context_outcome, context_mapping) = &input.contexts[&context.key];
+        // A required rule is available when this plan creates it or a rule
+        // with its code already exists, such as one an earlier release created.
+        let rules_available = channel.required_rules.iter().all(|rule| {
+            let (outcome, code) = &rule_outcomes[rule];
+            available(Some(outcome)) || input.seed.rule_codes.contains(code)
+        });
+        let declared = ExistingPublicationChannel {
+            enabled: channel.enabled,
+            required_rule_codes: channel
+                .required_rules
+                .iter()
+                .map(|rule| rule_outcomes[rule].1.clone())
+                .collect(),
+            require_valid_entity: channel.require_valid_entity,
+        };
+        let existing = input
+            .seed
+            .existing_contexts
+            .get(&context.key)
+            .and_then(|existing| existing.publication_channel.as_ref());
+        let outcome = if !available(Some(context_outcome)) || !rules_available {
+            ("blocked", "dependency_not_creatable")
+        } else if existing == Some(&declared) {
+            ("satisfied", "exact_match")
+        } else if existing.is_some() {
+            ("conflict", "publication_channel_mismatch")
+        } else {
+            ("create", "target_absent")
+        };
+        let outcome = optional_outcome(required, outcome);
+        let key = publication_channel_key(&context.key);
+        let payload = serde_json::json!({
+            "context_id": context_mapping.target_id,
+            "context_code": context_mapping.target_code,
+            "enabled": declared.enabled,
+            "required_rule_codes": declared.required_rule_codes,
+            "require_valid_entity": declared.require_valid_entity,
+        });
+        mappings.push(PlannedMapping {
+            resource_kind: "publication_channel",
+            logical_key: key.clone(),
+            target_id: context_mapping.target_id,
+            target_code: context_mapping.target_code.clone(),
+            target_version: None,
+            mapping_kind: if existing.is_some() {
+                "existing"
+            } else {
+                "create"
+            },
+            snapshot: serde_json::json!({
+                "context": context.key,
+                "enabled": existing.map(|existing| existing.enabled),
+            }),
+        });
+        actions.push(PlannedAction {
+            resource_kind: "publication_channel",
+            logical_key: key,
+            action: outcome.0,
+            reason_code: outcome.1,
+            summary: serde_json::json!({
+                "context": context.key,
+                "context_code": context_mapping.target_code,
+                "enabled": declared.enabled,
+                "required_rules": channel.required_rules,
+                "required_rule_codes": declared.required_rule_codes,
+                "require_valid_entity": declared.require_valid_entity,
+                "current_enabled": existing.map(|existing| existing.enabled),
+                "required": required,
+            }),
+            normalized_payload: matches!(outcome.0, "create" | "satisfied").then_some(payload),
+            preconditions: if matches!(outcome.0, "create" | "conflict") {
+                target_absent("publication_channel", &context_mapping.target_code)
+            } else {
+                serde_json::json!([])
+            },
+        });
+    }
+}
+
+/// Explorer state with physical blueprint and context codes, normalized by
+/// the same function as ordinary saved-search writes.
 fn physical_search_state(
     search: &SeedSavedSearch,
     blueprints: &BTreeMap<String, PlannedMapping>,
@@ -1438,23 +1645,7 @@ fn physical_search_state(
             }
         }
     }
-    if let Some(Value::String(query)) = object.get_mut("query") {
-        *query = query.trim().to_owned();
-    }
-    for flag in ["allVersions", "locked"] {
-        if object.get(flag) == Some(&Value::Bool(false)) {
-            object.remove(flag);
-        }
-    }
-    for list in ["attributeFilters", "relationshipFacets"] {
-        if object
-            .get(list)
-            .is_some_and(|value| value.as_array().is_some_and(Vec::is_empty))
-        {
-            object.remove(list);
-        }
-    }
-    state
+    saved_search::normalize_state(&state)
 }
 
 /// Summaries of a pack's seed resources for inspection.
@@ -1473,7 +1664,11 @@ pub fn seed_inspection_summary(pack: &ValidatedSolutionPack) -> Value {
         "contexts": pack.contexts().map(|context| serde_json::json!({
             "key": context.key,
             "parent": context.parent,
-            "publication_channel": context.publication_channel.map(|enabled| serde_json::json!({"enabled": enabled})),
+            "publication_channel": context.publication_channel.as_ref().map(|channel| serde_json::json!({
+                "enabled": channel.enabled,
+                "required_rules": channel.required_rules,
+                "require_valid_entity": channel.require_valid_entity,
+            })),
         })).collect::<Vec<_>>(),
         "rules": manifest.resources.rules.iter().map(|resource| {
             let rule = pack.rule(&resource.key).expect("validated rule");

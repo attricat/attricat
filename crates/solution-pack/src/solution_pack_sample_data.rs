@@ -2,7 +2,7 @@
 //! `solution-pack-sample-prohibited-v1` lexical matcher.
 
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashMap},
     net::{Ipv4Addr, Ipv6Addr},
     str::FromStr,
     sync::OnceLock,
@@ -115,14 +115,13 @@ pub fn validate_sample_file_bytes(media_type: &str, bytes: &[u8]) -> Result<(), 
     if bytes.is_empty() || bytes.len() > MAX_SAMPLE_FILE_BYTES {
         return Err("sample file must be non-empty and at most 8 MiB".into());
     }
-    let matches = match media_type {
-        "image/png" => bytes.starts_with(b"\x89PNG\r\n\x1a\n"),
-        "image/jpeg" => bytes.starts_with(&[0xff, 0xd8, 0xff]),
-        "image/webp" => bytes.len() >= 12 && &bytes[..4] == b"RIFF" && &bytes[8..12] == b"WEBP",
-        "application/pdf" => bytes.starts_with(b"%PDF-"),
-        "text/plain" => std::str::from_utf8(bytes).is_ok_and(|text| !text.contains('\0')),
-        _ => false,
-    };
+    // The same sniffer as ordinary uploads; sample media types never need
+    // the file name to disambiguate.
+    let matches = catalog_validation::files::detect_mime(
+        bytes,
+        "",
+        catalog_validation::files::is_plain_text(bytes),
+    ) == Some(media_type);
     if matches {
         Ok(())
     } else {
@@ -767,6 +766,132 @@ fn contains_encoded_blob(value: &str) -> bool {
                         .decode(bytes)
                         .is_ok_and(|decoded| decoded.len() >= 24))
         })
+}
+
+/// Normalizes one unique-key component with the workspace's shared rule
+/// ([`catalog_validation::unique_key::normalize_key_component`]). Stored
+/// date-times are already canonical UTC, so sample date-times are converted
+/// to that form first.
+fn sample_key_component(value: &Value, value_type: &str, case_sensitive: bool) -> Option<Value> {
+    let canonical = match (value_type, value) {
+        ("datetime", Value::String(text)) => chrono::DateTime::parse_from_rfc3339(text)
+            .map(|instant| Value::String(instant.with_timezone(&chrono::Utc).to_rfc3339()))
+            .ok(),
+        _ => None,
+    };
+    catalog_validation::unique_key::normalize_key_component(
+        value_type,
+        canonical.as_ref().unwrap_or(value),
+        case_sensitive,
+    )
+}
+
+/// One sample's context path: the context itself, its pack parents, and the
+/// workspace default context (`None`).
+type SampleContextPath<'a> = (Option<&'a str>, Vec<Option<&'a str>>);
+
+/// Rejects samples that would collide on one of their blueprint's unique
+/// keys, so the dataset cannot fail part-way through an application. Keys
+/// are compared like the workspace does; existing workspace entities of a
+/// mapped or reused blueprint can still collide when the plan is applied.
+pub(crate) fn validate_sample_unique_keys(
+    sample: &ValidatedSampleData,
+    blueprints: &BTreeMap<String, crate::solution_packs::SolutionPackBlueprint>,
+    contexts: &BTreeMap<String, crate::solution_pack_seeds::SeedContext>,
+) -> Result<(), String> {
+    let mut paths: Vec<SampleContextPath<'_>> = vec![(None, vec![None])];
+    for key in contexts.keys() {
+        let mut path = Vec::new();
+        let mut current = Some(key.as_str());
+        while let Some(context) = current {
+            path.push(Some(context));
+            current = contexts
+                .get(context)
+                .and_then(|context| context.parent.as_deref());
+        }
+        path.push(None);
+        paths.push((Some(key.as_str()), path));
+    }
+    let mut seen = HashMap::<(&str, &str, Option<&str>, Vec<Value>), &str>::new();
+    for entity in &sample.declaration.entities {
+        let Some(blueprint) = blueprints.get(&entity.blueprint) else {
+            continue;
+        };
+        let attributes = blueprint
+            .effective_attributes()
+            .iter()
+            .map(|attribute| (attribute.code.as_str(), attribute))
+            .collect::<HashMap<_, _>>();
+        let mut values = HashMap::<(&str, Option<&str>), Value>::new();
+        for fact in &entity.facts {
+            let code = fact.attribute.rsplit('/').next().unwrap_or_default();
+            values.insert((code, fact.context.as_deref()), fact.value.clone());
+        }
+        for relationship in &entity.relationships {
+            let code = relationship
+                .attribute
+                .rsplit('/')
+                .next()
+                .unwrap_or_default();
+            if let Some(target) = relationship.targets.iter().min() {
+                values.insert(
+                    (code, relationship.context.as_deref()),
+                    Value::String(target.clone()),
+                );
+            }
+        }
+        for key in blueprint.unique_keys() {
+            let scoped = if key.scope == "context" {
+                &paths[..]
+            } else {
+                &paths[..1]
+            };
+            'context: for (context, path) in scoped {
+                let mut components = Vec::with_capacity(key.attributes.len());
+                for code in &key.attributes {
+                    let Some(attribute) = attributes.get(code.as_str()) else {
+                        continue 'context;
+                    };
+                    let mut found = None;
+                    for (index, source) in path.iter().enumerate() {
+                        if let Some(value) = values.get(&(code.as_str(), *source)) {
+                            if index > 0 && attribute.context_fallback == "none" {
+                                break;
+                            }
+                            found = Some(value.clone());
+                            break;
+                        }
+                    }
+                    // Defaults are written in the default context.
+                    let found = found.or_else(|| {
+                        attribute
+                            .default_value
+                            .clone()
+                            .filter(|_| path.len() == 1 || attribute.context_fallback != "none")
+                    });
+                    let Some(component) = found.and_then(|value| {
+                        sample_key_component(&value, &attribute.value_type, key.case_sensitive)
+                    }) else {
+                        continue 'context;
+                    };
+                    components.push(component);
+                }
+                let family = blueprint.key();
+                if let Some(other) = seen.insert(
+                    (family, key.code.as_str(), *context, components),
+                    entity.key.as_str(),
+                ) {
+                    return Err(format!(
+                        "sample entities '{other}' and '{}' share unique key '{}' of '{family}'{}",
+                        entity.key,
+                        key.code,
+                        context.map_or_else(String::new, |context| format!(" in '{context}'"))
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

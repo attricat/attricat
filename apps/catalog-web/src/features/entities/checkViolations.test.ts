@@ -3,7 +3,9 @@ import { ApiRequestError } from '../../api/request';
 import {
   checkViolationError,
   publicationReadinessText,
+  readinessForContext,
   violationFieldErrors,
+  violationsText,
 } from './checkViolations';
 import type { CheckViolation } from './schemas';
 
@@ -101,5 +103,34 @@ describe('check violations', () => {
         ],
       }),
     ).toBe('SKU is required. An image is required.');
+  });
+
+  it('joins violation messages', () => {
+    expect(
+      violationsText([
+        violation('a', [], 'First.'),
+        violation('b', [], 'Second.'),
+      ]),
+    ).toBe('First. Second.');
+    expect(violationsText([])).toBe('');
+  });
+
+  it('finds the readiness of one channel', () => {
+    const storefront = {
+      context_id: '123e4567-e89b-12d3-a456-426614174000',
+      context_code: 'storefront',
+      ready: true,
+      violations: [],
+    };
+    expect(readinessForContext([storefront], storefront.context_id)).toBe(
+      storefront,
+    );
+    expect(
+      readinessForContext([storefront], '123e4567-e89b-12d3-a456-426614174001'),
+    ).toBeUndefined();
+    expect(readinessForContext([storefront], null)).toBeUndefined();
+    expect(
+      readinessForContext(undefined, storefront.context_id),
+    ).toBeUndefined();
   });
 });

@@ -4,15 +4,39 @@ import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import { QueryErrorNotice } from '../../../components/QueryErrorNotice';
 import { Timestamp } from '../../../time/Timestamp';
+import type { Attribute, EntityApproval, RetentionHold } from '../api';
+import { attributeLabel } from '../entityDisplay';
 import {
-  getEntityApprovals,
-  getEntityRetentionHolds,
-  type EntityApproval,
-  type RetentionHold,
-} from '../recordControls';
-import { entityQueryKeys } from '../queryKeys';
+  entityApprovalsOptions,
+  entityRetentionHoldsOptions,
+} from '../queryOptions';
+import { statusLabel } from '../status';
 
-const ApprovalItem = ({ approval }: { approval: EntityApproval }) => {
+/** Display labels for attribute and status codes the panel reports. */
+const recordLabels = (attributes: readonly Attribute[]) => {
+  const byCode = new Map(
+    attributes.map((attribute) => [attribute.code, attribute]),
+  );
+  return {
+    attribute: (code: string) => {
+      const attribute = byCode.get(code);
+      return attribute ? attributeLabel(attribute) : code;
+    },
+    status: (attributeCode: string | null, status: string) => {
+      const attribute = attributeCode ? byCode.get(attributeCode) : undefined;
+      return (attribute && statusLabel(attribute, status)) ?? status;
+    },
+  };
+};
+type RecordLabels = ReturnType<typeof recordLabels>;
+
+const ApprovalItem = ({
+  approval,
+  labels,
+}: {
+  approval: EntityApproval;
+  labels: RecordLabels;
+}) => {
   const { t } = useTranslation();
   const state =
     approval.end_reason === 'content_changed'
@@ -32,7 +56,7 @@ const ApprovalItem = ({ approval }: { approval: EntityApproval }) => {
       >
         <Typography variant="subtitle2">
           {t('entities.recordControls.approvedAs', {
-            status: approval.status,
+            status: labels.status(approval.attribute_code, approval.status),
             context: approval.context_code,
           })}
         </Typography>
@@ -45,7 +69,7 @@ const ApprovalItem = ({ approval }: { approval: EntityApproval }) => {
       </Stack>
       <Typography variant="body2" color="text.secondary">
         {t('entities.recordControls.approvedBy', {
-          user: approval.approved_by ?? t('entities.recordControls.system'),
+          user: approval.approved_by ?? t('audit.system'),
         })}{' '}
         <Timestamp value={approval.approved_at} />
       </Typography>
@@ -55,7 +79,10 @@ const ApprovalItem = ({ approval }: { approval: EntityApproval }) => {
           <Timestamp value={approval.ended_at} />
           {approval.void_status &&
             ` · ${t('entities.recordControls.returnedTo', {
-              status: approval.void_status,
+              status: labels.status(
+                approval.attribute_code,
+                approval.void_status,
+              ),
             })}`}
         </Typography>
       )}
@@ -72,7 +99,13 @@ const ApprovalItem = ({ approval }: { approval: EntityApproval }) => {
   );
 };
 
-const HoldItem = ({ hold }: { hold: RetentionHold }) => {
+const HoldItem = ({
+  hold,
+  labels,
+}: {
+  hold: RetentionHold;
+  labels: RecordLabels;
+}) => {
   const { t } = useTranslation();
   return (
     <Box
@@ -87,8 +120,12 @@ const HoldItem = ({ hold }: { hold: RetentionHold }) => {
         <Typography variant="subtitle2">
           {hold.source === 'status'
             ? t('entities.recordControls.statusHold', {
-                attribute: hold.attribute_code ?? '',
-                status: hold.status ?? '',
+                attribute: hold.attribute_code
+                  ? labels.attribute(hold.attribute_code)
+                  : '',
+                status: hold.status
+                  ? labels.status(hold.attribute_code, hold.status)
+                  : '',
               })
             : t('entities.recordControls.explicitHold', {
                 reason: hold.reason ?? '',
@@ -115,19 +152,20 @@ const HoldItem = ({ hold }: { hold: RetentionHold }) => {
 
 /**
  * Approval history and file retention holds of a controlled record. Renders
- * nothing for records without either.
+ * nothing for records without either. `attributes` label the reported codes.
  */
-export const RecordControlsPanel = ({ entityId }: { entityId: string }) => {
+export const RecordControlsPanel = ({
+  entityId,
+  attributes,
+}: {
+  entityId: string;
+  attributes: readonly Attribute[];
+}) => {
   const { t } = useTranslation();
   const headingId = useId();
-  const approvals = useQuery({
-    queryKey: [...entityQueryKeys.recordControls(entityId), 'approvals'],
-    queryFn: ({ signal }) => getEntityApprovals(entityId, signal),
-  });
-  const holds = useQuery({
-    queryKey: [...entityQueryKeys.recordControls(entityId), 'holds'],
-    queryFn: ({ signal }) => getEntityRetentionHolds(entityId, signal),
-  });
+  const approvals = useQuery(entityApprovalsOptions(entityId));
+  const holds = useQuery(entityRetentionHoldsOptions(entityId));
+  const labels = recordLabels(attributes);
   const error = approvals.error ?? holds.error;
   if (!error && !approvals.data?.length && !holds.data?.length) return null;
   return (
@@ -154,7 +192,11 @@ export const RecordControlsPanel = ({ entityId }: { entityId: string }) => {
           </Typography>
           <Box component="ul" sx={{ listStyle: 'none', p: 0, m: 0 }}>
             {approvals.data?.map((approval) => (
-              <ApprovalItem key={approval.id} approval={approval} />
+              <ApprovalItem
+                key={approval.id}
+                approval={approval}
+                labels={labels}
+              />
             ))}
           </Box>
         </>
@@ -166,7 +208,7 @@ export const RecordControlsPanel = ({ entityId }: { entityId: string }) => {
           </Typography>
           <Box component="ul" sx={{ listStyle: 'none', p: 0, m: 0 }}>
             {holds.data?.map((hold) => (
-              <HoldItem key={hold.id} hold={hold} />
+              <HoldItem key={hold.id} hold={hold} labels={labels} />
             ))}
           </Box>
         </>

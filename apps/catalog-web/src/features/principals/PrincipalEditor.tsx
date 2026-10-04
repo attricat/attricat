@@ -1,14 +1,13 @@
 import { Autocomplete, Stack, TextField, Typography } from '@mui/material';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { compactIconSize } from '../../components/iconSizes';
 import { AssignedUserIcon, TeamIcon } from '../../components/systemIcons';
 import { attributeLabel } from '../entities/entityDisplay';
 import type { ValueEditorProps } from '../views/components/componentTypes';
 import { assignableOptions, isAssignable, resolvePrincipal } from './principal';
 import type { PrincipalConfiguration } from './schemas';
 import { usePrincipalDirectory } from './usePrincipalDirectory';
-
-const ICON_SIZE = 16;
 
 /**
  * Picks a workspace user or team. A saved assignee who can no longer be
@@ -76,7 +75,7 @@ export const PrincipalEditor = ({
         return (
           <li key={key} {...props}>
             <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-              <Icon aria-hidden size={ICON_SIZE} />
+              <Icon aria-hidden size={compactIconSize} />
               <span>{option.principal.label}</span>
               {option.principal.kind === 'user' &&
                 option.principal.user.display_name && (

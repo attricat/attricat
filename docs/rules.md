@@ -31,46 +31,13 @@ Schedules are six-field UTC cron expressions. Event triggers accept only catalog
 
 Rules share one declarative predicate engine with entity-schema checks
 (`x-attricat-checks`), status transition conditions and publication channel
-gates; see [JSON Schema Validation](json-schema-validation.md#declarative-checks).
-A predicate *holds* when the data is acceptable; a rule reports a finding when
-it does not. Predicates are tagged by `type`, unknown fields are rejected, and
-the predicate is type-checked against the blueprint revision's attributes when
-the rule is created or the blueprint is compiled (`422 invalid_rule_definition`
-or `invalid_blueprint_definition`).
-
-| `type` | Fields | Holds when |
-| --- | --- | --- |
-| `required` | `attribute_code` | The attribute has a value; a relationship has at least one target. |
-| `stale` | `attribute_code`, `max_age_seconds` (1–31536000) | The current value changed within the age limit. Rules only. |
-| `has_tag` / `missing_tag` | `tag` | The entity has / does not have the system tag. |
-| `compare` | `attribute_code`, `op`, exactly one of `other_attribute_code`, `subject_attribute_code`, `value` | The comparison is true. |
-| `one_of` | `attribute_code`, `values` (1–100) | The value is one of the listed values, such as status codes. Not for relationships or files. |
-| `relative_date` | `attribute_code`, `op` (`lt`, `lte`, `gt`, `gte`), `offset_days` (−36500–36500, default 0) | A date/datetime compares with now + `offset_days`. |
-| `unique` | `attribute_codes` (1–4) | No other live entity of the same blueprint revision has the same values. String, number, integer, boolean, date and datetime only. Rules only. |
-| `linked` | `relationship_code`, `quantifier` (`all` default, `any`, `none`), `predicate` | `all`: every linked record satisfies the predicate (holds with no links); `any`: at least one does; `none`: none does. |
-| `referenced_by` | `blueprint_code`, `relationship_code`, optional `predicate`, `min` and/or `max` (≤ 1000) | The number of `blueprint_code` records whose `relationship_code` targets this record and that match `predicate` is within the bounds. |
-| `acyclic` | `relationship_code` | Following the relationship never returns to the record. Rules only. |
-| `all_of` / `any_of` | `predicates` (1–16) | Every / at least one nested predicate holds. |
-
-- `compare` operators are `eq`, `ne`, `lt`, `lte`, `gt`, `gte` and `disjoint`.
-  Ordering applies only to `number`, `integer`, `date` and `datetime`; strings
-  and booleans support `eq`/`ne`. Relationships compare target sets: `eq`/`ne`
-  (same set) and `disjoint` (no common target). Files cannot be compared, and
-  both sides must have compatible types. Write dates as `"2026-01-31"` strings.
-- A comparison with a missing operand holds. Combine it with `required` when a
-  value must exist.
-- `subject_attribute_code` is available only inside `linked` or
-  `referenced_by` and names an attribute of the record being checked.
-- `linked` and `referenced_by` follow one hop. Their nested predicate cannot use
-  `linked`, `referenced_by`, `unique`, `acyclic` or `stale`. Attributes not
-  declared on a linked record are missing. More than 200 linked records per
-  relationship, or more than 1000 referencing records, fail the predicate.
-  `acyclic` stops after 1000 visited entities. `referenced_by` counts only
-  live records in the same context.
-- Predicates nest at most 4 deep with at most 32 parts.
-- `stale`, `unique` and `acyclic` are *rules only*: they are not safe for
-  synchronous evaluation and cannot be used by enforcing rules, entity checks or
-  transition conditions.
+gates. A predicate *holds* when the data is acceptable; a rule reports a
+finding when it does not. Every predicate type, field, limit and comparison
+rule, including the rules-only `stale`, `unique` and `acyclic`, is defined in
+[JSON Schema Validation](json-schema-validation.md#predicates). `unique`
+compares the entity with every other live entity of the blueprint family
+(any revision), in the evaluated context. `referenced_by` counts only live
+records in the same context.
 
 Expiry, with a schedule trigger so findings open as dates pass:
 
@@ -163,7 +130,7 @@ A publication channel can require rules by code
 rules are the enabled rules of the entity's blueprint revision with that code,
 excluding rules scoped to another context; any predicate is allowed, including
 rules-only ones. They are evaluated live in the channel context when publishing
-and fail with `422 publication_checks_failed`. See [API](api.md#declarative-check-errors).
+and fail with `422 publication_checks_failed`. See [API](api.md#errors).
 
 ## Runtime guarantees
 

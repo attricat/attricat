@@ -3,6 +3,8 @@
 //! These routes are deliberately separate from the operator management API.
 //! A run is visible to its initiator while that user can still read every
 //! selected entity, and to workspace operators holding `extensions.manage`.
+//! Requests with `scope=own` (all extension frame requests) see only the
+//! caller's own runs.
 
 use axum::{
     Json,
@@ -64,7 +66,7 @@ pub(super) struct RunListQuery {
 #[derive(Serialize)]
 pub(super) struct RunDetailResponse {
     #[serde(flatten)]
-    run: InteractiveRun,
+    run: RunResponse,
     artifacts: Vec<InteractiveRunArtifact>,
 }
 
@@ -75,6 +77,25 @@ fn actor(principal: AuthenticatedPrincipal) -> AuthorizationActor {
     }
 }
 
+/// Which runs a request may address. Extension frames send `scope=own`
+/// through the browser broker: a frame acts for the signed-in user and never
+/// sees another user's run, even when that user is an operator.
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum RunScope {
+    /// The caller's own runs, and every run for `extensions.manage` holders.
+    #[default]
+    Visible,
+    /// Only runs the caller initiated.
+    Own,
+}
+
+#[derive(Deserialize)]
+pub(super) struct RunScopeQuery {
+    #[serde(default)]
+    scope: RunScope,
+}
+
 /// Resolves a run the caller may inspect. Other users' runs are reported as
 /// missing rather than forbidden so run IDs cannot be probed.
 async fn visible_run(
@@ -83,6 +104,7 @@ async fn visible_run(
     principal: AuthenticatedPrincipal,
     workspace: ActiveWorkspace,
     run_id: Uuid,
+    scope: RunScope,
 ) -> Result<InteractiveRun, ApiError> {
     let not_found = || ApiError::not_found("extension run");
     let run = repository
@@ -102,25 +124,47 @@ async fn visible_run(
             Err(error) => return Err(error.into()),
         }
     }
+    if scope == RunScope::Own {
+        return Err(if initiator {
+            ApiError::forbidden()
+        } else {
+            not_found()
+        });
+    }
     // Operators keep access to every run, including their own after they
     // lose read access to a member.
     let operator = state
         .repository
-        .is_authorized(principal.0, workspace.0, "extensions.manage", None, None)
-        .await?
-        && match principal.1 {
-            Some(token_id) => {
-                state
-                    .repository
-                    .personal_api_token_permits(token_id, "extensions.manage")
-                    .await?
-            }
-            None => true,
-        };
+        .principal_may(
+            actor(principal),
+            workspace.0,
+            "extensions.manage",
+            None,
+            None,
+        )
+        .await?;
     match (operator, initiator) {
         (true, _) => Ok(run),
         (false, true) => Err(ApiError::forbidden()),
         (false, false) => Err(not_found()),
+    }
+}
+
+/// A run with whether the signed-in user started it.
+#[derive(Serialize)]
+pub(super) struct RunResponse {
+    #[serde(flatten)]
+    run: InteractiveRun,
+    initiated_by_me: bool,
+}
+
+impl RunResponse {
+    fn new(run: InteractiveRun, principal: AuthenticatedPrincipal) -> Self {
+        let initiated_by_me = run.actor_user_id == Some(principal.0);
+        Self {
+            run,
+            initiated_by_me,
+        }
     }
 }
 
@@ -202,11 +246,15 @@ pub(super) async fn list(
     ScopedRepository(repository): ScopedRepository,
     principal: AuthenticatedPrincipal,
     ApiQuery(query): ApiQuery<RunListQuery>,
-) -> Result<Json<Vec<InteractiveRun>>, ApiError> {
+) -> Result<Json<Vec<RunResponse>>, ApiError> {
+    // The list holds only the caller's own runs, so it ignores `scope`.
     Ok(Json(
         repository
             .interactive_extension_runs(actor(principal), query.extension_id.as_deref())
-            .await?,
+            .await?
+            .into_iter()
+            .map(|run| RunResponse::new(run, principal))
+            .collect(),
     ))
 }
 
@@ -216,10 +264,22 @@ pub(super) async fn detail(
     principal: AuthenticatedPrincipal,
     workspace: ActiveWorkspace,
     ApiPath(run_id): ApiPath<Uuid>,
+    ApiQuery(query): ApiQuery<RunScopeQuery>,
 ) -> Result<Json<RunDetailResponse>, ApiError> {
-    let run = visible_run(&state, &repository, principal, workspace, run_id).await?;
+    let run = visible_run(
+        &state,
+        &repository,
+        principal,
+        workspace,
+        run_id,
+        query.scope,
+    )
+    .await?;
     let artifacts = repository.interactive_run_artifacts(run_id).await?;
-    Ok(Json(RunDetailResponse { run, artifacts }))
+    Ok(Json(RunDetailResponse {
+        run: RunResponse::new(run, principal),
+        artifacts,
+    }))
 }
 
 pub(super) async fn cancel(
@@ -228,6 +288,7 @@ pub(super) async fn cancel(
     principal: AuthenticatedPrincipal,
     workspace: ActiveWorkspace,
     ApiPath(run_id): ApiPath<Uuid>,
+    ApiQuery(query): ApiQuery<RunScopeQuery>,
 ) -> Result<StatusCode, ApiError> {
     // The initiator may always stop their own run: cancelling reveals nothing
     // about the selection, and a run continues for members still readable
@@ -238,7 +299,17 @@ pub(super) async fn cancel(
         .filter(|run| run.actor_user_id == Some(principal.0));
     let run = match own {
         Some(run) => run,
-        None => visible_run(&state, &repository, principal, workspace, run_id).await?,
+        None => {
+            visible_run(
+                &state,
+                &repository,
+                principal,
+                workspace,
+                run_id,
+                query.scope,
+            )
+            .await?
+        }
     };
     if !run.can_cancel {
         return Err(ApiError::conflict(
@@ -278,8 +349,17 @@ pub(super) async fn download(
     principal: AuthenticatedPrincipal,
     workspace: ActiveWorkspace,
     ApiPath((run_id, artifact_id)): ApiPath<(Uuid, Uuid)>,
+    ApiQuery(query): ApiQuery<RunScopeQuery>,
 ) -> Result<Response, ApiError> {
-    visible_run(&state, &repository, principal, workspace, run_id).await?;
+    visible_run(
+        &state,
+        &repository,
+        principal,
+        workspace,
+        run_id,
+        query.scope,
+    )
+    .await?;
     let name = repository
         .interactive_run_artifacts(run_id)
         .await?
@@ -377,23 +457,14 @@ pub(super) async fn repair_annotations(
 ) -> Result<Json<ExtensionAnnotations>, ApiError> {
     let may_write = state
         .repository
-        .is_authorized(
-            principal.0,
+        .principal_may(
+            actor(principal),
             workspace.0,
             "entities.write",
             Some(entity_id),
             None,
         )
-        .await?
-        && match principal.1 {
-            Some(token_id) => {
-                state
-                    .repository
-                    .personal_api_token_permits(token_id, "entities.write")
-                    .await?
-            }
-            None => true,
-        };
+        .await?;
     if !may_write {
         return Err(ApiError::forbidden());
     }

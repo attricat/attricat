@@ -645,6 +645,18 @@ impl Predicate {
         }
     }
 
+    /// Whether the predicate reads the checked record's own system tags. Tags
+    /// read inside `linked` or `referenced_by` belong to other records.
+    pub fn reads_subject_tags(&self) -> bool {
+        match self {
+            Self::HasTag { .. } | Self::MissingTag { .. } => true,
+            Self::AllOf { predicates } | Self::AnyOf { predicates } => {
+                predicates.iter().any(Self::reads_subject_tags)
+            }
+            _ => false,
+        }
+    }
+
     /// Records the related data the host must load before evaluation.
     pub fn collect_requirements(&self, requirements: &mut Requirements) {
         match self {
@@ -740,6 +752,97 @@ impl Predicate {
             _ => {}
         }
     }
+}
+
+impl Predicate {
+    /// Blueprint codes the predicate names, such as the source blueprint of
+    /// `referenced_by`. Installers use this to resolve and rewrite them.
+    pub fn blueprint_codes_mut(&mut self) -> Vec<&mut String> {
+        let mut codes = Vec::new();
+        self.collect_blueprint_codes(&mut codes);
+        codes
+    }
+
+    fn collect_blueprint_codes<'a>(&'a mut self, codes: &mut Vec<&'a mut String>) {
+        match self {
+            Self::ReferencedBy {
+                blueprint_code,
+                predicate,
+                ..
+            } => {
+                codes.push(blueprint_code);
+                if let Some(predicate) = predicate {
+                    predicate.collect_blueprint_codes(codes);
+                }
+            }
+            Self::Linked { predicate, .. } => predicate.collect_blueprint_codes(codes),
+            Self::AllOf { predicates } | Self::AnyOf { predicates } => {
+                for predicate in predicates {
+                    predicate.collect_blueprint_codes(codes);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Visits every blueprint code named by a serialized predicate, in the same
+/// places as [`Predicate::blueprint_codes_mut`]. Use it to rewrite stored or
+/// authored definitions without re-serializing them.
+pub fn visit_predicate_blueprint_codes<E>(
+    predicate: &mut Value,
+    visit: &mut dyn FnMut(&mut String) -> Result<(), E>,
+) -> Result<(), E> {
+    let Some(object) = predicate.as_object_mut() else {
+        return Ok(());
+    };
+    if object.get("type").and_then(Value::as_str) == Some("referenced_by")
+        && let Some(Value::String(code)) = object.get_mut("blueprint_code")
+    {
+        visit(code)?;
+    }
+    if let Some(nested) = object.get_mut("predicate") {
+        visit_predicate_blueprint_codes(nested, visit)?;
+    }
+    if let Some(Value::Array(nested)) = object.get_mut("predicates") {
+        for predicate in nested {
+            visit_predicate_blueprint_codes(predicate, visit)?;
+        }
+    }
+    Ok(())
+}
+
+/// Visits every blueprint code named by the predicates of a JSON schema: its
+/// entity checks (`x-attricat-checks`) and status transition conditions.
+pub fn visit_schema_blueprint_codes<E>(
+    schema: &mut Value,
+    visit: &mut dyn FnMut(&mut String) -> Result<(), E>,
+) -> Result<(), E> {
+    let Some(schema) = schema.as_object_mut() else {
+        return Ok(());
+    };
+    if let Some(Value::Array(checks)) = schema.get_mut(CHECKS_KEY) {
+        for check in checks {
+            if let Some(predicate) = check.get_mut("predicate") {
+                visit_predicate_blueprint_codes(predicate, visit)?;
+            }
+        }
+    }
+    if let Some(Value::Array(edges)) = schema
+        .get_mut(crate::status::STATUS_KEY)
+        .and_then(|status| status.get_mut("transitions"))
+    {
+        for edge in edges {
+            if let Some(Value::Array(conditions)) = edge.get_mut("conditions") {
+                for condition in conditions {
+                    if let Some(predicate) = condition.get_mut("predicate") {
+                        visit_predicate_blueprint_codes(predicate, visit)?;
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Related data a predicate needs beyond the record's own resolved values.
@@ -1328,6 +1431,23 @@ mod tests {
         serde_json::from_value(source).unwrap()
     }
 
+    #[test]
+    fn only_own_tag_predicates_read_subject_tags() {
+        let reads = |source: Value| predicate(source).reads_subject_tags();
+        assert!(reads(json!({"type": "has_tag", "tag": "x"})));
+        assert!(reads(json!({"type": "any_of", "predicates": [
+            {"type": "required", "attribute_code": "title"},
+            {"type": "missing_tag", "tag": "x"}
+        ]})));
+        assert!(!reads(
+            json!({"type": "required", "attribute_code": "title"})
+        ));
+        assert!(!reads(
+            json!({"type": "linked", "relationship_code": "supplier",
+            "predicate": {"type": "has_tag", "tag": "x"}})
+        ));
+    }
+
     fn validate(source: Value, usage: Usage) -> Result<(), String> {
         let types = types();
         validate_predicate(&predicate(source), Some(&types), usage)
@@ -1606,5 +1726,41 @@ mod tests {
         assert!(entity_checks(&unsafe_check).is_err());
         let unknown = json!({CHECKS_KEY: [{"code":"x","when":1,"predicate":{"type":"required","attribute_code":"a"}}]});
         assert!(entity_checks(&unknown).is_err());
+    }
+
+    #[test]
+    fn blueprint_code_visitors_find_referencing_sources() {
+        let raw = json!({"type":"all_of","predicates":[
+            {"type":"required","attribute_code":"x"},
+            {"type":"referenced_by","blueprint_code":"action","relationship_code":"nc","max":0}
+        ]});
+        let mut typed = predicate(raw.clone());
+        assert_eq!(
+            typed
+                .blueprint_codes_mut()
+                .into_iter()
+                .map(|code| code.clone())
+                .collect::<Vec<_>>(),
+            ["action"]
+        );
+        let mut schema = json!({
+            CHECKS_KEY: [{"code":"c","predicate":raw}],
+            "x-attricat-status": {"transitions":[{"from":"a","to":"b","conditions":[
+                {"code":"d","predicate":{"type":"referenced_by","blueprint_code":"task","relationship_code":"r","min":1}}
+            ]}]}
+        });
+        visit_schema_blueprint_codes::<()>(&mut schema, &mut |code| {
+            *code = format!("p_{code}");
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(
+            schema[CHECKS_KEY][0]["predicate"]["predicates"][1]["blueprint_code"],
+            "p_action"
+        );
+        assert_eq!(
+            schema["x-attricat-status"]["transitions"][0]["conditions"][0]["predicate"]["blueprint_code"],
+            "p_task"
+        );
     }
 }

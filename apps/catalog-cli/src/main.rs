@@ -991,6 +991,10 @@ enum RuleCommand {
     Enable {
         rule_id: Uuid,
         version: i64,
+        /// Enable an enforcing rule although its completed dry run found
+        /// existing violations; those entities cannot be saved until fixed.
+        #[arg(long)]
+        accept_existing_violations: bool,
     },
     Disable {
         rule_id: Uuid,
@@ -2876,13 +2880,17 @@ async fn rule_command(
             )
             .await
         }
-        RuleCommand::Enable { rule_id, version } => {
+        RuleCommand::Enable {
+            rule_id,
+            version,
+            accept_existing_violations,
+        } => {
             request(
                 client,
                 server,
                 Method::POST,
                 &format!("/rules/{rule_id}/versions/{version}/enable"),
-                None,
+                Some(json!({ "accept_existing_violations": accept_existing_violations })),
             )
             .await
         }
@@ -4464,52 +4472,7 @@ async fn request(
         .send()
         .await
         .map_err(|error| CliError::Transport(error.to_string()))?;
-    let status = response.status();
-    if response
-        .content_length()
-        .is_some_and(|length| length > MAX_RESPONSE_BYTES as u64)
-    {
-        return Err(CliError::ResponseTooLarge);
-    }
-    let mut stream = response.bytes_stream();
-    let mut body = Vec::new();
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|error| CliError::Transport(error.to_string()))?;
-        if body.len() + chunk.len() > MAX_RESPONSE_BYTES {
-            return Err(CliError::ResponseTooLarge);
-        }
-        body.extend_from_slice(&chunk);
-    }
-    let body = String::from_utf8(body).map_err(|_| CliError::InvalidResponse)?;
-
-    if status.is_success() {
-        if status == reqwest::StatusCode::NO_CONTENT {
-            return Ok("null".to_owned());
-        }
-        serde_json::from_str::<Value>(&body).map_err(|_| CliError::InvalidResponse)?;
-        return Ok(body);
-    }
-
-    let error = serde_json::from_str::<Value>(&body).ok();
-    let code = error
-        .as_ref()
-        .and_then(|body| body["error"]["code"].as_str())
-        .unwrap_or("api_error")
-        .to_owned();
-    let message = error
-        .as_ref()
-        .and_then(|body| body["error"]["message"].as_str())
-        .unwrap_or(&body)
-        .to_owned();
-    Err(CliError::Api {
-        status: status.as_u16(),
-        code,
-        message,
-        details: error
-            .as_ref()
-            .map(|body| body["error"]["details"].clone())
-            .filter(|details| !details.is_null()),
-    })
+    raw_response(response).await
 }
 
 async fn request_value(
@@ -5115,6 +5078,17 @@ value = "Blue shirt"
             ])
             .is_ok()
         );
+        assert!(
+            Cli::try_parse_from([
+                "acli",
+                "rule",
+                "enable",
+                id,
+                "2",
+                "--accept-existing-violations"
+            ])
+            .is_ok()
+        );
         assert!(Cli::try_parse_from(["acli", "data-health", "background-processing"]).is_ok());
     }
 
@@ -5131,6 +5105,12 @@ value = "Blue shirt"
             )
             .route(
                 "/rules/{rule_id}/run-now",
+                axum::routing::post(|axum::Json(body): axum::Json<Value>| async move {
+                    axum::Json(body)
+                }),
+            )
+            .route(
+                "/rules/{rule_id}/versions/{version}/enable",
                 axum::routing::post(|axum::Json(body): axum::Json<Value>| async move {
                     axum::Json(body)
                 }),
@@ -5182,6 +5162,21 @@ value = "Blue shirt"
         assert_eq!(
             serde_json::from_str::<Value>(&result).unwrap(),
             json!({"idempotency_key":"check","entity_id":id,"dry_run":true})
+        );
+        let result = rule_command(
+            &client,
+            &url,
+            RuleCommand::Enable {
+                rule_id: id,
+                version: 3,
+                accept_existing_violations: true,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            serde_json::from_str::<Value>(&result).unwrap(),
+            json!({"accept_existing_violations":true})
         );
         let result = rule_command(
             &client,

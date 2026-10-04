@@ -1226,3 +1226,109 @@ async fn referencing_update_refuses_more_targets_than_its_limit(pool: PgPool) {
     assert!(error.contains("more than 1 entities"), "{error}");
     server.abort();
 }
+
+#[sqlx::test]
+async fn workflow_writes_withdraw_changed_publications(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let blueprint = create_blueprint(
+        &client,
+        &base_url,
+        r#"
+format_version = 1
+code = "published_document"
+name = "Published document"
+kind = "entity"
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["title"]
+[[attributes]]
+code = "title"
+value_type = "string"
+[[attributes]]
+code = "body"
+value_type = "string"
+"#,
+    )
+    .await;
+    enabled_workflow(
+        &client,
+        &base_url,
+        r#"format_version = 2
+code = "retitle_on_body_change"
+name = "Retitle on body change"
+[[triggers]]
+event_type = "attribute_value.changed.v1"
+attributes = ["body"]
+[[actions]]
+type = "attribute_write"
+attribute_code = "title"
+fixed = "Reworked""#,
+    )
+    .await;
+    let document = create_entity(&client, &base_url, &blueprint).await;
+    let id = document["id"].as_str().unwrap();
+    client
+        .post(format!("{base_url}/entities/{id}/values"))
+        .json(&json!({"values":[{"kind":"scalar","attribute_code":"body","value":"v1"}]}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    // Publish after the triggering write, so only the workflow's own write
+    // can withdraw the publication.
+    let workspace_id: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
+    let channel = client
+        .post(format!("{base_url}/contexts"))
+        .json(&json!({"code": "web_channel", "data": {}}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json::<Value>()
+        .await
+        .unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .parse::<Uuid>()
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO publication_channels(workspace_id,context_id,enabled) VALUES($1,$2,true)",
+    )
+    .bind(workspace_id)
+    .bind(channel)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let publisher = Uuid::new_v4();
+    sqlx::query("INSERT INTO users(id,email) VALUES($1,$2)")
+        .bind(publisher)
+        .bind(format!("{publisher}@example.test"))
+        .execute(&pool)
+        .await
+        .unwrap();
+    let entity_id: Uuid = id.parse().unwrap();
+    sqlx::query("INSERT INTO entity_channel_publications(workspace_id,entity_id,context_id,published_at,published_by_user_id) VALUES($1,$2,$3,now(),$4)")
+        .bind(workspace_id).bind(entity_id).bind(channel).bind(publisher).execute(&pool).await.unwrap();
+    assert_eq!(fan_out_latest_event(&pool, id).await.1, 1);
+    let repository = CatalogRepository::system(pool.clone())
+        .for_workspace(workspace_id)
+        .await
+        .unwrap();
+    assert!(handle_workflow_task_once(&repository).await);
+    let (title, published): (Option<String>, bool) = sqlx::query_as(
+        "SELECT e.projections->'preview'->'default'->>'title', EXISTS (SELECT 1 FROM entity_channel_publications p WHERE p.entity_id = e.id AND p.published_at IS NOT NULL) FROM entities e WHERE e.id = $1",
+    )
+    .bind(entity_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(title.as_deref(), Some("Reworked"));
+    assert!(
+        !published,
+        "a workflow write withdraws a changed publication"
+    );
+    server.abort();
+}

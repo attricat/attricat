@@ -5,8 +5,10 @@ import {
   Switch,
   TextField,
 } from '@mui/material';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { PublicationChannelChecks } from './api';
+import { requiredRuleCodesFromInput } from './channelChecks';
 import { MAX_REQUIRED_RULE_CODES } from './constants';
 
 type Props = {
@@ -17,11 +19,6 @@ type Props = {
   onChange: (checks: PublicationChannelChecks) => void;
 };
 
-/** Normalizes entered rule codes into the unique list the API accepts. */
-export const requiredRuleCodesFromInput = (values: readonly string[]) => [
-  ...new Set(values.map((value) => value.trim()).filter(Boolean)),
-];
-
 /** Edits the checks an entity must pass before publication to a channel. */
 export const ChannelChecksEditor = ({
   disabled,
@@ -31,6 +28,8 @@ export const ChannelChecksEditor = ({
   onChange,
 }: Props) => {
   const { t } = useTranslation();
+  // Input beyond the API limit is not applied; say so instead of ignoring it.
+  const [overLimit, setOverLimit] = useState(false);
   return (
     <Stack spacing={1}>
       <FormControlLabel
@@ -51,16 +50,21 @@ export const ChannelChecksEditor = ({
         multiple
         onChange={(_, values) => {
           const codes = requiredRuleCodesFromInput(values);
-          if (codes.length <= MAX_REQUIRED_RULE_CODES)
-            onChange({ required_rule_codes: codes });
+          const exceeded = codes.length > MAX_REQUIRED_RULE_CODES;
+          setOverLimit(exceeded);
+          if (!exceeded) onChange({ required_rule_codes: codes });
         }}
         options={ruleCodes}
         renderInput={(params) => (
           <TextField
             {...params}
-            helperText={t('exports.requiredRulesHelp', {
-              max: MAX_REQUIRED_RULE_CODES,
-            })}
+            error={overLimit}
+            helperText={t(
+              overLimit
+                ? 'exports.requiredRulesLimit'
+                : 'exports.requiredRulesHelp',
+              { max: MAX_REQUIRED_RULE_CODES },
+            )}
             label={t('exports.requiredRules')}
           />
         )}

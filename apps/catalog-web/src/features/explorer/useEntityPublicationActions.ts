@@ -13,6 +13,7 @@ import {
   type EntityItem,
   type EntityPublicationStatus,
 } from '../entities/api';
+import { readinessForContext } from '../entities/checkViolations';
 import { entityQueryKeys } from '../entities/queryKeys';
 import {
   entityPublicationOptions,
@@ -54,9 +55,7 @@ export const useEntityPublicationActions = (
     enabled: Boolean(readinessEntityId && publicationContextId),
   });
   const readiness = readinessEntityId
-    ? readinessQuery.data?.find(
-        (item) => item.context_id === publicationContextId,
-      )
+    ? readinessForContext(readinessQuery.data, publicationContextId)
     : undefined;
   const requirePublicationContext = () => {
     if (!publicationContextId)

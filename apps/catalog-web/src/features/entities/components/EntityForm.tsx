@@ -44,11 +44,12 @@ import {
   savedStatusState,
   statusConfiguration,
   statusLocks,
-  statusTransitionAllowed,
+  statusTransitionDenial,
 } from '../status';
+import { useStatusTransitionDenialText } from '../useStatusTransitionDenialText';
 import { checkViolationError, violationFieldErrors } from '../checkViolations';
-import { CheckViolationsAlert } from './CheckViolationsAlert';
-import type { StatusTransitionAccess } from '../recordControls';
+import { ApiErrorAlert } from '../../../components/CheckViolationsAlert';
+import type { StatusTransitionAccess } from '../api';
 import { EntityFormAttributeEditor } from './EntityFormAttributeEditor';
 
 export type EntityFormHandle = {
@@ -151,6 +152,7 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
     ref,
   ) => {
     const { t } = useTranslation();
+    const denialText = useStatusTransitionDenialText();
     // A versioned editing session keeps values and its concurrency token from
     // the same snapshot. Refetches must not silently rebase unsaved edits.
     const [baseline] = useState({
@@ -250,22 +252,14 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
           contextId,
           statusParentContextIds,
         );
-        const after = fields[attribute.code] || saved.inherited;
-        if (!statusTransitionAllowed(config, saved.current, after))
-          validation.fieldErrors[attribute.code] = t(
-            'entities.statusTransitionDenied',
-          );
-        else if (after !== saved.current) {
-          const denied = statusTransitions.find(
-            (edge) =>
-              edge.attribute_code === attribute.code &&
-              edge.to === after &&
-              !edge.allowed,
-          );
-          if (denied)
-            validation.fieldErrors[attribute.code] =
-              denied.denial_reason ?? t('entities.statusTransitionDenied');
-        }
+        const denial = statusTransitionDenial(config, {
+          attributeCode: attribute.code,
+          baseline: saved.current,
+          inherited: saved.inherited,
+          selected: fields[attribute.code] ?? '',
+          transitions: statusTransitions,
+        });
+        if (denial) validation.fieldErrors[attribute.code] = denialText(denial);
       }
       setFieldErrors(validation.fieldErrors);
       setFormError(validation.formError);
@@ -477,17 +471,13 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
               }}
             </form.Field>
           )}
-          {checks ? (
-            <CheckViolationsAlert
-              title={checks.message}
-              violations={serverViolations?.unplaced ?? []}
+          {error && (
+            <ApiErrorAlert
+              error={error}
+              violations={serverViolations?.unplaced}
             />
-          ) : (
-            (error || formError) && (
-              <Alert severity="error">{error?.message ?? formError}</Alert>
-            )
           )}
-          {checks && formError && <Alert severity="error">{formError}</Alert>}
+          {formError && <Alert severity="error">{formError}</Alert>}
           {footerActions}
           {showSubmitButton && (
             <Button

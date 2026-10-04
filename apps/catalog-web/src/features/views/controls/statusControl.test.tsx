@@ -75,7 +75,7 @@ describe('status presentation and input', () => {
         inheritedValue={null}
         transitions={[
           {
-            attribute_code: 'status',
+            attribute_code: attribute.code,
             from: 'draft',
             to: 'live',
             code: null,

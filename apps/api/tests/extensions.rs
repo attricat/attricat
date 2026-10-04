@@ -647,6 +647,155 @@ async fn extension_catalog_upsert_is_idempotent_and_emits_a_change_feed(pool: sq
     );
 }
 
+const KEYED_SYNC_BLUEPRINT: &str = r#"
+format_version = 1
+code = "extension_keyed_item"
+name = "Extension keyed item"
+kind = "entity"
+[[unique_keys]]
+code = "external_id"
+attributes = ["external_id"]
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["external_id"]
+[[attributes]]
+code = "external_id"
+value_type = "string"
+[[attributes]]
+code = "title"
+value_type = "string"
+"#;
+
+#[sqlx::test(migrations = "./migrations")]
+async fn extension_intents_use_unique_keys_and_withdraw_publications(pool: sqlx::PgPool) {
+    let workspace_id = Uuid::from_u128(0x00000000000040008000000000000002);
+    let repository = CatalogRepository::system(pool.clone())
+        .for_workspace(workspace_id)
+        .await
+        .unwrap()
+        .for_extension("acme.sync");
+    let blueprint = repository
+        .create_blueprint(CreateBlueprint {
+            definition: KEYED_SYNC_BLUEPRINT.into(),
+        })
+        .await
+        .unwrap();
+    repository
+        .publish_blueprint_revision(blueprint.blueprint.id, blueprint.blueprint.version)
+        .await
+        .unwrap();
+    let external_id = blueprint
+        .attributes
+        .iter()
+        .find(|attribute| attribute.code == "external_id")
+        .unwrap()
+        .id;
+    let upsert = |key: &str, lookup: &str, title: &str| ExtensionCatalogBatch {
+        batch_key: key.into(),
+        dry_run: false,
+        intents: vec![ExtensionCatalogIntent::Upsert {
+            intent_key: "item".into(),
+            blueprint_id: blueprint.blueprint.id,
+            blueprint_version: blueprint.blueprint.version,
+            lookup_attribute_id: external_id,
+            lookup_value: lookup.into(),
+            relationships: vec![],
+            system_tags: vec![],
+            system_metadata: json!({}),
+            values: vec![NewAttributeValue::Scalar {
+                attribute_id: None,
+                attribute_code: Some("title".into()),
+                context_id: None,
+                value: json!(title),
+            }],
+        }],
+    };
+    // The first upsert creates; it must write the key value itself.
+    let mut first = upsert("u1", "EXT-1", "first");
+    if let ExtensionCatalogIntent::Upsert { values, .. } = &mut first.intents[0] {
+        values.push(NewAttributeValue::Scalar {
+            attribute_id: Some(external_id),
+            attribute_code: None,
+            context_id: None,
+            value: json!("EXT-1"),
+        });
+    }
+    let created = repository
+        .execute_extension_catalog_batch(first)
+        .await
+        .unwrap();
+    assert_eq!(
+        created[0].status,
+        ExtensionCatalogIntentStatus::Applied,
+        "{:?}",
+        created[0].error
+    );
+    let entity_id = created[0].entity_id.unwrap();
+
+    // Publish the entity in a channel; any later content change withdraws it.
+    let channel = repository
+        .create_context(api::model::CreateAttributeContext {
+            code: format!("export_{}", Uuid::new_v4().simple()),
+            data: json!({}),
+            parent_id: None,
+        })
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO publication_channels(workspace_id,context_id,enabled) VALUES($1,$2,true)",
+    )
+    .bind(workspace_id)
+    .bind(channel.id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let publisher_id = Uuid::new_v4();
+    sqlx::query("INSERT INTO users(id,email) VALUES($1,$2)")
+        .bind(publisher_id)
+        .bind(format!("{publisher_id}@example.test"))
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO entity_channel_publications(workspace_id,entity_id,context_id,published_at,published_by_user_id) VALUES($1,$2,$3,now(),$4)")
+        .bind(workspace_id).bind(entity_id).bind(channel.id).bind(publisher_id).execute(&pool).await.unwrap();
+    let published = || async {
+        sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS (SELECT 1 FROM entity_channel_publications WHERE entity_id=$1 AND published_at IS NOT NULL)",
+        )
+        .bind(entity_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+    };
+    assert!(published().await);
+
+    // The declared key resolves the lookup with its normalization, so a
+    // differently cased and spaced value updates the same entity.
+    let updated = repository
+        .execute_extension_catalog_batch(upsert("u2", "  ext-1 ", "second"))
+        .await
+        .unwrap();
+    assert_eq!(
+        updated[0].status,
+        ExtensionCatalogIntentStatus::Applied,
+        "{:?}",
+        updated[0].error
+    );
+    assert_eq!(updated[0].entity_id, Some(entity_id));
+    assert!(
+        !published().await,
+        "an extension update withdraws publication"
+    );
+    let title: String = sqlx::query_scalar(
+        "SELECT v.value_text FROM attribute_values v JOIN attributes a ON a.id=v.attribute_id WHERE v.entity_id=$1 AND a.code='title' AND v.active",
+    )
+    .bind(entity_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(title, "second");
+}
+
 #[sqlx::test(migrations = "./migrations")]
 async fn sideload_installs_a_validated_local_archive(pool: sqlx::PgPool) {
     let store = Arc::new(FakeObjectStore::available());

@@ -38,7 +38,10 @@ declare named Explorer searches. Applying the pack stores each as an
 applies the plan, so it appears in Explorer's saved searches for every
 authorized member. The pack's blueprint, relationship target, and context
 references are replaced with the plan's physical blueprint and context codes,
-and the state is normalized like an ordinary write. Packs cannot seed a pinned
+and the state is validated and normalized by the same code as an ordinary
+write. Field paths must resolve through the pack's blueprints, following at
+most three single-target relationship hops like Explorer, and a relationship
+facet's target blueprint must be one of the relationship's targets. Packs cannot seed a pinned
 blueprint `version` or selected relationship entity IDs, because both identify
 workspace data. Like any named view, only its owner can update or delete it
 afterwards.

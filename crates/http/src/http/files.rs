@@ -31,19 +31,7 @@ use uuid::Uuid;
 const SIGNATURE_SNIFF_BYTES: usize = 512;
 const MAX_CONTEXT_ID_BYTES: usize = 64;
 
-/// MIME types accepted by every upload entry point. Attribute policies may
-/// further restrict this set by MIME group, extension, size, or image-only.
-const SUPPORTED_UPLOAD_MIME_TYPES: &[&str] = &[
-    "image/png",
-    "image/jpeg",
-    "image/gif",
-    "image/webp",
-    "application/pdf",
-    "text/plain",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-];
+use catalog_validation::files::{detect_mime as detected_mime, is_supported_upload_mime};
 
 /// Avatars accept only these formats; the file worker re-encodes them.
 const AVATAR_MIME_TYPES: &[&str] = &["image/png", "image/jpeg"];
@@ -856,75 +844,14 @@ fn sanitize_filename(name: &str) -> Option<String> {
         .collect();
     (!clean.is_empty() && clean != "." && clean != ".." && clean.len() <= 255).then_some(clean)
 }
-fn extension(filename: &str) -> Option<String> {
-    filename
-        .rsplit_once('.')
-        .map(|(_, extension)| extension.to_ascii_lowercase())
-        .filter(|value| !value.is_empty())
-}
-fn detected_mime(signature: &[u8], filename: &str, valid_text: bool) -> Option<&'static str> {
-    if signature.starts_with(b"\x89PNG\r\n\x1a\n") {
-        Some("image/png")
-    } else if signature.starts_with(b"\xff\xd8\xff") {
-        Some("image/jpeg")
-    } else if signature.starts_with(b"GIF87a") || signature.starts_with(b"GIF89a") {
-        Some("image/gif")
-    } else if signature.len() >= 12 && &signature[..4] == b"RIFF" && &signature[8..12] == b"WEBP" {
-        Some("image/webp")
-    } else if signature.starts_with(b"%PDF-") {
-        Some("application/pdf")
-    } else if signature.starts_with(b"PK\x03\x04") {
-        match extension(filename).as_deref() {
-            Some("docx") => {
-                Some("application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-            }
-            Some("xlsx") => {
-                Some("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-            }
-            Some("pptx") => {
-                Some("application/vnd.openxmlformats-officedocument.presentationml.presentation")
-            }
-            _ => None,
-        }
-    } else if valid_text {
-        Some("text/plain")
-    } else {
-        None
-    }
-}
 fn declared_mime_matches(declared: Option<&str>, detected: &str) -> bool {
     let declared = declared
         .and_then(|value| value.split(';').next())
         .map(str::trim);
     matches!(declared, None | Some("application/octet-stream")) || declared == Some(detected)
 }
-fn is_supported_upload_mime(mime: &str) -> bool {
-    SUPPORTED_UPLOAD_MIME_TYPES.contains(&mime)
-}
 fn allowed_by_policy(policy: &FilePolicy, mime: &str, filename: &str, size: u64) -> bool {
-    if !is_supported_upload_mime(mime)
-        || policy.max_bytes.is_some_and(|limit| size > limit)
-        || (policy.image_only && !mime.starts_with("image/"))
-    {
-        return false;
-    }
-    if !policy.allowed_mime_groups.is_empty()
-        && !policy.allowed_mime_groups.iter().any(|group| {
-            group == mime
-                || group.trim_end_matches("/*") == mime.split('/').next().unwrap_or_default()
-                || group == mime.split('/').next().unwrap_or_default()
-        })
-    {
-        return false;
-    }
-    policy.allowed_extensions.is_empty()
-        || extension(filename).is_some_and(|extension| {
-            policy.allowed_extensions.iter().any(|allowed| {
-                allowed
-                    .trim_start_matches('.')
-                    .eq_ignore_ascii_case(&extension)
-            })
-        })
+    policy.allows(mime, filename, size)
 }
 async fn cleanup(files: &[StagedFile]) {
     for file in files {
@@ -961,6 +888,7 @@ fn storage_error(error: ObjectStoreError) -> ApiError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use catalog_validation::files::SUPPORTED_UPLOAD_MIME_TYPES;
 
     #[test]
     fn byte_ranges_follow_rfc_9110() {

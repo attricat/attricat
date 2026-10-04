@@ -65,13 +65,13 @@ value_type = "string"
 | `readonly` | wartość logiczna | `false` | Pokazuje pole w aplikacji webowej, ale uniemożliwia jego edycję w niej. API, CLI, agenci, przepływy pracy i rozszerzenia nadal mogą je zapisywać. Używaj dla wartości, którymi zarządza integracja. |
 | `tags` | tablica ciągów znaków | `[]` | Dowolne metadane. Muszą być unikalne i niepuste. Niektóre tagi ukrywają atrybut w aplikacji webowej; zobacz [Tagi widoczności](#tagi-widoczności). |
 | `default_value` | zgodny z typem | Nieustawiony | Wartość zapisywana w kontekście domyślnym, gdy encja zostaje utworzona bez niej. Tylko typy skalarne. |
-| `value_schema` | ciąg znaków (JSON) | Nieustawiony | JSON Schema dla jednej wartości. Tylko typy skalarne. Schemat atrybutu `string` może zawierać adnotację `x-attricat-status` z [warunkami przejść](#warunki-przejść). Zobacz [Walidacja](/pl/builders/validation/). |
+| `value_schema` | ciąg znaków (JSON) | Nieustawiony | JSON Schema dla jednej wartości. Tylko typy skalarne. Schemat atrybutu `string` może uczynić go [statusem](#statusy) lub [przypisaniem użytkownika lub zespołu](#przypisania-użytkowników-i-zespołów). Zobacz [Walidacja](/pl/builders/validation/). |
 
 ### Typy wartości
 
 | `value_type` | Przechowywana wartość | Przykład CLI/TOML | Uwagi |
 | --- | --- | --- | --- |
-| `string` | Tekst | `value = "Blue shirt"` | Wyczyszczenie ciągu znaków w kontekście innym niż domyślny usuwa nadpisanie zamiast zapisywać `""`. Może też być [statusem](/pl/builders/validation/#statusy) lub [przypisaniem użytkownika lub zespołu](#przypisania-użytkowników-i-zespołów). |
+| `string` | Tekst | `value = "Blue shirt"` | Wyczyszczenie ciągu znaków w kontekście innym niż domyślny usuwa nadpisanie zamiast zapisywać `""`. Może też być [statusem](#statusy) lub [przypisaniem użytkownika lub zespołu](#przypisania-użytkowników-i-zespołów). |
 | `number` | Liczba dziesiętna | `value = 19.99` | |
 | `integer` | 64-bitowa liczba całkowita | `value = 12` | |
 | `boolean` | `true` lub `false` | `value = true` | |
@@ -81,6 +81,68 @@ value_type = "string"
 | `json` | Dowolna wartość JSON | | Nie można według niej sortować ani używać jej w filtrach przeglądarki encji. Preferuj atrybuty typowane lub relacje. |
 | `relationship` | Powiązania z innymi encjami | | Zobacz [Klucze relacji](#klucze-relacji). |
 | `file` | Przesłane pliki | | Zobacz [Klucze plików](#klucze-plików). |
+
+### Statusy
+
+Atrybut `string`, którego `value_schema` ma `enum` i adnotację `x-attricat-status`, jest statusem. Działanie statusów opisuje sekcja [Statusy](/pl/builders/validation/#statusy).
+
+```toml
+[[attributes]]
+code = "status"
+value_type = "string"
+value_schema = '''{
+  "type": "string",
+  "enum": ["draft", "review", "released"],
+  "x-attricat-status": {
+    "version": 1,
+    "options": [
+      { "code": "draft", "label": "Draft" },
+      { "code": "review", "label": "In review",
+        "approval": { "covers": "all", "void_to": "draft" } },
+      { "code": "released", "label": "Released", "tone": "success",
+        "lock": "all", "retention_days": 3650 }
+    ],
+    "transitions": [
+      { "from": null, "to": "draft" },
+      { "from": "draft", "to": "review", "code": "submit" },
+      { "from": "review", "to": "released", "code": "release",
+        "roles": ["reviewer"], "separate_from": ["submit"] },
+      { "from": "released", "to": "draft", "code": "correct", "permission": "entities.publish" }
+    ]
+  }
+}'''
+```
+
+| Klucz | Wartość | Opis |
+| --- | --- | --- |
+| `version` | `1` | Wymagany. |
+| `options` | tablica od 1 do 100 tabel | Wymagany. Jedna opcja dla każdego kodu z `enum`, w kolejności wyświetlania. |
+| `transitions` | tablica do 10 000 tabel | Dozwolone zmiany. Pomiń, aby dopuścić każdą zmianę; jeśli jest podana, dozwolone są tylko wymienione zmiany, a pusta tablica nie dopuszcza żadnej. |
+
+Każda opcja:
+
+| Klucz | Wartość | Opis |
+| --- | --- | --- |
+| `code` | kod, do 128 znaków | Wymagany. Musi odpowiadać dokładnie jednej wartości z `enum`. |
+| `label` | ciąg znaków, od 1 do 200 znaków | Wymagany. Może zawierać [odwołania do leksykonu](/pl/builders/translations/#etykiety-statusów). |
+| `tone` | `default`, `success`, `warning`, `error` lub `info` | Kolor znacznika statusu. |
+| `lock` | `"all"` lub od 1 do 500 kodów atrybutów | Sprawia, że wymienione atrybuty są tylko do odczytu, dopóki rekord ma ten status. `"all"` obejmuje wszystkie atrybuty, relacje i pliki oprócz samego statusu. Atrybut wielokrotnego użytku zapisuje się jako `namespace:code`. Rekordu ze statusem z blokadą nie można usunąć. Wymaga `transitions`. |
+| `approval` | tabela z `covers` i `void_to` | Rejestruje zatwierdzenie, gdy rekord przechodzi do tego statusu. `covers` to `"all"` lub od 1 do 500 kodów atrybutów; `void_to` to inna opcja, do której rekord przechodzi, gdy objęta treść się zmieni. |
+| `retention_days` | liczba całkowita od 1 do 36 600 | Zakłada blokadę retencji na pliki zablokowanych atrybutów, gdy rekord przechodzi do tego statusu. Wymaga `lock`. |
+
+Każde przejście:
+
+| Klucz | Wartość | Opis |
+| --- | --- | --- |
+| `from` | kod opcji lub `null` | Wymagany. `null` oznacza brak wartości, więc krawędź z `null` pozwala ustawić pierwszą wartość, także domyślną. |
+| `to` | kod opcji lub `null` | Wymagany. Krawędź do `null` pozwala wyczyścić wartość. |
+| `code` | kod, do 128 znaków | Nazywa przejście w `separate_from` i w historii. |
+| `permission` | kod uprawnienia | Osoba zapisująca zmianę musi mieć to [uprawnienie](/pl/reference/permissions/) dla encji. |
+| `roles` | od 1 do 20 kodów ról | Osoba zapisująca zmianę musi mieć co najmniej jedną z tych ról w obszarze roboczym, dla schematu lub dla encji. |
+| `separate_from` | od 1 do 20 kodów przejść | Osoba zapisująca zmianę nie może być tą, która jako ostatnia wykonała jedno z tych przejść w tej encji i tym kontekście. |
+| `conditions` | do 16 kontroli | Wymagania dotyczące danych. Zobacz [Warunki przejść](#warunki-przejść). |
+
+Każda para `from`/`to` może wystąpić tylko raz. `permission`, `roles` i `separate_from` zawsze dotyczą osoby zapisującej zmianę; nie mogą odwoływać się do [przypisania użytkownika lub zespołu](#przypisania-użytkowników-i-zespołów) w rekordzie. Odmowy zwracają `403 status_transition_forbidden` lub `403 status_separation_of_duties`, a zmiany zablokowanej treści zwracają `409 record_locked`. Zobacz [Kontroluj cykl życia rekordu](/pl/builders/validation/#kontroluj-cykl-życia-rekordu).
 
 ### Przypisania użytkowników i zespołów
 
@@ -102,6 +164,7 @@ value_schema = '''{"type": "string", "x-attricat-principal": {"version": 1, "kin
 - Schemat musi mieć `"type": "string"` i nie może mieć `enum`, `const`, `pattern` ani `format`. Atrybut nie może mieć `default_value` ani być jednocześnie statusem. Atrybuty wielokrotnego użytku przyjmują tę samą adnotację.
 - Nowa lub zmieniona wartość musi wskazywać aktywnego członka obszaru roboczego lub nieusunięty zespół, w dozwolonym rodzaju. W przeciwnym razie zapis zwraca `422 attribute_value_schema_mismatch`. Niezmienione wartości nie są sprawdzane ponownie.
 - Filtry wyszukiwania porównują zapisaną wartość dokładnie. Wartość `@me` z operatorem `eq` pasuje do wywołującego i do każdego zespołu, do którego należy.
+- [Predykaty](#predykaty) traktują wartość jak tekst: `required` sprawdza, czy rekord jest przypisany, a `compare` z `eq` lub `one_of` może dopasować konkretne `user:<id>` lub `team:<id>`. Żaden predykat ani [wymaganie przejścia](#statusy) nie może odwoływać się do osoby zapisującej zmianę, więc nie da się zadeklarować zasady „zamknąć może tylko osoba przypisana”.
 
 ### Klucze relacji
 
@@ -405,7 +468,7 @@ to = "released"
 | Klucz | Typ | Domyślnie | Opis |
 | --- | --- | --- | --- |
 | `enforcement.on_save` | wartość logiczna | `false` | Odrzuca każdy zapis, po którym encja narusza regułę. |
-| `enforcement.transitions` | tablica tabel | `[]` | Do 16 chronionych zmian statusu, każda z `attribute_code`, opcjonalnym `from` oraz `to`. |
+| `enforcement.transitions` | tablica tabel | `[]` | Do 16 chronionych zmian statusu, każda z `attribute_code`, opcjonalnym `from` oraz `to`. Bez `from` chroniona jest każda zmiana na `to`. |
 
 Tabela `enforcement` wymaga `on_save = true` lub co najmniej jednego przejścia, wagi (`severity`) `error` lub `critical` oraz predykatu bez `stale`, `unique` i `acyclic`. `attribute_code` każdego przejścia musi być atrybutem statusu, a `from` i `to` muszą być kodami z jego `enum`. Naruszenia zwracają `422 rule_violation`. Zobacz [Egzekwowanie reguły](/pl/builders/rules/#egzekwowanie-reguły).
 
@@ -422,7 +485,7 @@ Reguły, kontrole encji, warunki przejść i kontrole kanałów publikacji używ
 | `compare` | `attribute_code`, `op` oraz dokładnie jeden z kluczy `other_attribute_code`, `subject_attribute_code` lub `value` | Porównanie jest prawdziwe. |
 | `one_of` | `attribute_code`, `values` (od 1 do 100) | Wartość jest jedną z `values`. Nie dotyczy relacji ani plików. |
 | `relative_date` | `attribute_code`, `op` (`lt`, `lte`, `gt`, `gte`), `offset_days` (od -36500 do 36500, domyślnie `0`) | Data lub data z godziną spełnia porównanie z bieżącym czasem przesuniętym o `offset_days`. |
-| `unique` | `attribute_codes` (od 1 do 4 atrybutów typu string, number, integer, boolean, date lub datetime) | Żadna inna aktywna encja schematu nie ma tych samych wartości w tym samym kontekście. Tylko reguły zgłaszające ustalenia. |
+| `unique` | `attribute_codes` (od 1 do 4 atrybutów typu string, number, integer, boolean, date lub datetime) | Żadna inna aktywna encja z rodziny schematów, w dowolnej wersji, nie ma tych samych wartości w tym samym kontekście. Tylko reguły zgłaszające ustalenia. |
 | `linked` | `relationship_code`, `quantifier` (`all`, `any`, `none`; domyślnie `all`), `predicate` | `all`: każdy powiązany rekord spełnia `predicate` (prawda, gdy nie ma powiązań). `any`: co najmniej jeden go spełnia. `none`: żaden go nie spełnia. |
 | `referenced_by` | `blueprint_code`, `relationship_code`, opcjonalnie `predicate`, `min` i/lub `max` (od 0 do 1000) | Liczba rekordów `blueprint_code`, których relacja `relationship_code` wskazuje ten rekord i które spełniają `predicate`, mieści się między `min` a `max`. `max = 0` oznacza „żaden”. |
 | `acyclic` | `relationship_code` | Podążanie za relacją nigdy nie wraca do rekordu. Tylko reguły zgłaszające ustalenia. |

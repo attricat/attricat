@@ -44,8 +44,8 @@ The frame stays mounted when the user switches context or theme. Listen for the 
 | `catalog.notify({ message, severity })` | `client.notification` | Shows a host notification. Messages are trimmed to 512 characters. |
 | `catalog.refresh({ target: 'current_entity' })` | `client.refresh` | Reloads the current entity's views after your command changed it. Available in entity outlets. |
 | `catalog.dialog.open()` / `catalog.dialog.close()` | `client.action_dialog` | Opens the extension's `action_dialog` from a version 2 selection action, with that action's selection; `close` works inside the dialog. |
-| `catalog.operations.start({ operation_id, input, idempotency_key })` | `client.operations.start` | Starts an [interactive operation](/extensions/operations/#interactive-operations-host-api-15) for the frame's selection and resolves to `{ run_id }`. Available in version 2 selection actions and the action dialog. |
-| `catalog.operations.list()` / `get({ run_id })` / `download({ run_id, artifact_id })` | `client.operations.read` | The signed-in user's runs of this extension. The host performs downloads. |
+| `catalog.operations.start({ operation_id, input, idempotency_key })` | `client.operations.start` | Starts an [interactive operation](/extensions/operations/#interactive-operations) for the frame's selection and resolves to `{ run_id }`. Available in version 2 selection actions and the action dialog. |
+| `catalog.operations.list()` / `get({ run_id })` / `download({ run_id, artifact_id })` | `client.operations.read` | Only runs of this extension that the signed-in user started, even when that user is an operator. The host performs downloads. |
 | `catalog.operations.cancel({ run_id })` | `client.operations.cancel` | Cancels one of those runs. |
 
 | Event on `root` | Needs | Fired |

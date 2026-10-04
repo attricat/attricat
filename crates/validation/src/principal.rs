@@ -146,19 +146,6 @@ pub fn validate_principal_value(schema: &Value, value: &Value) -> Result<(), Str
     Ok(())
 }
 
-/// Whether an assignment value names `user` directly or through one of
-/// `teams`. Transition permissions and rule predicates can use this to ask
-/// "is the acting user the assignee?".
-pub fn principal_matches(value: &Value, user: Uuid, teams: &[Uuid]) -> bool {
-    value
-        .as_str()
-        .and_then(PrincipalRef::parse)
-        .is_some_and(|reference| match reference.kind {
-            PrincipalKind::User => reference.id == user,
-            PrincipalKind::Team => teams.contains(&reference.id),
-        })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -220,7 +207,7 @@ mod tests {
     }
 
     #[test]
-    fn validates_values_and_matches_assignees() {
+    fn validates_principal_values() {
         let user = Uuid::new_v4();
         let team = Uuid::new_v4();
         let users_only = schema(json!(["user"]));
@@ -229,18 +216,5 @@ mod tests {
         assert!(validate_principal_value(&users_only, &json!(format!("team:{team}"))).is_err());
         assert!(validate_principal_value(&users_only, &json!("alice")).is_err());
         assert!(validate_principal_value(&json!({"type": "string"}), &json!("alice")).is_ok());
-
-        assert!(principal_matches(&json!(format!("user:{user}")), user, &[]));
-        assert!(principal_matches(
-            &json!(format!("team:{team}")),
-            user,
-            &[team]
-        ));
-        assert!(!principal_matches(
-            &json!(format!("team:{team}")),
-            user,
-            &[]
-        ));
-        assert!(!principal_matches(&Value::Null, user, &[team]));
     }
 }

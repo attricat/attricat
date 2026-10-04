@@ -60,7 +60,7 @@ Z `artifacts.write` komponent buduje pliki wyjściowe po kawałku:
 
 Limity wynoszą 1 GiB na plik wyjściowy, 2 GiB na przebieg i 8 GiB na obszar roboczy. Dane wyjściowe można pobrać po zakończeniu przebiegu i są przechowywane przez 30 dni.
 
-## Operacje interaktywne (API hosta 1.5)
+## Operacje interaktywne
 
 Dodaj `interactive` do operacji, aby zalogowani użytkownicy mogli ją uruchomić dla encji lub zaznaczenia z Twoich akcji w wersji 2:
 
@@ -68,7 +68,7 @@ Dodaj `interactive` do operacji, aby zalogowani użytkownicy mogli ją uruchomi�
 {"id": "generate", "handler": "generate", "request_schema": {"type": "object"}, "interactive": {"version": 1, "max_selection": 50}}
 ```
 
-Wymaga to `client.operations.start` i [ujednoliconego ABI hosta](/pl/extensions/server/#używaj-ujednoliconego-abi-w-nowych-rozszerzeniach) (`>=1.6.0`) albo starszego zakresu `catalog.host_api` zgodnego z 1.5, ale nie z 1.4. Komponent używa świata `catalog:host@1.5.0` z `crates/extension-runtime/wit-interactive/`: to świat 1.4 z dodatkowym interfejsem `selection`.
+Wymaga to `client.operations.start`. Nowe rozszerzenia buduj dla [ujednoliconego ABI hosta](/pl/extensions/server/#używaj-ujednoliconego-abi-w-nowych-rozszerzeniach): ustaw `"host_api": ">=1.6.0, <2.0.0"` i użyj świata `catalog-extension` lub `operation-extension` pakietu `catalog:host@1.6.0` z `crates/extension-runtime/wit-host/`, którego interfejs `selection` działa w uruchomieniu interaktywnym. Starsza ścieżka, czyli zakres `catalog.host_api` zgodny z 1.5, ale nie z 1.4, używa zamrożonego świata `catalog:host@1.5.0` z `wit-interactive/` (świat 1.4 z interfejsem `selection`) i nadal działa, ale nie da się jej łączyć z obsługą zdarzeń ani poleceniami.
 
 Przy starcie Catalog sprawdza, czy użytkownik może odczytać każdą zaznaczoną encję, i utrwala użytkownika, wydanie, dane wejściowe, kontekst oraz uporządkowane zaznaczenie. Następnie:
 
@@ -79,7 +79,7 @@ Przy starcie Catalog sprawdza, czy użytkownik może odczytać każdą zaznaczon
 
 Pobierz z każdej encji to, czego potrzebujesz, raz i zapisz w punkcie kontrolnym, aby ponowiona paczka tworzyła te same bajty. Raportuj postęp jako `{"completed": n, "total": n, "outcome": {"succeeded": n, "failed": n, "skipped": n}}`; Catalog pokazuje te liczby niezależnie od statusu uruchomienia, więc uruchomienie może się zakończyć mimo niepowodzeń części encji.
 
-Użytkownicy widzą swoje uruchomienia w **Profil → Uruchomienia rozszerzeń**. Otworzyć, anulować lub pobrać wyniki uruchomienia mogą tylko osoba, która je rozpoczęła, i zarządzający rozszerzeniami; pobieranie wymaga też dostępu do odczytu każdej zaznaczonej encji.
+Użytkownicy widzą swoje uruchomienia w **Profil → Uruchomienia rozszerzeń**. Uruchomienie widzą tylko osoba, która je rozpoczęła, i osoby z `extensions.manage`. Osoba, która je rozpoczęła, zawsze może je anulować, ale otworzyć je i pobrać wyniki może tylko dopóty, dopóki może odczytać każdą zaznaczoną encję. Osoby z `extensions.manage` mogą otwierać, anulować i pobierać każde uruchomienie.
 
 ## Adnotacje encji
 

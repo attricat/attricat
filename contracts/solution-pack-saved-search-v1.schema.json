@@ -34,7 +34,7 @@
       "required": [
         "blueprint"
       ],
-      "$comment": "Runtime also resolves blueprint, context, field, and targetBlueprint references against the pack.",
+      "$comment": "Runtime also resolves blueprint, context, field, and targetBlueprint references against the pack. Fields follow at most three single-target relationship hops, and a facet targetBlueprint must be a target of its relationship.",
       "properties": {
         "blueprint": {
           "type": "string",
@@ -69,7 +69,7 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 512,
-              "pattern": "^[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+)*$"
+              "pattern": "^[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+){0,3}$"
             },
             "direction": {
               "enum": [
@@ -95,7 +95,7 @@
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 512,
-                "pattern": "^[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+)*$"
+                "pattern": "^[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+){0,3}$"
               },
               "operator": {
                 "enum": [
@@ -132,7 +132,7 @@
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 512,
-                "pattern": "^[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+)*$"
+                "pattern": "^[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+){0,2}$"
               },
               "targetBlueprint": {
                 "type": "string",

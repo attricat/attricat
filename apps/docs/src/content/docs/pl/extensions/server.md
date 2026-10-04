@@ -16,7 +16,7 @@ Interfejs hosta jest zdefiniowany w pakietach WIT w repozytorium Attricat, w kat
 | `catalog:host@1.2.0` | `wit-operations/` | Trwałe [operacje](/pl/extensions/operations/). |
 | `catalog:host@1.3.0` | `wit-artifacts/` | Artefakty wejściowe i wyjściowe operacji. |
 | `catalog:host@1.4.0` | `wit-connectors/` | Wywołania katalogu przez konektory i przesyłanie plików przez HTTPS. |
-| `catalog:host@1.5.0` | `wit-interactive/` | [Operacje interaktywne](/pl/extensions/operations/#operacje-interaktywne-api-hosta-15) na zaznaczeniu. |
+| `catalog:host@1.5.0` | `wit-interactive/` | [Operacje interaktywne](/pl/extensions/operations/#operacje-interaktywne) na zaznaczeniu. |
 | `catalog:host@1.6.0` | `wit-host/` | **Ujednolicone ABI**: wszystko z 1.1 i 1.5 w jednym pakiecie. |
 
 Ustaw `catalog.host_api` w manifeście na zakres, dla którego zbudowano Twój komponent.

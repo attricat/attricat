@@ -56,21 +56,11 @@ attribute_code = "title"
 
 Encja **nie spełnia** reguły, gdy predykat nie jest spełniony. Reguły używają tych samych predykatów co [kontrole encji](/pl/builders/validation/#porównuj-atrybuty-za-pomocą-kontroli), [warunki przejść statusu](/pl/builders/validation/#warunki-przejść) i [kontrole kanałów publikacji](/pl/guides/publishing/#wymagaj-kontroli-przed-publikacją). Wszystkie klucze opisuje [dokumentacja Schematu](/pl/reference/blueprint/#predykaty).
 
-| `type` | Klucze | Spełniony, gdy |
-| --- | --- | --- |
-| `required` | `attribute_code` | Atrybut ma wartość. Relacja musi mieć co najmniej jeden cel. |
-| `stale` | `attribute_code`, `max_age_seconds` (od 1 do 31536000) | Atrybut został zaktualizowany w ciągu ostatnich `max_age_seconds` sekund. |
-| `has_tag` | `tag` | Encja ma ten tag systemowy. |
-| `missing_tag` | `tag` | Encja nie ma tego tagu systemowego. |
-| `compare` | `attribute_code`, `op` oraz jeden z kluczy `other_attribute_code` lub `value` | Porównanie jest prawdziwe, na przykład `valid_until` `gte` `valid_from`. |
-| `one_of` | `attribute_code`, `values` (od 1 do 100) | Wartość jest jedną z wymienionych, na przykład kodem statusu. |
-| `relative_date` | `attribute_code`, `op` (`lt`, `lte`, `gt`, `gte`), `offset_days` | Data lub data z godziną spełnia porównanie z chwilą obecną przesuniętą o `offset_days`. |
-| `unique` | `attribute_codes` (od 1 do 4) | Żadna inna aktywna encja tego samego Schematu nie ma tych samych wartości w tym samym kontekście. |
-| `linked` | `relationship_code`, `quantifier`, `predicate` | Powiązane rekordy spełniają zagnieżdżony predykat: wszystkie (`all`, domyślnie), co najmniej jeden (`any`) lub żaden (`none`). |
-| `referenced_by` | `blueprint_code`, `relationship_code`, opcjonalnie `predicate`, `min` i/lub `max` | Liczba rekordów innego Schematu, które wskazują tę encję i spełniają `predicate`, mieści się w granicach. |
-| `acyclic` | `relationship_code` | Podążanie za relacją od encji nigdy do niej nie wraca. |
-| `all_of` | `predicates` (od 1 do 16) | Każdy zagnieżdżony predykat jest spełniony. |
-| `any_of` | `predicates` (od 1 do 16) | Co najmniej jeden zagnieżdżony predykat jest spełniony. |
+- **Wartości:** `required`, `compare` (z innym atrybutem lub stałą wartością), `one_of` i `relative_date` (względem chwili obecnej przesuniętej o `offset_days`).
+- **Tagi:** `has_tag` i `missing_tag` sprawdzają tagi systemowe.
+- **Powiązane rekordy:** `linked` sprawdza rekordy, z którymi encja jest powiązana; `referenced_by` liczy rekordy, które ją wskazują.
+- **Tylko zgłaszanie ustaleń:** `stale` (brak aktualizacji w zadanym czasie), `unique` (żadna inna encja Schematu nie ma tych samych wartości) i `acyclic` (relacja nigdy nie prowadzi z powrotem do encji).
+- **Kombinacje:** `all_of` i `any_of`.
 
 Porównanie z brakującą wartością jest spełnione; to samo dotyczy `one_of` i `relative_date`, gdy atrybut jest pusty. Połącz je z `required`, jeśli wartość musi istnieć:
 
@@ -82,8 +72,6 @@ predicates = [
   { type = "relative_date", attribute_code = "valid_until", op = "gt", offset_days = 30 },
 ]
 ```
-
-`compare` porządkuje liczby, liczby całkowite, daty i daty z godziną operatorami `lt`, `lte`, `gt` i `gte`. Łańcuchy znaków i wartości logiczne obsługują `eq` i `ne`. Dwie relacje są równe (`eq`), gdy mają ten sam zbiór celów, i rozłączne (`disjoint`), gdy nie mają wspólnego celu. Plików nie można porównywać. Daty zapisuj jako łańcuchy znaków, na przykład `"2026-01-31"`.
 
 `linked` i `referenced_by` przechodzą o jeden krok wzdłuż relacji. Ich zagnieżdżony predykat odczytuje drugi rekord i może porównywać go ze sprawdzaną encją przez `subject_attribute_code`:
 
@@ -137,13 +125,7 @@ Reguła powiązana z kontekstem sprawdza rozstrzygnięte wartości encji w tym k
 
 `linked` i `referenced_by` zależą od innych rekordów. Gdy zmieni się rekord powiązany lub wskazujący, reguły z wyzwalaczem zdarzenia uruchamiają się też ponownie dla maksymalnie 100 zależnych od niego encji, dzięki czemu ich ustalenia pozostają aktualne. Reguły wyzwalane tylko harmonogramem lub ręcznie zauważą zmianę przy następnym przebiegu.
 
-### Limity
-
-- Predykaty można zagnieżdżać najwyżej na 4 poziomach i mogą mieć łącznie najwyżej 32 części.
-- `linked` sprawdza najwyżej 200 powiązanych rekordów na relację, a `referenced_by` najwyżej 1000 rekordów wskazujących. Po przekroczeniu limitu encja nie spełnia reguły, a komunikat to wyjaśnia.
-- `acyclic` odwiedza najwyżej 1000 rekordów. Jeśli nie zdoła zakończyć sprawdzania, encja nie spełnia reguły.
-- `linked` i `referenced_by` nie mogą być zagnieżdżone w sobie nawzajem, a ich zagnieżdżony predykat nie może używać `unique`, `acyclic` ani `stale`.
-- `offset_days` mieści się w zakresie od -36500 do 36500.
+Zasady porównywania dla każdego typu oraz limity zagnieżdżania i powiązanych rekordów opisuje [dokumentacja Schematu](/pl/reference/blueprint/#predykaty).
 
 ## Gdzie przechowywane są reguły
 
@@ -211,18 +193,9 @@ from = "review"
 to = "released"
 ```
 
-| Klucz | Opis |
-| --- | --- |
-| `on_save` | `true` odrzuca każdy zapis, po którym encja narusza regułę. |
-| `transitions` | Do 16 zmian statusu chronionych przez regułę. `attribute_code` to atrybut [statusu](/pl/builders/validation/#statusy); `to` to kod docelowy; `from` jest opcjonalny, a gdy go pominiesz, chroniona jest każda zmiana na `to`. |
+`on_save = true` odrzuca każdy zapis, po którym encja narusza regułę. Każdy element `transitions` chroni zmianę atrybutu [statusu](/pl/builders/validation/#statusy) na `to`, opcjonalnie tylko z `from`. Chronione przejścia są sprawdzane na stanie, który powstaje po zmianie, więc wartość zapisana w tym samym zapisie się liczy. Wewnątrz Schematu zapisz tabelę jako `[rules.enforcement]` i `[[rules.enforcement.transitions]]` po nagłówku `[[rules]]` danej reguły.
 
-Ustaw `on_save`, co najmniej jedno przejście albo oba. Chronione przejścia są sprawdzane na stanie, który powstaje po zmianie, więc wartość zapisana w tym samym zapisie się liczy. Wewnątrz Schematu zapisz tabelę jako `[rules.enforcement]` i `[[rules.enforcement.transitions]]` po nagłówku `[[rules]]` danej reguły.
-
-Egzekwowanie ma kilka wymagań:
-
-- Waga reguły to `error` lub `critical`.
-- Predykat musi dać się bezpiecznie sprawdzić podczas zapisu. `stale`, `unique` i `acyclic` się do tego nie nadają; używaj ich w regułach zgłaszających ustalenia.
-- W Schemacie atrybut przejścia musi być atrybutem statusu, a `from` i `to` muszą być jego kodami.
+Egzekwowanie wymaga wagi `error` lub `critical` i predykatu, który da się sprawdzić podczas zapisu. Wszystkie klucze i wymagania wymienia [dokumentacja Schematu](/pl/reference/blueprint/#reguły).
 
 Reguła powiązana z kontekstem jest egzekwowana tylko w tym kontekście. Reguła bez kontekstu jest egzekwowana w każdym kontekście.
 

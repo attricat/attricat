@@ -206,15 +206,19 @@ fn validate_declarative_checks(
             continue;
         };
         for edge in edges {
+            let invalid = |message: String| BlueprintError::InvalidJsonSchema {
+                field: format!("attributes.{}.value_schema", attribute.code),
+                message,
+            };
+            let conditions = edge.conditions.map_err(invalid)?;
             validate_checks(
-                &edge.conditions,
+                &conditions,
                 Some(&types),
                 Usage::Enforced,
                 MAX_TRANSITION_CONDITIONS,
             )
-            .map_err(|message| BlueprintError::InvalidJsonSchema {
-                field: format!("attributes.{}.value_schema", attribute.code),
-                message: format!("invalid status transition conditions: {message}"),
+            .map_err(|message| {
+                invalid(format!("invalid status transition conditions: {message}"))
             })?;
         }
     }

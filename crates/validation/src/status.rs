@@ -114,39 +114,9 @@ pub fn transition_requirements(
     before: &Value,
     after: &Value,
 ) -> TransitionRequirements {
-    let edge = schema
-        .get(STATUS_KEY)
-        .and_then(|config| config.get("transitions"))
-        .and_then(Value::as_array)
-        .and_then(|edges| {
-            edges
-                .iter()
-                .find(|edge| &edge["from"] == before && &edge["to"] == after)
-        });
-    let Some(edge) = edge.filter(|_| before != after) else {
-        return TransitionRequirements::default();
-    };
-    let strings = |key: &str| {
-        edge.get(key)
-            .and_then(Value::as_array)
-            .map(|items| {
-                items
-                    .iter()
-                    .filter_map(Value::as_str)
-                    .map(str::to_owned)
-                    .collect()
-            })
-            .unwrap_or_default()
-    };
-    TransitionRequirements {
-        code: edge.get("code").and_then(Value::as_str).map(str::to_owned),
-        permission: edge
-            .get("permission")
-            .and_then(Value::as_str)
-            .map(str::to_owned),
-        roles: strings("roles"),
-        separate_from: strings("separate_from"),
-    }
+    find_edge(schema, before, after)
+        .map(|edge| edge.requirements())
+        .unwrap_or_default()
 }
 
 pub fn status_configuration_schema() -> Value {
@@ -294,12 +264,61 @@ pub fn validate_status_definition(schema: &Value) -> Result<(), String> {
     Ok(())
 }
 
-/// One declared edge with its optional conditions.
+/// One declared transition edge.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TransitionEdge {
     pub from: Option<String>,
     pub to: Option<String>,
-    pub conditions: Vec<Check>,
+    pub code: Option<String>,
+    pub permission: Option<String>,
+    pub roles: Vec<String>,
+    pub separate_from: Vec<String>,
+    /// The edge's conditions, or why they are malformed. Callers that enforce
+    /// conditions must fail closed on `Err`.
+    pub conditions: Result<Vec<Check>, String>,
+}
+
+impl TransitionEdge {
+    fn parse(edge: &Value) -> Self {
+        let strings = |key: &str| {
+            edge.get(key)
+                .and_then(Value::as_array)
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .map(str::to_owned)
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        let string = |key: &str| edge.get(key).and_then(Value::as_str).map(str::to_owned);
+        Self {
+            from: string("from"),
+            to: string("to"),
+            code: string("code"),
+            permission: string("permission"),
+            roles: strings("roles"),
+            separate_from: strings("separate_from"),
+            conditions: edge_conditions(edge),
+        }
+    }
+
+    pub fn requirements(&self) -> TransitionRequirements {
+        TransitionRequirements {
+            code: self.code.clone(),
+            permission: self.permission.clone(),
+            roles: self.roles.clone(),
+            separate_from: self.separate_from.clone(),
+        }
+    }
+
+    fn connects(&self, before: &Value, after: &Value) -> bool {
+        self.from.as_deref() == before.as_str()
+            && self.to.as_deref() == after.as_str()
+            && (before.is_null() || before.is_string())
+            && (after.is_null() || after.is_string())
+    }
 }
 
 fn edge_conditions(edge: &Value) -> Result<Vec<Check>, String> {
@@ -321,32 +340,34 @@ fn edge_conditions(edge: &Value) -> Result<Vec<Check>, String> {
 /// Declared transition edges, or `None` when transitions are unrestricted.
 pub fn transition_edges(schema: &Value) -> Option<Vec<TransitionEdge>> {
     let edges = schema.get(STATUS_KEY)?.get("transitions")?.as_array()?;
-    Some(
-        edges
-            .iter()
-            .map(|edge| TransitionEdge {
-                from: edge["from"].as_str().map(str::to_owned),
-                to: edge["to"].as_str().map(str::to_owned),
-                conditions: edge_conditions(edge).unwrap_or_default(),
-            })
-            .collect(),
-    )
+    Some(edges.iter().map(TransitionEdge::parse).collect())
 }
 
-/// Conditions of the edge taken from `before` to `after`. Unchanged values
-/// and unrestricted graphs have none.
-pub fn transition_conditions(schema: &Value, before: &Value, after: &Value) -> Vec<Check> {
+/// The declared edge from `before` to `after`. Unchanged values, undeclared
+/// edges and unrestricted graphs have none.
+pub fn find_edge(schema: &Value, before: &Value, after: &Value) -> Option<TransitionEdge> {
     if before == after {
-        return Vec::new();
+        return None;
     }
-    transition_edges(schema)
-        .unwrap_or_default()
-        .into_iter()
-        .find(|edge| {
-            edge.from.as_deref() == before.as_str() && edge.to.as_deref() == after.as_str()
-        })
-        .map(|edge| edge.conditions)
-        .unwrap_or_default()
+    schema
+        .get(STATUS_KEY)?
+        .get("transitions")?
+        .as_array()?
+        .iter()
+        .find(|edge| &edge["from"] == before && &edge["to"] == after)
+        .map(TransitionEdge::parse)
+        .filter(|edge| edge.connects(before, after))
+}
+
+/// Conditions of the edge taken from `before` to `after`; none for unchanged
+/// values, undeclared edges and unrestricted graphs. Malformed conditions are
+/// an error, so enforcement fails closed.
+pub fn transition_conditions(
+    schema: &Value,
+    before: &Value,
+    after: &Value,
+) -> Result<Vec<Check>, String> {
+    find_edge(schema, before, after).map_or(Ok(Vec::new()), |edge| edge.conditions)
 }
 
 /// The `(code, label)` pairs of a status annotation, in option order. Labels
@@ -389,11 +410,12 @@ pub fn validate_status_transition(
     if before == after {
         return Ok(());
     }
-    if let Some(edges) = config.get("transitions").and_then(Value::as_array) {
-        if edges
-            .iter()
-            .any(|edge| &edge["from"] == before && &edge["to"] == after)
-        {
+    if config
+        .get("transitions")
+        .and_then(Value::as_array)
+        .is_some()
+    {
+        if find_edge(schema, before, after).is_some() {
             return Ok(());
         }
         return Err("status transition is not allowed".into());
@@ -539,11 +561,19 @@ mod tests {
         ]);
         assert!(validate_status_definition(&s).is_ok());
         assert_eq!(
-            transition_conditions(&s, &json!("live"), &json!("done"))[0].code,
+            transition_conditions(&s, &json!("live"), &json!("done")).unwrap()[0].code,
             "has-owner"
         );
-        assert!(transition_conditions(&s, &json!("draft"), &json!("live")).is_empty());
-        assert!(transition_conditions(&s, &json!("done"), &json!("done")).is_empty());
+        assert!(
+            transition_conditions(&s, &json!("draft"), &json!("live"))
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            transition_conditions(&s, &json!("done"), &json!("done"))
+                .unwrap()
+                .is_empty()
+        );
         for invalid in [
             json!([{"code": "x", "predicate": {"type": "unique", "attribute_codes": ["a"]}}]),
             json!([{"code": "x", "predicate": {"type": "required"}}]),
@@ -551,6 +581,13 @@ mod tests {
         ] {
             s[STATUS_KEY]["transitions"][2]["conditions"] = invalid.clone();
             assert!(validate_status_definition(&s).is_err(), "{invalid}");
+            // A stored definition that slipped past validation fails closed.
+            assert!(
+                transition_conditions(&s, &json!("live"), &json!("done")).is_err(),
+                "{invalid}"
+            );
+            let edge = find_edge(&s, &json!("live"), &json!("done")).unwrap();
+            assert!(edge.conditions.is_err());
         }
         let mut duplicate = schema();
         duplicate[STATUS_KEY]["transitions"]

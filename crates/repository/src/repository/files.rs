@@ -16,6 +16,19 @@ pub struct FilePolicy {
     pub image_only: bool,
 }
 
+impl FilePolicy {
+    /// Whether a file of a detected MIME type is accepted by this policy.
+    pub fn allows(&self, mime: &str, filename: &str, size: u64) -> bool {
+        catalog_validation::files::FileConstraints {
+            allowed_mime_groups: &self.allowed_mime_groups,
+            allowed_extensions: &self.allowed_extensions,
+            max_bytes: self.max_bytes,
+            image_only: self.image_only,
+        }
+        .allows(mime, filename, size)
+    }
+}
+
 fn publication_disposition_metadata(retained_role: Option<String>) -> serde_json::Value {
     match retained_role {
         Some(role_code) => serde_json::json!({
@@ -180,24 +193,19 @@ impl CatalogRepository {
         } else {
             0
         };
-        let workspace_id = self.workspace_id.0;
         let mut result = Vec::with_capacity(files.len());
         for (offset, file) in files.into_iter().enumerate() {
-            self.finish_file_upload(&mut transaction, &file.object_key)
-                .await?;
             let id = Uuid::new_v4();
             let status = "queued".to_owned();
-            sqlx::query(
-                "INSERT INTO files (id, workspace_id, original_filename, display_filename, mime_type, byte_size, sha256, original_key, status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+            self.insert_file_in_transaction(&mut transaction, id, &file)
+                .await?;
+            self.insert_attribute_file_reference_in_transaction(
+                &mut transaction,
+                value_id,
+                id,
+                start_position + offset as i32,
             )
-            .bind(id).bind(workspace_id).bind(&file.original_filename).bind(&file.display_filename)
-            .bind(&file.mime_type).bind(file.byte_size as i64).bind(&file.sha256).bind(&file.object_key).bind(&status)
-            .execute(&mut *transaction).await?;
-            sqlx::query("INSERT INTO attribute_file_references (attribute_value_id, workspace_id, file_id, position) VALUES ($1,$2,$3,$4)")
-                .bind(value_id).bind(workspace_id).bind(id).bind(start_position + offset as i32)
-                .execute(&mut *transaction).await?;
-            sqlx::query("INSERT INTO file_processing_jobs (id, workspace_id, file_id, kind, status) VALUES ($1,$2,$3,'metadata','queued')")
-                .bind(Uuid::new_v4()).bind(workspace_id).bind(id).execute(&mut *transaction).await?;
+            .await?;
             result.push(UploadedFile {
                 id,
                 filename: file.display_filename,
@@ -207,6 +215,7 @@ impl CatalogRepository {
                 status,
             });
         }
+        self.revalidate_entity(&mut transaction, &entity).await?;
         let retained_role = self
             .reconcile_entity_publication(&mut transaction, entity_id, "entity_changed")
             .await?;
@@ -221,6 +230,42 @@ impl CatalogRepository {
             context_id,
             files: result,
         })
+    }
+
+    /// Records an uploaded object as a queued workspace file with a metadata
+    /// job, in the caller's transaction. Every attribute file write uses it.
+    pub(super) async fn insert_file_in_transaction(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        id: Uuid,
+        file: &NewUploadedFile,
+    ) -> Result<(), RepositoryError> {
+        let workspace_id = self.workspace_id.0;
+        self.finish_file_upload(transaction, &file.object_key)
+            .await?;
+        sqlx::query(
+            "INSERT INTO files (id, workspace_id, original_filename, display_filename, mime_type, byte_size, sha256, original_key, status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'queued')",
+        )
+        .bind(id).bind(workspace_id).bind(&file.original_filename).bind(&file.display_filename)
+        .bind(&file.mime_type).bind(file.byte_size as i64).bind(&file.sha256).bind(&file.object_key)
+        .execute(&mut **transaction).await?;
+        sqlx::query("INSERT INTO file_processing_jobs (id, workspace_id, file_id, kind, status) VALUES ($1,$2,$3,'metadata','queued')")
+            .bind(Uuid::new_v4()).bind(workspace_id).bind(id).execute(&mut **transaction).await?;
+        Ok(())
+    }
+
+    /// References a file from an attribute value at a position.
+    pub(super) async fn insert_attribute_file_reference_in_transaction(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        value_id: Uuid,
+        file_id: Uuid,
+        position: i32,
+    ) -> Result<(), RepositoryError> {
+        sqlx::query("INSERT INTO attribute_file_references (attribute_value_id, workspace_id, file_id, position) VALUES ($1,$2,$3,$4)")
+            .bind(value_id).bind(self.workspace_id.0).bind(file_id).bind(position)
+            .execute(&mut **transaction).await?;
+        Ok(())
     }
 
     /// Removes or reorders existing references only. The expected ordered list
@@ -305,6 +350,7 @@ impl CatalogRepository {
         .bind(workspace_id)
         .fetch_one(&mut *transaction)
         .await?;
+        self.revalidate_entity(&mut transaction, &entity).await?;
         let retained_role = self
             .reconcile_entity_publication(&mut transaction, entity_id, "entity_changed")
             .await?;
@@ -415,6 +461,7 @@ impl CatalogRepository {
             .bind(position)
             .execute(&mut *transaction)
             .await?;
+        self.revalidate_entity(&mut transaction, &entity).await?;
         let retained_role = self
             .reconcile_entity_publication(&mut transaction, entity_id, "entity_changed")
             .await?;

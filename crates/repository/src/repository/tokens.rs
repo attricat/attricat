@@ -140,12 +140,4 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
         .fetch_all(&self.pool)
         .await?)
     }
-
-    pub async fn personal_api_token_permits(
-        &self,
-        token_id: Uuid,
-        permission: &str,
-    ) -> Result<bool, RepositoryError> {
-        Ok(sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM personal_api_token_permissions WHERE token_id = $1 AND permission_code = $2)").bind(token_id).bind(permission).fetch_one(&self.pool).await?)
-    }
 }

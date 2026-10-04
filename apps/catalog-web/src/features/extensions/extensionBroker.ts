@@ -199,10 +199,14 @@ const frameSelection = ({
   return selection;
 };
 
-/** Reads a run only when it belongs to the calling extension. */
+/**
+ * Reads a run only when the signed-in user started it for the calling
+ * extension. The `own` scope makes the server refuse other users' runs even
+ * for an operator; the client checks again.
+ */
 const ownRun = async (runId: string, { contribution }: BrokerDependencies) => {
-  const run = await getExtensionRun(runId);
-  if (run.extension_id !== contribution.extension_id)
+  const run = await getExtensionRun(runId, 'own');
+  if (run.extension_id !== contribution.extension_id || !run.initiated_by_me)
     throw new Error(extensionProtocolErrors.requestDenied);
   return run;
 };
@@ -258,7 +262,7 @@ const handleOperation = async (
   ) {
     const { run_id } = runReferenceSchema.parse(payload);
     await ownRun(run_id, dependencies);
-    await cancelExtensionRun(run_id);
+    await cancelExtensionRun(run_id, 'own');
     return null;
   }
   if (
@@ -269,7 +273,9 @@ const handleOperation = async (
     const run = await ownRun(run_id, dependencies);
     if (!run.artifacts.some((artifact) => artifact.id === artifact_id))
       throw new Error(extensionProtocolErrors.requestDenied);
-    dependencies.downloadArtifact(extensionRunArtifactUrl(run_id, artifact_id));
+    dependencies.downloadArtifact(
+      extensionRunArtifactUrl(run_id, artifact_id, 'own'),
+    );
     return null;
   }
   throw new Error(extensionProtocolErrors.requestDenied);

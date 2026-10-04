@@ -6,13 +6,13 @@
 //! endpoint, and stages its own audit evidence and domain event. Nothing is
 //! committed, audited or published unless every operation succeeds.
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use serde_json::{Value, json};
 use uuid::Uuid;
 
 use super::entity_commands::ChosenIdEntityCreate;
-use super::{CatalogRepository, RepositoryError};
+use super::{AuthorizationActor, CatalogRepository, RepositoryError, validate_code};
 use crate::model::{
     EntityBatchOperation, EntityBatchOperationResult, EntityBatchRequest, EntityBatchResponse,
     MAX_ENTITY_BATCH_OPERATIONS, MAX_ENTITY_BATCH_VALUES, SearchBlueprint, UpdateEntityFormRequest,
@@ -20,7 +20,8 @@ use crate::model::{
 
 impl CatalogRepository {
     /// Checks every operation's permission for one principal, and for a
-    /// personal API token its live permissions, before a batch runs.
+    /// personal API token its live permissions, before a batch runs. Existing
+    /// entities are checked in one query per permission.
     pub async fn is_authorized_for_entity_batch(
         &self,
         user_id: Uuid,
@@ -28,31 +29,38 @@ impl CatalogRepository {
         token_id: Option<Uuid>,
         request: &EntityBatchRequest,
     ) -> Result<bool, RepositoryError> {
-        let mut checked = HashSet::new();
+        let actor = AuthorizationActor { user_id, token_id };
+        let mut targets: BTreeMap<&str, Vec<Uuid>> = BTreeMap::new();
+        let mut untargeted = BTreeSet::new();
         for operation in &request.operations {
-            let (permission, entity_id) = operation.permission();
-            if !checked.insert((permission, entity_id)) {
-                continue;
+            match operation.permission() {
+                (permission, Some(entity_id)) => {
+                    targets.entry(permission).or_default().push(entity_id);
+                }
+                (permission, None) => {
+                    untargeted.insert(permission);
+                }
             }
-            if !self
-                .is_authorized(user_id, workspace_id, permission, entity_id, None)
+        }
+        let mut connection = self.pool.acquire().await?;
+        for permission in untargeted {
+            if !Self::principal_may_on(&mut connection, actor, workspace_id, permission, None, None)
                 .await?
             {
                 return Ok(false);
             }
         }
-        if let Some(token_id) = token_id {
-            let permissions: HashSet<_> = checked
-                .into_iter()
-                .map(|(permission, _)| permission)
-                .collect();
-            for permission in permissions {
-                if !self
-                    .personal_api_token_permits(token_id, permission)
-                    .await?
-                {
-                    return Ok(false);
-                }
+        for (permission, entity_ids) in targets {
+            let permitted = Self::principal_entity_ids_on(
+                &mut connection,
+                actor,
+                workspace_id,
+                permission,
+                &entity_ids,
+            )
+            .await?;
+            if !entity_ids.iter().all(|id| permitted.contains(id)) {
+                return Ok(false);
             }
         }
         Ok(true)
@@ -139,8 +147,9 @@ impl CatalogRepository {
                 if taken {
                     return Err(RepositoryError::EntityIdTaken(entity_id));
                 }
-                let (blueprint_id, blueprint_version) =
-                    self.batch_blueprint_revision(&blueprint).await?;
+                let (blueprint_id, blueprint_version) = self
+                    .batch_blueprint_revision(transaction, &blueprint)
+                    .await?;
                 let repository = self.for_batch_operation(index, operation_count, entity_id);
                 let (entity, changes, event) = repository
                     .create_entity_in_transaction(
@@ -206,19 +215,23 @@ impl CatalogRepository {
         })
     }
 
+    /// Resolves a published entity blueprint revision inside the batch
+    /// transaction, so the batch sees one consistent catalog state.
     async fn batch_blueprint_revision(
         &self,
+        transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         blueprint: &SearchBlueprint,
     ) -> Result<(Uuid, i64), RepositoryError> {
-        let revision = match blueprint.version {
-            Some(version) => {
-                self.get_published_blueprint_by_code_and_version(&blueprint.code, version)
-                    .await?
-            }
-            None => self.get_blueprint_by_code(&blueprint.code).await?,
-        }
-        .ok_or(RepositoryError::NotFound("blueprint"))?;
-        Ok((revision.blueprint.id, revision.blueprint.version))
+        validate_code(&blueprint.code)?;
+        sqlx::query_as::<_, (Uuid, i64)>(
+            "SELECT id, version FROM blueprints WHERE workspace_id = $1 AND code = $2 AND ($3::bigint IS NULL OR version = $3) AND status = 'published' AND deleted_at IS NULL ORDER BY version DESC LIMIT 1",
+        )
+        .bind(self.workspace_id.0)
+        .bind(&blueprint.code)
+        .bind(blueprint.version)
+        .fetch_optional(&mut **transaction)
+        .await?
+        .ok_or(RepositoryError::NotFound("blueprint"))
     }
 
     /// Each operation is audited against its own entity, with the batch

@@ -1,6 +1,10 @@
 import { z } from 'zod';
 import { lexiconText } from '../lexicon/lexicon';
-import type { Attribute, FormAttributeValue } from './api';
+import type {
+  Attribute,
+  FormAttributeValue,
+  StatusTransitionAccess,
+} from './api';
 
 export const STATUS_SCHEMA_KEY = 'x-attricat-status';
 const codeSchema = z
@@ -84,6 +88,49 @@ export const statusTransitionAllowed = (
       (edge) => edge.from === before && edge.to === after,
     );
   return after !== null;
+};
+
+/**
+ * Why a status selection is refused. `undeclared` edges are not in the
+ * transition graph; `access` edges are declared but the server refuses them
+ * to the caller (permission, role, separation of duties or conditions).
+ */
+export type StatusTransitionDenial =
+  { kind: 'undeclared' } | { kind: 'access'; access: StatusTransitionAccess };
+
+/**
+ * Why moving the saved `baseline` status to `selected` is refused, or
+ * `undefined` when it is allowed. An empty selection removes the local value,
+ * so the transition targets the `inherited` status instead.
+ */
+export const statusTransitionDenial = (
+  config: StatusConfiguration,
+  {
+    attributeCode,
+    baseline,
+    inherited,
+    selected,
+    transitions = [],
+  }: {
+    attributeCode: string;
+    baseline: string | null;
+    inherited: string | null;
+    selected: string;
+    /** Server-evaluated access to edges leaving the saved status. */
+    transitions?: readonly StatusTransitionAccess[];
+  },
+): StatusTransitionDenial | undefined => {
+  const target = selected || inherited;
+  if (!statusTransitionAllowed(config, baseline, target))
+    return { kind: 'undeclared' };
+  if (target === baseline) return undefined;
+  const access = transitions.find(
+    (edge) =>
+      edge.attribute_code === attributeCode &&
+      edge.to === target &&
+      !edge.allowed,
+  );
+  return access && { kind: 'access', access };
 };
 
 export const statusParentContexts = (

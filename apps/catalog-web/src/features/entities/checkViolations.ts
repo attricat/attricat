@@ -1,4 +1,5 @@
 import { ApiRequestError } from '../../api/request';
+import { statusTransitionDenialCodes } from './constants';
 import {
   checkViolationDetailsSchema,
   type CheckViolation,
@@ -8,7 +9,7 @@ import {
 /** API error codes whose `details.violations` list failed declarative checks. */
 export const checkViolationErrorCodes = {
   entityCheckFailed: 'entity_check_failed',
-  transitionConditionsUnmet: 'transition_conditions_unmet',
+  transitionConditionsUnmet: statusTransitionDenialCodes.conditionsUnmet,
   ruleViolation: 'rule_violation',
   publicationChecksFailed: 'publication_checks_failed',
 } as const;
@@ -66,7 +67,20 @@ export const violationFieldErrors = (
   return { fieldErrors, unplaced };
 };
 
+/** Violation messages joined into one run of text. */
+export const violationsText = (violations: readonly CheckViolation[]) =>
+  violations.map((violation) => violation.message).join(' ');
+
 /** The failing checks that keep an entity from one channel, as one sentence. */
 export const publicationReadinessText = (
   readiness: EntityPublicationReadiness,
-) => readiness.violations.map((violation) => violation.message).join(' ');
+) => violationsText(readiness.violations);
+
+/** The evaluated readiness of the channel for `contextId`, if any. */
+export const readinessForContext = (
+  readiness: readonly EntityPublicationReadiness[] | undefined,
+  contextId: string | null | undefined,
+) =>
+  contextId
+    ? readiness?.find((item) => item.context_id === contextId)
+    : undefined;

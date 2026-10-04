@@ -416,6 +416,20 @@ pub struct FilePolicy {
     pub image_only: bool,
 }
 
+impl FilePolicy {
+    /// Whether a file of a detected MIME type is accepted by this policy, as
+    /// for an ordinary upload.
+    pub fn allows(&self, mime: &str, filename: &str, size: u64) -> bool {
+        catalog_validation::files::FileConstraints {
+            allowed_mime_groups: &self.allowed_mime_groups,
+            allowed_extensions: &self.allowed_extensions,
+            max_bytes: self.max_bytes,
+            image_only: self.image_only,
+        }
+        .allows(mime, filename, size)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct LocalAttributeDeclaration {
     pub code: String,

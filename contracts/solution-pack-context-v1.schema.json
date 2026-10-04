@@ -33,6 +33,20 @@
       "properties": {
         "enabled": {
           "type": "boolean"
+        },
+        "required_rules": {
+          "type": "array",
+          "maxItems": 32,
+          "uniqueItems": true,
+          "$comment": "Logical keys of rules the pack declares; installed with their physical rule codes.",
+          "items": {
+            "type": "string",
+            "maxLength": 128,
+            "pattern": "^rules/[a-z][a-z0-9_-]*$"
+          }
+        },
+        "require_valid_entity": {
+          "type": "boolean"
         }
       }
     }

@@ -18,8 +18,8 @@ use crate::{
     solution_pack_extensions::ResolvedExtensionRelease,
     solution_pack_sample_data::{SampleEntity, explicit_fact_attribute_codes},
     solution_pack_seeds::{
-        ContextMappingRequest, ExistingContextSnapshot, PrerequisiteResolution,
-        SeedWorkspaceSnapshot, prerequisite_version_req, reused_blueprints,
+        ContextMappingRequest, ExistingContextSnapshot, ExistingPublicationChannel,
+        PrerequisiteResolution, SeedWorkspaceSnapshot, prerequisite_version_req, reused_blueprints,
         validate_context_mapping_requests,
     },
     solution_packs::{
@@ -848,18 +848,25 @@ async fn latest_published_blueprint(
     }))
 }
 
-async fn publication_channel_enabled(
+async fn existing_publication_channel(
     tx: &mut Transaction<'_, Postgres>,
     workspace_id: Uuid,
     context_id: Uuid,
-) -> Result<Option<bool>, RepositoryError> {
-    Ok(sqlx::query_scalar(
-        "SELECT enabled FROM publication_channels WHERE workspace_id=$1 AND context_id=$2",
+) -> Result<Option<ExistingPublicationChannel>, RepositoryError> {
+    Ok(sqlx::query_as::<_, (bool, Vec<String>, bool)>(
+        "SELECT enabled,required_rule_codes,require_valid_entity FROM publication_channels WHERE workspace_id=$1 AND context_id=$2",
     )
     .bind(workspace_id)
     .bind(context_id)
     .fetch_optional(&mut **tx)
-    .await?)
+    .await?
+    .map(
+        |(enabled, required_rule_codes, require_valid_entity)| ExistingPublicationChannel {
+            enabled,
+            required_rule_codes,
+            require_valid_entity,
+        },
+    ))
 }
 
 #[derive(sqlx::FromRow)]
@@ -944,8 +951,7 @@ impl CatalogRepository {
                 ExistingContextSnapshot {
                     id,
                     code: requested.code.clone(),
-                    publication_channel_enabled: publication_channel_enabled(tx, workspace_id, id)
-                        .await?,
+                    publication_channel: existing_publication_channel(tx, workspace_id, id).await?,
                 },
             );
         }
@@ -1753,13 +1759,13 @@ impl CatalogRepository {
                     && pack.context(&step.logical_key).is_some()
                 {
                     let channel =
-                        publication_channel_enabled(&mut tx, workspace_id, step.target_id).await?;
+                        existing_publication_channel(&mut tx, workspace_id, step.target_id).await?;
                     seed.existing_contexts.insert(
                         step.logical_key.clone(),
                         ExistingContextSnapshot {
                             id: step.target_id,
                             code: step.target_code.clone(),
-                            publication_channel_enabled: channel,
+                            publication_channel: channel,
                         },
                     );
                 }
@@ -5019,13 +5025,9 @@ impl CatalogRepository {
                         )
                         .await
                         .map_err(solution_pack_mutation_error)?;
-                    let mut entity_repository = self.clone();
-                    if let Some(audit) = entity_repository.audit_context.as_mut() {
-                        audit.target = serde_json::json!({"type":"entity","id":entity.id});
-                    }
-                    entity_repository
-                        .stage_entity_mutation(&mut tx, changes, event)
-                        .await?;
+                    // Bundled files are attached in the same transaction before
+                    // the write is staged, and the entity is validated again
+                    // with them, like an ordinary entity write.
                     let file_count = self
                         .attach_sample_files(
                             &mut tx,
@@ -5035,6 +5037,18 @@ impl CatalogRepository {
                             &contexts,
                             object_store,
                         )
+                        .await?;
+                    if file_count > 0 {
+                        self.validate_entity_schema(&mut tx, &entity)
+                            .await
+                            .map_err(solution_pack_mutation_error)?;
+                    }
+                    let mut entity_repository = self.clone();
+                    if let Some(audit) = entity_repository.audit_context.as_mut() {
+                        audit.target = serde_json::json!({"type":"entity","id":entity.id});
+                    }
+                    entity_repository
+                        .stage_entity_mutation(&mut tx, changes, event)
                         .await?;
                     (
                         {
@@ -6219,6 +6233,31 @@ struct PublicationChannelPayload {
     context_id: Uuid,
     context_code: String,
     enabled: bool,
+    // Plans made before channels carried their checks omit these.
+    #[serde(default)]
+    required_rule_codes: Vec<String>,
+    #[serde(default)]
+    require_valid_entity: bool,
+}
+
+impl PublicationChannelPayload {
+    fn settings(&self) -> ExistingPublicationChannel {
+        ExistingPublicationChannel {
+            enabled: self.enabled,
+            required_rule_codes: self.required_rule_codes.clone(),
+            require_valid_entity: self.require_valid_entity,
+        }
+    }
+
+    fn result(&self) -> Value {
+        serde_json::json!({
+            "context_id": self.context_id,
+            "context_code": self.context_code,
+            "enabled": self.enabled,
+            "required_rule_codes": self.required_rule_codes,
+            "require_valid_entity": self.require_valid_entity,
+        })
+    }
 }
 
 #[derive(Deserialize)]
@@ -6322,6 +6361,8 @@ impl CatalogRepository {
                 .map_or(default_context, |context| contexts[context]);
             self.validate_context_editable(tx, Some(context_id), &context_editable)
                 .await?;
+            self.ensure_attribute_unlocked(tx, &entity, code, context_id)
+                .await?;
             let value_id: Uuid = sqlx::query_scalar(
                 "INSERT INTO attribute_values (id, workspace_id, entity_id, attribute_id, context_id, active) VALUES ($1, $2, $3, $4, $5, true) RETURNING id",
             )
@@ -6379,33 +6420,27 @@ impl CatalogRepository {
                     {
                         return Err(RepositoryError::SolutionPackAssetObjectIntegrityFailed);
                     }
-                    self.finish_file_upload(tx, &object_key).await?;
-                    sqlx::query(
-                        "INSERT INTO files (id, workspace_id, original_filename, display_filename, mime_type, byte_size, sha256, original_key, status) VALUES ($1,$2,$3,$3,$4,$5,$6,$7,'queued')",
+                    self.insert_file_in_transaction(
+                        tx,
+                        file_id,
+                        &crate::repository::NewUploadedFile {
+                            original_filename: filename.clone(),
+                            display_filename: filename,
+                            mime_type: media_type,
+                            byte_size: byte_size as u64,
+                            sha256,
+                            object_key,
+                        },
                     )
-                    .bind(file_id)
-                    .bind(workspace_id)
-                    .bind(&filename)
-                    .bind(&media_type)
-                    .bind(byte_size)
-                    .bind(&sha256)
-                    .bind(&object_key)
-                    .execute(&mut **tx)
                     .await?;
-                    sqlx::query("INSERT INTO file_processing_jobs (id, workspace_id, file_id, kind, status) VALUES ($1,$2,$3,'metadata','queued')")
-                        .bind(Uuid::new_v4())
-                        .bind(workspace_id)
-                        .bind(file_id)
-                        .execute(&mut **tx)
-                        .await?;
                 }
-                sqlx::query("INSERT INTO attribute_file_references (attribute_value_id, workspace_id, file_id, position) VALUES ($1,$2,$3,$4)")
-                    .bind(value_id)
-                    .bind(workspace_id)
-                    .bind(file_id)
-                    .bind(position as i32)
-                    .execute(&mut **tx)
-                    .await?;
+                self.insert_attribute_file_reference_in_transaction(
+                    tx,
+                    value_id,
+                    file_id,
+                    position as i32,
+                )
+                .await?;
                 attached += 1;
             }
         }
@@ -6489,16 +6524,13 @@ impl CatalogRepository {
                 "persisted publication channel mapping does not match its payload".into(),
             ));
         }
-        let current = publication_channel_enabled(tx, self.workspace_id.0, context_id).await?;
-        if current != Some(payload.enabled) {
+        let current = existing_publication_channel(tx, self.workspace_id.0, context_id).await?;
+        if current != Some(payload.settings()) {
             return Err(RepositoryError::SolutionPackPlanStale);
         }
-        Ok(serde_json::json!({
-            "outcome": "satisfied",
-            "context_id": context_id,
-            "context_code": payload.context_code,
-            "enabled": payload.enabled,
-        }))
+        let mut result = payload.result();
+        result["outcome"] = "satisfied".into();
+        Ok(result)
     }
 
     /// Whether a seed resource target exists by its planned id, and whether
@@ -6587,16 +6619,20 @@ impl CatalogRepository {
                         "persisted publication channel mapping does not match its payload".into(),
                     ));
                 }
-                sqlx::query("INSERT INTO publication_channels (workspace_id, context_id, enabled) VALUES ($1, $2, $3)")
-                    .bind(workspace_id)
-                    .bind(payload.context_id)
-                    .bind(payload.enabled)
-                    .execute(&mut **tx)
-                    .await?;
-                Ok((
-                    serde_json::json!({"context_id": payload.context_id, "context_code": payload.context_code, "enabled": payload.enabled}),
-                    Vec::new(),
-                ))
+                // The plan created this channel's step only when no channel
+                // existed; the precondition check rejected one created since.
+                self.upsert_publication_channel_in_transaction(
+                    tx,
+                    payload.context_id,
+                    crate::model::UpdatePublicationChannel {
+                        enabled: payload.enabled,
+                        required_rule_codes: Some(payload.required_rule_codes.clone()),
+                        require_valid_entity: Some(payload.require_valid_entity),
+                    },
+                )
+                .await
+                .map_err(solution_pack_mutation_error)?;
+                Ok((payload.result(), Vec::new()))
             }
             ("rule", "create") => {
                 let payload: RulePayload = seed_payload(payload, "rule")?;
@@ -6627,6 +6663,11 @@ impl CatalogRepository {
                 }
                 self.publish_rule_in_transaction(tx, id, 1).await?;
                 if payload.enabled {
+                    // The ordinary enable gate: planning defers enforcing
+                    // rules on blueprints that may already have entities.
+                    self.ensure_rule_enable_allowed(tx, id, 1, false)
+                        .await
+                        .map_err(solution_pack_mutation_error)?;
                     self.enable_rule_in_transaction(tx, id, 1).await?;
                 }
                 Ok((
@@ -6687,16 +6728,27 @@ impl CatalogRepository {
                             "a saved search can only be seeded by a signed-in user or personal token".into(),
                         )
                     })?;
-                sqlx::query("INSERT INTO saved_views (id,workspace_id,owner_user_id,kind,name,description,visibility,state,state_hash) VALUES ($1,$2,$3,'explorer_search',$4,$5,'workspace',$6,$7)")
-                    .bind(step.target_id)
-                    .bind(workspace_id)
-                    .bind(owner)
-                    .bind(&payload.name)
-                    .bind(&payload.description)
-                    .bind(&payload.state)
-                    .bind(super::saved_views::state_hash(&payload.state))
-                    .execute(&mut **tx)
-                    .await?;
+                // Validated and normalized like every other saved-search write.
+                catalog_validation::saved_search::validate_state(
+                    catalog_validation::saved_search::EXPLORER_SEARCH_KIND,
+                    &payload.state,
+                )
+                .map_err(|reason| {
+                    RepositoryError::InvalidSolutionPackPlan(format!(
+                        "invalid persisted saved search state: {reason}"
+                    ))
+                })?;
+                let state = catalog_validation::saved_search::normalize_state(&payload.state);
+                self.create_saved_view_in_transaction(
+                    tx,
+                    step.target_id,
+                    owner,
+                    Some(&payload.name),
+                    payload.description.as_deref(),
+                    "workspace",
+                    &state,
+                )
+                .await?;
                 Ok((
                     serde_json::json!({"id": step.target_id, "name": payload.name, "visibility": "workspace", "owner_user_id": owner}),
                     Vec::new(),

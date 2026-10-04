@@ -104,22 +104,11 @@ The **Actions** menu works on the selection:
 
 ## Extension actions and runs
 
-An extension can offer an action, such as generating documents, from an entity
-preview, from a row's menu, or for the current selection. These actions always
-use saved data. If you have unsaved edits for a selected entity in the same
-browser tab, the dialog tells you and links to the editor so you can save
-first.
+An extension can offer an action, such as generating documents, from an entity preview, from a row's menu, or for the current selection. These actions always use saved data. If you have unsaved edits for a selected entity in the same browser tab, the dialog tells you and links to the editor so you can save first.
 
-Starting the action creates a run in the background. You can close the dialog
-or leave the page; the run continues and you are notified when it finishes.
-Open **Profile → Extension runs** to follow your runs, cancel one that is still
-in progress, and download its results. The status shows whether the run
-finished; the extension reports separately how many entities succeeded,
-failed, or were skipped.
+Starting the action creates a run in the background. You can close the dialog or leave the page; the run continues and you are notified when it finishes. Open **Profile → Extension runs** to follow your runs, cancel one that is still in progress, and download its results. The status shows whether the run finished; the extension reports separately how many entities succeeded, failed, or were skipped.
 
-Only you, and workspace members who manage extensions, can see your runs. You
-can download results only while you can still read every entity in the run.
-Results become available when the run completes and are kept for 30 days.
+Only you, and workspace members who manage extensions, can see your runs. You can download results only while you can still read every entity in the run. Results become available when the run completes and are kept for 30 days.
 
 ## Open an entity
 

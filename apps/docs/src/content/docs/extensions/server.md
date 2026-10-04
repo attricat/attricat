@@ -16,7 +16,7 @@ The host interface is defined in WIT packages in the Attricat repository under `
 | `catalog:host@1.2.0` | `wit-operations/` | Durable [operations](/extensions/operations/). |
 | `catalog:host@1.3.0` | `wit-artifacts/` | Operation input and output artifacts. |
 | `catalog:host@1.4.0` | `wit-connectors/` | Connector catalog calls and HTTPS file transfer. |
-| `catalog:host@1.5.0` | `wit-interactive/` | [Interactive operations](/extensions/operations/#interactive-operations-host-api-15) over a selection. |
+| `catalog:host@1.5.0` | `wit-interactive/` | [Interactive operations](/extensions/operations/#interactive-operations) over a selection. |
 | `catalog:host@1.6.0` | `wit-host/` | **Unified ABI**: everything from 1.1 and 1.5 in one package. |
 
 Set `catalog.host_api` in your manifest to the range your component is built for.

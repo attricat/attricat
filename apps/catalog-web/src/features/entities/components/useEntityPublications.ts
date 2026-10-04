@@ -9,6 +9,7 @@ import {
   entityPublicationReadinessOptions,
 } from '../queryOptions';
 import { invalidateEntityPublications } from '../invalidateEntity';
+import { readinessForContext } from '../checkViolations';
 
 /**
  * Loads an entity's channel publications and exposes publishing actions.
@@ -48,10 +49,7 @@ export const useEntityPublications = (
       contextId === null
         ? undefined
         : publications.data?.find((item) => item.context_id === contextId),
-    readiness:
-      contextId === null
-        ? undefined
-        : readiness.data?.find((item) => item.context_id === contextId),
+    readiness: readinessForContext(readiness.data, contextId),
     notReadyChannels: (readiness.data ?? []).filter((item) => !item.ready),
     publish: () => {
       if (contextId) publish.mutate(contextId);

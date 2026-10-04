@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { ExtensionRunStatus } from './constants';
+import { isActiveExtensionRun } from './runPolling';
 import {
   runOutcomeSchema,
   runProgressCountsSchema,
@@ -49,7 +50,7 @@ export const ExtensionRunProgress = ({ run }: { run: ExtensionRun }) => {
   const { t } = useTranslation();
   const counts = runProgressCountsSchema.safeParse(run.progress);
   const outcome = runOutcomeSchema.safeParse(run.progress.outcome);
-  const active = ['queued', 'running', 'cancelling'].includes(run.status);
+  const active = isActiveExtensionRun(run);
   const outcomeParts = outcome.success
     ? (['succeeded', 'failed', 'skipped'] as const).flatMap((key) =>
         outcome.data[key] === undefined

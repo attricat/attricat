@@ -253,6 +253,123 @@ async fn publishing_a_hierarchy_reports_existing_cycles_and_extra_parents(pool: 
     server.abort();
 }
 
+async fn link_in(
+    client: &Client,
+    base_url: &str,
+    source: &str,
+    field: &str,
+    context_id: &str,
+    targets: &[&str],
+) -> reqwest::Response {
+    client
+        .post(format!(
+            "{base_url}/entities/{source}/relationships/replace"
+        ))
+        .json(&json!({ "relationships": [{
+            "attribute_code": field, "context_id": context_id, "target_entity_ids": targets,
+        }] }))
+        .send()
+        .await
+        .unwrap()
+}
+
+#[sqlx::test]
+async fn hierarchies_follow_edges_inherited_from_parent_contexts(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    // Revision 1 lets entities set the field per context; revision 2 makes it
+    // a hierarchy, which entities pinned to revision 1 must still respect.
+    let contextual = LOCATION
+        .replace("tree = true\n", "")
+        .replace("acyclic = true\ncontext_editable = \"default\"\n", "");
+    let blueprint = create_blueprint(&client, &base_url, &contextual).await;
+    let blueprint_id = blueprint["blueprint"]["id"].as_str().unwrap().to_owned();
+    let french: Value = client
+        .post(format!("{base_url}/contexts"))
+        .json(&json!({ "code": "rc-fr", "data": {} }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let fr = french["id"].as_str().unwrap();
+    let [a, b] = [
+        entity(&client, &base_url, "rc_location").await,
+        entity(&client, &base_url, "rc_location").await,
+    ];
+    // a -> b in default, b -> a only in fr: fr inherits a -> b.
+    link(&client, &base_url, &a, "depends_on", &[&b])
+        .await
+        .error_for_status()
+        .unwrap();
+    link_in(&client, &base_url, &b, "depends_on", fr, &[&a])
+        .await
+        .error_for_status()
+        .unwrap();
+
+    let revision: Value = client
+        .post(format!("{base_url}/blueprints/{blueprint_id}/versions"))
+        .json(&json!({ "definition": LOCATION.replace("tree = true\n", "") }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let publish_url = format!(
+        "{base_url}/blueprints/{blueprint_id}/versions/{}/publish",
+        revision["blueprint"]["version"]
+    );
+    let publish = || client.post(&publish_url).send();
+    let rejected = publish().await.unwrap();
+    assert_eq!(rejected.status(), StatusCode::CONFLICT);
+    let body: Value = rejected.json().await.unwrap();
+    assert_eq!(body["error"]["code"], "relationship_hierarchy_violations");
+    let cycles = body["error"]["details"]["cycles"].as_array().unwrap();
+    assert_eq!(cycles.len(), 1, "the fr cycle is reported once");
+    let mut members = cycles[0].as_array().unwrap().clone();
+    assert_eq!(members.first(), members.last());
+    members.pop();
+    members.sort_by_key(|id| id.as_str().unwrap().to_owned());
+    let mut expected = vec![json!(a), json!(b)];
+    expected.sort_by_key(|id| id.as_str().unwrap().to_owned());
+    assert_eq!(members, expected);
+
+    link_in(&client, &base_url, &b, "depends_on", fr, &[])
+        .await
+        .error_for_status()
+        .unwrap();
+    publish().await.unwrap().error_for_status().unwrap();
+
+    // b is still pinned to revision 1, so it may write in fr, but the edge
+    // would close a cycle with the inherited a -> b.
+    let cycle = link_in(&client, &base_url, &b, "depends_on", fr, &[&a]).await;
+    assert_eq!(cycle.status(), StatusCode::CONFLICT);
+    let body: Value = cycle.json().await.unwrap();
+    assert_eq!(body["error"]["code"], "relationship_cycle");
+    assert_eq!(body["error"]["details"]["path"], json!([b, a, b]));
+
+    // A local fr edge of a overrides the inherited one, so no cycle forms.
+    let c = entity(&client, &base_url, "rc_location").await;
+    link_in(&client, &base_url, &a, "depends_on", fr, &[&c])
+        .await
+        .error_for_status()
+        .unwrap();
+    assert_eq!(
+        link_in(&client, &base_url, &b, "depends_on", fr, &[&a])
+            .await
+            .status(),
+        StatusCode::CREATED
+    );
+
+    server.abort();
+}
+
 #[sqlx::test]
 async fn relationships_accept_only_listed_target_blueprints(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;

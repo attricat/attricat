@@ -45,6 +45,7 @@ mod entity_migration;
 mod entity_projection;
 mod entity_publications;
 mod entity_search;
+mod error_codes;
 mod extension_annotations;
 mod extension_catalog_data;
 mod extension_interactive_operations;
@@ -62,6 +63,8 @@ mod health;
 mod lexicon;
 mod members;
 mod presentation_assets;
+mod record_values;
+mod references;
 mod retention_holds;
 mod reusable_attributes;
 mod roles;
@@ -95,6 +98,7 @@ pub use checks::{
     CheckSource, CheckTransition, CheckViolation, MAX_REPORTED_VIOLATIONS, PublicationReadiness,
 };
 pub use entity_comments::{COMMENT_PAGE_SIZE, EntityComment};
+pub use error_codes::{ErrorClass, ErrorDescription, TRANSITION_CONDITIONS_UNMET};
 pub use lexicon::{LexiconEntry, LexiconImportMode, LexiconImportSummary};
 pub use saved_views::SavedView;
 pub use structural_constraints::UniqueKeyDuplicate;
@@ -963,6 +967,21 @@ impl CatalogRepository {
             .await
     }
 
+    /// Rechecks the interactive actor for several entities at once; see
+    /// [`Self::ensure_principal_may_all`].
+    pub(crate) async fn ensure_actor_may_all(
+        &self,
+        connection: &mut sqlx::PgConnection,
+        permission: &str,
+        entity_ids: &[Uuid],
+    ) -> Result<(), RepositoryError> {
+        let Some(actor) = self.authorization_actor else {
+            return Ok(());
+        };
+        self.ensure_principal_may_all(connection, actor, permission, entity_ids)
+            .await
+    }
+
     /// Checks one principal's current grant and, for a token, its live token
     /// permission against one entity.
     pub(crate) async fn ensure_principal_may(
@@ -972,9 +991,9 @@ impl CatalogRepository {
         permission: &str,
         entity_id: Uuid,
     ) -> Result<(), RepositoryError> {
-        if !Self::is_authorized_on(
+        if Self::principal_may_on(
             connection,
-            actor.user_id,
+            actor,
             self.workspace_id.0,
             permission,
             Some(entity_id),
@@ -982,23 +1001,35 @@ impl CatalogRepository {
         )
         .await?
         {
-            return Err(RepositoryError::ActorNotAuthorized);
+            Ok(())
+        } else {
+            Err(RepositoryError::ActorNotAuthorized)
         }
-        if let Some(token_id) = actor.token_id {
-            let permitted: bool = sqlx::query_scalar(
-                "SELECT EXISTS (SELECT 1 FROM personal_api_tokens t JOIN personal_api_token_permissions p ON p.token_id = t.id WHERE t.id = $1 AND t.user_id = $2 AND t.workspace_id = $3 AND t.revoked_at IS NULL AND (t.expires_at IS NULL OR t.expires_at > clock_timestamp()) AND p.permission_code = $4)",
-            )
-            .bind(token_id)
-            .bind(actor.user_id)
-            .bind(self.workspace_id.0)
-            .bind(permission)
-            .fetch_one(&mut *connection)
-            .await?;
-            if !permitted {
-                return Err(RepositoryError::ActorNotAuthorized);
-            }
+    }
+
+    /// [`Self::ensure_principal_may`] for every entity in one query. A
+    /// workspace grant authorizes IDs that do not exist, so callers still
+    /// verify existence themselves.
+    pub(crate) async fn ensure_principal_may_all(
+        &self,
+        connection: &mut sqlx::PgConnection,
+        actor: AuthorizationActor,
+        permission: &str,
+        entity_ids: &[Uuid],
+    ) -> Result<(), RepositoryError> {
+        let permitted = Self::principal_entity_ids_on(
+            connection,
+            actor,
+            self.workspace_id.0,
+            permission,
+            entity_ids,
+        )
+        .await?;
+        if entity_ids.iter().all(|id| permitted.contains(id)) {
+            Ok(())
+        } else {
+            Err(RepositoryError::ActorNotAuthorized)
         }
-        Ok(())
     }
 
     /// Commits a catalog mutation, its audit evidence, and an outbox event as
@@ -1454,6 +1485,105 @@ impl<S: RepositoryScope> CatalogRepository<S> {
         Ok(rows.into_iter().collect())
     }
 
+    /// The subset of `entity_ids` one principal may access with `permission`:
+    /// the user's grants and, for a token, its live token permission.
+    pub(crate) async fn principal_entity_ids_on(
+        connection: &mut sqlx::PgConnection,
+        actor: AuthorizationActor,
+        workspace_id: Uuid,
+        permission: &str,
+        entity_ids: &[Uuid],
+    ) -> Result<HashSet<Uuid>, RepositoryError> {
+        if entity_ids.is_empty()
+            || !Self::token_permits_on(connection, actor, workspace_id, permission).await?
+        {
+            return Ok(HashSet::new());
+        }
+        Self::authorized_entity_ids_on(
+            connection,
+            actor.user_id,
+            workspace_id,
+            permission,
+            entity_ids,
+        )
+        .await
+    }
+
+    /// Whether one principal may act: the user's current grant for the target
+    /// and, for a personal API token, its live token permission.
+    pub async fn principal_may(
+        &self,
+        actor: AuthorizationActor,
+        workspace_id: Uuid,
+        permission: &str,
+        target_id: Option<Uuid>,
+        target_code: Option<&str>,
+    ) -> Result<bool, RepositoryError> {
+        let mut connection = self.pool.acquire().await?;
+        Self::principal_may_on(
+            &mut connection,
+            actor,
+            workspace_id,
+            permission,
+            target_id,
+            target_code,
+        )
+        .await
+    }
+
+    pub(crate) async fn principal_may_on(
+        connection: &mut sqlx::PgConnection,
+        actor: AuthorizationActor,
+        workspace_id: Uuid,
+        permission: &str,
+        target_id: Option<Uuid>,
+        target_code: Option<&str>,
+    ) -> Result<bool, RepositoryError> {
+        Ok(Self::is_authorized_on(
+            connection,
+            actor.user_id,
+            workspace_id,
+            permission,
+            target_id,
+            target_code,
+        )
+        .await?
+            && Self::token_permits_on(connection, actor, workspace_id, permission).await?)
+    }
+
+    /// Whether a principal's personal API token (if any) still carries
+    /// `permission`. A session always passes.
+    pub async fn principal_token_permits(
+        &self,
+        actor: AuthorizationActor,
+        workspace_id: Uuid,
+        permission: &str,
+    ) -> Result<bool, RepositoryError> {
+        let mut connection = self.pool.acquire().await?;
+        Self::token_permits_on(&mut connection, actor, workspace_id, permission).await
+    }
+
+    /// A live token's permission; a session (no token) always passes.
+    async fn token_permits_on(
+        connection: &mut sqlx::PgConnection,
+        actor: AuthorizationActor,
+        workspace_id: Uuid,
+        permission: &str,
+    ) -> Result<bool, RepositoryError> {
+        let Some(token_id) = actor.token_id else {
+            return Ok(true);
+        };
+        Ok(sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM personal_api_tokens t JOIN personal_api_token_permissions p ON p.token_id = t.id WHERE t.id = $1 AND t.user_id = $2 AND t.workspace_id = $3 AND t.revoked_at IS NULL AND (t.expires_at IS NULL OR t.expires_at > clock_timestamp()) AND p.permission_code = $4)",
+        )
+        .bind(token_id)
+        .bind(actor.user_id)
+        .bind(workspace_id)
+        .bind(permission)
+        .fetch_one(&mut *connection)
+        .await?)
+    }
+
     /// Returns the subset of `entity_ids` the user may access with
     /// `permission`, in one query. Equivalent to calling
     /// [`Self::is_authorized`] with each ID as the target: a workspace grant
@@ -1469,15 +1599,38 @@ impl<S: RepositoryScope> CatalogRepository<S> {
         if entity_ids.is_empty() {
             return Ok(HashSet::new());
         }
-        let rows: Vec<Uuid> = sqlx::query_scalar(
-            "WITH grants AS (SELECT g.scope_type, g.scope_target_id FROM workspace_memberships m JOIN users u ON u.id = m.user_id JOIN workspaces w ON w.id = m.workspace_id JOIN role_grants g ON g.membership_id = m.id AND g.workspace_id = m.workspace_id JOIN role_permissions rp ON rp.role_id = g.role_id WHERE m.user_id = $1 AND m.workspace_id = $2 AND m.state = 'active' AND u.state = 'active' AND w.deleted_at IS NULL AND rp.permission_code = $3) SELECT requested.id FROM unnest($4::uuid[]) AS requested(id) LEFT JOIN entities e ON e.id = requested.id AND e.workspace_id = $2 WHERE EXISTS (SELECT 1 FROM grants g WHERE (g.scope_type = 'workspace' AND g.scope_target_id = $2) OR (e.id IS NOT NULL AND ((g.scope_type = 'entity' AND g.scope_target_id = e.id) OR (g.scope_type = 'blueprint_family' AND g.scope_target_id = e.blueprint_id))))",
+        let mut connection = self.pool.acquire().await?;
+        Self::authorized_entity_ids_on(
+            &mut connection,
+            user_id,
+            workspace_id,
+            permission,
+            entity_ids,
         )
-        .bind(user_id)
-        .bind(workspace_id)
-        .bind(permission)
-        .bind(entity_ids)
-        .fetch_all(&self.pool)
-        .await?;
+        .await
+    }
+
+    async fn authorized_entity_ids_on(
+        connection: &mut sqlx::PgConnection,
+        user_id: Uuid,
+        workspace_id: Uuid,
+        permission: &str,
+        entity_ids: &[Uuid],
+    ) -> Result<HashSet<Uuid>, RepositoryError> {
+        if entity_ids.is_empty() {
+            return Ok(HashSet::new());
+        }
+        let sql = format!(
+            "WITH {} SELECT requested.id FROM unnest($4::uuid[]) AS requested(id) LEFT JOIN entities e ON e.id = requested.id AND e.workspace_id = $2 WHERE EXISTS (SELECT 1 FROM grants g WHERE (g.scope_type = 'workspace' AND g.scope_target_id = $2) OR (e.id IS NOT NULL AND ((g.scope_type = 'entity' AND g.scope_target_id = e.id) OR (g.scope_type = 'blueprint_family' AND g.scope_target_id = e.blueprint_id))))",
+            GrantCodes::Permission(permission).grant_set_sql()
+        );
+        let rows: Vec<Uuid> = sqlx::query_scalar(&sql)
+            .bind(user_id)
+            .bind(workspace_id)
+            .bind(GrantCodes::Permission(permission).codes())
+            .bind(entity_ids)
+            .fetch_all(connection)
+            .await?;
         Ok(rows.into_iter().collect())
     }
 
@@ -1511,18 +1664,77 @@ impl<S: RepositoryScope> CatalogRepository<S> {
         target_id: Option<Uuid>,
         target_code: Option<&str>,
     ) -> Result<bool, RepositoryError> {
+        Self::is_granted_on(
+            connection,
+            user_id,
+            workspace_id,
+            GrantCodes::Permission(permission),
+            target_id,
+            target_code,
+        )
+        .await
+    }
+
+    /// Whether the user holds a matching grant whose scope covers the
+    /// target: the workspace, a blueprint family, an entity (directly or
+    /// through its blueprint family) or a context subtree (through the
+    /// context's ancestors).
+    pub(crate) async fn is_granted_on(
+        connection: &mut sqlx::PgConnection,
+        user_id: Uuid,
+        workspace_id: Uuid,
+        codes: GrantCodes<'_>,
+        target_id: Option<Uuid>,
+        target_code: Option<&str>,
+    ) -> Result<bool, RepositoryError> {
         // Resolve grant scope in the application-owned repository query. A
         // non-workspace grant can only authorize the requested tenant target.
-        Ok(sqlx::query_scalar(
-            "WITH RECURSIVE grants AS (SELECT g.scope_type, g.scope_target_id FROM workspace_memberships m JOIN users u ON u.id = m.user_id JOIN workspaces w ON w.id = m.workspace_id JOIN role_grants g ON g.membership_id = m.id AND g.workspace_id = m.workspace_id JOIN role_permissions rp ON rp.role_id = g.role_id WHERE m.user_id = $1 AND m.workspace_id = $2 AND m.state = 'active' AND u.state = 'active' AND w.deleted_at IS NULL AND rp.permission_code = $3), target AS (SELECT 'blueprint'::text kind, id FROM blueprints WHERE workspace_id = $2 AND (id = $4 OR code = $5) UNION ALL SELECT 'entity', id FROM entities WHERE workspace_id = $2 AND id = $4 UNION ALL SELECT 'context', id FROM attribute_contexts WHERE workspace_id = $2 AND (id = $4 OR code = $5)), ancestors AS (SELECT c.id, c.parent_id FROM attribute_contexts c JOIN target t ON t.kind = 'context' AND t.id = c.id UNION ALL SELECT p.id, p.parent_id FROM attribute_contexts p JOIN ancestors a ON a.parent_id = p.id WHERE p.workspace_id = $2) SELECT EXISTS (SELECT 1 FROM grants g WHERE (g.scope_type = 'workspace' AND g.scope_target_id = $2) OR (($4 IS NOT NULL OR $5 IS NOT NULL) AND ((g.scope_type = 'blueprint_family' AND EXISTS (SELECT 1 FROM target WHERE kind = 'blueprint' AND id = g.scope_target_id)) OR (g.scope_type = 'entity' AND EXISTS (SELECT 1 FROM target WHERE kind = 'entity' AND id = g.scope_target_id)) OR (g.scope_type = 'blueprint_family' AND EXISTS (SELECT 1 FROM entities e JOIN target t ON t.kind = 'entity' AND t.id = e.id WHERE e.workspace_id = $2 AND e.blueprint_id = g.scope_target_id)) OR (g.scope_type = 'context_subtree' AND EXISTS (SELECT 1 FROM ancestors WHERE id = g.scope_target_id)) OR ($5 = '__context_list__' AND g.scope_type = 'context_subtree'))))",
+        let sql = format!(
+            "WITH RECURSIVE {}, target AS (SELECT 'blueprint'::text kind, id FROM blueprints WHERE workspace_id = $2 AND (id = $4 OR code = $5) UNION ALL SELECT 'entity', id FROM entities WHERE workspace_id = $2 AND id = $4 UNION ALL SELECT 'context', id FROM attribute_contexts WHERE workspace_id = $2 AND (id = $4 OR code = $5)), ancestors AS (SELECT c.id, c.parent_id FROM attribute_contexts c JOIN target t ON t.kind = 'context' AND t.id = c.id UNION ALL SELECT p.id, p.parent_id FROM attribute_contexts p JOIN ancestors a ON a.parent_id = p.id WHERE p.workspace_id = $2) SELECT EXISTS (SELECT 1 FROM grants g WHERE (g.scope_type = 'workspace' AND g.scope_target_id = $2) OR (($4 IS NOT NULL OR $5 IS NOT NULL) AND ((g.scope_type = 'blueprint_family' AND EXISTS (SELECT 1 FROM target WHERE kind = 'blueprint' AND id = g.scope_target_id)) OR (g.scope_type = 'entity' AND EXISTS (SELECT 1 FROM target WHERE kind = 'entity' AND id = g.scope_target_id)) OR (g.scope_type = 'blueprint_family' AND EXISTS (SELECT 1 FROM entities e JOIN target t ON t.kind = 'entity' AND t.id = e.id WHERE e.workspace_id = $2 AND e.blueprint_id = g.scope_target_id)) OR (g.scope_type = 'context_subtree' AND EXISTS (SELECT 1 FROM ancestors WHERE id = g.scope_target_id)) OR ($5 = '__context_list__' AND g.scope_type = 'context_subtree'))))",
+            codes.grant_set_sql()
+        );
+        Ok(sqlx::query_scalar(&sql)
+            .bind(user_id)
+            .bind(workspace_id)
+            .bind(codes.codes())
+            .bind(target_id)
+            .bind(target_code)
+            .fetch_one(connection)
+            .await?)
+    }
+}
+
+/// Which of a user's live grants count: those whose role carries a
+/// permission, or those of any of the named roles.
+#[derive(Clone, Copy)]
+pub(crate) enum GrantCodes<'a> {
+    Permission(&'a str),
+    Roles(&'a [String]),
+}
+
+impl GrantCodes<'_> {
+    /// The `grants(scope_type, scope_target_id)` CTE for user `$1` in
+    /// workspace `$2`, matching the codes bound as `$3`: active user,
+    /// membership and workspace only.
+    fn grant_set_sql(&self) -> String {
+        let filter = match self {
+            Self::Permission(_) => {
+                "JOIN role_permissions rp ON rp.role_id = g.role_id WHERE rp.permission_code = ANY($3)"
+            }
+            Self::Roles(_) => {
+                "JOIN roles r ON r.id = g.role_id WHERE (r.is_system OR r.workspace_id = $2) AND r.code = ANY($3)"
+            }
+        };
+        format!(
+            "grants AS (SELECT g.scope_type, g.scope_target_id FROM workspace_memberships m JOIN users u ON u.id = m.user_id JOIN workspaces w ON w.id = m.workspace_id JOIN role_grants g ON g.membership_id = m.id AND g.workspace_id = m.workspace_id {filter} AND m.user_id = $1 AND m.workspace_id = $2 AND m.state = 'active' AND u.state = 'active' AND w.deleted_at IS NULL)"
         )
-        .bind(user_id)
-        .bind(workspace_id)
-        .bind(permission)
-        .bind(target_id)
-        .bind(target_code)
-        .fetch_one(connection)
-        .await?)
+    }
+
+    fn codes(&self) -> Vec<String> {
+        match self {
+            Self::Permission(permission) => vec![(*permission).to_owned()],
+            Self::Roles(roles) => roles.to_vec(),
+        }
     }
 }
 

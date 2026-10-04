@@ -313,10 +313,7 @@ impl ExtensionRuntime {
         store
             .set_fuel(self.config.fuel)
             .map_err(|e| runtime_error(e.to_string()))?;
-        store.set_epoch_deadline(
-            (self.config.invocation_timeout.as_millis() / EPOCH_TICK_INTERVAL.as_millis()).max(1)
-                as u64,
-        );
+        store.set_epoch_deadline(epoch_deadline(self.config.invocation_timeout));
         let mut linker = Linker::new(&self.engine);
         host_interactive::CatalogExtensionOperation::add_to_linker::<
             OperationState,
@@ -328,64 +325,14 @@ impl ExtensionRuntime {
         )
         .await
         .map_err(|e| runtime_error(e.to_string()))?;
-        let operations = bindings.catalog_host_operations();
-        if cancelling {
-            operations
-                .call_cancel(&mut store, &request)
-                .await
-                .map_err(|e| runtime_error(e.to_string()))?
-                .map_err(runtime_error)?;
-            return Ok((checkpoint.clone(), json!({"cancelled": true}), true));
-        }
-        if !lifecycle_started {
-            operations
-                .call_prepare(&mut store, &request)
-                .await
-                .map_err(|e| runtime_error(e.to_string()))?
-                .map_err(runtime_error)?;
-            operations
-                .call_start(&mut store, &request)
-                .await
-                .map_err(|e| runtime_error(e.to_string()))?
-                .map_err(runtime_error)?;
-        }
-        let result = operations
-            .call_process_batch(&mut store, &request)
-            .await
-            .map_err(|e| runtime_error(e.to_string()))?
-            .map_err(runtime_error)?;
-        let next: Value = serde_json::from_str(&result.checkpoint)
-            .map_err(|_| runtime_error("operation returned invalid checkpoint".into()))?;
-        let progress: Value = serde_json::from_str(&result.progress)
-            .map_err(|_| runtime_error("operation returned invalid progress".into()))?;
-        let checkpoint_bytes = serde_json::to_vec(&next).map_or(usize::MAX, |v| v.len());
-        if !next.is_object()
-            || !progress.is_object()
-            || checkpoint_bytes > MAX_HOST_JSON_BYTES
-            || checkpoint_bytes > max_checkpoint_bytes as usize
-            || serde_json::to_vec(&progress).map_or(true, |v| v.len() > MAX_HOST_JSON_BYTES)
-        {
-            return Err(runtime_error(
-                "operation returned oversized or non-object checkpoint".into(),
-            ));
-        }
-        let checkpoint_request =
-            host_interactive::exports::catalog::host::operations::OperationRequest {
-                checkpoint: result.checkpoint,
-                ..request
-            };
-        operations
-            .call_checkpoint(&mut store, &checkpoint_request)
-            .await
-            .map_err(|e| runtime_error(e.to_string()))?
-            .map_err(runtime_error)?;
-        if result.done {
-            operations
-                .call_finish(&mut store, &checkpoint_request)
-                .await
-                .map_err(|e| runtime_error(e.to_string()))?
-                .map_err(runtime_error)?;
-        }
-        Ok((next, progress, result.done))
+        run_operation_batch!(
+            &mut store,
+            bindings.catalog_host_operations(),
+            request,
+            checkpoint: checkpoint,
+            max_checkpoint_bytes: max_checkpoint_bytes,
+            lifecycle_started: lifecycle_started,
+            cancelling: cancelling,
+        )
     }
 }

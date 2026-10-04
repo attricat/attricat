@@ -72,7 +72,7 @@ The actions of an event-triggered workflow apply to the entity the event is abou
 
 ### React only to specific attributes
 
-`attributes` lists attribute codes. The trigger then starts a run only when at least one of those attributes changed in the event, wherever it appears among the event's facts:
+`attributes` lists 1 to 100 attribute codes. The trigger then starts a run only when at least one of those attributes changed in the event, wherever it appears among the event's facts:
 
 ```toml
 [[triggers]]
@@ -130,7 +130,7 @@ Manual and scheduled runs have no event, so their actions must use fixed values.
 | `attribute_write` | `attribute_code` and exactly one of `fixed` or `event_field` | Writes a scalar attribute value. `fixed` is a literal; `event_field` copies a value from the event, such as `facts.0.after_value`. |
 | `referencing_entities_update` | `relationship_attribute`, optional `max_targets`, and nested `actions` | Applies the nested actions to every record that links to the trigger entity. See below. |
 
-`attribute_write` obeys the blueprint: type checks, schemas, `readonly`, and [status transitions](/builders/validation/#statuses) all apply.
+`attribute_write` obeys the blueprint: type checks, schemas, and [status transitions](/builders/validation/#statuses) all apply.
 
 ### Update records that reference the trigger entity
 
@@ -161,9 +161,9 @@ tags = ["needs-review"]
 ```
 
 - `relationship_attribute` is the code of the relationship attribute on the **referencing** records, not on the trigger entity.
-- Nested actions can set statuses and other attributes with fixed values, and add or remove system tags and metadata. They can't use `event_field`, and they can't contain another `referencing_entities_update`.
+- An action has 1 to 20 nested actions. They can set statuses and other attributes with fixed values, and add or remove system tags and metadata. They can't use `event_field`, and they can't contain another `referencing_entities_update`.
 - `max_targets` defaults to 100 and can be at most 500. If more records link to the trigger entity, the action fails before changing any further record. Raise the limit or narrow the relationship.
-- Each record is updated in its own save, with the same checks as any other edit: schemas, `readonly`, and status transitions. A record that would make a transition its status doesn't allow fails on its own; the other records are still updated.
+- Each record is updated in its own save, with the same checks as any other edit: schemas, checks, unique keys, enforcing rules, and status transitions, including their conditions, [locks, and permission or role requirements](/builders/validation/#control-a-records-lifecycle). Transition requirements are checked against the person whose change started the workflow. A record that fails any of these, such as one whose status is locked or doesn't allow the transition, fails on its own; the other records are still updated.
 - If any record fails, the run is retried. A retry only revisits records that failed or weren't reached; records already updated are never changed twice. A record that no longer exists or no longer links to the trigger entity by then is skipped.
 - See the outcome for each record, including its latest error, with `acli workflow run-targets <run-id>` or `GET /workflow-runs/{id}/targets`. The run list shows the run's overall error once it becomes a dead letter.
 - The records' own changes don't start workflows, like any other change made by a workflow.

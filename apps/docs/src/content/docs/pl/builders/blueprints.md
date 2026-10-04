@@ -273,8 +273,6 @@ entity_schema = '''
 
 Kontrola, która nie przejdzie, powoduje odrzucenie zapisu z `422 entity_check_failed`. Kontrole mogą też sprawdzać powiązane rekordy. Zobacz [Walidacja](/pl/builders/validation/#porównuj-atrybuty-za-pomocą-kontroli).
 
-Atrybut [statusu](/pl/builders/validation/#statusy) może ograniczać dozwolone zmiany, a każda dozwolona zmiana może mieć [warunki](/pl/builders/validation/#warunki-przejść), np. „osoba zatwierdzająca jest ustawiona”, zanim `review` zmieni się w `released`. Zmiana z niespełnionymi warunkami zostaje odrzucona z `422 transition_conditions_unmet`.
-
 ## Krok 9: udostępnij atrybuty w domieszce
 
 Gdy kilka schematów potrzebuje tych samych pól, np. metadanych SEO, umieść je w domieszce:
@@ -348,42 +346,13 @@ value_schema = '''{
 }'''
 ```
 
-### Kto może wykonać przejście
+W tym przykładzie:
 
-Przejście może określać wymagania. Osoba zapisująca zmianę musi spełnić je wszystkie, oprócz posiadania `entities.write`:
+- Osoba, która przesłała dokument do przeglądu, nie może go też zatwierdzić, a zatwierdzać mogą tylko osoby z rolą `reviewer`. Wydanie wymaga `entities.publish`.
+- Edycja tytułu lub procedury zatwierdzonego dokumentu unieważnia zatwierdzenie i odsyła dokument z powrotem do przeglądu.
+- Wydany dokument jest tylko do odczytu, nie można go usunąć, a jego pliki są zachowywane przez dziesięć lat. Właściciele i administratorzy poprawiają go przejściem `correct`, a potem edytują.
 
-- `permission`: [uprawnienie](/pl/reference/permissions/), które musi mieć dla tej encji, np. `entities.publish`.
-- `roles`: musi mieć co najmniej jedną z tych ról (wbudowaną lub [niestandardową](/pl/operate/workspaces/#role)), przydzieloną w całym obszarze roboczym, dla schematu lub dla tej encji.
-- `separate_from`: rozdzielenie obowiązków. Nie może to być osoba, która jako ostatnia wykonała w tej encji i w tym kontekście przejście o jednym z podanych kodów `code`. W powyższym przykładzie osoba, która przesłała dokument do przeglądu, nie może go też zatwierdzić.
-
-Nadaj przejściu `code`, aby wskazywać je w `separate_from` i w historii. Odrzucone przejście zwraca `403 status_transition_forbidden` lub `403 status_separation_of_duties` i nic nie zostaje zapisane. Formularz edycji wyłącza przejścia, których nie możesz wykonać, i wyjaśnia dlaczego.
-
-Te same kontrole obowiązują każdego, kto zapisuje dane: API, CLI, przepływy pracy (jako osobę, której zmiana uruchomiła przepływ), rozszerzenia i agentów (jako osobę, która zatwierdziła zmianę). Zapis bez możliwej do ustalenia osoby, np. z zaplanowanego zadania, nie może wykonać ograniczonego przejścia.
-
-### Blokuj sfinalizowane rekordy
-
-`lock` w statusie sprawia, że treść jest tylko do odczytu, dopóki rekord ma ten status:
-
-- `"lock": "all"` zamraża wszystkie atrybuty, relacje i pliki oprócz samego statusu oraz uniemożliwia usunięcie encji.
-- `"lock": ["title", "procedure"]` zamraża tylko te atrybuty.
-
-Blokady są egzekwowane na serwerze dla każdej drogi zapisu: formularza edycji, API, CLI, przepływów pracy, rozszerzeń, agentów, przywracania z historii wartości, przesyłania plików i zmiany ich kolejności oraz migracji. Odrzucony zapis zwraca `409 record_locked`. Formularz pokazuje zablokowane pola jako tylko do odczytu wraz z powodem.
-
-Status, który deklaruje blokadę, wymaga jawnej listy `transitions`, więc wyjście z niego jest zawsze nazwanym, ograniczonym przejściem. Aby poprawić wydany rekord, najpierw wykonaj przejście korygujące (w przykładzie `released` → `draft`, dostępne tylko dla właścicieli i administratorów), a dopiero potem edytuj. Korekta może zmienić wyłącznie status. Odblokowanie jest zapisywane w dzienniku audytu jako `entity.record.unlock`.
-
-Blokady działają w obrębie kontekstu: rekord wydany na jednym rynku nadal można edytować na innym, gdzie jest szkicem, o ile zmiana nie trafi do zablokowanego rynku przez dziedziczenie.
-
-### Wiąż zatwierdzenia z przejrzaną treścią
-
-`approval` w statusie rejestruje zatwierdzenie za każdym razem, gdy rekord przechodzi do tego statusu: kto zatwierdził, kiedy, oraz skrót SHA-256 objętej treści. `covers` przyjmuje `"all"` lub listę atrybutów; objęte relacje i pliki wchodzą do skrótu, pliki według ich dokładnej zawartości bajtowej.
-
-Gdy objęta treść się później zmieni, zatwierdzenie zostaje unieważnione w tym samym zapisie, a jeśli rekord wciąż ma status zatwierdzony, przechodzi do `void_to`. W przykładzie edycja tytułu zatwierdzonego dokumentu odsyła go z powrotem do przeglądu. Zmiany atrybutów, których zatwierdzenie nie obejmuje, nie naruszają zatwierdzenia.
-
-Zatwierdzenia i unieważnienia pojawiają się w dzienniku audytu (`entity.approval.record`, `entity.approval.void`) oraz w panelu **Kontrola rekordu** na stronie encji.
-
-### Zachowuj wydane pliki
-
-`retention_days` w zablokowanym statusie zakłada blokadę retencji na każdy plik, do którego odwołują się zablokowane atrybuty, gdy rekord przechodzi do tego statusu. Zablokowane pliki nigdy nie są usuwane z magazynu przed wygaśnięciem blokady, nawet jeśli późniejsza korekta je odłączy. Blokady są wyświetlane na stronie encji i w dzienniku audytu. Zobacz [Blokady retencji](/pl/operate/workspaces/#blokady-retencji).
+Działanie każdej z tych kontroli opisuje sekcja [Kontroluj cykl życia rekordu](/pl/builders/validation/#kontroluj-cykl-życia-rekordu), a wszystkie klucze sekcja [Statusy](/pl/reference/blueprint/#statusy).
 
 ## Wersje a istniejące encje
 

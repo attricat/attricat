@@ -13,26 +13,17 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeftIcon, DownloadIcon } from 'lucide-react';
 import { Trans, useTranslation } from 'react-i18next';
-import { ApiRequestError } from '../../api/request';
 import { RouterButton } from '../../components/RouterLink';
 import { Timestamp } from '../../time/Timestamp';
 import { formatBytes } from '../data-health/dataHealthFormat';
-import {
-  cancelExtensionRun,
-  extensionRunArtifactUrl,
-  getExtensionRun,
-} from './api';
-import {
-  activeExtensionRunStatuses,
-  extensionRunPollMilliseconds,
-  extensionRunsPagePath,
-  runDetailSkeletonHeight,
-} from './constants';
+import { cancelExtensionRun, extensionRunArtifactUrl } from './api';
+import { extensionRunsPagePath, runDetailSkeletonHeight } from './constants';
 import {
   ExtensionRunProgress,
   ExtensionRunStatusChip,
 } from './ExtensionRunSummary';
 import { extensionRunQueryKeys } from './queryKeys';
+import { extensionRunDetailOptions } from './queryOptions';
 import type { ExtensionRunDetail } from './schemas';
 
 const Outputs = ({ run }: { run: ExtensionRunDetail }) => {
@@ -97,22 +88,7 @@ const Outputs = ({ run }: { run: ExtensionRunDetail }) => {
 export const ExtensionRunDetailPage = ({ runId }: { runId: string }) => {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const run = useQuery({
-    queryKey: extensionRunQueryKeys.detail(runId),
-    queryFn: () => getExtensionRun(runId),
-    refetchInterval: (query) => {
-      const { data, error } = query.state;
-      // A 4xx (missing run or revoked access) will not change by polling.
-      const clientError =
-        error instanceof ApiRequestError &&
-        error.status >= 400 &&
-        error.status < 500;
-      return clientError ||
-        (data && !activeExtensionRunStatuses.includes(data.status))
-        ? false
-        : extensionRunPollMilliseconds;
-    },
-  });
+  const run = useQuery(extensionRunDetailOptions(runId));
   const cancel = useMutation({
     mutationFn: () => cancelExtensionRun(runId),
     onSettled: () =>

@@ -1,9 +1,13 @@
+use super::record_values::{ContextNode, ContextTree, resolve_on_path};
 use super::values::{ProjectionNativeValueRow, native_value_json};
 use super::*;
 use crate::constants::DEFAULT_PREVIEW_RELATIONSHIP_ITEMS;
 use crate::persistence_rows::{Db, IntoDomain};
 use std::collections::HashSet;
 use uuid::Uuid;
+
+/// One value source's direct value in a context.
+type DirectLookup<'a> = Box<dyn FnMut(&ContextNode) -> Option<Value> + 'a>;
 
 #[derive(sqlx::FromRow)]
 struct PreviewRelationship {
@@ -39,38 +43,42 @@ impl CatalogRepository {
             .get("preview")
             .and_then(Value::as_object)
             .ok_or(RepositoryError::InvalidPreview)?;
-        let contexts = self.list_contexts().await?;
-        let context_by_id: std::collections::HashMap<_, _> = contexts
+        let tree = {
+            let mut connection = self.pool.acquire().await?;
+            ContextTree::load(&mut connection, self.workspace_id.0).await?
+        };
+        let path: Vec<ContextNode> = tree
+            .path(requested_context.id, true)?
             .into_iter()
-            .map(|context| (context.id, context))
+            .filter_map(|id| tree.get(id).cloned())
             .collect();
-        let mut path = Vec::new();
-        let mut current = Some(requested_context.clone());
-        while let Some(context) = current {
-            current = context
-                .parent_id
-                .and_then(|parent_id| context_by_id.get(&parent_id).cloned());
-            path.push(context);
-        }
+        let ids: Vec<Uuid> = path.iter().map(|context| context.id).collect();
+        // The shared resolution rule, applied to this read's value sources.
+        let resolve = |inherit: bool, mut direct: DirectLookup<'_>| {
+            resolve_on_path(&ids, inherit, |id| {
+                path.iter()
+                    .find(|context| context.id == id)
+                    .and_then(|context| direct(context).map(|value| (context.id, context.code.clone(), value)))
+            })
+            .map(|(_, (id, code, value))| {
+                serde_json::json!({ "value": value, "source_context": { "id": id, "code": code } })
+            })
+        };
         let mut values = attributes
             .iter()
             .filter(|attribute| attribute.value_type != "file")
             .filter_map(|attribute| {
-                path.iter().enumerate().find_map(|(index, context)| {
-                    if index > 0 && attribute.context_fallback == "none" {
-                        return None;
-                    }
-                    preview
-                        .get(&context.code)
-                        .and_then(Value::as_object)
-                        .and_then(|values| values.get(&attribute.code))
-                        .map(|value| {
-                            (
-                                attribute.code.clone(),
-                                serde_json::json!({ "value": value, "source_context": { "id": context.id, "code": context.code } }),
-                            )
-                        })
-                })
+                resolve(
+                    attribute.context_fallback != "none",
+                    Box::new(|context| {
+                        preview
+                            .get(&context.code)
+                            .and_then(Value::as_object)
+                            .and_then(|values| values.get(&attribute.code))
+                            .cloned()
+                    }),
+                )
+                .map(|value| (attribute.code.clone(), value))
             })
             .collect::<Map<_, _>>();
         let file_values = self.file_form_values(entity_id).await?;
@@ -78,28 +86,24 @@ impl CatalogRepository {
             .iter()
             .filter(|attribute| attribute.value_type == "file")
         {
-            if let Some((files, context)) = path.iter().enumerate().find_map(|(index, context)| {
-                if index > 0 && attribute.context_fallback == "none" {
-                    return None;
-                }
-                file_values.iter().find_map(|value| match value {
-                    FormAttributeValue::File {
-                        attribute_code,
-                        context_id,
-                        files,
-                    } if attribute_code == &attribute.code && *context_id == Some(context.id) => {
-                        Some((files, context))
-                    }
-                    _ => None,
-                })
-            }) {
-                values.insert(
-                    attribute.code.clone(),
-                    serde_json::json!({
-                        "value": files,
-                        "source_context": { "id": context.id, "code": context.code },
-                    }),
-                );
+            if let Some(value) = resolve(
+                attribute.context_fallback != "none",
+                Box::new(|context| {
+                    file_values.iter().find_map(|value| match value {
+                        FormAttributeValue::File {
+                            attribute_code,
+                            context_id,
+                            files,
+                        } if attribute_code == &attribute.code
+                            && *context_id == Some(context.id) =>
+                        {
+                            Some(serde_json::json!(files))
+                        }
+                        _ => None,
+                    })
+                }),
+            ) {
+                values.insert(attribute.code.clone(), value);
             }
         }
         let enriched_preview = self
@@ -115,25 +119,18 @@ impl CatalogRepository {
             .iter()
             .filter(|attribute| attribute.value_type == "relationship")
             .filter_map(|attribute| {
-                path.iter().enumerate().find_map(|(index, context)| {
-                    if index > 0 && attribute.context_fallback == "none" {
-                        return None;
-                    }
-                    enriched_preview
-                        .get(&context.code)
-                        .and_then(Value::as_object)
-                        .and_then(|values| values.get(&attribute.code))
-                        .filter(|value| value.get("items").is_some())
-                        .map(|value| {
-                            (
-                                attribute.code.clone(),
-                                serde_json::json!({
-                                    "value": value,
-                                    "source_context": { "id": context.id, "code": context.code },
-                                }),
-                            )
-                        })
-                })
+                resolve(
+                    attribute.context_fallback != "none",
+                    Box::new(|context| {
+                        enriched_preview
+                            .get(&context.code)
+                            .and_then(Value::as_object)
+                            .and_then(|values| values.get(&attribute.code))
+                            .filter(|value| value.get("items").is_some())
+                            .cloned()
+                    }),
+                )
+                .map(|value| (attribute.code.clone(), value))
             })
             .collect::<Map<_, _>>();
         values.extend(relationships);
@@ -142,59 +139,42 @@ impl CatalogRepository {
         let reusable_values = reusable_attributes
             .iter()
             .filter_map(|attribute| {
-                path.iter().enumerate().find_map(|(index, context)| {
-                    if index > 0 && attribute.context_fallback == "none" {
-                        return None;
-                    }
-                    reusable_form_values.iter().find_map(|value| match value {
-                        FormAttributeValue::Scalar {
-                            attribute_code,
-                            context_id,
-                            value,
-                        } if attribute_code == &attribute.code
-                            && *context_id == Some(context.id) =>
-                        {
-                            Some((
-                                attribute.code.clone(),
-                                serde_json::json!({
-                                    "value": value,
-                                    "source_context": { "id": context.id, "code": context.code },
-                                }),
-                            ))
-                        }
-                        FormAttributeValue::Relationship {
-                            attribute_code,
-                            context_id,
-                            target_entity_id,
-                        } if attribute_code == &attribute.code
-                            && *context_id == Some(context.id) =>
-                        {
-                            Some((
-                                attribute.code.clone(),
-                                serde_json::json!({
-                                    "value": { "items": [{ "id": target_entity_id }] },
-                                    "source_context": { "id": context.id, "code": context.code },
-                                }),
-                            ))
-                        }
-                        FormAttributeValue::File {
-                            attribute_code,
-                            context_id,
-                            files,
-                        } if attribute_code == &attribute.code
-                            && *context_id == Some(context.id) =>
-                        {
-                            Some((
-                                attribute.code.clone(),
-                                serde_json::json!({
-                                    "value": files,
-                                    "source_context": { "id": context.id, "code": context.code },
-                                }),
-                            ))
-                        }
-                        _ => None,
-                    })
-                })
+                resolve(
+                    attribute.context_fallback != "none",
+                    Box::new(|context| {
+                        reusable_form_values.iter().find_map(|value| match value {
+                            FormAttributeValue::Scalar {
+                                attribute_code,
+                                context_id,
+                                value,
+                            } if attribute_code == &attribute.code
+                                && *context_id == Some(context.id) =>
+                            {
+                                Some(value.clone())
+                            }
+                            FormAttributeValue::Relationship {
+                                attribute_code,
+                                context_id,
+                                target_entity_id,
+                            } if attribute_code == &attribute.code
+                                && *context_id == Some(context.id) =>
+                            {
+                                Some(serde_json::json!({ "items": [{ "id": target_entity_id }] }))
+                            }
+                            FormAttributeValue::File {
+                                attribute_code,
+                                context_id,
+                                files,
+                            } if attribute_code == &attribute.code
+                                && *context_id == Some(context.id) =>
+                            {
+                                Some(serde_json::json!(files))
+                            }
+                            _ => None,
+                        })
+                    }),
+                )
+                .map(|value| (attribute.code.clone(), value))
             })
             .collect::<Map<_, _>>();
         Ok(Some(ResolvedEntityPreviewResponse {

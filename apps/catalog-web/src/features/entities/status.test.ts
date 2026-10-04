@@ -7,6 +7,7 @@ import {
   statusLocks,
   statusParentContexts,
   statusTransitionAllowed,
+  statusTransitionDenial,
   savedStatusValue,
 } from './status';
 import type { Attribute } from './api';
@@ -83,6 +84,46 @@ describe('status configuration', () => {
     expect(statusTransitionAllowed(config, 'done', 'done')).toBe(true);
     expect(statusTransitionAllowed(config, 'done', 'live')).toBe(false);
     expect(statusTransitionAllowed(config, 'live', null)).toBe(false);
+  });
+  it('explains refused transitions, targeting the inherited status when cleared', () => {
+    const config = statusConfiguration(statusAttribute)!;
+    const forbidden = {
+      attribute_code: 'status',
+      from: 'live',
+      to: 'done',
+      code: null,
+      allowed: false,
+      denial_code: 'status_separation_of_duties' as const,
+      denial_reason: 'Someone else must finish it.',
+    };
+    const denial = (
+      baseline: string | null,
+      selected: string,
+      inherited: string | null = null,
+      attributeCode = 'status',
+    ) =>
+      statusTransitionDenial(config, {
+        attributeCode,
+        baseline,
+        inherited,
+        selected,
+        transitions: [forbidden],
+      });
+    expect(denial('draft', 'live')).toBeUndefined();
+    expect(denial('draft', 'done')).toEqual({ kind: 'undeclared' });
+    expect(denial('live', 'done')).toEqual({
+      kind: 'access',
+      access: forbidden,
+    });
+    // Access for another attribute does not apply.
+    expect(denial('live', 'done', null, 'phase')).toBeUndefined();
+    // Clearing the local value moves to the inherited status.
+    expect(denial('live', '', 'done')).toEqual({
+      kind: 'access',
+      access: forbidden,
+    });
+    expect(denial('live', '', 'live')).toBeUndefined();
+    expect(denial('live', '', null)).toEqual({ kind: 'undeclared' });
   });
   it('resolves the saved inherited baseline and guards cyclic context paths', () => {
     const path = statusParentContexts(

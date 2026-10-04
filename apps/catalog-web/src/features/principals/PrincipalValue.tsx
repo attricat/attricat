@@ -1,11 +1,10 @@
 import { Chip, Stack, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import { compactIconSize } from '../../components/iconSizes';
 import { AssignedUserIcon, TeamIcon } from '../../components/systemIcons';
 import { NotSetValue } from '../views/components/values/NotSetValue';
 import { isAssignable, resolvePrincipal } from './principal';
 import { usePrincipalDirectory } from './usePrincipalDirectory';
-
-const ICON_SIZE = 16;
 
 /**
  * An assigned user or team as a labelled chip. References the directory no
@@ -32,7 +31,7 @@ export const PrincipalValue = ({ value }: { value: unknown }) => {
   return (
     <Stack spacing={0.5} sx={{ alignItems: 'flex-start' }}>
       <Chip
-        icon={<Icon aria-hidden size={ICON_SIZE} />}
+        icon={<Icon aria-hidden size={compactIconSize} />}
         label={principal.label}
         variant="outlined"
         title={principal.kind === 'user' ? principal.user.email : undefined}

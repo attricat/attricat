@@ -1,22 +1,34 @@
 //! Host side of the shared predicate engine: loads bounded, context-resolved
 //! records for [`catalog_validation::predicate`] and enforces entity-schema
-//! checks, status transition conditions and enforcing rules on every write.
+//! checks, status transition conditions and enforcing rules on every write
+//! of values or system tags.
+//!
+//! Records come from [`super::record_values`], the loader every other value
+//! consumer shares, and resolve with the same context rule.
+use super::record_values::{
+    ContextTree, RecordState, RecordValues, Selection, load_record, load_records,
+};
+use super::references::{ReferenceQuery, Referrers, referencing_entity_ids};
 use super::status::StatusChange;
-use super::values::{NativeValueRow, native_value_json};
+use super::structural_constraints::{
+    HierarchyField, HierarchyWalk, enforced_unique_keys, key_hash, walk_hierarchy,
+};
 use super::*;
 use catalog_validation::predicate::{
     self, Check, CycleState, Evaluation, Failure, MAX_CYCLE_VISITS, MAX_LINKED_RECORDS,
     MAX_REFERENCING_RECORDS, Predicate, Record, RecordSet, Related, Requirements,
 };
+use catalog_validation::unique_key::{UNIQUE_PREDICATE_CASE_SENSITIVE, normalize_key_component};
 use chrono::Utc;
 use serde::Serialize;
 use sqlx::PgConnection;
-use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::collections::BTreeMap;
 
 /// At most this many violations are reported in one error response.
 pub const MAX_REPORTED_VIOLATIONS: usize = 50;
-/// Candidates fetched for one `unique` key before values are compared.
-const MAX_UNIQUE_CANDIDATES: i64 = 200;
+/// Candidates compared per query while scanning for `unique` duplicates.
+/// Scanning continues until every candidate has been compared.
+const UNIQUE_CANDIDATE_BATCH: i64 = 500;
 
 /// The declaration that produced a violation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -67,17 +79,10 @@ pub struct PublicationReadiness {
     pub violations: Vec<CheckViolation>,
 }
 
-#[derive(Clone, Debug)]
-pub(crate) struct ContextNode {
-    pub id: Uuid,
-    pub code: String,
-    pub parent_id: Option<Uuid>,
-}
-
 /// Workspace contexts and the evaluation clock for one check session.
 pub(crate) struct CheckScope {
     workspace_id: Uuid,
-    pub contexts: Vec<ContextNode>,
+    pub tree: ContextTree,
     pub now: chrono::DateTime<Utc>,
 }
 
@@ -86,115 +91,32 @@ impl CheckScope {
         conn: &mut PgConnection,
         workspace_id: Uuid,
     ) -> Result<Self, RepositoryError> {
-        let contexts = sqlx::query_as::<_, (Uuid, String, Option<Uuid>)>(
-            "SELECT id, code, parent_id FROM attribute_contexts WHERE workspace_id = $1 ORDER BY code",
-        )
-        .bind(workspace_id)
-        .fetch_all(&mut *conn)
-        .await?
-        .into_iter()
-        .map(|(id, code, parent_id)| ContextNode {
-            id,
-            code,
-            parent_id,
-        })
-        .collect();
-        Ok(Self {
+        Ok(Self::new(
             workspace_id,
-            contexts,
+            ContextTree::load(conn, workspace_id).await?,
+        ))
+    }
+
+    pub(crate) fn new(workspace_id: Uuid, tree: ContextTree) -> Self {
+        Self {
+            workspace_id,
+            tree,
             now: Utc::now(),
-        })
+        }
     }
 
     /// The context followed by its ancestors, as values are inherited.
     pub(crate) fn path(&self, context_id: Uuid) -> Result<Vec<Uuid>, RepositoryError> {
-        let mut path = Vec::new();
-        let mut current = Some(context_id);
-        while let Some(id) = current {
-            if path.contains(&id) {
-                return Err(RepositoryError::InvalidContext);
-            }
-            path.push(id);
-            current = self
-                .contexts
-                .iter()
-                .find(|context| context.id == id)
-                .and_then(|context| context.parent_id);
-        }
-        Ok(path)
+        self.tree.path(context_id, true)
     }
 
     pub(crate) fn code(&self, context_id: Uuid) -> String {
-        self.contexts
-            .iter()
-            .find(|context| context.id == context_id)
-            .map(|context| context.code.clone())
-            .unwrap_or_default()
+        self.tree.code(context_id)
     }
 
     pub(crate) fn context_ids(&self) -> Vec<Uuid> {
-        self.contexts.iter().map(|context| context.id).collect()
+        self.tree.ids()
     }
-}
-
-#[derive(Debug, Default)]
-struct StoredAttribute {
-    value_type: String,
-    fallback_none: bool,
-    by_context: HashMap<Uuid, (Value, chrono::DateTime<Utc>)>,
-}
-
-/// One entity's current direct values in every context.
-#[derive(Debug, Default)]
-pub(crate) struct StoredEntity {
-    pub id: Uuid,
-    pub blueprint_id: Uuid,
-    tags: Vec<String>,
-    attributes: HashMap<String, StoredAttribute>,
-}
-
-impl StoredEntity {
-    /// Resolves values for a context path, honouring `context_fallback = "none"`.
-    pub(crate) fn resolve(&self, path: &[Uuid]) -> Record {
-        let mut record = Record {
-            id: self.id.to_string(),
-            tags: self.tags.clone(),
-            ..Record::default()
-        };
-        for (code, attribute) in &self.attributes {
-            let candidates = if attribute.fallback_none {
-                &path[..path.len().min(1)]
-            } else {
-                path
-            };
-            if let Some((value, changed_at)) = candidates
-                .iter()
-                .find_map(|context| attribute.by_context.get(context))
-            {
-                record.values.insert(code.clone(), value.clone());
-                record.changed_at.insert(code.clone(), *changed_at);
-            }
-        }
-        record
-    }
-
-    fn value_type(&self, code: &str) -> Option<&str> {
-        self.attributes
-            .get(code)
-            .map(|attribute| attribute.value_type.as_str())
-    }
-}
-
-#[derive(sqlx::FromRow)]
-struct CheckValueRow {
-    entity_id: Uuid,
-    attribute_code: String,
-    context_fallback: String,
-    context_id: Uuid,
-    relationship_target_entity_id: Option<Uuid>,
-    created_at: chrono::DateTime<Utc>,
-    #[sqlx(flatten)]
-    native: NativeValueRow,
 }
 
 /// Loads live entities with their current values. Missing or deleted IDs are
@@ -203,78 +125,15 @@ pub(crate) async fn load_entities(
     conn: &mut PgConnection,
     workspace_id: Uuid,
     ids: &[Uuid],
-) -> Result<HashMap<Uuid, StoredEntity>, RepositoryError> {
-    if ids.is_empty() {
-        return Ok(HashMap::new());
-    }
-    let mut entities: HashMap<Uuid, StoredEntity> = sqlx::query_as::<_, (Uuid, Uuid, Vec<String>)>(
-        "SELECT id, blueprint_id, system_tags FROM entities WHERE workspace_id = $1 AND id = ANY($2) AND deleted_at IS NULL",
+) -> Result<BTreeMap<Uuid, RecordValues>, RepositoryError> {
+    load_records(
+        conn,
+        workspace_id,
+        Selection::Entities(ids),
+        None,
+        RecordState::After,
     )
-    .bind(workspace_id)
-    .bind(ids)
-    .fetch_all(&mut *conn)
-    .await?
-    .into_iter()
-    .map(|(id, blueprint_id, tags)| {
-        (
-            id,
-            StoredEntity {
-                id,
-                blueprint_id,
-                tags,
-                attributes: HashMap::new(),
-            },
-        )
-    })
-    .collect();
-    let rows = sqlx::query_as::<_, CheckValueRow>(
-        r#"SELECT av.entity_id, a.code AS attribute_code, a.context_fallback, av.context_id,
-                  av.relationship_target_entity_id, av.created_at, a.value_type,
-                  av.value_text, av.value_number, av.value_integer, av.value_boolean,
-                  av.value_date, av.value_datetime, av.value_time, av.value_time_zone, av.value_json
-           FROM attribute_values av
-           JOIN entities e ON e.id = av.entity_id AND e.workspace_id = $1 AND e.deleted_at IS NULL
-           JOIN attributes a ON a.id = av.attribute_id AND a.deleted_at IS NULL
-            AND ((a.blueprint_id = e.blueprint_id AND a.blueprint_version = e.blueprint_version)
-                 OR a.entity_id = e.id)
-           WHERE av.entity_id = ANY($2)
-             AND (av.relationship_target_entity_id IS NULL OR av.active)"#,
-    )
-    .bind(workspace_id)
-    .bind(ids)
-    .fetch_all(&mut *conn)
-    .await?;
-    for row in rows {
-        let Some(entity) = entities.get_mut(&row.entity_id) else {
-            continue;
-        };
-        let attribute = entity
-            .attributes
-            .entry(row.attribute_code)
-            .or_insert_with(|| StoredAttribute {
-                value_type: row.native.value_type.clone(),
-                fallback_none: row.context_fallback == "none",
-                ..StoredAttribute::default()
-            });
-        if let Some(target) = row.relationship_target_entity_id {
-            let entry = attribute
-                .by_context
-                .entry(row.context_id)
-                .or_insert_with(|| (Value::Array(Vec::new()), row.created_at));
-            if let Value::Array(targets) = &mut entry.0 {
-                targets.push(Value::String(target.to_string()));
-            }
-            entry.1 = entry.1.max(row.created_at);
-            continue;
-        }
-        let value = native_value_json(row.native)?;
-        if !value.is_null() {
-            attribute
-                .by_context
-                .insert(row.context_id, (value, row.created_at));
-        }
-    }
-    Ok(entities)
+    .await
 }
 
 fn uuids(value: Option<&Value>) -> Vec<Uuid> {
@@ -290,11 +149,12 @@ fn uuids(value: Option<&Value>) -> Vec<Uuid> {
 pub(crate) async fn load_related(
     conn: &mut PgConnection,
     scope: &CheckScope,
-    subject: &StoredEntity,
+    subject: &RecordValues,
     record: &Record,
-    path: &[Uuid],
+    context_id: Uuid,
     requirements: &Requirements,
 ) -> Result<Related, RepositoryError> {
+    let path = scope.path(context_id)?;
     let mut related = Related::default();
     for relationship in &requirements.linked {
         let mut ids = uuids(record.values.get(relationship));
@@ -304,41 +164,34 @@ pub(crate) async fn load_related(
         let records = ids
             .iter()
             .filter_map(|id| loaded.get(id))
-            .map(|entity| entity.resolve(path))
+            .map(|entity| entity.record(&path))
             .collect();
         related
             .linked
             .insert(relationship.clone(), RecordSet { records, truncated });
     }
     for (blueprint_code, relationship) in &requirements.referenced_by {
-        let mut ids: Vec<Uuid> = sqlx::query_scalar(
-            r#"SELECT DISTINCT av.entity_id
-               FROM attribute_values av
-               JOIN entities e ON e.id = av.entity_id AND e.workspace_id = $1 AND e.deleted_at IS NULL
-               JOIN blueprints b ON b.id = e.blueprint_id AND b.version = e.blueprint_version
-                AND b.workspace_id = $1 AND b.code = $3
-               JOIN attributes a ON a.id = av.attribute_id AND a.code = $4 AND a.deleted_at IS NULL
-                AND ((a.blueprint_id = e.blueprint_id AND a.blueprint_version = e.blueprint_version)
-                     OR a.entity_id = e.id)
-               WHERE av.relationship_target_entity_id = $2 AND av.active
-               LIMIT $5"#,
+        let mut ids = referencing_entity_ids(
+            conn,
+            scope.workspace_id,
+            ReferenceQuery {
+                target: subject.id,
+                attribute_code: relationship,
+                referrers: Referrers::BlueprintCode(blueprint_code),
+                only: None,
+                exclude_target: false,
+                limit: MAX_REFERENCING_RECORDS as i64 + 1,
+            },
         )
-        .bind(scope.workspace_id)
-        .bind(subject.id)
-        .bind(blueprint_code)
-        .bind(relationship)
-        .bind(MAX_REFERENCING_RECORDS as i64 + 1)
-        .fetch_all(&mut *conn)
         .await?;
         let truncated = ids.len() > MAX_REFERENCING_RECORDS;
         ids.truncate(MAX_REFERENCING_RECORDS);
-        ids.sort();
         let loaded = load_entities(conn, scope.workspace_id, &ids).await?;
         let subject_id = Value::String(subject.id.to_string());
         let records = ids
             .iter()
             .filter_map(|id| loaded.get(id))
-            .map(|entity| entity.resolve(path))
+            .map(|entity| entity.record(&path))
             // The reference must hold in this context, not only somewhere.
             .filter(|referencing| {
                 referencing
@@ -354,45 +207,96 @@ pub(crate) async fn load_related(
         );
     }
     for key in &requirements.unique {
-        let others = duplicates(conn, scope, subject, record, path, key).await?;
+        let others = duplicates(conn, scope, subject, context_id, &path, key).await?;
         related.duplicates.insert(key.clone(), others);
     }
     for relationship in &requirements.acyclic {
-        let state = cycle(conn, scope, subject, record, path, relationship).await?;
+        let state = cycle(conn, scope, subject, record, context_id, relationship).await?;
         related.cycles.insert(relationship.clone(), state);
     }
     Ok(related)
 }
 
+/// The normalized key of `record` in the context `path`, or `None` when a
+/// component is missing. Only blueprint fields take part, as in unique keys.
+fn key_components(
+    record: &RecordValues,
+    path: &[Uuid],
+    key: &[String],
+    case_sensitive: bool,
+) -> Option<Vec<Value>> {
+    key.iter()
+        .map(|code| {
+            let attribute = record
+                .attributes
+                .get(code)
+                .filter(|attribute| !attribute.entity_scoped)?;
+            normalize_key_component(
+                &attribute.value_type,
+                &attribute.resolve(path)?.key_input(),
+                case_sensitive,
+            )
+        })
+        .collect()
+}
+
+/// Other live entities of the subject's blueprint family whose `key`
+/// resolves, in the same context, to the same normalized values. Values are
+/// compared as `[[unique_keys]]` compare them (see
+/// [`normalize_key_component`]); strings ignore case. When a declared key of
+/// the family covers exactly these attributes, its index answers directly.
+/// Otherwise candidates are scanned in batches with no limit.
 async fn duplicates(
     conn: &mut PgConnection,
     scope: &CheckScope,
-    subject: &StoredEntity,
-    record: &Record,
+    subject: &RecordValues,
+    context_id: Uuid,
     path: &[Uuid],
     key: &[String],
 ) -> Result<Vec<String>, RepositoryError> {
-    let Some(first) = key.first() else {
+    let case_sensitive = UNIQUE_PREDICATE_CASE_SENSITIVE;
+    let Some(components) = key_components(subject, path, key, case_sensitive) else {
         return Ok(Vec::new());
     };
-    let Some(value) = record.values.get(first) else {
-        return Ok(Vec::new());
-    };
-    // Typed equality on the first key attribute keeps the candidate scan
-    // indexed and bounded; the remaining attributes are compared in Rust.
-    let (column, cast) = match subject.value_type(first) {
-        Some("string") => ("value_text", "text"),
-        Some("integer") => ("value_integer", "bigint"),
-        Some("number") => ("value_number", "numeric"),
-        Some("boolean") => ("value_boolean", "boolean"),
-        Some("date") => ("value_date", "date"),
-        Some("datetime") => ("value_datetime", "timestamptz"),
-        _ => return Ok(Vec::new()),
-    };
-    let literal = match value {
-        Value::String(text) => text.clone(),
-        other => other.to_string(),
-    };
+    let is_default = scope.tree.default_context()?.id == context_id;
+    let declared = enforced_unique_keys(conn, scope.workspace_id, subject.blueprint_id)
+        .await?
+        .into_iter()
+        .find(|declared| {
+            declared.case_sensitive == case_sensitive
+                && (declared.scope == "context" || is_default)
+                && declared.attributes.len() == key.len()
+                && declared.attributes.iter().all(|code| key.contains(code))
+        });
+    if let Some(declared) = declared {
+        let ordered: Vec<Value> = declared
+            .attributes
+            .iter()
+            .filter_map(|code| key.iter().position(|item| item == code))
+            .map(|position| components[position].clone())
+            .collect();
+        let others: Vec<Uuid> = sqlx::query_scalar(
+            "SELECT entity_id FROM entity_unique_key_values WHERE workspace_id = $1 AND blueprint_id = $2 AND key_code = $3 AND context_id = $4 AND key_hash = $5 AND entity_id <> $6 ORDER BY entity_id",
+        )
+        .bind(scope.workspace_id)
+        .bind(subject.blueprint_id)
+        .bind(&declared.code)
+        .bind(context_id)
+        .bind(key_hash(&Value::Array(ordered)))
+        .bind(subject.id)
+        .fetch_all(&mut *conn)
+        .await?;
+        return Ok(others.iter().map(Uuid::to_string).collect());
+    }
+
+    // Candidates have a row for the first attribute that could normalize to
+    // the subject's value in some context; the comparison happens in Rust on
+    // the values resolved in this context.
+    let first = &key[0];
+    let (filter, parameter) = candidate_filter(
+        subject.value_type(first).unwrap_or_default(),
+        &components[0],
+    );
     let query = format!(
         r#"SELECT DISTINCT av.entity_id
            FROM attribute_values av
@@ -400,85 +304,116 @@ async fn duplicates(
             AND e.blueprint_id = $2 AND e.id <> $3
            JOIN attributes a ON a.id = av.attribute_id AND a.code = $4 AND a.deleted_at IS NULL
             AND a.blueprint_id = e.blueprint_id AND a.blueprint_version = e.blueprint_version
-           WHERE av.relationship_target_entity_id IS NULL AND av.{column} = $5::text::{cast}
-           LIMIT $6"#
+           WHERE av.workspace_id = $1 AND av.relationship_target_entity_id IS NULL
+             AND av.entity_id > $5 AND {filter}
+           ORDER BY av.entity_id
+           LIMIT $7"#
     );
-    let mut ids: Vec<Uuid> = sqlx::query_scalar(&query)
-        .bind(scope.workspace_id)
-        .bind(subject.blueprint_id)
-        .bind(subject.id)
-        .bind(first)
-        .bind(literal)
-        .bind(MAX_UNIQUE_CANDIDATES)
-        .fetch_all(&mut *conn)
+    let mut others = Vec::new();
+    let mut after = Uuid::nil();
+    loop {
+        let batch: Vec<Uuid> = sqlx::query_scalar(&query)
+            .bind(scope.workspace_id)
+            .bind(subject.blueprint_id)
+            .bind(subject.id)
+            .bind(first)
+            .bind(after)
+            .bind(&parameter)
+            .bind(UNIQUE_CANDIDATE_BATCH)
+            .fetch_all(&mut *conn)
+            .await?;
+        let Some(last) = batch.last() else {
+            break;
+        };
+        after = *last;
+        let loaded = load_records(
+            conn,
+            scope.workspace_id,
+            Selection::Entities(&batch),
+            Some(key),
+            RecordState::After,
+        )
         .await?;
-    ids.sort();
-    let loaded = load_entities(conn, scope.workspace_id, &ids).await?;
-    Ok(ids
-        .iter()
-        .filter_map(|id| loaded.get(id))
-        .filter(|other| {
-            let other = other.resolve(path);
-            key.iter()
-                .all(|code| other.values.get(code) == record.values.get(code))
-        })
-        .map(|other| other.id.to_string())
-        .collect())
+        others.extend(
+            loaded
+                .values()
+                .filter(|other| {
+                    key_components(other, path, key, case_sensitive).as_ref() == Some(&components)
+                })
+                .map(|other| other.id.to_string()),
+        );
+        if (batch.len() as i64) < UNIQUE_CANDIDATE_BATCH {
+            break;
+        }
+    }
+    Ok(others)
 }
 
+/// A SQL condition (on `av`, parameter `$6`) every row whose value
+/// normalizes to `component` satisfies.
+fn candidate_filter(value_type: &str, component: &Value) -> (&'static str, Option<String>) {
+    let text = match component {
+        Value::String(text) => text.clone(),
+        other => other.to_string(),
+    };
+    match value_type {
+        "string" => {
+            // Normalized strings keep each whitespace-free token verbatim
+            // (case aside). ASCII case folding is the same in PostgreSQL.
+            let token = text
+                .split(' ')
+                .max_by_key(|token| token.len())
+                .unwrap_or_default();
+            if token.is_ascii() && !token.is_empty() {
+                let escaped = token
+                    .replace('\\', "\\\\")
+                    .replace('%', "\\%")
+                    .replace('_', "\\_");
+                ("av.value_text ILIKE $6", Some(format!("%{escaped}%")))
+            } else {
+                ("($6::text IS NULL AND av.value_text IS NOT NULL)", None)
+            }
+        }
+        "number" => ("av.value_number = $6::text::numeric", Some(text)),
+        "integer" => ("av.value_integer = $6::text::bigint", Some(text)),
+        "boolean" => ("av.value_boolean = $6::text::boolean", Some(text)),
+        "date" => ("av.value_date = $6::text::date", Some(text)),
+        "datetime" => ("av.value_datetime = $6::text::timestamptz", Some(text)),
+        _ => ("$6::text IS NULL", None),
+    }
+}
+
+/// Whether following `relationship` from the subject, as resolved in the
+/// context, returns to it. Shares the hierarchy walk of structural
+/// constraints, bounded by [`MAX_CYCLE_VISITS`].
 async fn cycle(
     conn: &mut PgConnection,
     scope: &CheckScope,
-    subject: &StoredEntity,
+    subject: &RecordValues,
     record: &Record,
-    path: &[Uuid],
+    context_id: Uuid,
     relationship: &str,
 ) -> Result<CycleState, RepositoryError> {
-    let mut parents: HashMap<Uuid, Uuid> = HashMap::new();
-    let mut frontier: VecDeque<Uuid> = VecDeque::new();
-    for target in uuids(record.values.get(relationship)) {
-        if target == subject.id {
-            return Ok(CycleState::Cycle(vec![
-                subject.id.to_string(),
-                subject.id.to_string(),
-            ]));
-        }
-        if parents.insert(target, subject.id).is_none() {
-            frontier.push_back(target);
-        }
-    }
-    while !frontier.is_empty() {
-        if parents.len() > MAX_CYCLE_VISITS {
-            return Ok(CycleState::LimitReached);
-        }
-        let batch: Vec<Uuid> = frontier.drain(..).collect();
-        let loaded = load_entities(conn, scope.workspace_id, &batch).await?;
-        for id in batch {
-            let Some(entity) = loaded.get(&id) else {
-                continue;
-            };
-            for target in uuids(entity.resolve(path).values.get(relationship)) {
-                if target == subject.id {
-                    let mut chain = vec![subject.id.to_string(), id.to_string()];
-                    let mut current = id;
-                    while let Some(parent) = parents.get(&current).copied() {
-                        chain.push(parent.to_string());
-                        if parent == subject.id {
-                            break;
-                        }
-                        current = parent;
-                    }
-                    chain.reverse();
-                    return Ok(CycleState::Cycle(chain));
-                }
-                if let std::collections::hash_map::Entry::Vacant(entry) = parents.entry(target) {
-                    entry.insert(id);
-                    frontier.push_back(target);
-                }
-            }
-        }
-    }
-    Ok(CycleState::Clear)
+    let starts = uuids(record.values.get(relationship));
+    let walk = walk_hierarchy(
+        conn,
+        scope.workspace_id,
+        &scope.tree,
+        context_id,
+        &HierarchyField {
+            code: relationship,
+            family: None,
+        },
+        &starts,
+        subject.id,
+        Some(MAX_CYCLE_VISITS),
+    )
+    .await?;
+    Ok(match walk {
+        HierarchyWalk::Clear => CycleState::Clear,
+        HierarchyWalk::Cycle(path) => CycleState::Cycle(path.iter().map(Uuid::to_string).collect()),
+        HierarchyWalk::LimitReached => CycleState::LimitReached,
+    })
 }
 
 /// Evaluates predicates for one subject in one context, overriding values
@@ -486,13 +421,13 @@ async fn cycle(
 pub(crate) async fn evaluate_in_context(
     conn: &mut PgConnection,
     scope: &CheckScope,
-    subject: &StoredEntity,
+    subject: &RecordValues,
     context_id: Uuid,
     overrides: &[(String, Value)],
     predicates: &[&Predicate],
 ) -> Result<Vec<Result<(), Failure>>, RepositoryError> {
     let path = scope.path(context_id)?;
-    let mut record = subject.resolve(&path);
+    let mut record = subject.record(&path);
     for (code, value) in overrides {
         if value.is_null() {
             record.values.remove(code);
@@ -501,7 +436,7 @@ pub(crate) async fn evaluate_in_context(
         }
     }
     let requirements = Requirements::for_predicates(predicates.iter().copied());
-    let related = load_related(conn, scope, subject, &record, &path, &requirements).await?;
+    let related = load_related(conn, scope, subject, &record, context_id, &requirements).await?;
     let input = Evaluation {
         subject: &record,
         related: &related,
@@ -556,6 +491,66 @@ struct Job<'a> {
     transition: Option<CheckTransition>,
 }
 
+/// The transition conditions of a status change, failing closed when the
+/// stored edge's conditions are malformed.
+fn change_conditions(change: &StatusChange) -> Result<Vec<Check>, RepositoryError> {
+    catalog_validation::status::transition_conditions(&change.schema, &change.before, &change.after)
+        .map_err(RepositoryError::InvalidBlueprintDefinition)
+}
+
+fn condition_jobs<'a>(change: &StatusChange, conditions: &'a [Check]) -> Vec<Job<'a>> {
+    let transition = change.transition();
+    conditions
+        .iter()
+        .map(|condition| Job {
+            source: CheckSource::TransitionCondition,
+            code: &condition.code,
+            message: condition.message.as_deref(),
+            predicate: &condition.predicate,
+            severity: None,
+            transition: Some(transition.clone()),
+        })
+        .collect()
+}
+
+/// The job of an enforcing rule that guards the change's transition.
+fn guard_job<'a>(change: &StatusChange, rule: &'a EnabledRule) -> Option<Job<'a>> {
+    let guards = rule
+        .compiled
+        .enforcement
+        .as_ref()
+        .is_some_and(|enforcement| {
+            enforcement.guards_transition(
+                &change.attribute_code,
+                change.before.as_str(),
+                change.after.as_str(),
+            )
+        });
+    (guards
+        && rule
+            .context_id
+            .is_none_or(|context| context == change.context_id))
+    .then(|| Job {
+        source: CheckSource::Rule,
+        code: &rule.code,
+        message: None,
+        predicate: &rule.compiled.predicate,
+        severity: Some(severity(&rule.compiled)),
+        transition: Some(change.transition()),
+    })
+}
+
+/// Transition conditions and guarding rules a status change must satisfy.
+fn transition_jobs<'a>(
+    change: &StatusChange,
+    conditions: &'a [Check],
+    rules: &'a [EnabledRule],
+) -> Vec<Job<'a>> {
+    let mut jobs = condition_jobs(change, conditions);
+    jobs.extend(rules.iter().filter_map(|rule| guard_job(change, rule)));
+    jobs
+}
+
 fn severity(rule: &catalog_rules::CompiledRule) -> String {
     serde_json::to_value(&rule.severity)
         .ok()
@@ -599,7 +594,7 @@ fn record_violation(
 async fn run_jobs(
     conn: &mut PgConnection,
     scope: &CheckScope,
-    subject: &StoredEntity,
+    subject: &RecordValues,
     jobs: &BTreeMap<Uuid, Vec<Job<'_>>>,
 ) -> Result<Vec<CheckViolation>, RepositoryError> {
     let mut violations = Vec::new();
@@ -618,25 +613,30 @@ async fn run_jobs(
 
 impl CatalogRepository {
     /// Enforces entity-schema checks, status transition conditions and
-    /// enforcing rules on the transaction's final state. Called by every
-    /// write path through `validate_entity_schema`.
+    /// enforcing rules on the transaction's final state. Every write that
+    /// changes attribute values calls it through `validate_entity_schema`,
+    /// with the write's own status `changes`: system transitions (approval
+    /// voids) are not guarded. Extension annotation patches, which change
+    /// only system tags and metadata, call it through
+    /// [`Self::enforce_tag_checks`].
     pub(super) async fn enforce_declarative_checks(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
-        entity: &Entity,
         entity_schema: Option<&Value>,
+        tree: &ContextTree,
+        subject: &RecordValues,
+        changes: &[StatusChange],
     ) -> Result<(), RepositoryError> {
         let checks = entity_schema
             .map(predicate::entity_checks)
             .transpose()
             .map_err(RepositoryError::InvalidBlueprintDefinition)?
             .unwrap_or_default();
-        let changes = self.effective_status_changes(transaction, entity).await?;
         let rules = enabled_rules(
             transaction,
             self.workspace_id.0,
-            entity.blueprint_id,
-            entity.blueprint_version,
+            subject.blueprint_id,
+            subject.blueprint_version,
         )
         .await?;
         let enforcing: Vec<_> = rules
@@ -645,22 +645,15 @@ impl CatalogRepository {
             .collect();
         let conditions: Vec<(&StatusChange, Vec<Check>)> = changes
             .iter()
-            .map(|change| {
-                (
-                    change,
-                    catalog_validation::status::transition_conditions(
-                        &change.schema,
-                        &change.before,
-                        &change.after,
-                    ),
-                )
-            })
+            .map(|change| Ok((change, change_conditions(change)?)))
+            .collect::<Result<Vec<_>, RepositoryError>>()?
+            .into_iter()
             .filter(|(_, conditions)| !conditions.is_empty())
             .collect();
         if checks.is_empty() && conditions.is_empty() && enforcing.is_empty() {
             return Ok(());
         }
-        let scope = CheckScope::load(transaction, self.workspace_id.0).await?;
+        let scope = CheckScope::new(self.workspace_id.0, tree.clone());
         let all_contexts = scope.context_ids();
 
         let mut check_jobs: BTreeMap<Uuid, Vec<Job>> = BTreeMap::new();
@@ -676,32 +669,25 @@ impl CatalogRepository {
                 });
             }
         }
-        let mut condition_jobs: BTreeMap<Uuid, Vec<Job>> = BTreeMap::new();
+        let mut condition_jobs_by_context: BTreeMap<Uuid, Vec<Job>> = BTreeMap::new();
         for (change, conditions) in &conditions {
-            for condition in conditions {
-                condition_jobs
-                    .entry(change.context_id)
-                    .or_default()
-                    .push(Job {
-                        source: CheckSource::TransitionCondition,
-                        code: &condition.code,
-                        message: condition.message.as_deref(),
-                        predicate: &condition.predicate,
-                        severity: None,
-                        transition: Some(change.transition()),
-                    });
-            }
+            condition_jobs_by_context
+                .entry(change.context_id)
+                .or_default()
+                .extend(condition_jobs(change, conditions));
         }
         let mut rule_jobs: BTreeMap<Uuid, Vec<Job>> = BTreeMap::new();
         for rule in &enforcing {
-            let Some(enforcement) = &rule.compiled.enforcement else {
-                continue;
-            };
-            let contexts = rule
-                .context_id
-                .map(|context| vec![context])
-                .unwrap_or_else(|| all_contexts.clone());
-            if enforcement.on_save {
+            if rule
+                .compiled
+                .enforcement
+                .as_ref()
+                .is_some_and(|enforcement| enforcement.on_save)
+            {
+                let contexts = rule
+                    .context_id
+                    .map(|context| vec![context])
+                    .unwrap_or_else(|| all_contexts.clone());
                 for context_id in &contexts {
                     rule_jobs.entry(*context_id).or_default().push(Job {
                         source: CheckSource::Rule,
@@ -713,47 +699,84 @@ impl CatalogRepository {
                     });
                 }
             }
-            for change in &changes {
-                if contexts.contains(&change.context_id)
-                    && enforcement.guards_transition(
-                        &change.attribute_code,
-                        change.before.as_str(),
-                        change.after.as_str(),
-                    )
-                {
-                    rule_jobs.entry(change.context_id).or_default().push(Job {
-                        source: CheckSource::Rule,
-                        code: &rule.code,
-                        message: None,
-                        predicate: &rule.compiled.predicate,
-                        severity: Some(severity(&rule.compiled)),
-                        transition: Some(change.transition()),
-                    });
+            for change in changes {
+                if let Some(job) = guard_job(change, rule) {
+                    rule_jobs.entry(change.context_id).or_default().push(job);
                 }
             }
         }
 
-        let subject = load_entities(transaction, self.workspace_id.0, &[entity.id])
-            .await?
-            .remove(&entity.id)
-            .unwrap_or_else(|| StoredEntity {
-                id: entity.id,
-                blueprint_id: entity.blueprint_id,
-                ..StoredEntity::default()
-            });
-        let violations = run_jobs(transaction, &scope, &subject, &check_jobs).await?;
+        let violations = run_jobs(transaction, &scope, subject, &check_jobs).await?;
         if !violations.is_empty() {
             return Err(RepositoryError::EntityCheckFailed(violations));
         }
-        let violations = run_jobs(transaction, &scope, &subject, &condition_jobs).await?;
+        let violations = run_jobs(transaction, &scope, subject, &condition_jobs_by_context).await?;
         if !violations.is_empty() {
             return Err(RepositoryError::TransitionConditionsUnmet(violations));
         }
-        let violations = run_jobs(transaction, &scope, &subject, &rule_jobs).await?;
+        let violations = run_jobs(transaction, &scope, subject, &rule_jobs).await?;
         if !violations.is_empty() {
             return Err(RepositoryError::RuleViolation(violations));
         }
         Ok(())
+    }
+
+    /// Enforces entity checks and on-save enforcing rules after a write that
+    /// changed only the entity's system tags, when any of them reads the
+    /// entity's own tags (`has_tag`, `missing_tag`). Such a write changes no
+    /// value, so it has no status transitions and the JSON entity schema
+    /// cannot change its verdict.
+    pub(super) async fn enforce_tag_checks(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        entity: &Entity,
+    ) -> Result<(), RepositoryError> {
+        let entity_schema = sqlx::query_scalar::<_, Option<Value>>(
+            "SELECT entity_schema FROM blueprints WHERE id = $1 AND version = $2 AND workspace_id = $3",
+        )
+        .bind(entity.blueprint_id)
+        .bind(entity.blueprint_version)
+        .bind(self.workspace_id.0)
+        .fetch_one(&mut **transaction)
+        .await?;
+        let checks = entity_schema
+            .as_ref()
+            .map(predicate::entity_checks)
+            .transpose()
+            .map_err(RepositoryError::InvalidBlueprintDefinition)?
+            .unwrap_or_default();
+        let reads_tags = checks
+            .iter()
+            .any(|check| check.predicate.reads_subject_tags())
+            || enabled_rules(
+                transaction,
+                self.workspace_id.0,
+                entity.blueprint_id,
+                entity.blueprint_version,
+            )
+            .await?
+            .iter()
+            .any(|rule| {
+                rule.compiled
+                    .enforcement
+                    .as_ref()
+                    .is_some_and(|enforcement| enforcement.on_save)
+                    && rule.compiled.predicate.reads_subject_tags()
+            });
+        if !reads_tags {
+            return Ok(());
+        }
+        let tree = ContextTree::load(transaction, self.workspace_id.0).await?;
+        let record = load_record(
+            transaction,
+            self.workspace_id.0,
+            entity.id,
+            RecordState::After,
+        )
+        .await?
+        .ok_or(RepositoryError::NotFound("entity"))?;
+        self.enforce_declarative_checks(transaction, entity_schema.as_ref(), &tree, &record, &[])
+            .await
     }
 
     /// Transition conditions and enforcing rules that the saved state plus the
@@ -762,13 +785,10 @@ impl CatalogRepository {
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         entity: &Entity,
+        tree: &ContextTree,
         change: &StatusChange,
     ) -> Result<Vec<CheckViolation>, RepositoryError> {
-        let conditions = catalog_validation::status::transition_conditions(
-            &change.schema,
-            &change.before,
-            &change.after,
-        );
+        let conditions = change_conditions(change)?;
         let rules = enabled_rules(
             transaction,
             self.workspace_id.0,
@@ -776,53 +796,19 @@ impl CatalogRepository {
             entity.blueprint_version,
         )
         .await?;
-        let transition = change.transition();
-        let mut jobs: Vec<Job> = conditions
-            .iter()
-            .map(|condition| Job {
-                source: CheckSource::TransitionCondition,
-                code: &condition.code,
-                message: condition.message.as_deref(),
-                predicate: &condition.predicate,
-                severity: None,
-                transition: Some(transition.clone()),
-            })
-            .collect();
-        for rule in &rules {
-            let guards = rule
-                .compiled
-                .enforcement
-                .as_ref()
-                .is_some_and(|enforcement| {
-                    enforcement.guards_transition(
-                        &change.attribute_code,
-                        change.before.as_str(),
-                        change.after.as_str(),
-                    )
-                });
-            if guards
-                && rule
-                    .context_id
-                    .is_none_or(|context| context == change.context_id)
-            {
-                jobs.push(Job {
-                    source: CheckSource::Rule,
-                    code: &rule.code,
-                    message: None,
-                    predicate: &rule.compiled.predicate,
-                    severity: Some(severity(&rule.compiled)),
-                    transition: Some(transition.clone()),
-                });
-            }
-        }
+        let jobs = transition_jobs(change, &conditions, &rules);
         if jobs.is_empty() {
             return Ok(Vec::new());
         }
-        let scope = CheckScope::load(transaction, self.workspace_id.0).await?;
-        let subject = load_entities(transaction, self.workspace_id.0, &[entity.id])
-            .await?
-            .remove(&entity.id)
-            .ok_or(RepositoryError::NotFound("entity"))?;
+        let scope = CheckScope::new(self.workspace_id.0, tree.clone());
+        let subject = load_record(
+            transaction,
+            self.workspace_id.0,
+            entity.id,
+            RecordState::After,
+        )
+        .await?
+        .ok_or(RepositoryError::NotFound("entity"))?;
         let predicates: Vec<&Predicate> = jobs.iter().map(|job| job.predicate).collect();
         let outcomes = evaluate_in_context(
             transaction,
@@ -840,5 +826,78 @@ impl CatalogRepository {
             }
         }
         Ok(unmet)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn change(schema: Value) -> StatusChange {
+        StatusChange {
+            attribute_code: "status".to_owned(),
+            schema,
+            context_id: Uuid::nil(),
+            context_code: "default".to_owned(),
+            before: json!("draft"),
+            after: json!("live"),
+        }
+    }
+
+    #[test]
+    fn malformed_transition_conditions_fail_closed() {
+        let schema = |conditions: Value| {
+            json!({"type": "string", "enum": ["draft", "live"], "x-attricat-status": {
+                "version": 1,
+                "options": [{"code": "draft", "label": "Draft"}, {"code": "live", "label": "Live"}],
+                "transitions": [{"from": "draft", "to": "live", "conditions": conditions}]
+            }})
+        };
+        let valid = change(schema(json!([
+            {"code": "owner", "predicate": {"type": "required", "attribute_code": "owner"}}
+        ])));
+        let conditions = change_conditions(&valid).unwrap();
+        let jobs = transition_jobs(&valid, &conditions, &[]);
+        assert_eq!(jobs.len(), 1);
+        assert_eq!(jobs[0].source, CheckSource::TransitionCondition);
+        assert_eq!(
+            jobs[0].transition.as_ref().unwrap().to.as_deref(),
+            Some("live")
+        );
+        for malformed in [
+            json!([{"code": "owner", "predicate": {"type": "unknown"}}]),
+            json!([{"code": "owner", "predicate": {"type": "unique", "attribute_codes": ["a"]}}]),
+            json!("not a list"),
+        ] {
+            assert!(
+                matches!(
+                    change_conditions(&change(schema(malformed.clone()))),
+                    Err(RepositoryError::InvalidBlueprintDefinition(_))
+                ),
+                "{malformed}"
+            );
+        }
+    }
+
+    #[test]
+    fn candidate_filters_never_exclude_a_normalized_match() {
+        assert_eq!(
+            candidate_filter("string", &json!("ab x_%")),
+            ("av.value_text ILIKE $6", Some("%x\\_\\%%".to_owned()))
+        );
+        assert_eq!(
+            candidate_filter("string", &json!("żółw")).1,
+            None,
+            "non-ASCII text is compared without a SQL prefilter"
+        );
+        assert_eq!(
+            candidate_filter("number", &json!("1.5")),
+            (
+                "av.value_number = $6::text::numeric",
+                Some("1.5".to_owned())
+            )
+        );
+        assert_eq!(candidate_filter("time", &json!({"time": "x"})).1, None);
     }
 }

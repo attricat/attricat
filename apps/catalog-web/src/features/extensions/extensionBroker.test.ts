@@ -12,8 +12,12 @@ import { maximumExtensionResponseBytes } from './constants';
 vi.mock('../../api/request', () => ({ requestText: vi.fn() }));
 vi.mock('../extension-runs/api', () => ({
   cancelExtensionRun: vi.fn(),
-  extensionRunArtifactUrl: (runId: string, artifactId: string) =>
-    `/api/extension-runs/${runId}/artifacts/${artifactId}/download`,
+  extensionRunArtifactUrl: (
+    runId: string,
+    artifactId: string,
+    scope?: string,
+  ) =>
+    `/api/extension-runs/${runId}/artifacts/${artifactId}/download${scope === 'own' ? '?scope=own' : ''}`,
   getExtensionRun: vi.fn(),
   listExtensionRuns: vi.fn(),
   startExtensionRun: vi.fn(),
@@ -201,6 +205,63 @@ describe('extension broker', () => {
         deps,
       ),
     ).rejects.toThrow('Request denied');
+    expect(runs.cancelExtensionRun).not.toHaveBeenCalled();
+  });
+
+  it('reads, cancels and downloads only runs the signed-in user started', async () => {
+    const runId = '55555555-5555-4555-8555-555555555555';
+    const artifactId = '77777777-7777-4777-8777-777777777777';
+    const ownRun = {
+      extension_id: 'example.extension',
+      initiated_by_me: true,
+      artifacts: [{ id: artifactId }],
+    } as Awaited<ReturnType<typeof runs.getExtensionRun>>;
+    vi.mocked(runs.getExtensionRun).mockResolvedValue(ownRun);
+    const deps = selectionDependencies([
+      'client.operations.read',
+      'client.operations.cancel',
+    ]);
+    await expect(
+      handleBrokerRequest(
+        { method: 'operations.get', payload: { run_id: runId } },
+        deps,
+      ),
+    ).resolves.toBe(ownRun);
+    expect(runs.getExtensionRun).toHaveBeenLastCalledWith(runId, 'own');
+    await handleBrokerRequest(
+      { method: 'operations.cancel', payload: { run_id: runId } },
+      deps,
+    );
+    expect(runs.cancelExtensionRun).toHaveBeenLastCalledWith(runId, 'own');
+    await handleBrokerRequest(
+      {
+        method: 'operations.download',
+        payload: { run_id: runId, artifact_id: artifactId },
+      },
+      deps,
+    );
+    expect(deps.downloadArtifact).toHaveBeenCalledWith(
+      `/api/extension-runs/${runId}/artifacts/${artifactId}/download?scope=own`,
+    );
+
+    // An operator's frame must not reach another user's run of the same
+    // extension, even if the server returned it.
+    vi.mocked(runs.cancelExtensionRun).mockClear();
+    vi.mocked(runs.getExtensionRun).mockResolvedValue({
+      ...ownRun,
+      initiated_by_me: false,
+    });
+    for (const request of [
+      { method: 'operations.get', payload: { run_id: runId } },
+      { method: 'operations.cancel', payload: { run_id: runId } },
+      {
+        method: 'operations.download',
+        payload: { run_id: runId, artifact_id: artifactId },
+      },
+    ])
+      await expect(handleBrokerRequest(request, deps)).rejects.toThrow(
+        'Request denied',
+      );
     expect(runs.cancelExtensionRun).not.toHaveBeenCalled();
   });
 

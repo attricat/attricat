@@ -65,13 +65,13 @@ value_type = "string"
 | `readonly` | boolean | `false` | Shows the field in the web app but prevents editing it there. The API, CLI, agents, workflows, and extensions can still write it. Use it for values owned by an integration. |
 | `tags` | array of strings | `[]` | Free-form metadata. Must be unique and non-empty. Some tags hide the attribute in the web app; see [Visibility tags](#visibility-tags). |
 | `default_value` | matches the type | Unset | Value stored in the default context when an entity is created without one. Scalar types only. |
-| `value_schema` | string (JSON) | Unset | JSON Schema for one value. Scalar types only. A `string` attribute's schema can carry an `x-attricat-status` annotation with [transition conditions](#transition-conditions). See [Validation](/builders/validation/). |
+| `value_schema` | string (JSON) | Unset | JSON Schema for one value. Scalar types only. A `string` attribute's schema can make it a [status](#statuses) or a [user or team assignment](#user-or-team-assignments). See [Validation](/builders/validation/). |
 
 ### Value types
 
 | `value_type` | Stored value | CLI/TOML example | Notes |
 | --- | --- | --- | --- |
-| `string` | Text | `value = "Blue shirt"` | Clearing a string in a non-default context removes the override instead of storing `""`. Can also be a [status](/builders/validation/#statuses) or a [user or team assignment](#user-or-team-assignments). |
+| `string` | Text | `value = "Blue shirt"` | Clearing a string in a non-default context removes the override instead of storing `""`. Can also be a [status](#statuses) or a [user or team assignment](#user-or-team-assignments). |
 | `number` | Decimal | `value = 19.99` | |
 | `integer` | 64-bit integer | `value = 12` | |
 | `boolean` | `true` or `false` | `value = true` | |
@@ -81,6 +81,68 @@ value_type = "string"
 | `json` | Any JSON value | | Cannot be sorted or used in Explorer filters. Prefer typed attributes or relationships. |
 | `relationship` | Links to other entities | | See [Relationship keys](#relationship-keys). |
 | `file` | Uploaded files | | See [File keys](#file-keys). |
+
+### Statuses
+
+A `string` attribute whose `value_schema` has an `enum` and an `x-attricat-status` annotation is a status. See [Statuses](/builders/validation/#statuses) for how they behave.
+
+```toml
+[[attributes]]
+code = "status"
+value_type = "string"
+value_schema = '''{
+  "type": "string",
+  "enum": ["draft", "review", "released"],
+  "x-attricat-status": {
+    "version": 1,
+    "options": [
+      { "code": "draft", "label": "Draft" },
+      { "code": "review", "label": "In review",
+        "approval": { "covers": "all", "void_to": "draft" } },
+      { "code": "released", "label": "Released", "tone": "success",
+        "lock": "all", "retention_days": 3650 }
+    ],
+    "transitions": [
+      { "from": null, "to": "draft" },
+      { "from": "draft", "to": "review", "code": "submit" },
+      { "from": "review", "to": "released", "code": "release",
+        "roles": ["reviewer"], "separate_from": ["submit"] },
+      { "from": "released", "to": "draft", "code": "correct", "permission": "entities.publish" }
+    ]
+  }
+}'''
+```
+
+| Key | Value | Description |
+| --- | --- | --- |
+| `version` | `1` | Required. |
+| `options` | array of 1 to 100 tables | Required. One option per `enum` code, in display order. |
+| `transitions` | array of up to 10,000 tables | Allowed changes. Omit it to allow any change; with it, only the listed changes are allowed, and an empty array allows none. |
+
+Each option:
+
+| Key | Value | Description |
+| --- | --- | --- |
+| `code` | code, up to 128 characters | Required. Must match exactly one `enum` value. |
+| `label` | string, 1 to 200 characters | Required. Can contain [lexicon references](/builders/translations/#status-labels). |
+| `tone` | `default`, `success`, `warning`, `error`, or `info` | Color of the status chip. |
+| `lock` | `"all"`, or 1 to 500 attribute codes | Makes the listed attributes read-only while the record has this status. `"all"` covers every attribute, relationship, and file except the status itself. A reusable attribute is written `namespace:code`. A record with a locking status cannot be deleted. Requires `transitions`. |
+| `approval` | table with `covers` and `void_to` | Records an approval when the record enters this status. `covers` is `"all"` or 1 to 500 attribute codes; `void_to` is another option the record moves to when covered content changes. |
+| `retention_days` | integer, 1 to 36,600 | Places a retention hold on the locked attributes' files when the record enters this status. Requires `lock`. |
+
+Each transition:
+
+| Key | Value | Description |
+| --- | --- | --- |
+| `from` | option code or `null` | Required. `null` means no value, so an edge from `null` allows setting the first value, including defaults. |
+| `to` | option code or `null` | Required. An edge to `null` allows clearing the value. |
+| `code` | code, up to 128 characters | Names the transition in `separate_from` and in history. |
+| `permission` | permission code | The person saving must hold this [permission](/reference/permissions/) for the entity. |
+| `roles` | 1 to 20 role codes | The person saving must hold at least one of these roles for the workspace, the blueprint, or the entity. |
+| `separate_from` | 1 to 20 transition codes | The person saving must not be the one who most recently made one of these transitions on this entity and context. |
+| `conditions` | up to 16 checks | Requirements on the data. See [Transition conditions](#transition-conditions). |
+
+Each `from`/`to` pair may appear only once. `permission`, `roles`, and `separate_from` always refer to the person saving; they cannot refer to a [user or team assignment](#user-or-team-assignments) on the record. Refusals return `403 status_transition_forbidden` or `403 status_separation_of_duties`, and changes to locked content return `409 record_locked`. See [Control a record's lifecycle](/builders/validation/#control-a-records-lifecycle).
 
 ### User or team assignments
 
@@ -102,6 +164,7 @@ value_schema = '''{"type": "string", "x-attricat-principal": {"version": 1, "kin
 - The schema must have `"type": "string"` and no `enum`, `const`, `pattern`, or `format`. The attribute cannot have a `default_value` or also be a status. Reusable attributes accept the same annotation.
 - A new or changed value must be an active workspace member or a team that has not been deleted, of an accepted kind. Otherwise saving returns `422 attribute_value_schema_mismatch`. Unchanged values are not checked again.
 - Search filters match the stored value exactly. The value `@me` with operator `eq` matches the caller and every team the caller belongs to.
+- [Predicates](#predicates) treat the value as text: `required` checks that a record is assigned, and `compare` with `eq` or `one_of` can match a specific `user:<id>` or `team:<id>`. No predicate and no [transition requirement](#statuses) can refer to the person saving, so a rule such as "only the assignee may close this" cannot be declared.
 
 ### Relationship keys
 
@@ -405,7 +468,7 @@ to = "released"
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
 | `enforcement.on_save` | boolean | `false` | Reject every write that leaves the entity violating the rule. |
-| `enforcement.transitions` | array of tables | `[]` | Up to 16 guarded status changes, each with `attribute_code`, optional `from`, and `to`. |
+| `enforcement.transitions` | array of tables | `[]` | Up to 16 guarded status changes, each with `attribute_code`, optional `from`, and `to`. Without `from`, every change into `to` is guarded. |
 
 An `enforcement` table needs `on_save = true` or at least one transition, `severity` `error` or `critical`, and a predicate without `stale`, `unique`, or `acyclic`. Each transition's `attribute_code` must be a status attribute, and `from` and `to` must be codes of its `enum`. Violations return `422 rule_violation`. See [Enforce a rule](/builders/rules/#enforce-a-rule).
 
@@ -422,7 +485,7 @@ Rules, entity checks, transition conditions, and publication channel checks shar
 | `compare` | `attribute_code`, `op`, and exactly one of `other_attribute_code`, `subject_attribute_code`, or `value` | The comparison is true. |
 | `one_of` | `attribute_code`, `values` (1 to 100) | The value is one of `values`. Not for relationships or files. |
 | `relative_date` | `attribute_code`, `op` (`lt`, `lte`, `gt`, `gte`), `offset_days` (-36500 to 36500, default `0`) | The date or datetime compares true with the current time plus `offset_days`. |
-| `unique` | `attribute_codes` (1 to 4 string, number, integer, boolean, date, or datetime attributes) | No other live entity of the blueprint has the same values in the same context. Reporting rules only. |
+| `unique` | `attribute_codes` (1 to 4 string, number, integer, boolean, date, or datetime attributes) | No other live entity of the blueprint family, on any revision, has the same values in the same context. Reporting rules only. |
 | `linked` | `relationship_code`, `quantifier` (`all`, `any`, `none`; default `all`), `predicate` | `all`: every linked record satisfies `predicate` (true with no links). `any`: at least one does. `none`: none does. |
 | `referenced_by` | `blueprint_code`, `relationship_code`, optional `predicate`, `min` and/or `max` (0 to 1000) | The number of `blueprint_code` records whose `relationship_code` targets this record, and that satisfy `predicate`, is between `min` and `max`. `max = 0` means "none". |
 | `acyclic` | `relationship_code` | Following the relationship never returns to the record. Reporting rules only. |

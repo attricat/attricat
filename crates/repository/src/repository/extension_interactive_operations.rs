@@ -346,10 +346,13 @@ impl CatalogRepository {
                 "selection must contain saved entities from one blueprint revision".into(),
             ));
         }
-        for entity_id in &input.entity_ids {
-            self.ensure_principal_may(&mut transaction, input.actor, "entities.read", *entity_id)
-                .await?;
-        }
+        self.ensure_principal_may_all(
+            &mut transaction,
+            input.actor,
+            "entities.read",
+            &input.entity_ids,
+        )
+        .await?;
         let id = Uuid::new_v4();
         let inserted: Option<Uuid> = sqlx::query_scalar(
             "INSERT INTO extension_operation_runs(id,workspace_id,extension_id,installed_release_id,abi_version,operation_id,actor_user_id,actor_token_id,configuration_snapshot,input,idempotency_key,invocation,contribution_id,selection_blueprint_id,selection_blueprint_version,selection_context_id,request_digest) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'interactive',$12,$13,$14,$15,$16) ON CONFLICT DO NOTHING RETURNING id",
@@ -437,20 +440,14 @@ impl CatalogRepository {
         if rows.is_empty() {
             return Ok(Vec::new());
         }
-        if let Some(token_id) = actor.token_id
-            && !self
-                .personal_api_token_permits(token_id, "entities.read")
-                .await?
-        {
-            return Ok(Vec::new());
-        }
         let run_ids: Vec<Uuid> = rows.iter().map(|row| row.id).collect();
+        let mut connection = self.pool.acquire().await?;
         let members: Vec<(Uuid, Uuid)> = sqlx::query_as(
             "SELECT operation_run_id, entity_id FROM extension_operation_run_entities WHERE workspace_id=$1 AND operation_run_id = ANY($2)",
         )
         .bind(self.workspace_id.0)
         .bind(&run_ids)
-        .fetch_all(&self.pool)
+        .fetch_all(&mut *connection)
         .await?;
         let entity_ids: Vec<Uuid> = members
             .iter()
@@ -458,14 +455,14 @@ impl CatalogRepository {
             .collect::<HashSet<_>>()
             .into_iter()
             .collect();
-        let readable = self
-            .authorized_entity_ids(
-                actor.user_id,
-                self.workspace_id.0,
-                "entities.read",
-                &entity_ids,
-            )
-            .await?;
+        let readable = Self::principal_entity_ids_on(
+            &mut connection,
+            actor,
+            self.workspace_id.0,
+            "entities.read",
+            &entity_ids,
+        )
+        .await?;
         let hidden: HashSet<Uuid> = members
             .iter()
             .filter(|(_, entity_id)| !readable.contains(entity_id))
@@ -522,11 +519,8 @@ impl CatalogRepository {
         .bind(self.workspace_id.0)
         .fetch_all(&mut *connection)
         .await?;
-        for entity_id in members {
-            self.ensure_principal_may(&mut connection, actor, "entities.read", entity_id)
-                .await?;
-        }
-        Ok(())
+        self.ensure_principal_may_all(&mut connection, actor, "entities.read", &members)
+            .await
     }
 
     /// Host-call scope for a run. `None` means the run is administrative.
@@ -672,6 +666,27 @@ impl CatalogRepository {
         let read_at: DateTime<Utc> = sqlx::query_scalar("SELECT clock_timestamp()")
             .fetch_one(&self.pool)
             .await?;
+        // One authorization query for the page; the connection is released
+        // before the entity reads below, which acquire their own, so a run
+        // never holds two pool connections.
+        let readable = {
+            let page: Vec<Uuid> = scope
+                .entity_ids
+                .iter()
+                .skip(start)
+                .take(limit as usize)
+                .copied()
+                .collect();
+            let mut connection = self.pool.acquire().await?;
+            Self::principal_entity_ids_on(
+                &mut connection,
+                scope.actor,
+                self.workspace_id.0,
+                "entities.read",
+                &page,
+            )
+            .await?
+        };
         let mut entities = Vec::new();
         let mut bytes = 0;
         let mut next = None;
@@ -682,20 +697,7 @@ impl CatalogRepository {
             .skip(start)
             .take(limit as usize)
         {
-            // The connection is released before the entity reads below, which
-            // acquire their own: a run never holds two pool connections.
-            let readable = {
-                let mut connection = self.pool.acquire().await?;
-                match self
-                    .ensure_principal_may(&mut connection, scope.actor, "entities.read", *entity_id)
-                    .await
-                {
-                    Ok(()) => true,
-                    Err(RepositoryError::ActorNotAuthorized) => false,
-                    Err(error) => return Err(error),
-                }
-            };
-            let item = if !readable {
+            let item = if !readable.contains(entity_id) {
                 json!({"position": position, "entity_id": entity_id, "status": "unavailable"})
             } else {
                 match (

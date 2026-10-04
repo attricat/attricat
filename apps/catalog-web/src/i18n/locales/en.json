@@ -261,7 +261,6 @@
       "approvalVoided": "Voided by a content change",
       "approvalSuperseded": "Superseded",
       "approvedBy": "Approved by {{user}}",
-      "system": "system",
       "voidedOn": "Voided",
       "returnedTo": "returned to {{status}}",
       "digest": "Content digest {{digest}}",
@@ -421,7 +420,8 @@
     "publicationChecks": "Publication checks",
     "requireValidEntity": "Require a valid entity",
     "requiredRules": "Required rules",
-    "requiredRulesHelp": "Codes of enabled rules that must pass before publishing (at most {{max}})."
+    "requiredRulesHelp": "Codes of enabled rules that must pass before publishing (at most {{max}}).",
+    "requiredRulesLimit": "A channel can require at most {{max}} rules. Remove one before adding another."
   },
   "blueprints": {
     "blueprint": "Blueprint",

@@ -105,7 +105,7 @@ value_schema = '''{
 }'''
 ```
 
-- Warunek ma `code`, opcjonalny `message` (od 1 do 500 znaków) i `predicate`. Predykaty są takie same jak w [regułach](/pl/builders/rules/#predykaty), z wyjątkiem `stale`, `unique` i `acyclic`. Krawędź może mieć najwyżej 16 warunków.
+- Warunek ma `code`, opcjonalny `message` (od 1 do 500 znaków) i `predicate`. Predykaty są takie same jak w [regułach](/pl/reference/blueprint/#predykaty), z wyjątkiem `stale`, `unique` i `acyclic`. Krawędź może mieć najwyżej 16 warunków.
 - Każdą krawędź `from`/`to` można zadeklarować tylko raz.
 - Warunki są sprawdzane na stanie, który powstaje po zapisie, więc uzupełnienie `root_cause` i zamknięcie w jednym zapisie działa.
 - Są sprawdzane w każdym kontekście, w którym zmienia się status, dla każdego zapisującego.
@@ -114,8 +114,50 @@ Jeśli którykolwiek warunek nie jest spełniony, cały zapis zostaje odrzucony 
 
 Aby z wyprzedzeniem sprawdzić, które statusy docelowe są dostępne, wywołaj `GET /v1/entities/{id}/status-transitions?context_id=<uuid>` (bez parametru używany jest kontekst domyślny). Odpowiedź zawiera każde zadeklarowane przejście z zapisanego statusu z polem `allowed`, a dla zablokowanych także `denial_code` i `denial_reason`, oraz `unmet`, czyli niespełnione warunki i egzekwowane reguły. Są one oceniane na zapisanej encji tak, jakby status już się zmienił. Blokada przez warunki ma `denial_code` `transition_conditions_unmet`.
 
-Status może też ograniczać, kto może wykonać poszczególne przejścia, blokować sfinalizowane rekordy i wiązać zatwierdzenia z przejrzaną treścią. Zobacz [Kontroluj cykl życia rekordu](/pl/builders/blueprints/#krok-10-kontroluj-cykl-życia-rekordu).
+### Kontroluj cykl życia rekordu
 
+W dokumentach kontrolowanych, inspekcjach czy ocenach status może też decydować, kto może wykonać przejście, zamrażać rekord, gdy jest już ostateczny, wiązać zatwierdzenie z dokładnie tą treścią, którą przejrzano, i zachowywać wydane pliki przez okres retencji. Pełny przykład zawiera [Krok 10 tworzenia schematu](/pl/builders/blueprints/#krok-10-kontroluj-cykl-życia-rekordu), a wszystkie klucze wymienia sekcja [Statusy](/pl/reference/blueprint/#statusy).
+
+#### Kto może wykonać przejście
+
+Przejście może określać wymagania. Osoba zapisująca zmianę musi spełnić je wszystkie, oprócz posiadania `entities.write`:
+
+- `permission`: [uprawnienie](/pl/reference/permissions/), które musi mieć dla tej encji, np. `entities.publish`.
+- `roles`: musi mieć co najmniej jedną z tych ról (wbudowaną lub [niestandardową](/pl/operate/workspaces/#role)), przydzieloną w całym obszarze roboczym, dla schematu lub dla tej encji.
+- `separate_from`: rozdzielenie obowiązków. Nie może to być osoba, która jako ostatnia wykonała w tej encji i w tym kontekście przejście o jednym z podanych kodów `code`. Na przykład osoba, która przesłała dokument do przeglądu, nie może go też zatwierdzić.
+
+Nadaj przejściu `code`, aby wskazywać je w `separate_from` i w historii. Odrzucone przejście zwraca `403 status_transition_forbidden` lub `403 status_separation_of_duties` i nic nie zostaje zapisane. Formularz edycji wyłącza przejścia, których nie możesz wykonać, i wyjaśnia dlaczego.
+
+Te same kontrole obowiązują każdego, kto zapisuje dane: API, CLI, przepływy pracy (jako osobę, której zmiana uruchomiła przepływ), rozszerzenia i agentów (jako osobę, która zatwierdziła zmianę). Zapis bez możliwej do ustalenia osoby, np. z zaplanowanego zadania, nie może wykonać ograniczonego przejścia.
+
+Wymagania zawsze dotyczą osoby zapisującej zmianę. Nie mogą odwoływać się do [atrybutu użytkownika lub zespołu](/pl/builders/modeling/#przypisz-odpowiedzialność) w rekordzie, więc nie da się zadeklarować zasady „zamknąć może tylko osoba przypisana”.
+
+#### Blokuj sfinalizowane rekordy
+
+`lock` w statusie sprawia, że treść jest tylko do odczytu, dopóki rekord ma ten status:
+
+- `"lock": "all"` zamraża wszystkie atrybuty, relacje i pliki oprócz samego statusu.
+- `"lock": ["title", "procedure"]` zamraża tylko te atrybuty.
+
+Rekordu nie można usunąć, dopóki którykolwiek z jego kontekstów ma status z blokadą, niezależnie od jej postaci.
+
+Blokady są egzekwowane na serwerze dla każdej drogi zapisu: formularza edycji, API, CLI, przepływów pracy, rozszerzeń, agentów, przywracania z historii wartości, przesyłania plików i zmiany ich kolejności oraz migracji. Odrzucony zapis zwraca `409 record_locked`. Formularz pokazuje zablokowane pola jako tylko do odczytu wraz z powodem.
+
+Status, który deklaruje blokadę, wymaga jawnej listy `transitions`, więc wyjście z niego jest zawsze nazwanym, ograniczonym przejściem. Aby poprawić wydany rekord, najpierw wykonaj przejście korygujące, a dopiero potem edytuj. Korekta może zmienić wyłącznie status. Odblokowanie jest zapisywane w dzienniku audytu jako `entity.record.unlock`.
+
+Blokady działają w obrębie kontekstu: rekord wydany na jednym rynku nadal można edytować na innym, gdzie jest szkicem, o ile zmiana nie trafi do zablokowanego rynku przez dziedziczenie.
+
+#### Wiąż zatwierdzenia z przejrzaną treścią
+
+`approval` w statusie rejestruje zatwierdzenie za każdym razem, gdy rekord przechodzi do tego statusu: kto zatwierdził, kiedy, oraz skrót SHA-256 objętej treści. `covers` przyjmuje `"all"` lub listę atrybutów; objęte relacje i pliki wchodzą do skrótu, pliki według ich dokładnej zawartości bajtowej.
+
+Gdy objęta treść się później zmieni, zatwierdzenie zostaje unieważnione w tym samym zapisie, a jeśli rekord wciąż ma status zatwierdzony, przechodzi do `void_to`. Na przykład edycja tytułu zatwierdzonego dokumentu może odesłać go z powrotem do przeglądu. Zmiany atrybutów, których zatwierdzenie nie obejmuje, nie naruszają zatwierdzenia.
+
+Zatwierdzenia i unieważnienia pojawiają się w dzienniku audytu (`entity.approval.record`, `entity.approval.void`) oraz w panelu **Kontrola rekordu** na stronie encji.
+
+#### Zachowuj wydane pliki
+
+`retention_days` w zablokowanym statusie zakłada blokadę retencji na każdy plik, do którego odwołują się zablokowane atrybuty, gdy rekord przechodzi do tego statusu. Zablokowane pliki nigdy nie są usuwane z magazynu przed wygaśnięciem blokady, nawet jeśli późniejsza korekta je odłączy. Blokady są wyświetlane na stronie encji i w dzienniku audytu. Zobacz [Blokady retencji](/pl/operate/workspaces/#blokady-retencji).
 ## Ogranicz całą encję
 
 `entity_schema` widzi encję jako jeden obiekt JSON. Używaj go dla reguł obejmujących więcej niż jeden atrybut:
@@ -183,7 +225,7 @@ Każda kontrola ma:
 | --- | --- |
 | `code` | Unikalny w obrębie listy. Podawany w błędach. |
 | `message` | Opcjonalny, od 1 do 500 znaków. Wyświetlany, gdy kontrola nie przejdzie; w przeciwnym razie Attricat generuje komunikat. |
-| `predicate` | Dowolny [predykat reguły](/pl/builders/rules/#predykaty) z wyjątkiem `stale`, `unique` i `acyclic`, których nie da się sprawdzić podczas zapisu. |
+| `predicate` | Dowolny [predykat](/pl/reference/blueprint/#predykaty) z wyjątkiem `stale`, `unique` i `acyclic`, których nie da się sprawdzić podczas zapisu. |
 
 Schemat może mieć najwyżej 32 kontrole. Ich typy są sprawdzane podczas kompilacji schematu: nieznany atrybut, porównanie porządkujące na łańcuchu znaków albo porównanie daty z liczbą kończy się błędem `422 invalid_blueprint_definition`.
 
@@ -236,40 +278,11 @@ Aby wychwycić takie przypadki, dodaj [regułę](/pl/builders/rules/) z tym samy
 | `transition_conditions_unmet` | 422 | Warunki przejścia statusu nie są spełnione. |
 | `rule_violation` | 422 | Po zapisie encja naruszałaby egzekwowaną regułę. |
 | `publication_checks_failed` | 422 | Kontrole wymagane przez kanał nie przechodzą. Zobacz [Publikowanie](/pl/guides/publishing/#wymagaj-kontroli-przed-publikacją). |
+| `status_transition_forbidden` | 403 | Przejście wymaga uprawnienia lub roli, których nie masz. Zobacz [Kto może wykonać przejście](#kto-może-wykonać-przejście). |
+| `status_separation_of_duties` | 403 | To przejście musi wykonać ktoś inny. |
+| `record_locked` | 409 | Status rekordu blokuje zmienioną treść albo rekordu nie można usunąć. Najpierw wykonaj przejście korygujące. Zobacz [Blokuj sfinalizowane rekordy](#blokuj-sfinalizowane-rekordy). |
 
-Przy zapisie kontrole, warunki i egzekwowane reguły działają w tej kolejności, po JSON Schema, a zgłaszana jest tylko pierwsza grupa, która nie przeszła. Każdy błąd wymienia do 50 naruszeń w `error.details.violations`:
-
-```json
-{
-  "error": {
-    "code": "entity_check_failed",
-    "message": "entity checks failed: Valid until must not be before valid from (valid-range)",
-    "details": {
-      "violations": [
-        {
-          "source": "entity_check",
-          "code": "valid-range",
-          "message": "Valid until must not be before valid from",
-          "contexts": ["default", "PL"],
-          "attributes": ["valid_until", "valid_from"],
-          "evidence": { "attribute_code": "valid_until", "value": "2026-01-01", "compared_with": "2026-03-01" }
-        }
-      ]
-    }
-  }
-}
-```
-
-| Pole | Opis |
-| --- | --- |
-| `source` | `entity_check`, `transition_condition`, `rule` lub, tylko przy publikacji, `entity_schema`. |
-| `code` | Kod kontroli, warunku lub reguły. |
-| `message` | Własny komunikat lub wygenerowany. |
-| `contexts` | Kody kontekstów, w których wystąpił problem. |
-| `attributes` | Atrybuty tej encji, których dotyczy naruszenie, np. obie strony porównania lub relacja kontroli `linked`. |
-| `severity` | Dla reguł: waga reguły. |
-| `transition` | Dla warunków i chronionych przejść: `attribute_code`, `from` i `to`. |
-| `evidence` | Szczegóły, np. porównywane wartości lub identyfikatory powiązanych rekordów, które nie przeszły kontroli. |
+Przy zapisie kontrole, warunki i egzekwowane reguły działają w tej kolejności, po JSON Schema, a zgłaszana jest tylko pierwsza grupa, która nie przeszła. Cztery błędy `422` wymieniają do 50 naruszeń w `error.details.violations`, każde z kodem `code`, komunikatem `message`, kontekstami `contexts`, w których wystąpiło, i atrybutami `attributes`, których dotyczy. Wszystkie pola opisuje [dokumentacja API](/pl/reference/api/#szczegóły-błędu).
 
 W aplikacji internetowej formularz edycji wymienia kontrole, które nie przeszły, wraz z kontekstami, i pokazuje każdy komunikat przy polach wymienionych w `attributes`. Komunikat przy polu znika, gdy je edytujesz. Klienci API otrzymują te same informacje w `attributes`. Aby usunąć problem, zmień te atrybuty w wymienionych kontekstach albo popraw powiązane lub wskazujące rekordy, o których mówi komunikat, i zapisz ponownie. Przy zmianie statusu sprawdź niespełnione warunki przez [punkt końcowy status-transitions](#warunki-przejść).
 
@@ -287,15 +300,9 @@ code = "document_revision"
 attributes = ["document", "revision_label"]
 ```
 
-Drugi klucz jest złożony: dokument może mieć tylko jedną wersję `B`, ale każdy dokument może mieć własną. Klucze mogą łączyć do ośmiu atrybutów skalarnych lub relacji z jednym celem.
+Drugi klucz jest złożony: dokument może mieć tylko jedną wersję `B`, ale każdy dokument może mieć własną. Domyślnie tekst jest porównywany bez względu na wielkość liter i nadmiarowe białe znaki, a encja bez którejś wartości klucza nie jest względem niego sprawdzana. Zapis powodujący konflikt zwraca `409 unique_key_conflict` z encją, która już ma tę wartość.
 
-- **Porównywanie.** Tekst jest przycinany, ciągi białych znaków stają się jedną spacją, a wielkość liter jest pomijana, więc `ABC-1` i ` abc-1 ` kolidują. Ustaw `case_sensitive = true`, aby porównywać tekst dokładnie. Liczby są porównywane według wartości, a relacje według powiązanej encji.
-- **Brakujące wartości.** Encja bez wartości któregoś atrybutu klucza nie jest sprawdzana względem tego klucza. Jeśli każda encja musi go mieć, oznacz atrybuty jako wymagane w `entity_schema`.
-- **Konteksty.** Domyślnie klucz porównuje wartości z kontekstu domyślnego. Przy `scope = "context"` porównuje wartości wyświetlane w każdym kontekście, także dziedziczone, więc np. slug może być unikalny w każdym rynku.
-- **Równoczesne zapisy.** Baza danych sprawdza klucz w trakcie zapisu. Jeśli dwie osoby zapiszą ten sam numer części w tym samym momencie, jeden zapis się powiedzie, a drugi otrzyma `409 unique_key_conflict` z konfliktową encją w `error.details.conflicting_entity_id`.
-- **Dodanie klucza później.** Publikacja wersji, która dodaje klucz, najpierw sprawdza istniejące encje. Duplikaty powodują błąd publikacji `409 unique_key_duplicates` z listą encji współdzielących każdą wartość. Od publikacji klucz obejmuje każdą encję schematu, także encje na starszych wersjach.
-
-Wszystkie opcje opisuje sekcja [Klucze unikalne](/pl/reference/blueprint/#klucze-unikalne).
+Zasady porównywania, klucze w poszczególnych kontekstach i to, co się dzieje po dodaniu klucza do schematu, który ma już encje, opisuje sekcja [Klucze unikalne](/pl/reference/blueprint/#klucze-unikalne).
 
 ## Walidacja a konteksty
 

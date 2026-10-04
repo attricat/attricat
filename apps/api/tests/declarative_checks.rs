@@ -435,12 +435,18 @@ async fn transition_conditions_block_and_explain_status_changes(pool: PgPool) {
     .await;
     let nc_url = format!("{base}/v1/entities/{}", nc["id"].as_str().unwrap());
 
+    // The documented controlled-records shape: one item per declared edge
+    // leaving the saved status.
     let options = get(&client, format!("{nc_url}/status-transitions")).await;
-    let closed = &options[0]["destinations"][0];
-    assert_eq!(options[0]["current"], "open");
-    assert_eq!(closed["to"], "closed");
+    let closed = options["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|edge| edge["to"] == "closed")
+        .unwrap();
+    assert_eq!(closed["from"], "open");
     assert_eq!(closed["allowed"], false);
-    assert_eq!(closed["reason"], "conditions_unmet");
+    assert_eq!(closed["denial_code"], "transition_conditions_unmet");
     assert_eq!(closed["unmet"].as_array().unwrap().len(), 2);
 
     let form = &nc;
@@ -556,12 +562,14 @@ async fn new_rule_predicates_open_and_resolve_findings(pool: PgPool) {
         ]),
     )
     .await;
+    // `unique` compares values as `[[unique_keys]]` do: trimmed, whitespace
+    // collapsed and case-insensitive.
     let second = entity(
         &client,
         &base,
         "rule_product",
         json!([
-            scalar("sku", json!("A-1")),
+            scalar("sku", json!("  a-1 ")),
             scalar("expires_on", json!("2999-01-01"))
         ]),
     )
@@ -651,6 +659,124 @@ async fn new_rule_predicates_open_and_resolve_findings(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!(open, 0);
+    server.abort();
+}
+
+const GALLERY: &str = r#"format_version = 1
+code = "gallery_item"
+name = "Gallery item"
+kind = "entity"
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["title"]
+[[attributes]]
+code = "title"
+value_type = "string"
+[[attributes]]
+code = "photo"
+value_type = "file"
+cardinality = "many"
+allowed_mime_groups = ["image"]
+allowed_extensions = ["png"]
+max_bytes = 1048576
+"#;
+
+#[sqlx::test]
+async fn predicates_see_file_values_and_explicit_empty_local_values(pool: PgPool) {
+    CatalogRepository::system(pool.clone())
+        .ensure_rule_permissions()
+        .await
+        .unwrap();
+    let (base, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let blueprint = create_blueprint(&client, &base, GALLERY).await;
+    let (status, french) = post(
+        &client,
+        format!("{base}/contexts"),
+        json!({"code": "gallery-fr", "data": {}}),
+    )
+    .await;
+    assert!(status.is_success(), "{french}");
+    let workspace_id: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
+    let repository = CatalogRepository::new(pool.clone(), workspace_id);
+    let mut ids = Vec::new();
+    for title in ["with photo", "photo removed in fr"] {
+        let item = entity(
+            &client,
+            &base,
+            "gallery_item",
+            json!([scalar("title", json!(title))]),
+        )
+        .await;
+        let id: Uuid = item["id"].as_str().unwrap().parse().unwrap();
+        let file_id = Uuid::new_v4();
+        sqlx::query("INSERT INTO files (id, workspace_id, original_filename, display_filename, mime_type, byte_size, sha256, original_key, status) VALUES ($1, $2, 'p.png', 'p.png', 'image/png', 7, $3, 'files/p.png', 'ready')")
+            .bind(file_id).bind(workspace_id).bind("0".repeat(64)).execute(&pool).await.unwrap();
+        repository
+            .link_file_to_attribute(id, "photo", None, file_id)
+            .await
+            .unwrap();
+        ids.push(id);
+    }
+    // An explicit empty local value (what removing every file in a context
+    // stores) must not reveal the photo inherited from default.
+    sqlx::query("INSERT INTO attribute_values (id, workspace_id, entity_id, attribute_id, context_id, active) SELECT gen_random_uuid(), e.workspace_id, e.id, a.id, $2, true FROM entities e JOIN attributes a ON a.blueprint_id = e.blueprint_id AND a.blueprint_version = e.blueprint_version AND a.code = 'photo' WHERE e.id = $1")
+        .bind(ids[1])
+        .bind(french["id"].as_str().unwrap().parse::<Uuid>().unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let (status, created) = create_rule(
+        &client,
+        &base,
+        &blueprint,
+        &rule(
+            "has-photo",
+            "type = \"required\"\nattribute_code = \"photo\"",
+            "",
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{created}");
+    publish_rule(&client, &base, &created).await;
+    let id = created["id"].as_str().unwrap();
+    let (status, body) = post(
+        &client,
+        format!("{base}/rules/{id}/versions/1/enable"),
+        json!({}),
+    )
+    .await;
+    assert!(status.is_success(), "{body}");
+    let (status, body) = post(
+        &client,
+        format!("{base}/rules/{id}/run-now"),
+        json!({"dry_run": false, "idempotency_key": "photos"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::ACCEPTED, "{body}");
+    drain_rule_tasks(&pool).await;
+    for _ in 0..100 {
+        let pending: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM rule_runs WHERE status NOT IN ('completed', 'dead_letter', 'cancelled'))",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        if !pending {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    let findings: Vec<(Uuid, Value)> = sqlx::query_as(
+        "SELECT entity_id, evidence FROM rule_findings WHERE state = 'open' ORDER BY entity_id",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(findings.len(), 1, "{findings:?}");
+    assert_eq!(findings[0].0, ids[1]);
+    assert_eq!(findings[0].1["contexts"], json!(["gallery-fr"]));
     server.abort();
 }
 

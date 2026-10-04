@@ -28,6 +28,10 @@ export const entityQueryKeys = {
   changes: (entityId: string) => ['entity-changes', entityId] as const,
   recordControls: (entityId: string) =>
     ['entity-record-controls', entityId] as const,
+  approvals: (entityId: string) =>
+    [...entityQueryKeys.recordControls(entityId), 'approvals'] as const,
+  retentionHolds: (entityId: string) =>
+    [...entityQueryKeys.recordControls(entityId), 'retention-holds'] as const,
   statusTransitions: (entityId: string, contextId: string | null) =>
     [
       ...entityQueryKeys.recordControls(entityId),

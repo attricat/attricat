@@ -600,6 +600,37 @@ async fn interactive_runs_are_authorized_per_entity_and_fail_closed(pool: sqlx::
         .await
         .unwrap();
     assert_eq!(operator.status(), StatusCode::OK);
+    assert_eq!(
+        operator.json::<Value>().await.unwrap()["initiated_by_me"],
+        false
+    );
+    // Extension frames ask for `scope=own`: an operator's frame cannot read,
+    // cancel or download another user's run.
+    for request in [
+        authenticated_client().get(format!("{base}/extension-runs/{viewer_run}?scope=own")),
+        authenticated_client().post(format!(
+            "{base}/extension-runs/{viewer_run}/cancel?scope=own"
+        )),
+        authenticated_client().get(format!(
+            "{base}/extension-runs/{viewer_run}/artifacts/{}/download?scope=own",
+            Uuid::new_v4()
+        )),
+    ] {
+        assert_eq!(
+            request.send().await.unwrap().status(),
+            StatusCode::NOT_FOUND
+        );
+    }
+    let own_scoped = client_for(viewer)
+        .get(format!("{base}/extension-runs/{viewer_run}?scope=own"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(own_scoped.status(), StatusCode::OK);
+    assert_eq!(
+        own_scoped.json::<Value>().await.unwrap()["initiated_by_me"],
+        true
+    );
     let own = client_for(viewer)
         .get(format!("{base}/extension-runs"))
         .send()
@@ -802,6 +833,64 @@ fn batch(key: &str, intents: Vec<ExtensionCatalogIntent>) -> ExtensionCatalogBat
         dry_run: false,
         intents,
     }
+}
+
+const TAG_CHECKED_BLUEPRINT: &str = r#"
+format_version = 1
+code = "tag_checked_item"
+name = "Tag checked item"
+kind = "entity"
+entity_schema = '''{
+  "x-attricat-checks": [
+    {"code": "not-blocked", "predicate": {"type": "missing_tag", "tag": "acme.docs:blocked"}}
+  ]
+}'''
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["title"]
+[[attributes]]
+code = "title"
+value_type = "string"
+"#;
+
+#[sqlx::test(migrations = "./migrations")]
+async fn annotation_tag_changes_run_tag_checks(pool: sqlx::PgPool) {
+    let repository = CatalogRepository::system(pool.clone())
+        .for_workspace(workspace())
+        .await
+        .unwrap();
+    let extension = repository.for_extension("acme.docs");
+    let blueprint = published_blueprint(&repository, TAG_CHECKED_BLUEPRINT).await;
+    let item = entity(&repository, blueprint, "Item").await;
+    let tag = |key: &str, tag: &str| ExtensionCatalogIntent::Annotate {
+        intent_key: key.into(),
+        entity_id: item,
+        add_tags: vec![tag.into()],
+        remove_tags: vec![],
+        set_metadata: Default::default(),
+        remove_metadata: vec![],
+        expected_revision: None,
+    };
+    let allowed = extension
+        .execute_extension_catalog_batch(batch("t1", vec![tag("t1", "reviewed")]))
+        .await
+        .unwrap();
+    assert_eq!(
+        allowed[0].status,
+        ExtensionCatalogIntentStatus::Applied,
+        "{allowed:?}"
+    );
+    let blocked = extension
+        .execute_extension_catalog_batch(batch("t2", vec![tag("t2", "blocked")]))
+        .await
+        .unwrap();
+    assert_eq!(blocked[0].status, ExtensionCatalogIntentStatus::Rejected);
+    let tags: Vec<String> = sqlx::query_scalar("SELECT system_tags FROM entities WHERE id = $1")
+        .bind(item)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(tags, ["acme.docs:reviewed"]);
 }
 
 #[sqlx::test(migrations = "./migrations")]

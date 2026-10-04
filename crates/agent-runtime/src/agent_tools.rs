@@ -84,64 +84,27 @@ pub enum ToolError {
     Repository(#[from] RepositoryError),
 }
 
-impl ToolError {
-    /// Stable code for the tool result. Controlled-record denials keep their
-    /// API codes so the agent can explain them instead of retrying blindly.
-    pub fn code(&self) -> &'static str {
-        match self {
-            Self::Forbidden => "forbidden",
-            Self::Repository(RepositoryError::RecordLocked { .. }) => "record_locked",
-            Self::Repository(RepositoryError::StatusTransitionForbidden(_)) => {
-                "status_transition_forbidden"
-            }
-            Self::Repository(RepositoryError::StatusSeparationOfDuties { .. }) => {
-                "status_separation_of_duties"
-            }
-            Self::Repository(RepositoryError::StatusPreconditionRequired) => {
-                "status_precondition_required"
-            }
-            _ => "tool_error",
-        }
-    }
-}
+const TOOL_ERROR: &str = "tool_error";
+const FORBIDDEN: &str = "forbidden";
 
-/// The provider-facing payload of a failed tool call. Declarative check
-/// failures use the API error code as `code` and add the API's
-/// `error.details` as `details`, so the agent can name the failed checks and
-/// the attributes or linked records to fix.
+/// The provider-facing payload of a failed tool call. Repository errors use
+/// the same code, message and `details` as the API's error body (see
+/// [`RepositoryError::describe`]), so the agent can name failed checks,
+/// conflicting entities, cycle paths and failing batch operations. Other tool
+/// failures use `forbidden` or `tool_error`.
 pub fn tool_error_payload(error: &ToolError) -> Value {
-    let mut payload = json!({"code":error.code(),"message":error.to_string()});
     let ToolError::Repository(error) = error else {
-        return payload;
+        let code = match error {
+            ToolError::Forbidden => FORBIDDEN,
+            _ => TOOL_ERROR,
+        };
+        return json!({"code":code,"message":error.to_string()});
     };
-    let violations =
-        |violations: &[crate::repository::CheckViolation]| json!({ "violations": violations });
-    let (code, details) = match error {
-        RepositoryError::EntityCheckFailed(items) => {
-            ("entity_check_failed", Some(violations(items)))
-        }
-        RepositoryError::TransitionConditionsUnmet(items) => {
-            ("transition_conditions_unmet", Some(violations(items)))
-        }
-        RepositoryError::RuleViolation(items) => ("rule_violation", Some(violations(items))),
-        RepositoryError::PublicationChecksFailed {
-            context,
-            violations: items,
-        } => (
-            "publication_checks_failed",
-            Some(json!({ "violations": items, "context": context })),
-        ),
-        RepositoryError::RuleDryRunRequired => ("rule_dry_run_required", None),
-        RepositoryError::RuleHasExistingViolations(count) => (
-            "rule_has_existing_violations",
-            Some(json!({ "existing_violations": count })),
-        ),
-        _ => return payload,
-    };
-    payload["code"] = json!(code);
-    if let Some(mut details) = details {
-        // Evidence can list many related entity IDs; keep the payload within
-        // the tool result bound by dropping it before anything else.
+    let description = error.describe();
+    let mut payload = json!({"code":description.code,"message":description.message});
+    if let Some(mut details) = description.details {
+        // Check evidence can list many related entity IDs; keep the payload
+        // within the tool result bound by dropping it before anything else.
         if details.to_string().len() > MAX_TOOL_RESULT_BYTES / 2
             && let Some(items) = details["violations"].as_array_mut()
         {
@@ -300,7 +263,7 @@ pub fn definitions() -> Vec<ToolDefinition> {
         ),
         definition(
             "apply_entity_batch",
-            "Apply several entity changes atomically as one approval: every operation commits or none does. Use it whenever a business operation changes more than one entity, such as releasing a new revision and superseding the previous one, or recording a movement and updating the item's current location. Operations run in order; each is {op:'create', entity_id?:'new UUID you choose so later operations can link to it', blueprint:{code, version?}, values?, system_tags?, system_metadata?}, {op:'update', entity_id, expected_updated_at?, values?, relationships?, remove_values?, system_tags?, system_metadata?}, or {op:'delete', entity_id, expected_updated_at?}, with values and relationships shaped as in create_entity and replace_entity_relationships. Status changes are ordinary values and need expected_updated_at from get_entity. Each entity may appear once, in at most 50 operations. Inspect every entity first. If an operation fails, nothing is applied and the error names the operation index. This change requires approval.",
+            "Apply several entity changes atomically as one approval: every operation commits or none does. Use it whenever a business operation changes more than one entity, such as releasing a new revision and superseding the previous one, or recording a movement and updating the item's current location. Operations run in order; each is {op:'create', entity_id?:'new UUID you choose so later operations can link to it', blueprint:{code, version?}, values?, system_tags?, system_metadata?}, {op:'update', entity_id, expected_updated_at?, values?, relationships?, remove_values?, system_tags?, system_metadata?}, or {op:'delete', entity_id, expected_updated_at?}, with values and relationships shaped as in create_entity and replace_entity_relationships. An update that changes a status attribute needs expected_updated_at from get_entity; this is the only tool that can change a status. Each entity may appear once, in at most 50 operations. Inspect every entity first. If an operation fails, nothing is applied and the error names the operation index. This change requires approval.",
             json!({"type":"object","required":["operations"],"properties":{"operations":{"type":"array","minItems":1,"maxItems":crate::model::MAX_ENTITY_BATCH_OPERATIONS,"items":{"type":"object","required":["op"],"properties":{
                 "op":{"type":"string","enum":["create","update","delete"]},
                 "entity_id":{"type":"string","format":"uuid"},
@@ -2687,7 +2650,6 @@ mod tests {
         let payload = super::tool_error_payload(&ToolError::Repository(
             RepositoryError::TransitionConditionsUnmet(vec![violation.clone()]),
         ));
-        assert_eq!(payload["code"], "tool_error");
         assert_eq!(payload["code"], "transition_conditions_unmet");
         assert_eq!(
             payload["details"]["violations"][0]["attributes"],
@@ -2725,7 +2687,63 @@ mod tests {
         );
 
         let payload = super::tool_error_payload(&ToolError::Forbidden);
+        assert_eq!(payload["code"], "forbidden");
+        let payload =
+            super::tool_error_payload(&ToolError::InvalidArguments("entity_id is required".into()));
         assert_eq!(payload["code"], "tool_error");
+    }
+
+    #[test]
+    fn structural_and_batch_errors_keep_their_api_code_and_details() {
+        use crate::repository::{CheckSource, CheckViolation, RepositoryError};
+        let conflicting = uuid::Uuid::new_v4();
+        let payload =
+            super::tool_error_payload(&ToolError::Repository(RepositoryError::UniqueKeyConflict {
+                key: "sku".into(),
+                context: "default".into(),
+                values: json!({"sku": "a-1"}),
+                conflicting_entity_id: conflicting,
+            }));
+        assert_eq!(payload["code"], "unique_key_conflict");
+        assert_eq!(
+            payload["details"]["conflicting_entity_id"],
+            json!(conflicting)
+        );
+
+        let path = vec![uuid::Uuid::new_v4(), uuid::Uuid::new_v4()];
+        let payload =
+            super::tool_error_payload(&ToolError::Repository(RepositoryError::RelationshipCycle {
+                attribute: "parent".into(),
+                path: path.clone(),
+            }));
+        assert_eq!(payload["code"], "relationship_cycle");
+        assert_eq!(payload["details"]["path"], json!(path));
+
+        // A failed batch operation keeps the wrapped error's code and
+        // violations, plus the failing operation index.
+        let violation = CheckViolation {
+            source: CheckSource::EntityCheck,
+            code: "has-owner".into(),
+            message: "An owner is required".into(),
+            contexts: vec!["default".into()],
+            attributes: vec!["owner".into()],
+            severity: None,
+            transition: None,
+            evidence: json!({}),
+        };
+        let payload = super::tool_error_payload(&ToolError::Repository(
+            RepositoryError::EntityBatchOperationFailed {
+                index: 1,
+                entity_id: None,
+                source: Box::new(RepositoryError::EntityCheckFailed(vec![violation])),
+            },
+        ));
+        assert_eq!(payload["code"], "entity_check_failed");
+        assert_eq!(payload["details"]["operation_index"], 1);
+        assert_eq!(
+            payload["details"]["violations"][0]["attributes"],
+            json!(["owner"])
+        );
     }
 
     #[test]

@@ -53,7 +53,8 @@ Można zastosować tylko gotowe plany. Plan wygasa po 24 godzinach, jeśli jego 
 ### Reguły, przepływy pracy i zapisane wyszukiwania
 
 - **Reguły** są tworzone dla Schematów pakietu i publikowane. Podsumowanie planu pokazuje, które zostaną włączone; pozostałe są wyłączone, dopóki ich nie włączysz. Reguły wymagają opublikowanych Schematów, więc `--blueprint-publication draft` blokuje regułę dla nowo tworzonego Schematu.
-- **Przepływy pracy** są publikowane i włączane tylko wtedy, gdy przewiduje to pakiet.
+- Reguła, która **odrzuca nieprawidłowe zmiany**, nie jest włączana dla Schematu wskazanego przez Ciebie lub użytego ponownie, ponieważ ten Schemat może już mieć encje. Zostaje zainstalowana jako wyłączona, a podsumowanie planu pokazuje `enable_deferred_reason: enforcing_rule_requires_dry_run`. Uruchom regułę w trybie próbnym, przejrzyj wyniki i włącz ją tak jak każdą inną regułę.
+- **Przepływy pracy** są zawsze publikowane. Podsumowanie planu pokazuje, które zostaną włączone; pozostałe są wyłączone, dopóki ich nie włączysz.
 - **Zapisane wyszukiwania** są udostępniane całemu obszarowi roboczemu i pojawiają się na liście **Zapisane wyszukiwania** w Przeglądarce encji. Właścicielem wyszukiwań utworzonych przez stosowany plan jesteś Ty.
 
 Kody nowych reguł i przepływów pracy zaczynają się od Twojego prefiksu. Włączone reguły i przepływy pracy reagują na późniejsze zmiany, także na encje przykładowe tworzone przez ten sam plan, dlatego przejrzyj je przed zastosowaniem. Po instalacji są zwykłymi zasobami, którymi zarządzasz jak zwykle.
@@ -91,7 +92,9 @@ acli solution-pack plan --file pack.tar.zst --prefix example \
   --map-context contexts/poland=PL
 ```
 
-Wskazany kontekst jest używany bez zmian. Jeśli pakiet oczekuje, że będzie kanałem, istniejący zgodny kanał ma status `satisfied`, a brakujący zostanie utworzony. Kanał wyłączony, gdy pakiet oczekuje włączonego (lub odwrotnie), powoduje konflikt `publication_channel_mismatch`: zmień kanał samodzielnie albo nie wskazuj tego kontekstu. Reguły, zapisane wyszukiwania i wartości przykładowe przypisane do kontekstu pakietu używają utworzonego lub wskazanego kontekstu.
+Kanał może wymagać spełnienia niektórych reguł pakietu lub poprawności encji, zanim encja zostanie w nim opublikowana; podsumowanie planu je wymienia (`required_rule_codes`, `require_valid_entity`). Kanał jest planowany po tych regułach.
+
+Wskazany kontekst jest używany bez zmian. Jeśli pakiet oczekuje, że będzie kanałem, istniejący kanał o dokładnie takich samych ustawieniach, łącznie z wymaganymi sprawdzeniami, ma status `satisfied`, a brakujący zostanie utworzony. Kanał o innych ustawieniach, na przykład wyłączony, gdy pakiet oczekuje włączonego, powoduje konflikt `publication_channel_mismatch`: zmień kanał samodzielnie albo nie wskazuj tego kontekstu. Reguły, zapisane wyszukiwania i wartości przykładowe przypisane do kontekstu pakietu używają utworzonego lub wskazanego kontekstu.
 
 ### Wymagane pakiety
 

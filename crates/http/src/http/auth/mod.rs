@@ -11,7 +11,7 @@ use super::{AppState, audit, error::ApiError};
 use crate::{
     account::{SessionDigest, SessionSecret},
     constants::SESSION_COOKIE,
-    repository::CatalogRepository,
+    repository::{AuthorizationActor, CatalogRepository},
 };
 
 mod policy;
@@ -200,46 +200,41 @@ pub(super) async fn authorize(
         {
             return Err(ApiError::forbidden());
         }
+        let actor = AuthorizationActor {
+            user_id: principal,
+            token_id,
+        };
         // Ordinary permission evaluation already checks the live user,
         // membership and workspace; do not repeat those database round trips.
-        if !handler_authorized
-            && !state
+        // Handler-authorized routes resolve their target later and only need
+        // the token's permission here.
+        let permitted = if handler_authorized {
+            state
                 .repository
-                .is_authorized(
-                    principal,
+                .principal_token_permits(actor, workspace, policy.permission)
+                .await?
+        } else {
+            state
+                .repository
+                .principal_may(
+                    actor,
                     workspace,
                     policy.permission,
                     target_id,
                     target_code.as_deref(),
                 )
                 .await?
-        {
+        };
+        if !permitted {
             return Err(ApiError::forbidden());
         }
-        if let Some(token_id) = token_id
+        if let Some(extra) = policy::additional_permission(matched)
             && !state
                 .repository
-                .personal_api_token_permits(token_id, policy.permission)
+                .principal_may(actor, workspace, extra, None, None)
                 .await?
         {
             return Err(ApiError::forbidden());
-        }
-        if let Some(extra) = policy::additional_permission(matched) {
-            if !state
-                .repository
-                .is_authorized(principal, workspace, extra, None, None)
-                .await?
-            {
-                return Err(ApiError::forbidden());
-            }
-            if let Some(token_id) = token_id
-                && !state
-                    .repository
-                    .personal_api_token_permits(token_id, extra)
-                    .await?
-            {
-                return Err(ApiError::forbidden());
-            }
         }
     } else if matches!(
         matched,

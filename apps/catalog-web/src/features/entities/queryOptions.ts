@@ -1,5 +1,10 @@
 import { queryOptions } from '@tanstack/react-query';
-import { getEntityPublicationReadiness, getEntityPublications } from './api';
+import {
+  getEntityApprovals,
+  getEntityPublicationReadiness,
+  getEntityPublications,
+  getEntityRetentionHolds,
+} from './api';
 import { entityQueryKeys } from './queryKeys';
 
 // Revisited virtual rows reuse their result; mutations explicitly invalidate it.
@@ -17,4 +22,16 @@ export const entityPublicationReadinessOptions = (entityId: string) =>
   queryOptions({
     queryKey: entityQueryKeys.publicationReadiness(entityId),
     queryFn: ({ signal }) => getEntityPublicationReadiness(entityId, signal),
+  });
+
+export const entityApprovalsOptions = (entityId: string) =>
+  queryOptions({
+    queryKey: entityQueryKeys.approvals(entityId),
+    queryFn: ({ signal }) => getEntityApprovals(entityId, signal),
+  });
+
+export const entityRetentionHoldsOptions = (entityId: string) =>
+  queryOptions({
+    queryKey: entityQueryKeys.retentionHolds(entityId),
+    queryFn: ({ signal }) => getEntityRetentionHolds(entityId, signal),
   });

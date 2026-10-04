@@ -261,7 +261,6 @@
       "approvalVoided": "Unieważnione przez zmianę treści",
       "approvalSuperseded": "Zastąpione",
       "approvedBy": "Zatwierdził(a): {{user}}",
-      "system": "system",
       "voidedOn": "Unieważniono",
       "returnedTo": "powrót do statusu {{status}}",
       "digest": "Skrót treści {{digest}}",
@@ -427,7 +426,8 @@
     "publicationChecks": "Kontrole publikacji",
     "requireValidEntity": "Wymagaj poprawnej encji",
     "requiredRules": "Wymagane reguły",
-    "requiredRulesHelp": "Kody włączonych reguł, które muszą być spełnione przed publikacją (najwyżej {{max}})."
+    "requiredRulesHelp": "Kody włączonych reguł, które muszą być spełnione przed publikacją (najwyżej {{max}}).",
+    "requiredRulesLimit": "Kanał może wymagać najwyżej {{max}} reguł. Usuń jedną, zanim dodasz kolejną."
   },
   "blueprints": {
     "blueprint": "Schemat",

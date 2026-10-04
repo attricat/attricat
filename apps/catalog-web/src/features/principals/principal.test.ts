@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Attribute } from '../entities/api';
 import {
   assignableOptions,
+  directoryOptions,
   parsePrincipalReference,
   principalConfiguration,
   resolvePrincipal,
@@ -82,5 +83,22 @@ describe('user-or-team assignments', () => {
     expect(
       assignableOptions(directory, usersOnly).map((option) => option.value),
     ).toEqual([`user:${userId}`]);
+  });
+
+  it('lists former members and deleted teams for filtering', () => {
+    const config = principalConfiguration(assignee(['user', 'team']))!;
+    expect(
+      directoryOptions(directory, config).map((option) => option.value),
+    ).toEqual([
+      `user:${userId}`,
+      `user:${formerId}`,
+      `team:${teamId}`,
+      `team:${deletedTeamId}`,
+    ]);
+    const teamsOnly = principalConfiguration(assignee(['team']))!;
+    expect(
+      directoryOptions(directory, teamsOnly).map((option) => option.value),
+    ).toEqual([`team:${teamId}`, `team:${deletedTeamId}`]);
+    expect(directoryOptions(undefined, config)).toEqual([]);
   });
 });

@@ -9,6 +9,7 @@ use super::{
     extractors::{ApiJson, ApiPath, ApiQuery},
 };
 use crate::repository::SavedView;
+use catalog_validation::saved_search;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -35,164 +36,12 @@ pub(super) struct LinkInput {
     state: Value,
 }
 
-fn valid_attribute_filter(filter: &Value) -> bool {
-    filter.as_object().is_some_and(|filter| {
-        !filter
-            .keys()
-            .any(|key| !["field", "operator", "value"].contains(&key.as_str()))
-            && filter
-                .get("field")
-                .and_then(Value::as_str)
-                .is_some_and(|field| !field.is_empty())
-            && matches!(
-                filter.get("operator").and_then(Value::as_str),
-                Some("eq" | "contains" | "starts_with" | "gt" | "gte" | "lt" | "lte")
-            )
-            && filter
-                .get("value")
-                .is_some_and(|value| value.is_string() || value.is_number() || value.is_boolean())
-    })
-}
-
-fn valid_relationship_facet(facet: &Value) -> bool {
-    facet.as_object().is_some_and(|facet| {
-        !facet
-            .keys()
-            .any(|key| !["field", "selectedIds", "targetBlueprint"].contains(&key.as_str()))
-            && facet
-                .get("field")
-                .and_then(Value::as_str)
-                .is_some_and(|field| !field.is_empty())
-            && facet.get("selectedIds").is_none_or(|ids| {
-                ids.as_array().is_some_and(|ids| {
-                    ids.len() <= 100
-                        && ids
-                            .iter()
-                            .all(|id| id.as_str().is_some_and(|id| Uuid::parse_str(id).is_ok()))
-                })
-            })
-            && facet.get("targetBlueprint").is_none_or(Value::is_string)
-    })
-}
-
 fn validate_state(kind: &str, state: &Value) -> Result<(), ApiError> {
-    if kind != "explorer_search" {
-        return Err(ApiError::invalid_input(
-            "unsupported saved view kind".to_owned(),
-        ));
-    }
-    let bytes = serde_json::to_vec(state)
-        .map_err(|_| ApiError::invalid_input("invalid state".to_owned()))?;
-    if bytes.len() > 32_768 {
-        return Err(ApiError::invalid_input(
-            "search state exceeds 32 KiB".to_owned(),
-        ));
-    }
-    let object = state
-        .as_object()
-        .ok_or_else(|| ApiError::invalid_input("search state must be an object".to_owned()))?;
-    const KEYS: &[&str] = &[
-        "blueprint",
-        "version",
-        "allVersions",
-        "query",
-        "context",
-        "locked",
-        "sort",
-        "relationshipFacets",
-        "attributeFilters",
-    ];
-    if object.keys().any(|key| !KEYS.contains(&key.as_str()))
-        || !object
-            .get("blueprint")
-            .and_then(Value::as_str)
-            .is_some_and(|s| !s.trim().is_empty() && s.len() <= 256)
-    {
-        return Err(ApiError::invalid_input(
-            "invalid Explorer search state".to_owned(),
-        ));
-    }
-    if let Some(filters) = object.get("attributeFilters") {
-        let filters = filters.as_array().ok_or_else(|| {
-            ApiError::invalid_input("attributeFilters must be an array".to_owned())
-        })?;
-        if filters.len() > 20 || !filters.iter().all(valid_attribute_filter) {
-            return Err(ApiError::invalid_input(
-                "invalid attributeFilters".to_owned(),
-            ));
-        }
-    }
-    if let Some(facets) = object.get("relationshipFacets") {
-        let facets = facets.as_array().ok_or_else(|| {
-            ApiError::invalid_input("relationshipFacets must be an array".to_owned())
-        })?;
-        if facets.len() > 20 || !facets.iter().all(valid_relationship_facet) {
-            return Err(ApiError::invalid_input(
-                "invalid relationshipFacets".to_owned(),
-            ));
-        }
-    }
-    if object
-        .get("version")
-        .is_some_and(|v| v.as_u64().is_none_or(|v| v == 0))
-        || ["allVersions", "locked"]
-            .iter()
-            .any(|k| object.get(*k).is_some_and(|v| !v.is_boolean()))
-        || ["query", "context"].iter().any(|k| {
-            object
-                .get(*k)
-                .is_some_and(|v| v.as_str().is_none_or(str::is_empty))
-        })
-        || object.get("sort").is_some_and(|v| {
-            v.as_object().is_none_or(|v| {
-                v.len() != 2
-                    || v.get("field")
-                        .and_then(Value::as_str)
-                        .is_none_or(str::is_empty)
-                    || !matches!(
-                        v.get("direction").and_then(Value::as_str),
-                        Some("asc" | "desc")
-                    )
-            })
-        })
-    {
-        return Err(ApiError::invalid_input(
-            "invalid Explorer search state".to_owned(),
-        ));
-    }
-    Ok(())
+    saved_search::validate_state(kind, state).map_err(ApiError::invalid_input)
 }
 
 fn normalized_state(state: &Value) -> Value {
-    let mut state = state.clone();
-    let object = state
-        .as_object_mut()
-        .expect("validated search state is an object");
-    for key in ["blueprint", "query", "context"] {
-        if let Some(Value::String(value)) = object.get_mut(key) {
-            *value = value.trim().to_owned();
-        }
-    }
-    for key in ["allVersions", "locked"] {
-        if object.get(key) == Some(&Value::Bool(false)) {
-            object.remove(key);
-        }
-    }
-    for key in ["attributeFilters", "relationshipFacets"] {
-        if object
-            .get(key)
-            .is_some_and(|value| value.as_array().is_some_and(Vec::is_empty))
-        {
-            object.remove(key);
-        }
-    }
-    if object.get("context").and_then(Value::as_str) == Some("default") {
-        object.remove("context");
-    }
-    if object.get("query").and_then(Value::as_str) == Some("") {
-        object.remove("query");
-    }
-    state
+    saved_search::normalize_state(state)
 }
 
 fn validate_named(input: &ViewInput) -> Result<(&str, Option<&str>), ApiError> {
@@ -329,18 +178,25 @@ mod tests {
             "relationshipFacets": [{"field": "brand", "selectedIds": [Uuid::new_v4()]}],
         });
         assert!(validate_state("explorer_search", &state).is_ok());
-        assert!(valid_relationship_facet(&json!({"field": "brand"})));
-        assert!(!valid_attribute_filter(
-            &json!({"field": "name", "operator": "eq"})
-        ));
-        assert!(!valid_relationship_facet(
-            &json!({"field": "brand", "selectedIds": ["invalid"]})
-        ));
-        assert!(!valid_relationship_facet(
-            &json!({"field": "brand", "selectedIds": "invalid"})
-        ));
-        assert!(!valid_relationship_facet(
-            &json!({"field": "brand", "unexpected": true})
-        ));
+        for facet in [
+            json!({"field": "brand", "selectedIds": ["invalid"]}),
+            json!({"field": "brand", "selectedIds": "invalid"}),
+            json!({"field": "brand", "unexpected": true}),
+        ] {
+            assert!(
+                validate_state(
+                    "explorer_search",
+                    &json!({"blueprint": "product", "relationshipFacets": [facet]})
+                )
+                .is_err()
+            );
+        }
+        assert!(
+            validate_state(
+                "explorer_search",
+                &json!({"blueprint": "product", "attributeFilters": [{"field": "name", "operator": "eq"}]})
+            )
+            .is_err()
+        );
     }
 }

@@ -27,6 +27,10 @@ import {
   updateEntityRequestSchema,
   entityPublicationStatusSchema,
   entityPublicationReadinessSchema,
+  entityApprovalSchema,
+  itemsResponseSchema,
+  retentionHoldSchema,
+  statusTransitionAccessSchema,
   uuidSchema,
 } from './schemas';
 
@@ -38,6 +42,7 @@ export type {
   CheckViolation,
   ComponentReference,
   Entity,
+  EntityApproval,
   EntityAuditChange,
   EntityFormResponse,
   EntityMigrationPreview,
@@ -51,11 +56,17 @@ export type {
   NewAttributeValue,
   RelationshipTargets,
   ResolvedEntityPreview,
+  RetentionHold,
+  StatusTransitionAccess,
   ViewDefinition,
   ViewNode,
 } from './schemas';
 
 export { ApiRequestError } from '../../api/request';
+
+/** Path of one entity in the versioned entity API. */
+const entityPath = (id: string) =>
+  `/api/v1/entities/${encodeURIComponent(uuidSchema.parse(id))}`;
 
 export type SearchEntitiesOptions = {
   blueprint: string;
@@ -164,14 +175,12 @@ export const getEntityChanges = (id: string, offset: number) =>
       next_offset: z.number().int().nonnegative().nullable(),
     }),
   );
-export const getEntityForm = (id: string, signal?: AbortSignal) => {
-  const entityId = uuidSchema.parse(id);
-  return request(
-    `/api/v1/entities/${encodeURIComponent(entityId)}`,
+export const getEntityForm = (id: string, signal?: AbortSignal) =>
+  request(
+    entityPath(id),
     entityFormResponseSchema,
     signal === undefined ? undefined : { signal },
   );
-};
 export const getIncomingRelationships = (
   id: string,
   relationships: { source_blueprint: string; field: string }[],
@@ -179,7 +188,7 @@ export const getIncomingRelationships = (
   cursor: string | null,
 ) =>
   request(
-    `/api/v1/entities/${encodeURIComponent(uuidSchema.parse(id))}/incoming-relationships`,
+    `${entityPath(id)}/incoming-relationships`,
     incomingRelationshipsPageSchema,
     {
       method: 'POST',
@@ -220,32 +229,24 @@ export const deleteEntity = (id: string) =>
   );
 
 export const duplicateEntity = (id: string) =>
-  request(
-    `/api/v1/entities/${encodeURIComponent(uuidSchema.parse(id))}/duplicate`,
-    entitySchema,
-    { method: 'POST' },
-  );
+  request(`${entityPath(id)}/duplicate`, entitySchema, { method: 'POST' });
 
 export const updateEntity = (
   id: string,
   input: z.input<typeof updateEntityRequestSchema>,
 ) => {
-  const entityId = uuidSchema.parse(id);
+  const path = entityPath(id);
   const payload = updateEntityRequestSchema.parse(input);
-  return request(
-    `/api/v1/entities/${encodeURIComponent(entityId)}`,
-    entitySchema,
-    {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    },
-  );
+  return request(path, entitySchema, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
 };
 
 export const getEntityPublications = (id: string, signal?: AbortSignal) =>
   request(
-    `/api/v1/entities/${encodeURIComponent(uuidSchema.parse(id))}/publications`,
+    `${entityPath(id)}/publications`,
     z.array(entityPublicationStatusSchema),
     signal === undefined ? undefined : { signal },
   );
@@ -255,38 +256,31 @@ export const getEntityPublicationReadiness = (
   signal?: AbortSignal,
 ) =>
   request(
-    `/api/v1/entities/${encodeURIComponent(uuidSchema.parse(id))}/publications/readiness`,
+    `${entityPath(id)}/publications/readiness`,
     z.array(entityPublicationReadinessSchema),
     signal === undefined ? undefined : { signal },
   );
 export const publishEntity = (id: string, contextId: string) =>
-  request(
-    `/api/v1/entities/${encodeURIComponent(uuidSchema.parse(id))}/publications`,
-    entityPublicationStatusSchema,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ context_id: uuidSchema.parse(contextId) }),
-    },
-  );
+  request(`${entityPath(id)}/publications`, entityPublicationStatusSchema, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ context_id: uuidSchema.parse(contextId) }),
+  });
 export const publishEntityAllChannels = (id: string) =>
   request(
-    `/api/v1/entities/${encodeURIComponent(uuidSchema.parse(id))}/publications/publish-all`,
+    `${entityPath(id)}/publications/publish-all`,
     z.array(entityPublicationStatusSchema),
     { method: 'POST' },
   );
 export const unpublishEntity = (id: string, contextId: string) =>
-  requestNoContent(
-    `/api/v1/entities/${encodeURIComponent(uuidSchema.parse(id))}/publications/unpublish`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ context_id: uuidSchema.parse(contextId) }),
-    },
-  );
+  requestNoContent(`${entityPath(id)}/publications/unpublish`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ context_id: uuidSchema.parse(contextId) }),
+  });
 export const previewEntityMigration = (id: string) =>
   request(
-    `/api/v1/entities/${encodeURIComponent(uuidSchema.parse(id))}/blueprint-migration/preview`,
+    `${entityPath(id)}/blueprint-migration/preview`,
     entityMigrationPreviewSchema,
     { method: 'POST' },
   );
@@ -295,19 +289,45 @@ export const migrateEntity = (
   id: string,
   input: z.input<typeof migrateEntityRequestSchema>,
 ) => {
-  const entityId = uuidSchema.parse(id);
+  const path = entityPath(id);
   const { expected_updated_at, ...payload } =
     migrateEntityRequestSchema.parse(input);
   const query = expected_updated_at
     ? `?${new URLSearchParams({ expected_updated_at })}`
     : '';
-  return request(
-    `/api/v1/entities/${encodeURIComponent(entityId)}/blueprint-migration${query}`,
-    entitySchema,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    },
-  );
+  return request(`${path}/blueprint-migration${query}`, entitySchema, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
 };
+
+/** Declared edges from the saved status and whether the caller may take them. */
+export const getStatusTransitions = (
+  id: string,
+  contextId: string | null,
+  signal?: AbortSignal,
+) =>
+  request(
+    `${entityPath(id)}/status-transitions${
+      contextId
+        ? `?context_id=${encodeURIComponent(uuidSchema.parse(contextId))}`
+        : ''
+    }`,
+    itemsResponseSchema(statusTransitionAccessSchema),
+    signal === undefined ? undefined : { signal },
+  );
+
+export const getEntityApprovals = (id: string, signal?: AbortSignal) =>
+  request(
+    `${entityPath(id)}/approvals`,
+    itemsResponseSchema(entityApprovalSchema),
+    signal === undefined ? undefined : { signal },
+  );
+
+export const getEntityRetentionHolds = (id: string, signal?: AbortSignal) =>
+  request(
+    `${entityPath(id)}/retention-holds`,
+    itemsResponseSchema(retentionHoldSchema),
+    signal === undefined ? undefined : { signal },
+  );

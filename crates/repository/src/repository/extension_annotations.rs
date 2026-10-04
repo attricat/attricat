@@ -478,25 +478,10 @@ impl CatalogRepository {
             });
         }
         let prefix = tag_prefix(extension_id);
+        let qualify = |tags: &[String]| -> Vec<String> {
+            tags.iter().map(|tag| format!("{prefix}{tag}")).collect()
+        };
         let mut tags = entity.system_tags.clone();
-        let removed_tags = patch
-            .remove_tags
-            .iter()
-            .filter(|tag| tags.contains(&format!("{prefix}{tag}")))
-            .cloned()
-            .collect::<Vec<_>>();
-        tags.retain(|tag| {
-            !tag.strip_prefix(&prefix)
-                .is_some_and(|local| patch.remove_tags.iter().any(|removed| removed == local))
-        });
-        let mut added_tags = Vec::new();
-        for tag in &patch.add_tags {
-            let qualified = format!("{prefix}{tag}");
-            if !tags.contains(&qualified) {
-                tags.push(qualified);
-                added_tags.push(tag.clone());
-            }
-        }
         let mut metadata = entity
             .system_metadata
             .as_object()
@@ -517,29 +502,29 @@ impl CatalogRepository {
                 ));
             }
         };
-        let mut set_keys = Vec::new();
-        for (key, value) in &patch.set_metadata {
-            if namespace.get(key) != Some(value) {
-                set_keys.push(key.clone());
-            }
-            namespace.insert(key.clone(), value.clone());
-        }
-        let removed_keys = patch
-            .remove_metadata
-            .iter()
-            .filter(|key| namespace.remove(*key).is_some())
-            .cloned()
-            .collect::<Vec<_>>();
+        let changes = entity_commands::apply_tag_metadata_patch(
+            &mut tags,
+            &mut namespace,
+            &entity_commands::TagMetadataPatch {
+                add_tags: qualify(&patch.add_tags),
+                remove_tags: qualify(&patch.remove_tags),
+                set_metadata: patch.set_metadata.clone(),
+                remove_metadata: patch.remove_metadata.clone(),
+            },
+        );
+        let local = |tags: Vec<String>| -> Vec<String> {
+            tags.into_iter()
+                .map(|tag| tag[prefix.len()..].to_owned())
+                .collect()
+        };
+        let added_tags = local(changes.added_tags.clone());
+        let removed_tags = local(changes.removed_tags.clone());
+        let (set_keys, removed_keys) = (changes.set_keys.clone(), changes.removed_keys.clone());
         if !namespace.is_empty() {
             metadata.insert(extension_id.to_owned(), Value::Object(namespace));
         }
         let metadata = Value::Object(metadata);
-        if added_tags.is_empty()
-            && removed_tags.is_empty()
-            && set_keys.is_empty()
-            && removed_keys.is_empty()
-            && replaced_value.is_none()
-        {
+        if changes.is_empty() && replaced_value.is_none() {
             return Ok(revision);
         }
         entity_commands::validate_system_tag_update(&entity.system_tags, &tags)?;
@@ -555,6 +540,10 @@ impl CatalogRepository {
             .bind(self.workspace_id.0)
             .execute(&mut **transaction)
             .await?;
+        // Tags are record data for declarative checks and enforcing rules.
+        if !changes.added_tags.is_empty() || !changes.removed_tags.is_empty() {
+            self.enforce_tag_checks(transaction, &entity).await?;
+        }
         let next_revision = revision + 1;
         sqlx::query(
             "INSERT INTO entity_extension_annotation_revisions(workspace_id,entity_id,extension_id,revision) VALUES($1,$2,$3,$4) ON CONFLICT (workspace_id,entity_id,extension_id) DO UPDATE SET revision=EXCLUDED.revision, updated_at=now()",

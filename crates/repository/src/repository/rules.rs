@@ -271,9 +271,29 @@ impl CatalogRepository {
         version: i64,
         options: crate::model::EnableRule,
     ) -> Result<Rule, RepositoryError> {
-        let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
-        let target: Option<(serde_json::Value, Uuid, i64)> = sqlx::query_as("SELECT compiled_plan,blueprint_id,blueprint_version FROM rules WHERE workspace_id=$1 AND id=$2 AND version=$3 AND status='published'").bind(ws).bind(id).bind(version).fetch_optional(&mut *tx).await?;
+        self.ensure_rule_enable_allowed(&mut tx, id, version, options.accept_existing_violations)
+            .await?;
+        self.enable_rule_in_transaction(&mut tx, id, version)
+            .await?;
+        self.commit_mutation(tx).await?;
+        self.get_rule(id)
+            .await?
+            .ok_or(RepositoryError::NotFound("rule"))
+    }
+    /// The enable gate shared by every path that enables a rule revision: it
+    /// must be published, and an enforcing rule whose blueprint revision has
+    /// live entities needs a completed full dry run of that revision; existing
+    /// violations must be accepted explicitly.
+    pub(super) async fn ensure_rule_enable_allowed(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        id: Uuid,
+        version: i64,
+        accept_existing_violations: bool,
+    ) -> Result<(), RepositoryError> {
+        let ws = self.workspace_id.0;
+        let target: Option<(serde_json::Value, Uuid, i64)> = sqlx::query_as("SELECT compiled_plan,blueprint_id,blueprint_version FROM rules WHERE workspace_id=$1 AND id=$2 AND version=$3 AND status='published'").bind(ws).bind(id).bind(version).fetch_optional(&mut **tx).await?;
         let Some((target_plan, blueprint_id, blueprint_version)) = target else {
             return Err(RepositoryError::RuleNotPublished);
         };
@@ -281,25 +301,20 @@ impl CatalogRepository {
             .map_err(|error| RepositoryError::InvalidRuleDefinition(error.to_string()))?;
         if target_rule.enforcement.is_some() {
             let has_entities: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM entities WHERE workspace_id=$1 AND blueprint_id=$2 AND blueprint_version=$3 AND deleted_at IS NULL)")
-                .bind(ws).bind(blueprint_id).bind(blueprint_version).fetch_one(&mut *tx).await?;
+                .bind(ws).bind(blueprint_id).bind(blueprint_version).fetch_one(&mut **tx).await?;
             if has_entities {
                 let violations: Option<i64> = sqlx::query_scalar("SELECT findings_created FROM rule_runs WHERE workspace_id=$1 AND rule_id=$2 AND rule_version=$3 AND dry_run AND scope_entity_id IS NULL AND status='completed' ORDER BY completed_at DESC LIMIT 1")
-                    .bind(ws).bind(id).bind(version).fetch_optional(&mut *tx).await?;
+                    .bind(ws).bind(id).bind(version).fetch_optional(&mut **tx).await?;
                 match violations {
                     None => return Err(RepositoryError::RuleDryRunRequired),
-                    Some(count) if count > 0 && !options.accept_existing_violations => {
+                    Some(count) if count > 0 && !accept_existing_violations => {
                         return Err(RepositoryError::RuleHasExistingViolations(count));
                     }
                     Some(_) => {}
                 }
             }
         }
-        self.enable_rule_in_transaction(&mut tx, id, version)
-            .await?;
-        self.commit_mutation(tx).await?;
-        self.get_rule(id)
-            .await?
-            .ok_or(RepositoryError::NotFound("rule"))
+        Ok(())
     }
     pub(super) async fn enable_rule_in_transaction(
         &self,
@@ -465,9 +480,27 @@ impl CatalogRepository {
             let requirements =
                 catalog_validation::predicate::Requirements::for_predicates([&compiled.predicate]);
             let mut dependents: Vec<Uuid> = Vec::new();
+            // The rule evaluates only entities pinned to its revision; their
+            // relationship may be a revision field or an additional attribute.
             for relationship in &requirements.linked {
-                dependents.extend(sqlx::query_scalar::<_, Uuid>("SELECT DISTINCT av.entity_id FROM attribute_values av JOIN attributes a ON a.id=av.attribute_id AND a.code=$3 AND a.blueprint_id=$4 AND a.blueprint_version=$5 JOIN entities e ON e.id=av.entity_id AND e.workspace_id=$1 AND e.deleted_at IS NULL AND e.blueprint_id=$4 AND e.blueprint_version=$5 WHERE av.relationship_target_entity_id=$2 AND av.active LIMIT $6")
-                    .bind(ws).bind(event.aggregate_id).bind(relationship).bind(blueprint_id).bind(blueprint_version).bind(MAX_DEPENDENTS).fetch_all(&mut **tx).await?);
+                dependents.extend(
+                    super::references::referencing_entity_ids(
+                        tx,
+                        ws,
+                        super::references::ReferenceQuery {
+                            target: event.aggregate_id,
+                            attribute_code: relationship,
+                            referrers: super::references::Referrers::Revision {
+                                blueprint_id,
+                                version: blueprint_version,
+                            },
+                            only: None,
+                            exclude_target: true,
+                            limit: MAX_DEPENDENTS,
+                        },
+                    )
+                    .await?,
+                );
             }
             for (blueprint_code, relationship) in &requirements.referenced_by {
                 if event_blueprint.as_deref() != Some(blueprint_code.as_str()) {

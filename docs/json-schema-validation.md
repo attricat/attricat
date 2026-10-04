@@ -43,16 +43,18 @@ entity_schema = '''
 ```
 
 The validation document contains scalar values in their native JSON form and
-relationships as arrays of target entity UUID strings. Missing values are
+relationships as sorted arrays of target entity UUID strings and files as
+ordered arrays of `{"id", "sha256"}` references (an explicitly emptied file
+value is `[]` and is not inherited). Missing values are
 omitted. It does not use preview labels or relationship display objects.
 
 ## Declarative Checks
 
 JSON Schema cannot compare two attributes or look at linked records. The
 entity schema's `x-attricat-checks` array adds named checks that use the
-declarative predicate engine shared with [rules](rules.md#predicates). A
-check *holds* when the data is acceptable; a write that leaves any check
-failing is rejected.
+declarative [predicate](#predicates) engine shared with status transition
+conditions, rules and publication channel gates. A check *holds* when the
+data is acceptable; a write that leaves any check failing is rejected.
 
 ```toml
 entity_schema = '''
@@ -94,19 +96,48 @@ entity_schema = '''
   rejected.
 - Checks are type-checked against the blueprint's attributes when the
   blueprint is saved; errors return `422 invalid_blueprint_definition`.
-- Predicate `type`s: `required`, `has_tag`, `missing_tag`, `compare`, `one_of`,
-  `relative_date`, `linked`, `referenced_by`, `all_of` and `any_of` (see
-  [Rules](rules.md#predicates) for every field). `stale`, `unique` and
+- Only synchronous-safe predicates are allowed: `stale`, `unique` and
   `acyclic` are rules-only and rejected here.
-- `compare` takes `attribute_code`, `op` (`eq`, `ne`, `lt`, `lte`, `gt`, `gte`,
-  `disjoint`) and exactly one of `other_attribute_code`, `value` or (inside
-  `linked`/`referenced_by` only) `subject_attribute_code`. Ordering is for
-  `number`, `integer`, `date` and `datetime`; strings and booleans use
-  `eq`/`ne`; relationships compare target sets with `eq`, `ne` and `disjoint`;
-  files cannot be compared. Write dates as `"2026-01-31"`.
+
+### Predicates
+
+A predicate *holds* when the data is acceptable. Predicates are tagged by
+`type`, unknown fields are rejected, and every predicate is type-checked
+against the blueprint revision's attributes when the blueprint or rule is
+saved (`422 invalid_blueprint_definition` or `invalid_rule_definition`).
+
+| `type` | Fields | Holds when |
+| --- | --- | --- |
+| `required` | `attribute_code` | The attribute has a value; a relationship has at least one target. |
+| `stale` | `attribute_code`, `max_age_seconds` (1–31536000) | The current value changed within the age limit. Rules only. |
+| `has_tag` / `missing_tag` | `tag` | The entity has / does not have the system tag. |
+| `compare` | `attribute_code`, `op`, exactly one of `other_attribute_code`, `subject_attribute_code`, `value` | The comparison is true. |
+| `one_of` | `attribute_code`, `values` (1–100) | The value is one of the listed values, such as status codes. Not for relationships or files. |
+| `relative_date` | `attribute_code`, `op` (`lt`, `lte`, `gt`, `gte`), `offset_days` (−36500–36500, default 0) | A date/datetime compares with now + `offset_days`. |
+| `unique` | `attribute_codes` (1–4) | No other live entity of the same blueprint family (any revision, attributes matched by code) has the same values in the evaluated context. Values compare as [unique keys](database.md#structural-constraints) do: strings trimmed, whitespace collapsed and case-insensitive; numbers by value. String, number, integer, boolean, date and datetime only. Rules only. |
+| `linked` | `relationship_code`, `quantifier` (`all` default, `any`, `none`), `predicate` | `all`: every linked record satisfies the predicate (holds with no links); `any`: at least one does; `none`: none does. |
+| `referenced_by` | `blueprint_code`, `relationship_code`, optional `predicate`, `min` and/or `max` (≤ 1000) | The number of `blueprint_code` records whose `relationship_code` targets this record and that match `predicate` is within the bounds. |
+| `acyclic` | `relationship_code` | Following the relationship never returns to the record. Rules only. |
+| `all_of` / `any_of` | `predicates` (1–16) | Every / at least one nested predicate holds. |
+
+- `compare` operators are `eq`, `ne`, `lt`, `lte`, `gt`, `gte` and `disjoint`.
+  Ordering applies only to `number`, `integer`, `date` and `datetime`; strings
+  and booleans support `eq`/`ne`. Relationships compare target sets: `eq`/`ne`
+  (same set) and `disjoint` (no common target). Files cannot be compared, and
+  both sides must have compatible types. Write dates as `"2026-01-31"`.
 - A comparison with a missing operand (absent, null, empty string or empty
-  relationship) holds. Use the JSON Schema `required` keyword or a `required`
-  predicate when a value must exist.
+  relationship) holds, and so do `one_of` and `relative_date` on an empty
+  attribute. Use the JSON Schema `required` keyword or a `required` predicate
+  when a value must exist.
+- `subject_attribute_code` is available only inside `linked` or
+  `referenced_by` and names an attribute of the record being checked.
+- Predicates nest at most 4 deep with at most 32 parts.
+- `stale`, `unique` and `acyclic` are *rules only*: they are not safe for
+  synchronous evaluation and cannot be used by enforcing rules, entity checks or
+  transition conditions.
+- User or team assignment values are plain strings to predicates: `required`,
+  `compare` `eq`/`ne` and `one_of` work against a literal `user:<uuid>` or
+  `team:<uuid>`. No predicate can refer to the acting user.
 
 ### Linked checks
 
@@ -123,7 +154,7 @@ example `max = 0` for "no open corrective actions".
   `referenced_by`, `unique`, `acyclic` or `stale`.
 - Attributes that a linked record does not declare are treated as missing.
 - More than 200 linked records per relationship, or more than 1000 referencing
-  records, fail the check.
+  records, fail the check. `acyclic` stops after 1000 visited entities.
 - Changes to the linked or referencing record are **not** rejected because of
   another entity's checks. Event-triggered rules with the same predicate report
   affected dependents as findings, and the dependent's next save is rejected
@@ -149,9 +180,15 @@ transaction's final state:
 1. JSON Schema (`value_schema`, then `entity_schema`).
 2. `x-attricat-checks` in every context, with inherited values resolved:
    `422 entity_check_failed`.
-3. Status [transition conditions](status-control.md#transition-conditions) for
-   each changed status: `422 transition_conditions_unmet`.
-4. Enforcing [rules](rules.md#enforcement): `422 rule_violation`.
+3. Status transition conditions for each changed status: `conditions` on the
+   taken edge of an `x-attricat-status` `transitions` entry, at most 16 checks
+   of the same shape as `x-attricat-checks`
+   ([status attributes](status-control.md#transition-conditions)):
+   `422 transition_conditions_unmet`.
+4. Enforcing rules: enabled rules with `[rules.enforcement]` (`on_save = true`
+   and/or up to 16 guarded status `transitions`), severity `error` or
+   `critical`, and a synchronous-safe predicate ([rules](rules.md#enforcement)):
+   `422 rule_violation`.
 
 Only the first failing group is returned, and the whole write rolls back. Each
 group reports every failing item, not just the first.

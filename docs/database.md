@@ -373,11 +373,28 @@ Repository code owns everything else, inside the write transaction:
   the latest published revision's keys changed, reporting existing duplicates
   instead of failing on the constraint.
 - Context creation copies the parent's context-scoped rows; reparenting
-  revalidates every entity, which recomputes them; context deletion cascades.
-- Hierarchy (`attributes.hierarchy`) checks walk existing edges of the family
-  field when an edge is inserted, under the workspace relationship lock shared
-  by all relationship writers. Publication checks existing edges with the same
+  revalidates every entity structurally (see
+  [Status control](status-control.md)), which recomputes them, and rechecks
+  every hierarchy; context deletion cascades.
+- Key values are the entity's values resolved per context like every other
+  read (nearest context with a value; `context_fallback = "none"` stops
+  inheritance) and normalized: strings trimmed, whitespace collapsed and
+  lowercased unless `case_sensitive`, blank strings missing, numbers by value,
+  relationships by target. The rules-only `unique` predicate uses the same
+  normalization (case-insensitive) and reads this index when a declared key
+  covers exactly its attributes.
+- Hierarchy (`attributes.hierarchy`) checks walk the family field's edges as
+  resolved in each context when an edge is inserted, so an edge inherited from
+  a parent context and a local edge cannot close a cycle together. They run
+  under the workspace relationship lock shared by all relationship writers.
+  Publication checks existing edges, resolved in every context, with the same
   lock.
+- Revision policy: keys and hierarchies follow the family's latest published
+  revision, whichever revision an entity is pinned to, because they constrain
+  the family as a whole (two entities on different revisions must not share a
+  key or form a cycle). Entity checks, transition conditions and rules use the
+  entity's pinned revision, because they validate that revision's own
+  definition of the record.
 
 Declare new structural constraints as data (blueprint columns and index
 tables with `UNIQUE`/`CHECK`), never as triggers or functions.

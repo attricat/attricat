@@ -25,6 +25,8 @@ export const extensionRunSchema = z.object({
   cancelled_at: z.string().nullable(),
   outputs_expire_at: z.string().nullable(),
   outputs_expired: z.boolean(),
+  /** Whether the signed-in user started the run. */
+  initiated_by_me: z.boolean(),
 });
 export type ExtensionRun = z.infer<typeof extensionRunSchema>;
 

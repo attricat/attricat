@@ -3,8 +3,12 @@ import { useNavigate } from '@tanstack/react-router';
 import { Alert, Button, Typography } from '@mui/material';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { getEntityForm, getCurrentBlueprint, updateEntity } from './api';
-import { getStatusTransitions } from './recordControls';
+import {
+  getCurrentBlueprint,
+  getEntityForm,
+  getStatusTransitions,
+  updateEntity,
+} from './api';
 import { EDIT_ENTITY_FORM_ID } from './constants';
 import { draftEditors } from '../drafts/constants';
 import { EditEntityToolbar } from './components/EditEntityToolbar';

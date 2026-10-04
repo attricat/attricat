@@ -455,14 +455,17 @@ async fn approvals_bind_to_content_and_void_on_change(pool: PgPool) {
     )
     .await;
     assert_eq!(record.status(&owner).await, "approved");
-    // Covered content voids the approval and returns the record to review atomically.
+    // Covered content, here a file upload, voids the approval and returns the
+    // record to review atomically, although no approved -> review edge is
+    // declared: the void is a system transition, not validated or guarded
+    // like the write's own.
     expect(
         upload(&owner, &base, &record, "late.txt").await,
         StatusCode::CREATED,
         None,
     )
     .await;
-    assert_eq!(record.status(&owner).await, "approved");
+    assert_eq!(record.status(&owner).await, "review");
     expect(
         record
             .put(
@@ -485,6 +488,87 @@ async fn approvals_bind_to_content_and_void_on_change(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!(actions, ["entity.approval.record", "entity.approval.void"]);
+    server.abort();
+}
+
+const VOIDABLE: &str = r#"format_version = 1
+code = 'voidable_document'
+name = 'Voidable document'
+kind = 'entity'
+[views.dropdown_option]
+type = 'dropdown_option'
+fields = ['title']
+[[attributes]]
+code = 'title'
+value_type = 'string'
+[[attributes]]
+code = 'reason'
+value_type = 'string'
+[[attributes]]
+code = 'status'
+value_type = 'string'
+value_schema = '''{"type":"string","enum":["draft","approved"],"x-attricat-status":{"version":1,
+  "options":[
+    {"code":"draft","label":"Draft"},
+    {"code":"approved","label":"Approved","approval":{"covers":["title"],"void_to":"draft"}}
+  ],
+  "transitions":[
+    {"from":null,"to":"draft"},
+    {"from":"draft","to":"approved"},
+    {"from":"approved","to":"draft","conditions":[
+      {"code":"reason","predicate":{"type":"required","attribute_code":"reason"}}
+    ]}
+  ]}}'''
+"#;
+
+#[sqlx::test]
+async fn approval_voids_are_not_guarded_by_transition_conditions(pool: PgPool) {
+    let (base, server) = start_server(pool.clone()).await;
+    let owner = authenticated_client();
+    create_blueprint(&owner, &base, VOIDABLE).await;
+    let entity: Value = owner
+        .post(format!("{base}/v1/entities"))
+        .json(&json!({"blueprint":{"code":"voidable_document"},"values":[
+            {"kind":"scalar","attribute_code":"status","value":"draft"},
+            {"kind":"scalar","attribute_code":"title","value":"Procedure"}
+        ]}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let record = Record {
+        url: format!("{base}/v1/entities/{}", entity["id"].as_str().unwrap()),
+    };
+    expect(
+        record.set_status(&owner, "approved").await,
+        StatusCode::OK,
+        None,
+    )
+    .await;
+    // A user moving approved -> draft must give a reason ...
+    expect(
+        record.set_status(&owner, "draft").await,
+        StatusCode::UNPROCESSABLE_ENTITY,
+        Some("transition_conditions_unmet"),
+    )
+    .await;
+    // ... but the system void of a covered edit is not that user transition.
+    expect(
+        record
+            .put(
+                &owner,
+                json!([{"kind":"scalar","attribute_code":"title","value":"Procedure v2"}]),
+            )
+            .await,
+        StatusCode::OK,
+        None,
+    )
+    .await;
+    assert_eq!(record.status(&owner).await, "draft");
     server.abort();
 }
 
@@ -581,5 +665,96 @@ async fn released_files_are_held_and_explicit_holds_are_managed(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(listed["items"].as_array().unwrap().len(), 2);
+    server.abort();
+}
+
+#[sqlx::test]
+async fn context_reparenting_revalidates_without_status_effects(pool: PgPool) {
+    let (base, server, _, record) = setup(&pool).await;
+    let owner = authenticated_client();
+    let reviewer = client_for(member(&pool, reviewer_role(&pool).await).await);
+    let context = |code: &str, parent_id: Option<Value>| {
+        let owner = owner.clone();
+        let url = format!("{base}/contexts");
+        let body = json!({"code": code, "data": {}, "parent_id": parent_id});
+        async move {
+            owner
+                .post(url)
+                .json(&body)
+                .send()
+                .await
+                .unwrap()
+                .error_for_status()
+                .unwrap()
+                .json::<Value>()
+                .await
+                .unwrap()["id"]
+                .clone()
+        }
+    };
+    let a = context("region_a", None).await;
+    let b = context("region_b", None).await;
+    let c = context("region_c", Some(a.clone())).await;
+    expect(
+        record.set_status(&owner, "review").await,
+        StatusCode::OK,
+        None,
+    )
+    .await;
+    expect(
+        record
+            .put(
+                &owner,
+                json!([{"kind":"scalar","attribute_code":"title","context_id":b,"value":"Procedure B"}]),
+            )
+            .await,
+        StatusCode::OK,
+        None,
+    )
+    .await;
+    // Approval in the default context is inherited, and recorded, in every
+    // context, each with that context's covered content.
+    expect(
+        record.set_status(&reviewer, "approved").await,
+        StatusCode::OK,
+        None,
+    )
+    .await;
+    let c_id: Uuid = c.as_str().unwrap().parse().unwrap();
+    let active_in_c = || async {
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM entity_approvals WHERE context_id = $1 AND ended_at IS NULL",
+        )
+        .bind(c_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+    };
+    let transitions = || async {
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM entity_status_transitions")
+            .fetch_one(&pool)
+            .await
+            .unwrap()
+    };
+    assert_eq!(active_in_c().await, 1);
+    let recorded = transitions().await;
+
+    // Moving c under b changes its inherited title. That is not an edit of
+    // the record: the approval is neither voided nor is any transition
+    // recorded or enforced for the operator who reparents.
+    let moved = owner
+        .put(format!("{base}/contexts/id/{c_id}"))
+        .json(&json!({"parent_id": b, "data": {}}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        moved.status(),
+        StatusCode::OK,
+        "{}",
+        moved.text().await.unwrap()
+    );
+    assert_eq!(active_in_c().await, 1);
+    assert_eq!(transitions().await, recorded);
     server.abort();
 }

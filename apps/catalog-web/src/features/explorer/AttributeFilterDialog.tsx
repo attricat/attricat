@@ -6,14 +6,10 @@ import { RelationshipSelectorDialog } from '../../components/RelationshipSelecto
 import type { Attribute } from '../entities/api';
 import { attributeLabel } from '../entities/entityDisplay';
 import { statusConfiguration, statusOptionLabel } from '../entities/status';
+import { CURRENT_USER_FILTER_VALUE } from '../principals/constants';
 import {
-  CURRENT_USER_FILTER_VALUE,
-  principalKinds,
-} from '../principals/constants';
-import {
+  directoryOptions,
   principalConfiguration,
-  principalReference,
-  userLabel,
 } from '../principals/principal';
 import { usePrincipalDirectory } from '../principals/usePrincipalDirectory';
 import { operatorsForAttribute } from './attributeFilters';
@@ -114,20 +110,7 @@ export const AttributeFilterDialog = ({
   const directory = usePrincipalDirectory(Boolean(principal));
   // Filters may target former members and deleted teams, unlike assignment.
   const principalOptions = principal
-    ? [
-        ...(principal.kinds.includes(principalKinds.user)
-          ? (directory.data?.users ?? []).map((user) => ({
-              value: principalReference(principalKinds.user, user.id),
-              label: userLabel(user),
-            }))
-          : []),
-        ...(principal.kinds.includes(principalKinds.team)
-          ? (directory.data?.teams ?? []).map((team) => ({
-              value: principalReference(principalKinds.team, team.id),
-              label: team.name,
-            }))
-          : []),
-      ]
+    ? directoryOptions(directory.data, principal)
     : [];
   const submit = () => void form.handleSubmit();
   const submitOnEnter = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -269,7 +252,7 @@ export const AttributeFilterDialog = ({
                     </MenuItem>
                     {principalOptions.map((option) => (
                       <MenuItem key={option.value} value={option.value}>
-                        {option.label}
+                        {option.principal.label}
                       </MenuItem>
                     ))}
                   </TextField>

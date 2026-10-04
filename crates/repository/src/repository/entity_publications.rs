@@ -60,6 +60,24 @@ impl CatalogRepository {
         context_id: Uuid,
         input: crate::model::UpdatePublicationChannel,
     ) -> Result<PublicationChannel, RepositoryError> {
+        let mut tx = self.pool.begin().await?;
+        let channel = self
+            .upsert_publication_channel_in_transaction(&mut tx, context_id, input)
+            .await?;
+        self.write_audit_event(&mut tx).await?;
+        tx.commit().await?;
+        Ok(channel)
+    }
+
+    /// Validates and writes a channel's settings in the caller's transaction,
+    /// creating the channel when the context has none. Omitted check
+    /// settings are kept. The caller records the audit event.
+    pub(super) async fn upsert_publication_channel_in_transaction(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        context_id: Uuid,
+        input: crate::model::UpdatePublicationChannel,
+    ) -> Result<PublicationChannel, RepositoryError> {
         if let Some(codes) = &input.required_rule_codes {
             let unique: std::collections::HashSet<_> = codes.iter().collect();
             if codes.len() > 32
@@ -72,20 +90,17 @@ impl CatalogRepository {
             }
         }
         let workspace_id = self.workspace_id.0;
-        let mut tx = self.pool.begin().await?;
         let context = sqlx::query_as::<_, Db<AttributeContext>>(
             "SELECT id, code, data, parent_id FROM attribute_contexts WHERE workspace_id = $1 AND id = $2",
         )
         .bind(workspace_id)
         .bind(context_id)
-        .fetch_optional(&mut *tx)
+        .fetch_optional(&mut **tx)
         .await?
         .ok_or(RepositoryError::InvalidContext)?
         .into_domain();
         let (required_rule_codes, require_valid_entity): (Vec<String>, bool) = sqlx::query_as("INSERT INTO publication_channels (workspace_id, context_id, enabled, required_rule_codes, require_valid_entity) VALUES ($1, $2, $3, COALESCE($4, '{}'::text[]), COALESCE($5, false)) ON CONFLICT (workspace_id, context_id) DO UPDATE SET enabled = EXCLUDED.enabled, required_rule_codes = COALESCE($4, publication_channels.required_rule_codes), require_valid_entity = COALESCE($5, publication_channels.require_valid_entity), updated_at = now() RETURNING required_rule_codes, require_valid_entity")
-            .bind(workspace_id).bind(context_id).bind(input.enabled).bind(input.required_rule_codes).bind(input.require_valid_entity).fetch_one(&mut *tx).await?;
-        self.write_audit_event(&mut tx).await?;
-        tx.commit().await?;
+            .bind(workspace_id).bind(context_id).bind(input.enabled).bind(input.required_rule_codes).bind(input.require_valid_entity).fetch_one(&mut **tx).await?;
         Ok(PublicationChannel {
             context_id,
             context_code: context.code,
@@ -552,14 +567,13 @@ impl CatalogRepository {
             .fetch_one(&mut **tx)
             .await?;
             if let Some(schema) = entity_schema {
-                let record = subject.resolve(&path);
-                for error in catalog_validation::validate_json_schema(
-                    &schema,
-                    &Value::Object(record.values.clone()),
-                )
-                .map_err(RepositoryError::InvalidBlueprintDefinition)?
-                .into_iter()
-                .take(10)
+                // The same document the write path validates.
+                let document = subject.schema_document(&path);
+                for error in
+                    catalog_validation::validate_json_schema(&schema, &Value::Object(document))
+                        .map_err(RepositoryError::InvalidBlueprintDefinition)?
+                        .into_iter()
+                        .take(10)
                 {
                     let attribute = error
                         .instance_path

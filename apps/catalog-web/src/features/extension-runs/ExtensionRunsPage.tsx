@@ -5,18 +5,12 @@ import { RouterButton } from '../../components/RouterLink';
 import { smallIconSize } from '../../components/iconSizes';
 import { ExtensionRunIcon } from '../../components/systemIcons';
 import { Timestamp } from '../../time/Timestamp';
-import { listExtensionRuns } from './api';
-import {
-  activeExtensionRunStatuses,
-  extensionRunPollMilliseconds,
-  runSkeletonCount,
-  runSkeletonHeight,
-} from './constants';
+import { runSkeletonCount, runSkeletonHeight } from './constants';
 import {
   ExtensionRunProgress,
   ExtensionRunStatusChip,
 } from './ExtensionRunSummary';
-import { extensionRunQueryKeys } from './queryKeys';
+import { extensionRunListOptions } from './queryOptions';
 import type { ExtensionRun } from './schemas';
 
 const RunCard = ({ run }: { run: ExtensionRun }) => {
@@ -67,16 +61,7 @@ const RunCard = ({ run }: { run: ExtensionRun }) => {
 /** The signed-in user's recent extension runs, newest first. */
 export const ExtensionRunsPage = () => {
   const { t } = useTranslation();
-  const runs = useQuery({
-    queryKey: extensionRunQueryKeys.list(),
-    queryFn: () => listExtensionRuns(),
-    refetchInterval: (query) =>
-      query.state.data?.some((run) =>
-        activeExtensionRunStatuses.includes(run.status),
-      )
-        ? extensionRunPollMilliseconds
-        : false,
-  });
+  const runs = useQuery(extensionRunListOptions());
   return (
     <Stack spacing={5}>
       <Typography color="text.secondary" variant="body2">

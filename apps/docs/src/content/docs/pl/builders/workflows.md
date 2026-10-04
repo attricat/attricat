@@ -72,7 +72,7 @@ Akcje przepływu pracy wyzwolonego zdarzeniem dotyczą encji, której dotyczy zd
 
 ### Reaguj tylko na wybrane atrybuty
 
-`attributes` to lista kodów atrybutów. Wyzwalacz uruchamia wtedy przebieg tylko wtedy, gdy w zdarzeniu zmienił się co najmniej jeden z tych atrybutów, niezależnie od jego miejsca wśród faktów zdarzenia:
+`attributes` to lista od 1 do 100 kodów atrybutów. Wyzwalacz uruchamia przebieg tylko wtedy, gdy w zdarzeniu zmienił się co najmniej jeden z tych atrybutów, niezależnie od jego miejsca wśród faktów zdarzenia:
 
 ```toml
 [[triggers]]
@@ -130,7 +130,7 @@ Przebiegi ręczne i harmonogramowe nie mają zdarzenia, więc ich akcje muszą u
 | `attribute_write` | `attribute_code` i dokładnie jeden z `fixed` lub `event_field` | Zapisuje skalarną wartość atrybutu. `fixed` to literał; `event_field` kopiuje wartość ze zdarzenia, np. `facts.0.after_value`. |
 | `referencing_entities_update` | `relationship_attribute`, opcjonalnie `max_targets` i zagnieżdżone `actions` | Stosuje zagnieżdżone akcje do każdego rekordu, który łączy się z encją wyzwalającą. Zobacz niżej. |
 
-`attribute_write` przestrzega Schematu: obowiązują kontrole typów, schematy wartości, `readonly` i [przejścia statusów](/pl/builders/validation/#statusy).
+`attribute_write` przestrzega Schematu: obowiązują kontrole typów, schematy wartości i [przejścia statusów](/pl/builders/validation/#statusy).
 
 ### Aktualizuj rekordy odwołujące się do encji wyzwalającej
 
@@ -161,9 +161,9 @@ tags = ["needs-review"]
 ```
 
 - `relationship_attribute` to kod atrybutu relacji w rekordach **odwołujących się**, a nie w encji wyzwalającej.
-- Zagnieżdżone akcje mogą ustawiać statusy i inne atrybuty stałymi wartościami oraz dodawać lub usuwać tagi i metadane systemowe. Nie mogą używać `event_field` ani zawierać kolejnego `referencing_entities_update`.
+- Akcja ma od 1 do 20 akcji zagnieżdżonych. Mogą one ustawiać statusy i inne atrybuty stałymi wartościami oraz dodawać lub usuwać tagi i metadane systemowe. Nie mogą używać `event_field` ani zawierać kolejnego `referencing_entities_update`.
 - `max_targets` domyślnie wynosi 100, a maksymalnie 500. Jeśli z encją wyzwalającą łączy się więcej rekordów, akcja kończy się błędem, zanim zmieni kolejny rekord. Zwiększ limit lub zawęź relację.
-- Każdy rekord jest aktualizowany osobnym zapisem, z tymi samymi kontrolami co każda inna edycja: schematami, `readonly` i przejściami statusów. Rekord, którego status nie pozwala na dane przejście, kończy się błędem sam; pozostałe rekordy są nadal aktualizowane.
+- Każdy rekord jest aktualizowany osobnym zapisem, z tymi samymi kontrolami co każda inna edycja: schematami, sprawdzeniami, kluczami unikalnymi, egzekwującymi regułami i przejściami statusów, łącznie z ich warunkami, [blokadami oraz wymaganymi uprawnieniami lub rolami](/pl/builders/validation/#kontroluj-cykl-życia-rekordu). Wymagania przejść są sprawdzane względem osoby, której zmiana uruchomiła przepływ pracy. Rekord, który nie przejdzie którejś z tych kontroli, na przykład zablokowany lub którego status nie pozwala na dane przejście, kończy się błędem sam; pozostałe rekordy są nadal aktualizowane.
 - Jeśli którykolwiek rekord się nie powiedzie, przebieg jest ponawiany. Ponowienie wraca tylko do rekordów, które się nie powiodły lub do których nie dotarto; już zaktualizowane rekordy nigdy nie są zmieniane dwukrotnie. Rekord, który do tego czasu nie istnieje lub nie łączy się już z encją wyzwalającą, jest pomijany.
 - Wynik dla każdego rekordu, wraz z ostatnim błędem, zobaczysz poleceniem `acli workflow run-targets <run-id>` albo przez `GET /workflow-runs/{id}/targets`. Lista przebiegów pokazuje ogólny błąd przebiegu, gdy stanie się on martwą wiadomością.
 - Zmiany tych rekordów nie uruchamiają przepływów pracy, tak jak każda inna zmiana wprowadzona przez przepływ pracy.

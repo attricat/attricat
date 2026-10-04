@@ -1,6 +1,10 @@
 import { MenuItem, TextField } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import type { Attribute, ComponentReference } from '../api';
+import type {
+  Attribute,
+  ComponentReference,
+  StatusTransitionAccess,
+} from '../api';
 import { resolveValueEditor } from '../../views/components/registry';
 import type { ValueEditorProps } from '../../views/components/componentTypes';
 import { StatusEditor } from '../../views/controls/editors';
@@ -14,7 +18,6 @@ import {
 import { statusConfiguration } from '../status';
 import { principalConfiguration } from '../../principals/principal';
 import { PrincipalEditor } from '../../principals/PrincipalEditor';
-import type { StatusTransitionAccess } from '../recordControls';
 
 const numeric = (attribute: Attribute) =>
   attribute.value_type === attributeValueTypes.number ||

@@ -60,7 +60,7 @@ With `artifacts.write`, a component builds output files in pieces:
 
 Limits are 1 GiB per output, 2 GiB per run, and 8 GiB per workspace. Outputs can be downloaded once the run completes and are kept for 30 days.
 
-## Interactive operations (host API 1.5)
+## Interactive operations
 
 Add `interactive` to an operation to let signed-in users start it for an entity or a selection from your version 2 actions:
 
@@ -68,7 +68,7 @@ Add `interactive` to an operation to let signed-in users start it for an entity 
 {"id": "generate", "handler": "generate", "request_schema": {"type": "object"}, "interactive": {"version": 1, "max_selection": 50}}
 ```
 
-It needs `client.operations.start` and the [unified host ABI](/extensions/server/#use-the-unified-abi-for-new-extensions) (`>=1.6.0`), or a legacy `catalog.host_api` range compatible with 1.5 but not 1.4. The component uses the `catalog:host@1.5.0` world in `crates/extension-runtime/wit-interactive/`: the 1.4 world plus a `selection` interface.
+It needs `client.operations.start`. Build new extensions for the [unified host ABI](/extensions/server/#use-the-unified-abi-for-new-extensions): set `"host_api": ">=1.6.0, <2.0.0"` and use the `catalog:host@1.6.0` `catalog-extension` or `operation-extension` world in `crates/extension-runtime/wit-host/`, whose `selection` interface works inside an interactive run. The legacy path, a `catalog.host_api` range compatible with 1.5 but not 1.4, uses the frozen `catalog:host@1.5.0` world in `wit-interactive/` (the 1.4 world plus `selection`) and still runs, but can't be combined with event handlers or commands.
 
 When a run starts, Catalog checks that the user can read every selected entity and freezes the user, release, input, context, and the ordered selection. Then:
 
@@ -79,7 +79,7 @@ When a run starts, Catalog checks that the user can read every selected entity a
 
 Capture what you need from each entity once and keep it in the checkpoint, so a retried batch renders the same bytes. Report progress as `{"completed": n, "total": n, "outcome": {"succeeded": n, "failed": n, "skipped": n}}`; Catalog shows these counts separately from the run status, so a run can complete with some entities failed.
 
-Users see their runs under **Profile → Extension runs**. Only the user who started a run and extension managers can open, cancel, or download it, and downloads also require read access to every selected entity.
+Users see their runs under **Profile → Extension runs**. Only the user who started a run and people with `extensions.manage` can see it. The user who started it can always cancel it, but can open it and download its results only while they can still read every selected entity. People with `extensions.manage` can open, cancel, and download any run.
 
 ## Entity annotations
 

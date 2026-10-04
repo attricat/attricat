@@ -21,7 +21,7 @@ blueprint codes contain only ASCII letters, numbers, hyphens, and underscores.
 Every attribute declares exactly one of `value_type` or `from`. Supported value
 types are `string`, `number`, `integer`, `boolean`, `date`, `datetime`, `time`,
 `relationship`, and `file`. Annotations on a `string` attribute's
-`value_schema` add [statuses](status-control.md) and
+`value_schema` add [statuses](#status-attributes) and
 [user or team assignments](#user-or-team-assignments).
 
 ```toml
@@ -246,6 +246,70 @@ relationship target, duplicate/empty policy entries, invalid purpose codes,
 zero size limits, and ordered single-file declarations. The persisted policy is
 part of the pinned blueprint revision.
 
+### Status attributes
+
+A status is a `string` attribute whose `value_schema` has an `enum` of option
+codes and the versioned `x-attricat-status` annotation:
+
+```toml
+[[attributes]]
+code = "status"
+value_type = "string"
+value_schema = '''{
+  "type": "string",
+  "enum": ["draft", "review", "released"],
+  "x-attricat-status": {
+    "version": 1,
+    "options": [
+      { "code": "draft", "label": "Draft" },
+      { "code": "review", "label": "In review",
+        "approval": { "covers": "all", "void_to": "draft" } },
+      { "code": "released", "label": "Released", "tone": "success",
+        "lock": "all", "retention_days": 3650 }
+    ],
+    "transitions": [
+      { "from": null, "to": "draft" },
+      { "from": "draft", "to": "review", "code": "submit" },
+      { "from": "review", "to": "released", "code": "release",
+        "roles": ["reviewer"], "separate_from": ["submit"],
+        "conditions": [{ "code": "has-approver",
+          "predicate": { "type": "required", "attribute_code": "approver" } }] },
+      { "from": "released", "to": "draft", "code": "correct",
+        "permission": "entities.publish" }
+    ]
+  }
+}'''
+```
+
+- `options` (1–100, required): one per `enum` code, in display order. `code`
+  (≤ 128 chars) and nonblank `label` (≤ 200 chars, may use `{{key}}` lexicon
+  references) are required. Optional: `tone` (`default`, `success`,
+  `warning`, `error`, `info`); `lock` (`"all"` or 1–500 attribute codes,
+  `namespace:code` for reusable attributes) makes covered content read-only in
+  that status and blocks entity deletion, and requires `transitions`;
+  `approval` `{covers, void_to}` records an approval bound to a digest of the
+  covered content and moves to `void_to` (another option) when it changes;
+  `retention_days` (1–36,600, requires `lock`) holds the locked attributes'
+  files.
+- `transitions` (≤ 10,000): omit to allow any change; an empty array allows
+  none. `from`/`to` are option codes or `null` (no value: initial set or
+  clear); each pair once; unchanged values are always allowed. Optional
+  `code`; `permission` (`area.action`); `roles` (1–20 role codes held through a
+  workspace, blueprint-family or entity grant); `separate_from` (1–20 edge
+  `code`s whose most recent actor on this entity and context may not take this
+  edge); `conditions` (≤ 16 checks with the
+  [predicate](json-schema-validation.md#predicates) shape, synchronous-safe
+  only).
+- Violations: forbidden edge `422 attribute_value_schema_mismatch`; unmet
+  conditions `422 transition_conditions_unmet`; `permission`/`roles`
+  `403 status_transition_forbidden`; `separate_from`
+  `403 status_separation_of_duties`; locked content or deletion
+  `409 record_locked`; status writes without `expected_updated_at`
+  `428 status_precondition_required`.
+- Statuses compare effective values per context, and every writer (API, CLI,
+  workflows, agents, extensions, restores, migrations) is checked. Details:
+  [status control](status-control.md).
+
 ### User or team assignments
 
 To store who is responsible for an entity (assignee, owner, reviewer), use a
@@ -285,11 +349,14 @@ value_schema = '''{
   the web app). The filter value `@me` with operator `eq` means *assigned to
   me*: it matches the caller and every team the caller belongs to. Saved
   searches keep `@me`, so they resolve for whoever runs them.
-- Rule predicates and transition permissions can compare the value with the
-  acting user: `catalog_validation::principal::principal_matches(value, user,
-  teams)` with teams from `CatalogRepository::principal_team_ids(user)`.
-  Existing presence and equality checks work unchanged because values are
-  strings.
+- Neither rule predicates nor status transition requirements can refer to the
+  assignee or the acting user. Predicates see the value as a string, so
+  `required`, `compare` `eq`/`ne` and `one_of` against a literal
+  `user:<uuid>` / `team:<uuid>` work. Transition `permission`, `roles` and
+  `separate_from` always check the acting principal, never an assignment
+  attribute, so "only the assignee may close" cannot be declared. The helper
+  `catalog_validation::principal::principal_matches` exists but is not wired
+  into either.
 
 ## Unique Keys
 
@@ -659,10 +726,10 @@ to = "released"
 
 Failures return `422 entity_check_failed`, `transition_conditions_unmet` or
 `rule_violation` with `error.details.violations`. See
-[JSON Schema Validation](json-schema-validation.md#declarative-checks),
-[Status attributes](status-control.md#transition-conditions), and
-[Rules](rules.md) for every field, limit, and the dry run required before an
-enforcing rule is enabled.
+[JSON Schema Validation](json-schema-validation.md#predicates) for every
+predicate field and limit and the `error.details` shape,
+[Status attributes](#status-attributes), and [Rules](rules.md) for the dry run
+required before an enforcing rule is enabled.
 
 ## Entity migration status
 

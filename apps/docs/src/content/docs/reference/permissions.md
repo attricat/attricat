@@ -38,9 +38,7 @@ A missing or expired sign-in returns `401`. A signed-in person without the permi
 
 ## Status transitions
 
-A blueprint status can require a permission or a role for an individual transition, and can require that a different person makes it than made an earlier transition. These checks come on top of `entities.write` and apply to every writer, including workflows, extensions, and agents. A refused transition returns `403` with the code `status_transition_forbidden` or `status_separation_of_duties`. See [Control a record's lifecycle](/builders/blueprints/#step-10-control-a-records-lifecycle).
-
-Records in a locked status reject changes to locked content with `409 record_locked`, whatever the writer's permissions. Unlocking takes an explicit, permitted correction transition, which is recorded in the audit log.
+A blueprint status can require a permission or role for a transition, or a different person than made an earlier one, on top of `entities.write` and for every writer; locked records refuse changes whatever the writer's permissions. See [Control a record's lifecycle](/builders/validation/#control-a-records-lifecycle).
 
 ## Attribute visibility
 

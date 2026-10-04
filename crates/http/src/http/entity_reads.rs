@@ -34,15 +34,13 @@ const MAX_SEARCH_FILTERS: usize = 20;
 
 fn map_search_error(error: RepositoryError) -> ApiError {
     match error {
-        RepositoryError::RelationshipSearchBudgetExceeded { .. } => {
-            ApiError::global_relationship_search_budget_exceeded()
-        }
-        RepositoryError::RelationshipSearchTimedOut => {
-            ApiError::global_relationship_search_timed_out()
-        }
-        // Infrastructure failures are server errors; their text (SQL, pool
-        // state) must never be echoed to the client as a query problem.
-        error @ (RepositoryError::Database(_) | RepositoryError::Task(_)) => error.into(),
+        // Search budgets keep their own codes. Infrastructure failures are
+        // server errors; their text (SQL, pool state) must never be echoed to
+        // the client as a query problem.
+        error @ (RepositoryError::RelationshipSearchBudgetExceeded { .. }
+        | RepositoryError::RelationshipSearchTimedOut
+        | RepositoryError::Database(_)
+        | RepositoryError::Task(_)) => error.into(),
         error => ApiError::invalid_search_query(error.to_string()),
     }
 }

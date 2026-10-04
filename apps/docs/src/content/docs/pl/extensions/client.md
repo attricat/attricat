@@ -44,8 +44,8 @@ Ramka pozostaje zamontowana, gdy użytkownik przełącza kontekst lub motyw. Nas
 | `catalog.notify({ message, severity })` | `client.notification` | Wyświetla powiadomienie hosta. Komunikaty są przycinane do 512 znaków. |
 | `catalog.refresh({ target: 'current_entity' })` | `client.refresh` | Ponownie ładuje widoki bieżącej encji po zmianie wprowadzonej przez Twoje polecenie. Dostępne w miejscach osadzenia encji. |
 | `catalog.dialog.open()` / `catalog.dialog.close()` | `client.action_dialog` | Otwiera `action_dialog` rozszerzenia z akcji zaznaczenia w wersji 2, z zaznaczeniem tej akcji; `close` działa wewnątrz okna. |
-| `catalog.operations.start({ operation_id, input, idempotency_key })` | `client.operations.start` | Uruchamia [operację interaktywną](/pl/extensions/operations/#operacje-interaktywne-api-hosta-15) dla zaznaczenia ramki i zwraca `{ run_id }`. Dostępne w akcjach zaznaczenia w wersji 2 i w oknie akcji. |
-| `catalog.operations.list()` / `get({ run_id })` / `download({ run_id, artifact_id })` | `client.operations.read` | Uruchomienia tego rozszerzenia należące do zalogowanego użytkownika. Pobieranie wykonuje host. |
+| `catalog.operations.start({ operation_id, input, idempotency_key })` | `client.operations.start` | Uruchamia [operację interaktywną](/pl/extensions/operations/#operacje-interaktywne) dla zaznaczenia ramki i zwraca `{ run_id }`. Dostępne w akcjach zaznaczenia w wersji 2 i w oknie akcji. |
+| `catalog.operations.list()` / `get({ run_id })` / `download({ run_id, artifact_id })` | `client.operations.read` | Tylko uruchomienia tego rozszerzenia rozpoczęte przez zalogowanego użytkownika, także gdy jest on operatorem. Pobieranie wykonuje host. |
 | `catalog.operations.cancel({ run_id })` | `client.operations.cancel` | Anuluje jedno z tych uruchomień. |
 
 | Zdarzenie na `root` | Wymaga | Wywoływane |

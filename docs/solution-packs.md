@@ -127,10 +127,17 @@ acli solution-pack plan --file pack.tar.zst --prefix example \
   --map-context contexts/poland=PL
 ```
 
+A channel can also require pack rules and a valid entity before publication.
+The plan shows them as `required_rule_codes` (the rules' physical codes) and
+`require_valid_entity`, and orders channel actions after rule actions. A
+channel whose required rule cannot be created or found is
+`dependency_not_creatable`. Apply writes the channel through the same
+validated path as an ordinary channel update.
+
 A mapped context is used as it is; its data and parent are not changed. If the
-pack declares it as a channel, a matching channel is `satisfied`, a missing
-channel is created, and a channel whose enabled state differs is a
-`publication_channel_mismatch` conflict. Packs never change an existing channel.
+pack declares it as a channel, a channel whose enabled state and required
+checks match exactly is `satisfied`, a missing channel is created, and a
+channel whose settings differ is a `publication_channel_mismatch` conflict. Packs never change an existing channel.
 Apply rechecks mapped contexts and channels, so a later change makes the plan
 stale. Rules, saved searches, and sample values that use a pack context use the
 created or mapped workspace context.
@@ -143,8 +150,15 @@ created or mapped workspace context.
   A rule needs a published blueprint, so with `--blueprint-publication draft` a
   rule for a newly created blueprint is `blueprint_not_published`. New rule
   codes are `<prefix>_<code>` and conflict with an existing rule code.
-- **Workflows** are created with code `<prefix>_<code>`, published, and enabled
-  only if the pack declares so. Packs cannot seed schedule triggers, because a
+- **Enforcing rules** on a mapped or reused blueprint, which may already have
+  entities, are created disabled even when the pack enables them. The rule
+  action's summary keeps `requested_enabled: true` and reports
+  `enable_deferred_reason: enforcing_rule_requires_dry_run`. Enable it through
+  the ordinary rule lifecycle after a full dry run. Apply also enforces the
+  ordinary enable gate, so an enforcing rule on a blueprint that gained
+  entities since planning fails its step instead of being enabled unchecked.
+- **Workflows** are created with code `<prefix>_<code>` and always published;
+  they are enabled only if the pack declares so. Packs cannot seed schedule triggers, because a
   schedule targets one workspace entity.
 - **Saved searches** are created as named Explore searches with **Workspace**
   visibility, so they appear in every authorized member's saved searches. The

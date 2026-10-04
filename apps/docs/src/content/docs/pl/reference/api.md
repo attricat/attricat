@@ -43,6 +43,11 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | `unique_key_duplicates` | 409 | Publikacja nowego klucza unikalnego nie powiodła się, bo istniejące encje współdzielą wartości. `details.duplicates` je wymienia. |
 | `relationship_hierarchy_violations` | 409 | Publikacja `acyclic` lub `tree` nie powiodła się, bo istniejące powiązania zawierają cykle lub nadmiarowych rodziców. `details` je wymienia. |
 | `stale_entity` | 409 | `expected_updated_at` nie odpowiada już encji. Wczytaj ją ponownie i spróbuj jeszcze raz. |
+| `status_precondition_required` | 428 | Zapis atrybutu statusu nie zawiera `expected_updated_at`. Odczytaj encję i wyślij jej `updated_at`. |
+| `status_transition_forbidden` | 403 | Przejście statusu wymaga uprawnienia lub roli, których wywołujący nie ma. |
+| `status_separation_of_duties` | 403 | Przejście statusu musi wykonać ktoś inny niż osoba, która wykonała wcześniejsze przejście. |
+| `record_locked` | 409 | Status rekordu blokuje zmienianą treść albo rekordu nie można usunąć, dopóki jest zablokowany. |
+| `entity_id_taken` | 409 | Operacja `create` we wsadzie wybrała `entity_id`, który już istnieje. |
 | `relationship_path_sort_requires_single_result_version` | 422 | Sortowanie według powiązanej wartości w kilku wersjach schematu. |
 | `file_processing` | 409 | Plik nie jest jeszcze gotowy do pobrania. |
 | `approval_already_decided` | 409 | Wywołanie narzędzia przez agenta zostało już zatwierdzone lub odrzucone. |
@@ -55,7 +60,9 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | `rule_dry_run_required` | 409 | Włączenie egzekwowanej reguły wymaga najpierw ukończonego pełnego przebiegu próbnego tej wersji. |
 | `rule_has_existing_violations` | 409 | Przebieg próbny znalazł naruszenia. `details.existing_violations` podaje ich liczbę. |
 
-Cztery błędy kontroli 422 wymieniają do 50 naruszeń w `error.details.violations`:
+### Szczegóły błędu
+
+`entity_check_failed`, `transition_conditions_unmet`, `rule_violation` i `publication_checks_failed` wymieniają do 50 naruszeń w `error.details.violations`:
 
 ```json
 {"error": {"code": "transition_conditions_unmet", "message": "…", "details": {"violations": [
@@ -66,7 +73,18 @@ Cztery błędy kontroli 422 wymieniają do 50 naruszeń w `error.details.violati
 ]}}}
 ```
 
-`source` to `entity_check`, `transition_condition`, `rule` lub (tylko przy publikacji) `entity_schema`. `contexts` zawiera kody kontekstów, w których kontrola nie przeszła, a `attributes` atrybuty encji, których dotyczy naruszenie, do wyróżnienia pól. Reguły dodają `severity`; niepowodzenia publikacji zbiorczej dodają `evidence.entity_id`. Zobacz [Walidacja](/pl/builders/validation/#błędy-i-ich-naprawa).
+| Pole | Opis |
+| --- | --- |
+| `source` | `entity_check`, `transition_condition`, `rule` lub, tylko przy publikacji, `entity_schema`. |
+| `code` | Kod kontroli, warunku lub reguły. |
+| `message` | Własny komunikat lub wygenerowany. |
+| `contexts` | Kody kontekstów, w których wystąpił problem. |
+| `attributes` | Atrybuty tej encji, których dotyczy naruszenie, np. obie strony porównania lub relacja kontroli `linked`. Służą do wyróżnienia pól. |
+| `severity` | Dla reguł: waga reguły. |
+| `transition` | Dla warunków i chronionych przejść: `attribute_code`, `from` i `to`. |
+| `evidence` | Szczegóły, np. porównywane wartości lub identyfikatory powiązanych rekordów, które nie przeszły kontroli. Niepowodzenia publikacji zbiorczej dodają `entity_id`. |
+
+`publication_checks_failed` ma też `details.context`, czyli kod kanału. Znaczenie każdego błędu i sposób naprawy opisuje [Walidacja](/pl/builders/validation/#błędy-i-ich-naprawa).
 
 ## Trasy
 
@@ -112,6 +130,8 @@ Cztery błędy kontroli 422 wymieniają do 50 naruszeń w `error.details.violati
 | `POST` | `/v1/entities/{id}/blueprint-migration` | Migruje. |
 | `POST` | `/v1/entities/{id}/reusable-attributes`, `/v1/entities/{id}/reusable-attribute-groups/{group_id}` | Dołącza atrybut lub grupę atrybutów wielokrotnego użytku. |
 | `GET` | `/v1/entities/{id}/status-transitions?context_id=…` | Zadeklarowane przejścia z zapisanego statusu w jednym kontekście (bez parametru: kontekst domyślny): `{"items": [{attribute_code, from, to, code, allowed, denial_code, denial_reason, unmet}]}`. `denial_code` to `status_transition_forbidden`, `status_separation_of_duties` lub `transition_conditions_unmet`; `unmet` wymienia niespełnione warunki i egzekwowane reguły jako naruszenia. |
+| `GET` | `/v1/entities/{id}/approvals` | Zatwierdzenia zarejestrowane przez przejścia statusów, od najnowszych, z osobą zatwierdzającą, czasem, skrótem objętej treści i powodem unieważnienia. |
+| `GET` | `/v1/entities/{id}/retention-holds` | Blokady retencji na plikach encji. |
 
 ### Zmiany wsadowe
 
@@ -152,7 +172,7 @@ POST /api/v1/entities/batch
 
 Udany wsad zwraca `200` z jednym wynikiem na operację, np. `{"op": "update", "entity": {…}}` lub `{"op": "delete", "entity_id": "…"}`. Każda operacja jest zapisywana w dzienniku audytu i emituje swoje zwykłe zdarzenie, ale dopiero po zapisaniu całego wsadu.
 
-Jeśli operacja się nie powiedzie, nic nie zostaje zapisane. Odpowiedź ma status i kod błędu tej operacji, komunikat zaczyna się od `operation <index>:`, a `error.details` zawiera `operation_index` i `entity_id`. Popraw tę operację i wyślij cały wsad ponownie. Odpowiednikiem w CLI jest `acli entity batch --operations <plik>`.
+Jeśli operacja się nie powiedzie, nic nie zostaje zapisane. Odpowiedź ma status i kod błędu tej operacji, komunikat zaczyna się od `operation <index>:`, a `error.details` zawiera `operation_index` i `entity_id`. Popraw tę operację i wyślij cały wsad ponownie. Odpowiednikiem w CLI jest `acli entity batch --operations <file>`.
 
 ### Wyszukiwanie
 
@@ -189,6 +209,8 @@ POST /api/v1/entities/search
 | `GET` | `/files/{file_id}` | Metadane i stan przetwarzania. |
 | `GET` | `/files/{file_id}/download` | Oryginalny plik. Obsługuje jeden zakres `Range`. |
 | `GET` | `/files/{file_id}/variants/{kind}/download` | Wariant `thumbnail` lub `display`. |
+| `GET`, `POST` | `/files/{file_id}/retention-holds` | Lista blokad retencji pliku albo założenie jawnej blokady przez `{"days": 365, "reason": "…"}` (`files.hold`). |
+| `POST` | `/files/{file_id}/retention-holds/{hold_id}/release` | Zwolnienie jawnej blokady przed terminem (`files.hold`). Blokad założonych przez status nie można zwolnić. |
 
 Pobieranie zwraca `409 file_processing`, dopóki plik nie ma stanu `ready`.
 

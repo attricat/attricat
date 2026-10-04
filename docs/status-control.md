@@ -81,9 +81,8 @@ a `code`, an optional `message` and a `predicate`.
 - Unchanged statuses and graphs without `transitions` have no conditions.
 - Entity checks run first, then conditions, then enforcing rules that guard the
   transition ([rules](rules.md#enforcement)). Unmet conditions reject the whole
-  write with `422 transition_conditions_unmet`; `error.details.violations`
-  lists every unmet condition with `source = "transition_condition"`,
-  `transition: {attribute_code, from, to}`, `contexts` and `attributes`.
+  write with `422 transition_conditions_unmet`, listing every unmet condition
+  in the [violation shape](json-schema-validation.md#error-details).
 
 ### Available destinations
 
@@ -132,6 +131,10 @@ Transitions compare effective values resolved through the context's parent
 chain, unless `context_fallback = "none"`. Removing a local override is a
 transition to the newly inherited value, which may differ from absence.
 Changes to a parent context are also checked for affected descendants.
+Reparenting a context is not an entity edit: entities are revalidated
+structurally (schema, unique keys, hierarchies and entity checks) without
+transition enforcement or records, approval voids or retention holds, even if
+an inherited effective status changes.
 
 The repository validates the transaction's original and final states. A batch
 cannot submit intermediate statuses to traverse multiple edges in one save.
@@ -186,6 +189,13 @@ option. Plain codes in `lock` and `approval.covers` must be attributes of the
 effective entity blueprint; qualified `namespace:code` reusable attributes are
 attached per entity and are not checked at publication.
 
+Requirements and conditions cannot refer to a
+[user or team assignment](blueprints.md#user-or-team-assignments): `roles`,
+`permission` and `separate_from` are evaluated for the acting principal only,
+and no predicate can name the acting user. Predicates can only test an
+assignment value as a string (`required`, `compare` `eq`/`ne` or `one_of`
+against a literal `user:<uuid>` / `team:<uuid>`).
+
 ### Transition requirements
 
 `permission`, `roles` and `separate_from` add to the edge check, for every
@@ -232,8 +242,8 @@ inherits from it.
 
 The check runs on every path that validates statuses: entity create/update,
 value append and removal, relationship mutations, workflow actions, extension
-catalog batches, history restoration, reusable attribute attachment and
-migration (against the source definition). Entity deletion is refused while any
+catalog batches, file uploads, links and reorders, history restoration,
+reusable attribute attachment and migration (against the source definition). Entity deletion is refused while any
 context is locked. A violation returns `409 record_locked`.
 
 Locks are evaluated from the starting status, so moving into a locked status may

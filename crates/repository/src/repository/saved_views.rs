@@ -90,19 +90,49 @@ impl CatalogRepository {
                 return Ok(view);
             }
         }
+        let mut tx = self.pool.begin().await?;
+        let view = self
+            .create_saved_view_in_transaction(
+                &mut tx,
+                Uuid::new_v4(),
+                actor,
+                name,
+                description,
+                visibility,
+                state,
+            )
+            .await?;
+        tx.commit().await?;
+        Ok(view)
+    }
+
+    /// Inserts a saved view with a caller-chosen ID in the caller's
+    /// transaction. The state must already be validated and normalized with
+    /// [`catalog_validation::saved_search`].
+    #[allow(clippy::too_many_arguments)]
+    pub(super) async fn create_saved_view_in_transaction(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        id: Uuid,
+        actor: Uuid,
+        name: Option<&str>,
+        description: Option<&str>,
+        visibility: &str,
+        state: &Value,
+    ) -> Result<SavedView, RepositoryError> {
         let query = format!(
             "INSERT INTO saved_views (id,workspace_id,owner_user_id,kind,name,description,visibility,state,state_hash) VALUES ($1,$2,$3,'explorer_search',$4,$5,$6,$7,$8) RETURNING {FIELDS}"
         );
         Ok(sqlx::query_as(&query)
-            .bind(Uuid::new_v4())
-            .bind(workspace)
+            .bind(id)
+            .bind(self.workspace_id_for_runtime())
             .bind(actor)
             .bind(name)
             .bind(description)
             .bind(visibility)
             .bind(state)
-            .bind(hash)
-            .fetch_one(&self.pool)
+            .bind(state_hash(state))
+            .fetch_one(&mut **tx)
             .await?)
     }
 

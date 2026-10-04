@@ -3,11 +3,8 @@
 Most API routes exchange JSON over HTTP; successful empty responses use `204`,
 and file, asset, and metrics routes return their documented content types.
 Failures return a JSON `error` object with a machine-readable code and message,
-alongside the HTTP status. Some failures add an `error.details` object with
-machine-readable context, such as the entity holding a conflicting unique key
-(see [Structural constraint errors](#structural-constraint-errors)) or the
-failed checks (see [Declarative check errors](#declarative-check-errors)). Use
-the [CLI](cli.md) for shell automation.
+alongside the HTTP status; some add an `error.details` object (see
+[Errors](#errors)). Use the [CLI](cli.md) for shell automation.
 
 ## Authorization
 
@@ -212,36 +209,9 @@ A channel can require checks before an entity is published to it:
 
 Publishing to one channel, to all channels, or blueprint bulk publication
 returns `422 publication_checks_failed` with `details.context` (the channel's
-context code) and `details.violations`. A bulk request is rejected as a whole
+context code) and `details.violations` (see [Errors](#errors)). A bulk request is rejected as a whole
 and each violation's `evidence.entity_id` names the failing entity. Use the
 readiness route to check beforehand.
-
-### Declarative check errors
-
-`entity_check_failed`, `transition_conditions_unmet`, `rule_violation` and
-`publication_checks_failed` return `422` with:
-
-```json
-{ "error": { "code": "transition_conditions_unmet", "message": "…",
-  "details": { "violations": [{
-    "source": "transition_condition", "code": "has-root-cause",
-    "message": "Record the root cause before closing",
-    "contexts": ["default"], "attributes": ["root_cause"],
-    "transition": { "attribute_code": "status", "from": "open", "to": "closed" },
-    "evidence": { "attribute_code": "root_cause" } }] } } }
-```
-
-`source` is `entity_check`, `transition_condition`, `rule` or `entity_schema`;
-`severity` is present for rules; `transition` for conditions and
-transition-guarding rules; `context` only for publication errors. At most 50
-violations are reported. Fix the listed `attributes` (or the linked records in
-`evidence`) and retry; for conditions, read the status-transitions route. See
-[JSON Schema Validation](json-schema-validation.md#error-details).
-
-Enabling an enforcing rule can return `409 rule_dry_run_required` (run
-`run-now` with `"dry_run": true` and the `version` first) or
-`409 rule_has_existing_violations` with `details.existing_violations` (a count;
-fix the entities or pass `accept_existing_violations`).
 
 ### Entity change and value-history pagination
 
@@ -554,18 +524,60 @@ that operation's status and error code. The message starts with
 targets its entity and records `metadata.batch` with `operation_index` and
 `operation_count`; all share the request and correlation IDs.
 
-## Structural constraint errors
+## Errors
 
-Blueprint [unique keys and hierarchies](blueprints.md#unique-keys) add these
-errors to entity writes and blueprint publication:
+Every failure returns `{ "error": { "code", "message", "details"? } }` with the
+HTTP status. Switch on `code`; `message` is for people and may change. Codes
+and statuses for write failures follow one rule:
+
+- `409` means the current state of other data blocks the write: another entity
+  holds the key, the record is locked, a revision changed, or existing data
+  violates a constraint you are enabling. Change or inspect that other data.
+- `422` means the submitted content itself fails validation or declared
+  checks. Change the request.
+
+`403` refuses the actor (permissions, transition roles, separation of duties)
+and `428` asks for an optimistic-concurrency precondition.
+
+`error.details` is present only for the codes below. Check failures use
+`details.violations[]`; every other code uses a flat object. Agent tool
+results report the same `code`, `message` and `details`.
 
 | Status | Code | `error.details` |
 | --- | --- | --- |
-| `409` | `unique_key_conflict` | `key`, `context`, normalized `values`, `conflicting_entity_id` |
-| `409` | `unique_key_duplicates` | `duplicates` (up to 20 `{ key, context, values, entity_ids }`) and `total`; returned by publication |
-| `409` | `relationship_cycle` | `attribute`, and `path`: entity IDs from the written entity back to it |
-| `409` | `relationship_hierarchy_violations` | `attribute`, `cycles`, `multiple_parents`; returned by publication |
+| `422` | `entity_check_failed`, `transition_conditions_unmet`, `rule_violation` | `violations` (see below) |
+| `422` | `publication_checks_failed` | `violations` and `context` (the channel's context code) |
+| `422` | `attribute_value_schema_mismatch` | `attribute`, `instance_path` (JSON Pointer of the failing value) |
+| `422` | `entity_schema_mismatch` | `context`, `instance_path` |
 | `422` | `relationship_target_type_mismatch` | none; the target's blueprint is not in the attribute's `target_blueprint_codes` |
+| `428` | `status_precondition_required` | none; resend with `expected_updated_at` |
+| `403` | `status_transition_forbidden` | `attribute`, `context`, `from`, `to`, `reason` |
+| `403` | `status_separation_of_duties` | `attribute`, `context`, `edge` (the earlier transition made by this user) |
+| `409` | `record_locked` | `attribute`, `context`, `status` (the locking status) |
+| `409` | `unique_key_conflict` | `key`, `context`, normalized `values`, `conflicting_entity_id` |
+| `409` | `unique_key_duplicates` | `duplicates` (up to 20 `{ key, context, values, entity_ids }`) and `total`; returned by blueprint publication |
+| `409` | `relationship_cycle` | `attribute`, and `path`: entity IDs from the written entity back to it |
+| `409` | `relationship_hierarchy_violations` | `attribute`, `cycles`, `multiple_parents`; returned by blueprint publication |
+| `409` | `relationship_cardinality_conflict` | `attribute`, `context_id`, `source_entity_id`, `target_entity_id`, `conflicting_source_entity_id` |
+| `409` | `entity_id_taken` | `entity_id` |
+| `409` | `annotation_revision_conflict` | `expected`, `actual` revisions |
+| `409` | `rule_dry_run_required` | none; run `run-now` with `"dry_run": true` and the `version` first |
+| `409` | `rule_has_existing_violations` | `existing_violations` (a count); fix the entities or pass `accept_existing_violations` |
+
+A failed [entity batch](#entity-batches) operation keeps that operation's
+status, code and details, and adds `operation_index` and `entity_id`.
+
+The `violations` shape (at most 50 items with `source`, `code`, `message`,
+`contexts`, `attributes`, and `severity`, `transition` and `evidence` where
+they apply) is defined in
+[JSON Schema Validation](json-schema-validation.md#error-details). For a
+blocked status change, read the status-transitions route.
+
+Other codes carry no details. Common ones are `invalid_input`, `bad_request`,
+`not_found`, `forbidden`, `unauthenticated`, `conflict` (a code or unique value
+is already in use), `stale_entity`, `idempotency_key_reused`,
+`payload_too_large`, `rate_limited`, `storage_unavailable` and
+`internal_error`.
 
 ## Entity system annotations
 

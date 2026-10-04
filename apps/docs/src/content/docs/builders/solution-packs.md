@@ -53,7 +53,8 @@ Only ready plans can be applied. Plans expire after 24 hours if application has 
 ### Rules, workflows, and saved searches
 
 - **Rules** are created for the pack's blueprints and published. The plan summary shows whether each will be enabled; the others stay disabled until you enable them. Rules need published blueprints, so `--blueprint-publication draft` blocks a rule for a newly created blueprint.
-- **Workflows** are published and enabled only when the pack says so.
+- A rule that **rejects invalid changes** is not enabled on a blueprint you mapped or reused, because that blueprint may already have entities. It is installed disabled, and the plan summary shows `enable_deferred_reason: enforcing_rule_requires_dry_run`. Run a dry run of the rule, review its findings, and enable it as you would any rule.
+- **Workflows** are always published. The plan summary shows whether each will be enabled; the others stay disabled until you enable them.
 - **Saved searches** are shared with the whole workspace and appear under **Saved searches** in Explore. You own the ones created by the plan you apply.
 
 New rule and workflow codes start with your prefix. Enabled rules and workflows react to later changes, including sample entities created by the same plan, so review them before applying. After installation they are ordinary resources you manage as usual.
@@ -91,7 +92,9 @@ acli solution-pack plan --file pack.tar.zst --prefix example \
   --map-context contexts/poland=PL
 ```
 
-A mapped context is used as it is. If the pack wants it as a channel, an existing matching channel is `satisfied` and a missing one is created. A channel that is switched off when the pack expects it on, or the reverse, is a `publication_channel_mismatch` conflict: change the channel yourself or skip the mapping. Rules, saved searches, and sample values that belong to the pack's context use the created or mapped context.
+A channel can require some of the pack's rules, or a valid entity, before an entity is published there; the plan summary lists them (`required_rule_codes`, `require_valid_entity`). The channel is planned after those rules.
+
+A mapped context is used as it is. If the pack wants it as a channel, an existing channel that matches exactly, including its required checks, is `satisfied` and a missing one is created. A channel whose settings differ, for example one that is switched off when the pack expects it on, is a `publication_channel_mismatch` conflict: change the channel yourself or skip the mapping. Rules, saved searches, and sample values that belong to the pack's context use the created or mapped context.
 
 ### Required packs
 

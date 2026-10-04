@@ -260,13 +260,14 @@ impl CatalogRepository {
         Ok(WorkspaceDirectory { users, teams })
     }
 
-    /// The non-deleted teams `user_id` belongs to in this workspace.
+    /// The non-deleted teams `user_id` belongs to through an active membership
+    /// in this workspace.
     pub async fn principal_team_ids(&self, user_id: Uuid) -> Result<Vec<Uuid>, RepositoryError> {
         Ok(sqlx::query_scalar(
             "SELECT t.id FROM teams t
              JOIN team_members tm ON tm.team_id = t.id
              JOIN workspace_memberships m ON m.id = tm.membership_id
-             WHERE t.workspace_id = $1 AND t.deleted_at IS NULL AND m.user_id = $2
+             WHERE t.workspace_id = $1 AND t.deleted_at IS NULL AND m.user_id = $2 AND m.state = 'active'
              ORDER BY t.id",
         )
         .bind(self.workspace_id.0)

@@ -56,21 +56,11 @@ attribute_code = "title"
 
 An entity **fails** when the predicate is not satisfied. Rules use the same predicates as [entity checks](/builders/validation/#compare-attributes-with-checks), [status transition conditions](/builders/validation/#conditions-on-transitions), and [publication channel checks](/guides/publishing/#require-checks-before-publication). The [blueprint reference](/reference/blueprint/#predicates) lists every key.
 
-| `type` | Keys | Satisfied when |
-| --- | --- | --- |
-| `required` | `attribute_code` | The attribute has a value. A relationship needs at least one target. |
-| `stale` | `attribute_code`, `max_age_seconds` (1 to 31536000) | The attribute was updated within the last `max_age_seconds`. |
-| `has_tag` | `tag` | The entity has this system tag. |
-| `missing_tag` | `tag` | The entity does not have this system tag. |
-| `compare` | `attribute_code`, `op`, and one of `other_attribute_code` or `value` | The comparison is true, for example `valid_until` `gte` `valid_from`. |
-| `one_of` | `attribute_code`, `values` (1 to 100) | The value is one of the listed values, such as status codes. |
-| `relative_date` | `attribute_code`, `op` (`lt`, `lte`, `gt`, `gte`), `offset_days` | The date or datetime compares true with now plus `offset_days`. |
-| `unique` | `attribute_codes` (1 to 4) | No other live entity of the same blueprint has the same values in the same context. |
-| `linked` | `relationship_code`, `quantifier`, `predicate` | The linked records satisfy the nested predicate: `all` of them (default), `any`, or `none`. |
-| `referenced_by` | `blueprint_code`, `relationship_code`, optional `predicate`, `min` and/or `max` | The number of records of another blueprint that link to this one, and match `predicate`, is within the bounds. |
-| `acyclic` | `relationship_code` | Following the relationship from the entity never leads back to it. |
-| `all_of` | `predicates` (1 to 16) | Every nested predicate is satisfied. |
-| `any_of` | `predicates` (1 to 16) | At least one nested predicate is satisfied. |
+- **Values:** `required`, `compare` (with another attribute or a literal), `one_of`, and `relative_date` (against now plus `offset_days`).
+- **Tags:** `has_tag` and `missing_tag` check system tags.
+- **Linked records:** `linked` checks the records an entity links to; `referenced_by` counts the records that link to it.
+- **Reporting only:** `stale` (not updated within an age limit), `unique` (no other entity of the blueprint has the same values), and `acyclic` (a relationship never leads back to the entity).
+- **Combinations:** `all_of` and `any_of`.
 
 A comparison whose value is missing is satisfied, and so are `one_of` and `relative_date` when the attribute is empty. Combine them with `required` when the value must exist:
 
@@ -82,8 +72,6 @@ predicates = [
   { type = "relative_date", attribute_code = "valid_until", op = "gt", offset_days = 30 },
 ]
 ```
-
-`compare` orders numbers, integers, dates, and datetimes with `lt`, `lte`, `gt`, and `gte`. Strings and booleans support `eq` and `ne`. Two relationships are `eq` when they have the same set of targets, and `disjoint` when they have no target in common. Files cannot be compared. Write dates as strings, such as `"2026-01-31"`.
 
 `linked` and `referenced_by` follow one relationship hop. Their nested predicate reads the other record and can compare with the entity being checked through `subject_attribute_code`:
 
@@ -137,13 +125,7 @@ A rule attached to a context checks the entity's resolved values in that context
 
 `linked` and `referenced_by` depend on other records. When a linked or referencing record changes, event-triggered rules also re-run for up to 100 entities that depend on it, so their findings stay current. Rules with only schedule or manual triggers notice the change on their next run.
 
-### Limits
-
-- Predicates nest at most 4 levels deep and have at most 32 parts in total.
-- `linked` checks at most 200 linked records per relationship, and `referenced_by` at most 1,000 referencing records. Over the limit, the entity fails with a message saying so.
-- `acyclic` follows at most 1,000 records. If it cannot finish, the entity fails.
-- `linked` and `referenced_by` cannot be nested inside each other, and their nested predicate cannot use `unique`, `acyclic`, or `stale`.
-- `offset_days` is between -36500 and 36500.
+The [blueprint reference](/reference/blueprint/#predicates) has the comparison rules for each type and the limits on nesting and linked records.
 
 ## Where rules live
 
@@ -211,18 +193,9 @@ from = "review"
 to = "released"
 ```
 
-| Key | Description |
-| --- | --- |
-| `on_save` | `true` rejects any write that leaves the entity violating the rule. |
-| `transitions` | Up to 16 status changes the rule guards. `attribute_code` is a [status](/builders/validation/#statuses) attribute; `to` is the destination code; `from` is optional and, when omitted, every change into `to` is guarded. |
+`on_save = true` rejects any write that leaves the entity violating the rule. Each entry in `transitions` guards a change of a [status](/builders/validation/#statuses) attribute into `to`, optionally only from `from`. Guarded transitions are checked on the state the change produces, so a value saved in the same write counts. Inside a blueprint, write the table as `[rules.enforcement]` and `[[rules.enforcement.transitions]]` after the rule's `[[rules]]` header.
 
-Set `on_save`, at least one transition, or both. Guarded transitions are checked on the state the change produces, so a value saved in the same write counts. Inside a blueprint, write the table as `[rules.enforcement]` and `[[rules.enforcement.transitions]]` after the rule's `[[rules]]` header.
-
-Enforcement has a few requirements:
-
-- The rule's severity is `error` or `critical`.
-- The predicate is safe to check during a save. `stale`, `unique`, and `acyclic` are not; use them in reporting rules.
-- In a blueprint, the transition's attribute must be a status attribute and `from` and `to` must be its codes.
+Enforcement needs a severity of `error` or `critical` and a predicate that can be checked during a save. The [blueprint reference](/reference/blueprint/#rules) lists every key and requirement.
 
 A rule attached to a context enforces in that context only. A rule without a context enforces in every context.
 

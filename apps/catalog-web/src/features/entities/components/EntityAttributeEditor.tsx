@@ -1,8 +1,11 @@
 import { Tooltip, useTheme } from '@mui/material';
 import { InfoIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import type { Attribute, ComponentReference } from '../api';
-import type { StatusTransitionAccess } from '../recordControls';
+import type {
+  Attribute,
+  ComponentReference,
+  StatusTransitionAccess,
+} from '../api';
 import type { FileMetadata } from '../../files/schemas';
 import { attributeValueTypes } from '../valueTypes';
 import { FileAttributeEditor } from '../../files/FileAttributeEditor';

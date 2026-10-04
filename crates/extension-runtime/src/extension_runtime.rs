@@ -83,6 +83,104 @@ mod host_connector {
         exports: { default: async },
     });
 }
+/// Validates the checkpoint and progress JSON a batch returned. Both must be
+/// objects within the host JSON bound, and the checkpoint must also fit the
+/// run's declared checkpoint budget.
+fn validate_batch_result(
+    checkpoint: &str,
+    progress: &str,
+    max_checkpoint_bytes: u64,
+) -> Result<(Value, Value), ExtensionRuntimeError> {
+    let next: Value = serde_json::from_str(checkpoint).map_err(|_| {
+        ExtensionRuntimeError::Runtime("operation returned invalid checkpoint".into())
+    })?;
+    let progress: Value = serde_json::from_str(progress).map_err(|_| {
+        ExtensionRuntimeError::Runtime("operation returned invalid progress".into())
+    })?;
+    let checkpoint_bytes = serde_json::to_vec(&next).map_or(usize::MAX, |v| v.len());
+    if !next.is_object()
+        || !progress.is_object()
+        || checkpoint_bytes > MAX_HOST_JSON_BYTES
+        || checkpoint_bytes > max_checkpoint_bytes as usize
+        || serde_json::to_vec(&progress).map_or(true, |v| v.len() > MAX_HOST_JSON_BYTES)
+    {
+        return Err(ExtensionRuntimeError::Runtime(
+            "operation returned oversized or non-object checkpoint".into(),
+        ));
+    }
+    Ok((next, progress))
+}
+
+/// Runs the released operation-batch lifecycle against one world's
+/// `catalog:host/operations` bindings: cancel, or prepare/start on the first
+/// batch, then process, validate, checkpoint and finish when done. Each world
+/// has its own bindgen types, so this is a macro rather than a generic fn.
+/// Evaluates to `Result<(checkpoint, progress, done), ExtensionRuntimeError>`.
+macro_rules! run_operation_batch {
+    (
+        $store:expr,
+        $operations:expr,
+        $request:expr,
+        checkpoint: $checkpoint:expr,
+        max_checkpoint_bytes: $max_checkpoint_bytes:expr,
+        lifecycle_started: $lifecycle_started:expr,
+        cancelling: $cancelling:expr $(,)?
+    ) => {
+        async {
+            let store = $store;
+            let operations = $operations;
+            let mut request = $request;
+            let wasm_error =
+                |error: wasmtime::Error| ExtensionRuntimeError::Runtime(error.to_string());
+            if $cancelling {
+                operations
+                    .call_cancel(&mut *store, &request)
+                    .await
+                    .map_err(wasm_error)?
+                    .map_err(ExtensionRuntimeError::Runtime)?;
+                return Ok((($checkpoint).clone(), json!({"cancelled": true}), true));
+            }
+            if !$lifecycle_started {
+                operations
+                    .call_prepare(&mut *store, &request)
+                    .await
+                    .map_err(wasm_error)?
+                    .map_err(ExtensionRuntimeError::Runtime)?;
+                operations
+                    .call_start(&mut *store, &request)
+                    .await
+                    .map_err(wasm_error)?
+                    .map_err(ExtensionRuntimeError::Runtime)?;
+            }
+            let result = operations
+                .call_process_batch(&mut *store, &request)
+                .await
+                .map_err(wasm_error)?
+                .map_err(ExtensionRuntimeError::Runtime)?;
+            let (next, progress) = validate_batch_result(
+                &result.checkpoint,
+                &result.progress,
+                $max_checkpoint_bytes,
+            )?;
+            request.checkpoint = result.checkpoint;
+            operations
+                .call_checkpoint(&mut *store, &request)
+                .await
+                .map_err(wasm_error)?
+                .map_err(ExtensionRuntimeError::Runtime)?;
+            if result.done {
+                operations
+                    .call_finish(&mut *store, &request)
+                    .await
+                    .map_err(wasm_error)?
+                    .map_err(ExtensionRuntimeError::Runtime)?;
+            }
+            Ok((next, progress, result.done))
+        }
+        .await
+    };
+}
+
 #[cfg(test)]
 mod abi_evolution_tests;
 mod interactive;
@@ -386,10 +484,7 @@ impl ExtensionRuntime {
         store
             .set_fuel(self.config.fuel)
             .map_err(|e| ExtensionRuntimeError::Runtime(e.to_string()))?;
-        store.set_epoch_deadline(
-            (self.config.invocation_timeout.as_millis() / EPOCH_TICK_INTERVAL.as_millis()).max(1)
-                as u64,
-        );
+        store.set_epoch_deadline(epoch_deadline(self.config.invocation_timeout));
         let mut linker = Linker::new(&self.engine);
         host_operations::CatalogExtensionOperation::add_to_linker::<
             OperationState,
@@ -401,66 +496,15 @@ impl ExtensionRuntime {
         )
         .await
         .map_err(|e| ExtensionRuntimeError::Runtime(e.to_string()))?;
-        let operations = bindings.catalog_host_operations();
-        if cancelling {
-            operations
-                .call_cancel(&mut store, &request)
-                .await
-                .map_err(|e| ExtensionRuntimeError::Runtime(e.to_string()))?
-                .map_err(ExtensionRuntimeError::Runtime)?;
-            return Ok((checkpoint.clone(), json!({"cancelled":true}), true));
-        }
-        if !lifecycle_started {
-            operations
-                .call_prepare(&mut store, &request)
-                .await
-                .map_err(|e| ExtensionRuntimeError::Runtime(e.to_string()))?
-                .map_err(ExtensionRuntimeError::Runtime)?;
-            operations
-                .call_start(&mut store, &request)
-                .await
-                .map_err(|e| ExtensionRuntimeError::Runtime(e.to_string()))?
-                .map_err(ExtensionRuntimeError::Runtime)?;
-        }
-        let result = operations
-            .call_process_batch(&mut store, &request)
-            .await
-            .map_err(|e| ExtensionRuntimeError::Runtime(e.to_string()))?
-            .map_err(ExtensionRuntimeError::Runtime)?;
-        let next: Value = serde_json::from_str(&result.checkpoint).map_err(|_| {
-            ExtensionRuntimeError::Runtime("operation returned invalid checkpoint".into())
-        })?;
-        let progress: Value = serde_json::from_str(&result.progress).map_err(|_| {
-            ExtensionRuntimeError::Runtime("operation returned invalid progress".into())
-        })?;
-        if !next.is_object()
-            || !progress.is_object()
-            || serde_json::to_vec(&next).map_or(true, |v| v.len() > MAX_HOST_JSON_BYTES)
-            || serde_json::to_vec(&next).map_or(true, |v| v.len() > max_checkpoint_bytes as usize)
-            || serde_json::to_vec(&progress).map_or(true, |v| v.len() > MAX_HOST_JSON_BYTES)
-        {
-            return Err(ExtensionRuntimeError::Runtime(
-                "operation returned oversized or non-object checkpoint".into(),
-            ));
-        }
-        let checkpoint_request =
-            host_operations::exports::catalog::host::operations::OperationRequest {
-                checkpoint: result.checkpoint,
-                ..request
-            };
-        operations
-            .call_checkpoint(&mut store, &checkpoint_request)
-            .await
-            .map_err(|e| ExtensionRuntimeError::Runtime(e.to_string()))?
-            .map_err(ExtensionRuntimeError::Runtime)?;
-        if result.done {
-            operations
-                .call_finish(&mut store, &checkpoint_request)
-                .await
-                .map_err(|e| ExtensionRuntimeError::Runtime(e.to_string()))?
-                .map_err(ExtensionRuntimeError::Runtime)?;
-        }
-        Ok((next, progress, result.done))
+        run_operation_batch!(
+            &mut store,
+            bindings.catalog_host_operations(),
+            request,
+            checkpoint: checkpoint,
+            max_checkpoint_bytes: max_checkpoint_bytes,
+            lifecycle_started: lifecycle_started,
+            cancelling: cancelling,
+        )
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -505,10 +549,7 @@ impl ExtensionRuntime {
         store
             .set_fuel(self.config.fuel)
             .map_err(|e| ExtensionRuntimeError::Runtime(e.to_string()))?;
-        store.set_epoch_deadline(
-            (self.config.invocation_timeout.as_millis() / EPOCH_TICK_INTERVAL.as_millis()).max(1)
-                as u64,
-        );
+        store.set_epoch_deadline(epoch_deadline(self.config.invocation_timeout));
         let mut linker = Linker::new(&self.engine);
         host_connector::CatalogExtensionOperation::add_to_linker::<
             OperationState,
@@ -520,66 +561,15 @@ impl ExtensionRuntime {
         )
         .await
         .map_err(|e| ExtensionRuntimeError::Runtime(e.to_string()))?;
-        let operations = bindings.catalog_host_operations();
-        if cancelling {
-            operations
-                .call_cancel(&mut store, &request)
-                .await
-                .map_err(|e| ExtensionRuntimeError::Runtime(e.to_string()))?
-                .map_err(ExtensionRuntimeError::Runtime)?;
-            return Ok((checkpoint.clone(), json!({"cancelled":true}), true));
-        }
-        if !lifecycle_started {
-            operations
-                .call_prepare(&mut store, &request)
-                .await
-                .map_err(|e| ExtensionRuntimeError::Runtime(e.to_string()))?
-                .map_err(ExtensionRuntimeError::Runtime)?;
-            operations
-                .call_start(&mut store, &request)
-                .await
-                .map_err(|e| ExtensionRuntimeError::Runtime(e.to_string()))?
-                .map_err(ExtensionRuntimeError::Runtime)?;
-        }
-        let result = operations
-            .call_process_batch(&mut store, &request)
-            .await
-            .map_err(|e| ExtensionRuntimeError::Runtime(e.to_string()))?
-            .map_err(ExtensionRuntimeError::Runtime)?;
-        let next: Value = serde_json::from_str(&result.checkpoint).map_err(|_| {
-            ExtensionRuntimeError::Runtime("operation returned invalid checkpoint".into())
-        })?;
-        let progress: Value = serde_json::from_str(&result.progress).map_err(|_| {
-            ExtensionRuntimeError::Runtime("operation returned invalid progress".into())
-        })?;
-        if !next.is_object()
-            || !progress.is_object()
-            || serde_json::to_vec(&next).map_or(true, |v| v.len() > MAX_HOST_JSON_BYTES)
-            || serde_json::to_vec(&next).map_or(true, |v| v.len() > max_checkpoint_bytes as usize)
-            || serde_json::to_vec(&progress).map_or(true, |v| v.len() > MAX_HOST_JSON_BYTES)
-        {
-            return Err(ExtensionRuntimeError::Runtime(
-                "operation returned oversized or non-object checkpoint".into(),
-            ));
-        }
-        let checkpoint_request =
-            host_connector::exports::catalog::host::operations::OperationRequest {
-                checkpoint: result.checkpoint,
-                ..request
-            };
-        operations
-            .call_checkpoint(&mut store, &checkpoint_request)
-            .await
-            .map_err(|e| ExtensionRuntimeError::Runtime(e.to_string()))?
-            .map_err(ExtensionRuntimeError::Runtime)?;
-        if result.done {
-            operations
-                .call_finish(&mut store, &checkpoint_request)
-                .await
-                .map_err(|e| ExtensionRuntimeError::Runtime(e.to_string()))?
-                .map_err(ExtensionRuntimeError::Runtime)?;
-        }
-        Ok((next, progress, result.done))
+        run_operation_batch!(
+            &mut store,
+            bindings.catalog_host_operations(),
+            request,
+            checkpoint: checkpoint,
+            max_checkpoint_bytes: max_checkpoint_bytes,
+            lifecycle_started: lifecycle_started,
+            cancelling: cancelling,
+        )
     }
 
     pub async fn invoke_command(

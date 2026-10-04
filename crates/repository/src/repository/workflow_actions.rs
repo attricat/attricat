@@ -1,10 +1,11 @@
 //! Workflow action execution. Every workflow write, whether to the trigger
 //! entity or to an entity that references it, goes through
-//! [`CatalogRepository::apply_workflow_actions`], so it is validated, audited and
-//! published exactly like any other entity write.
-use super::entity_commands::{validate_system_metadata, validate_system_tag_update};
+//! [`CatalogRepository::apply_workflow_actions`], which uses the ordinary
+//! entity update seam, so it is validated, audited and published exactly like
+//! any other entity write.
+use super::entity_commands::{TagMetadataPatch, apply_tag_metadata_patch};
 use super::*;
-use crate::domain_events::{ENTITY_UPDATED_V1, EntityMutationV1};
+use crate::model::UpdateEntityFormRequest;
 use sqlx::{Postgres, Transaction};
 use std::collections::HashSet;
 
@@ -47,53 +48,55 @@ impl WorkflowEntityChange {
         action: &catalog_workflow::Action,
         event: &crate::domain_events::DomainEvent,
     ) -> Result<(), RepositoryError> {
-        let current_tags = self.system_tags.as_ref().unwrap_or(&entity.system_tags);
-        let current_metadata = self
+        let patch = match action {
+            catalog_workflow::Action::SystemTagsAdd { tags } => TagMetadataPatch {
+                add_tags: tags.clone(),
+                ..TagMetadataPatch::default()
+            },
+            catalog_workflow::Action::SystemTagsRemove { tags } => TagMetadataPatch {
+                remove_tags: tags.clone(),
+                ..TagMetadataPatch::default()
+            },
+            catalog_workflow::Action::SystemMetadataMerge { values } => TagMetadataPatch {
+                set_metadata: values.clone(),
+                ..TagMetadataPatch::default()
+            },
+            catalog_workflow::Action::SystemMetadataDelete { keys } => TagMetadataPatch {
+                remove_metadata: keys.clone(),
+                ..TagMetadataPatch::default()
+            },
+            action => return self.stage_value(action, event),
+        };
+        let mut tags = self
+            .system_tags
+            .clone()
+            .unwrap_or_else(|| entity.system_tags.clone());
+        let mut metadata = self
             .system_metadata
             .as_ref()
-            .unwrap_or(&entity.system_metadata);
+            .unwrap_or(&entity.system_metadata)
+            .as_object()
+            .cloned()
+            .ok_or(RepositoryError::InvalidSystemMetadata)?;
+        apply_tag_metadata_patch(&mut tags, &mut metadata, &patch);
+        if matches!(
+            action,
+            catalog_workflow::Action::SystemTagsAdd { .. }
+                | catalog_workflow::Action::SystemTagsRemove { .. }
+        ) {
+            self.system_tags = Some(tags);
+        } else {
+            self.system_metadata = Some(Value::Object(metadata));
+        }
+        Ok(())
+    }
+
+    fn stage_value(
+        &mut self,
+        action: &catalog_workflow::Action,
+        event: &crate::domain_events::DomainEvent,
+    ) -> Result<(), RepositoryError> {
         match action {
-            catalog_workflow::Action::SystemTagsAdd { tags } => {
-                let mut result = current_tags.clone();
-                for tag in tags {
-                    if !result.contains(tag) {
-                        result.push(tag.clone());
-                    }
-                }
-                validate_system_tag_update(&entity.system_tags, &result)?;
-                self.system_tags = Some(result);
-            }
-            catalog_workflow::Action::SystemTagsRemove { tags } => {
-                self.system_tags = Some(
-                    current_tags
-                        .iter()
-                        .filter(|tag| !tags.contains(*tag))
-                        .cloned()
-                        .collect(),
-                );
-            }
-            catalog_workflow::Action::SystemMetadataMerge { values } => {
-                let mut metadata = current_metadata
-                    .as_object()
-                    .cloned()
-                    .ok_or(RepositoryError::InvalidSystemMetadata)?;
-                for (key, value) in values {
-                    metadata.insert(key.clone(), value.clone());
-                }
-                let metadata = Value::Object(metadata);
-                validate_system_metadata(&metadata)?;
-                self.system_metadata = Some(metadata);
-            }
-            catalog_workflow::Action::SystemMetadataDelete { keys } => {
-                let mut metadata = current_metadata
-                    .as_object()
-                    .cloned()
-                    .ok_or(RepositoryError::InvalidSystemMetadata)?;
-                for key in keys {
-                    metadata.remove(key);
-                }
-                self.system_metadata = Some(Value::Object(metadata));
-            }
             catalog_workflow::Action::AttributeWrite {
                 attribute_code,
                 value,
@@ -126,7 +129,7 @@ impl WorkflowEntityChange {
                     value,
                 });
             }
-            catalog_workflow::Action::ReferencingEntitiesUpdate { .. } => {
+            _ => {
                 return Err(RepositoryError::InvalidWorkflowDefinition(
                     "referencing_entities_update is not a local entity action".into(),
                 ));
@@ -241,9 +244,13 @@ impl CatalogRepository {
         Ok(true)
     }
 
-    /// Applies local actions to one locked entity as a single normal entity
-    /// write: schema, readonly and status-transition validation, preview
-    /// rebuild, audit evidence and one `entity.updated.v1` outbox event.
+    /// Applies local actions to one locked entity as a single ordinary entity
+    /// update through [`Self::update_entity_in_transaction`]: schema, status
+    /// transition, check and annotation validation, preview rebuild, audit
+    /// evidence, publication reconciliation and one `entity.updated.v1`
+    /// outbox event. Like every server-side write, it does not enforce an
+    /// attribute's `readonly` flag, which only marks the field read-only in
+    /// the editing UI.
     async fn apply_workflow_actions(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
@@ -251,8 +258,6 @@ impl CatalogRepository {
         actions: &[catalog_workflow::Action],
         event: &crate::domain_events::DomainEvent,
     ) -> Result<(), RepositoryError> {
-        let ws = self.workspace_id.0;
-        let before = self.entity_audit_snapshot(transaction, entity.id).await?;
         let mut change = WorkflowEntityChange::default();
         for action in actions {
             change.stage(&entity, action, event)?;
@@ -262,49 +267,25 @@ impl CatalogRepository {
             system_tags,
             system_metadata,
         } = change;
-        if system_tags.is_some() || system_metadata.is_some() {
-            self.ensure_annotation_namespaces_unchanged(
+        // The caller holds the row lock, so the entity cannot have changed.
+        let (_, changes, event) = self
+            .update_entity_in_transaction(
                 transaction,
-                &entity.system_tags,
-                &entity.system_metadata,
-                system_tags.as_deref().unwrap_or(&entity.system_tags),
-                system_metadata.as_ref().unwrap_or(&entity.system_metadata),
+                entity.id,
+                UpdateEntityFormRequest {
+                    expected_updated_at: Some(entity.updated_at),
+                    values,
+                    relationships: Vec::new(),
+                    remove_values: Vec::new(),
+                    system_tags,
+                    system_metadata,
+                },
             )
             .await?;
-            sqlx::query("UPDATE entities SET system_tags=COALESCE($2,system_tags),system_metadata=COALESCE($3,system_metadata),updated_at=now() WHERE id=$1 AND workspace_id=$4")
-                .bind(entity.id).bind(system_tags).bind(system_metadata).bind(ws).execute(&mut **transaction).await?;
-        }
-        for value in values {
-            self.insert_value(transaction, &entity, value).await?;
-        }
-        self.validate_entity_schema(transaction, &entity).await?;
-        let preview = Self::build_preview_projection(transaction, entity.id).await?;
-        let entity = self.store_preview(transaction, entity.id, preview).await?;
-        let after = self.entity_audit_snapshot(transaction, entity.id).await?;
-        let changes = Self::audit_changes(entity.id, before, after, false);
-        let event = self.core_event(
-            ENTITY_UPDATED_V1,
-            "entity",
-            entity.id,
-            serde_json::to_value(EntityMutationV1 {
-                entity_id: entity.id,
-                blueprint_id: entity.blueprint_id,
-                blueprint_version: entity.blueprint_version,
-                facts: Self::affected_facts(&changes),
-            })
-            .expect("entity-updated payload serializes"),
-        );
-        // Revalidate immediately before the durable effect's audit/outbox
-        // completion boundary; this also holds the task row against reclaim.
-        self.ensure_task_fence(transaction).await?;
-        if let Some(audit_event_id) = self.write_audit_event(transaction).await? {
-            for change in changes {
-                sqlx::query("INSERT INTO audit_event_changes (id,audit_event_id,workspace_id,entity_id,attribute_id,attribute_code,context_id,context_code,change_kind,before_value,after_value) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)")
-                    .bind(Uuid::new_v4()).bind(audit_event_id).bind(ws).bind(change.entity_id).bind(change.attribute_id).bind(change.attribute_code).bind(change.context_id).bind(change.context_code).bind(change.change_kind).bind(change.before_value).bind(change.after_value).execute(&mut **transaction).await?;
-            }
-        }
-        self.enqueue_event(transaction, event).await?;
-        Ok(())
+        // Revalidates the task fence immediately before the durable effect's
+        // audit/outbox completion boundary.
+        self.stage_entity_mutation(transaction, changes, event)
+            .await
     }
 
     /// Live entities whose `relationship_attribute` (of their current blueprint
@@ -318,24 +299,19 @@ impl CatalogRepository {
         only: Option<Uuid>,
         limit: i64,
     ) -> Result<Vec<Uuid>, RepositoryError> {
-        Ok(sqlx::query_scalar(
-            r#"SELECT DISTINCT av.entity_id
-               FROM attribute_values av
-               JOIN entities e ON e.id = av.entity_id AND e.workspace_id = av.workspace_id AND e.deleted_at IS NULL
-               JOIN attributes a ON a.id = av.attribute_id AND a.deleted_at IS NULL
-                AND ((a.blueprint_id = e.blueprint_id AND a.blueprint_version = e.blueprint_version) OR a.entity_id = e.id)
-               WHERE av.workspace_id = $1 AND av.relationship_target_entity_id = $2 AND av.active
-                 AND a.code = $3 AND av.entity_id <> $2 AND ($4::uuid IS NULL OR av.entity_id = $4)
-               ORDER BY av.entity_id
-               LIMIT $5"#,
+        super::references::referencing_entity_ids(
+            transaction,
+            self.workspace_id.0,
+            super::references::ReferenceQuery {
+                target,
+                attribute_code: relationship_attribute,
+                referrers: super::references::Referrers::Any,
+                only,
+                exclude_target: true,
+                limit,
+            },
         )
-        .bind(self.workspace_id.0)
-        .bind(target)
-        .bind(relationship_attribute)
-        .bind(only)
-        .bind(limit)
-        .fetch_all(&mut **transaction)
-        .await?)
+        .await
     }
 
     /// Updates every entity that references the trigger entity. Each target is

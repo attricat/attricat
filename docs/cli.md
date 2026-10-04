@@ -119,7 +119,8 @@ acli rule get <rule-id>
 acli rule validate|create --blueprint-id <uuid> --blueprint-version <version> [--context-id <uuid>] --file rule.toml
 acli rule validate|create --blueprint-id <uuid> --blueprint-version <version> [--context-id <uuid>] --stdin
 acli rule revision <rule-id> --blueprint-id <uuid> --blueprint-version <version> [--context-id <uuid>] --file rule-v2.toml
-acli rule publish|enable <rule-id> <version>
+acli rule publish <rule-id> <version>
+acli rule enable <rule-id> <version> [--accept-existing-violations]
 acli rule disable <rule-id>
 acli rule run-now <rule-id> --idempotency-key <key> [--entity-id <uuid>] [--dry-run]
 acli rule run-list
@@ -274,6 +275,11 @@ non-array JSON locally. This keeps complex request bodies out of shell quoting.
 source contract as blueprint commands: the source is sent unchanged as the
 API's TOML `definition`. Rule writes additionally require the blueprint ID
 and version; `--context-id` is optional.
+
+`rule enable` of an enforcing rule fails with `rule_has_existing_violations`
+when its latest dry run found violations. `--accept-existing-violations`
+enables it anyway; the violating entities cannot be saved until they are
+fixed.
 
 ## Browser authentication
 

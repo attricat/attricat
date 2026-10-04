@@ -55,9 +55,9 @@ A role grant applies at one scope:
 | **Entire workspace** | Everything. |
 | **Blueprint family** | One blueprint and its entities, across all revisions. |
 | **Entity** | One entity. |
-| **Context subtree** | One context and everything below it, but not its parent or siblings. |
+| **Context subtree** | The context settings of one context and the contexts below it, but not its parent or siblings. It does not cover entities or their values. |
 
-Grants add up. A person with `viewer` on the workspace and `editor` on the `PL` context subtree can read everything and edit values in `PL` and its children.
+Grants add up. A person with `viewer` on the workspace and `editor` on the `PL` context subtree can read everything, and can edit or delete the `PL` context and its children and make them publication channels. Creating contexts needs a workspace grant. A context subtree grant does not let anyone read or edit entity values in those contexts: access to entities comes from workspace, blueprint family, and entity grants.
 
 The owner role can only be granted on the whole workspace.
 
@@ -102,7 +102,7 @@ A retention hold keeps a file's exact bytes in storage until a date. While any h
 
 Holds come from two places:
 
-- **Record statuses.** A blueprint status with `retention_days` places a hold on the files of a record when it enters that status, for example when a document is released. See [Control a record's lifecycle](/builders/blueprints/#step-10-control-a-records-lifecycle). These holds cannot be released early.
+- **Record statuses.** A blueprint status with `retention_days` places a hold on the files of a record when it enters that status, for example when a document is released. See [Retain released files](/builders/validation/#retain-released-files). These holds cannot be released early.
 - **Explicit holds**, such as a legal hold. People with the `files.hold` permission (owners and admins by default) can place one on a file for a number of days with a reason, and release it early.
 
 The entity page lists the holds on its files and when they expire. Placing and releasing holds is recorded in the audit log.

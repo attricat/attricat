@@ -70,27 +70,35 @@ export const isAssignable = (principal: ResolvedPrincipal) =>
 
 export type PrincipalOption = { value: string; principal: ResolvedPrincipal };
 
-/** Active users and existing teams of the configured kinds. */
-export const assignableOptions = (
+/**
+ * Every directory entry of the configured kinds, including former members and
+ * deleted teams (for example, to filter by past assignments).
+ */
+export const directoryOptions = (
   directory: Directory | undefined,
   config: PrincipalConfiguration,
 ): PrincipalOption[] => {
   if (!directory) return [];
   const users = config.kinds.includes(principalKinds.user)
-    ? directory.users
-        .filter((user) => user.active)
-        .map((user) => ({
-          value: principalReference(principalKinds.user, user.id),
-          principal: { kind: 'user' as const, user, label: userLabel(user) },
-        }))
+    ? directory.users.map((user) => ({
+        value: principalReference(principalKinds.user, user.id),
+        principal: { kind: 'user' as const, user, label: userLabel(user) },
+      }))
     : [];
   const teams = config.kinds.includes(principalKinds.team)
-    ? directory.teams
-        .filter((team) => !team.deleted)
-        .map((team) => ({
-          value: principalReference(principalKinds.team, team.id),
-          principal: { kind: 'team' as const, team, label: team.name },
-        }))
+    ? directory.teams.map((team) => ({
+        value: principalReference(principalKinds.team, team.id),
+        principal: { kind: 'team' as const, team, label: team.name },
+      }))
     : [];
   return [...users, ...teams];
 };
+
+/** Active users and existing teams of the configured kinds. */
+export const assignableOptions = (
+  directory: Directory | undefined,
+  config: PrincipalConfiguration,
+): PrincipalOption[] =>
+  directoryOptions(directory, config).filter((option) =>
+    isAssignable(option.principal),
+  );

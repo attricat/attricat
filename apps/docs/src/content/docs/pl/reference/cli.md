@@ -168,6 +168,7 @@ acli context delete <context-id>
 acli entity create --blueprint <code> --values values.toml [--context-id <id>] [--system-tags <json>] [--system-metadata <json>]
 acli entity get | form | delete <entity-id>
 acli entity update <entity-id> [--values f.toml] [--relationships f.toml] [--remove-values f.toml] [--context-id <id>]
+acli entity batch --operations <json-or-file>
 acli entity preview <entity-id> [--relationship-depth <n>] [--relationship-limit <n>]
 acli entity resolved-preview <entity-id> --context-id <id>
 acli entity search --blueprint <code> [--query <text>] [--filters <json>] [--version <n>] [--sort-field <f> --sort-direction asc|desc] [--size <n>] [--cursor <c>] [--include-total] [--outdated] [--system-tags <json>] [--relationship-tree-facets <json>]
@@ -187,6 +188,8 @@ acli value current <entity-id>
 acli value append <entity-id> --file values.toml --context-id <id>
 acli value replace | remove <entity-id> --file relationships.toml --context-id <id>
 ```
+
+`entity batch` przyjmuje tablicę JSON z operacjami tworzenia, aktualizacji i usuwania, podaną bezpośrednio lub w pliku, i zapisuje wszystkie albo żadną. Format operacji opisuje sekcja [Zmiany wsadowe](/pl/reference/api/#zmiany-wsadowe).
 
 ### Pliki
 

@@ -29,7 +29,7 @@ Obszar roboczy zawsze ma co najmniej jednego aktywnego właściciela. Zmiany cz�
 
 Karta **Zespoły** grupuje członków pod wspólną nazwą, na przykład *Jakość* lub *Serwis terenowy*, aby [atrybut użytkownika lub zespołu](/pl/builders/modeling/#przypisz-odpowiedzialność) mógł przypisać pracę całemu zespołowi. Każdy, kto ma `members.manage`, może utworzyć zespół, zmienić jego nazwę i skład albo go usunąć. Kodu zespołu nie można zmienić po utworzeniu.
 
-Rekordy zapisują sam zespół, więc zmiana jego składu nigdy nie zmienia rekordów. Filtry **Przypisane do mnie** w Eksploratorze obejmują rekordy przypisane do Twoich zespołów. Usunięty zespół pozostaje w rekordach, które już go używają, i jest oznaczony jako usunięty, ale nie można go już przypisać. Zespoły nie nadają uprawnień.
+Rekordy zapisują sam zespół, więc zmiana jego składu nigdy nie zmienia rekordów. Filtry **Przypisane do mnie** w Przeglądarce obejmują rekordy przypisane do Twoich zespołów. Usunięty zespół pozostaje w rekordach, które już go używają, i jest oznaczony jako usunięty, ale nie można go już przypisać. Zespoły nie nadają uprawnień.
 
 ## Role
 
@@ -55,9 +55,9 @@ Przydział roli obowiązuje w jednym zakresie:
 | **Cały obszar roboczy** | Wszystko. |
 | **Rodzina schematów** | Jeden schemat i jego encje we wszystkich wersjach. |
 | **Encja** | Jedną encję. |
-| **Poddrzewo kontekstu** | Jeden kontekst i wszystko poniżej niego, ale nie jego kontekst nadrzędny ani konteksty równorzędne. |
+| **Poddrzewo kontekstu** | Ustawienia jednego kontekstu i kontekstów poniżej niego, ale nie jego kontekstu nadrzędnego ani kontekstów równorzędnych. Nie obejmuje encji ani ich wartości. |
 
-Przydziały sumują się. Osoba z rolą `viewer` w obszarze roboczym i `editor` w poddrzewie kontekstu `PL` może odczytywać wszystko i edytować wartości w `PL` oraz jego kontekstach podrzędnych.
+Przydziały sumują się. Osoba z rolą `viewer` w obszarze roboczym i `editor` w poddrzewie kontekstu `PL` może odczytywać wszystko, a także edytować lub usuwać kontekst `PL` i jego konteksty podrzędne oraz robić z nich kanały publikacji. Tworzenie kontekstów wymaga przydziału w całym obszarze roboczym. Przydział w poddrzewie kontekstu nie pozwala odczytywać ani edytować wartości encji w tych kontekstach: dostęp do encji wynika z przydziałów w obszarze roboczym, rodzinie schematów i encji.
 
 Rolę właściciela można przydzielić tylko w całym obszarze roboczym.
 
@@ -102,7 +102,7 @@ Blokada retencji przechowuje dokładną zawartość pliku w magazynie do określ
 
 Blokady pochodzą z dwóch źródeł:
 
-- **Statusy rekordów.** Status w schemacie z `retention_days` zakłada blokadę na pliki rekordu, gdy ten przechodzi do tego statusu, np. gdy dokument zostaje wydany. Zobacz [Kontroluj cykl życia rekordu](/pl/builders/blueprints/#krok-10-kontroluj-cykl-życia-rekordu). Takich blokad nie można zwolnić przed terminem.
+- **Statusy rekordów.** Status w schemacie z `retention_days` zakłada blokadę na pliki rekordu, gdy ten przechodzi do tego statusu, np. gdy dokument zostaje wydany. Zobacz [Zachowuj wydane pliki](/pl/builders/validation/#zachowuj-wydane-pliki). Takich blokad nie można zwolnić przed terminem.
 - **Blokady jawne**, np. blokada na potrzeby postępowania prawnego. Osoby z uprawnieniem `files.hold` (domyślnie właściciele i administratorzy) mogą założyć ją na plik na określoną liczbę dni, podając powód, i zwolnić ją przed terminem.
 
 Strona encji wyświetla blokady jej plików i datę ich wygaśnięcia. Zakładanie i zwalnianie blokad jest zapisywane w dzienniku audytu.

@@ -390,10 +390,7 @@ impl CatalogRepository {
             configuration,
             input,
             checkpoint,
-            batch_key: if abi_version == "1.4.0"
-                || abi_version == super::INTERACTIVE_OPERATION_ABI
-                || crate::extensions::is_unified_abi_version(&abi_version)
-            {
+            batch_key: if uses_run_scoped_batch_key(&abi_version) {
                 format!("{}:{}", task.subject_id, batch_number)
             } else {
                 format!("{}:{}", idempotency_key, batch_number)
@@ -705,9 +702,34 @@ pub(crate) fn operation_run_abi(host_api: &str) -> Result<&'static str, Reposito
     })
 }
 
+/// Whether a recorded run ABI executes through a batch-scoped world (1.4
+/// connector, 1.5 interactive or unified), whose batch key is derived from the
+/// run id rather than the idempotency key. This mirrors the runtime's dispatch
+/// exactly: only these recorded ABIs select those worlds, so any other value
+/// (including unrecorded patch versions) keeps the released 1.2 key.
+fn uses_run_scoped_batch_key(abi_version: &str) -> bool {
+    abi_version == "1.4.0"
+        || abi_version == super::INTERACTIVE_OPERATION_ABI
+        || crate::extensions::is_unified_abi_version(abi_version)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn run_scoped_batch_keys_follow_recorded_abi() {
+        assert!(!uses_run_scoped_batch_key("1.2.0"));
+        assert!(uses_run_scoped_batch_key("1.4.0"));
+        assert!(uses_run_scoped_batch_key(
+            super::super::INTERACTIVE_OPERATION_ABI
+        ));
+        assert!(uses_run_scoped_batch_key(
+            crate::extensions::SUPPORTED_HOST_API
+        ));
+        assert!(!uses_run_scoped_batch_key("1.4.1"));
+        assert!(!uses_run_scoped_batch_key("2.0.0"));
+    }
 
     #[test]
     fn redact_removes_nested_credential_named_values() {

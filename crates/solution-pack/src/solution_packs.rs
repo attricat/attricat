@@ -392,6 +392,7 @@ pub struct SolutionPackBlueprint {
     table_path_dependencies: BTreeSet<String>,
     kind: BlueprintKind,
     effective_attributes: Vec<catalog_blueprint::EffectiveAttribute>,
+    unique_keys: Vec<catalog_blueprint::UniqueKeyDefinition>,
     extension_layout: Vec<BlueprintExtensionLayoutEntry>,
 }
 
@@ -438,6 +439,10 @@ impl SolutionPackBlueprint {
 
     pub fn effective_attributes(&self) -> &[catalog_blueprint::EffectiveAttribute] {
         &self.effective_attributes
+    }
+
+    pub fn unique_keys(&self) -> &[catalog_blueprint::UniqueKeyDefinition] {
+        &self.unique_keys
     }
 }
 
@@ -1253,6 +1258,12 @@ fn validate_sample_resource(
         .map_err(|error| SolutionPackError::Invalid(format!("'{path}': {error}")))?;
     }
     validate_effective_sample_facts(&sample, blueprints, files)?;
+    crate::solution_pack_sample_data::validate_sample_unique_keys(
+        &sample,
+        blueprints,
+        &seeds.contexts,
+    )
+    .map_err(SolutionPackError::Invalid)?;
     Ok(Some(sample))
 }
 
@@ -1302,6 +1313,19 @@ fn validate_effective_sample_facts(
             {
                 return invalid(format!(
                     "sample entity '{}' fact '{}' is read-only or non-scalar",
+                    entity.key, fact.attribute
+                ));
+            }
+            // Status values follow workspace transitions and principals name
+            // workspace users or teams, so samples leave them to defaults.
+            if attribute.value_schema.as_ref().is_some_and(|schema| {
+                schema.get(catalog_validation::status::STATUS_KEY).is_some()
+                    || schema
+                        .get(catalog_validation::principal::PRINCIPAL_KEY)
+                        .is_some()
+            }) {
+                return invalid(format!(
+                    "sample entity '{}' cannot set status or principal attribute '{}'",
                     entity.key, fact.attribute
                 ));
             }
@@ -1368,7 +1392,11 @@ fn validate_effective_sample_facts(
             }
             validate_sample_context_editable(&entity.key, value.context.as_ref(), attribute)?;
             for file in &value.files {
-                if !sample_file_allowed_by_policy(policy, file, files[&file.path].len()) {
+                if !policy.allows(
+                    &file.media_type,
+                    &file.filename,
+                    files[&file.path].len() as u64,
+                ) {
                     return invalid(format!(
                         "sample file '{}' is not allowed by the file policy of '{}'",
                         file.path, value.attribute
@@ -1392,40 +1420,6 @@ fn validate_sample_context_editable(
         ));
     }
     Ok(())
-}
-
-/// Mirrors the ordinary upload policy check for a bundled sample file.
-fn sample_file_allowed_by_policy(
-    policy: &catalog_blueprint::FilePolicy,
-    file: &crate::solution_pack_sample_data::SampleFile,
-    size: usize,
-) -> bool {
-    let media_type = file.media_type.as_str();
-    let family = media_type.split('/').next().unwrap_or_default();
-    if policy.max_bytes.is_some_and(|limit| size as u64 > limit)
-        || (policy.image_only && family != "image")
-    {
-        return false;
-    }
-    if !policy.allowed_mime_groups.is_empty()
-        && !policy.allowed_mime_groups.iter().any(|group| {
-            group == media_type || group.trim_end_matches("/*") == family || group == family
-        })
-    {
-        return false;
-    }
-    let extension = file
-        .filename
-        .rsplit_once('.')
-        .map(|(_, extension)| extension);
-    policy.allowed_extensions.is_empty()
-        || extension.is_some_and(|extension| {
-            policy.allowed_extensions.iter().any(|allowed| {
-                allowed
-                    .trim_start_matches('.')
-                    .eq_ignore_ascii_case(extension)
-            })
-        })
 }
 
 fn validate_sample_value_for_attribute(
@@ -2703,11 +2697,64 @@ fn validate_content(
         .map(|(key, mut blueprint)| {
             blueprint.portable.table_path_dependencies = table_path_dependencies[&key].clone();
             blueprint.portable.effective_attributes = compiled[&key].attributes.clone();
+            blueprint.portable.unique_keys = compiled[&key].unique_keys.clone();
             (key, blueprint.portable)
         })
         .collect();
 
     Ok(blueprints)
+}
+
+/// Visits the blueprint codes named by predicates embedded in a blueprint
+/// definition: its `[[rules]]`, entity checks (`x-attricat-checks`) and status
+/// transition conditions. Packs name these blueprints by pack-local code.
+fn visit_embedded_predicate_blueprint_codes(
+    table: &mut toml::Table,
+    visit: &mut dyn FnMut(&mut String) -> Result<(), SolutionPackError>,
+) -> Result<(), SolutionPackError> {
+    fn json_string(
+        schema: &mut toml::Value,
+        visit: &mut dyn FnMut(&mut String) -> Result<(), SolutionPackError>,
+    ) -> Result<(), SolutionPackError> {
+        let toml::Value::String(source) = schema else {
+            return Ok(());
+        };
+        // Malformed JSON is reported by the ordinary blueprint parser.
+        let Ok(original) = serde_json::from_str::<Value>(source) else {
+            return Ok(());
+        };
+        let mut rewritten = original.clone();
+        catalog_validation::predicate::visit_schema_blueprint_codes(&mut rewritten, visit)?;
+        if rewritten != original {
+            *source = serde_json::to_string(&rewritten).expect("JSON value serializes");
+        }
+        Ok(())
+    }
+    if let Some(rules) = table.get_mut("rules").and_then(toml::Value::as_array_mut) {
+        for rule in rules {
+            if let Some(predicate) = rule.get_mut("predicate") {
+                crate::solution_pack_seeds::visit_toml_predicate_blueprint_codes(predicate, visit)?;
+            }
+        }
+    }
+    if let Some(schema) = table.get_mut("entity_schema") {
+        json_string(schema, visit)?;
+    }
+    if let Some(attributes) = table
+        .get_mut("attributes")
+        .and_then(toml::Value::as_array_mut)
+    {
+        for attribute in attributes {
+            if let Some(schema) = attribute.get_mut("value_schema") {
+                json_string(schema, visit)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn table_of(value: &mut toml::Value) -> &mut toml::Table {
+    value.as_table_mut().expect("blueprint source is a table")
 }
 
 fn prepare_blueprint(
@@ -2820,6 +2867,16 @@ fn prepare_blueprint(
         }
     }
 
+    let pack_codes = blueprint_codes.values().copied().collect::<HashSet<_>>();
+    visit_embedded_predicate_blueprint_codes(table_of(&mut value), &mut |code| {
+        if pack_codes.contains(code.as_str()) {
+            Ok(())
+        } else {
+            invalid(format!(
+                "blueprint '{key}' predicate references blueprint '{code}' that the pack does not declare"
+            ))
+        }
+    })?;
     let native_source = toml::to_string(&value).map_err(|_| {
         SolutionPackError::Invalid(format!(
             "blueprint '{key}' is not valid strict blueprint TOML"
@@ -2892,6 +2949,7 @@ fn prepare_blueprint(
             table_path_dependencies: BTreeSet::new(),
             kind: definition.kind.clone(),
             effective_attributes: Vec::new(),
+            unique_keys: Vec::new(),
             extension_layout,
         },
         native_definition: definition,
@@ -4831,6 +4889,10 @@ fn normalized_blueprint_payload(
             }
         }
     }
+    visit_embedded_predicate_blueprint_codes(table, &mut |code| {
+        *code = crate::solution_pack_seeds::physical_blueprint_code(mappings, code)?;
+        Ok(())
+    })?;
     if let Some(views) = table.get_mut("views").and_then(toml::Value::as_table_mut) {
         for (name, view) in views.iter_mut() {
             if let Some(view) = view.as_table_mut() {
@@ -8431,6 +8493,190 @@ tags = ["reviewed"]
 "#;
     const UNNAMED_SEARCH: &[u8] = br#"{"format_version":1,"kind":"solution_pack_saved_search","name":"Unnamed products","description":"Products without a name","state":{"blueprint":"blueprints/product","context":"contexts/pl","sort":{"field":"categories.name","direction":"asc"},"attributeFilters":[{"field":"name","operator":"eq","value":""}],"relationshipFacets":[{"field":"categories","targetBlueprint":"blueprints/category"}],"locked":false}}"#;
 
+    /// The name rule with its predicate (and anything after it) replaced.
+    fn rule_with_predicate(predicate: &str) -> Vec<u8> {
+        String::from_utf8(NAME_RULE.to_vec())
+            .unwrap()
+            .replace("type = \"required\"\nattribute_code = \"name\"", predicate)
+            .into_bytes()
+    }
+
+    fn replace_seed_file(
+        manifest: &mut Value,
+        files: &mut [(&'static str, &'static [u8])],
+        kind: &str,
+        path: &'static str,
+        bytes: &'static [u8],
+    ) {
+        let entry = manifest["resources"][kind]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|resource| resource["path"] == path)
+            .unwrap();
+        entry["sha256"] = json!(digest(bytes));
+        files
+            .iter_mut()
+            .find(|(candidate, _)| *candidate == path)
+            .unwrap()
+            .1 = bytes;
+    }
+
+    #[test]
+    fn predicates_resolve_and_rewrite_pack_blueprint_codes() {
+        let (mut manifest, mut files) = seed_manifest();
+        // A nested `linked` code belongs to the linked blueprint, not to the
+        // rule's own; a `referenced_by` source is a pack-local blueprint code.
+        let rule = rule_with_predicate(
+            "type = \"all_of\"\n\n[[predicate.predicates]]\ntype = \"linked\"\nrelationship_code = \"categories\"\n\n[predicate.predicates.predicate]\ntype = \"required\"\nattribute_code = \"products\"\n\n[[predicate.predicates]]\ntype = \"referenced_by\"\nblueprint_code = \"category\"\nrelationship_code = \"products\"\nmin = 1",
+        );
+        replace_seed_file(
+            &mut manifest,
+            &mut files,
+            "rules",
+            "rules/name-required.toml",
+            Box::leak(rule.into_boxed_slice()),
+        );
+        let product = String::from_utf8(PRODUCT_BLUEPRINT.to_vec()).unwrap().replace(
+            "kind = \"entity\"\n",
+            "kind = \"entity\"\nentity_schema = '{\"type\":\"object\",\"x-attricat-checks\":[{\"code\":\"in_category\",\"predicate\":{\"type\":\"referenced_by\",\"blueprint_code\":\"category\",\"relationship_code\":\"products\",\"min\":1}}]}'\n",
+        );
+        let product: &'static [u8] = Box::leak(product.into_bytes().into_boxed_slice());
+        replace_seed_file(
+            &mut manifest,
+            &mut files,
+            "blueprints",
+            "blueprints/product.toml",
+            product,
+        );
+        let pack = ValidatedSolutionPack::from_tar_zst(&archive(&manifest, &files)).unwrap();
+        let plan = build_solution_pack_plan(
+            &pack,
+            "ecom",
+            BlueprintPublication::Publish,
+            &seed_workspace(SeedWorkspaceSnapshot::default()),
+        )
+        .unwrap();
+        assert!(plan.ready, "{:?}", plan.actions);
+        let definition = action(&plan, "rules/name-required")
+            .normalized_payload
+            .as_ref()
+            .unwrap()["definition"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        assert!(
+            definition.contains("blueprint_code = \"ecom_category\""),
+            "{definition}"
+        );
+        assert!(catalog_rules::compile(&definition).is_ok());
+        let blueprint = action(&plan, "blueprints/product")
+            .normalized_payload
+            .as_ref()
+            .unwrap()["definition"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        assert!(blueprint.contains("ecom_category"), "{blueprint}");
+
+        let unknown = String::from_utf8(product.to_vec()).unwrap().replace(
+            "\"blueprint_code\":\"category\"",
+            "\"blueprint_code\":\"missing\"",
+        );
+        replace_seed_file(
+            &mut manifest,
+            &mut files,
+            "blueprints",
+            "blueprints/product.toml",
+            Box::leak(unknown.into_bytes().into_boxed_slice()),
+        );
+        assert_invalid(&archive(&manifest, &files), "the pack does not declare");
+    }
+
+    #[test]
+    fn channels_require_rules_by_physical_code_and_enforcing_rules_on_mapped_blueprints_wait() {
+        let (mut manifest, mut files) = seed_manifest();
+        let context = String::from_utf8(PL_CONTEXT.to_vec()).unwrap().replace(
+            "{\"enabled\":true}",
+            "{\"enabled\":true,\"required_rules\":[\"rules/name-required\"],\"require_valid_entity\":true}",
+        );
+        replace_seed_file(
+            &mut manifest,
+            &mut files,
+            "contexts",
+            "contexts/pl.json",
+            Box::leak(context.into_bytes().into_boxed_slice()),
+        );
+        let rule = rule_with_predicate(
+            "type = \"required\"\nattribute_code = \"name\"\n\n[enforcement]\non_save = true",
+        );
+        replace_seed_file(
+            &mut manifest,
+            &mut files,
+            "rules",
+            "rules/name-required.toml",
+            Box::leak(rule.into_boxed_slice()),
+        );
+        let pack = ValidatedSolutionPack::from_tar_zst(&archive(&manifest, &files)).unwrap();
+        let plan = build_solution_pack_plan(
+            &pack,
+            "ecom",
+            BlueprintPublication::Publish,
+            &seed_workspace(SeedWorkspaceSnapshot::default()),
+        )
+        .unwrap();
+        let channel = action(&plan, "channels/pl")
+            .normalized_payload
+            .clone()
+            .unwrap();
+        assert_eq!(
+            channel["required_rule_codes"],
+            json!(["ecom_name-required"])
+        );
+        assert_eq!(channel["require_valid_entity"], json!(true));
+        // A newly created blueprint has no entities, so the rule is enabled.
+        let rule = action(&plan, "rules/name-required");
+        assert_eq!(
+            rule.normalized_payload.as_ref().unwrap()["enabled"],
+            json!(true)
+        );
+        assert_eq!(rule.summary["enable_deferred_reason"], Value::Null);
+
+        let existing = |hash: String| ExistingBlueprintSnapshot {
+            id: uuid::Uuid::from_u128(9),
+            code: "shared_product".into(),
+            version: 2,
+            kind: "entity".into(),
+            canonical_definition_hash: hash,
+            definition_hash: "0".repeat(64),
+        };
+        let mut workspace = seed_workspace(SeedWorkspaceSnapshot::default());
+        workspace.physical_codes.insert("shared_product".to_owned());
+        workspace.existing_blueprints =
+            BTreeMap::from([("blueprints/product".to_owned(), existing("0".repeat(64)))]);
+        let probe =
+            build_solution_pack_plan(&pack, "ecom", BlueprintPublication::Publish, &workspace)
+                .unwrap();
+        let hash = probe.blueprint_canonical_definition_hashes["blueprints/product"].clone();
+        workspace.existing_blueprints =
+            BTreeMap::from([("blueprints/product".to_owned(), existing(hash))]);
+        let plan =
+            build_solution_pack_plan(&pack, "ecom", BlueprintPublication::Publish, &workspace)
+                .unwrap();
+        assert_eq!(action(&plan, "blueprints/product").action, "map");
+        let rule = action(&plan, "rules/name-required");
+        assert_eq!(rule.action, "create");
+        assert_eq!(
+            rule.normalized_payload.as_ref().unwrap()["enabled"],
+            json!(false)
+        );
+        assert_eq!(rule.summary["requested_enabled"], json!(true));
+        assert_eq!(
+            rule.summary["enable_deferred_reason"],
+            json!("enforcing_rule_requires_dry_run")
+        );
+    }
+
     fn seed_manifest() -> (Value, Vec<(&'static str, &'static [u8])>) {
         let mut manifest = manifest_value();
         manifest["resources"]["contexts"] = json!([
@@ -8520,9 +8766,10 @@ tags = ["reviewed"]
                 .unwrap()
         };
         assert!(position("contexts/eu") < position("contexts/pl"));
-        assert!(position("contexts/pl") < position("channels/pl"));
-        assert!(position("channels/pl") < position("blueprints/product"));
+        assert!(position("contexts/pl") < position("blueprints/product"));
         assert!(position("blueprints/product") < position("rules/name-required"));
+        // Channels follow the rules they can require.
+        assert!(position("rules/name-required") < position("channels/pl"));
 
         let eu = mapping(&plan, "contexts/eu");
         let pl = mapping(&plan, "contexts/pl");
@@ -8536,7 +8783,13 @@ tags = ["reviewed"]
         );
         assert_eq!(
             action(&plan, "channels/pl").normalized_payload,
-            Some(json!({"context_id": pl.target_id, "context_code": "ecom_pl", "enabled": true}))
+            Some(json!({
+                "context_id": pl.target_id,
+                "context_code": "ecom_pl",
+                "enabled": true,
+                "required_rule_codes": [],
+                "require_valid_entity": false,
+            }))
         );
 
         let rule = action(&plan, "rules/name-required");
@@ -8617,7 +8870,13 @@ tags = ["reviewed"]
                         crate::solution_pack_seeds::ExistingContextSnapshot {
                             id: existing_id,
                             code: "PL".to_owned(),
-                            publication_channel_enabled: enabled,
+                            publication_channel: enabled.map(|enabled| {
+                                crate::solution_pack_seeds::ExistingPublicationChannel {
+                                    enabled,
+                                    required_rule_codes: Vec::new(),
+                                    require_valid_entity: false,
+                                }
+                            }),
                         },
                     )]),
                     rule_codes: BTreeSet::from(["ecom_name-required".to_owned()]),
@@ -8740,6 +8999,98 @@ tags = ["reviewed"]
                     .replace("categories.name", "categories.missing")
                     .into_bytes(),
                 "unknown attribute 'missing'",
+            ),
+            (
+                "rules",
+                "rules/name-required.toml",
+                rule_with_predicate(
+                    "type = \"referenced_by\"\nblueprint_code = \"missing\"\nrelationship_code = \"products\"\nmin = 1",
+                ),
+                "not a pack entity blueprint",
+            ),
+            (
+                "rules",
+                "rules/name-required.toml",
+                rule_with_predicate(
+                    "type = \"referenced_by\"\nblueprint_code = \"category\"\nrelationship_code = \"name\"\nmin = 1",
+                ),
+                "unknown relationship 'name'",
+            ),
+            (
+                "rules",
+                "rules/name-required.toml",
+                rule_with_predicate(
+                    "type = \"compare\"\nattribute_code = \"name\"\nop = \"eq\"\nother_attribute_code = \"missing\"",
+                ),
+                "unknown attribute 'missing'",
+            ),
+            (
+                "rules",
+                "rules/name-required.toml",
+                rule_with_predicate(
+                    "type = \"required\"\nattribute_code = \"name\"\n\n[enforcement]\non_save = false\n\n[[enforcement.transitions]]\nattribute_code = \"missing\"\nto = \"done\"",
+                ),
+                "unknown enforcement attribute 'missing'",
+            ),
+            (
+                "workflows",
+                "workflows/mark-reviewed.toml",
+                String::from_utf8(REVIEW_WORKFLOW.to_vec())
+                    .unwrap()
+                    .replace(
+                        "[[actions]]\ntype = \"system_tags_add\"\ntags = [\"reviewed\"]",
+                        "[[actions]]\ntype = \"referencing_entities_update\"\nrelationship_attribute = \"categories\"\nmax_targets = 5\n[[actions.actions]]\ntype = \"attribute_write\"\nattribute_code = \"products\"\nfixed = \"x\"",
+                    )
+                    .into_bytes(),
+                "writes attribute 'products'",
+            ),
+            (
+                "workflows",
+                "workflows/mark-reviewed.toml",
+                String::from_utf8(REVIEW_WORKFLOW.to_vec())
+                    .unwrap()
+                    .replace(
+                        "[[actions]]\ntype = \"system_tags_add\"\ntags = [\"reviewed\"]",
+                        "[[actions]]\ntype = \"referencing_entities_update\"\nrelationship_attribute = \"name\"\nmax_targets = 5\n[[actions.actions]]\ntype = \"system_tags_add\"\ntags = [\"x\"]",
+                    )
+                    .into_bytes(),
+                "follows relationship 'name'",
+            ),
+            (
+                "saved_searches",
+                "saved-searches/unnamed.json",
+                String::from_utf8(UNNAMED_SEARCH.to_vec())
+                    .unwrap()
+                    .replace(
+                        "categories.name",
+                        "categories.products.categories.products.name",
+                    )
+                    .into_bytes(),
+                "more than 3 relationship hops",
+            ),
+            (
+                "saved_searches",
+                "saved-searches/unnamed.json",
+                String::from_utf8(UNNAMED_SEARCH.to_vec())
+                    .unwrap()
+                    .replace(
+                        "\"targetBlueprint\":\"blueprints/category\"",
+                        "\"targetBlueprint\":\"blueprints/product\"",
+                    )
+                    .into_bytes(),
+                "cannot target 'blueprints/product'",
+            ),
+            (
+                "contexts",
+                "contexts/pl.json",
+                String::from_utf8(PL_CONTEXT.to_vec())
+                    .unwrap()
+                    .replace(
+                        "{\"enabled\":true}",
+                        "{\"enabled\":true,\"required_rules\":[\"rules/missing\"]}",
+                    )
+                    .into_bytes(),
+                "requires undeclared rule 'rules/missing'",
             ),
             (
                 "contexts",
@@ -8973,6 +9324,98 @@ tags = ["reviewed"]
     }
 
     #[test]
+    fn samples_cannot_share_a_unique_key() {
+        let keyed = format!(
+            "{}\n[[unique_keys]]\ncode = \"title\"\nattributes = [\"title\"]\n",
+            String::from_utf8(DOCUMENT_BLUEPRINT.to_vec()).unwrap()
+        );
+        let keyed: &'static [u8] = Box::leak(keyed.into_bytes().into_boxed_slice());
+        let archive_for = |titles: [&str; 2]| {
+            let sample = serde_json::to_vec(&json!({
+                "format_version": 1,
+                "kind": "solution_pack_sample_data",
+                "classification": "synthetic",
+                "entities": titles.iter().enumerate().map(|(index, title)| json!({
+                    "key": format!("sample-entities/doc-{index}"),
+                    "blueprint": "blueprints/document",
+                    "facts": [{"attribute": "blueprints/document/attributes/title", "value": title}],
+                    "relationships": []
+                })).collect::<Vec<_>>(),
+            }))
+            .unwrap();
+            let sample: &'static [u8] = Box::leak(sample.into_boxed_slice());
+            let mut manifest = manifest_value();
+            manifest["resources"]["blueprints"]
+                .as_array_mut()
+                .unwrap()
+                .push(resource(
+                    "blueprints/document",
+                    "blueprints/document.toml",
+                    keyed,
+                ));
+            manifest["resources"]["sample_data"] = json!({
+                "key": "sample-data/default",
+                "path": "sample-data/sample-data.json",
+                "sha256": digest(sample),
+                "files": [],
+            });
+            let mut files = valid_files();
+            files.push(("blueprints/document.toml", keyed));
+            files.push(("sample-data/sample-data.json", sample));
+            archive(&manifest, &files)
+        };
+        assert!(
+            ValidatedSolutionPack::from_tar_zst(&archive_for(["Spec one", "Spec two"])).is_ok()
+        );
+        // Compared like stored keys: trimmed, whitespace collapsed, case folded.
+        assert_invalid(
+            &archive_for(["Sample  spec", " sample SPEC"]),
+            "share unique key 'title'",
+        );
+    }
+
+    #[test]
+    fn samples_cannot_set_status_values() {
+        let statused = format!(
+            "{}\n[[attributes]]\ncode = \"state\"\nvalue_type = \"string\"\nvalue_schema = '{{\"type\":\"string\",\"enum\":[\"draft\"],\"x-attricat-status\":{{\"version\":1,\"options\":[{{\"code\":\"draft\",\"label\":\"Draft\"}}]}}}}'\n",
+            String::from_utf8(DOCUMENT_BLUEPRINT.to_vec()).unwrap()
+        );
+        let statused: &'static [u8] = Box::leak(statused.into_bytes().into_boxed_slice());
+        let sample = document_sample(json!({
+            "key": "sample-entities/doc",
+            "blueprint": "blueprints/document",
+            "facts": [
+                {"attribute": "blueprints/document/attributes/title", "value": "Spec"},
+                {"attribute": "blueprints/document/attributes/state", "value": "draft"}
+            ],
+            "relationships": []
+        }));
+        let sample: &'static [u8] = Box::leak(sample.into_boxed_slice());
+        let mut manifest = manifest_value();
+        manifest["resources"]["blueprints"]
+            .as_array_mut()
+            .unwrap()
+            .push(resource(
+                "blueprints/document",
+                "blueprints/document.toml",
+                statused,
+            ));
+        manifest["resources"]["sample_data"] = json!({
+            "key": "sample-data/default",
+            "path": "sample-data/sample-data.json",
+            "sha256": digest(sample),
+            "files": [],
+        });
+        let mut files = valid_files();
+        files.push(("blueprints/document.toml", statused));
+        files.push(("sample-data/sample-data.json", sample));
+        assert_invalid(
+            &archive(&manifest, &files),
+            "cannot set status or principal attribute",
+        );
+    }
+
+    #[test]
     fn samples_attach_bundled_files_and_set_contextual_values() {
         let valid = json!({
             "key": "sample-entities/spec",
@@ -9164,6 +9607,12 @@ tags = ["reviewed"]
         for fixture in [EU_CONTEXT, PL_CONTEXT] {
             assert!(accepts(&context, &serde_json::from_slice(fixture).unwrap()));
         }
+        let mut gated: Value = serde_json::from_slice(PL_CONTEXT).unwrap();
+        gated["publication_channel"]["required_rules"] = json!(["rules/name-required"]);
+        gated["publication_channel"]["require_valid_entity"] = json!(true);
+        assert!(accepts(&context, &gated));
+        gated["publication_channel"]["required_rules"] = json!(["name-required"]);
+        assert!(!accepts(&context, &gated));
         assert!(!accepts(
             &context,
             &json!({"format_version": 1, "code": "eu", "data": {}})
@@ -9174,6 +9623,9 @@ tags = ["reviewed"]
         ));
         let mut fixture: Value = serde_json::from_slice(UNNAMED_SEARCH).unwrap();
         assert!(accepts(&search, &fixture));
+        fixture["state"]["sort"]["field"] = json!("a.b.c.d.e");
+        assert!(!accepts(&search, &fixture));
+        fixture = serde_json::from_slice(UNNAMED_SEARCH).unwrap();
         fixture["state"]["version"] = json!(1);
         assert!(!accepts(&search, &fixture));
 

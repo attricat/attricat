@@ -1,7 +1,11 @@
 import { useTranslation } from 'react-i18next';
 import { savedStatusState } from '../status';
-import type { Attribute, ComponentReference, FormAttributeValue } from '../api';
-import type { StatusTransitionAccess } from '../recordControls';
+import type {
+  Attribute,
+  ComponentReference,
+  FormAttributeValue,
+  StatusTransitionAccess,
+} from '../api';
 import {
   filesForAttribute,
   formatResolvedValue,

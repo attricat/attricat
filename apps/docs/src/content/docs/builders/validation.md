@@ -105,7 +105,7 @@ value_schema = '''{
 }'''
 ```
 
-- A condition has a `code`, an optional `message` (1 to 500 characters), and a `predicate`. Predicates are the same as in [rules](/builders/rules/#predicates), except `stale`, `unique`, and `acyclic`. An edge has at most 16 conditions.
+- A condition has a `code`, an optional `message` (1 to 500 characters), and a `predicate`. Predicates are the same as in [rules](/reference/blueprint/#predicates), except `stale`, `unique`, and `acyclic`. An edge has at most 16 conditions.
 - Each `from`/`to` edge can be declared only once.
 - Conditions are checked on the state the write produces, so filling in `root_cause` and closing in the same save works.
 - They are checked in every context where the status changes, by every writer.
@@ -114,7 +114,50 @@ If any condition is unmet, the whole write is rejected with `422 transition_cond
 
 To find out ahead of time which destinations are available, call `GET /v1/entities/{id}/status-transitions?context_id=<uuid>` (the default context if you leave it out). It returns each declared transition from the saved status with `allowed` and, when blocked, a `denial_code` and `denial_reason`, plus `unmet`: the unmet conditions and enforcing rules, evaluated on the saved entity as if the status had changed. Blocked by conditions shows as `denial_code` `transition_conditions_unmet`.
 
-A status can also restrict who may make each transition, lock finalized records, and bind approvals to reviewed content. See [Control a record's lifecycle](/builders/blueprints/#step-10-control-a-records-lifecycle).
+### Control a record's lifecycle
+
+For controlled documents, inspections, or assessments, a status can also decide who may make a transition, freeze the record once it is final, bind an approval to the exact content that was reviewed, and keep released files for a retention period. [Step 10 of Author a blueprint](/builders/blueprints/#step-10-control-a-records-lifecycle) has a complete example, and [Statuses](/reference/blueprint/#statuses) lists every key.
+
+#### Who may make a transition
+
+A transition can name requirements. The person saving must meet all of them, in addition to `entities.write`:
+
+- `permission`: a [permission](/reference/permissions/) they must hold for this entity, such as `entities.publish`.
+- `roles`: they must hold at least one of these roles (built-in or [custom](/operate/workspaces/#roles)), granted for the whole workspace, the blueprint, or this entity.
+- `separate_from`: separation of duties. They must not be the person who most recently made a transition with one of these `code`s on this entity, in this context. For example, whoever submitted a document cannot also approve it.
+
+Give a transition a `code` to name it in `separate_from` and in history. A refused transition returns `403 status_transition_forbidden` or `403 status_separation_of_duties`, and nothing is saved. The edit form disables the transitions you may not make and says why.
+
+The same checks apply to every writer: the API, the CLI, workflows (as the person whose change started the workflow), extensions, and agents (as the person who approved the change). A write with no identifiable person, such as a scheduled job, cannot make a restricted transition.
+
+Requirements always refer to the person saving. They cannot refer to a [user or team attribute](/builders/modeling/#assign-responsibility) on the record, so "only the assignee may close this" cannot be declared.
+
+#### Lock finalized records
+
+`lock` on a status makes content read-only while the record has that status:
+
+- `"lock": "all"` freezes every attribute, relationship, and file except the status itself.
+- `"lock": ["title", "procedure"]` freezes only those attributes.
+
+A record cannot be deleted while any of its contexts has a locking status, whichever form the lock takes.
+
+Locks are enforced on the server for every write path: the edit form, API, CLI, workflows, extensions, agents, value-history restores, file uploads and reorders, and migrations. A rejected write returns `409 record_locked`. The form shows locked fields as read-only with the reason.
+
+A status that declares a lock needs an explicit `transitions` list, so leaving it is always a named, restricted transition. To correct a released record, make the correction transition first, and then edit. A correction must change only the status. Unlocking is recorded in the audit log as `entity.record.unlock`.
+
+Locks apply per context: a record released in one market can still be edited in another market where it is a draft, as long as the change does not reach the locked market through inheritance.
+
+#### Bind approvals to the reviewed content
+
+`approval` on a status records an approval each time the record enters it: who approved it, when, and a SHA-256 digest of the covered content. `covers` is `"all"` or a list of attributes; covered relationships and files are part of the digest, files by their exact bytes.
+
+When covered content later changes, the approval is voided in the same save, and if the record is still in the approved status it moves to `void_to`. For example, editing the title of an approved document can send it back to review. Changes to attributes that are not covered keep the approval.
+
+Approvals and voids appear in the audit log (`entity.approval.record`, `entity.approval.void`) and in the **Record control** panel on the entity page.
+
+#### Retain released files
+
+`retention_days` on a locked status places a retention hold on every file the locked attributes reference when the record enters that status. Held files are never removed from storage until the hold expires, even if a later correction detaches them. Holds are listed on the entity page and in the audit log. See [Retention holds](/operate/workspaces/#retention-holds).
 
 ## Constrain the whole entity
 
@@ -183,7 +226,7 @@ Each check has:
 | --- | --- |
 | `code` | Unique within the list. Reported in errors. |
 | `message` | Optional, 1 to 500 characters. Shown when the check fails; otherwise Attricat generates one. |
-| `predicate` | Any [rule predicate](/builders/rules/#predicates) except `stale`, `unique`, and `acyclic`, which cannot run during a save. |
+| `predicate` | Any [predicate](/reference/blueprint/#predicates) except `stale`, `unique`, and `acyclic`, which cannot run during a save. |
 
 A blueprint can have at most 32 checks. They are type-checked when the blueprint is compiled: an unknown attribute, an ordering comparison on a string, or a comparison of a date with a number fails with `422 invalid_blueprint_definition`.
 
@@ -236,40 +279,11 @@ A [data quality rule](/builders/rules/#enforce-a-rule) with an `enforcement` tab
 | `transition_conditions_unmet` | 422 | A status transition's conditions are not met. |
 | `rule_violation` | 422 | The write leaves the entity violating an enforcing rule. |
 | `publication_checks_failed` | 422 | A channel's required checks fail. See [Publishing](/guides/publishing/#require-checks-before-publication). |
+| `status_transition_forbidden` | 403 | The transition needs a permission or role you do not have. See [Who may make a transition](#who-may-make-a-transition). |
+| `status_separation_of_duties` | 403 | Someone else must make this transition. |
+| `record_locked` | 409 | The record's status locks the content you changed, or the record cannot be deleted. Make the correction transition first. See [Lock finalized records](#lock-finalized-records). |
 
-On a save, checks, conditions, and enforcing rules run in that order, after the JSON Schema, and only the first group that fails is reported. Each error lists up to 50 violations in `error.details.violations`:
-
-```json
-{
-  "error": {
-    "code": "entity_check_failed",
-    "message": "entity checks failed: Valid until must not be before valid from (valid-range)",
-    "details": {
-      "violations": [
-        {
-          "source": "entity_check",
-          "code": "valid-range",
-          "message": "Valid until must not be before valid from",
-          "contexts": ["default", "PL"],
-          "attributes": ["valid_until", "valid_from"],
-          "evidence": { "attribute_code": "valid_until", "value": "2026-01-01", "compared_with": "2026-03-01" }
-        }
-      ]
-    }
-  }
-}
-```
-
-| Field | Description |
-| --- | --- |
-| `source` | `entity_check`, `transition_condition`, `rule`, or, for publication only, `entity_schema`. |
-| `code` | The check, condition, or rule code. |
-| `message` | The custom message, or a generated one. |
-| `contexts` | Codes of the contexts where it failed. |
-| `attributes` | Attributes of this entity involved, such as both sides of a comparison or the relationship of a `linked` check. |
-| `severity` | For rules: the rule's severity. |
-| `transition` | For conditions and guarded transitions: `attribute_code`, `from`, and `to`. |
-| `evidence` | Details such as the compared values or the IDs of failing linked records. |
+On a save, checks, conditions, and enforcing rules run in that order, after the JSON Schema, and only the first group that fails is reported. The four `422` errors list up to 50 violations in `error.details.violations`, each with the failing `code`, its `message`, the `contexts` it failed in, and the `attributes` involved. The [API reference](/reference/api/#error-details) describes every field.
 
 In the web app, the edit form lists the failed checks with the contexts they failed in, and shows each message on the fields named in `attributes`. A field's message clears once you edit that field. API clients get the same information from `attributes`. To fix the problem, change those attributes in the listed contexts, or fix the linked or referring records the message names, and save again. For a status change, check which conditions are unmet with the [status-transitions endpoint](#conditions-on-transitions).
 
@@ -287,15 +301,9 @@ code = "document_revision"
 attributes = ["document", "revision_label"]
 ```
 
-The second key is composite: a document can have only one revision `B`, but every document can have its own. Keys can combine up to eight scalar attributes or single-target relationships.
+The second key is composite: a document can have only one revision `B`, but every document can have its own. Text is compared without case or extra whitespace by default, and an entity missing one of the key's values is not checked against that key. A conflicting save returns `409 unique_key_conflict` with the entity that already holds the value.
 
-- **Comparison.** Text is trimmed, runs of whitespace become one space, and case is ignored, so `ABC-1` and ` abc-1 ` collide. Set `case_sensitive = true` to compare text exactly. Numbers compare by value and relationships by the linked entity.
-- **Missing values.** An entity without a value for one of the key's attributes is not checked against that key. Require the attributes in `entity_schema` if every entity must have one.
-- **Contexts.** By default a key compares default-context values. With `scope = "context"`, it compares the values each context shows, including inherited ones, so a slug can be unique per market.
-- **Concurrent saves.** The database checks the key inside the save. If two people save the same part number at the same moment, one save succeeds and the other gets `409 unique_key_conflict` with the conflicting entity in `error.details.conflicting_entity_id`.
-- **Adding a key later.** Publishing a revision that adds a key first checks existing entities. Duplicates make publication fail with `409 unique_key_duplicates`, listing the entities that share each value. The key then covers every entity of the blueprint, including those still on older revisions.
-
-See [Unique keys](/reference/blueprint/#unique-keys) for every option.
+See [Unique keys](/reference/blueprint/#unique-keys) for comparison rules, per-context keys, and what happens when you add a key to a blueprint that already has entities.
 
 ## Validation and contexts
 

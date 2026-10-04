@@ -159,6 +159,10 @@ impl CatalogRepository {
             return Err(RepositoryError::InvalidContextData);
         }
         let mut transaction = self.pool.begin().await?;
+        // Relationship writers take this lock before entity rows; taking it
+        // first keeps that order while hierarchies are rechecked below.
+        self.lock_relationship_cardinality_writes(&mut transaction)
+            .await?;
         // Reparenting changes resolved values for every entity, so it must serialize with writes.
         sqlx::query("LOCK TABLE entities IN SHARE ROW EXCLUSIVE MODE")
             .execute(&mut *transaction)
@@ -197,10 +201,18 @@ impl CatalogRepository {
             .bind(self.workspace_id.0)
             .fetch_all(&mut *transaction).await?
             .into_domain();
+        // Reparenting is not an edit of any entity: it is revalidated
+        // structurally, without transition enforcement or status effects.
         for entity in &entities {
-            self.validate_entity_schema(&mut transaction, entity)
-                .await?;
+            self.validate_entity_schema_with(
+                &mut transaction,
+                entity,
+                super::entity_commands::Revalidation::Structural,
+            )
+            .await?;
         }
+        self.validate_workspace_hierarchies(&mut transaction)
+            .await?;
         let affected_contexts: Vec<Uuid> = sqlx::query_scalar(
             "WITH RECURSIVE descendants AS (SELECT id FROM attribute_contexts WHERE workspace_id = $1 AND id = $2 UNION ALL SELECT child.id FROM attribute_contexts child JOIN descendants parent ON child.parent_id = parent.id WHERE child.workspace_id = $1) SELECT id FROM descendants",
         )

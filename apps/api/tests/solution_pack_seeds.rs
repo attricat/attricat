@@ -65,7 +65,10 @@ cardinality = "many"
 "#;
 const EU_CONTEXT: &[u8] =
     br#"{"format_version":1,"kind":"solution_pack_context","data":{"region":"eu"}}"#;
-const PL_CONTEXT: &[u8] = br#"{"format_version":1,"kind":"solution_pack_context","data":{"language":"pl"},"parent":"contexts/eu","publication_channel":{"enabled":true}}"#;
+const PL_CONTEXT: &[u8] = br#"{"format_version":1,"kind":"solution_pack_context","data":{"language":"pl"},"parent":"contexts/eu","publication_channel":{"enabled":true,"required_rules":["rules/name-required"]}}"#;
+/// The channel without the checks it requires, for an existing channel that
+/// only matches on its enabled state.
+const PLAIN_PL_CONTEXT: &[u8] = br#"{"format_version":1,"kind":"solution_pack_context","data":{"language":"pl"},"parent":"contexts/eu","publication_channel":{"enabled":true}}"#;
 const NAME_RULE: &[u8] = br#"
 format_version = 1
 code = "name-required"
@@ -142,6 +145,10 @@ fn seed_archive() -> Vec<u8> {
 }
 
 fn seed_archive_version(version: &str) -> Vec<u8> {
+    seed_archive_with(version, PL_CONTEXT)
+}
+
+fn seed_archive_with(version: &str, pl_context: &[u8]) -> Vec<u8> {
     let mut manifest = manifest("attricat.seeds", version);
     manifest["resources"] = json!({
         "blueprints": [
@@ -150,7 +157,7 @@ fn seed_archive_version(version: &str) -> Vec<u8> {
         ],
         "contexts": [
             resource("contexts/eu", "contexts/eu.json", EU_CONTEXT),
-            resource("contexts/pl", "contexts/pl.json", PL_CONTEXT),
+            resource("contexts/pl", "contexts/pl.json", pl_context),
         ],
         "rules": [resource("rules/name-required", "rules/name-required.toml", NAME_RULE)],
         "workflows": [resource("workflows/mark-reviewed", "workflows/mark-reviewed.toml", REVIEW_WORKFLOW)],
@@ -162,7 +169,7 @@ fn seed_archive_version(version: &str) -> Vec<u8> {
             ("blueprints/product.toml", PRODUCT_BLUEPRINT),
             ("blueprints/category.toml", CATEGORY_BLUEPRINT),
             ("contexts/eu.json", EU_CONTEXT),
-            ("contexts/pl.json", PL_CONTEXT),
+            ("contexts/pl.json", pl_context),
             ("rules/name-required.toml", NAME_RULE),
             ("workflows/mark-reviewed.toml", REVIEW_WORKFLOW),
             ("saved-searches/unnamed.json", UNNAMED_SEARCH),
@@ -245,7 +252,7 @@ async fn seeds_install_contexts_channels_rules_workflows_and_saved_searches(pool
     assert_eq!(inspection["seeds"]["workflows"][0]["enabled"], false);
     assert_eq!(
         inspection["seeds"]["contexts"][1]["publication_channel"],
-        json!({"enabled": true})
+        json!({"enabled": true, "required_rules": ["rules/name-required"], "require_valid_entity": false})
     );
     assert_eq!(
         inspection["seeds"]["saved_searches"][0]["name"],
@@ -304,15 +311,16 @@ async fn seeds_install_contexts_channels_rules_workflows_and_saved_searches(pool
     .await
     .unwrap();
     assert_eq!(pl_parent, Some(eu_id));
-    assert!(
-        sqlx::query_scalar::<_, bool>(
-            "SELECT enabled FROM publication_channels WHERE context_id = $1"
-        )
-        .bind(pl_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap()
-    );
+    // The channel requires the seeded rule by its physical code.
+    let (channel_enabled, required_rule_codes): (bool, Vec<String>) = sqlx::query_as(
+        "SELECT enabled, required_rule_codes FROM publication_channels WHERE context_id = $1",
+    )
+    .bind(pl_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(channel_enabled);
+    assert_eq!(required_rule_codes, ["seed_name-required"]);
     let (rule_status, rule_context, enabled_version): (String, Option<Uuid>, Option<i64>) =
         sqlx::query_as(
             "SELECT r.status, r.context_id, l.enabled_version FROM rules r JOIN rule_lifecycles l ON l.rule_id = r.id WHERE r.code = 'seed_name-required'",
@@ -470,7 +478,7 @@ async fn installers_map_pack_contexts_to_existing_contexts_and_channels(pool: Pg
     let unknown = create_plan(
         &client,
         &base_url,
-        seed_archive(),
+        seed_archive_with("1.0.0", PLAIN_PL_CONTEXT),
         "prefix=mapped&blueprint_publication=publish",
         &[("contexts/pl", "missing")],
     )
@@ -480,7 +488,7 @@ async fn installers_map_pack_contexts_to_existing_contexts_and_channels(pool: Pg
     let mismatch = create_plan(
         &client,
         &base_url,
-        seed_archive(),
+        seed_archive_with("1.0.0", PLAIN_PL_CONTEXT),
         "prefix=mapped&blueprint_publication=publish",
         &[("contexts/pl", "PL")],
     )
@@ -503,7 +511,7 @@ async fn installers_map_pack_contexts_to_existing_contexts_and_channels(pool: Pg
     let plan = create_plan(
         &client,
         &base_url,
-        seed_archive(),
+        seed_archive_with("1.0.0", PLAIN_PL_CONTEXT),
         "prefix=mapped&blueprint_publication=publish",
         &[("contexts/pl", "PL")],
     )
@@ -554,7 +562,7 @@ async fn installers_map_pack_contexts_to_existing_contexts_and_channels(pool: Pg
     let plan = create_plan(
         &client,
         &base_url,
-        seed_archive(),
+        seed_archive_with("1.0.0", PLAIN_PL_CONTEXT),
         "prefix=mapped&blueprint_publication=publish",
         &[("contexts/pl", "PL")],
     )

@@ -4,6 +4,7 @@ use super::extension_catalog_data::{
     ExtensionCatalogIntentStatus, MAX_EXTENSION_BATCH_INTENTS, MAX_EXTENSION_BATCH_KEY_BYTES,
     MAX_EXTENSION_INTENT_KEY_BYTES,
 };
+use super::record_values::{ContextTree, RecordState, RecordValues, load_record};
 use super::values::{NativeValue, ValueType};
 use super::*;
 use crate::domain_events::{
@@ -28,6 +29,21 @@ pub(super) struct AuditValueSnapshot {
     context_code: Option<String>,
     relationship_target_entity_id: Option<Uuid>,
     value: Value,
+}
+
+/// How [`CatalogRepository::validate_entity_schema_with`] treats status.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Revalidation {
+    /// An entity write: status transitions are checked (edges, permissions,
+    /// separation of duties, locks) and recorded, and approvals whose covered
+    /// content changed are voided, with the writer as actor.
+    Write,
+    /// A structural change that is not an edit of the entity, such as context
+    /// reparenting: effective values may change through inheritance, but no
+    /// transition is enforced or recorded and no approval is voided or hold
+    /// placed. Schema, principal values, unique keys and entity checks still
+    /// apply.
+    Structural,
 }
 
 pub(super) struct ChosenIdEntityCreate {
@@ -75,13 +91,21 @@ impl CatalogRepository {
                 },
             )
             .await?;
-        self.stage_entity_mutation(&mut transaction, changes, event)
+        self.commit_entity_mutation(transaction, changes, event)
             .await?;
-        transaction.commit().await?;
         Ok(entity)
     }
 
     /// Chosen-ID, caller-transaction seam for ordinary entity creation.
+    ///
+    /// The create, update and delete seams share one contract: each takes the
+    /// locks it needs itself (the workspace relationship lock when it writes
+    /// relationships, then the entity row), which is a no-op when the caller
+    /// already holds them, and returns the audit changes and event for the
+    /// caller to pass to [`Self::stage_entity_mutation`] (or
+    /// [`Self::commit_entity_mutation`]) before committing. A caller that locks
+    /// entity rows itself before a relationship write must take the
+    /// relationship lock first.
     pub(super) async fn create_entity_in_transaction(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
@@ -119,10 +143,7 @@ impl CatalogRepository {
         .await?;
         // Do not expose an entity before its initial values and derived preview
         // agree; otherwise a concurrent reader can observe a partial create.
-        if values
-            .iter()
-            .any(|value| matches!(value, NewAttributeValue::Relationship { .. }))
-        {
+        if writes_relationship_values(&values) {
             self.lock_relationship_cardinality_writes(transaction)
                 .await?;
         }
@@ -300,14 +321,6 @@ impl CatalogRepository {
         expected_updated_at: Option<DateTime<Utc>>,
     ) -> Result<Entity, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
-        if !relationships.is_empty()
-            || values
-                .iter()
-                .any(|value| matches!(value, NewAttributeValue::Relationship { .. }))
-        {
-            self.lock_relationship_cardinality_writes(&mut transaction)
-                .await?;
-        }
         let (entity, changes, event) = self
             .update_entity_in_transaction(
                 &mut transaction,
@@ -327,9 +340,9 @@ impl CatalogRepository {
         Ok(entity)
     }
 
-    /// Caller-transaction seam for an entity update. Callers writing
-    /// relationships take the workspace relationship lock first and stage the
-    /// returned audit changes and event before committing.
+    /// Caller-transaction seam for an entity update; see
+    /// [`Self::create_entity_in_transaction`] for the shared contract.
+    /// `system_tags` and `system_metadata` replace the whole field.
     pub(super) async fn update_entity_in_transaction(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
@@ -346,6 +359,10 @@ impl CatalogRepository {
         } = input;
         if let Some(metadata) = &system_metadata {
             validate_system_metadata(metadata)?;
+        }
+        if !relationships.is_empty() || writes_relationship_values(&values) {
+            self.lock_relationship_cardinality_writes(transaction)
+                .await?;
         }
         let before = self.entity_audit_snapshot(transaction, entity_id).await?;
         // The row lock serializes writers for an entity. It protects both the
@@ -505,7 +522,8 @@ impl CatalogRepository {
     }
 
     /// Caller-transaction seam for entity deletion with an optional
-    /// optimistic-concurrency precondition.
+    /// optimistic-concurrency precondition; see
+    /// [`Self::create_entity_in_transaction`] for the shared contract.
     pub(super) async fn delete_entity_in_transaction(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
@@ -1106,14 +1124,37 @@ impl CatalogRepository {
         .ok_or(RepositoryError::NotFound("blueprint version"))
     }
 
+    /// The shared validation step of every entity write; see [`Revalidation`].
     pub(super) async fn validate_entity_schema(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         entity: &Entity,
     ) -> Result<(), RepositoryError> {
-        self.validate_status_values(transaction, entity).await?;
+        self.validate_entity_schema_with(transaction, entity, Revalidation::Write)
+            .await
+    }
+
+    pub(super) async fn validate_entity_schema_with(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        entity: &Entity,
+        mode: Revalidation,
+    ) -> Result<(), RepositoryError> {
+        let tree = ContextTree::load(transaction, self.workspace_id.0).await?;
+        // The write's own status changes, validated before system effects
+        // (approval voids) add transitions of their own.
+        let changes = match mode {
+            Revalidation::Write => {
+                self.checked_status_changes(transaction, entity, &tree)
+                    .await?
+            }
+            Revalidation::Structural => Vec::new(),
+        };
         self.validate_principal_values(transaction, entity).await?;
-        self.apply_status_effects(transaction, entity).await?;
+        if mode == Revalidation::Write {
+            self.apply_status_effects_in(transaction, entity, &tree)
+                .await?;
+        }
         // Every value write validates here, so unique keys stay current.
         self.sync_entity_unique_keys(transaction, entity).await?;
         let entity_schema = sqlx::query_scalar::<_, Option<Value>>(
@@ -1123,110 +1164,41 @@ impl CatalogRepository {
         .bind(entity.blueprint_version)
         .fetch_one(&mut **transaction)
         .await?;
+        let record = load_record(
+            transaction,
+            self.workspace_id.0,
+            entity.id,
+            RecordState::After,
+        )
+        .await?
+        .unwrap_or_else(|| {
+            RecordValues::empty(entity.id, entity.blueprint_id, entity.blueprint_version)
+        });
         if let Some(entity_schema) = &entity_schema {
-            self.validate_json_entity_schema(transaction, entity, entity_schema)
-                .await?;
+            validate_json_entity_schema(&tree, &record, entity_schema)?;
         }
-        self.enforce_declarative_checks(transaction, entity, entity_schema.as_ref())
-            .await
+        self.enforce_declarative_checks(
+            transaction,
+            entity_schema.as_ref(),
+            &tree,
+            &record,
+            &changes,
+        )
+        .await
     }
 
-    async fn validate_json_entity_schema(
+    /// The validation tail for writes that change stored values without the
+    /// update seam (file references, reusable attribute attachment):
+    /// [`Self::validate_entity_schema`] with its status side effects, then the
+    /// rebuilt preview. Returns the stored entity.
+    pub(super) async fn revalidate_entity(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         entity: &Entity,
-        entity_schema: &Value,
-    ) -> Result<(), RepositoryError> {
-        let attributes = self
-            .list_attributes(entity.blueprint_id, entity.blueprint_version)
-            .await?;
-        let contexts = sqlx::query_as::<_, Db<AttributeContext>>(
-            "SELECT id, code, data, parent_id FROM attribute_contexts WHERE workspace_id = $1 ORDER BY code",
-        )
-        .bind(self.workspace_id.0)
-        .fetch_all(&mut **transaction)
-        .await?;
-        let context_by_id: std::collections::HashMap<_, _> = contexts
-            .iter()
-            .map(|context| (context.id, context))
-            .collect();
-        let scalar_projection = Self::build_preview_projection(transaction, entity.id).await?;
-        let mut direct_values = scalar_projection
-            .as_object()
-            .cloned()
-            .ok_or(RepositoryError::InvalidPreview)?;
-        let relationships = sqlx::query_as::<_, (String, String, Uuid)>(
-            r#"SELECT a.code, c.code, av.relationship_target_entity_id
-               FROM attribute_values av
-               JOIN attributes a ON a.id = av.attribute_id
-               JOIN attribute_contexts c ON c.id = av.context_id
-               WHERE av.entity_id = $1
-                 AND a.blueprint_id = $2
-                 AND a.blueprint_version = $3
-                 AND av.relationship_target_entity_id IS NOT NULL
-                  AND av.active"#,
-        )
-        .bind(entity.id)
-        .bind(entity.blueprint_id)
-        .bind(entity.blueprint_version)
-        .fetch_all(&mut **transaction)
-        .await?;
-        for (attribute_code, context_code, target_id) in relationships {
-            let context = direct_values
-                .entry(context_code)
-                .or_insert_with(|| Value::Object(Map::new()))
-                .as_object_mut()
-                .ok_or(RepositoryError::InvalidPreview)?;
-            let targets = context
-                .entry(attribute_code)
-                .or_insert_with(|| Value::Array(Vec::new()))
-                .as_array_mut()
-                .ok_or(RepositoryError::InvalidPreview)?;
-            targets.push(Value::String(target_id.to_string()));
-        }
-
-        for context in &contexts {
-            let mut path = Vec::new();
-            let mut current = Some(context);
-            while let Some(item) = current {
-                current = item
-                    .parent_id
-                    .and_then(|parent_id| context_by_id.get(&parent_id).copied());
-                path.push(item);
-            }
-            let mut document = Map::new();
-            for attribute in &attributes {
-                for (index, source_context) in path.iter().enumerate() {
-                    if index > 0 && attribute.context_fallback == "none" {
-                        break;
-                    }
-                    if let Some(value) = direct_values
-                        .get(&source_context.code)
-                        .and_then(Value::as_object)
-                        .and_then(|values| values.get(&attribute.code))
-                    {
-                        document.insert(attribute.code.clone(), value.clone());
-                        break;
-                    }
-                }
-            }
-            if let Some(error) = validate_json_schema(entity_schema, &Value::Object(document))
-                .map_err(|message| RepositoryError::EntitySchemaMismatch {
-                    context: context.code.clone(),
-                    instance_path: String::new(),
-                    message,
-                })?
-                .into_iter()
-                .next()
-            {
-                return Err(RepositoryError::EntitySchemaMismatch {
-                    context: context.code.clone(),
-                    instance_path: error.instance_path,
-                    message: error.message,
-                });
-            }
-        }
-        Ok(())
+    ) -> Result<Entity, RepositoryError> {
+        self.validate_entity_schema(transaction, entity).await?;
+        let preview = Self::build_preview_projection(transaction, entity.id).await?;
+        self.store_preview(transaction, entity.id, preview).await
     }
 
     async fn relationship_attribute(
@@ -1859,86 +1831,15 @@ impl CatalogRepository {
                 system_metadata,
                 ..
             } => {
-                validate_system_annotations(&system_tags, &system_metadata)?;
-                // Legacy create/upsert fields predate namespace ownership and
-                // cannot write a claimed namespace, including the caller's own.
-                self.ensure_annotation_namespaces_unchanged(
+                self.apply_extension_catalog_create(
                     transaction,
-                    &[],
-                    &Value::Object(Map::new()),
-                    &system_tags,
-                    &system_metadata,
+                    blueprint_id,
+                    blueprint_version,
+                    values,
+                    system_tags,
+                    system_metadata,
                 )
-                .await?;
-                if values
-                    .iter()
-                    .any(|value| matches!(value, NewAttributeValue::Relationship { .. }))
-                {
-                    self.lock_relationship_cardinality_writes(transaction)
-                        .await?;
-                }
-                let entity = self
-                    .insert_entity(
-                        transaction,
-                        Uuid::new_v4(),
-                        blueprint_id,
-                        blueprint_version,
-                        system_tags,
-                        system_metadata,
-                    )
-                    .await?;
-                let default_context_id = self
-                    .resolve_context_id(transaction, None)
-                    .await?
-                    .expect("default context required");
-                let attributes = self
-                    .list_attributes_in_transaction(
-                        transaction,
-                        entity.blueprint_id,
-                        entity.blueprint_version,
-                    )
-                    .await?;
-                for attribute in attributes.iter().filter(|attribute| {
-                    attribute.default_value.is_some()
-                        && !values.iter().any(|value| {
-                            matches!(
-                                value,
-                                NewAttributeValue::Scalar { attribute_id, attribute_code, context_id, .. }
-                                    if (attribute_id == &Some(attribute.id)
-                                        || attribute_code.as_deref() == Some(attribute.code.as_str()))
-                                        && context_id.is_none_or(|id| id == default_context_id)
-                            )
-                        })
-                }) {
-                    self.insert_value(transaction, &entity, NewAttributeValue::Scalar { attribute_id: Some(attribute.id), attribute_code: None, context_id: Some(default_context_id), value: attribute.default_value.clone().expect("default exists") }).await?;
-                }
-                for value in values {
-                    self.insert_value(transaction, &entity, value).await?;
-                }
-                self.validate_entity_schema(transaction, &entity).await?;
-                let preview = Self::build_preview_projection(transaction, entity.id).await?;
-                let entity = self.store_preview(transaction, entity.id, preview).await?;
-                let changes = Self::audit_changes(
-                    entity.id,
-                    Vec::new(),
-                    self.entity_audit_snapshot(transaction, entity.id).await?,
-                    false,
-                );
-                let event = self.core_event(
-                    ENTITY_CREATED_V1,
-                    "entity",
-                    entity.id,
-                    serde_json::to_value(EntityMutationV1 {
-                        entity_id: entity.id,
-                        blueprint_id: entity.blueprint_id,
-                        blueprint_version: entity.blueprint_version,
-                        facts: Self::affected_facts(&changes),
-                    })
-                    .expect("event serializes"),
-                );
-                self.commit_entity_mutation_in_transaction(transaction, changes, event)
-                    .await?;
-                Ok(entity.id)
+                .await
             }
             ExtensionCatalogIntent::Update {
                 entity_id,
@@ -1984,51 +1885,184 @@ impl CatalogRepository {
                         "upsert lookup value must be 1-512 bytes".into(),
                     ));
                 }
-                let workspace_id = self.workspace_id.0;
-                // There is no global uniqueness constraint for arbitrary blueprint
-                // attributes. Serialize this declared business key so concurrent
-                // absent-key upserts cannot both take the create branch.
-                sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
-                    .bind(format!("extension-upsert:{workspace_id}:{blueprint_id}:{blueprint_version}:{lookup_attribute_id}:{lookup_value}"))
-                    .execute(&mut **transaction).await?;
-                let matches: Vec<Uuid> = sqlx::query_scalar(
-                    "SELECT e.id FROM entities e JOIN attribute_values v ON v.entity_id=e.id AND v.workspace_id=e.workspace_id AND v.active \
-                     WHERE e.workspace_id=$1 AND e.deleted_at IS NULL AND e.blueprint_id=$2 AND e.blueprint_version=$3 \
-                       AND v.attribute_id=$4 AND v.relationship_target_entity_id IS NULL AND v.value_text=$5 \
-                     ORDER BY e.id FOR UPDATE OF e LIMIT 2",
-                ).bind(workspace_id).bind(blueprint_id).bind(blueprint_version).bind(lookup_attribute_id).bind(&lookup_value).fetch_all(&mut **transaction).await?;
-                match matches.as_slice() {
-                    [entity_id] => {
+                // The lookup locks the matched entity row, so the workspace
+                // relationship lock must be taken before it.
+                if !relationships.is_empty() || writes_relationship_values(&values) {
+                    self.lock_relationship_cardinality_writes(transaction)
+                        .await?;
+                }
+                let existing = self
+                    .extension_upsert_lookup(
+                        transaction,
+                        blueprint_id,
+                        blueprint_version,
+                        lookup_attribute_id,
+                        &lookup_value,
+                    )
+                    .await?;
+                match existing {
+                    Some(entity_id) => {
                         self.apply_extension_catalog_update(
                             transaction,
-                            *entity_id,
+                            entity_id,
                             values,
                             relationships,
                         )
                         .await
                     }
-                    [] => {
-                        Box::pin(self.apply_extension_catalog_intent(
+                    None => {
+                        self.apply_extension_catalog_create(
                             transaction,
-                            ExtensionCatalogIntent::Create {
-                                intent_key: String::new(),
-                                blueprint_id,
-                                blueprint_version,
-                                values,
-                                system_tags,
-                                system_metadata,
-                            },
-                        ))
+                            blueprint_id,
+                            blueprint_version,
+                            values,
+                            system_tags,
+                            system_metadata,
+                        )
                         .await
                     }
-                    _ => Err(RepositoryError::InvalidExtension(
-                        "upsert lookup matched multiple entities".into(),
-                    )),
                 }
             }
         }
     }
 
+    /// Finds the entity a legacy upsert updates, locking its row. When the
+    /// lookup attribute alone forms a declared unique key, the key index
+    /// resolves it across every revision of the blueprint family, with the
+    /// key's normalization. Otherwise the lookup is advisory: an exact text
+    /// match among entities pinned to the requested revision.
+    async fn extension_upsert_lookup(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        blueprint_id: Uuid,
+        blueprint_version: i64,
+        lookup_attribute_id: Uuid,
+        lookup_value: &str,
+    ) -> Result<Option<Uuid>, RepositoryError> {
+        let workspace_id = self.workspace_id.0;
+        let attribute: Option<(String, String)> = sqlx::query_as(
+            "SELECT code, value_type FROM attributes WHERE id = $1 AND workspace_id = $2 AND blueprint_id = $3 AND blueprint_version = $4 AND deleted_at IS NULL",
+        )
+        .bind(lookup_attribute_id)
+        .bind(workspace_id)
+        .bind(blueprint_id)
+        .bind(blueprint_version)
+        .fetch_optional(&mut **transaction)
+        .await?;
+        let unique_key = match &attribute {
+            Some((code, value_type)) if value_type == "string" => {
+                super::structural_constraints::enforced_unique_keys(
+                    transaction,
+                    workspace_id,
+                    blueprint_id,
+                )
+                .await?
+                .into_iter()
+                .find(|key| key.attributes.len() == 1 && &key.attributes[0] == code)
+            }
+            _ => None,
+        };
+        let matches: Vec<Uuid> = if let Some(key) = unique_key {
+            let Some(component) = catalog_validation::unique_key::normalize_key_component(
+                "string",
+                &Value::String(lookup_value.to_owned()),
+                key.case_sensitive,
+            ) else {
+                return Ok(None);
+            };
+            let key_hash = super::structural_constraints::key_hash(&Value::Array(vec![component]));
+            // Serializes concurrent absent-key upserts of the same key value,
+            // so the second one updates rather than conflicting on the index.
+            sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+                .bind(format!(
+                    "extension-upsert-key:{workspace_id}:{blueprint_id}:{}:{key_hash}",
+                    key.code
+                ))
+                .execute(&mut **transaction)
+                .await?;
+            // Workspace keys are indexed in the default context only; for a
+            // context key, the default context's value identifies the record.
+            let default_context_id = self
+                .resolve_context_id(transaction, None)
+                .await?
+                .ok_or(RepositoryError::InvalidContext)?;
+            sqlx::query_scalar(
+                "SELECT e.id FROM entity_unique_key_values k JOIN entities e ON e.id = k.entity_id AND e.workspace_id = k.workspace_id \
+                 WHERE k.workspace_id = $1 AND k.blueprint_id = $2 AND k.key_code = $3 AND k.context_id = $4 AND k.key_hash = $5 AND e.deleted_at IS NULL \
+                 ORDER BY e.id FOR UPDATE OF e LIMIT 2",
+            )
+            .bind(workspace_id)
+            .bind(blueprint_id)
+            .bind(&key.code)
+            .bind(default_context_id)
+            .bind(&key_hash)
+            .fetch_all(&mut **transaction)
+            .await?
+        } else {
+            // Without a declared single-attribute unique key nothing prevents
+            // duplicates of this value. Serialize the lookup so concurrent
+            // absent-key upserts cannot both take the create branch.
+            sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+                .bind(format!("extension-upsert:{workspace_id}:{blueprint_id}:{blueprint_version}:{lookup_attribute_id}:{lookup_value}"))
+                .execute(&mut **transaction)
+                .await?;
+            sqlx::query_scalar(
+                "SELECT e.id FROM entities e JOIN attribute_values v ON v.entity_id=e.id AND v.workspace_id=e.workspace_id AND v.active \
+                 WHERE e.workspace_id=$1 AND e.deleted_at IS NULL AND e.blueprint_id=$2 AND e.blueprint_version=$3 \
+                   AND v.attribute_id=$4 AND v.relationship_target_entity_id IS NULL AND v.value_text=$5 \
+                 ORDER BY e.id FOR UPDATE OF e LIMIT 2",
+            )
+            .bind(workspace_id)
+            .bind(blueprint_id)
+            .bind(blueprint_version)
+            .bind(lookup_attribute_id)
+            .bind(lookup_value)
+            .fetch_all(&mut **transaction)
+            .await?
+        };
+        match matches.as_slice() {
+            [] => Ok(None),
+            [entity_id] => Ok(Some(*entity_id)),
+            _ => Err(RepositoryError::InvalidExtension(
+                "upsert lookup matched multiple entities".into(),
+            )),
+        }
+    }
+
+    /// A legacy extension create: the ordinary create seam. Legacy
+    /// create/upsert annotation fields predate namespace ownership and cannot
+    /// write a claimed namespace, including the caller's own.
+    async fn apply_extension_catalog_create(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        blueprint_id: Uuid,
+        blueprint_version: i64,
+        values: Vec<NewAttributeValue>,
+        system_tags: Vec<String>,
+        system_metadata: Value,
+    ) -> Result<Uuid, RepositoryError> {
+        let (entity, changes, event) = self
+            .create_entity_in_transaction(
+                transaction,
+                ChosenIdEntityCreate {
+                    entity_id: Uuid::new_v4(),
+                    blueprint_id,
+                    blueprint_version,
+                    values,
+                    system_tags,
+                    system_metadata,
+                    host_sample_marker: false,
+                },
+            )
+            .await?;
+        self.stage_entity_mutation(transaction, changes, event)
+            .await?;
+        Ok(entity.id)
+    }
+
+    /// A legacy extension update: the ordinary update seam, bounded for an
+    /// interactive run by its initiator's grants. The legacy intent ABI has
+    /// no caller-supplied version token, so it cannot change a status.
     async fn apply_extension_catalog_update(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
@@ -2036,11 +2070,8 @@ impl CatalogRepository {
         values: Vec<NewAttributeValue>,
         relationships: Vec<RelationshipTargets>,
     ) -> Result<Uuid, RepositoryError> {
-        if !relationships.is_empty()
-            || values
-                .iter()
-                .any(|value| matches!(value, NewAttributeValue::Relationship { .. }))
-        {
+        // The seam takes this lock too; the actor checks below come first.
+        if !relationships.is_empty() || writes_relationship_values(&values) {
             self.lock_relationship_cardinality_writes(transaction)
                 .await?;
         }
@@ -2048,7 +2079,7 @@ impl CatalogRepository {
             .await?;
         // A run bound to a user may link only to entities that user can read,
         // whether or not they are in the run's selection.
-        let targets: BTreeSet<Uuid> = values
+        let targets: Vec<Uuid> = values
             .iter()
             .filter_map(|value| match value {
                 NewAttributeValue::Relationship {
@@ -2061,67 +2092,64 @@ impl CatalogRepository {
                     .iter()
                     .flat_map(|set| set.target_entity_ids.iter().copied()),
             )
+            .collect::<BTreeSet<_>>()
+            .into_iter()
             .collect();
-        for target in targets {
-            self.ensure_actor_may(transaction, "entities.read", target)
-                .await?;
-        }
-        let before = self.entity_audit_snapshot(transaction, entity_id).await?;
-        let entity = self.lock_entity(transaction, entity_id).await?;
-        // The legacy extension intent ABI has no caller-supplied version token.
-        // It cannot safely edit a status, including by chaining intents.
-        if self
-            .has_status_writes(transaction, &entity, &values, &[])
-            .await?
-        {
-            self.check_status_precondition(transaction, &entity, None)
-                .await?;
-        }
-        for value in values {
-            self.insert_value(transaction, &entity, value).await?;
-        }
-        self.replace_relationship_sets(transaction, &entity, relationships)
+        self.ensure_actor_may_all(transaction, "entities.read", &targets)
             .await?;
-        self.validate_entity_schema(transaction, &entity).await?;
-        let preview = Self::build_preview_projection(transaction, entity.id).await?;
-        let entity = self.store_preview(transaction, entity.id, preview).await?;
-        let changes = Self::audit_changes(
-            entity.id,
-            before,
-            self.entity_audit_snapshot(transaction, entity.id).await?,
-            false,
-        );
-        let event = self.core_event(
-            ENTITY_UPDATED_V1,
-            "entity",
-            entity.id,
-            serde_json::to_value(EntityMutationV1 {
-                entity_id: entity.id,
-                blueprint_id: entity.blueprint_id,
-                blueprint_version: entity.blueprint_version,
-                facts: Self::affected_facts(&changes),
-            })
-            .expect("event serializes"),
-        );
-        self.commit_entity_mutation_in_transaction(transaction, changes, event)
+        let (entity, changes, event) = self
+            .update_entity_in_transaction(
+                transaction,
+                entity_id,
+                UpdateEntityFormRequest {
+                    expected_updated_at: None,
+                    values,
+                    relationships,
+                    remove_values: Vec::new(),
+                    system_tags: None,
+                    system_metadata: None,
+                },
+            )
+            .await?;
+        self.stage_entity_mutation(transaction, changes, event)
             .await?;
         Ok(entity.id)
     }
+}
 
-    async fn commit_entity_mutation_in_transaction(
-        &self,
-        transaction: &mut Transaction<'_, Postgres>,
-        changes: Vec<AuditEventChange>,
-        event: NewDomainEvent,
-    ) -> Result<(), RepositoryError> {
-        self.ensure_task_fence(transaction).await?;
-        if let Some(audit_event_id) = self.write_audit_event(transaction).await? {
-            for change in changes {
-                sqlx::query("INSERT INTO audit_event_changes (id,audit_event_id,workspace_id,entity_id,attribute_id,attribute_code,context_id,context_code,change_kind,before_value,after_value) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)").bind(Uuid::new_v4()).bind(audit_event_id).bind(self.workspace_id.0).bind(change.entity_id).bind(change.attribute_id).bind(change.attribute_code).bind(change.context_id).bind(change.context_code).bind(change.change_kind).bind(change.before_value).bind(change.after_value).execute(&mut **transaction).await?;
-            }
+fn writes_relationship_values(values: &[NewAttributeValue]) -> bool {
+    values
+        .iter()
+        .any(|value| matches!(value, NewAttributeValue::Relationship { .. }))
+}
+
+/// Validates the blueprint's JSON entity schema in every context against the
+/// resolved values of the blueprint's fields (see
+/// [`RecordValues::schema_document`]); the first violation is returned.
+pub(super) fn validate_json_entity_schema(
+    tree: &ContextTree,
+    record: &RecordValues,
+    entity_schema: &Value,
+) -> Result<(), RepositoryError> {
+    for context in tree.nodes() {
+        let document = record.schema_document(&tree.path(context.id, true)?);
+        if let Some(error) = validate_json_schema(entity_schema, &Value::Object(document))
+            .map_err(|message| RepositoryError::EntitySchemaMismatch {
+                context: context.code.clone(),
+                instance_path: String::new(),
+                message,
+            })?
+            .into_iter()
+            .next()
+        {
+            return Err(RepositoryError::EntitySchemaMismatch {
+                context: context.code.clone(),
+                instance_path: error.instance_path,
+                message: error.message,
+            });
         }
-        self.enqueue_event(transaction, event).await.map(|_| ())
     }
+    Ok(())
 }
 
 fn extension_intent_key(intent: &ExtensionCatalogIntent) -> &str {
@@ -2154,6 +2182,75 @@ pub(super) fn validate_system_tag_update(
             .cloned()
             .collect::<Vec<_>>(),
     )
+}
+
+/// A tag and metadata patch, applied by [`apply_tag_metadata_patch`].
+#[derive(Default)]
+pub(super) struct TagMetadataPatch {
+    pub add_tags: Vec<String>,
+    pub remove_tags: Vec<String>,
+    pub set_metadata: BTreeMap<String, Value>,
+    pub remove_metadata: Vec<String>,
+}
+
+/// The effective changes of one [`TagMetadataPatch`].
+pub(super) struct TagMetadataChanges {
+    pub added_tags: Vec<String>,
+    pub removed_tags: Vec<String>,
+    pub set_keys: Vec<String>,
+    pub removed_keys: Vec<String>,
+}
+
+impl TagMetadataChanges {
+    pub fn is_empty(&self) -> bool {
+        self.added_tags.is_empty()
+            && self.removed_tags.is_empty()
+            && self.set_keys.is_empty()
+            && self.removed_keys.is_empty()
+    }
+}
+
+/// Applies `patch` in place: tag removals, then additions (kept in order,
+/// without duplicates), then metadata sets and key removals. Reports only
+/// what actually changed. Callers validate the result.
+pub(super) fn apply_tag_metadata_patch(
+    tags: &mut Vec<String>,
+    metadata: &mut Map<String, Value>,
+    patch: &TagMetadataPatch,
+) -> TagMetadataChanges {
+    let removed_tags = patch
+        .remove_tags
+        .iter()
+        .filter(|tag| tags.contains(tag))
+        .cloned()
+        .collect();
+    tags.retain(|tag| !patch.remove_tags.contains(tag));
+    let mut added_tags = Vec::new();
+    for tag in &patch.add_tags {
+        if !tags.contains(tag) {
+            tags.push(tag.clone());
+            added_tags.push(tag.clone());
+        }
+    }
+    let mut set_keys = Vec::new();
+    for (key, value) in &patch.set_metadata {
+        if metadata.get(key) != Some(value) {
+            set_keys.push(key.clone());
+        }
+        metadata.insert(key.clone(), value.clone());
+    }
+    let removed_keys = patch
+        .remove_metadata
+        .iter()
+        .filter(|key| metadata.remove(*key).is_some())
+        .cloned()
+        .collect();
+    TagMetadataChanges {
+        added_tags,
+        removed_tags,
+        set_keys,
+        removed_keys,
+    }
 }
 
 /// Longest stored system tag, including an extension namespace prefix.

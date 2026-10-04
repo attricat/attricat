@@ -92,3 +92,13 @@ export const CONVERSATION_ENTITY_ID_PREFIX_LENGTH = 8;
 export const ENTITY_HEADER_CONTEXT_VERSION = 1;
 /** Blueprint version assumed by the extension drawer before data loads. */
 export const FALLBACK_BLUEPRINT_VERSION = 1;
+
+/** Why the server refuses a status transition (`denial_code`). */
+export const statusTransitionDenialCodes = {
+  forbidden: 'status_transition_forbidden',
+  separationOfDuties: 'status_separation_of_duties',
+  /** Also the API error code whose details list the unmet conditions. */
+  conditionsUnmet: 'transition_conditions_unmet',
+} as const;
+export type StatusTransitionDenialCode =
+  (typeof statusTransitionDenialCodes)[keyof typeof statusTransitionDenialCodes];

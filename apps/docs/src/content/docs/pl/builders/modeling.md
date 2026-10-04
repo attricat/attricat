@@ -172,8 +172,9 @@ value_schema = '''{
 
 - Formularz pokazuje listę aktywnych członków obszaru roboczego i zespołów, a rekord wyświetla wybraną nazwę. Użyj `"kinds": ["user"]`, gdy odpowiedzialność musi należeć do jednej osoby.
 - Zapis sprawdza, czy nowa wartość to aktywny członek lub istniejący zespół. Rekord przypisany do osoby, która odeszła, zachowuje przypisanie i pokazuje je jako nieaktywne, dopóki ktoś go nie zmieni.
-- W Eksploratorze filtruj atrybut według osoby lub zespołu albo wybierz **Przypisane do mnie (lub moich zespołów)**. Zapisane wyszukiwania z takim filtrem działają dla każdego, kto je otworzy.
+- W Przeglądarce filtruj atrybut według osoby lub zespołu albo wybierz **Przypisane do mnie (lub moich zespołów)**. Zapisane wyszukiwania z takim filtrem działają dla każdego, kto je otworzy.
 - [Zespołami](/pl/operate/workspaces/#zespoły) zarządza się w **Zarządzanie → Zarządzanie obszarem roboczym → Zespoły**. Przypisanie zapisuje zespół, więc zmiana jego składu nigdy nie zmienia rekordów.
+- Przypisanie nie nadaje ani nie ogranicza dostępu. [Wymagania przejść](/pl/builders/validation/#kto-może-wykonać-przejście) statusu sprawdzają osobę zapisującą zmianę, a nie osobę przypisaną, a predykaty reguł mogą jedynie sprawdzić, czy rekord jest przypisany, lub porównać wartość ze stałym użytkownikiem lub zespołem. Nie da się zadeklarować zasady „zamknąć może tylko osoba przypisana”; użyj zamiast tego ról lub [rozdzielenia obowiązków](/pl/builders/validation/#kto-może-wykonać-przejście).
 
 Dokładne zasady opisuje sekcja [Przypisania użytkowników i zespołów](/pl/reference/blueprint/#przypisania-użytkowników-i-zespołów).
 

@@ -290,8 +290,13 @@ single-attribute `lookup` requests; `page` cursors pin a database-clock snapshot
 and `changes` cursors pin a domain-event sequence high-water mark. Cursors are
 opaque and filter/workspace-bound. `catalog.command.v1` accepts a bounded,
 idempotent batch of typed `create`, `update`, `relationships`, or `upsert`
-intents. An upsert serializes its declared blueprint/attribute business key,
-creates only when it is absent, and rejects an ambiguous match. `events.emit.v1`
+intents. Each intent runs the ordinary entity create or update path (validation,
+checks, audit, publication reconciliation and its domain event). An upsert
+serializes its declared blueprint/attribute business key, creates only when it
+is absent, and rejects an ambiguous match. When the lookup attribute alone is a
+declared unique key, the lookup uses that key's normalized index across every
+revision of the blueprint family; otherwise it matches the exact text among
+entities of the requested revision. `events.emit.v1`
 is implemented only for a manifest-declared, per-contract event export as
 described in [Inter-extension events](#inter-extension-events).
 
@@ -863,7 +868,9 @@ passes that same object to `mount`. It may use only granted operations:
   `catalog.operations.download({ run_id, artifact_id })` require
   `client.operations.read`; `catalog.operations.cancel({ run_id })` requires
   `client.operations.cancel`. They see only the signed-in user's runs of the
-  calling extension. Downloads are started by the host; the frame never
+  calling extension, even when that user is an operator: the host sends these
+  requests with `scope=own`, which the server enforces, and checks the run's
+  `initiated_by_me` flag. Downloads are started by the host; the frame never
   receives a URL.
 - `catalog.storage.get/set/delete/list(...)` requires `storage.extension` and
   provides release-scoped extension storage. Storage requests and values are
@@ -1040,10 +1047,15 @@ the run.
 
 Runs started in a tab are polled only while active and announced with a
 notification that links to the run, so users can close the dialog or leave the
-page. Only the initiator (while they can still read every selected entity) and
-`extensions.manage` operators can read, cancel, or download a run. Because a
-combined artifact may contain any member, losing access to one member denies
-every download of that run. Outputs are downloadable only after the run
+page. Only the initiator and `extensions.manage` operators can see a run.
+Operators can read, cancel, or download any run, except with `?scope=own` on
+`GET /extension-runs/{run_id}`, its `cancel` and artifact `download` routes,
+which limits every caller to runs they started. Run responses include
+`initiated_by_me`. The initiator can always
+cancel their own run (cancelling reveals nothing about the selection), but can
+read or download it only while they can still read every selected entity:
+because a combined artifact may contain any member, losing access to one
+member denies every download of that run. Outputs are downloadable only after the run
 completes and for 30 days; history keeps the run but marks outputs expired.
 Finalized outputs carry the extension's output name as the download filename.
 
@@ -1072,7 +1084,10 @@ other namespaces never lose changes. Setting a key replaces its whole value.
 recognized as `already_applied` before the revision is compared. Applied
 outcomes include `annotation_revision`. Each change is audited and emits
 `entity.annotations_changed.v1`; it does not change the entity's `updated_at`,
-so an extension's own bookkeeping never makes its output look stale. Do not
+so an extension's own bookkeeping never makes its output look stale. A tag
+change runs the entity's checks and on-save enforcing rules when any of them
+uses `has_tag` or `missing_tag` on the entity, and is rejected like any other
+write that would violate them. Do not
 store signed URLs or secret inputs in annotations, and do not treat a tag as
 proof that a download is available: resolve that through the run and artifact
 APIs.

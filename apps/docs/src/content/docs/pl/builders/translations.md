@@ -1,6 +1,6 @@
 ---
 title: Tłumaczenie etykiet
-description: Wyświetlaj nazwy schematów, nazwy atrybutów i etykiety widoków w języku każdego użytkownika dzięki leksykonowi obszaru roboczego.
+description: Wyświetlaj nazwy schematów, nazwy atrybutów, etykiety statusów i etykiety widoków w języku każdego użytkownika dzięki leksykonowi obszaru roboczego.
 ---
 
 Etykiety schematów są domyślnie zwykłym tekstem i wyświetlają się dokładnie tak, jak je zapisano. Aby przetłumaczyć etykietę, umieść ją w podwójnych nawiasach klamrowych. Tekst w nawiasach jest wyszukiwany w **leksykonie** obszaru roboczego, czyli zbiorze tłumaczeń przechowywanym poza schematami:
@@ -46,7 +46,7 @@ Pozostały tekst, na przykład bloki `heading` i `text`, separatory wyświetlani
 ]
 ```
 
-Przetłumaczoną etykietę, z takim samym zastępowaniem brakujących tłumaczeń jak w innych etykietach, pokazują znaczniki statusu, lista wyboru statusu w formularzu encji, lista wartości filtra i etykiety filtrów w Eksploratorze oraz wartości wyświetlane jako tekst. Wyszukiwanie, filtry, zapisane wyszukiwania, API i eksporty nadal używają kodu, więc przetłumaczenie lub zmiana etykiety nigdy nie zmienia zapisanych danych. Kontekst, na przykład `{{Draft|status}}`, oddziela status „Draft” od innych użyć tego słowa.
+Przetłumaczoną etykietę, z takim samym zastępowaniem brakujących tłumaczeń jak w innych etykietach, pokazują znaczniki statusu, lista wyboru statusu w formularzu encji, lista wartości filtra i etykiety filtrów w Przeglądarce oraz wartości wyświetlane jako tekst. Wyszukiwanie, filtry, zapisane wyszukiwania, API i eksporty nadal używają kodu, więc przetłumaczenie lub zmiana etykiety nigdy nie zmienia zapisanych danych. Kontekst, na przykład `{{Draft|status}}`, oddziela status „Draft” od innych użyć tego słowa.
 
 ## Składnia odwołań
 

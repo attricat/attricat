@@ -174,6 +174,7 @@ value_schema = '''{
 - Saving checks that a new value is an active member or an existing team. A record assigned to someone who has since left keeps the assignment and shows it as no longer active until someone changes it.
 - In the Explorer, filter the attribute by a person or team, or choose **Assigned to me (or my teams)**. Saved searches with that filter work for whoever opens them.
 - [Teams](/operate/workspaces/#teams) are managed under **Manage → Workspace management → Teams**. An assignment stores the team, so changing who belongs to it never touches records.
+- An assignment does not grant or restrict access. Status [transition requirements](/builders/validation/#who-may-make-a-transition) check the person saving, not the assignee, and rule predicates can only check that a record is assigned or compare the value with a fixed user or team. "Only the assignee may close this" cannot be declared; use roles or [separation of duties](/builders/validation/#who-may-make-a-transition) instead.
 
 See [User or team assignments](/reference/blueprint/#user-or-team-assignments) for the exact rules.
 

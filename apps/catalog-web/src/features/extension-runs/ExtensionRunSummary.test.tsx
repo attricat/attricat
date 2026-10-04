@@ -26,6 +26,7 @@ const run = (overrides: Partial<ExtensionRun>): ExtensionRun => ({
   cancelled_at: null,
   outputs_expire_at: '2026-11-01T12:01:00Z',
   outputs_expired: false,
+  initiated_by_me: true,
   ...overrides,
 });
 

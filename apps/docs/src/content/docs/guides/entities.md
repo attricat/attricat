@@ -45,7 +45,7 @@ To recover, read the listed conditions and fix what they ask for. Missing values
 
 Conditions are checked in every context where the status changes. If the status is inherited, a change in the default context must satisfy the conditions in every child context too.
 
-To see which statuses are available and why others are blocked, without trying to save, call `GET /v1/entities/{id}/status-transitions` with an optional `context_id`. Each transition shows `allowed`, a `denial_reason` when blocked, and the `unmet` conditions.
+Integrations can ask which statuses are available without trying to save; see [Conditions on transitions](/builders/validation/#conditions-on-transitions).
 
 ## Relationships
 

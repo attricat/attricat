@@ -1,20 +1,9 @@
 import { Alert, AlertTitle, Box, Typography } from '@mui/material';
 import type { SxProps, Theme } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import type { CheckViolation } from '../schemas';
-import { checkViolationError } from '../checkViolations';
-
-/** One violation's message, naming the contexts in which it failed. */
-export const useViolationText = () => {
-  const { t } = useTranslation();
-  return (violation: CheckViolation) =>
-    violation.contexts.length > 0
-      ? t('entities.checks.violationInContexts', {
-          message: violation.message,
-          contexts: violation.contexts.join(', '),
-        })
-      : violation.message;
-};
+import type { CheckViolation } from '../features/entities/schemas';
+import { checkViolationError } from '../features/entities/checkViolations';
+import { useViolationText } from './useViolationText';
 
 type Props = {
   title: string;
@@ -43,12 +32,17 @@ export const CheckViolationsAlert = ({ title, violations, sx }: Props) => {
   );
 };
 
-/** Shows an API failure, listing its check violations when it has any. */
+/**
+ * Shows an API failure, listing its check violations when it has any. Pass
+ * `violations` to list a subset, for example those not shown on form fields.
+ */
 export const ApiErrorAlert = ({
   error,
+  violations,
   sx,
 }: {
   error: Error;
+  violations?: readonly CheckViolation[];
   sx?: SxProps<Theme>;
 }) => {
   const { t } = useTranslation();
@@ -67,7 +61,7 @@ export const ApiErrorAlert = ({
           ? t('entities.checks.publicationBlocked', { context: checks.context })
           : checks.message
       }
-      violations={checks.violations}
+      violations={violations ?? checks.violations}
     />
   );
 };

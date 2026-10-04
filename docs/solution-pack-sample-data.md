@@ -43,10 +43,21 @@ own contexts; those values use the context the plan creates or that you map
 with `--map-context` (see [contexts](solution-packs.md#contexts-and-publication-channels)).
 A sample that needs a context the plan cannot create or map stops planning.
 
+Samples cannot set status or principal (user or team) attribute values: status
+values follow the workspace's transitions and principals name workspace
+members, so a pack that sets them is rejected during inspection. Status
+attributes take their ordinary defaults. Samples of one blueprint also cannot
+share a value of one of its unique keys; inspection compares them the way the
+workspace does (trimmed, whitespace collapsed, and case-insensitive unless the
+key is case-sensitive). An existing entity of a mapped or reused blueprint can
+still hold the same key, and then the sample's step fails on apply.
+
 Samples can attach files bundled in the archive, such as images, PDFs, or plain
 text documents. Planning uploads each bundled file once to ordinary file storage
 before saving the plan; apply attaches it to the sample entity as an ordinary
-file, which then shows its usual processing status. Inspection reports the
+file in the same transaction that creates the entity, and validates the entity
+again with its files before recording the ordinary audit record and event. The
+file then shows its usual processing status. Inspection reports the
 number of bundled files (`sample_data.file_count`). Attricat checks each file's
 type and the attribute's file policy, but cannot inspect file content for
 copied or private data; review it with the publisher.

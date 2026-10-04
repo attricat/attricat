@@ -62,24 +62,20 @@ Gdy jedna prośba zmienia kilka encji, np. wydanie nowej wersji i zastąpienie p
 
 ## Gdy zmiana zostaje odrzucona
 
-Schematy mogą deklarować reguły, które serwer egzekwuje przy każdej zmianie, także zmianie agenta:
+Zmiany wprowadzone przez agenta przechodzą tę samą walidację co Twoje edycje, a serwer odrzuca je z tych samych powodów. Gdy zatwierdzona zmiana zostaje odrzucona, nic nie zostaje zapisane. Agent wyjaśnia przyczynę zamiast ponawiać próbę i, jeśli to ma sens, proponuje poprawioną zmianę, która ponownie wymaga Twojego zatwierdzenia.
 
+- **Kontrole i reguły.** Zmianę odrzuca kontrola (`entity_check_failed`), warunek przejścia statusu (`transition_conditions_unmet`), egzekwowana reguła (`rule_violation`) lub kontrole wymagane przez kanał (`publication_checks_failed`), które nie przeszły. Agent wyjaśnia, które kontrole nie przeszły. Aby wyjaśnić, dlaczego opcja statusu jest zablokowana lub encji nie można jeszcze opublikować, może odczytać przejścia statusu i gotowość encji do publikacji.
 - **Klucze unikalne.** Jeśli inna encja ma już ten sam numer części lub dokumentu, zmiana zostaje odrzucona, a agent dowiaduje się, która encja go ma. Powinien pokazać Ci tę encję i zapytać, czy ją zaktualizować, czy użyć innej wartości, zamiast ponawiać próbę.
 - **Hierarchie.** Powiązanie, które uczyniłoby encję własnym przodkiem, np. lokalizację wewnątrz niej samej, zostaje odrzucone wraz ze ścieżką pętli.
 - **Dozwolone cele.** Relacja może wskazywać tylko wymienione w niej schematy.
 - **Ograniczenia publikacji.** Publikacja schematu, który dodaje klucz unikalny lub hierarchię, nie powiedzie się, jeśli istniejące encje je naruszają; agent wymienia je, aby można było je najpierw poprawić.
-
-## Rekordy kontrolowane
-
-Schematy mogą ograniczać, kto wykonuje przejście statusu, blokować sfinalizowane rekordy i wiązać zatwierdzenia z przejrzaną treścią. Agent przestrzega tych samych zasad co Ty:
-
-- Zmiana odrzucona przez te zasady kończy się błędem z jasnym powodem, np. zablokowanym rekordem lub przejściem, którego nie możesz wykonać. Agent wyjaśnia go zamiast ponawiać próbę i może pokazać, które przejścia możesz wykonać, kto musi działać i które przejście korygujące odblokowuje rekord.
+- **Rekordy kontrolowane.** Schematy mogą ograniczać, kto wykonuje przejście statusu, blokować sfinalizowane rekordy i wiązać zatwierdzenia z przejrzaną treścią, a agent przestrzega tych samych zasad co Ty. Zablokowany rekord lub przejście, którego nie możesz wykonać, kończy się odrzuceniem z jasnym powodem, a agent może pokazać, które przejścia możesz wykonać, kto musi działać i które przejście korygujące odblokowuje rekord.
 - Przy przejściu, które musi wykonać inna osoba niż autor wcześniejszego przejścia, za wykonującego uznaje się Ciebie, ponieważ zatwierdzona przez Ciebie zmiana działa w Twoim imieniu.
 - Jeśli proponowana edycja dotyczy zatwierdzonej treści, to gdy ją zaakceptujesz, zatwierdzenie rekordu zostanie unieważnione, a rekord w tej samej zmianie wróci do wcześniejszego statusu.
 
 ## Gdzie widać zmiany
 
-Zmiany wprowadzone przez agenta przechodzą tę samą walidację i audyt co Twoje edycje. Jeśli zatwierdzoną zmianę odrzuci kontrola (`entity_check_failed`), warunek przejścia statusu (`transition_conditions_unmet`), egzekwowana reguła (`rule_violation`) lub kontrole wymagane przez kanał (`publication_checks_failed`), nic nie zostaje zapisane. Agent wyjaśnia, które kontrole nie przeszły, i proponuje poprawioną zmianę, która ponownie wymaga Twojego zatwierdzenia. Aby wyjaśnić, dlaczego opcja statusu jest zablokowana lub encji nie można jeszcze opublikować, agent może odczytać przejścia statusu i gotowość encji do publikacji. Na stronie **Zmiany** encji oraz w **Zarządzanie → Aktywność / dziennik audytu** widać uruchomienie agenta, narzędzie, decyzję o zatwierdzeniu i osobę, która zatwierdziła zmianę.
+Zmiany wprowadzone przez agenta są audytowane tak samo jak Twoje edycje. Na stronie **Zmiany** encji oraz w **Zarządzanie → Aktywność / dziennik audytu** widać uruchomienie agenta, narzędzie, decyzję o zatwierdzeniu i osobę, która zatwierdziła zmianę.
 
 ## Dane wysyłane do dostawcy
 

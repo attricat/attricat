@@ -43,6 +43,11 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `unique_key_duplicates` | 409 | Publishing a new unique key failed because existing entities share values. `details.duplicates` lists them. |
 | `relationship_hierarchy_violations` | 409 | Publishing `acyclic` or `tree` failed because existing links contain cycles or extra parents. `details` lists them. |
 | `stale_entity` | 409 | `expected_updated_at` no longer matches the entity. Reload it and try again. |
+| `status_precondition_required` | 428 | A write to a status attribute did not send `expected_updated_at`. Read the entity and send its `updated_at`. |
+| `status_transition_forbidden` | 403 | The status transition requires a permission or role the caller does not have. |
+| `status_separation_of_duties` | 403 | The status transition must be made by someone other than the person who made an earlier transition. |
+| `record_locked` | 409 | The record's status locks the content being changed, or the record cannot be deleted while it is locked. |
+| `entity_id_taken` | 409 | A batch `create` chose an `entity_id` that already exists. |
 | `relationship_path_sort_requires_single_result_version` | 422 | Sorting by a related value across several blueprint revisions. |
 | `file_processing` | 409 | The file is not ready to download yet. |
 | `approval_already_decided` | 409 | An agent tool call was already approved or rejected. |
@@ -55,7 +60,9 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `rule_dry_run_required` | 409 | Enabling an enforcing rule needs a completed full dry run of that revision first. |
 | `rule_has_existing_violations` | 409 | The dry run found violations. `details.existing_violations` is the count. |
 
-The four 422 check errors list up to 50 violations in `error.details.violations`:
+### Error details
+
+`entity_check_failed`, `transition_conditions_unmet`, `rule_violation`, and `publication_checks_failed` list up to 50 violations in `error.details.violations`:
 
 ```json
 {"error": {"code": "transition_conditions_unmet", "message": "…", "details": {"violations": [
@@ -66,7 +73,18 @@ The four 422 check errors list up to 50 violations in `error.details.violations`
 ]}}}
 ```
 
-`source` is `entity_check`, `transition_condition`, `rule`, or (publication only) `entity_schema`. `contexts` lists the context codes where the check failed, and `attributes` the entity's attributes involved, for highlighting fields. Rules add `severity`; publication bulk failures add `evidence.entity_id`. See [Validation](/builders/validation/#errors-and-how-to-fix-them).
+| Field | Description |
+| --- | --- |
+| `source` | `entity_check`, `transition_condition`, `rule`, or, for publication only, `entity_schema`. |
+| `code` | The check, condition, or rule code. |
+| `message` | The custom message, or a generated one. |
+| `contexts` | Codes of the contexts where it failed. |
+| `attributes` | Attributes of this entity involved, such as both sides of a comparison or the relationship of a `linked` check. Use them to highlight fields. |
+| `severity` | For rules: the rule's severity. |
+| `transition` | For conditions and guarded transitions: `attribute_code`, `from`, and `to`. |
+| `evidence` | Details such as the compared values or the IDs of failing linked records. Publication bulk failures add `entity_id`. |
+
+`publication_checks_failed` also has `details.context`, the channel code. For what each error means and how to fix it, see [Validation](/builders/validation/#errors-and-how-to-fix-them).
 
 ## Routes
 
@@ -112,6 +130,8 @@ The four 422 check errors list up to 50 violations in `error.details.violations`
 | `POST` | `/v1/entities/{id}/blueprint-migration` | Migrate. |
 | `POST` | `/v1/entities/{id}/reusable-attributes`, `/v1/entities/{id}/reusable-attribute-groups/{group_id}` | Attach a reusable attribute or group. |
 | `GET` | `/v1/entities/{id}/status-transitions?context_id=…` | Declared transitions from the saved status in one context (default context if omitted): `{"items": [{attribute_code, from, to, code, allowed, denial_code, denial_reason, unmet}]}`. `denial_code` is `status_transition_forbidden`, `status_separation_of_duties` or `transition_conditions_unmet`; `unmet` lists unmet conditions and enforcing rules as violations. |
+| `GET` | `/v1/entities/{id}/approvals` | Approvals recorded by status transitions, newest first, with who approved, when, a digest of the covered content, and why an approval was voided. |
+| `GET` | `/v1/entities/{id}/retention-holds` | Retention holds on the entity's files. |
 
 ### Batch changes
 
@@ -189,6 +209,8 @@ POST /api/v1/entities/search
 | `GET` | `/files/{file_id}` | Metadata and processing status. |
 | `GET` | `/files/{file_id}/download` | Original file. Supports one `Range`. |
 | `GET` | `/files/{file_id}/variants/{kind}/download` | `thumbnail` or `display` variant. |
+| `GET`, `POST` | `/files/{file_id}/retention-holds` | List a file's retention holds, or place an explicit hold with `{"days": 365, "reason": "…"}` (`files.hold`). |
+| `POST` | `/files/{file_id}/retention-holds/{hold_id}/release` | Release an explicit hold early (`files.hold`). Holds placed by a status cannot be released. |
 
 Downloads return `409 file_processing` until the file is `ready`.
 
