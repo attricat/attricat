@@ -331,6 +331,20 @@ impl CatalogRepository {
         Ok((tags, metadata))
     }
 
+    async fn annotation_namespace_claimed(
+        &self,
+        connection: &mut sqlx::PgConnection,
+        extension_id: &str,
+    ) -> Result<bool, RepositoryError> {
+        Ok(sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM extension_annotation_namespaces WHERE workspace_id=$1 AND extension_id=$2)",
+        )
+        .bind(self.workspace_id.0)
+        .bind(extension_id)
+        .fetch_one(connection)
+        .await?)
+    }
+
     async fn namespace_annotation_count(
         &self,
         connection: &mut sqlx::PgConnection,
@@ -364,14 +378,10 @@ impl CatalogRepository {
         // write of data under the same name.
         self.lock_annotation_namespace(&mut *transaction, extension_id)
             .await?;
-        let claimed: bool = sqlx::query_scalar(
-            "SELECT EXISTS (SELECT 1 FROM extension_annotation_namespaces WHERE workspace_id=$1 AND extension_id=$2)",
-        )
-        .bind(self.workspace_id.0)
-        .bind(extension_id)
-        .fetch_one(&mut **transaction)
-        .await?;
-        if claimed {
+        if self
+            .annotation_namespace_claimed(transaction, extension_id)
+            .await?
+        {
             return Ok(false);
         }
         if !adopt_legacy
@@ -512,14 +522,11 @@ impl CatalogRepository {
                 remove_metadata: patch.remove_metadata.clone(),
             },
         );
-        let local = |tags: Vec<String>| -> Vec<String> {
-            tags.into_iter()
-                .map(|tag| tag[prefix.len()..].to_owned())
+        let local = |tags: &[String]| -> Vec<String> {
+            tags.iter()
+                .filter_map(|tag| tag.strip_prefix(&prefix).map(str::to_owned))
                 .collect()
         };
-        let added_tags = local(changes.added_tags.clone());
-        let removed_tags = local(changes.removed_tags.clone());
-        let (set_keys, removed_keys) = (changes.set_keys.clone(), changes.removed_keys.clone());
         if !namespace.is_empty() {
             metadata.insert(extension_id.to_owned(), Value::Object(namespace));
         }
@@ -557,10 +564,10 @@ impl CatalogRepository {
         let mut summary = json!({
             "extension_id": extension_id,
             "revision": next_revision,
-            "tags_added": added_tags,
-            "tags_removed": removed_tags,
-            "metadata_keys_set": set_keys,
-            "metadata_keys_removed": removed_keys,
+            "tags_added": local(&changes.added_tags),
+            "tags_removed": local(&changes.removed_tags),
+            "metadata_keys_set": changes.set_keys,
+            "metadata_keys_removed": changes.removed_keys,
         });
         if let Some(value) = replaced_value {
             summary["replaced_namespace_value"] = value;
@@ -593,14 +600,10 @@ impl CatalogRepository {
         patch: ExtensionAnnotationPatch,
     ) -> Result<ExtensionAnnotations, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
-        let claimed: bool = sqlx::query_scalar(
-            "SELECT EXISTS (SELECT 1 FROM extension_annotation_namespaces WHERE workspace_id=$1 AND extension_id=$2)",
-        )
-        .bind(self.workspace_id.0)
-        .bind(extension_id)
-        .fetch_one(&mut *transaction)
-        .await?;
-        if !claimed {
+        if !self
+            .annotation_namespace_claimed(&mut transaction, extension_id)
+            .await?
+        {
             return Err(RepositoryError::NotFound("claimed annotation namespace"));
         }
         self.apply_extension_annotation_patch(
