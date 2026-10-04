@@ -826,3 +826,58 @@ async fn rejects_policy_and_signature_mismatches_with_the_error_envelope(pool: P
     assert_eq!(store.object_count().await, 0);
     server.abort();
 }
+
+#[sqlx::test]
+async fn duplicating_an_entity_is_atomic_with_its_file_links(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let blueprint = upload_blueprint(&client, &base_url).await;
+    let entity = create_entity(&client, &base_url, &blueprint).await;
+    let entity_id: Uuid = entity["id"].as_str().unwrap().parse().unwrap();
+    let workspace_id: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
+    let repository = api::repository::CatalogRepository::new(pool.clone(), workspace_id);
+    let file_id = Uuid::new_v4();
+    sqlx::query("INSERT INTO files (id, workspace_id, original_filename, display_filename, mime_type, byte_size, sha256, original_key, status) VALUES ($1, $2, 'p.png', 'p.png', 'image/png', 7, $3, 'files/p.png', 'ready')")
+        .bind(file_id)
+        .bind(workspace_id)
+        .bind("0".repeat(64))
+        .execute(&pool)
+        .await
+        .unwrap();
+    repository
+        .link_file_to_attribute(entity_id, "image", None, file_id)
+        .await
+        .unwrap();
+
+    let copy = repository.duplicate_entity(entity_id).await.unwrap();
+    let references: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM attribute_file_references r JOIN attribute_values v ON v.id = r.attribute_value_id WHERE v.entity_id = $1 AND r.file_id = $2",
+    )
+    .bind(copy.id)
+    .bind(file_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(references, 1);
+
+    // The file can no longer be linked as an attachment, so linking it into
+    // a second copy fails. That failure must roll back the whole copy.
+    sqlx::query("UPDATE files SET purpose = 'avatar' WHERE id = $1")
+        .bind(file_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let entities = || async {
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM entities WHERE blueprint_id = $1 AND deleted_at IS NULL",
+        )
+        .bind(copy.blueprint_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+    };
+    let before = entities().await;
+    assert!(repository.duplicate_entity(entity_id).await.is_err());
+    assert_eq!(entities().await, before);
+    server.abort();
+}

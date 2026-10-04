@@ -268,24 +268,43 @@ impl CatalogRepository {
         let (system_tags, system_metadata) = self
             .without_claimed_annotations(system_tags, source.system_metadata)
             .await?;
-        let entity = self
-            .create_entity_with_values(
-                source.blueprint_id,
-                source.blueprint_version,
-                values,
-                system_tags,
-                system_metadata,
+        // The copy, its file references and its audit/event commit together,
+        // so a failed file link cannot leave a partial duplicate behind.
+        let mut transaction = self.pool.begin().await?;
+        let (entity, changes, event) = self
+            .create_entity_in_transaction(
+                &mut transaction,
+                ChosenIdEntityCreate {
+                    entity_id: Uuid::new_v4(),
+                    blueprint_id: source.blueprint_id,
+                    blueprint_version: source.blueprint_version,
+                    values,
+                    system_tags,
+                    system_metadata,
+                    host_sample_marker: false,
+                },
             )
             .await?;
-        for (attribute_code, context_id, files) in file_values {
-            for file in files {
-                self.link_file_to_attribute(entity.id, &attribute_code, context_id, file.id)
+        let entity = if file_values.is_empty() {
+            entity
+        } else {
+            for (attribute_code, context_id, files) in file_values {
+                for file in files {
+                    self.link_file_in_transaction(
+                        &mut transaction,
+                        &entity,
+                        &attribute_code,
+                        context_id,
+                        file.id,
+                    )
                     .await?;
+                }
             }
-        }
-        self.get_entity(entity.id)
-            .await?
-            .ok_or(RepositoryError::NotFound("entity"))
+            self.revalidate_entity(&mut transaction, &entity).await?
+        };
+        self.commit_entity_mutation(transaction, changes, event)
+            .await?;
+        Ok(entity)
     }
 
     pub async fn update_entity_with_values(
@@ -364,10 +383,12 @@ impl CatalogRepository {
             self.lock_relationship_cardinality_writes(transaction)
                 .await?;
         }
-        let before = self.entity_audit_snapshot(transaction, entity_id).await?;
         // The row lock serializes writers for an entity. It protects both the
         // one-latest-value invariant and the preview rebuilt from that state.
         let entity = self.lock_entity(transaction, entity_id).await?;
+        // Snapshot under the lock so a concurrent writer cannot change the
+        // audited "before" state between the read and this mutation.
+        let before = self.entity_audit_snapshot(transaction, entity_id).await?;
         if expected_updated_at.is_some()
             || self
                 .has_status_writes(transaction, &entity, &values, &remove_values)
@@ -530,8 +551,8 @@ impl CatalogRepository {
         entity_id: Uuid,
         expected_updated_at: Option<DateTime<Utc>>,
     ) -> Result<(Vec<AuditEventChange>, NewDomainEvent), RepositoryError> {
-        let before = self.entity_audit_snapshot(transaction, entity_id).await?;
         let entity = self.lock_entity(transaction, entity_id).await?;
+        let before = self.entity_audit_snapshot(transaction, entity_id).await?;
         if expected_updated_at.is_some_and(|expected| expected != entity.updated_at) {
             return Err(RepositoryError::StaleEntity);
         }
@@ -585,9 +606,6 @@ impl CatalogRepository {
             self.lock_relationship_cardinality_writes(&mut transaction)
                 .await?;
         }
-        let before = self
-            .entity_audit_snapshot(&mut transaction, entity_id)
-            .await?;
         let entity = sqlx::query_as::<_, Db<Entity>>(
             r#"SELECT id, blueprint_id, blueprint_version, projections, system_tags, system_metadata, ('attricat.sample'=ANY(system_tags)) AS is_sample, created_at, updated_at, deleted_at
                FROM entities
@@ -600,6 +618,9 @@ impl CatalogRepository {
         .await?
         .into_domain()
         .ok_or(RepositoryError::NotFound("entity"))?;
+        let before = self
+            .entity_audit_snapshot(&mut transaction, entity_id)
+            .await?;
 
         if input.expected_updated_at.is_some()
             || self
@@ -702,10 +723,10 @@ impl CatalogRepository {
             self.lock_relationship_cardinality_writes(&mut transaction)
                 .await?;
         }
+        let entity = self.lock_entity(&mut transaction, entity_id).await?;
         let before = self
             .entity_audit_snapshot(&mut transaction, entity_id)
             .await?;
-        let entity = self.lock_entity(&mut transaction, entity_id).await?;
         let mut values = Vec::new();
         for relationship in input.relationships {
             let context_id = self

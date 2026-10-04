@@ -443,7 +443,10 @@ impl CatalogRepository {
     pub async fn backfill_workflow_tasks(&self) -> Result<u64, RepositoryError> {
         let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
-        sqlx::query("UPDATE workflow_runs SET status='pending',lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND status='leased'").bind(ws).execute(&mut *tx).await?;
+        // Current code never leases a run row (the task envelope owns the
+        // lease), so only legacy rows match. Never reset one whose task is
+        // under a live lease.
+        sqlx::query("UPDATE workflow_runs wr SET status='pending',lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE wr.workspace_id=$1 AND wr.status='leased' AND NOT EXISTS (SELECT 1 FROM tasks t WHERE t.workspace_id=wr.workspace_id AND t.kind='workflow_run.v1' AND t.subject_id=wr.id AND t.status='leased' AND t.lease_until>clock_timestamp())").bind(ws).execute(&mut *tx).await?;
         let rows: Vec<(Uuid, Option<Uuid>, Option<Uuid>)> = sqlx::query_as("SELECT id,trigger_event_id,trigger_event_id FROM workflow_runs WHERE workspace_id=$1 AND status='pending' FOR UPDATE").bind(ws).fetch_all(&mut *tx).await?;
         let count = rows.len() as u64;
         for (run_id, correlation, causation) in rows {

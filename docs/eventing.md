@@ -178,7 +178,7 @@ The dispatcher emits Prometheus metrics on the normal `/metrics` endpoint
 
 - `catalog_event_deliveries_total{outcome="claimed|completed|retry|dead_letter"}`
   counts lifecycle outcomes.
-- `catalog_event_delivery_queue_depth{status="pending|leased|completed|dead_letter"}`
+- `catalog_event_delivery_queue_depth{workspace_id,consumer,status="pending|leased|completed|dead_letter"}`
   is updated while the dispatcher polls each active workspace.
 
 Alert on a growing `pending` queue, a lease that does not recover after the

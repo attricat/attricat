@@ -372,25 +372,56 @@ impl CatalogRepository {
         context_id: Option<Uuid>,
         file_id: Uuid,
     ) -> Result<FileMetadata, RepositoryError> {
-        let workspace_id = self.workspace_id.0;
         let mut transaction = self.pool.begin().await?;
         let entity = self.lock_entity(&mut transaction, entity_id).await?;
+        self.link_file_in_transaction(
+            &mut transaction,
+            &entity,
+            attribute_code,
+            context_id,
+            file_id,
+        )
+        .await?;
+        self.revalidate_entity(&mut transaction, &entity).await?;
+        let retained_role = self
+            .reconcile_entity_publication(&mut transaction, entity_id, "entity_changed")
+            .await?;
+        self.write_audit_event_with_publication_metadata(
+            &mut transaction,
+            Some(publication_disposition_metadata(retained_role)),
+        )
+        .await?;
+        transaction.commit().await?;
+        self.file_metadata(file_id).await
+    }
+
+    /// Adds one file reference to `entity`, which the caller has locked,
+    /// without revalidating it, so several files can be linked in the
+    /// transaction that created or changed the entity.
+    pub(super) async fn link_file_in_transaction(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        entity: &Entity,
+        attribute_code: &str,
+        context_id: Option<Uuid>,
+        file_id: Uuid,
+    ) -> Result<(), RepositoryError> {
+        let workspace_id = self.workspace_id.0;
+        let entity_id = entity.id;
         let (attribute_id, policy, context_editable) = self
-            .file_upload_attribute(&mut transaction, &entity, attribute_code)
+            .file_upload_attribute(transaction, entity, attribute_code)
             .await?;
-        let context_id = self
-            .file_upload_context(&mut transaction, context_id)
+        let context_id = self.file_upload_context(transaction, context_id).await?;
+        self.validate_context_editable(transaction, Some(context_id), &context_editable)
             .await?;
-        self.validate_context_editable(&mut transaction, Some(context_id), &context_editable)
-            .await?;
-        self.ensure_attribute_unlocked(&mut transaction, &entity, attribute_code, context_id)
+        self.ensure_attribute_unlocked(transaction, entity, attribute_code, context_id)
             .await?;
         let exists = sqlx::query_scalar::<_, Uuid>(
             "SELECT id FROM files WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL AND purpose = 'attachment'",
         )
         .bind(file_id)
         .bind(workspace_id)
-        .fetch_optional(&mut *transaction)
+        .fetch_optional(&mut **transaction)
         .await?;
         if exists.is_none() {
             return Err(RepositoryError::NotFound("file"));
@@ -401,7 +432,7 @@ impl CatalogRepository {
         .bind(entity_id)
         .bind(attribute_id)
         .bind(context_id)
-        .fetch_optional(&mut *transaction)
+        .fetch_optional(&mut **transaction)
         .await?;
         let count =
             match current_value {
@@ -409,7 +440,7 @@ impl CatalogRepository {
                     "SELECT COUNT(*) FROM attribute_file_references WHERE attribute_value_id = $1",
                 )
                 .bind(value_id)
-                .fetch_one(&mut *transaction)
+                .fetch_one(&mut **transaction)
                 .await?,
                 None => 0,
             };
@@ -418,7 +449,7 @@ impl CatalogRepository {
         }
         let value_id = if policy.cardinality == "one" {
             self.archive_current_value(
-                &mut transaction,
+                transaction,
                 entity_id,
                 attribute_id,
                 Some(context_id),
@@ -433,7 +464,7 @@ impl CatalogRepository {
             .bind(entity_id)
             .bind(attribute_id)
             .bind(context_id)
-            .fetch_one(&mut *transaction)
+            .fetch_one(&mut **transaction)
             .await?
         } else if let Some(value_id) = current_value {
             value_id
@@ -446,7 +477,7 @@ impl CatalogRepository {
             .bind(entity_id)
             .bind(attribute_id)
             .bind(context_id)
-            .fetch_one(&mut *transaction)
+            .fetch_one(&mut **transaction)
             .await?
         };
         let position = if policy.cardinality == "one" {
@@ -459,19 +490,9 @@ impl CatalogRepository {
             .bind(workspace_id)
             .bind(file_id)
             .bind(position)
-            .execute(&mut *transaction)
+            .execute(&mut **transaction)
             .await?;
-        self.revalidate_entity(&mut transaction, &entity).await?;
-        let retained_role = self
-            .reconcile_entity_publication(&mut transaction, entity_id, "entity_changed")
-            .await?;
-        self.write_audit_event_with_publication_metadata(
-            &mut transaction,
-            Some(publication_disposition_metadata(retained_role)),
-        )
-        .await?;
-        transaction.commit().await?;
-        self.file_metadata(file_id).await
+        Ok(())
     }
 
     /// Persists files uploaded from a conversation without creating an entity

@@ -218,10 +218,7 @@ async fn dispatch_handler(
         repository
             .ensure_event_consumer(handler.name(), handler.event_types())
             .await?;
-        for (status, count) in repository.event_delivery_health().await? {
-            metrics::gauge!("catalog_event_delivery_queue_depth", "status" => status)
-                .set(count as f64);
-        }
+        record_delivery_health(&repository, workspace_id).await?;
         let Some(delivery) = repository
             .claim_event_delivery(
                 handler.name(),
@@ -269,6 +266,38 @@ async fn dispatch_handler(
                     .await?;
                 metrics::counter!("catalog_event_deliveries_total", "outcome" => if delivery.attempts >= config.max_attempts { "dead_letter" } else { "retry" }).increment(1);
             }
+        }
+    }
+    Ok(())
+}
+
+/// Publishes queue depth per workspace, consumer and status. Statuses absent
+/// from the aggregate are reset so a drained queue does not keep reporting its
+/// last non-zero depth.
+async fn record_delivery_health(
+    repository: &CatalogRepository,
+    workspace_id: Uuid,
+) -> Result<(), RepositoryError> {
+    const STATUSES: [&str; 4] = ["pending", "leased", "completed", "dead_letter"];
+    let health = repository.event_delivery_health_by_consumer().await?;
+    let workspace = workspace_id.to_string();
+    let consumers = health
+        .iter()
+        .map(|(consumer, _, _)| consumer.as_str())
+        .collect::<HashSet<_>>();
+    for consumer in consumers {
+        for status in STATUSES {
+            let count = health
+                .iter()
+                .find(|(name, state, _)| name == consumer && state == status)
+                .map_or(0, |(_, _, count)| *count);
+            metrics::gauge!(
+                "catalog_event_delivery_queue_depth",
+                "workspace_id" => workspace.clone(),
+                "consumer" => consumer.to_owned(),
+                "status" => status
+            )
+            .set(count as f64);
         }
     }
     Ok(())

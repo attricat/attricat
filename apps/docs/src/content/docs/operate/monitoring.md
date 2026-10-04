@@ -48,7 +48,7 @@ Useful series:
 | `catalog_task_queue_depth`, `catalog_task_queue_oldest_age_seconds`, `catalog_task_queue_retries` | Growing depth, old tasks, any dead letters. |
 | `catalog_file_worker_queue_depth`, `catalog_file_worker_oldest_age_seconds`, `catalog_file_worker_retries` | Same, for file processing. |
 | `catalog_file_worker_jobs_failed_total` | Increases. |
-| `catalog_event_delivery_queue_depth{status}` | Growing `pending`, any `dead_letter`. |
+| `catalog_event_delivery_queue_depth{workspace_id,consumer,status}` | Growing `pending`, any `dead_letter`. |
 | `catalog_event_deliveries_total{outcome}` | `dead_letter` increases. |
 | `catalog_extension_operation_runs`, `catalog_extension_operation_oldest_age_seconds` | Stuck extension operations. |
 | `catalog_file_uploads_total`, `catalog_file_downloads_total`, `catalog_object_store_operations_total` | Error outcomes. |

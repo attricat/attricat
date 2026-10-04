@@ -555,6 +555,18 @@ impl CatalogRepository {
             .await?)
     }
 
+    /// Delivery counts per consumer and status for this workspace, using the
+    /// same status mapping as [`Self::event_delivery_health`].
+    pub async fn event_delivery_health_by_consumer(
+        &self,
+    ) -> Result<Vec<(String, String, i64)>, RepositoryError> {
+        let workspace_id = self.workspace_id.0;
+        Ok(sqlx::query_as("SELECT c.name, CASE t.status WHEN 'queued' THEN 'pending' WHEN 'leased' THEN 'leased' WHEN 'succeeded' THEN 'completed' WHEN 'dead_letter' THEN 'dead_letter' ELSE d.status END AS status, count(*) FROM event_deliveries d JOIN event_consumers c ON c.id = d.consumer_id LEFT JOIN tasks t ON t.id = d.task_id WHERE c.workspace_id = $1 GROUP BY 1, 2")
+            .bind(workspace_id)
+            .fetch_all(&self.pool)
+            .await?)
+    }
+
     /// Reactivates only a terminal delivery; domain event facts are never modified.
     pub async fn replay_event_delivery(
         &self,

@@ -697,10 +697,10 @@ impl CatalogRepository {
         let mut transaction = self.pool.begin().await?;
         self.lock_relationship_cardinality_writes(&mut transaction)
             .await?;
+        let entity = self.lock_entity(&mut transaction, entity_id).await?;
         let before = self
             .entity_audit_snapshot(&mut transaction, entity_id)
             .await?;
-        let entity = self.lock_entity(&mut transaction, entity_id).await?;
         let history = sqlx::query_as::<_, HistoryNativeValueRow>(
             r#"SELECT h.id, h.entity_id, h.attribute_id, h.relationship_target_entity_id,
                       h.active, h.context_id, h.created_at, h.archived_at, a.value_type,
