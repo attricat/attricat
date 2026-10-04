@@ -369,3 +369,49 @@ async fn migration_preserves_reusable_attribute_values(pool: PgPool) {
     );
     server.abort();
 }
+
+#[sqlx::test]
+async fn attaching_a_reusable_attribute_audits_its_default_and_emits_an_entity_update(
+    pool: PgPool,
+) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let blueprint = create_blueprint(&client, &base_url, PRODUCT).await;
+    let published = create_published_reusable(
+        &client,
+        &base_url,
+        json!({ "code": "depth", "name": "Depth", "value_type": "number", "default_value": 2.5 }),
+    )
+    .await;
+    let entity = create_entity(&client, &base_url, &blueprint).await;
+    let entity_id: Uuid = entity["id"].as_str().unwrap().parse().unwrap();
+    client
+        .post(format!(
+            "{base_url}/v1/entities/{entity_id}/reusable-attributes"
+        ))
+        .json(&json!({ "reusable_attribute_revision_id": published["id"] }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+
+    let payload: Value = sqlx::query_scalar(
+        "SELECT payload FROM domain_events WHERE aggregate_id = $1 AND event_type = 'entity.updated.v1' ORDER BY sequence DESC LIMIT 1",
+    )
+    .bind(entity_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(payload["facts"][0]["attribute_code"], "default:depth");
+    assert_eq!(payload["facts"][0]["after_value"], 2.5);
+    let change_kind: String = sqlx::query_scalar(
+        "SELECT change_kind FROM audit_event_changes WHERE entity_id = $1 AND attribute_code = 'default:depth'",
+    )
+    .bind(entity_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(change_kind, "set");
+    server.abort();
+}
