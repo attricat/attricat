@@ -888,6 +888,20 @@ async fn samples_store_bundled_files_and_contextual_values(pool: PgPool) {
     assert_eq!(sha256, digest(PDF_BYTES));
     assert_eq!(stored_key, object_key);
     assert_eq!(context_id, eu_id);
+    let preview: Value =
+        sqlx::query_scalar("SELECT projections->'preview' FROM entities WHERE id = $1")
+            .bind(entity_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    // The preview is rebuilt after the files are attached, as an ordinary
+    // file write rebuilds it.
+    assert!(
+        preview["docs_eu"]
+            .as_object()
+            .is_some_and(|values| values.contains_key("evidence")),
+        "the stored preview includes the file attribute: {preview}"
+    );
     assert_eq!(
         count(&pool, "SELECT count(*) FROM file_upload_intents").await,
         0,
