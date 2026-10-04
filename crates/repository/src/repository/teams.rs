@@ -325,9 +325,10 @@ impl CatalogRepository {
     /// differs from the saved projection must be a valid reference and, on
     /// writes, name an active member or an existing team. Unchanged values
     /// may refer to people who have since left, so unrelated edits never
-    /// fail. A structural revalidation only checks the format: a value that
-    /// a context reparent newly inherits was assigned earlier, and the
-    /// reparent assigns nobody.
+    /// fail. A structural revalidation only checks the format. The preview
+    /// holds each context's own values, so a reparent changes none of them
+    /// today; the early return keeps it that way if that ever changes,
+    /// since a reparent assigns nobody.
     pub(super) async fn validate_principal_values(
         &self,
         transaction: &mut Transaction<'_, Postgres>,

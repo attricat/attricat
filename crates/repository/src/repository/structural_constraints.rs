@@ -268,8 +268,10 @@ impl CatalogRepository {
     /// latest published revision has context-scoped keys, in ID order. Every
     /// key writer holds the same lock shared until it commits, so a context
     /// change that holds these locks sees every committed key row and no
-    /// writer computes rows against the old context tree. Returns the
-    /// families.
+    /// writer computes rows against the old context tree. Callers first take
+    /// the workspace row and the entities table lock (see the lock order in
+    /// `mod.rs`), so no writer holding a family lock waits on them. Returns
+    /// the families.
     pub(super) async fn lock_context_unique_keys(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
