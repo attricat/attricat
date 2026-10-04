@@ -454,6 +454,7 @@ impl CatalogRepository {
         if !blueprint_exists {
             return Err(RepositoryError::NotFound("entity blueprint revision"));
         }
+        super::entity_commands::lock_entity_writes(&mut tx, workspace_id, false).await?;
         let entity_ids: Vec<Uuid> = sqlx::query_scalar(
             "SELECT id FROM entities WHERE workspace_id = $1 AND blueprint_id = $2 AND blueprint_version = $3 AND deleted_at IS NULL ORDER BY id FOR UPDATE",
         )

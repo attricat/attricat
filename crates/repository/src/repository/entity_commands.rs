@@ -702,6 +702,7 @@ impl CatalogRepository {
             self.lock_relationship_cardinality_writes(&mut transaction)
                 .await?;
         }
+        lock_entity_writes(&mut transaction, self.workspace_id.0, false).await?;
         let entity = sqlx::query_as::<_, Db<Entity>>(
             r#"SELECT id, blueprint_id, blueprint_version, projections, system_tags, system_metadata, ('attricat.sample'=ANY(system_tags)) AS is_sample, created_at, updated_at, deleted_at
                FROM entities
@@ -1350,6 +1351,7 @@ impl CatalogRepository {
         transaction: &mut Transaction<'_, Postgres>,
         entity_id: Uuid,
     ) -> Result<Entity, RepositoryError> {
+        lock_entity_writes(transaction, self.workspace_id.0, false).await?;
         sqlx::query_as::<_, Db<Entity>>(
             r#"SELECT id, blueprint_id, blueprint_version, projections, system_tags, system_metadata, ('attricat.sample'=ANY(system_tags)) AS is_sample, created_at, updated_at, deleted_at
                FROM entities WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL FOR UPDATE"#,
@@ -1377,6 +1379,7 @@ impl CatalogRepository {
             contexts_generation: Option<i64>,
             extensions_generation: Option<i64>,
         }
+        lock_entity_writes(transaction, self.workspace_id.0, false).await?;
         let row = sqlx::query_as::<_, Row>(
             r#"SELECT e.id, e.blueprint_id, e.blueprint_version, e.projections, e.system_tags, e.system_metadata, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.created_at, e.updated_at, e.deleted_at,
                       w.catalog_generation, w.contexts_generation, w.extensions_generation
@@ -1413,6 +1416,7 @@ impl CatalogRepository {
         system_tags: Vec<String>,
         system_metadata: Value,
     ) -> Result<Entity, RepositoryError> {
+        lock_entity_writes(transaction, self.workspace_id.0, false).await?;
         sqlx::query_as::<_, Db<Entity>>(
             r#"INSERT INTO entities (id, workspace_id, blueprint_id, blueprint_version, projections, system_tags, system_metadata)
                SELECT $1, $2, b.id, b.version, $3, $4, $5
@@ -2091,5 +2095,26 @@ pub(super) fn validate_json_entity_schema(
             });
         }
     }
+    Ok(())
+}
+
+/// Every entity writer holds this workspace lock shared from before its
+/// first entity row lock until it commits; context creation and reparenting
+/// take it exclusively, so they wait for this workspace's in-flight writers
+/// without blocking other workspaces. See the lock order in `mod.rs`.
+pub(super) async fn lock_entity_writes(
+    transaction: &mut Transaction<'_, Postgres>,
+    workspace_id: Uuid,
+    exclusive: bool,
+) -> Result<(), RepositoryError> {
+    let statement = if exclusive {
+        "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))"
+    } else {
+        "SELECT pg_advisory_xact_lock_shared(hashtextextended($1, 0))"
+    };
+    sqlx::query(statement)
+        .bind(format!("entity-writes:{workspace_id}"))
+        .execute(&mut **transaction)
+        .await?;
     Ok(())
 }

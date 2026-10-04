@@ -410,12 +410,14 @@ Repository code owns everything else, inside the write transaction:
   instead of failing on the constraint.
 - Context creation and reparenting first lock the workspace row (by
   advancing the contexts generation), the same row publication locks first,
-  so they serialize with publication. They then take
-  `LOCK TABLE entities IN EXCLUSIVE MODE`, which waits for every in-flight
-  entity writer, and only then take the family lock exclusively for every
-  family with context-scoped keys, in ID order. They see every committed
-  row, no writer computes rows against the old tree, and no writer holding
-  a family lock can wait on them. Plain reads continue meanwhile. Creation
+  so they serialize with publication. They then take the workspace's
+  entity-writer advisory lock exclusively. Every entity writer holds it
+  shared from before its first entity row lock, so this waits for the
+  workspace's in-flight writers only; other workspaces are unaffected. Only
+  then do they take the family lock exclusively for every family with
+  context-scoped keys, in ID order. They see every committed row, no writer
+  computes rows against the old tree, and no writer holding a family lock
+  can wait on them. Creation
   indexes the new context from the family's values (as in the parent, except
   that `context_fallback = "none"` attributes are missing there). Reparenting
   re-indexes those families as a whole, reporting real duplicates as

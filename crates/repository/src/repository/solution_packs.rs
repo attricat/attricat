@@ -5535,6 +5535,13 @@ impl CatalogRepository {
             ));
         }
         super::lock_workspace_resource_code(tx, workspace_id, &step.target_code).await?;
+        // The workspace row comes before the table lock below, the order
+        // context creation uses (see the lock order in `mod.rs`); both steps
+        // advance a workspace generation later anyway.
+        sqlx::query("SELECT 1 FROM workspaces WHERE id = $1 FOR NO KEY UPDATE")
+            .bind(workspace_id)
+            .execute(&mut **tx)
+            .await?;
         // Attribute contexts share the physical code namespace. PostgreSQL has
         // no row lock for an absent key, so hold a short table lock while the
         // blueprint insert and its cross-kind absence check commit atomically.

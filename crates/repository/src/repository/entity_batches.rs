@@ -94,6 +94,8 @@ impl CatalogRepository {
             .filter_map(EntityBatchOperation::entity_id)
             .collect();
         existing.sort();
+        super::entity_commands::lock_entity_writes(&mut transaction, self.workspace_id.0, false)
+            .await?;
         sqlx::query(
             "SELECT id FROM entities WHERE workspace_id = $1 AND id = ANY($2) ORDER BY id FOR UPDATE",
         )

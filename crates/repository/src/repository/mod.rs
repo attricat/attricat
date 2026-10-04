@@ -14,13 +14,18 @@
 //! 4. Entity rows. A transaction that locks several takes them in ID order.
 //! 5. Extension annotation namespace locks, in sorted name order.
 //!
-//! Entity writers take the per-family unique-key locks shared while they
+//! Entity writers take the workspace's entity-writer advisory lock shared
+//! right before their first entity row lock (inside `lock_entity`,
+//! `lock_entity_with_generations`, entity insertion, batch pre-locking and
+//! bulk publication), and the per-family unique-key locks shared while they
 //! validate, after their entity rows. Blueprint publication takes the
 //! workspace row (by advancing a generation) and then its family's key lock
 //! exclusively. Context creation and reparenting take the workspace row
-//! first, then (reparenting only) the relationship lock, then
-//! `LOCK TABLE entities IN EXCLUSIVE MODE`, which waits for every in-flight
-//! entity writer, and only then the family key locks exclusively.
+//! first, then (reparenting only) the relationship lock, then the
+//! entity-writer lock exclusively, which waits for that workspace's
+//! in-flight entity writers only, and then the family key locks
+//! exclusively. Solution-pack blueprint and context steps lock the
+//! workspace row before their `attribute_contexts` share lock.
 //!
 //! The entity seams (`create_entity_in_transaction`,
 //! `update_entity_in_transaction`, `delete_entity_in_transaction`) take the

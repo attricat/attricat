@@ -6,6 +6,7 @@ use crate::domain_events::{
     CONTEXT_CREATED_V1, CONTEXT_DELETED_V1, CONTEXT_UPDATED_V1, ContextCreatedV1, NewDomainEvent,
 };
 
+use super::entity_commands::lock_entity_writes;
 use super::generations::{Generation, advance_generation};
 use super::{CatalogRepository, RepositoryError, validate_code};
 use crate::model::{AttributeContext, CreateAttributeContext, Entity, UpdateAttributeContext};
@@ -77,14 +78,12 @@ impl CatalogRepository {
             return Err(RepositoryError::InvalidContext);
         }
         // Lock order (see the module docs in `mod.rs`): the workspace row,
-        // as blueprint publication takes it first, then the entities table,
-        // which waits for every in-flight entity writer, then the family key
-        // locks. The new context is indexed from committed values and later
-        // writes see it.
+        // as blueprint publication takes it first, then this workspace's
+        // entity-writer lock, which waits for its in-flight entity writers,
+        // then the family key locks. The new context is indexed from
+        // committed values and later writes see it.
         advance_generation(transaction, workspace_id, Generation::Contexts).await?;
-        sqlx::query("LOCK TABLE entities IN EXCLUSIVE MODE")
-            .execute(&mut **transaction)
-            .await?;
+        lock_entity_writes(transaction, workspace_id, true).await?;
         let key_families = self.lock_context_unique_keys(transaction).await?;
         let context = query_as::<_, Db<AttributeContext>>(
             r#"INSERT INTO attribute_contexts (id, workspace_id, code, data, parent_id)
@@ -172,17 +171,14 @@ impl CatalogRepository {
         let mut transaction = self.pool.begin().await?;
         // Lock order (see the module docs in `mod.rs`): the workspace row,
         // as blueprint publication takes it first; the relationship lock,
-        // which relationship writers take before entity rows; the entities
-        // table, which waits for every in-flight entity writer, including
-        // those holding only row locks; then the family key locks.
-        // Reparenting changes resolved values for every entity, so it must
-        // serialize with writes.
+        // which relationship writers take before entity rows; this
+        // workspace's entity-writer lock, which waits for its in-flight
+        // entity writers; then the family key locks. Reparenting changes
+        // resolved values for every entity, so it must serialize with writes.
         advance_generation(&mut transaction, self.workspace_id.0, Generation::Contexts).await?;
         self.lock_relationship_cardinality_writes(&mut transaction)
             .await?;
-        sqlx::query("LOCK TABLE entities IN EXCLUSIVE MODE")
-            .execute(&mut *transaction)
-            .await?;
+        lock_entity_writes(&mut transaction, self.workspace_id.0, true).await?;
         let key_families = self.lock_context_unique_keys(&mut transaction).await?;
         let context_code = sqlx::query_scalar::<_, String>(
             "SELECT code FROM attribute_contexts WHERE id = $1 AND workspace_id = $2",
