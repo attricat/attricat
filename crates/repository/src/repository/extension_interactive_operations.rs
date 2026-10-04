@@ -5,11 +5,9 @@
 //! authorization grant: the initiator's current access is checked again by
 //! every selection read, catalog write and artifact download.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, hash_map::Entry};
 
-use crate::persistence_rows::{Db, IntoDomain};
 use catalog_domain::model::{Attribute, Entity};
-
 use chrono::{DateTime, Duration, Utc};
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -17,11 +15,15 @@ use sha2::{Digest, Sha256};
 use sqlx::FromRow;
 use uuid::Uuid;
 
+use crate::{
+    persistence_rows::{Db, IntoDomain},
+    task_queue::{TaskInsert, TaskKind},
+};
+
 use super::{
     AuthorizationActor, CatalogRepository, ClaimedTask, RepositoryError,
     extension_annotations::own_annotations,
 };
-use crate::task_queue::{TaskInsert, TaskKind};
 
 /// Interactive runs use the additive 1.5 operation world.
 pub const INTERACTIVE_OPERATION_ABI: &str = "1.5.0";
@@ -747,8 +749,7 @@ impl CatalogRepository {
             .collect();
             for entity in loaded.values() {
                 let revision = (entity.blueprint_id, entity.blueprint_version);
-                if let std::collections::hash_map::Entry::Vacant(entry) = attributes.entry(revision)
-                {
+                if let Entry::Vacant(entry) = attributes.entry(revision) {
                     entry.insert(self.list_attributes(revision.0, revision.1).await?);
                 }
             }
