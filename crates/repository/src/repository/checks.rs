@@ -852,39 +852,53 @@ impl CatalogRepository {
 
     /// Transition conditions and enforcing rules that the saved state plus the
     /// change's destination would not satisfy, for the status control.
+    /// The revision's enabled rules and the entity's record are loaded into
+    /// `rules` and `subject` on first use and reused for later edges.
     pub(super) async fn transition_unmet(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         entity: &Entity,
         tree: &ContextTree,
         change: &StatusChange,
+        rules: &mut Option<Vec<EnabledRule>>,
+        subject: &mut Option<RecordValues>,
     ) -> Result<Vec<CheckViolation>, RepositoryError> {
         let conditions = change_conditions(change)?;
-        let rules = enabled_rules(
-            transaction,
-            self.workspace_id.0,
-            entity.blueprint_id,
-            entity.blueprint_version,
-        )
-        .await?;
-        let jobs = transition_jobs(change, &conditions, &rules);
+        if rules.is_none() {
+            *rules = Some(
+                enabled_rules(
+                    transaction,
+                    self.workspace_id.0,
+                    entity.blueprint_id,
+                    entity.blueprint_version,
+                )
+                .await?,
+            );
+        }
+        let rules = rules.as_deref().expect("loaded above");
+        let jobs = transition_jobs(change, &conditions, rules);
         if jobs.is_empty() {
             return Ok(Vec::new());
         }
         let scope = CheckScope::new(self.workspace_id.0, tree.clone());
-        let subject = load_record(
-            transaction,
-            self.workspace_id.0,
-            entity.id,
-            RecordState::After,
-        )
-        .await?
-        .ok_or(RepositoryError::NotFound("entity"))?;
+        if subject.is_none() {
+            *subject = Some(
+                load_record(
+                    transaction,
+                    self.workspace_id.0,
+                    entity.id,
+                    RecordState::After,
+                )
+                .await?
+                .ok_or(RepositoryError::NotFound("entity"))?,
+            );
+        }
+        let subject = subject.as_ref().expect("loaded above");
         let predicates: Vec<&Predicate> = jobs.iter().map(|job| job.predicate).collect();
         let outcomes = evaluate_in_context(
             transaction,
             &scope,
-            &subject,
+            subject,
             change.context_id,
             &[(change.attribute_code.clone(), change.after.clone())],
             &predicates,

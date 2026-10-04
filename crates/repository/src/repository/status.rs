@@ -944,6 +944,9 @@ impl CatalogRepository {
         };
         let path = tree.path(context.id, true)?;
         let projection = entity.projections.get("preview").unwrap_or(&Value::Null);
+        // Shared by every edge's transition conditions.
+        let mut rules = None;
+        let mut subject = None;
         let mut access = Vec::new();
         for (_, code, schema, fallback) in &attributes {
             let current = effective_projection(projection, &tree, &path, fallback != "none", code);
@@ -973,7 +976,14 @@ impl CatalogRepository {
                 let mut denial_code = denial.as_ref().map(RepositoryError::code);
                 let mut denial_reason = denial.map(|error| error.to_string());
                 let unmet = self
-                    .transition_unmet(&mut transaction, &entity, &tree, &change)
+                    .transition_unmet(
+                        &mut transaction,
+                        &entity,
+                        &tree,
+                        &change,
+                        &mut rules,
+                        &mut subject,
+                    )
                     .await?;
                 if denial_code.is_none() && !unmet.is_empty() {
                     denial_code = Some(super::TRANSITION_CONDITIONS_UNMET);
