@@ -288,7 +288,12 @@ components with `storage.extension`. The legacy JSON
 `catalog.read.v1` surface additionally provides bounded `page`, `changes`, and
 single-attribute `lookup` requests; `page` cursors pin a database-clock snapshot
 and `changes` cursors pin a domain-event sequence high-water mark. Cursors are
-opaque and filter/workspace-bound. `catalog.command.v1` accepts a bounded,
+opaque and filter/workspace-bound. A `lookup` resolves exactly like an upsert's
+business key (below): a single-attribute unique key uses its normalized index
+across every revision of the blueprint family, and a value that matches more
+than one entity fails with `lookup matched multiple entities` rather than
+returning an arbitrary match. This is a host behaviour change that applies to
+every host ABI version. `catalog.command.v1` accepts a bounded,
 idempotent batch of typed `create`, `update`, `relationships`, or `upsert`
 intents. Each intent runs the ordinary entity create or update path (validation,
 checks, audit, publication reconciliation and its domain event). An upsert
@@ -322,6 +327,8 @@ allows query-free HTTPS, validates every DNS answer as public before connecting,
 pins the connection to those checked addresses, verifies TLS, disables
 redirects, streams bounded request/response bodies, applies each rule's timeout
 and byte limits, and limits an extension release to 60 requests per minute.
+That limit is counted per API process; with `CACHE_BACKEND=redis` it is shared
+across replicas.
 Only status and selected safe response headers are returned; response bytes are
 base64 encoded.
 

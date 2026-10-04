@@ -73,7 +73,9 @@ Z `catalog.write` może zapisywać wartości skalarne w jawnie wskazanym kontek�
 
 Zapis wykonany podczas obsługi zdarzenia jest przypisywany użytkownikowi lub tokenowi, który stoi za pierwotną zmianą, zachowuje identyfikator korelacji zdarzenia i jest publikowany ze źródłem `extension:<extension-id>`. **Ignoruj zdarzenia z własnego źródła**, inaczej procedura obsługi, która zapisuje, będzie wyzwalać samą siebie.
 
-Wywołania JSON `catalog.read.v1` i `catalog.command.v1` dodają odczyty stronicowane, kanały zmian, wyszukiwanie pojedynczego atrybutu oraz partie intencji `create`, `update`, `relationships` i `upsert`. Upsert dopasowuje encję po zadeklarowanym atrybucie klucza biznesowego, tworzy ją tylko wtedy, gdy żadna encja nie pasuje, i kończy się błędem, jeśli pasuje więcej niż jedna.
+Wywołania JSON `catalog.read.v1` i `catalog.command.v1` dodają odczyty stronicowane, kanały zmian, wyszukiwanie pojedynczego atrybutu oraz partie intencji `create`, `update`, `relationships` i `upsert`. Upsert dopasowuje encję po zadeklarowanym atrybucie klucza biznesowego, tworzy ją tylko wtedy, gdy żadna encja nie pasuje, i kończy się błędem, jeśli pasuje więcej niż jedna. Zbiory relacji z upsertu są stosowane zarówno wtedy, gdy aktualizuje on dopasowaną encję, jak i wtedy, gdy ją tworzy.
+
+Wyszukiwanie działa dokładnie tak samo jak dopasowanie w upsercie. Jeśli sam atrybut jest zadeklarowanym kluczem unikalnym, wyszukiwanie korzysta ze znormalizowanych wartości tego klucza we wszystkich wersjach Schematu; w przeciwnym razie dopasowuje dokładny tekst wśród encji żądanej wersji. Wartość pasująca do więcej niż jednej encji kończy się błędem `lookup matched multiple entities`, zamiast zwracać jedną z nich. To zachowanie hosta dotyczy każdej wersji API hosta, więc widzą je także rozszerzenia zbudowane dla starszej wersji.
 
 ## Magazyn
 
@@ -111,7 +113,7 @@ Host:
 - wymaga HTTPS i adresu URL bez ciągu zapytania, pasującego do reguły;
 - rozwiązuje DNS, odrzuca każdy adres niepubliczny i łączy się tylko ze sprawdzonym adresem;
 - weryfikuje TLS i nie podąża za przekierowaniami;
-- egzekwuje limity rozmiaru i limit czasu z reguły oraz 60 żądań na minutę na wydanie;
+- egzekwuje limity rozmiaru i limit czasu z reguły oraz 60 żądań na minutę na wydanie (liczonych osobno w każdym procesie API, a przy `CACHE_BACKEND=redis` wspólnie dla wszystkich replik);
 - zwraca status, wybrane bezpieczne nagłówki i treść w base64.
 
 Broker nigdy nie ponawia żądań. Przekroczenie limitu czasu lub błąd połączenia to **niepewny wynik**: druga strona mogła otrzymać żądanie. Ponawiaj tylko wtedy, gdy miejsce docelowe obsługuje klucz idempotencji i wysyłasz stały klucz.

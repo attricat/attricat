@@ -73,7 +73,9 @@ With `catalog.write`, it can write scalar values in an explicit context. Writes 
 
 A write made while handling an event is attributed to the user or token behind the original change, keeps the event's correlation ID, and is published with source `extension:<extension-id>`. **Ignore events from your own source**, or a handler that writes will trigger itself.
 
-The JSON `catalog.read.v1` and `catalog.command.v1` calls add paged reads, change feeds, single-attribute lookups, and batches of `create`, `update`, `relationships`, and `upsert` intents. An upsert matches on a declared business key attribute, creates only when no entity matches, and fails if more than one does.
+The JSON `catalog.read.v1` and `catalog.command.v1` calls add paged reads, change feeds, single-attribute lookups, and batches of `create`, `update`, `relationships`, and `upsert` intents. An upsert matches on a declared business key attribute, creates only when no entity matches, and fails if more than one does. Its relationship sets apply whether it updates a match or creates the entity.
+
+A lookup resolves exactly like an upsert. If the attribute alone is a declared unique key, the lookup uses that key's normalized values across every revision of the blueprint family; otherwise it matches the exact text among entities of the requested revision. A value that matches more than one entity fails with `lookup matched multiple entities` instead of returning one of them. This host behaviour applies to every host API version, so extensions built against an older version see it too.
 
 ## Storage
 
@@ -111,7 +113,7 @@ The host:
 - requires HTTPS and a URL without a query string that matches the rule;
 - resolves DNS, rejects any non-public address, and connects only to the checked address;
 - verifies TLS and does not follow redirects;
-- enforces the rule's size limits and timeout, and 60 requests per minute per release;
+- enforces the rule's size limits and timeout, and 60 requests per minute per release (counted per API process, or shared across replicas when `CACHE_BACKEND=redis`);
 - returns the status, selected safe headers, and the body as base64.
 
 The broker never retries. A timeout or connection failure is an **uncertain outcome**: the other side may have received the request. Retry only if the destination supports an idempotency key and you send a stable one.
