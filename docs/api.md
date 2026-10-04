@@ -115,7 +115,7 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `POST` | `/workspace/roles` | Create a workspace-local role. |
 | `PUT` | `/workspace/roles/{role_id}` | Update a workspace-local role. Fixed roles are immutable. |
 | `POST` | `/workspace/roles/{role_id}/duplicate` | Duplicate a fixed or local role as a custom role. |
-| `POST` | `/workspace/roles/{role_id}/retire` | Retire a custom role, optionally replacing its grants. |
+| `POST` | `/workspace/roles/{role_id}/retire` | Retire a custom role, optionally replacing its grants. `owner` is accepted as the replacement only for an active owner and only when every reassigned grant is workspace-scoped. |
 | `GET` | `/workspace/permissions` | List permissions available for custom roles (`roles.manage`). |
 | `GET` | `/workspace/assignable-roles` | List roles available to member and invitation management (`members.manage`). |
 | `GET` | `/workspace/token-permissions` | List the caller's permissions available to personal-token management (`tokens.manage`). |
@@ -749,7 +749,8 @@ for each specified attribute/context (an empty list clears it); removal unlinks
 only named targets. `apply_entity_batch` proposes several entity operations
 as one approval and applies them through [entity batches](#entity-batches);
 each operation is authorized for the initiating user when the approved call
-runs. The agent must inspect current values first. These tools
+runs. `get_entity_publication_readiness` reports, per channel, whether an
+entity passes the channel's required checks. The agent must inspect current values first. These tools
 use the initiating user's `blueprints.read` or entity-scoped permissions:
 `entities.write` for migration assessment and relationship changes, and
 `entities.read` for existing entity inspection. Bounded `get_entity_changes`

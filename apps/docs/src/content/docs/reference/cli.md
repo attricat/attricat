@@ -62,9 +62,11 @@ Commands that download files, artifacts, or metrics require `--output <path>` an
 { "error": { "code": "invalid_blueprint_definition", "message": "blueprints must define at least one attribute", "status": 422 } }
 ```
 
+When the API returns machine-readable `details` (for example check violations or a unique-key conflict), the error object includes them unchanged.
+
 ## JSON arguments
 
-Options that take structured data (`--permissions`, `--entries`, `--filters`, `--relationship-tree-facets`, `--relationships`, `--selected-target-ids`, `--values`, `--discard-attributes`, `--configuration`, `--body`, `--payload`, `--input`, `--state`) accept either inline JSON or a path to a JSON file.
+Options that take structured data (`--permissions`, `--entries`, `--filters`, `--relationship-tree-facets`, `--relationships`, `--selected-target-ids`, `--values`, `--discard-attributes`, `--configuration`, `--body`, `--payload`, `--input`, `--state`, `--operations`) accept either inline JSON or a path to a JSON file.
 
 Blueprint, workflow, and rule commands take `--file <path>` or `--stdin` and send the TOML unchanged.
 

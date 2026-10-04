@@ -62,9 +62,11 @@ Polecenia, które pobierają pliki, artefakty lub metryki, wymagają `--output <
 { "error": { "code": "invalid_blueprint_definition", "message": "blueprints must define at least one attribute", "status": 422 } }
 ```
 
+Gdy API zwraca szczegóły w formie czytelnej dla maszyn (na przykład naruszenia kontroli lub konflikt klucza unikalnego), obiekt błędu zawiera je bez zmian w polu `details`.
+
 ## Argumenty JSON
 
-Opcje przyjmujące dane strukturalne (`--permissions`, `--entries`, `--filters`, `--relationship-tree-facets`, `--relationships`, `--selected-target-ids`, `--values`, `--discard-attributes`, `--configuration`, `--body`, `--payload`, `--input`, `--state`) akceptują JSON podany bezpośrednio albo ścieżkę do pliku JSON.
+Opcje przyjmujące dane strukturalne (`--permissions`, `--entries`, `--filters`, `--relationship-tree-facets`, `--relationships`, `--selected-target-ids`, `--values`, `--discard-attributes`, `--configuration`, `--body`, `--payload`, `--input`, `--state`, `--operations`) akceptują JSON podany bezpośrednio albo ścieżkę do pliku JSON.
 
 Polecenia schematów, przepływów pracy i reguł przyjmują `--file <path>` lub `--stdin` i wysyłają TOML bez zmian.
 

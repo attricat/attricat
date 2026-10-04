@@ -266,8 +266,8 @@ The CLI returns JSON with an `id`; set `CATALOG_WEB_URL` (or `WEB_PORT` from `.w
 
 Options named `--permissions`, `--entries`, `--filters`,
 `--relationship-tree-facets`, `--relationships`, `--selected-target-ids`,
-`--values`, `--discard-attributes`, `--configuration`, `--body`, and `--payload`
-accept an inline JSON value or a path to a JSON file. Array options reject
+`--values`, `--discard-attributes`, `--configuration`, `--body`, `--payload`, and
+`--operations` accept an inline JSON value or a path to a JSON file. Array options reject
 non-array JSON locally. This keeps complex request bodies out of shell quoting.
 
 `workflow validate`, `workflow create`, `workflow revision`, and rule
@@ -554,6 +554,10 @@ The client writes errors such as this to stderr:
   }
 }
 ```
+
+When the API response carries machine-readable `error.details` (for example
+check violations or unique-key conflicts), the CLI passes it through
+unchanged as `error.details`.
 
 Exit codes are `0` for success, `2` for local input/configuration errors, `3`
 for transport errors, `4` for API error responses, and `5` for invalid API JSON.
