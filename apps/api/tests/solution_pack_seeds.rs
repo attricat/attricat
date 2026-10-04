@@ -1,6 +1,6 @@
 mod support;
 
-use std::{io::Cursor, sync::Arc};
+use std::sync::Arc;
 
 use api::storage::{FakeObjectStore, ObjectStore};
 use sha2::{Digest, Sha256};
@@ -111,21 +111,10 @@ fn resource(key: &str, path: &str, bytes: &[u8]) -> Value {
 
 fn archive(manifest: &Value, files: &[(&str, &[u8])]) -> Vec<u8> {
     let manifest = serde_json::to_vec(manifest).unwrap();
-    let mut tar_bytes = Vec::new();
-    {
-        let mut tar = tar::Builder::new(&mut tar_bytes);
-        for (path, bytes) in std::iter::once(("solution-pack.json", manifest.as_slice()))
-            .chain(files.iter().copied())
-        {
-            let mut header = tar::Header::new_gnu();
-            header.set_size(bytes.len() as u64);
-            header.set_mode(0o644);
-            header.set_cksum();
-            tar.append_data(&mut header, path, bytes).unwrap();
-        }
-        tar.finish().unwrap();
-    }
-    zstd::stream::encode_all(Cursor::new(tar_bytes), 0).unwrap()
+    let entries: Vec<(&str, &[u8])> = std::iter::once(("solution-pack.json", manifest.as_slice()))
+        .chain(files.iter().copied())
+        .collect();
+    tar_zst(&entries)
 }
 
 fn manifest(id: &str, version: &str) -> Value {
@@ -227,10 +216,6 @@ fn action<'a>(plan: &'a Value, key: &str) -> &'a Value {
         .iter()
         .find(|action| action["logical_key"] == key)
         .unwrap_or_else(|| panic!("missing action {key}"))
-}
-
-async fn count(pool: &PgPool, query: &str) -> i64 {
-    sqlx::query_scalar(query).fetch_one(pool).await.unwrap()
 }
 
 #[sqlx::test(migrations = "./migrations")]

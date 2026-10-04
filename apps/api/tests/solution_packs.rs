@@ -709,14 +709,6 @@ async fn install_layout_extension(pool: &PgPool) -> Uuid {
     release_id
 }
 
-fn append_file(tar: &mut tar::Builder<&mut Vec<u8>>, path: &str, bytes: &[u8]) {
-    let mut header = tar::Header::new_gnu();
-    header.set_size(bytes.len() as u64);
-    header.set_mode(0o644);
-    header.set_cksum();
-    tar.append_data(&mut header, path, bytes).unwrap();
-}
-
 fn bearer_client(secret: &str) -> Client {
     Client::builder()
         .default_headers({
