@@ -60,6 +60,7 @@ mod extension_storage;
 mod extensions;
 mod files;
 mod health;
+mod leadership;
 mod lexicon;
 mod members;
 mod presentation_assets;
@@ -112,7 +113,9 @@ pub use avatars::{AVATAR_VARIANT_KIND, OwnAvatar};
 pub use blueprint_connector_jobs::BlueprintConnectorJob;
 pub use catalog_cache::QueryCache;
 pub use catalog_domain::model::{FileMetadata, FileVariantMetadata};
-pub use domain_events::{EventConsumer, EventDelivery, EventPublisher, FailedEventDelivery};
+pub use domain_events::{
+    EventConsumer, EventDelivery, EventPublisher, FailedEventDelivery, MaterializeScope,
+};
 pub use entity_search::{
     EntityRelationshipFilter, EntitySearchFilter, EntitySearchSort, SEARCH_FILTER_EQ_ANY,
     decode_search_cursor,
@@ -153,6 +156,7 @@ pub use extensions::{
     required_extension_grants,
 };
 pub use files::{FileObject, FilePolicy, FileUploadResult, NewUploadedFile};
+pub use leadership::CoordinatorLeadership;
 pub use members::{WorkspaceInvitation, WorkspaceMember};
 pub use presentation_assets::{MAX_PRESENTATION_ASSET_PAGE_SIZE, PresentationAsset};
 pub use retention_holds::FileRetentionHold;

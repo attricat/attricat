@@ -143,8 +143,15 @@ async fn run(
     } else {
         tracing::info!(kinds = ?kinds, concurrency = config.concurrency, "task worker started");
     }
+    let leases: Vec<(TaskKind, Duration)> = kinds
+        .iter()
+        .map(|kind| (*kind, kind.policy().lease_duration))
+        .collect();
+    // Tasks written before enqueueing created fairness rows still need one.
+    if let Err(error) = repository.materialize_task_workspace_service().await {
+        tracing::warn!(%error, "could not prepare task claim fairness rows");
+    }
     let mut running = JoinSet::new();
-    let mut next_kind = 0;
     let mut stopping = false;
     let mut metrics_tick = time::interval(Duration::from_secs(5));
     metrics_tick.set_missed_tick_behavior(time::MissedTickBehavior::Skip);
@@ -154,35 +161,21 @@ async fn run(
         }
         let mut claim_failed = false;
         while running.len() < config.concurrency {
-            // Claim one registered kind at a time so the lease used at claim
-            // is the registered per-kind policy, not a truncated global value.
-            let (claimed, failed) = measure("worker:task_claim", async {
-                for offset in 0..kinds.len() {
-                    let index = (next_kind + offset) % kinds.len();
-                    let kind = kinds[index];
-                    match repository
-                        .claim_task_for_kinds(
-                            &config.worker_id,
-                            kind.policy().lease_duration,
-                            &[kind],
-                        )
-                        .await
-                    {
-                        Ok(Some(task)) => {
-                            next_kind = (index + 1) % kinds.len();
-                            return (Some(task), false);
-                        }
-                        Ok(None) => {}
-                        Err(error) => {
-                            tracing::warn!(%error, "task claim failed; retrying after backoff");
-                            return (None, true);
-                        }
-                    }
+            // One statement claims the next due task of any registered kind,
+            // leased for that kind's registered policy.
+            let claimed = match measure(
+                "worker:task_claim",
+                repository.claim_task_with_leases(&config.worker_id, &leases),
+            )
+            .await
+            {
+                Ok(claimed) => claimed,
+                Err(error) => {
+                    tracing::warn!(%error, "task claim failed; retrying after backoff");
+                    claim_failed = true;
+                    None
                 }
-                (None, false)
-            })
-            .await;
-            claim_failed |= failed;
+            };
             let Some(task) = claimed else {
                 break;
             };
@@ -220,7 +213,10 @@ async fn run(
                 }
             }
             _ = metrics_tick.tick() => {
-                if let Err(error) = measure("worker:task_metrics", record_queue_metrics(&repository, &kinds)).await {
+                if let Err(error) = measure("worker:task_metrics", async {
+                    repository.materialize_task_workspace_service().await?;
+                    record_queue_metrics(&repository, &kinds).await
+                }).await {
                     tracing::warn!(%error, "could not refresh task queue metrics");
                 }
             }

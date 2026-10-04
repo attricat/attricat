@@ -45,9 +45,10 @@ use crate::{
     },
     model::{AppendAttributeValues, NewAttributeValue},
     repository::{
-        CatalogRepository, ClaimedTask, DeliveryState, ExtensionCatalogBatch,
-        ExtensionCatalogIntent, ExtensionCatalogPageRequest, ExtensionConfigurationScope,
-        ExtensionOperationArtifact, ExtensionRuntimeInstallation, SystemRepository,
+        CatalogRepository, ClaimedTask, CoordinatorLeadership, DeliveryState,
+        ExtensionCatalogBatch, ExtensionCatalogIntent, ExtensionCatalogPageRequest,
+        ExtensionConfigurationScope, ExtensionOperationArtifact, ExtensionRuntimeInstallation,
+        MaterializeScope, RepositoryError, SystemRepository,
     },
     storage::{ObjectStore, ObjectStoreError, StoredObject},
     task_queue::TaskKind,
@@ -2116,46 +2117,49 @@ impl TaskHandler for WasmExtensionTaskHandler {
 /// Intake is only a producer/coordinator. It registers at the high-water mark
 /// and atomically creates delivery/task pairs for subsequently supported event
 /// versions; execution is exclusively owned by `WasmExtensionTaskHandler`.
+/// How often the coordinator runs its operation storage, schedule and
+/// connector sweeps per workspace.
+const COORDINATOR_SWEEP_INTERVAL: Duration = Duration::from_secs(5);
+
+/// What the coordinator remembers about one workspace between ticks.
+#[derive(Default)]
+struct CoordinatedWorkspace {
+    /// The consumer row exists; it is never removed afterwards.
+    registered: bool,
+    /// The eligible event types of the last materialization; a change, or
+    /// the first pass, also scans legacy deliveries and the historical gap.
+    event_types: Option<Vec<String>>,
+    /// A historical batch was enqueued and more may remain.
+    history_pending: bool,
+    last_sweep: Option<Instant>,
+}
+
 pub fn start_event_delivery_coordinator(
     repository: SystemRepository,
     object_store: Arc<dyn ObjectStore>,
     mut shutdown: watch::Receiver<()>,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
+        let mut workspaces: HashMap<Uuid, CoordinatedWorkspace> = HashMap::new();
+        // Only one replica runs intake and sweeps; the others stand by.
+        let mut leadership = CoordinatorLeadership::new("extension_intake");
         loop {
+            if !leadership.is_leader(&repository).await {
+                tokio::select! {
+                    _ = tokio::time::sleep(Duration::from_secs(1)) => continue,
+                    _ = shutdown.changed() => return,
+                }
+            }
             measure("worker:extension_coordinator", async {
-                for workspace_id in repository.active_workspace_ids().await.unwrap_or_default() {
-                    let result = async {
-                        let scoped = repository.for_workspace(workspace_id).await?;
-                        // Incomplete operation output has no committed object key;
-                        // this periodic lifecycle sweep makes interrupted streams
-                        // unavailable even when no subsequent operation task runs.
-                        scoped.expire_extension_operation_storage().await?;
-                        scoped.abort_stale_extension_operation_artifacts().await?;
-                        for key in scoped
-                            .pending_extension_operation_object_deletions()
-                            .await?
-                        {
-                            if object_store.delete(&key).await.is_ok() {
-                                scoped
-                                    .confirm_extension_operation_object_deletion(&key)
-                                    .await?;
-                            }
-                        }
-                        scoped.produce_due_extension_operation_schedules().await?;
-                        scoped.produce_due_blueprint_connector_jobs().await?;
-                        scoped
-                            .ensure_event_consumer("catalog.extensions.wasm", &[])
-                            .await?;
-                        let event_types = scoped.enabled_extension_event_types().await?;
-                        scoped
-                            .materialize_event_delivery_tasks(
-                                "catalog.extensions.wasm",
-                                &event_types,
-                            )
-                            .await
-                    }
-                    .await;
+                for workspace_id in repository
+                    .polled_workspace_ids()
+                    .await
+                    .map(|workspaces| workspaces.as_ref().clone())
+                    .unwrap_or_default()
+                {
+                    let state = workspaces.entry(workspace_id).or_default();
+                    let result =
+                        coordinate_workspace(&repository, &object_store, workspace_id, state).await;
                     if let Err(error) = result {
                         tracing::error!(%error, "extension event-delivery intake failed");
                     }
@@ -2168,6 +2172,51 @@ pub fn start_event_delivery_coordinator(
             }
         }
     })
+}
+
+async fn coordinate_workspace(
+    repository: &SystemRepository,
+    object_store: &Arc<dyn ObjectStore>,
+    workspace_id: Uuid,
+    state: &mut CoordinatedWorkspace,
+) -> Result<(), RepositoryError> {
+    let scoped = repository.for_workspace(workspace_id).await?;
+    if state
+        .last_sweep
+        .is_none_or(|last| last.elapsed() >= COORDINATOR_SWEEP_INTERVAL)
+    {
+        state.last_sweep = Some(Instant::now());
+        // Incomplete operation output has no committed object key; this
+        // periodic lifecycle sweep makes interrupted streams unavailable even
+        // when no subsequent operation task runs.
+        scoped.expire_extension_operation_storage().await?;
+        for key in scoped.abort_stale_extension_operation_artifacts().await? {
+            if object_store.delete(&key).await.is_ok() {
+                scoped
+                    .confirm_extension_operation_object_deletion(&key)
+                    .await?;
+            }
+        }
+        scoped.produce_due_extension_operation_schedules().await?;
+        scoped.produce_due_blueprint_connector_jobs().await?;
+    }
+    if !state.registered {
+        scoped
+            .ensure_event_consumer("catalog.extensions.wasm", &[])
+            .await?;
+        state.registered = true;
+    }
+    let event_types = scoped.enabled_extension_event_types().await?;
+    let scope = if state.history_pending || state.event_types.as_ref() != Some(&event_types) {
+        MaterializeScope::Full
+    } else {
+        MaterializeScope::NewEvents
+    };
+    state.history_pending = scoped
+        .materialize_event_delivery_tasks_with("catalog.extensions.wasm", &event_types, scope)
+        .await?;
+    state.event_types = Some(event_types);
+    Ok(())
 }
 
 const _: () = assert!(MAX_ARTIFACT_CHUNK_BYTES <= MAX_HOST_JSON_BYTES);

@@ -13,6 +13,17 @@ use crate::{
 };
 
 use super::{CatalogRepository, RepositoryError};
+use catalog_cache::{CacheKey, Policy};
+use std::sync::Arc;
+
+/// What [`CatalogRepository::materialize_event_delivery_tasks_with`] scans.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MaterializeScope {
+    /// Legacy deliveries, the historical gap and new events.
+    Full,
+    /// Only events after the watermark.
+    NewEvents,
+}
 
 #[derive(Debug, sqlx::FromRow)]
 pub struct EventConsumer {
@@ -280,30 +291,62 @@ impl CatalogRepository {
         consumer_name: &str,
         event_types: &[T],
     ) -> Result<(), RepositoryError> {
+        self.materialize_event_delivery_tasks_with(
+            consumer_name,
+            event_types,
+            MaterializeScope::Full,
+        )
+        .await
+        .map(drop)
+    }
+
+    /// [`Self::materialize_event_delivery_tasks`] for a polling coordinator.
+    /// With [`MaterializeScope::NewEvents`] it skips the legacy backfill and
+    /// the historical gap scan, which only find work after startup or a
+    /// change of the eligible event types, and returns after one statement
+    /// when no event arrived since the watermark.
+    pub async fn materialize_event_delivery_tasks_with<T: AsRef<str>>(
+        &self,
+        consumer_name: &str,
+        event_types: &[T],
+        scope: MaterializeScope,
+    ) -> Result<bool, RepositoryError> {
         let workspace_id = self.workspace_id.0;
         let event_types: Vec<String> = event_types
             .iter()
             .map(|value| value.as_ref().to_owned())
             .collect();
         if event_types.is_empty() {
-            return Ok(());
+            return Ok(false);
+        }
+        if scope == MaterializeScope::NewEvents {
+            let arrived: bool = sqlx::query_scalar(
+                "SELECT EXISTS (SELECT 1 FROM event_consumers c JOIN domain_events e ON e.workspace_id = c.workspace_id AND e.sequence > c.watermark WHERE c.workspace_id = $1 AND c.name = $2)",
+            )
+            .bind(workspace_id)
+            .bind(consumer_name)
+            .fetch_one(&self.pool)
+            .await?;
+            if !arrived {
+                return Ok(false);
+            }
         }
         let mut transaction = self.pool.begin().await?;
-
-        // Migrations intentionally contain no data backfill. Assign every old
-        // delivery a stable subject and a task in this transaction. A legacy
-        // lease becomes queued because no legacy executor is started after the
-        // extension cutover.
-        let legacy: Vec<DeliveryBackfillRow> = sqlx::query_as(
+        if scope == MaterializeScope::Full {
+            // Migrations intentionally contain no data backfill. Assign every old
+            // delivery a stable subject and a task in this transaction. A legacy
+            // lease becomes queued because no legacy executor is started after the
+            // extension cutover.
+            let legacy: Vec<DeliveryBackfillRow> = sqlx::query_as(
             "SELECT d.consumer_id, d.event_id, c.workspace_id, e.correlation_id, e.causation_id, d.status FROM event_deliveries d JOIN event_consumers c ON c.id = d.consumer_id JOIN domain_events e ON e.id = d.event_id WHERE c.workspace_id = $1 AND c.name = $2 AND d.id IS NULL FOR UPDATE OF d",
         )
         .bind(workspace_id)
         .bind(consumer_name)
         .fetch_all(&mut *transaction)
         .await?;
-        for row in legacy {
-            let delivery_id = Uuid::new_v4();
-            let task_id = self.enqueue_task(&mut transaction, TaskInsert {
+            for row in legacy {
+                let delivery_id = Uuid::new_v4();
+                let task_id = self.enqueue_task(&mut transaction, TaskInsert {
                 workspace_id: row.workspace_id,
                 kind: TaskKind::EventDeliveryV1,
                 subject_id: delivery_id,
@@ -312,23 +355,24 @@ impl CatalogRepository {
                 correlation_id: Some(row.correlation_id),
                 causation_id: row.causation_id,
             }).await?.expect("a new delivery subject has no task conflict");
-            sqlx::query("UPDATE event_deliveries SET id = $3, task_id = $4, status = CASE WHEN status = 'leased' THEN 'pending' ELSE status END, lease_owner = NULL, lease_until = NULL WHERE consumer_id = $1 AND event_id = $2")
+                sqlx::query("UPDATE event_deliveries SET id = $3, task_id = $4, status = CASE WHEN status = 'leased' THEN 'pending' ELSE status END, lease_owner = NULL, lease_until = NULL WHERE consumer_id = $1 AND event_id = $2")
                 .bind(row.consumer_id).bind(row.event_id).bind(delivery_id).bind(task_id)
                 .execute(&mut *transaction).await?;
-            match row.status.as_str() {
-                "completed" => {
-                    sqlx::query(
+                match row.status.as_str() {
+                    "completed" => {
+                        sqlx::query(
                         "UPDATE tasks SET status = 'succeeded', completed_at = now() WHERE id = $1",
                     )
                     .bind(task_id)
                     .execute(&mut *transaction)
                     .await?;
-                }
-                "dead_letter" => {
-                    sqlx::query("UPDATE tasks SET status = 'dead_letter', failures = max_failures, failed_at = now() WHERE id = $1")
+                    }
+                    "dead_letter" => {
+                        sqlx::query("UPDATE tasks SET status = 'dead_letter', failures = max_failures, failed_at = now() WHERE id = $1")
                         .bind(task_id).execute(&mut *transaction).await?;
+                    }
+                    _ => {}
                 }
-                _ => {}
             }
         }
 
@@ -340,16 +384,21 @@ impl CatalogRepository {
         // passed its event. Drain that historical gap before advancing again;
         // otherwise a plugin event would be skipped permanently when a consumer
         // is enabled or re-granted after publication.
-        let historical: Vec<EventTaskSeed> = sqlx::query_as(
-            "SELECT e.id AS event_id, e.workspace_id, e.correlation_id, e.causation_id FROM domain_events e WHERE e.workspace_id = $1 AND e.sequence <= $2 AND e.event_type = ANY($3) AND NOT EXISTS (SELECT 1 FROM event_deliveries d WHERE d.consumer_id = $4 AND d.event_id = e.id) ORDER BY e.sequence LIMIT $5",
-        )
-        .bind(workspace_id).bind(consumer.watermark).bind(&event_types).bind(consumer.id).bind(EVENT_DELIVERY_MATERIALIZATION_BATCH_SIZE)
-        .fetch_all(&mut *transaction).await?;
+        let historical: Vec<EventTaskSeed> = if scope == MaterializeScope::Full {
+            sqlx::query_as(
+                "SELECT e.id AS event_id, e.workspace_id, e.correlation_id, e.causation_id FROM domain_events e WHERE e.workspace_id = $1 AND e.sequence <= $2 AND e.event_type = ANY($3) AND NOT EXISTS (SELECT 1 FROM event_deliveries d WHERE d.consumer_id = $4 AND d.event_id = e.id) ORDER BY e.sequence LIMIT $5",
+            )
+            .bind(workspace_id).bind(consumer.watermark).bind(&event_types).bind(consumer.id).bind(EVENT_DELIVERY_MATERIALIZATION_BATCH_SIZE)
+            .fetch_all(&mut *transaction).await?
+        } else {
+            Vec::new()
+        };
         if !historical.is_empty() {
             self.enqueue_event_delivery_tasks(&mut transaction, consumer.id, historical)
                 .await?;
             transaction.commit().await?;
-            return Ok(());
+            // More of the historical gap may remain.
+            return Ok(true);
         }
 
         // Bound both the scan and the inserts. Every event in this sequence
@@ -362,7 +411,7 @@ impl CatalogRepository {
         .fetch_all(&mut *transaction).await?;
         let Some(max_sequence) = sequences.last().copied() else {
             transaction.commit().await?;
-            return Ok(());
+            return Ok(false);
         };
         let seeds: Vec<EventTaskSeed> = sqlx::query_as(
             "SELECT e.id AS event_id, e.workspace_id, e.correlation_id, e.causation_id FROM domain_events e WHERE e.workspace_id = $1 AND e.sequence > $2 AND e.sequence <= $3 AND e.event_type = ANY($4) AND NOT EXISTS (SELECT 1 FROM event_deliveries d WHERE d.consumer_id = $5 AND d.event_id = e.id) ORDER BY e.sequence",
@@ -374,37 +423,59 @@ impl CatalogRepository {
         sqlx::query("UPDATE event_consumers SET watermark = $2, updated_at = clock_timestamp() WHERE id = $1")
             .bind(consumer.id).bind(max_sequence).execute(&mut *transaction).await?;
         transaction.commit().await?;
-        Ok(())
+        Ok(false)
     }
 
+    /// Creates each seed's delivery receipt and its task envelope; one
+    /// statement for the whole batch.
     async fn enqueue_event_delivery_tasks(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         consumer_id: Uuid,
         seeds: Vec<EventTaskSeed>,
     ) -> Result<(), RepositoryError> {
+        let mut workspace_ids = Vec::with_capacity(seeds.len());
+        let mut delivery_ids = Vec::with_capacity(seeds.len());
+        let mut task_ids = Vec::with_capacity(seeds.len());
+        let mut event_ids = Vec::with_capacity(seeds.len());
+        let mut correlation_ids = Vec::with_capacity(seeds.len());
+        let mut causation_ids = Vec::with_capacity(seeds.len());
         for seed in seeds {
-            let delivery_id = Uuid::new_v4();
-            let task_id = self.enqueue_task(transaction, TaskInsert {
-                workspace_id: seed.workspace_id,
-                kind: TaskKind::EventDeliveryV1,
-                subject_id: delivery_id,
-                generation: 0,
-                payload: serde_json::json!({"consumer_id": consumer_id.to_string(), "event_id": seed.event_id.to_string()}),
-                correlation_id: Some(seed.correlation_id),
-                causation_id: seed.causation_id,
-            }).await?.expect("a new delivery subject has no task conflict");
-            sqlx::query("INSERT INTO event_deliveries (consumer_id, event_id, id, task_id) VALUES ($1, $2, $3, $4)")
-                .bind(consumer_id).bind(seed.event_id).bind(delivery_id).bind(task_id)
-                .execute(&mut **transaction).await?;
+            workspace_ids.push(seed.workspace_id);
+            delivery_ids.push(Uuid::new_v4());
+            task_ids.push(Uuid::new_v4());
+            event_ids.push(seed.event_id);
+            correlation_ids.push(seed.correlation_id);
+            causation_ids.push(seed.causation_id);
         }
+        if event_ids.is_empty() {
+            return Ok(());
+        }
+        let kind = TaskKind::EventDeliveryV1;
+        sqlx::query(
+            "WITH seeds AS (SELECT * FROM UNNEST($1::uuid[], $2::uuid[], $3::uuid[], $4::uuid[], $5::uuid[], $6::uuid[]) AS s(workspace_id, delivery_id, task_id, event_id, correlation_id, causation_id)), service AS (INSERT INTO task_workspace_service (workspace_id) SELECT DISTINCT workspace_id FROM seeds ON CONFLICT (workspace_id) DO NOTHING), queued AS (INSERT INTO tasks (id, workspace_id, kind, envelope_version, subject_id, generation, payload, max_failures, correlation_id, causation_id) SELECT task_id, workspace_id, $8, 1, delivery_id, 0, jsonb_build_object('consumer_id', $7::text, 'event_id', event_id::text), $9, correlation_id, causation_id FROM seeds) INSERT INTO event_deliveries (consumer_id, event_id, id, task_id) SELECT $7, event_id, delivery_id, task_id FROM seeds",
+        )
+        .bind(&workspace_ids)
+        .bind(&delivery_ids)
+        .bind(&task_ids)
+        .bind(&event_ids)
+        .bind(&correlation_ids)
+        .bind(&causation_ids)
+        .bind(consumer_id)
+        .bind(kind.as_str())
+        .bind(kind.policy().max_failures)
+        .execute(&mut **transaction)
+        .await?;
         Ok(())
     }
 
-    /// Atomically advances the consumer watermark, creates deliveries for
-    /// supported event versions, and leases one eligible delivery. This legacy
-    /// claimer remains for non-extension intake handlers during their separate
-    /// cutovers; task-linked deliveries are never leased here.
+    /// Advances the consumer watermark, creates deliveries for supported event
+    /// versions, and leases one eligible delivery. This legacy claimer remains
+    /// for non-extension intake handlers during their separate cutovers;
+    /// task-linked deliveries are never leased here.
+    ///
+    /// Materialization is one statement under the consumer row lock and
+    /// writes nothing when no event arrived; the lease is a second statement.
     pub async fn claim_event_delivery(
         &self,
         consumer_name: &str,
@@ -417,45 +488,23 @@ impl CatalogRepository {
             .iter()
             .map(|value| (*value).to_owned())
             .collect();
-        let mut transaction = self.pool.begin().await?;
-        let consumer: EventConsumer = sqlx::query_as(
-            "SELECT id, workspace_id, name, watermark FROM event_consumers WHERE workspace_id = $1 AND name = $2 FOR UPDATE",
+        sqlx::query(
+            "WITH consumer AS (SELECT id, watermark FROM event_consumers WHERE workspace_id = $1 AND name = $2 FOR UPDATE), latest AS (SELECT c.id, c.watermark, (SELECT max(e.sequence) FROM domain_events e WHERE e.workspace_id = $1 AND e.sequence > c.watermark) AS max_sequence FROM consumer c), inserted AS (INSERT INTO event_deliveries (consumer_id, event_id) SELECT l.id, e.id FROM latest l JOIN domain_events e ON e.workspace_id = $1 AND e.sequence > l.watermark AND e.sequence <= l.max_sequence AND e.event_type = ANY($3) ON CONFLICT DO NOTHING) UPDATE event_consumers ec SET watermark = l.max_sequence, updated_at = clock_timestamp() FROM latest l WHERE ec.id = l.id AND l.max_sequence IS NOT NULL",
         )
         .bind(workspace_id)
         .bind(consumer_name)
-        .fetch_one(&mut *transaction)
-        .await?;
-        let max_sequence: i64 = sqlx::query_scalar(
-            "SELECT COALESCE(max(sequence), $2) FROM domain_events WHERE workspace_id = $1",
-        )
-        .bind(workspace_id)
-        .bind(consumer.watermark)
-        .fetch_one(&mut *transaction)
-        .await?;
-        sqlx::query(
-            "INSERT INTO event_deliveries (consumer_id, event_id) SELECT $1, id FROM domain_events WHERE workspace_id = $2 AND sequence > $3 AND sequence <= $4 AND event_type = ANY($5) ON CONFLICT DO NOTHING",
-        )
-        .bind(consumer.id)
-        .bind(workspace_id)
-        .bind(consumer.watermark)
-        .bind(max_sequence)
         .bind(&event_types)
-        .execute(&mut *transaction)
+        .execute(&self.pool)
         .await?;
-        sqlx::query("UPDATE event_consumers SET watermark = $2, updated_at = clock_timestamp() WHERE id = $1")
-            .bind(consumer.id)
-            .bind(max_sequence)
-            .execute(&mut *transaction)
-            .await?;
         let row = sqlx::query_as::<_, EventDeliveryRow>(
-            "WITH candidate AS (SELECT d.consumer_id, d.event_id FROM event_deliveries d WHERE d.consumer_id = $1 AND d.task_id IS NULL AND ((d.status = 'pending' AND d.next_attempt_at <= clock_timestamp()) OR (d.status = 'leased' AND d.lease_until <= clock_timestamp())) ORDER BY d.next_attempt_at, d.event_id FOR UPDATE SKIP LOCKED LIMIT 1), leased AS (UPDATE event_deliveries d SET status = 'leased', attempts = d.attempts + 1, lease_owner = $2, lease_until = clock_timestamp() + ($3 * interval '1 millisecond'), last_error = NULL FROM candidate c WHERE d.consumer_id = c.consumer_id AND d.event_id = c.event_id RETURNING d.consumer_id, d.event_id, d.attempts) SELECT l.consumer_id, l.event_id, l.attempts, e.id, e.sequence, e.workspace_id, e.occurred_at, e.event_type, e.aggregate_kind, e.aggregate_id, e.correlation_id, e.causation_id, e.source_kind, e.source_name, e.metadata, e.payload FROM leased l JOIN domain_events e ON e.id = l.event_id",
+            "WITH candidate AS (SELECT d.consumer_id, d.event_id FROM event_deliveries d JOIN event_consumers c ON c.id = d.consumer_id WHERE c.workspace_id = $1 AND c.name = $2 AND d.task_id IS NULL AND ((d.status = 'pending' AND d.next_attempt_at <= clock_timestamp()) OR (d.status = 'leased' AND d.lease_until <= clock_timestamp())) ORDER BY d.next_attempt_at, d.event_id FOR UPDATE OF d SKIP LOCKED LIMIT 1), leased AS (UPDATE event_deliveries d SET status = 'leased', attempts = d.attempts + 1, lease_owner = $3, lease_until = clock_timestamp() + ($4 * interval '1 millisecond'), last_error = NULL FROM candidate c WHERE d.consumer_id = c.consumer_id AND d.event_id = c.event_id RETURNING d.consumer_id, d.event_id, d.attempts) SELECT l.consumer_id, l.event_id, l.attempts, e.id, e.sequence, e.workspace_id, e.occurred_at, e.event_type, e.aggregate_kind, e.aggregate_id, e.correlation_id, e.causation_id, e.source_kind, e.source_name, e.metadata, e.payload FROM leased l JOIN domain_events e ON e.id = l.event_id",
         )
-        .bind(consumer.id)
+        .bind(workspace_id)
+        .bind(consumer_name)
         .bind(lease_owner)
         .bind(lease_duration.as_millis() as i64)
-        .fetch_optional(&mut *transaction)
+        .fetch_optional(&self.pool)
         .await?;
-        transaction.commit().await?;
         Ok(row.map(|row| {
             let mut delivery: EventDelivery = row.into();
             delivery.lease_owner = lease_owner.to_owned();
@@ -607,5 +656,22 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
                 .fetch_all(&self.pool)
                 .await?,
         )
+    }
+
+    /// [`Self::active_workspace_ids`] shared by the background loops of one
+    /// process and refreshed every few seconds: a new or deleted workspace
+    /// is picked up within that time.
+    pub async fn polled_workspace_ids(&self) -> Result<Arc<Vec<Uuid>>, RepositoryError> {
+        self.cache
+            .fetch(
+                CacheKey::new("active_workspaces", &[]),
+                &[],
+                Policy::Ttl {
+                    fresh: Duration::from_secs(5),
+                    stale: Duration::from_secs(5),
+                },
+                || self.active_workspace_ids(),
+            )
+            .await
     }
 }

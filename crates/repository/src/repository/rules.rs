@@ -431,108 +431,147 @@ impl CatalogRepository {
         }
         let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
-        let rows: Vec<(Uuid, i64, serde_json::Value)> = sqlx::query_as("SELECT r.id,r.version,r.compiled_plan FROM rules r JOIN rule_lifecycles l ON l.rule_id=r.id AND l.workspace_id=r.workspace_id JOIN entities e ON e.id=$3 AND e.workspace_id=r.workspace_id AND e.blueprint_id=r.blueprint_id AND e.blueprint_version=r.blueprint_version AND e.deleted_at IS NULL WHERE r.workspace_id=$1 AND r.status='published' AND l.enabled_version=r.version AND $2 > COALESCE(l.activation_sequence,0) FOR SHARE OF l").bind(ws).bind(event.sequence).bind(event.aggregate_id).fetch_all(&mut *tx).await?;
-        let mut inserted = 0;
-        for (rule_id, version, plan) in rows {
-            let compiled: catalog_rules::CompiledRule = serde_json::from_value(plan)
-                .map_err(|error| RepositoryError::InvalidRuleDefinition(error.to_string()))?;
-            if !compiled.triggers.iter().any(|trigger| matches!(trigger, catalog_rules::Trigger::Event { event_type } if event_type == &event.event_type)) { continue; }
-            let run_id: Option<Uuid> = sqlx::query_scalar("INSERT INTO rule_runs(id,workspace_id,rule_id,rule_version,source,scope_entity_id,idempotency_key) VALUES($1,$2,$3,$4,'event',$5,$6) ON CONFLICT(workspace_id,rule_id,rule_version,source,idempotency_key) DO NOTHING RETURNING id")
-                .bind(Uuid::new_v4()).bind(ws).bind(rule_id).bind(version).bind(event.aggregate_id).bind(event.id.to_string()).fetch_optional(&mut *tx).await?;
-            if let Some(run_id) = run_id {
-                self.enqueue_rule_task(
-                    &mut tx,
-                    ws,
-                    run_id,
-                    Some(event.correlation_id),
-                    Some(event.id),
-                )
-                .await?;
-                inserted += 1;
+        // Every enabled rule in one read: whether it targets the event
+        // entity's own revision, and that entity's blueprint code.
+        let rows: Vec<EventRuleRow> = sqlx::query_as("SELECT r.id, r.version, r.compiled_plan, r.blueprint_id, r.blueprint_version, (e.id IS NOT NULL) AS direct, (SELECT b.code FROM entities x JOIN blueprints b ON b.id=x.blueprint_id AND b.version=x.blueprint_version WHERE x.workspace_id=$1 AND x.id=$3) AS event_blueprint FROM rules r JOIN rule_lifecycles l ON l.rule_id=r.id AND l.workspace_id=r.workspace_id LEFT JOIN entities e ON e.id=$3 AND e.workspace_id=r.workspace_id AND e.blueprint_id=r.blueprint_id AND e.blueprint_version=r.blueprint_version AND e.deleted_at IS NULL WHERE r.workspace_id=$1 AND r.status='published' AND l.enabled_version=r.version AND $2 > COALESCE(l.activation_sequence,0) FOR SHARE OF l").bind(ws).bind(event.sequence).bind(event.aggregate_id).fetch_all(&mut *tx).await?;
+        let mut rules = Vec::with_capacity(rows.len());
+        for row in rows {
+            let compiled: catalog_rules::CompiledRule =
+                serde_json::from_value(row.compiled_plan.clone())
+                    .map_err(|error| RepositoryError::InvalidRuleDefinition(error.to_string()))?;
+            if compiled.triggers.iter().any(|trigger| matches!(trigger, catalog_rules::Trigger::Event { event_type } if event_type == &event.event_type)) {
+                rules.push((row, compiled));
             }
         }
-        inserted += self.fan_out_dependent_rule_runs(&mut tx, event).await?;
+        let mut runs: Vec<(Uuid, i64, Uuid, String)> = rules
+            .iter()
+            .filter(|(row, _)| row.direct)
+            .map(|(row, _)| {
+                (
+                    row.id,
+                    row.version,
+                    event.aggregate_id,
+                    event.id.to_string(),
+                )
+            })
+            .collect();
+        let mut inserted = self.insert_event_rule_runs(&mut tx, event, &runs).await?;
+        runs.clear();
+        for (row, compiled) in &rules {
+            for dependent in self.rule_dependents(&mut tx, event, row, compiled).await? {
+                runs.push((
+                    row.id,
+                    row.version,
+                    dependent,
+                    format!("{}:{dependent}", event.id),
+                ));
+            }
+        }
+        inserted += self.insert_event_rule_runs(&mut tx, event, &runs).await?;
         tx.commit().await?;
         Ok(inserted)
+    }
+
+    /// Creates event-sourced runs `(rule, version, scope entity, key)` and
+    /// their task envelopes with one statement; existing runs are skipped.
+    async fn insert_event_rule_runs(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        event: &DomainEvent,
+        runs: &[(Uuid, i64, Uuid, String)],
+    ) -> Result<u64, RepositoryError> {
+        if runs.is_empty() {
+            return Ok(0);
+        }
+        let ids: Vec<Uuid> = runs.iter().map(|_| Uuid::new_v4()).collect();
+        let task_ids: Vec<Uuid> = runs.iter().map(|_| Uuid::new_v4()).collect();
+        let rule_ids: Vec<Uuid> = runs.iter().map(|run| run.0).collect();
+        let versions: Vec<i64> = runs.iter().map(|run| run.1).collect();
+        let scopes: Vec<Uuid> = runs.iter().map(|run| run.2).collect();
+        let keys: Vec<String> = runs.iter().map(|run| run.3.clone()).collect();
+        let kind = TaskKind::RuleRunV1;
+        let created: i64 = sqlx::query_scalar("WITH candidates AS (SELECT * FROM UNNEST($2::uuid[], $3::uuid[], $4::uuid[], $5::bigint[], $6::uuid[], $7::text[]) AS c(id, task_id, rule_id, rule_version, scope_entity_id, idempotency_key)), created AS (INSERT INTO rule_runs(id,workspace_id,rule_id,rule_version,source,scope_entity_id,idempotency_key) SELECT id, $1, rule_id, rule_version, 'event', scope_entity_id, idempotency_key FROM candidates ON CONFLICT(workspace_id,rule_id,rule_version,source,idempotency_key) DO NOTHING RETURNING id), service AS (INSERT INTO task_workspace_service (workspace_id) VALUES ($1) ON CONFLICT (workspace_id) DO NOTHING), queued AS (INSERT INTO tasks (id, workspace_id, kind, envelope_version, subject_id, generation, payload, max_failures, correlation_id, causation_id) SELECT c.task_id, $1, $8, 1, c.id, 0, '{}'::jsonb, $9, $10, $11 FROM created JOIN candidates c ON c.id = created.id RETURNING id) SELECT count(*) FROM queued")
+            .bind(self.workspace_id.0)
+            .bind(&ids)
+            .bind(&task_ids)
+            .bind(&rule_ids)
+            .bind(&versions)
+            .bind(&scopes)
+            .bind(&keys)
+            .bind(kind.as_str())
+            .bind(kind.policy().max_failures)
+            .bind(event.correlation_id)
+            .bind(event.id)
+            .fetch_one(&mut **tx)
+            .await?;
+        Ok(created as u64)
     }
 
     /// A change to a linked or referencing record can invalidate another
     /// entity's `linked` or `referenced_by` predicate. Event-triggered rules
     /// re-evaluate those dependents (at most 100 per rule and event), so the
     /// change is reported as a finding rather than rejected.
-    async fn fan_out_dependent_rule_runs(
+    async fn rule_dependents(
         &self,
         tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         event: &DomainEvent,
-    ) -> Result<u64, RepositoryError> {
+        rule: &EventRuleRow,
+        compiled: &catalog_rules::CompiledRule,
+    ) -> Result<Vec<Uuid>, RepositoryError> {
         const MAX_DEPENDENTS: i64 = 100;
         let ws = self.workspace_id.0;
-        let rows: Vec<(Uuid, i64, serde_json::Value, Uuid, i64)> = sqlx::query_as("SELECT r.id,r.version,r.compiled_plan,r.blueprint_id,r.blueprint_version FROM rules r JOIN rule_lifecycles l ON l.rule_id=r.id AND l.workspace_id=r.workspace_id WHERE r.workspace_id=$1 AND r.status='published' AND l.enabled_version=r.version AND $2 > COALESCE(l.activation_sequence,0) FOR SHARE OF l").bind(ws).bind(event.sequence).fetch_all(&mut **tx).await?;
-        let event_blueprint: Option<String> = sqlx::query_scalar("SELECT b.code FROM entities e JOIN blueprints b ON b.id=e.blueprint_id AND b.version=e.blueprint_version WHERE e.workspace_id=$1 AND e.id=$2")
-            .bind(ws).bind(event.aggregate_id).fetch_optional(&mut **tx).await?;
-        let mut inserted = 0;
-        for (rule_id, version, plan, blueprint_id, blueprint_version) in rows {
-            let compiled: catalog_rules::CompiledRule = serde_json::from_value(plan)
-                .map_err(|error| RepositoryError::InvalidRuleDefinition(error.to_string()))?;
-            if !compiled.triggers.iter().any(|trigger| matches!(trigger, catalog_rules::Trigger::Event { event_type } if event_type == &event.event_type)) {
+        let requirements =
+            catalog_validation::predicate::Requirements::for_predicates([&compiled.predicate]);
+        let mut dependents: Vec<Uuid> = Vec::new();
+        // The rule evaluates only entities pinned to its revision; their
+        // relationship may be a revision field or an additional attribute.
+        for relationship in &requirements.linked {
+            dependents.extend(
+                super::references::referencing_entity_ids(
+                    tx,
+                    ws,
+                    super::references::ReferenceQuery {
+                        target: event.aggregate_id,
+                        attribute_code: relationship,
+                        referrers: super::references::Referrers::Revision {
+                            blueprint_id: rule.blueprint_id,
+                            version: rule.blueprint_version,
+                        },
+                        only: None,
+                        exclude_target: true,
+                        limit: MAX_DEPENDENTS,
+                    },
+                )
+                .await?,
+            );
+        }
+        for (blueprint_code, relationship) in &requirements.referenced_by {
+            if rule.event_blueprint.as_deref() != Some(blueprint_code.as_str()) {
                 continue;
             }
-            let requirements =
-                catalog_validation::predicate::Requirements::for_predicates([&compiled.predicate]);
-            let mut dependents: Vec<Uuid> = Vec::new();
-            // The rule evaluates only entities pinned to its revision; their
-            // relationship may be a revision field or an additional attribute.
-            for relationship in &requirements.linked {
-                dependents.extend(
-                    super::references::referencing_entity_ids(
-                        tx,
-                        ws,
-                        super::references::ReferenceQuery {
-                            target: event.aggregate_id,
-                            attribute_code: relationship,
-                            referrers: super::references::Referrers::Revision {
-                                blueprint_id,
-                                version: blueprint_version,
-                            },
-                            only: None,
-                            exclude_target: true,
-                            limit: MAX_DEPENDENTS,
-                        },
-                    )
-                    .await?,
-                );
-            }
-            for (blueprint_code, relationship) in &requirements.referenced_by {
-                if event_blueprint.as_deref() != Some(blueprint_code.as_str()) {
-                    continue;
-                }
-                dependents.extend(sqlx::query_scalar::<_, Uuid>("SELECT DISTINCT av.relationship_target_entity_id FROM attribute_values av JOIN attributes a ON a.id=av.attribute_id AND a.code=$3 JOIN entities t ON t.id=av.relationship_target_entity_id AND t.workspace_id=$1 AND t.deleted_at IS NULL AND t.blueprint_id=$4 AND t.blueprint_version=$5 WHERE av.entity_id=$2 AND av.active LIMIT $6")
-                    .bind(ws).bind(event.aggregate_id).bind(relationship).bind(blueprint_id).bind(blueprint_version).bind(MAX_DEPENDENTS).fetch_all(&mut **tx).await?);
-            }
-            dependents.sort();
-            dependents.dedup();
-            dependents.retain(|dependent| *dependent != event.aggregate_id);
-            dependents.truncate(MAX_DEPENDENTS as usize);
-            for dependent in dependents {
-                let run_id: Option<Uuid> = sqlx::query_scalar("INSERT INTO rule_runs(id,workspace_id,rule_id,rule_version,source,scope_entity_id,idempotency_key) VALUES($1,$2,$3,$4,'event',$5,$6) ON CONFLICT(workspace_id,rule_id,rule_version,source,idempotency_key) DO NOTHING RETURNING id")
-                    .bind(Uuid::new_v4()).bind(ws).bind(rule_id).bind(version).bind(dependent).bind(format!("{}:{dependent}", event.id)).fetch_optional(&mut **tx).await?;
-                if let Some(run_id) = run_id {
-                    self.enqueue_rule_task(
-                        tx,
-                        ws,
-                        run_id,
-                        Some(event.correlation_id),
-                        Some(event.id),
-                    )
-                    .await?;
-                    inserted += 1;
-                }
-            }
+            dependents.extend(sqlx::query_scalar::<_, Uuid>("SELECT DISTINCT av.relationship_target_entity_id FROM attribute_values av JOIN attributes a ON a.id=av.attribute_id AND a.code=$3 JOIN entities t ON t.id=av.relationship_target_entity_id AND t.workspace_id=$1 AND t.deleted_at IS NULL AND t.blueprint_id=$4 AND t.blueprint_version=$5 WHERE av.entity_id=$2 AND av.active LIMIT $6")
+                .bind(ws).bind(event.aggregate_id).bind(relationship).bind(rule.blueprint_id).bind(rule.blueprint_version).bind(MAX_DEPENDENTS).fetch_all(&mut **tx).await?);
         }
-        Ok(inserted)
+        dependents.sort();
+        dependents.dedup();
+        dependents.retain(|dependent| *dependent != event.aggregate_id);
+        dependents.truncate(MAX_DEPENDENTS as usize);
+        Ok(dependents)
     }
     /// Materialize due cron occurrences as durable runs. The occurrence timestamp is the
     /// idempotency key, while schedule state is the only timer/cursor held by the system.
+    /// Whether any enabled rule's schedule cursor is due. Schedulers check
+    /// this first so an idle tick costs one statement.
+    pub async fn rule_schedules_due(&self) -> Result<bool, RepositoryError> {
+        Ok(sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM rule_schedule_states s JOIN rule_lifecycles l ON l.rule_id = s.rule_id AND l.workspace_id = s.workspace_id AND l.enabled_version = s.rule_version WHERE s.workspace_id = $1 AND s.next_run_at <= $2)",
+        )
+        .bind(self.workspace_id.0)
+        .bind(Utc::now())
+        .fetch_one(&self.pool)
+        .await?)
+    }
+
     pub async fn schedule_rule_runs(&self) -> Result<u64, RepositoryError> {
         let ws = self.workspace_id.0;
         let now = Utc::now();
@@ -542,6 +581,9 @@ impl CatalogRepository {
         for (rule_id, version, plan) in rows {
             let compiled: catalog_rules::CompiledRule = serde_json::from_value(plan)
                 .map_err(|error| RepositoryError::InvalidRuleDefinition(error.to_string()))?;
+            // Whether the rule has an unfinished run; read on first need and
+            // kept current as this pass creates runs.
+            let mut active: Option<bool> = None;
             for (index, trigger) in compiled.triggers.iter().enumerate() {
                 let catalog_rules::Trigger::Schedule { cron, .. } = trigger else {
                     continue;
@@ -562,8 +604,14 @@ impl CatalogRepository {
                     )
                 })?;
                 let missed = due < now - chrono::Duration::minutes(5);
-                let active: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM rule_runs WHERE workspace_id=$1 AND rule_id=$2 AND status IN ('pending','leased'))").bind(ws).bind(rule_id).fetch_one(&mut *tx).await?;
-                if !missed && !active {
+                let is_active = match active {
+                    Some(active) => active,
+                    None => {
+                        let current: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM rule_runs WHERE workspace_id=$1 AND rule_id=$2 AND status IN ('pending','leased'))").bind(ws).bind(rule_id).fetch_one(&mut *tx).await?;
+                        *active.insert(current)
+                    }
+                };
+                if !missed && !is_active {
                     let key = format!("{index}:{}", due.to_rfc3339());
                     let run_id: Option<Uuid> = sqlx::query_scalar("INSERT INTO rule_runs(id,workspace_id,rule_id,rule_version,source,idempotency_key) VALUES($1,$2,$3,$4,'schedule',$5) ON CONFLICT(workspace_id,rule_id,rule_version,source,idempotency_key) DO NOTHING RETURNING id")
                         .bind(Uuid::new_v4()).bind(ws).bind(rule_id).bind(version).bind(key).fetch_optional(&mut *tx).await?;
@@ -571,9 +619,10 @@ impl CatalogRepository {
                         self.enqueue_rule_task(&mut tx, ws, run_id, None, None)
                             .await?;
                         created += 1;
+                        active = Some(true);
                     }
                 }
-                sqlx::query("UPDATE rule_schedule_states SET next_run_at=$5,misfires=misfires+$6,updated_at=clock_timestamp() WHERE workspace_id=$1 AND rule_id=$2 AND rule_version=$3 AND trigger_index=$4").bind(ws).bind(rule_id).bind(version).bind(index as i32).bind(next).bind(if missed || active { 1_i64 } else { 0 }).execute(&mut *tx).await?;
+                sqlx::query("UPDATE rule_schedule_states SET next_run_at=$5,misfires=misfires+$6,updated_at=clock_timestamp() WHERE workspace_id=$1 AND rule_id=$2 AND rule_version=$3 AND trigger_index=$4").bind(ws).bind(rule_id).bind(version).bind(index as i32).bind(next).bind(if missed || is_active { 1_i64 } else { 0 }).execute(&mut *tx).await?;
             }
         }
         tx.commit().await?;
@@ -846,6 +895,20 @@ impl CatalogRepository {
         tx.commit().await?;
         Ok(true)
     }
+}
+
+/// An enabled rule as seen by event fan-out.
+#[derive(sqlx::FromRow)]
+struct EventRuleRow {
+    id: Uuid,
+    version: i64,
+    compiled_plan: serde_json::Value,
+    blueprint_id: Uuid,
+    blueprint_version: i64,
+    /// The rule targets the event entity's own revision.
+    direct: bool,
+    /// The event entity's blueprint code.
+    event_blueprint: Option<String>,
 }
 
 impl CatalogRepository {

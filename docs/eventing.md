@@ -149,8 +149,7 @@ already happened.
 Prevent feedback loops. If a handler writes catalog state, its derived event is
 `source_kind = "worker"` and its `source_name` is the handler name. Ignore an
 event with that source when processing it would recursively produce the same
-work. The built-in `catalog.computed_fields` reservation handler follows this
-rule. Apply a more specific provenance/causation guard as needed, but never
+work. Apply a more specific provenance/causation guard as needed, but never
 assume delivery order alone breaks a loop.
 
 ## Retry, dead letters, and retention

@@ -155,8 +155,10 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
         task.validate()?;
         let id = Uuid::new_v4();
         let policy = task.kind.policy();
+        // The workspace's claim-fairness row is created with its first task,
+        // so claiming never has to discover new workspaces first.
         let inserted = sqlx::query_scalar(
-            "INSERT INTO tasks (id, workspace_id, kind, envelope_version, subject_id, generation, payload, max_failures, correlation_id, causation_id) VALUES ($1, $2, $3, 1, $4, $5, $6, $7, $8, $9) ON CONFLICT (workspace_id, kind, subject_id, generation) DO NOTHING RETURNING id",
+            "WITH service AS (INSERT INTO task_workspace_service (workspace_id) VALUES ($2) ON CONFLICT (workspace_id) DO NOTHING) INSERT INTO tasks (id, workspace_id, kind, envelope_version, subject_id, generation, payload, max_failures, correlation_id, causation_id) VALUES ($1, $2, $3, 1, $4, $5, $6, $7, $8, $9) ON CONFLICT (workspace_id, kind, subject_id, generation) DO NOTHING RETURNING id",
         )
         .bind(id)
         .bind(task.workspace_id)
@@ -182,6 +184,48 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
     ) -> Result<Option<ClaimedTask>, TaskError> {
         self.claim_task_for_kinds(worker_id, lease_duration, &TaskKind::ALL)
             .await
+    }
+
+    /// Creates missing claim-fairness rows for workspaces with claimable
+    /// tasks. Enqueueing creates them; this repairs rows for tasks written
+    /// before that, and is safe to repeat.
+    pub async fn materialize_task_workspace_service(&self) -> Result<(), TaskError> {
+        sqlx::query("INSERT INTO task_workspace_service (workspace_id) SELECT DISTINCT workspace_id FROM tasks WHERE (status = 'queued' OR status = 'leased') ON CONFLICT (workspace_id) DO NOTHING")
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    /// Claims one due envelope of any registered kind with one statement,
+    /// leasing it for that kind's own lease duration. Workspaces are served
+    /// least-recently first, then tasks oldest first.
+    pub async fn claim_task_with_leases(
+        &self,
+        worker_id: &str,
+        leases: &[(TaskKind, Duration)],
+    ) -> Result<Option<ClaimedTask>, TaskError> {
+        if leases.is_empty() {
+            return Ok(None);
+        }
+        if worker_id.is_empty() || worker_id.len() > MAX_LEASE_OWNER_BYTES {
+            return Err(TaskError::ValueTooLong);
+        }
+        let mut kinds = Vec::with_capacity(leases.len());
+        let mut seconds = Vec::with_capacity(leases.len());
+        for (kind, lease) in leases {
+            kinds.push(kind.to_string());
+            seconds.push(lease_seconds(*lease)?);
+        }
+        let row = sqlx::query_as::<_, ClaimedTaskRow>(
+            "WITH policy AS (SELECT * FROM UNNEST($4::text[], $3::bigint[]) AS p(kind, lease_seconds)), candidate AS (SELECT t.id, t.workspace_id, p.lease_seconds FROM tasks t JOIN policy p ON p.kind = t.kind JOIN task_workspace_service s ON s.workspace_id = t.workspace_id WHERE ((t.status = 'queued' AND t.available_at <= now()) OR (t.status = 'leased' AND t.lease_until <= now())) ORDER BY s.last_served_at ASC, t.available_at ASC, t.created_at ASC, t.id ASC FOR UPDATE OF t, s SKIP LOCKED LIMIT 1), service AS (UPDATE task_workspace_service s SET last_served_at = now(), updated_at = now() FROM candidate c WHERE s.workspace_id = c.workspace_id RETURNING s.workspace_id) UPDATE tasks t SET status = 'leased', attempts = t.attempts + 1, lease_owner = $1, lease_token = $2, lease_until = now() + (c.lease_seconds * interval '1 second'), started_at = COALESCE(t.started_at, now()), updated_at = now() FROM candidate c JOIN service s ON s.workspace_id = c.workspace_id WHERE t.id = c.id RETURNING t.id, t.workspace_id, t.kind, t.subject_id, t.generation, t.payload, t.attempts, t.failures, t.max_failures, t.lease_owner, t.lease_token, t.lease_until, t.correlation_id, t.causation_id",
+        )
+        .bind(worker_id)
+        .bind(Uuid::new_v4())
+        .bind(&seconds)
+        .bind(&kinds)
+        .fetch_optional(&self.pool)
+        .await?;
+        row.map(TryInto::try_into).transpose()
     }
 
     /// Claims only registered kinds. A runtime with no active handler must not

@@ -353,6 +353,19 @@ impl CatalogRepository {
     /// Advances schedule cursors; it is a producer only. Each created run and
     /// task envelope is committed together, while active task/run state keeps
     /// the existing no-overlap semantics.
+    /// Whether any enabled workflow's schedule cursor is due. Schedulers check
+    /// this first so an idle tick costs one statement; a periodic full pass
+    /// still creates cursors that predate enable-time creation.
+    pub async fn workflow_schedules_due(&self) -> Result<bool, RepositoryError> {
+        Ok(sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM workflow_schedule_states s JOIN workflow_lifecycles l ON l.workflow_id = s.workflow_id AND l.workspace_id = s.workspace_id AND l.enabled_version = s.workflow_version WHERE s.workspace_id = $1 AND s.next_run_at <= $2)",
+        )
+        .bind(self.workspace_id.0)
+        .bind(Utc::now())
+        .fetch_one(&self.pool)
+        .await?)
+    }
+
     pub async fn schedule_workflow_runs(&self) -> Result<u64, RepositoryError> {
         use chrono::Duration as ChronoDuration;
         let ws = self.workspace_id.0;
@@ -363,6 +376,9 @@ impl CatalogRepository {
         for (workflow_id, version, plan) in rows {
             let compiled: catalog_workflow::CompiledWorkflow = serde_json::from_value(plan.clone())
                 .map_err(|e| RepositoryError::InvalidWorkflowDefinition(e.to_string()))?;
+            // Whether the workflow has a pending run; read on first need and
+            // kept current as this pass creates runs.
+            let mut pending: Option<bool> = None;
             for (index, trigger) in compiled.triggers.iter().enumerate() {
                 let catalog_workflow::Trigger::Schedule {
                     cron,
@@ -407,7 +423,13 @@ impl CatalogRepository {
                         )
                     })?;
                     let missed = occurrence_due < now - ChronoDuration::minutes(5);
-                    let active: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM workflow_runs WHERE workspace_id=$1 AND workflow_id=$2 AND status='pending')").bind(ws).bind(workflow_id).fetch_one(&mut *tx).await?;
+                    let active = match pending {
+                        Some(pending) => pending,
+                        None => {
+                            let current: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM workflow_runs WHERE workspace_id=$1 AND workflow_id=$2 AND status='pending')").bind(ws).bind(workflow_id).fetch_one(&mut *tx).await?;
+                            *pending.insert(current)
+                        }
+                    };
                     if missed || active {
                         skipped += 1;
                     } else {
@@ -426,6 +448,7 @@ impl CatalogRepository {
                             )
                             .await?;
                             created += 1;
+                            pending = Some(true);
                         }
                     }
                     occurrence_due = next;

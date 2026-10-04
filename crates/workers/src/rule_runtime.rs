@@ -1,5 +1,6 @@
 //! Rule intake and schedule advancement are producers. Evaluation is owned by
 //! the shared task worker after the rule task cutover.
+use crate::repository::CoordinatorLeadership;
 use crate::{
     domain_events::{ALL_EVENT_TYPES_V1, DomainEvent},
     event_dispatcher::{EventHandler, EventHandlerCommandContext},
@@ -12,7 +13,11 @@ use crate::{
 use async_trait::async_trait;
 use catalog_repository::round_trips::measure;
 use chrono::Utc;
-use std::{sync::Arc, time::Duration};
+use std::{
+    collections::HashMap,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 use tokio::sync::watch;
 use uuid::Uuid;
 
@@ -189,10 +194,18 @@ pub fn start_schedule_coordinator(
     mut shutdown: watch::Receiver<()>,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
+        // Workspaces this coordinator has prepared, with the last full pass.
+        let mut prepared: HashMap<Uuid, Instant> = HashMap::new();
+        // Only one replica runs schedules; the others stand by.
+        let mut leadership = CoordinatorLeadership::new("rule_schedule");
         loop {
+            if !leadership.is_leader(&repository).await {
+                tokio::select! { _ = tokio::time::sleep(Duration::from_secs(1)) => continue, _ = shutdown.changed() => return }
+            }
             let delay = measure("worker:rule_schedule", async {
-                let (workspaces, delay) = match repository.active_workspace_ids().await {
+                let (workspaces, delay) = match repository.polled_workspace_ids().await {
                     Ok(workspaces) => {
+                        let workspaces = workspaces.as_ref().clone();
                         metrics::gauge!("catalog_schedule_coordinator_healthy", "kind" => "rule")
                             .set(1.0);
                         (workspaces, Duration::from_millis(250))
@@ -207,10 +220,24 @@ pub fn start_schedule_coordinator(
                 for workspace in workspaces {
                     match repository.for_workspace(workspace).await {
                         Ok(scoped) => {
-                            if let Err(error) = scoped.backfill_rule_tasks().await {
+                            // Pre-cutover rows get task envelopes once per
+                            // workspace; afterwards an idle tick only checks
+                            // whether any schedule cursor is due.
+                            let first = prepared.insert(workspace, Instant::now()).is_none();
+                            if first && let Err(error) = scoped.backfill_rule_tasks().await {
                                 tracing::error!(%error, "rule task backfill failed");
                             }
-                            if let Err(error) = scoped.schedule_rule_runs().await {
+                            let run = if first {
+                                Ok(true)
+                            } else {
+                                scoped.rule_schedules_due().await
+                            };
+                            let result = match run {
+                                Ok(true) => scoped.schedule_rule_runs().await.map(drop),
+                                Ok(false) => Ok(()),
+                                Err(error) => Err(error),
+                            };
+                            if let Err(error) = result {
                                 tracing::error!(%error, "rule schedule poll failed");
                             }
                         }

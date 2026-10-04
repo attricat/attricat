@@ -124,8 +124,10 @@ impl EventHandlerRegistry {
         Ok(Self { handlers })
     }
 
+    /// The built-in handlers. There are none today; workflow and rule
+    /// handlers are added by their runtimes.
     pub fn default_handlers() -> Self {
-        Self::new(vec![Arc::new(ComputedFieldHandler)]).expect("built-in handlers are valid")
+        Self::default()
     }
 
     pub fn with_handler(mut self, handler: Arc<dyn EventHandler>) -> Result<Self, &'static str> {
@@ -143,33 +145,11 @@ impl EventHandlerRegistry {
     }
 }
 
-/// Reservation point for computed-field invalidation. It deliberately does no
-/// writes yet; it also ignores its own worker events to prevent a future
-/// computed-field mutation from recursively scheduling itself.
-struct ComputedFieldHandler;
-
-#[async_trait]
-impl EventHandler for ComputedFieldHandler {
-    fn name(&self) -> &'static str {
-        "catalog.computed_fields"
-    }
-
-    fn event_types(&self) -> &'static [&'static str] {
-        &["attribute_value.changed.v1", "relationship.changed.v1"]
-    }
-
-    async fn handle(
-        &self,
-        event: DomainEvent,
-        _context: EventHandlerCommandContext,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        if event.source_kind == "worker" && event.source_name == self.name() {
-            return Ok(());
-        }
-        // Computed-field definitions are intentionally a later feature.
-        Ok(())
-    }
-}
+/// Deliveries one handler processes per workspace before yielding to the
+/// next workspace.
+const MAX_DELIVERIES_PER_TICK: usize = 64;
+/// How often queue-depth gauges are refreshed.
+const HEALTH_INTERVAL: Duration = Duration::from_secs(5);
 
 pub fn start(
     repository: impl Into<SystemRepository>,
@@ -178,15 +158,18 @@ pub fn start(
     shutdown: tokio::sync::watch::Receiver<()>,
 ) -> Vec<tokio::task::JoinHandle<()>> {
     let repository = repository.into();
-    registry.handlers.into_iter().map(|handler| {
+    registry.handlers.into_iter().enumerate().map(|(index, handler)| {
         let repository = repository.clone();
         let config = config.clone();
         let mut shutdown = shutdown.clone();
+        // One handler publishes the workspace-wide queue gauges.
+        let publishes_health = index == 0;
         tokio::spawn(async move {
+            let mut state = DispatchState::default();
             loop {
                 let delay = match measure(
                     format!("worker:event_dispatcher:{}", handler.name()),
-                    dispatch_handler(&repository, handler.as_ref(), &config),
+                    dispatch_handler(&repository, handler.as_ref(), &config, &mut state, publishes_health),
                 )
                 .await
                 {
@@ -208,64 +191,98 @@ pub fn start(
     }).collect()
 }
 
+/// Per-handler loop state.
+#[derive(Default)]
+struct DispatchState {
+    /// Workspaces whose consumer row exists; it is never removed afterwards.
+    registered: HashSet<Uuid>,
+    last_health: Option<std::time::Instant>,
+}
+
 async fn dispatch_handler(
     repository: &SystemRepository,
     handler: &dyn EventHandler,
     config: &DispatcherConfig,
+    state: &mut DispatchState,
+    publishes_health: bool,
 ) -> Result<(), RepositoryError> {
-    for workspace_id in repository.active_workspace_ids().await? {
+    let publish_health = publishes_health
+        && state
+            .last_health
+            .is_none_or(|last| last.elapsed() >= HEALTH_INTERVAL);
+    if publish_health {
+        state.last_health = Some(std::time::Instant::now());
+    }
+    for workspace_id in repository.polled_workspace_ids().await?.as_ref().clone() {
         let repository = repository.for_workspace(workspace_id).await?;
-        repository
-            .ensure_event_consumer(handler.name(), handler.event_types())
-            .await?;
-        record_delivery_health(&repository, workspace_id).await?;
-        let Some(delivery) = repository
-            .claim_event_delivery(
-                handler.name(),
-                handler.event_types(),
-                &Uuid::new_v4().to_string(),
-                config.lease_duration,
-            )
-            .await?
-        else {
-            continue;
-        };
-        metrics::counter!("catalog_event_deliveries_total", "outcome" => "claimed").increment(1);
-        tracing::info!(handler = handler.name(), event_id = %delivery.event.id, attempt = delivery.attempts, "event delivery claimed");
-        let context = EventHandlerCommandContext {
-            repository: repository.for_event_handler(&delivery.event, handler.name()),
-        };
-        // Bound handler execution below the lease so a stalled dependency
-        // cannot indefinitely block deliveries in every later workspace.
-        // Handlers must be idempotent: cancellation can follow a durable write.
-        let result = tokio::time::timeout(
-            config.lease_duration / 2,
-            handler.handle(delivery.event.clone(), context),
-        )
-        .await;
-        match result {
-            Ok(Ok(())) => {
-                repository.complete_event_delivery(&delivery).await?;
-                metrics::counter!("catalog_event_deliveries_total", "outcome" => "completed")
-                    .increment(1);
-            }
-            failure => {
-                let error = match failure {
-                    Ok(Err(error)) => error.to_string(),
-                    Err(_) => "event handler timed out".to_owned(),
-                    Ok(Ok(())) => unreachable!(),
-                };
-                tracing::warn!(handler = handler.name(), event_id = %delivery.event.id, %error, "event handler failed");
-                repository
-                    .retry_event_delivery(
-                        &delivery,
-                        &error,
-                        config.retry_delay(delivery.attempts),
-                        config.max_attempts,
-                    )
-                    .await?;
-                metrics::counter!("catalog_event_deliveries_total", "outcome" => if delivery.attempts >= config.max_attempts { "dead_letter" } else { "retry" }).increment(1);
-            }
+        if !state.registered.contains(&workspace_id) {
+            repository
+                .ensure_event_consumer(handler.name(), handler.event_types())
+                .await?;
+            state.registered.insert(workspace_id);
+        }
+        if publish_health {
+            record_delivery_health(&repository, workspace_id).await?;
+        }
+        for _ in 0..MAX_DELIVERIES_PER_TICK {
+            let Some(delivery) = repository
+                .claim_event_delivery(
+                    handler.name(),
+                    handler.event_types(),
+                    &Uuid::new_v4().to_string(),
+                    config.lease_duration,
+                )
+                .await?
+            else {
+                break;
+            };
+            deliver(&repository, handler, config, delivery).await?;
+        }
+    }
+    Ok(())
+}
+
+async fn deliver(
+    repository: &CatalogRepository,
+    handler: &dyn EventHandler,
+    config: &DispatcherConfig,
+    delivery: crate::repository::EventDelivery,
+) -> Result<(), RepositoryError> {
+    metrics::counter!("catalog_event_deliveries_total", "outcome" => "claimed").increment(1);
+    tracing::info!(handler = handler.name(), event_id = %delivery.event.id, attempt = delivery.attempts, "event delivery claimed");
+    let context = EventHandlerCommandContext {
+        repository: repository.for_event_handler(&delivery.event, handler.name()),
+    };
+    // Bound handler execution below the lease so a stalled dependency
+    // cannot indefinitely block deliveries in every later workspace.
+    // Handlers must be idempotent: cancellation can follow a durable write.
+    let result = tokio::time::timeout(
+        config.lease_duration / 2,
+        handler.handle(delivery.event.clone(), context),
+    )
+    .await;
+    match result {
+        Ok(Ok(())) => {
+            repository.complete_event_delivery(&delivery).await?;
+            metrics::counter!("catalog_event_deliveries_total", "outcome" => "completed")
+                .increment(1);
+        }
+        failure => {
+            let error = match failure {
+                Ok(Err(error)) => error.to_string(),
+                Err(_) => "event handler timed out".to_owned(),
+                Ok(Ok(())) => unreachable!(),
+            };
+            tracing::warn!(handler = handler.name(), event_id = %delivery.event.id, %error, "event handler failed");
+            repository
+                .retry_event_delivery(
+                    &delivery,
+                    &error,
+                    config.retry_delay(delivery.attempts),
+                    config.max_attempts,
+                )
+                .await?;
+            metrics::counter!("catalog_event_deliveries_total", "outcome" => if delivery.attempts >= config.max_attempts { "dead_letter" } else { "retry" }).increment(1);
         }
     }
     Ok(())

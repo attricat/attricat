@@ -1,5 +1,6 @@
 //! Workflow intake and schedule advancement are producers. Execution is owned
 //! exclusively by the shared task worker after the workflow task cutover.
+use crate::repository::CoordinatorLeadership;
 use crate::{
     domain_events::{ALL_EVENT_TYPES_V1, DomainEvent},
     event_dispatcher::{EventHandler, EventHandlerCommandContext},
@@ -10,8 +11,13 @@ use crate::{
 use async_trait::async_trait;
 use catalog_repository::round_trips::measure;
 use serde_json::Value;
-use std::{sync::Arc, time::Duration};
+use std::{
+    collections::HashMap,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 use tokio::sync::watch;
+use uuid::Uuid;
 
 const MAX_CAUSAL_DEPTH: usize = 8;
 
@@ -132,6 +138,9 @@ fn task_error(error: crate::repository::RepositoryError) -> TaskHandlerError {
     }
 }
 
+/// How often a workflow coordinator makes a full schedule pass per workspace.
+const FULL_SCHEDULE_PASS: Duration = Duration::from_secs(10 * 60);
+
 /// The only workflow schedule coordinator. It never claims workflow runs;
 /// task-worker instances are the sole execution claimers.
 pub fn start_schedule_coordinator(
@@ -139,10 +148,18 @@ pub fn start_schedule_coordinator(
     mut shutdown: watch::Receiver<()>,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
+        // Workspaces this coordinator has prepared, with the last full pass.
+        let mut prepared: HashMap<Uuid, Instant> = HashMap::new();
+        // Only one replica runs schedules; the others stand by.
+        let mut leadership = CoordinatorLeadership::new("workflow_schedule");
         loop {
+            if !leadership.is_leader(&repository).await {
+                tokio::select! { _ = tokio::time::sleep(Duration::from_secs(1)) => continue, _ = shutdown.changed() => return }
+            }
             let delay = measure("worker:workflow_schedule", async {
-                let (workspaces, delay) = match repository.active_workspace_ids().await {
+                let (workspaces, delay) = match repository.polled_workspace_ids().await {
                     Ok(workspaces) => {
+                        let workspaces = workspaces.as_ref().clone();
                         metrics::gauge!("catalog_schedule_coordinator_healthy", "kind" => "workflow")
                             .set(1.0);
                         (workspaces, Duration::from_millis(250))
@@ -157,10 +174,33 @@ pub fn start_schedule_coordinator(
                 for workspace in workspaces {
                     match repository.for_workspace(workspace).await {
                         Ok(scoped) => {
-                            if let Err(error) = scoped.backfill_workflow_tasks().await {
+                            // Pre-cutover rows get task envelopes once per
+                            // workspace; afterwards an idle tick only checks
+                            // whether any schedule cursor is due.
+                            let first = prepared.insert(workspace, Instant::now()).is_none();
+                            if first && let Err(error) = scoped.backfill_workflow_tasks().await {
                                 tracing::error!(%error, "workflow task backfill failed");
                             }
-                            if let Err(error) = scoped.schedule_workflow_runs().await {
+                            // A full pass also creates cursors for schedules
+                            // enabled before cursors were created on enable.
+                            let full = first
+                                || prepared
+                                    .get(&workspace)
+                                    .is_some_and(|last| last.elapsed() >= FULL_SCHEDULE_PASS);
+                            if full {
+                                prepared.insert(workspace, Instant::now());
+                            }
+                            let run = if full {
+                                Ok(true)
+                            } else {
+                                scoped.workflow_schedules_due().await
+                            };
+                            let result = match run {
+                                Ok(true) => scoped.schedule_workflow_runs().await.map(drop),
+                                Ok(false) => Ok(()),
+                                Err(error) => Err(error),
+                            };
+                            if let Err(error) = result {
                                 tracing::error!(%error, "workflow schedule poll failed");
                             }
                         }
