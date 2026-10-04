@@ -962,7 +962,6 @@ async fn expire_sample_file_staging(
     Ok(())
 }
 
-/// A bundled sample file uploaded under an upload intent while planning.
 /// Sample entity rows of a plan, inserted with their evidence at once.
 #[derive(Default)]
 struct SampleEntityRows {
@@ -1017,6 +1016,7 @@ impl SampleEntityRows {
     }
 }
 
+/// A bundled sample file uploaded under an upload intent while planning.
 struct StagedSampleFile {
     path: String,
     file_id: Uuid,
@@ -5167,7 +5167,8 @@ impl CatalogRepository {
                         .map_err(solution_pack_mutation_error)?;
                     // Bundled files are attached in the same transaction before
                     // the write is staged, and the entity is validated again
-                    // with them, like an ordinary entity write.
+                    // and its preview refreshed with them, like an ordinary
+                    // file write.
                     let file_count = self
                         .attach_sample_files(
                             &mut tx,
@@ -5179,7 +5180,7 @@ impl CatalogRepository {
                         )
                         .await?;
                     if file_count > 0 {
-                        self.validate_entity_schema(&mut tx, &entity)
+                        self.revalidate_entity(&mut tx, &entity)
                             .await
                             .map_err(solution_pack_mutation_error)?;
                     }
