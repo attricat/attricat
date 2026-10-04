@@ -1,7 +1,7 @@
 //! Strict, inert rule definition parsing. Candidate selection and evaluation are host-owned.
 use catalog_validation::{
     is_valid_code,
-    predicate::{AttributeTypes, Usage, validate_predicate},
+    predicate::{AttributeTypes, PredicateError, Usage, validate_predicate},
 };
 use cron::Schedule;
 use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
@@ -19,8 +19,20 @@ pub enum RuleError {
     Toml(#[from] toml::de::Error),
     #[error("unsupported format_version {0}")]
     UnsupportedFormatVersion(u32),
+    /// The predicate names an attribute the blueprint does not declare.
+    #[error("unknown attribute '{0}'")]
+    UnknownAttribute(String),
     #[error("{0}")]
     Invalid(String),
+}
+
+impl From<PredicateError> for RuleError {
+    fn from(error: PredicateError) -> Self {
+        match error {
+            PredicateError::UnknownAttribute(code) => Self::UnknownAttribute(code),
+            PredicateError::Invalid(message) => Self::Invalid(message),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -67,7 +79,7 @@ pub struct Enforcement {
     pub on_save: bool,
     /// Reject the listed status transitions while the rule is violated.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    #[schemars(length(max = 16))]
+    #[schemars(length(max = MAX_ENFORCED_TRANSITIONS))]
     pub transitions: Vec<TransitionSelector>,
 }
 
@@ -88,7 +100,20 @@ pub struct TransitionSelector {
     pub to: String,
 }
 
+/// Most status transitions one enforcing rule can guard.
+pub const MAX_ENFORCED_TRANSITIONS: usize = 16;
+
 impl Enforcement {
+    /// Enforcing rules run inside write transactions, so their predicates must
+    /// be safe for synchronous evaluation; other rules only report findings.
+    fn usage(enforcement: Option<&Self>) -> Usage {
+        if enforcement.is_some() {
+            Usage::Enforced
+        } else {
+            Usage::Finding
+        }
+    }
+
     /// Whether this rule guards the change of `attribute` from `before` to `after`.
     pub fn guards_transition(
         &self,
@@ -201,12 +226,8 @@ pub fn parse(source: &str) -> Result<RuleDefinition, RuleError> {
             }
         })
         .collect::<Result<Vec<_>, _>>()?;
-    let usage = if raw.enforcement.is_some() {
-        Usage::Enforced
-    } else {
-        Usage::Finding
-    };
-    validate_predicate(&raw.predicate, None, usage).map_err(RuleError::Invalid)?;
+    let usage = Enforcement::usage(raw.enforcement.as_ref());
+    validate_predicate(&raw.predicate, None, usage)?;
     if let Some(enforcement) = &raw.enforcement {
         validate_enforcement(enforcement, &raw.severity)?;
     }
@@ -232,10 +253,10 @@ fn validate_enforcement(enforcement: &Enforcement, severity: &Severity) -> Resul
             "enforcement needs on_save or at least one transition".into(),
         ));
     }
-    if enforcement.transitions.len() > 16 {
-        return Err(RuleError::Invalid(
-            "enforcement allows at most 16 transitions".into(),
-        ));
+    if enforcement.transitions.len() > MAX_ENFORCED_TRANSITIONS {
+        return Err(RuleError::Invalid(format!(
+            "enforcement allows at most {MAX_ENFORCED_TRANSITIONS} transitions"
+        )));
     }
     for selector in &enforcement.transitions {
         code(&selector.attribute_code, "enforcement attribute_code")?;
@@ -252,12 +273,8 @@ pub fn validate_against_attributes(
     rule: &CompiledRule,
     attributes: &dyn AttributeTypes,
 ) -> Result<(), RuleError> {
-    let usage = if rule.enforcement.is_some() {
-        Usage::Enforced
-    } else {
-        Usage::Finding
-    };
-    validate_predicate(&rule.predicate, Some(attributes), usage).map_err(RuleError::Invalid)?;
+    let usage = Enforcement::usage(rule.enforcement.as_ref());
+    validate_predicate(&rule.predicate, Some(attributes), usage)?;
     for selector in rule
         .enforcement
         .iter()

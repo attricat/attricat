@@ -313,12 +313,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                             value_type,
                         });
                     }
-                    if (attribute.target_blueprint.is_some()
-                        || !attribute.target_blueprints.is_empty()
-                        || attribute.acyclic.is_some()
-                        || attribute.tree.is_some())
-                        && value_type != "relationship"
-                    {
+                    if attribute.declares_relationship_targets() && value_type != "relationship" {
                         return Err(BlueprintError::InvalidAttributeDeclaration(attribute.code));
                     }
                     let (target_blueprint, target_blueprints) =
@@ -487,11 +482,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                     }))
                 }
                 (None, None, Some(source))
-                    if attribute.target_blueprint.is_none()
-                        && attribute.target_blueprints.is_empty()
-                        && attribute.acyclic.is_none()
-                        && attribute.tree.is_none()
-                        && attribute.name.is_none() =>
+                    if !attribute.declares_relationship_targets() && attribute.name.is_none() =>
                 {
                     let (include_alias, attribute_code) =
                         parse_selection(&attribute.code, &source)?;
@@ -504,10 +495,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                 (None, Some(extension_type), None) => {
                     if extension_type.trim().is_empty()
                         || attribute.value_schema.is_some()
-                        || attribute.target_blueprint.is_some()
-                        || !attribute.target_blueprints.is_empty()
-                        || attribute.acyclic.is_some()
-                        || attribute.tree.is_some()
+                        || attribute.declares_relationship_targets()
                         || attribute.cardinality.is_some()
                         || attribute.target_cardinality.is_some()
                         || attribute.ordered.is_some()
@@ -585,14 +573,14 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                 AttributeDeclaration::Selection { code, .. } => (code.clone(), None),
             })
             .collect();
-        catalog_rules::validate_against_attributes(rule, &types).map_err(|error| {
-            match unknown_attribute(&error.to_string()) {
-                Some(attribute) => BlueprintError::RuleUnknownAttribute {
+        catalog_rules::validate_against_attributes(rule, &types).map_err(|error| match error {
+            catalog_rules::RuleError::UnknownAttribute(attribute) => {
+                BlueprintError::RuleUnknownAttribute {
                     rule: rule.code.clone(),
                     attribute,
-                },
-                None => BlueprintError::InvalidRule(format!("rule '{}': {error}", rule.code)),
+                }
             }
+            error => BlueprintError::InvalidRule(format!("rule '{}': {error}", rule.code)),
         })?;
     }
 
@@ -614,6 +602,17 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
     };
     crate::lexicon_text::validate_lexicon_references(&definition)?;
     Ok(definition)
+}
+
+impl RawAttributeDeclaration {
+    /// Whether the declaration sets target blueprints or a hierarchy, which
+    /// only local relationship attributes may declare.
+    fn declares_relationship_targets(&self) -> bool {
+        self.target_blueprint.is_some()
+            || !self.target_blueprints.is_empty()
+            || self.acyclic.is_some()
+            || self.tree.is_some()
+    }
 }
 
 /// Normalizes `target_blueprint`/`target_blueprints` into the single-target
@@ -787,13 +786,6 @@ fn parse_json_value(
             })
         })
         .transpose()
-}
-
-fn unknown_attribute(message: &str) -> Option<String> {
-    message
-        .strip_prefix("unknown attribute '")
-        .and_then(|rest| rest.strip_suffix('\''))
-        .map(str::to_owned)
 }
 
 fn parse_json_schema(

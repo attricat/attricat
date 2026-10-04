@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { ActionDialogRequest } from './extensionBroker';
 
-type OpenActionDialog = ActionDialogRequest & {
+export type OpenActionDialog = ActionDialogRequest & {
   /** Distinguishes reopenings so the dialog frame always starts fresh. */
   key: number;
 };

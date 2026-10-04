@@ -6,7 +6,9 @@ import {
   ClockIcon,
   LoaderIcon,
 } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Timestamp } from '../../time/Timestamp';
 import type { ExtensionRunStatus } from './constants';
 import { isActiveExtensionRun } from './runPolling';
 import {
@@ -39,6 +41,52 @@ export const ExtensionRunStatusChip = ({
       label={t(`extensionRuns.status.${status}`)}
       variant="outlined"
     />
+  );
+};
+
+/**
+ * The operation, extension and status of a run, then when it started and on
+ * how many entities. `heading` is the operation title in its page outline.
+ */
+export const ExtensionRunHeader = ({
+  heading,
+  icon,
+  run,
+}: {
+  heading: { component: 'h2' | 'h3'; variant: 'h6' | 'subtitle1' };
+  icon?: ReactNode;
+  run: ExtensionRun;
+}) => {
+  const { t } = useTranslation();
+  return (
+    <>
+      {/* A leading icon keeps the row layout on narrow screens. */}
+      <Stack
+        direction={icon ? 'row' : { xs: 'column', sm: 'row' }}
+        spacing={3}
+        sx={{ alignItems: icon ? 'flex-start' : { sm: 'flex-start' } }}
+      >
+        {icon}
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography
+            component={heading.component}
+            sx={{ overflowWrap: 'anywhere' }}
+            variant={heading.variant}
+          >
+            {run.operation_id}
+          </Typography>
+          <Typography color="text.secondary" variant="body2">
+            {run.extension_id}
+          </Typography>
+        </Box>
+        <ExtensionRunStatusChip status={run.status} />
+      </Stack>
+      <Typography color="text.secondary" variant="body2">
+        {t('extensionRuns.entityCount', { count: run.selection_count })}
+        {' · '}
+        <Timestamp style="dateTime" value={run.created_at} />
+      </Typography>
+    </>
   );
 };
 

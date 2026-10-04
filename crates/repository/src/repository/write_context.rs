@@ -79,8 +79,8 @@ struct Derived {
 /// rather than per relationship target.
 #[derive(Clone, Debug, Default)]
 pub(super) struct FamilyConstraints {
-    /// Hierarchy kind (`tree`, `dag`) per relationship field code.
-    pub hierarchies: BTreeMap<String, String>,
+    /// Hierarchy kind per relationship field code.
+    pub hierarchies: BTreeMap<String, super::structural_constraints::Hierarchy>,
     /// Field codes some published revision limits to one source per target.
     pub target_one_codes: HashSet<String>,
 }
@@ -185,7 +185,10 @@ impl WriteContext {
                 .fetch_all(&mut *connection)
                 .await?
                 .into_iter()
-                .collect();
+                .map(|(code, hierarchy)| {
+                    Ok((code, super::structural_constraints::Hierarchy::parse(&hierarchy)?))
+                })
+                .collect::<Result<_, RepositoryError>>()?;
                 let target_one_codes = sqlx::query_scalar::<_, String>(
                     "SELECT DISTINCT a.code FROM attributes a JOIN blueprints b ON b.id = a.blueprint_id AND b.version = a.blueprint_version WHERE a.blueprint_id = $1 AND a.target_cardinality = 'one' AND a.workspace_id = $2 AND a.deleted_at IS NULL AND b.status = 'published' AND b.deleted_at IS NULL",
                 )

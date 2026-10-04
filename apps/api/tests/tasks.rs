@@ -481,3 +481,171 @@ async fn oversized_retry_error_is_truncated_and_consumes_failure_budget(pool: Pg
         1
     );
 }
+
+#[sqlx::test]
+async fn revoked_initiator_dead_letters_the_envelope_through_the_shared_helper(pool: PgPool) {
+    let system = CatalogRepository::system(pool.clone());
+    let workspace_id = workspace(&pool, "tasks-revoked-initiator").await;
+    let release_id = Uuid::new_v4();
+    sqlx::query("INSERT INTO installed_extension_releases (id, workspace_id, extension_id, version, manifest, manifest_sha256, source) VALUES ($1, $2, 'acme.interactive', '1.0.0', '{}'::jsonb, $3, 'side_load')")
+        .bind(release_id)
+        .bind(workspace_id)
+        .bind("0".repeat(64))
+        .execute(&pool)
+        .await
+        .unwrap();
+    let run_id = Uuid::new_v4();
+    sqlx::query("INSERT INTO extension_operation_runs (id, workspace_id, extension_id, installed_release_id, abi_version, operation_id, idempotency_key) VALUES ($1, $2, 'acme.interactive', $3, '1.6.0', 'label', $4)")
+        .bind(run_id)
+        .bind(workspace_id)
+        .bind(release_id)
+        .bind(run_id.to_string())
+        .execute(&pool)
+        .await
+        .unwrap();
+    let mut transaction = pool.begin().await.unwrap();
+    system
+        .enqueue_task(
+            &mut transaction,
+            TaskInsert {
+                workspace_id,
+                kind: TaskKind::ExtensionOperationRunV1,
+                subject_id: run_id,
+                generation: 0,
+                payload: json!({"run_id": run_id.to_string()}),
+                correlation_id: None,
+                causation_id: None,
+            },
+        )
+        .await
+        .unwrap();
+    transaction.commit().await.unwrap();
+    let task = system
+        .claim_task("worker", Duration::from_secs(30))
+        .await
+        .unwrap()
+        .unwrap();
+    sqlx::query("UPDATE extension_operation_runs SET status = 'leased', lease_token = $2, lease_owner = 'worker', lease_until = now() + interval '30 seconds' WHERE id = $1")
+        .bind(run_id)
+        .bind(task.lease_token)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    CatalogRepository::new(pool.clone(), workspace_id)
+        .for_extension_operation_task(&task)
+        .fail_extension_operation_for_revoked_initiator(&task)
+        .await
+        .unwrap();
+
+    // A terminal failure exhausts the budget rather than counting one attempt.
+    let (status, failures, max_failures): (String, i32, i32) =
+        sqlx::query_as("SELECT status, failures, max_failures FROM tasks WHERE id = $1")
+            .bind(task.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(status, "dead_letter");
+    assert_eq!(failures, max_failures);
+}
+
+#[sqlx::test]
+async fn in_transaction_holder_transitions_reject_a_lease_that_expired_mid_transaction(
+    pool: PgPool,
+) {
+    let repository = CatalogRepository::system(pool.clone());
+    let workspace_id = workspace(&pool, "tasks-in-transaction").await;
+    let mut transaction = pool.begin().await.unwrap();
+    repository
+        .enqueue_task(&mut transaction, insert(workspace_id, Uuid::new_v4()))
+        .await
+        .unwrap();
+    transaction.commit().await.unwrap();
+    let task = repository
+        .claim_task("worker", Duration::from_secs(30))
+        .await
+        .unwrap()
+        .unwrap();
+
+    let mut transaction = pool.begin().await.unwrap();
+    // The lease expires after this transaction started, so `now()` alone
+    // would still consider it live.
+    sqlx::query("UPDATE tasks SET lease_until = clock_timestamp() + interval '50 milliseconds' WHERE id = $1")
+        .bind(task.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("SELECT 1")
+        .execute(&mut *transaction)
+        .await
+        .unwrap();
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert!(
+        repository
+            .dead_letter_task_in_transaction(&mut transaction, &task, "domain", "failed")
+            .await
+            .is_err()
+    );
+    assert!(
+        repository
+            .complete_task_in_transaction(&mut transaction, task.id, "worker", task.lease_token)
+            .await
+            .is_err()
+    );
+    transaction.rollback().await.unwrap();
+}
+
+#[sqlx::test]
+async fn set_based_cancellation_obeys_kind_policy_and_skips_leased_work(pool: PgPool) {
+    let repository = CatalogRepository::system(pool.clone());
+    let workspace_id = workspace(&pool, "tasks-set-cancel").await;
+    let (queued, leased) = (Uuid::new_v4(), Uuid::new_v4());
+    let mut transaction = pool.begin().await.unwrap();
+    for subject in [leased, queued] {
+        repository
+            .enqueue_task(&mut transaction, insert(workspace_id, subject))
+            .await
+            .unwrap();
+    }
+    transaction.commit().await.unwrap();
+    sqlx::query("UPDATE tasks SET status = 'leased', lease_owner = 'worker', lease_token = gen_random_uuid(), lease_until = now() + interval '30 seconds' WHERE subject_id = $1")
+        .bind(leased)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let mut transaction = pool.begin().await.unwrap();
+    assert!(
+        repository
+            .cancel_queued_tasks_for_subjects(
+                &mut transaction,
+                workspace_id,
+                TaskKind::AgentRunV1,
+                &[queued],
+            )
+            .await
+            .is_err()
+    );
+    let cancelled = repository
+        .cancel_queued_tasks_for_subjects(
+            &mut transaction,
+            workspace_id,
+            TaskKind::RuleRunV1,
+            &[queued, leased],
+        )
+        .await
+        .unwrap();
+    transaction.commit().await.unwrap();
+    assert_eq!(cancelled, 1);
+    let statuses: Vec<(Uuid, String)> = sqlx::query_as(
+        "SELECT subject_id, status FROM tasks WHERE workspace_id = $1 ORDER BY status",
+    )
+    .bind(workspace_id)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        statuses,
+        vec![(queued, "cancelled".into()), (leased, "leased".into())]
+    );
+}

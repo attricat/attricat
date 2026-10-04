@@ -19,8 +19,8 @@ import { formatBytes } from '../data-health/dataHealthFormat';
 import { cancelExtensionRun, extensionRunArtifactUrl } from './api';
 import { extensionRunsPagePath, runDetailSkeletonHeight } from './constants';
 import {
+  ExtensionRunHeader,
   ExtensionRunProgress,
-  ExtensionRunStatusChip,
 } from './ExtensionRunSummary';
 import { extensionRunQueryKeys } from './queryKeys';
 import { extensionRunDetailOptions } from './queryOptions';
@@ -113,32 +113,10 @@ export const ExtensionRunDetailPage = ({ runId }: { runId: string }) => {
       )}
       {run.data && (
         <Card sx={{ display: 'flex', flexDirection: 'column', gap: 4, p: 5 }}>
-          <Stack
-            direction={{ xs: 'column', sm: 'row' }}
-            spacing={3}
-            sx={{ alignItems: { sm: 'flex-start' } }}
-          >
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography
-                component="h2"
-                sx={{ overflowWrap: 'anywhere' }}
-                variant="h6"
-              >
-                {run.data.operation_id}
-              </Typography>
-              <Typography color="text.secondary" variant="body2">
-                {run.data.extension_id}
-              </Typography>
-            </Box>
-            <ExtensionRunStatusChip status={run.data.status} />
-          </Stack>
-          <Typography color="text.secondary" variant="body2">
-            {t('extensionRuns.entityCount', {
-              count: run.data.selection_count,
-            })}
-            {' · '}
-            <Timestamp style="dateTime" value={run.data.created_at} />
-          </Typography>
+          <ExtensionRunHeader
+            heading={{ component: 'h2', variant: 'h6' }}
+            run={run.data}
+          />
           {run.data.failure && (
             <Alert severity="error">
               {t(`extensionRuns.failure.${run.data.failure}`)}

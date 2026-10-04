@@ -1,5 +1,6 @@
 import type { TFunction } from 'i18next';
 import type { Attribute } from '../entities/api';
+import { attributeLabel } from '../entities/entityDisplay';
 import { statusConfiguration, statusLabel } from '../entities/status';
 import { CURRENT_USER_FILTER_VALUE } from '../principals/constants';
 import {
@@ -87,15 +88,15 @@ export const attributeFilterValueLabel = (
             : undefined))) ??
       String(filter.value));
 
+/** A filter as one pill label; `attribute` names the field and its values. */
 export const attributeFilterLabel = (
   t: TFunction,
   filter: AttributeFilter,
-  fieldLabel: string = filter.field,
   attribute?: Attribute,
   directory?: Directory,
 ) =>
   t('explorer.attributeFilterPill', {
-    field: fieldLabel,
+    field: attributeLabel(attribute ?? { code: filter.field }),
     operator: t(`explorer.filterOperatorSymbols.${filter.operator}`),
     value: JSON.stringify(
       attributeFilterValueLabel(t, filter, attribute, directory),

@@ -10,36 +10,11 @@ use api::{
 use support::*;
 
 async fn post(client: &Client, url: String, body: Value) -> (StatusCode, Value) {
-    let response = client.post(url).json(&body).send().await.unwrap();
-    let status = response.status();
-    (status, response.json().await.unwrap_or(Value::Null))
+    status_json(client.post(url).json(&body).send().await.unwrap()).await
 }
 
 async fn put(client: &Client, url: String, body: Value) -> (StatusCode, Value) {
-    let response = client.put(url).json(&body).send().await.unwrap();
-    let status = response.status();
-    (status, response.json().await.unwrap_or(Value::Null))
-}
-
-async fn get(client: &Client, url: String) -> Value {
-    client
-        .get(url)
-        .send()
-        .await
-        .unwrap()
-        .error_for_status()
-        .unwrap()
-        .json()
-        .await
-        .unwrap()
-}
-
-fn scalar(code: &str, value: Value) -> Value {
-    json!({"kind": "scalar", "attribute_code": code, "value": value})
-}
-
-fn link(code: &str, target: &Value) -> Value {
-    json!({"kind": "relationship", "attribute_code": code, "target_entity_id": target["id"]})
+    status_json(client.put(url).json(&body).send().await.unwrap()).await
 }
 
 async fn create(
@@ -48,18 +23,7 @@ async fn create(
     blueprint: &str,
     values: Value,
 ) -> (StatusCode, Value) {
-    post(
-        client,
-        format!("{base}/v1/entities"),
-        json!({"blueprint": {"code": blueprint}, "values": values}),
-    )
-    .await
-}
-
-async fn entity(client: &Client, base: &str, blueprint: &str, values: Value) -> Value {
-    let (status, body) = create(client, base, blueprint, values).await;
-    assert!(status.is_success(), "{status}: {body}");
-    body
+    status_json(post_entity(client, base, blueprint, values).await).await
 }
 
 /// Runs queued rule tasks to completion; other task kinds are acknowledged.
@@ -180,7 +144,7 @@ async fn entity_schema_checks_compare_attributes_on_every_write(pool: PgPool) {
     );
     assert_eq!(violation["contexts"], json!(["default"]));
 
-    let valid = entity(
+    let valid = create_entity_with(
         &client,
         &base,
         "certificate",
@@ -202,15 +166,18 @@ async fn entity_schema_checks_compare_attributes_on_every_write(pool: PgPool) {
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
     assert_eq!(body["error"]["details"]["violations"][0]["code"], "limits");
     // The rejected write is not committed.
-    let form = get(&client, url.clone()).await;
+    let form = get_json(&client, url.clone()).await;
     assert!(form.to_string().contains("1.5"), "{form}");
 
-    let other = entity(&client, &base, "certificate", json!([])).await;
+    let other = create_entity_with(&client, &base, "certificate", json!([])).await;
     let (status, body) = create(
         &client,
         &base,
         "certificate",
-        json!([link("source", &other), link("target", &other)]),
+        json!([
+            relationship("source", &other),
+            relationship("target", &other)
+        ]),
     )
     .await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
@@ -290,46 +257,30 @@ async fn linked_record_checks_read_one_hop_on_save(pool: PgPool) {
     let (base, server) = start_server(pool).await;
     let client = authenticated_client();
     for definition in [SUPPLY, FACILITY, ASSESSMENT] {
-        let (status, body) = post(
-            &client,
-            format!("{base}/blueprints"),
-            json!({"definition": definition}),
-        )
-        .await;
-        assert!(status.is_success(), "{body}");
-        let (status, body) = post(
-            &client,
-            format!(
-                "{base}/blueprints/{}/versions/1/publish",
-                body["blueprint"]["id"].as_str().unwrap()
-            ),
-            json!({}),
-        )
-        .await;
-        assert!(status.is_success(), "{body}");
+        create_blueprint(&client, &base, definition).await;
     }
-    let acme = entity(
+    let acme = create_entity_with(
         &client,
         &base,
         "supplier",
         json!([scalar("name", json!("Acme"))]),
     )
     .await;
-    let globex = entity(
+    let globex = create_entity_with(
         &client,
         &base,
         "supplier",
         json!([scalar("name", json!("Globex"))]),
     )
     .await;
-    let plant = entity(
+    let plant = create_entity_with(
         &client,
         &base,
         "facility",
         json!([
             scalar("name", json!("Plant")),
             scalar("state", json!("approved")),
-            link("supplier", &acme)
+            relationship("supplier", &acme)
         ]),
     )
     .await;
@@ -338,7 +289,10 @@ async fn linked_record_checks_read_one_hop_on_save(pool: PgPool) {
         &client,
         &base,
         "assessment",
-        json!([link("supplier", &globex), link("facility", &plant)]),
+        json!([
+            relationship("supplier", &globex),
+            relationship("facility", &plant)
+        ]),
     )
     .await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
@@ -350,11 +304,14 @@ async fn linked_record_checks_read_one_hop_on_save(pool: PgPool) {
         json!([plant["id"]])
     );
 
-    entity(
+    create_entity_with(
         &client,
         &base,
         "assessment",
-        json!([link("supplier", &acme), link("facility", &plant)]),
+        json!([
+            relationship("supplier", &acme),
+            relationship("facility", &plant)
+        ]),
     )
     .await;
 
@@ -419,25 +376,28 @@ async fn transition_conditions_block_and_explain_status_changes(pool: PgPool) {
     let client = authenticated_client();
     create_blueprint(&client, &base, NONCONFORMANCE).await;
     create_blueprint(&client, &base, ACTION).await;
-    let nc = entity(
+    let nc = create_entity_with(
         &client,
         &base,
         "nonconformance",
         json!([scalar("status", json!("open"))]),
     )
     .await;
-    let action = entity(
+    let action = create_entity_with(
         &client,
         &base,
         "corrective_action",
-        json!([scalar("state", json!("open")), link("nonconformance", &nc)]),
+        json!([
+            scalar("state", json!("open")),
+            relationship("nonconformance", &nc)
+        ]),
     )
     .await;
     let nc_url = format!("{base}/v1/entities/{}", nc["id"].as_str().unwrap());
 
     // The documented controlled-records shape: one item per declared edge
     // leaving the saved status.
-    let options = get(&client, format!("{nc_url}/status-transitions")).await;
+    let options = get_json(&client, format!("{nc_url}/status-transitions")).await;
     let closed = options["items"]
         .as_array()
         .unwrap()
@@ -449,11 +409,10 @@ async fn transition_conditions_block_and_explain_status_changes(pool: PgPool) {
     assert_eq!(closed["denial_code"], "transition_conditions_unmet");
     assert_eq!(closed["unmet"].as_array().unwrap().len(), 2);
 
-    let form = &nc;
     let (status, body) = put(
         &client,
         nc_url.clone(),
-        json!({"expected_updated_at": form["updated_at"], "values": [scalar("status", json!("closed"))]}),
+        json!({"expected_updated_at": nc["updated_at"], "values": [scalar("status", json!("closed"))]}),
     )
     .await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
@@ -482,7 +441,7 @@ async fn transition_conditions_block_and_explain_status_changes(pool: PgPool) {
     let (status, body) = put(
         &client,
         nc_url.clone(),
-        json!({"expected_updated_at": form["updated_at"], "values": [scalar("root_cause", json!("Worn tool")), scalar("status", json!("closed"))]}),
+        json!({"expected_updated_at": nc["updated_at"], "values": [scalar("root_cause", json!("Worn tool")), scalar("status", json!("closed"))]}),
     )
     .await;
     assert!(status.is_success(), "{body}");
@@ -537,6 +496,30 @@ async fn publish_rule(client: &Client, base: &str, rule: &Value) {
     assert!(status.is_success(), "{body}");
 }
 
+/// Publishes and enables version 1 of a rule.
+async fn enable_rule(client: &Client, base: &str, rule: &Value) {
+    publish_rule(client, base, rule).await;
+    let id = rule["id"].as_str().unwrap();
+    let (status, body) = post(
+        client,
+        format!("{base}/rules/{id}/versions/1/enable"),
+        json!({}),
+    )
+    .await;
+    assert!(status.is_success(), "{body}");
+}
+
+/// Queues a reporting run of the rule.
+async fn run_rule(client: &Client, base: &str, rule_id: &str, idempotency_key: &str) {
+    let (status, body) = post(
+        client,
+        format!("{base}/rules/{rule_id}/run-now"),
+        json!({"dry_run": false, "idempotency_key": idempotency_key}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::ACCEPTED, "{body}");
+}
+
 fn rule(code: &str, predicate: &str, extra: &str) -> String {
     format!(
         "format_version = 1\ncode = \"{code}\"\nname = \"{code}\"\nseverity = \"error\"\n[[triggers]]\ntype = \"manual\"\n[predicate]\n{predicate}\n{extra}"
@@ -552,7 +535,7 @@ async fn new_rule_predicates_open_and_resolve_findings(pool: PgPool) {
     let (base, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
     let blueprint = create_blueprint(&client, &base, PRODUCT).await;
-    let first = entity(
+    let first = create_entity_with(
         &client,
         &base,
         "rule_product",
@@ -564,7 +547,7 @@ async fn new_rule_predicates_open_and_resolve_findings(pool: PgPool) {
     .await;
     // `unique` compares values as `[[unique_keys]]` do: trimmed, whitespace
     // collapsed and case-insensitive.
-    let second = entity(
+    let second = create_entity_with(
         &client,
         &base,
         "rule_product",
@@ -603,22 +586,8 @@ async fn new_rule_predicates_open_and_resolve_findings(pool: PgPool) {
     ] {
         let (status, created) = create_rule(&client, &base, &blueprint, &definition).await;
         assert_eq!(status, StatusCode::CREATED, "{created}");
-        publish_rule(&client, &base, &created).await;
-        let id = created["id"].as_str().unwrap();
-        let (status, body) = post(
-            &client,
-            format!("{base}/rules/{id}/versions/1/enable"),
-            json!({}),
-        )
-        .await;
-        assert!(status.is_success(), "{body}");
-        let (status, body) = post(
-            &client,
-            format!("{base}/rules/{id}/run-now"),
-            json!({"dry_run": false, "idempotency_key": "first"}),
-        )
-        .await;
-        assert_eq!(status, StatusCode::ACCEPTED, "{body}");
+        enable_rule(&client, &base, &created).await;
+        run_rule(&client, &base, created["id"].as_str().unwrap(), "first").await;
         rules.push(created);
     }
     drain_rule_tasks(&pool).await;
@@ -637,19 +606,15 @@ async fn new_rule_predicates_open_and_resolve_findings(pool: PgPool) {
         ]
     );
 
-    put(
+    let (status, body) = put(
         &client,
         format!("{base}/v1/entities/{second_id}"),
         json!({"values": [scalar("sku", json!("B-2"))]}),
     )
     .await;
+    assert!(status.is_success(), "{body}");
     let id = rules[0]["id"].as_str().unwrap();
-    post(
-        &client,
-        format!("{base}/rules/{id}/run-now"),
-        json!({"dry_run": false, "idempotency_key": "second"}),
-    )
-    .await;
+    run_rule(&client, &base, id, "second").await;
     drain_rule_tasks(&pool).await;
     let open: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM rule_findings WHERE rule_id = $1 AND state = 'open'",
@@ -701,7 +666,7 @@ async fn predicates_see_file_values_and_explicit_empty_local_values(pool: PgPool
     let repository = CatalogRepository::new(pool.clone(), workspace_id);
     let mut ids = Vec::new();
     for title in ["with photo", "photo removed in fr"] {
-        let item = entity(
+        let item = create_entity_with(
             &client,
             &base,
             "gallery_item",
@@ -739,35 +704,19 @@ async fn predicates_see_file_values_and_explicit_empty_local_values(pool: PgPool
     )
     .await;
     assert_eq!(status, StatusCode::CREATED, "{created}");
-    publish_rule(&client, &base, &created).await;
-    let id = created["id"].as_str().unwrap();
-    let (status, body) = post(
-        &client,
-        format!("{base}/rules/{id}/versions/1/enable"),
-        json!({}),
-    )
-    .await;
-    assert!(status.is_success(), "{body}");
-    let (status, body) = post(
-        &client,
-        format!("{base}/rules/{id}/run-now"),
-        json!({"dry_run": false, "idempotency_key": "photos"}),
-    )
-    .await;
-    assert_eq!(status, StatusCode::ACCEPTED, "{body}");
+    enable_rule(&client, &base, &created).await;
+    run_rule(&client, &base, created["id"].as_str().unwrap(), "photos").await;
     drain_rule_tasks(&pool).await;
-    for _ in 0..100 {
-        let pending: bool = sqlx::query_scalar(
-            "SELECT EXISTS (SELECT 1 FROM rule_runs WHERE status NOT IN ('completed', 'dead_letter', 'cancelled'))",
+    let settled = wait_until(|| async {
+        count(
+            &pool,
+            "SELECT count(*) FROM rule_runs WHERE status NOT IN ('completed', 'dead_letter', 'cancelled')",
         )
-        .fetch_one(&pool)
         .await
-        .unwrap();
-        if !pending {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(50)).await;
-    }
+            == 0
+    })
+    .await;
+    assert!(settled, "the rule run did not settle");
     let findings: Vec<(Uuid, Value)> = sqlx::query_as(
         "SELECT entity_id, evidence FROM rule_findings WHERE state = 'open' ORDER BY entity_id",
     )
@@ -789,7 +738,7 @@ async fn enforcing_rules_dry_run_before_enabling_and_reject_writes(pool: PgPool)
     let (base, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
     let blueprint = create_blueprint(&client, &base, PRODUCT).await;
-    let negative = entity(
+    let negative = create_entity_with(
         &client,
         &base,
         "rule_product",
@@ -908,16 +857,9 @@ async fn channels_require_checks_before_publication(pool: PgPool) {
     )
     .await;
     assert_eq!(status, StatusCode::CREATED, "{created}");
-    publish_rule(&client, &base, &created).await;
-    let id = created["id"].as_str().unwrap();
-    post(
-        &client,
-        format!("{base}/rules/{id}/versions/1/enable"),
-        json!({}),
-    )
-    .await;
+    enable_rule(&client, &base, &created).await;
 
-    let context = get(&client, format!("{base}/contexts/default")).await;
+    let context = get_json(&client, format!("{base}/contexts/default")).await;
     let context_id = context["id"].as_str().unwrap();
     let (status, channel) = put(
         &client,
@@ -928,9 +870,9 @@ async fn channels_require_checks_before_publication(pool: PgPool) {
     assert!(status.is_success(), "{channel}");
     assert_eq!(channel["required_rule_codes"], json!(["has-sku"]));
 
-    let product = entity(&client, &base, "rule_product", json!([])).await;
+    let product = create_entity_with(&client, &base, "rule_product", json!([])).await;
     let entity_url = format!("{base}/v1/entities/{}", product["id"].as_str().unwrap());
-    let readiness = get(&client, format!("{entity_url}/publications/readiness")).await;
+    let readiness = get_json(&client, format!("{entity_url}/publications/readiness")).await;
     assert_eq!(readiness[0]["ready"], false);
     assert_eq!(readiness[0]["violations"][0]["code"], "has-sku");
 
@@ -960,13 +902,14 @@ async fn channels_require_checks_before_publication(pool: PgPool) {
         product["id"]
     );
 
-    put(
+    let (status, body) = put(
         &client,
         entity_url.clone(),
         json!({"values": [scalar("sku", json!("A-1"))]}),
     )
     .await;
-    let readiness = get(&client, format!("{entity_url}/publications/readiness")).await;
+    assert!(status.is_success(), "{body}");
+    let readiness = get_json(&client, format!("{entity_url}/publications/readiness")).await;
     assert_eq!(readiness[0]["ready"], true, "{readiness}");
     let (status, body) = post(
         &client,
@@ -1041,7 +984,7 @@ async fn rule_pages_resolve_related_records_per_candidate(pool: PgPool) {
         let client = client.clone();
         let base = base.clone();
         async move {
-            entity(
+            create_entity_with(
                 &client,
                 &base,
                 "page_item",
@@ -1055,8 +998,8 @@ async fn rule_pages_resolve_related_records_per_candidate(pool: PgPool) {
     let bad = item("bad").await;
     let order = |title: &'static str, items: Vec<&Value>| {
         let mut values = vec![scalar("title", json!(title))];
-        values.extend(items.into_iter().map(|item| link("items", item)));
-        entity(&client, &base, "page_order", Value::Array(values))
+        values.extend(items.into_iter().map(|item| relationship("items", item)));
+        create_entity_with(&client, &base, "page_order", Value::Array(values))
     };
     let empty = order("empty", vec![]).await;
     let open_note = order("open note", vec![&ok]).await;
@@ -1064,11 +1007,11 @@ async fn rule_pages_resolve_related_records_per_candidate(pool: PgPool) {
     let closed_note = order("closed note", vec![&ok, &also_ok]).await;
     let mixed_notes = order("mixed notes", vec![&ok]).await;
     let note = |state: &'static str, order: &Value| {
-        entity(
+        create_entity_with(
             &client,
             &base,
             "page_note",
-            json!([scalar("state", json!(state)), link("order", order)]),
+            json!([scalar("state", json!(state)), relationship("order", order)]),
         )
     };
     let reopened = note("open", &open_note).await;

@@ -385,7 +385,7 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
         {
             return Err(RepositoryError::NotFound("lifecycle token"));
         }
-        sqlx::query("UPDATE user_lifecycle_action_tokens SET revoked_at = clock_timestamp() WHERE user_id = $1 AND purpose = $2 AND consumed_at IS NULL AND revoked_at IS NULL").bind(user_id).bind(purpose).execute(&mut *tx).await?;
+        Self::revoke_outstanding_lifecycle_tokens(&mut tx, user_id, Some(purpose)).await?;
         sqlx::query("INSERT INTO user_lifecycle_action_tokens (id, user_id, purpose, token_digest, issued_security_version, issued_credential_version, expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7)").bind(id).bind(user_id).bind(purpose).bind(digest).bind(user.try_get::<i32,_>("security_version")?).bind(credential_version).bind(expires_at).execute(&mut *tx).await?;
         self.commit_mutation(tx).await?;
         Ok(())
@@ -421,8 +421,19 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
             return Err(RepositoryError::NotFound("lifecycle purpose"));
         }
         let mut tx = self.pool.begin().await?;
-        sqlx::query("UPDATE user_lifecycle_action_tokens SET revoked_at = clock_timestamp() WHERE user_id = $1 AND ($2::text IS NULL OR purpose = $2) AND consumed_at IS NULL AND revoked_at IS NULL").bind(user_id).bind(purpose).execute(&mut *tx).await?;
+        Self::revoke_outstanding_lifecycle_tokens(&mut tx, user_id, purpose).await?;
         self.commit_mutation(tx).await?;
+        Ok(())
+    }
+
+    /// Revokes a user's unconsumed lifecycle tokens, of one purpose or all,
+    /// in the caller's transaction. Consumed tokens keep their record.
+    pub(super) async fn revoke_outstanding_lifecycle_tokens(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        user_id: Uuid,
+        purpose: Option<&str>,
+    ) -> Result<(), sqlx::Error> {
+        sqlx::query("UPDATE user_lifecycle_action_tokens SET revoked_at = clock_timestamp() WHERE user_id = $1 AND ($2::text IS NULL OR purpose = $2) AND consumed_at IS NULL AND revoked_at IS NULL").bind(user_id).bind(purpose).execute(&mut **tx).await?;
         Ok(())
     }
 }

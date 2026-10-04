@@ -232,7 +232,8 @@ acli lexicon report [--language <znacznik>]...
 acli rule list [--blueprint-id <id>]
 acli rule validate | create --blueprint-id <id> --blueprint-version <n> [--context-id <id>] --file rule.toml
 acli rule revision <rule-id> --blueprint-id <id> --blueprint-version <n> --file rule.toml
-acli rule publish | enable <rule-id> <version>
+acli rule publish <rule-id> <version>
+acli rule enable <rule-id> <version> [--accept-existing-violations]
 acli rule disable <rule-id>
 acli rule run-now <rule-id> --idempotency-key <key> [--entity-id <id>] [--dry-run]
 acli rule run-list
@@ -320,7 +321,7 @@ acli connector-job run <job-id> --idempotency-key <key>
 
 ```sh
 acli solution-pack inspect --file pack.tar.zst
-acli solution-pack plan --file pack.tar.zst --prefix <prefix> --blueprint-publication draft|publish [--include-sample-data] [--map key=code] [--map-asset key=uuid] [--from-application <id>]
+acli solution-pack plan --file pack.tar.zst --prefix <prefix> --blueprint-publication draft|publish [--include-sample-data] [--map key=code] [--map-asset key=uuid] [--map-context key=code] [--from-application <id>]
 acli solution-pack plan show <plan-id>
 acli solution-pack apply <plan-id>
 acli solution-pack applications list | show <id> | abandon <id>

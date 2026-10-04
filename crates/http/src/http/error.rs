@@ -17,215 +17,169 @@ pub(super) struct ApiError {
     details: Option<serde_json::Value>,
 }
 impl ApiError {
+    fn new(status: StatusCode, code: &'static str, message: impl Into<String>) -> Self {
+        Self {
+            status,
+            code,
+            message: message.into(),
+            details: None,
+        }
+    }
     #[cfg(test)]
     pub(super) fn status(&self) -> StatusCode {
         self.status
     }
     pub(super) fn unauthenticated() -> Self {
-        Self {
-            status: StatusCode::UNAUTHORIZED,
-            code: "unauthenticated",
-            message: "authentication is required".to_owned(),
-            details: None,
-        }
+        Self::new(
+            StatusCode::UNAUTHORIZED,
+            "unauthenticated",
+            "authentication is required",
+        )
     }
     pub(super) fn csrf_failed() -> Self {
-        Self {
-            status: StatusCode::FORBIDDEN,
-            code: "csrf_failed",
-            message: "a valid CSRF token is required".to_owned(),
-            details: None,
-        }
+        Self::new(
+            StatusCode::FORBIDDEN,
+            "csrf_failed",
+            "a valid CSRF token is required",
+        )
     }
     pub(super) fn rate_limited() -> Self {
-        Self {
-            status: StatusCode::TOO_MANY_REQUESTS,
-            code: "rate_limited",
-            message: "too many login attempts; try again later".to_owned(),
-            details: None,
-        }
+        Self::new(
+            StatusCode::TOO_MANY_REQUESTS,
+            "rate_limited",
+            "too many login attempts; try again later",
+        )
     }
     pub(super) fn invalid_credentials() -> Self {
-        Self {
-            status: StatusCode::UNAUTHORIZED,
-            code: "invalid_credentials",
-            message: "invalid email or password".to_owned(),
-            details: None,
-        }
+        Self::new(
+            StatusCode::UNAUTHORIZED,
+            "invalid_credentials",
+            "invalid email or password",
+        )
     }
     pub(super) fn forbidden() -> Self {
-        Self {
-            status: StatusCode::FORBIDDEN,
-            code: "forbidden",
-            message: "you are not authorized to perform this action".to_owned(),
-            details: None,
-        }
+        Self::new(
+            StatusCode::FORBIDDEN,
+            "forbidden",
+            "you are not authorized to perform this action",
+        )
     }
     pub(super) fn not_found(resource: &'static str) -> Self {
-        Self {
-            status: StatusCode::NOT_FOUND,
-            code: "not_found",
-            message: format!("{resource} was not found"),
-            details: None,
-        }
+        Self::new(
+            StatusCode::NOT_FOUND,
+            "not_found",
+            format!("{resource} was not found"),
+        )
     }
     pub(super) fn service_unavailable(message: &'static str) -> Self {
-        Self {
-            status: StatusCode::SERVICE_UNAVAILABLE,
-            code: "service_unavailable",
-            message: message.to_owned(),
-            details: None,
-        }
+        Self::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "service_unavailable",
+            message,
+        )
     }
     /// A handler exceeded the server-side request deadline. This is not a 408:
     /// the client sent its request in time, and some clients automatically
     /// replay 408 responses, which is unsafe for partially applied mutations.
     pub(super) fn request_timeout() -> Self {
-        Self {
-            status: StatusCode::SERVICE_UNAVAILABLE,
-            code: "request_timeout",
-            message: "request exceeded the server time limit".to_owned(),
-            details: None,
-        }
+        Self::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "request_timeout",
+            "request exceeded the server time limit",
+        )
     }
     /// An upstream dependency (e.g. the LLM provider) returned an unusable
     /// response to a valid request.
     pub(super) fn bad_gateway(message: &'static str) -> Self {
-        Self {
-            status: StatusCode::BAD_GATEWAY,
-            code: "bad_gateway",
-            message: message.to_owned(),
-            details: None,
-        }
+        Self::new(StatusCode::BAD_GATEWAY, "bad_gateway", message)
     }
     pub(super) fn internal(message: &'static str) -> Self {
-        Self {
-            status: StatusCode::INTERNAL_SERVER_ERROR,
-            code: "internal_error",
-            message: message.to_owned(),
-            details: None,
-        }
+        Self::new(StatusCode::INTERNAL_SERVER_ERROR, "internal_error", message)
     }
     pub(super) fn invalid_search_query(message: String) -> Self {
-        Self {
-            status: StatusCode::BAD_REQUEST,
-            code: "invalid_input",
-            message,
-            details: None,
-        }
+        Self::new(StatusCode::BAD_REQUEST, "invalid_input", message)
     }
     pub(super) fn conflict(message: &'static str) -> Self {
-        Self {
-            status: StatusCode::CONFLICT,
-            code: "conflict",
-            message: message.into(),
-            details: None,
-        }
+        Self::new(StatusCode::CONFLICT, "conflict", message)
     }
-
     pub(super) fn invalid_input(message: String) -> Self {
-        Self {
-            status: StatusCode::UNPROCESSABLE_ENTITY,
-            code: "invalid_input",
-            message,
-            details: None,
-        }
+        Self::new(StatusCode::UNPROCESSABLE_ENTITY, "invalid_input", message)
     }
     pub(super) fn relationship_sort_requires_single_version() -> Self {
-        Self {
-            status: StatusCode::UNPROCESSABLE_ENTITY,
-            code: "relationship_path_sort_requires_single_result_version",
-            message: "related-value sorting requires results from one blueprint version".to_owned(),
-            details: None,
-        }
+        Self::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "relationship_path_sort_requires_single_result_version",
+            "related-value sorting requires results from one blueprint version",
+        )
     }
     pub(super) fn storage_conflict() -> Self {
-        Self {
-            status: StatusCode::CONFLICT,
-            code: "storage_conflict",
-            message: "storage revision conflict".to_owned(),
-            details: None,
-        }
+        Self::new(
+            StatusCode::CONFLICT,
+            "storage_conflict",
+            "storage revision conflict",
+        )
     }
     pub(super) fn storage_quota_exceeded() -> Self {
-        Self {
-            status: StatusCode::PAYLOAD_TOO_LARGE,
-            code: "storage_quota_exceeded",
-            message: "extension storage quota exceeded".to_owned(),
-            details: None,
-        }
+        Self::new(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "storage_quota_exceeded",
+            "extension storage quota exceeded",
+        )
     }
     pub(super) fn payload_too_large() -> Self {
-        Self {
-            status: StatusCode::PAYLOAD_TOO_LARGE,
-            code: "payload_too_large",
-            message: "request body exceeds the configured size limit".to_owned(),
-            details: None,
-        }
+        Self::new(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "payload_too_large",
+            "request body exceeds the configured size limit",
+        )
     }
     pub(super) fn file_too_large() -> Self {
-        Self {
-            status: StatusCode::PAYLOAD_TOO_LARGE,
-            code: "file_too_large",
-            message: "file exceeds the configured size limit".to_owned(),
-            details: None,
-        }
+        Self::new(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "file_too_large",
+            "file exceeds the configured size limit",
+        )
     }
     pub(super) fn file_count_exceeded() -> Self {
-        Self {
-            status: StatusCode::PAYLOAD_TOO_LARGE,
-            code: "file_count_exceeded",
-            message: "request exceeds the configured file count limit".to_owned(),
-            details: None,
-        }
+        Self::new(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "file_count_exceeded",
+            "request exceeds the configured file count limit",
+        )
     }
     pub(super) fn unsupported_media_type() -> Self {
-        Self {
-            status: StatusCode::UNSUPPORTED_MEDIA_TYPE,
-            code: "unsupported_media_type",
-            message: "file type is not allowed".to_owned(),
-            details: None,
-        }
+        Self::new(
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            "unsupported_media_type",
+            "file type is not allowed",
+        )
     }
     pub(super) fn invalid_file(message: &'static str) -> Self {
-        Self {
-            status: StatusCode::UNPROCESSABLE_ENTITY,
-            code: "invalid_file",
-            message: message.to_owned(),
-            details: None,
-        }
+        Self::new(StatusCode::UNPROCESSABLE_ENTITY, "invalid_file", message)
     }
     pub(super) fn invalid_range() -> Self {
-        Self {
-            status: StatusCode::RANGE_NOT_SATISFIABLE,
-            code: "invalid_range",
-            message: "requested byte range is not satisfiable".to_owned(),
-            details: None,
-        }
+        Self::new(
+            StatusCode::RANGE_NOT_SATISFIABLE,
+            "invalid_range",
+            "requested byte range is not satisfiable",
+        )
     }
     pub(super) fn file_processing() -> Self {
-        Self {
-            status: StatusCode::CONFLICT,
-            code: "file_processing",
-            message: "file is not available for download".to_owned(),
-            details: None,
-        }
+        Self::new(
+            StatusCode::CONFLICT,
+            "file_processing",
+            "file is not available for download",
+        )
     }
     pub(super) fn storage_unavailable() -> Self {
-        Self {
-            status: StatusCode::SERVICE_UNAVAILABLE,
-            code: "storage_unavailable",
-            message: "object storage is unavailable".to_owned(),
-            details: None,
-        }
+        Self::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "storage_unavailable",
+            "object storage is unavailable",
+        )
     }
     fn bad_request(message: &'static str) -> Self {
-        Self {
-            status: StatusCode::BAD_REQUEST,
-            code: "bad_request",
-            message: message.to_owned(),
-            details: None,
-        }
+        Self::new(StatusCode::BAD_REQUEST, "bad_request", message)
     }
     pub(super) fn from_json_rejection(rejection: axum::extract::rejection::JsonRejection) -> Self {
         use axum::extract::rejection::JsonRejection;
@@ -233,12 +187,11 @@ impl ApiError {
             JsonRejection::JsonDataError(_) => Self::invalid_input(
                 "request body does not match the expected JSON shape".to_owned(),
             ),
-            JsonRejection::MissingJsonContentType(_) => Self {
-                status: StatusCode::UNSUPPORTED_MEDIA_TYPE,
-                code: "unsupported_media_type",
-                message: "request body must be `application/json`".to_owned(),
-                details: None,
-            },
+            JsonRejection::MissingJsonContentType(_) => Self::new(
+                StatusCode::UNSUPPORTED_MEDIA_TYPE,
+                "unsupported_media_type",
+                "request body must be `application/json`",
+            ),
             JsonRejection::BytesRejection(rejection) => Self::from_bytes_rejection(rejection),
             _ => Self::bad_request("request body is malformed"),
         }
@@ -280,7 +233,7 @@ impl From<RepositoryError> for ApiError {
         }
         Self {
             status,
-            code: description.code,
+            code: description.code.as_str(),
             message: description.message,
             details: description.details,
         }

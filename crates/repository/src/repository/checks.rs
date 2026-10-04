@@ -13,10 +13,11 @@ use super::references::{
 };
 use super::status::StatusChange;
 use super::structural_constraints::{
-    EnforcedUniqueKey, HierarchyField, HierarchyWalk, enforced_unique_keys, key_hash,
-    walk_hierarchy,
+    EnforcedUniqueKey, HierarchyField, HierarchyWalk, UniqueKeyScope, enforced_unique_keys,
+    key_hash, walk_hierarchy,
 };
 use super::*;
+use catalog_rules::Severity;
 use catalog_validation::predicate::{
     self, Check, CycleState, Evaluation, Failure, MAX_CYCLE_VISITS, MAX_LINKED_RECORDS,
     MAX_REFERENCING_RECORDS, Predicate, Record, RecordSet, Related, Requirements,
@@ -65,8 +66,9 @@ pub struct CheckViolation {
     pub contexts: Vec<String>,
     /// Attributes of the entity involved, for highlighting form fields.
     pub attributes: Vec<String>,
+    /// The rule's severity; checks and conditions have none.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub severity: Option<String>,
+    pub severity: Option<Severity>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub transition: Option<CheckTransition>,
     pub evidence: Value,
@@ -118,10 +120,6 @@ impl CheckScope {
 
     pub(crate) fn code(&self, context_id: Uuid) -> String {
         self.tree.code(context_id)
-    }
-
-    pub(crate) fn workspace_id(&self) -> Uuid {
-        self.workspace_id
     }
 
     pub(crate) fn context_ids(&self) -> Vec<Uuid> {
@@ -235,7 +233,8 @@ pub(crate) async fn prefetch_related(
     Ok(prefetch)
 }
 
-/// Loads the related data a predicate set needs for one subject and context.
+/// Loads the related data a predicate set needs for one subject and context,
+/// reading linked and referencing records from `prefetch` when it has them.
 pub(crate) async fn load_related(
     conn: &mut PgConnection,
     scope: &CheckScope,
@@ -247,28 +246,18 @@ pub(crate) async fn load_related(
 ) -> Result<Related, RepositoryError> {
     let path = scope.path(context_id)?;
     let mut related = Related::default();
+
+    // Collect every linked and referencing ID first so the records load in
+    // one query.
+    let mut linked = Vec::with_capacity(requirements.linked.len());
     for relationship in &requirements.linked {
         let mut ids = uuids(record.values.get(relationship));
         let truncated = ids.len() > MAX_LINKED_RECORDS;
         ids.truncate(MAX_LINKED_RECORDS);
-        let loaded;
-        let loaded = match prefetch.and_then(|prefetch| prefetch.records(&ids)) {
-            Some(prefetched) => prefetched,
-            None => {
-                loaded = load_entities(conn, scope.workspace_id, &ids).await?;
-                loaded.iter().map(|(id, record)| (*id, record)).collect()
-            }
-        };
-        let records = ids
-            .iter()
-            .filter_map(|id| loaded.get(id))
-            .map(|entity| entity.record(&path))
-            .collect();
-        related
-            .linked
-            .insert(relationship.clone(), RecordSet { records, truncated });
+        linked.push((relationship, ids, truncated));
     }
-    for (blueprint_code, relationship) in &requirements.referenced_by {
+    let mut referencing = Vec::with_capacity(requirements.referenced_by.len());
+    for key @ (blueprint_code, relationship) in &requirements.referenced_by {
         let prefetched = prefetch.and_then(|prefetch| {
             prefetch
                 .referencing
@@ -294,32 +283,54 @@ pub(crate) async fn load_related(
         };
         let truncated = ids.len() > MAX_REFERENCING_RECORDS;
         ids.truncate(MAX_REFERENCING_RECORDS);
-        let loaded;
-        let loaded = match prefetch.and_then(|prefetch| prefetch.records(&ids)) {
-            Some(prefetched) => prefetched,
-            None => {
-                loaded = load_entities(conn, scope.workspace_id, &ids).await?;
-                loaded.iter().map(|(id, record)| (*id, record)).collect()
-            }
-        };
-        let subject_id = Value::String(subject.id.to_string());
-        let records = ids
-            .iter()
+        referencing.push((key, ids, truncated));
+    }
+    let mut all_ids: Vec<Uuid> = linked
+        .iter()
+        .flat_map(|(_, ids, _)| ids)
+        .chain(referencing.iter().flat_map(|(_, ids, _)| ids))
+        .copied()
+        .collect();
+    all_ids.sort_unstable();
+    all_ids.dedup();
+    let fetched;
+    let loaded = match prefetch.and_then(|prefetch| prefetch.records(&all_ids)) {
+        Some(prefetched) => prefetched,
+        None => {
+            fetched = load_entities(conn, scope.workspace_id, &all_ids).await?;
+            fetched.iter().map(|(id, record)| (*id, record)).collect()
+        }
+    };
+    let records_of = |ids: &[Uuid]| -> Vec<Record> {
+        ids.iter()
             .filter_map(|id| loaded.get(id))
             .map(|entity| entity.record(&path))
-            // The reference must hold in this context, not only somewhere.
-            .filter(|referencing| {
-                referencing
-                    .values
-                    .get(relationship)
-                    .and_then(Value::as_array)
-                    .is_some_and(|targets| targets.contains(&subject_id))
-            })
-            .collect();
-        related.referenced_by.insert(
-            (blueprint_code.clone(), relationship.clone()),
-            RecordSet { records, truncated },
+            .collect()
+    };
+
+    for (relationship, ids, truncated) in linked {
+        related.linked.insert(
+            relationship.clone(),
+            RecordSet {
+                records: records_of(&ids),
+                truncated,
+            },
         );
+    }
+    let subject_id = Value::String(subject.id.to_string());
+    for (key, ids, truncated) in referencing {
+        let mut records = records_of(&ids);
+        // The reference must hold in this context, not only somewhere.
+        records.retain(|referencing| {
+            referencing
+                .values
+                .get(&key.1)
+                .and_then(Value::as_array)
+                .is_some_and(|targets| targets.contains(&subject_id))
+        });
+        related
+            .referenced_by
+            .insert(key.clone(), RecordSet { records, truncated });
     }
     for key in &requirements.unique {
         let others = duplicates(conn, scope, subject, context_id, &path, key).await?;
@@ -391,7 +402,7 @@ async fn duplicates(
     };
     let declared = keys.iter().find(|declared| {
         declared.case_sensitive == case_sensitive
-            && (declared.scope == "context" || is_default)
+            && (declared.scope == UniqueKeyScope::Context || is_default)
             && declared.attributes.len() == key.len()
             && declared.attributes.iter().all(|code| key.contains(code))
     });
@@ -608,6 +619,22 @@ pub(crate) struct EnabledRule {
     pub compiled: catalog_rules::CompiledRule,
 }
 
+impl EnabledRule {
+    /// Whether the rule rejects every write that leaves the entity violating it.
+    fn enforced_on_save(&self) -> bool {
+        self.compiled
+            .enforcement
+            .as_ref()
+            .is_some_and(|enforcement| enforcement.on_save)
+    }
+
+    /// Whether the rule applies in `context_id`.
+    pub(crate) fn applies_in(&self, context_id: Uuid) -> bool {
+        self.context_id.is_none_or(|context| context == context_id)
+    }
+}
+
+/// The enabled rule revisions of one blueprint revision, by code.
 pub(crate) async fn enabled_rules(
     conn: &mut PgConnection,
     workspace_id: Uuid,
@@ -660,15 +687,52 @@ pub(crate) async fn enabled_rule_sets(
     Ok(sets)
 }
 
+/// The `x-attricat-checks` of an entity schema, failing closed when they are
+/// malformed. A blueprint without an entity schema has none.
+pub(crate) fn entity_checks(entity_schema: Option<&Value>) -> Result<Vec<Check>, RepositoryError> {
+    entity_schema
+        .map(predicate::entity_checks)
+        .transpose()
+        .map_err(RepositoryError::InvalidBlueprintDefinition)
+        .map(Option::unwrap_or_default)
+}
+
 /// One predicate to evaluate in one context, with its reporting identity.
 struct Job<'a> {
     source: CheckSource,
     code: &'a str,
     message: Option<&'a str>,
     predicate: &'a Predicate,
-    severity: Option<String>,
+    severity: Option<Severity>,
     transition: Option<CheckTransition>,
 }
+
+impl<'a> Job<'a> {
+    fn check(check: &'a Check) -> Self {
+        Self {
+            source: CheckSource::EntityCheck,
+            code: &check.code,
+            message: check.message.as_deref(),
+            predicate: &check.predicate,
+            severity: None,
+            transition: None,
+        }
+    }
+
+    fn rule(rule: &'a EnabledRule, transition: Option<CheckTransition>) -> Self {
+        Self {
+            source: CheckSource::Rule,
+            code: &rule.code,
+            message: None,
+            predicate: &rule.compiled.predicate,
+            severity: Some(rule.compiled.severity.clone()),
+            transition,
+        }
+    }
+}
+
+/// Jobs grouped by the context they are evaluated in.
+type JobsByContext<'a> = BTreeMap<Uuid, Vec<Job<'a>>>;
 
 /// The transition conditions of a status change, failing closed when the
 /// stored edge's conditions are malformed.
@@ -705,18 +769,8 @@ fn guard_job<'a>(change: &StatusChange, rule: &'a EnabledRule) -> Option<Job<'a>
                 change.after.as_str(),
             )
         });
-    (guards
-        && rule
-            .context_id
-            .is_none_or(|context| context == change.context_id))
-    .then(|| Job {
-        source: CheckSource::Rule,
-        code: &rule.code,
-        message: None,
-        predicate: &rule.compiled.predicate,
-        severity: Some(severity(&rule.compiled)),
-        transition: Some(change.transition()),
-    })
+    (guards && rule.applies_in(change.context_id))
+        .then(|| Job::rule(rule, Some(change.transition())))
 }
 
 /// Transition conditions and guarding rules a status change must satisfy.
@@ -730,11 +784,59 @@ fn transition_jobs<'a>(
     jobs
 }
 
-fn severity(rule: &catalog_rules::CompiledRule) -> String {
-    serde_json::to_value(&rule.severity)
-        .ok()
-        .and_then(|value| value.as_str().map(str::to_owned))
-        .unwrap_or_default()
+/// Entity checks apply in every context.
+fn entity_check_jobs<'a>(contexts: &[Uuid], checks: &'a [Check]) -> JobsByContext<'a> {
+    if checks.is_empty() {
+        return JobsByContext::new();
+    }
+    contexts
+        .iter()
+        .map(|context| (*context, checks.iter().map(Job::check).collect()))
+        .collect()
+}
+
+/// Each change's transition conditions apply in the change's context.
+fn transition_condition_jobs<'a>(
+    conditions: &'a [(&StatusChange, Vec<Check>)],
+) -> JobsByContext<'a> {
+    let mut jobs = JobsByContext::new();
+    for (change, conditions) in conditions {
+        jobs.entry(change.context_id)
+            .or_default()
+            .extend(condition_jobs(change, conditions));
+    }
+    jobs
+}
+
+/// On-save rules apply in their context (every context without one); rules
+/// that guard a change's transition apply in the change's context.
+fn enforcing_rule_jobs<'a>(
+    contexts: &[Uuid],
+    rules: &'a [EnabledRule],
+    changes: &[StatusChange],
+) -> JobsByContext<'a> {
+    let mut jobs = JobsByContext::new();
+    for rule in rules {
+        if rule.enforced_on_save() {
+            let rule_contexts = rule.context_id.as_slice();
+            let rule_contexts = if rule_contexts.is_empty() {
+                contexts
+            } else {
+                rule_contexts
+            };
+            for context_id in rule_contexts {
+                jobs.entry(*context_id)
+                    .or_default()
+                    .push(Job::rule(rule, None));
+            }
+        }
+        for change in changes {
+            if let Some(job) = guard_job(change, rule) {
+                jobs.entry(change.context_id).or_default().push(job);
+            }
+        }
+    }
+    jobs
 }
 
 /// Merges a failure into the report; one violation per declaration lists
@@ -776,7 +878,7 @@ async fn run_job_groups<const N: usize>(
     conn: &mut PgConnection,
     scope: &CheckScope,
     subject: &RecordValues,
-    groups: [&BTreeMap<Uuid, Vec<Job<'_>>>; N],
+    groups: [&JobsByContext<'_>; N],
 ) -> Result<[Vec<CheckViolation>; N], RepositoryError> {
     let mut contexts: BTreeMap<Uuid, Vec<(usize, &Job<'_>)>> = BTreeMap::new();
     for (group, jobs) in groups.iter().enumerate() {
@@ -806,6 +908,40 @@ async fn run_job_groups<const N: usize>(
     Ok(violations)
 }
 
+/// Transition conditions and enforcing `rules` that the subject's saved
+/// state plus the change's destination would not satisfy, for the status
+/// control. `rules` are the subject's [`enabled_rules`].
+pub(super) async fn transition_unmet(
+    conn: &mut PgConnection,
+    scope: &CheckScope,
+    subject: &RecordValues,
+    rules: &[EnabledRule],
+    change: &StatusChange,
+) -> Result<Vec<CheckViolation>, RepositoryError> {
+    let conditions = change_conditions(change)?;
+    let jobs = transition_jobs(change, &conditions, rules);
+    if jobs.is_empty() {
+        return Ok(Vec::new());
+    }
+    let predicates: Vec<&Predicate> = jobs.iter().map(|job| job.predicate).collect();
+    let outcomes = evaluate_in_context(
+        conn,
+        scope,
+        subject,
+        change.context_id,
+        &[(change.attribute_code.clone(), change.after.clone())],
+        &predicates,
+    )
+    .await?;
+    let mut unmet = Vec::new();
+    for (job, outcome) in jobs.iter().zip(outcomes) {
+        if let Err(failure) = outcome {
+            record_violation(&mut unmet, job, change.context_code.clone(), failure);
+        }
+    }
+    Ok(unmet)
+}
+
 impl CatalogRepository {
     /// Enforces entity-schema checks, status transition conditions and
     /// enforcing rules on the transaction's final state. Every write that
@@ -814,6 +950,37 @@ impl CatalogRepository {
     /// voids) are not guarded. Extension annotation patches, which change
     /// only system tags and metadata, call it through
     /// [`Self::enforce_tag_checks`].
+    ///
+    /// The three kinds are evaluated in that order and the first kind with a
+    /// failure is reported with its own error.
+    pub(super) async fn enforce_declarative_checks(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        entity_schema: Option<&Value>,
+        tree: &ContextTree,
+        subject: &RecordValues,
+        changes: &[StatusChange],
+    ) -> Result<(), RepositoryError> {
+        // A malformed entity check is reported before a malformed rule.
+        entity_checks(entity_schema)?;
+        let rules = enabled_rules(
+            transaction,
+            self.workspace_id.0,
+            subject.blueprint_id,
+            subject.blueprint_version,
+        )
+        .await?;
+        self.enforce_declarative_checks_with(
+            transaction,
+            entity_schema,
+            tree,
+            subject,
+            changes,
+            &rules,
+        )
+        .await
+    }
+
     /// [`Self::enforce_declarative_checks`] with the revision's enabled rules
     /// when the caller already has them.
     pub(super) async fn enforce_declarative_checks_using(
@@ -844,37 +1011,6 @@ impl CatalogRepository {
         }
     }
 
-    pub(super) async fn enforce_declarative_checks(
-        &self,
-        transaction: &mut Transaction<'_, Postgres>,
-        entity_schema: Option<&Value>,
-        tree: &ContextTree,
-        subject: &RecordValues,
-        changes: &[StatusChange],
-    ) -> Result<(), RepositoryError> {
-        // A malformed entity check is reported before a malformed rule.
-        entity_schema
-            .map(predicate::entity_checks)
-            .transpose()
-            .map_err(RepositoryError::InvalidBlueprintDefinition)?;
-        let rules = enabled_rules(
-            transaction,
-            self.workspace_id.0,
-            subject.blueprint_id,
-            subject.blueprint_version,
-        )
-        .await?;
-        self.enforce_declarative_checks_with(
-            transaction,
-            entity_schema,
-            tree,
-            subject,
-            changes,
-            &rules,
-        )
-        .await
-    }
-
     /// [`Self::enforce_declarative_checks`] with the revision's enabled rules
     /// already loaded.
     async fn enforce_declarative_checks_with(
@@ -886,85 +1022,35 @@ impl CatalogRepository {
         changes: &[StatusChange],
         rules: &[EnabledRule],
     ) -> Result<(), RepositoryError> {
-        let checks = entity_schema
-            .map(predicate::entity_checks)
-            .transpose()
-            .map_err(RepositoryError::InvalidBlueprintDefinition)?
-            .unwrap_or_default();
-        let enforcing: Vec<_> = rules
+        let checks = entity_checks(entity_schema)?;
+        let rules: Vec<EnabledRule> = rules
             .iter()
             .filter(|rule| rule.compiled.enforcement.is_some())
+            .cloned()
             .collect();
-        let conditions: Vec<(&StatusChange, Vec<Check>)> = changes
-            .iter()
-            .map(|change| Ok((change, change_conditions(change)?)))
-            .collect::<Result<Vec<_>, RepositoryError>>()?
-            .into_iter()
-            .filter(|(_, conditions)| !conditions.is_empty())
-            .collect();
-        if checks.is_empty() && conditions.is_empty() && enforcing.is_empty() {
+        let mut conditions = Vec::new();
+        for change in changes {
+            let declared = change_conditions(change)?;
+            if !declared.is_empty() {
+                conditions.push((change, declared));
+            }
+        }
+        if checks.is_empty() && conditions.is_empty() && rules.is_empty() {
             return Ok(());
         }
         let scope = CheckScope::new(self.workspace_id.0, tree.clone());
-        let all_contexts = scope.context_ids();
-
-        let mut check_jobs: BTreeMap<Uuid, Vec<Job>> = BTreeMap::new();
-        for context_id in &all_contexts {
-            for check in &checks {
-                check_jobs.entry(*context_id).or_default().push(Job {
-                    source: CheckSource::EntityCheck,
-                    code: &check.code,
-                    message: check.message.as_deref(),
-                    predicate: &check.predicate,
-                    severity: None,
-                    transition: None,
-                });
-            }
-        }
-        let mut condition_jobs_by_context: BTreeMap<Uuid, Vec<Job>> = BTreeMap::new();
-        for (change, conditions) in &conditions {
-            condition_jobs_by_context
-                .entry(change.context_id)
-                .or_default()
-                .extend(condition_jobs(change, conditions));
-        }
-        let mut rule_jobs: BTreeMap<Uuid, Vec<Job>> = BTreeMap::new();
-        for rule in &enforcing {
-            if rule
-                .compiled
-                .enforcement
-                .as_ref()
-                .is_some_and(|enforcement| enforcement.on_save)
-            {
-                let contexts = rule
-                    .context_id
-                    .map(|context| vec![context])
-                    .unwrap_or_else(|| all_contexts.clone());
-                for context_id in &contexts {
-                    rule_jobs.entry(*context_id).or_default().push(Job {
-                        source: CheckSource::Rule,
-                        code: &rule.code,
-                        message: None,
-                        predicate: &rule.compiled.predicate,
-                        severity: Some(severity(&rule.compiled)),
-                        transition: None,
-                    });
-                }
-            }
-            for change in changes {
-                if let Some(job) = guard_job(change, rule) {
-                    rule_jobs.entry(change.context_id).or_default().push(job);
-                }
-            }
-        }
-
+        let contexts = scope.context_ids();
         // One evaluation per context; failures keep their precedence:
         // entity checks, then transition conditions, then rules.
         let [checks, conditions, rules] = run_job_groups(
             transaction,
             &scope,
             subject,
-            [&check_jobs, &condition_jobs_by_context, &rule_jobs],
+            [
+                &entity_check_jobs(&contexts, &checks),
+                &transition_condition_jobs(&conditions),
+                &enforcing_rule_jobs(&contexts, &rules, changes),
+            ],
         )
         .await?;
         if !checks.is_empty() {
@@ -997,12 +1083,7 @@ impl CatalogRepository {
         .bind(self.workspace_id.0)
         .fetch_one(&mut **transaction)
         .await?;
-        let checks = entity_schema
-            .as_ref()
-            .map(predicate::entity_checks)
-            .transpose()
-            .map_err(RepositoryError::InvalidBlueprintDefinition)?
-            .unwrap_or_default();
+        let checks = entity_checks(entity_schema.as_ref())?;
         let rules = enabled_rules(
             transaction,
             self.workspace_id.0,
@@ -1014,11 +1095,7 @@ impl CatalogRepository {
             .iter()
             .any(|check| check.predicate.reads_subject_tags())
             || rules.iter().any(|rule| {
-                rule.compiled
-                    .enforcement
-                    .as_ref()
-                    .is_some_and(|enforcement| enforcement.on_save)
-                    && rule.compiled.predicate.reads_subject_tags()
+                rule.enforced_on_save() && rule.compiled.predicate.reads_subject_tags()
             });
         if !reads_tags {
             return Ok(());
@@ -1041,69 +1118,6 @@ impl CatalogRepository {
             &rules,
         )
         .await
-    }
-
-    /// Transition conditions and enforcing rules that the saved state plus the
-    /// change's destination would not satisfy, for the status control.
-    /// The revision's enabled rules and the entity's record are loaded into
-    /// `rules` and `subject` on first use and reused for later edges.
-    pub(super) async fn transition_unmet(
-        &self,
-        transaction: &mut Transaction<'_, Postgres>,
-        entity: &Entity,
-        tree: &ContextTree,
-        change: &StatusChange,
-        rules: &mut Option<Vec<EnabledRule>>,
-        subject: &mut Option<RecordValues>,
-    ) -> Result<Vec<CheckViolation>, RepositoryError> {
-        let conditions = change_conditions(change)?;
-        if rules.is_none() {
-            *rules = Some(
-                enabled_rules(
-                    transaction,
-                    self.workspace_id.0,
-                    entity.blueprint_id,
-                    entity.blueprint_version,
-                )
-                .await?,
-            );
-        }
-        let rules = rules.as_deref().expect("loaded above");
-        let jobs = transition_jobs(change, &conditions, rules);
-        if jobs.is_empty() {
-            return Ok(Vec::new());
-        }
-        let scope = CheckScope::new(self.workspace_id.0, tree.clone());
-        if subject.is_none() {
-            *subject = Some(
-                load_record(
-                    transaction,
-                    self.workspace_id.0,
-                    entity.id,
-                    RecordState::After,
-                )
-                .await?
-                .ok_or(RepositoryError::NotFound("entity"))?,
-            );
-        }
-        let subject = subject.as_ref().expect("loaded above");
-        let predicates: Vec<&Predicate> = jobs.iter().map(|job| job.predicate).collect();
-        let outcomes = evaluate_in_context(
-            transaction,
-            &scope,
-            subject,
-            change.context_id,
-            &[(change.attribute_code.clone(), change.after.clone())],
-            &predicates,
-        )
-        .await?;
-        let mut unmet = Vec::new();
-        for (job, outcome) in jobs.iter().zip(outcomes) {
-            if let Err(failure) = outcome {
-                record_violation(&mut unmet, job, change.context_code.clone(), failure);
-            }
-        }
-        Ok(unmet)
     }
 }
 

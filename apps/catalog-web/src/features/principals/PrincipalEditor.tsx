@@ -1,11 +1,9 @@
 import { Autocomplete, Stack, TextField, Typography } from '@mui/material';
-import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { compactIconSize } from '../../components/iconSizes';
-import { AssignedUserIcon, TeamIcon } from '../../components/systemIcons';
 import { attributeLabel } from '../entities/entityDisplay';
 import type { ValueEditorProps } from '../views/components/componentTypes';
 import { assignableOptions, isAssignable, resolvePrincipal } from './principal';
+import { PrincipalKindIcon } from './PrincipalValue';
 import type { PrincipalConfiguration } from './schemas';
 import { usePrincipalDirectory } from './usePrincipalDirectory';
 
@@ -25,13 +23,12 @@ export const PrincipalEditor = ({
 }: ValueEditorProps & { config: PrincipalConfiguration }) => {
   const { t } = useTranslation();
   const directory = usePrincipalDirectory();
-  const options = useMemo(() => {
-    const assignable = assignableOptions(directory.data, config);
-    const current = resolvePrincipal(directory.data, value);
-    return current && !assignable.some((option) => option.value === value)
+  const assignable = assignableOptions(directory.data, config);
+  const current = resolvePrincipal(directory.data, value);
+  const options =
+    current && !assignable.some((option) => option.value === value)
       ? [{ value, principal: current }, ...assignable]
       : assignable;
-  }, [config, directory.data, value]);
   const selected = options.find((option) => option.value === value) ?? null;
   const unknown = Boolean(value) && !selected && !directory.isPending;
   return (
@@ -69,24 +66,20 @@ export const PrincipalEditor = ({
       onChange={(_, option) => {
         if (!disabled) onChange(option?.value ?? '');
       }}
-      renderOption={({ key, ...props }, option) => {
-        const Icon =
-          option.principal.kind === 'team' ? TeamIcon : AssignedUserIcon;
-        return (
-          <li key={key} {...props}>
-            <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-              <Icon aria-hidden size={compactIconSize} />
-              <span>{option.principal.label}</span>
-              {option.principal.kind === 'user' &&
-                option.principal.user.display_name && (
-                  <Typography color="text.secondary" variant="caption">
-                    {option.principal.user.email}
-                  </Typography>
-                )}
-            </Stack>
-          </li>
-        );
-      }}
+      renderOption={({ key, ...props }, option) => (
+        <li key={key} {...props}>
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+            <PrincipalKindIcon kind={option.principal.kind} />
+            <span>{option.principal.label}</span>
+            {option.principal.kind === 'user' &&
+              option.principal.user.display_name && (
+                <Typography color="text.secondary" variant="caption">
+                  {option.principal.user.email}
+                </Typography>
+              )}
+          </Stack>
+        </li>
+      )}
       renderInput={(params) => (
         <TextField
           {...params}

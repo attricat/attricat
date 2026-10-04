@@ -26,6 +26,7 @@ use sqlx::PgConnection;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use uuid::Uuid;
 
+/// One attribute context; the root has no parent.
 #[derive(Clone, Debug, PartialEq, Eq, sqlx::FromRow, serde::Serialize, serde::Deserialize)]
 pub(crate) struct ContextNode {
     pub id: Uuid,
@@ -159,6 +160,7 @@ impl DirectValue {
     }
 }
 
+/// One attribute's direct values of an entity, by context.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct AttributeValues {
     pub value_type: String,
@@ -243,6 +245,7 @@ impl RecordValues {
 /// Which entities to load.
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum Selection<'a> {
+    /// These entities, of any blueprint family.
     Entities(&'a [Uuid]),
     /// Every live entity of a blueprint family.
     Family(Uuid),
@@ -396,23 +399,24 @@ fn add_row(record: &mut RecordValues, row: ValueRow) -> Result<(), RepositoryErr
         }
         return Ok(());
     }
+    let exact = row.native.value_number.map(|number| number.to_string());
     let value = if row.native.value_type == "file" {
         row.files.unwrap_or_else(|| Value::Array(Vec::new()))
     } else {
-        native_value_json(row.native.clone())?
+        native_value_json(row.native)?
     };
     attribute.by_context.insert(
         row.context_id,
         DirectValue {
             value,
             changed_at: row.created_at,
-            exact: row.native.value_number.map(|number| number.to_string()),
+            exact,
         },
     );
     Ok(())
 }
 
-/// Codes of every attribute either record holds, in order.
+/// Codes of every attribute any of `records` holds, sorted and deduplicated.
 pub(crate) fn attribute_codes<'a>(records: &[&'a RecordValues]) -> Vec<&'a str> {
     let mut seen = HashSet::new();
     let mut codes: Vec<&str> = records

@@ -25,44 +25,21 @@ code = "description"
 value_type = "string"
 "#;
 
-async fn create_with(
-    client: &Client,
-    base_url: &str,
-    blueprint: &str,
-    values: Value,
-) -> reqwest::Response {
-    client
-        .post(format!("{base_url}/v1/entities"))
-        .json(&json!({ "blueprint": { "code": blueprint }, "values": values }))
-        .send()
-        .await
-        .unwrap()
-}
-
-fn scalar(code: &str, value: Value) -> Value {
-    json!({"kind": "scalar", "attribute_code": code, "context_id": null, "value": value})
-}
-
 #[sqlx::test]
 async fn single_keys_normalize_values_and_report_the_conflicting_entity(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
     create_blueprint(&client, &base_url, PART).await;
 
-    let first: Value = create_with(
+    let first: Value = create_entity_with(
         &client,
         &base_url,
         "uk_part",
         json!([scalar("part_number", json!("ABC-1  Rev"))]),
     )
-    .await
-    .error_for_status()
-    .unwrap()
-    .json()
-    .await
-    .unwrap();
+    .await;
 
-    let duplicate = create_with(
+    let duplicate = post_entity(
         &client,
         &base_url,
         "uk_part",
@@ -82,30 +59,23 @@ async fn single_keys_normalize_values_and_report_the_conflicting_entity(pool: Pg
 
     // Entities without the key attribute do not participate.
     for _ in 0..2 {
-        create_with(
+        create_entity_with(
             &client,
             &base_url,
             "uk_part",
             json!([scalar("description", json!("no number"))]),
         )
-        .await
-        .error_for_status()
-        .unwrap();
+        .await;
     }
 
     // Changing or deleting the holder releases its old value.
-    let second: Value = create_with(
+    let second: Value = create_entity_with(
         &client,
         &base_url,
         "uk_part",
         json!([scalar("part_number", json!("XYZ"))]),
     )
-    .await
-    .error_for_status()
-    .unwrap()
-    .json()
-    .await
-    .unwrap();
+    .await;
     client
         .post(format!(
             "{base_url}/entities/{}/values",
@@ -127,7 +97,7 @@ async fn single_keys_normalize_values_and_report_the_conflicting_entity(pool: Pg
         .await
         .unwrap();
     assert_eq!(reuse.status(), StatusCode::CREATED);
-    let taken = create_with(
+    let taken = post_entity(
         &client,
         &base_url,
         "uk_part",
@@ -145,15 +115,13 @@ async fn single_keys_normalize_values_and_report_the_conflicting_entity(pool: Pg
         .unwrap()
         .error_for_status()
         .unwrap();
-    create_with(
+    create_entity_with(
         &client,
         &base_url,
         "uk_part",
         json!([scalar("part_number", json!("ABC-2"))]),
     )
-    .await
-    .error_for_status()
-    .unwrap();
+    .await;
 
     server.abort();
 }
@@ -169,7 +137,7 @@ async fn concurrent_duplicate_writes_allow_exactly_one(pool: PgPool) {
         let client = client.clone();
         let base_url = base_url.clone();
         attempts.spawn(async move {
-            create_with(
+            post_entity(
                 &client,
                 &base_url,
                 "uk_part",
@@ -252,7 +220,7 @@ value_type = "string"
         let client = client.clone();
         let base_url = base_url.clone();
         async move {
-            create_with(
+            post_entity(
                 &client,
                 &base_url,
                 "uk_document",
@@ -272,12 +240,9 @@ value_type = "string"
         ])
     };
     for (document, label) in [(&first, "A"), (&second, "A"), (&first, "a")] {
-        create_with(&client, &base_url, "uk_revision", revision(document, label))
-            .await
-            .error_for_status()
-            .unwrap();
+        create_entity_with(&client, &base_url, "uk_revision", revision(document, label)).await;
     }
-    let duplicate = create_with(&client, &base_url, "uk_revision", revision(&first, "A")).await;
+    let duplicate = post_entity(&client, &base_url, "uk_revision", revision(&first, "A")).await;
     assert_eq!(duplicate.status(), StatusCode::CONFLICT);
     let body: Value = duplicate.json().await.unwrap();
     assert_eq!(
@@ -302,16 +267,13 @@ async fn publishing_a_key_reports_existing_duplicates_and_then_covers_older_revi
     let blueprint_id = blueprint["blueprint"]["id"].as_str().unwrap().to_owned();
     let mut ids = Vec::new();
     for number in ["P-1", "p-1", "P-2"] {
-        let entity: Value = create_with(
+        let entity: Value = create_entity_with(
             &client,
             &base_url,
             "uk_part",
             json!([scalar("part_number", json!(number))]),
         )
-        .await
-        .json()
-        .await
-        .unwrap();
+        .await;
         ids.push(entity["id"].as_str().unwrap().to_owned());
     }
 
@@ -408,26 +370,20 @@ value_type = "string"
         .json()
         .await
         .unwrap();
-    let shirt: Value = create_with(
+    let shirt: Value = create_entity_with(
         &client,
         &base_url,
         "uk_page",
         json!([scalar("slug", json!("shirt"))]),
     )
-    .await
-    .json()
-    .await
-    .unwrap();
-    let dress: Value = create_with(
+    .await;
+    let dress: Value = create_entity_with(
         &client,
         &base_url,
         "uk_page",
         json!([scalar("slug", json!("dress"))]),
     )
-    .await
-    .json()
-    .await
-    .unwrap();
+    .await;
     let set_slug = |entity: &Value, context: &Value, slug: &str| {
         client
             .post(format!(

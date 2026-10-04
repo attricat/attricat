@@ -296,8 +296,24 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
         lease_owner: &str,
         lease_token: Uuid,
     ) -> Result<(), TaskError> {
-        let changed = sqlx::query("UPDATE tasks SET status = 'succeeded', lease_owner = NULL, lease_token = NULL, lease_until = NULL, completed_at = now(), updated_at = now() WHERE id = $1 AND status = 'leased' AND lease_until > now() AND lease_owner = $2 AND lease_token = $3")
-            .bind(task_id).bind(lease_owner).bind(lease_token).execute(&self.pool).await?.rows_affected();
+        let mut transaction = self.pool.begin().await?;
+        self.complete_task_in_transaction(&mut transaction, task_id, lease_owner, lease_token)
+            .await?;
+        transaction.commit().await?;
+        Ok(())
+    }
+
+    /// Completes an owned envelope in the same transaction as its domain
+    /// terminal transition. A lost or expired lease fails the transaction.
+    pub async fn complete_task_in_transaction(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        task_id: Uuid,
+        lease_owner: &str,
+        lease_token: Uuid,
+    ) -> Result<(), TaskError> {
+        let changed = sqlx::query("UPDATE tasks SET status = 'succeeded', lease_owner = NULL, lease_token = NULL, lease_until = NULL, completed_at = now(), updated_at = now() WHERE id = $1 AND status = 'leased' AND lease_until > clock_timestamp() AND lease_owner = $2 AND lease_token = $3")
+            .bind(task_id).bind(lease_owner).bind(lease_token).execute(&mut **transaction).await?.rows_affected();
         if changed == 1 {
             Ok(())
         } else {
@@ -333,12 +349,42 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
         error_code: &str,
         error_message: &str,
     ) -> Result<TaskStatus, TaskError> {
+        let mut transaction = self.pool.begin().await?;
+        let status = self
+            .retry_task_at_in_transaction(
+                &mut transaction,
+                task_id,
+                lease_owner,
+                lease_token,
+                available_at,
+                error_code,
+                error_message,
+            )
+            .await?;
+        transaction.commit().await?;
+        Ok(status)
+    }
+
+    /// [`Self::retry_task_at`] in the caller's transaction, so a handler can
+    /// record retry-visible domain state with the same commit. Returns whether
+    /// the envelope was requeued or exhausted its failure budget.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn retry_task_at_in_transaction(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        task_id: Uuid,
+        lease_owner: &str,
+        lease_token: Uuid,
+        available_at: DateTime<Utc>,
+        error_code: &str,
+        error_message: &str,
+    ) -> Result<TaskStatus, TaskError> {
         if error_code.len() > MAX_ERROR_CODE_BYTES || error_message.len() > MAX_ERROR_MESSAGE_BYTES
         {
             return Err(TaskError::ValueTooLong);
         }
-        let status: Option<String> = sqlx::query_scalar("UPDATE tasks SET status = CASE WHEN failures + 1 >= max_failures THEN 'dead_letter' ELSE 'queued' END, failures = failures + 1, available_at = CASE WHEN failures + 1 >= max_failures THEN available_at ELSE $4 END, lease_owner = NULL, lease_token = NULL, lease_until = NULL, last_error_code = $5, last_error_message = $6, failed_at = CASE WHEN failures + 1 >= max_failures THEN now() ELSE failed_at END, updated_at = now() WHERE id = $1 AND status = 'leased' AND lease_until > now() AND lease_owner = $2 AND lease_token = $3 RETURNING status")
-            .bind(task_id).bind(lease_owner).bind(lease_token).bind(available_at).bind(error_code).bind(error_message).fetch_optional(&self.pool).await?;
+        let status: Option<String> = sqlx::query_scalar("UPDATE tasks SET status = CASE WHEN failures + 1 >= max_failures THEN 'dead_letter' ELSE 'queued' END, failures = failures + 1, available_at = CASE WHEN failures + 1 >= max_failures THEN available_at ELSE $4 END, lease_owner = NULL, lease_token = NULL, lease_until = NULL, last_error_code = $5, last_error_message = $6, failed_at = CASE WHEN failures + 1 >= max_failures THEN now() ELSE failed_at END, updated_at = now() WHERE id = $1 AND status = 'leased' AND lease_until > clock_timestamp() AND lease_owner = $2 AND lease_token = $3 RETURNING status")
+            .bind(task_id).bind(lease_owner).bind(lease_token).bind(available_at).bind(error_code).bind(error_message).fetch_optional(&mut **transaction).await?;
         match status.as_deref() {
             Some("queued") => Ok(TaskStatus::Queued),
             Some("dead_letter") => Ok(TaskStatus::DeadLetter),
@@ -355,17 +401,57 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
         error_code: &str,
         error_message: &str,
     ) -> Result<(), TaskError> {
+        let mut transaction = self.pool.begin().await?;
+        self.dead_letter_task_in_transaction(&mut transaction, task, error_code, error_message)
+            .await?;
+        transaction.commit().await?;
+        Ok(())
+    }
+
+    /// [`Self::dead_letter_task`] in the caller's transaction, alongside the
+    /// domain record's terminal transition. The failure budget is exhausted so
+    /// the envelope is never retried; a lost or expired lease is an error.
+    pub async fn dead_letter_task_in_transaction(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        task: &ClaimedTask,
+        error_code: &str,
+        error_message: &str,
+    ) -> Result<(), TaskError> {
         if error_code.len() > MAX_ERROR_CODE_BYTES || error_message.len() > MAX_ERROR_MESSAGE_BYTES
         {
             return Err(TaskError::ValueTooLong);
         }
         let changed = sqlx::query("UPDATE tasks SET status='dead_letter',failures=max_failures,lease_owner=NULL,lease_token=NULL,lease_until=NULL,last_error_code=$4,last_error_message=$5,failed_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1 AND status='leased' AND lease_owner=$2 AND lease_token=$3 AND lease_until>clock_timestamp()")
-            .bind(task.id).bind(&task.lease_owner).bind(task.lease_token).bind(error_code).bind(error_message).execute(&self.pool).await?.rows_affected();
+            .bind(task.id).bind(&task.lease_owner).bind(task.lease_token).bind(error_code).bind(error_message).execute(&mut **transaction).await?.rows_affected();
         if changed == 1 {
             Ok(())
         } else {
             Err(TaskError::LeaseLost)
         }
+    }
+
+    /// Cancels every queued envelope of `kind` for the given subjects in the
+    /// caller's transaction, under the same per-kind policy as
+    /// [`Self::cancel_queued_task`]. Leased envelopes are left to their
+    /// token-fenced handler. Returns how many envelopes were cancelled.
+    pub async fn cancel_queued_tasks_for_subjects(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        workspace_id: Uuid,
+        kind: TaskKind,
+        subject_ids: &[Uuid],
+    ) -> Result<u64, TaskError> {
+        if !kind.policy().cancel_allowed {
+            return Err(TaskError::OperationNotPermitted);
+        }
+        Ok(sqlx::query("UPDATE tasks SET status = 'cancelled', cancelled_at = clock_timestamp(), updated_at = clock_timestamp() WHERE workspace_id = $1 AND kind = $2 AND subject_id = ANY($3) AND status = 'queued'")
+            .bind(workspace_id)
+            .bind(kind.as_str())
+            .bind(subject_ids)
+            .execute(&mut **transaction)
+            .await?
+            .rows_affected())
     }
 
     /// Cancels queued work in the same transaction as its domain record.

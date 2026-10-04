@@ -269,65 +269,32 @@ impl v15::artifacts::HostOutputArtifact for OperationState {
 impl ExtensionRuntime {
     /// Executes one batch through the 1.5 world. The lifecycle mirrors the
     /// released 1.4 connector world exactly.
-    #[allow(clippy::too_many_arguments)]
     pub(super) async fn invoke_interactive_batch(
         &self,
         installation: &ExtensionRuntimeInstallation,
         repository: CatalogRepository,
-        run_id: Uuid,
-        operation_handler: &str,
-        configuration: &Value,
-        input: &Value,
-        checkpoint: &Value,
-        batch_key: &str,
-        max_checkpoint_bytes: u64,
-        lifecycle_started: bool,
+        run: &ClaimedExtensionOperationRun,
         cancelling: bool,
     ) -> Result<(Value, Value, bool), ExtensionRuntimeError> {
-        let runtime_error = |error: String| ExtensionRuntimeError::Runtime(error);
         let component = self.component(installation).await?;
-        let request = host_interactive::exports::catalog::host::operations::OperationRequest {
-            run_id: run_id.to_string(),
-            operation_id: operation_handler.to_owned(),
-            configuration: serde_json::to_string(configuration)
-                .map_err(|e| runtime_error(e.to_string()))?,
-            input: serde_json::to_string(input).map_err(|e| runtime_error(e.to_string()))?,
-            checkpoint: serde_json::to_string(checkpoint)
-                .map_err(|e| runtime_error(e.to_string()))?,
-            batch_key: batch_key.to_owned(),
-        };
-        let mut store = Store::new(
-            &self.engine,
-            OperationState::new(
-                self.config.max_memory_bytes,
-                installation.clone(),
-                repository,
-                self.object_store.clone(),
-                run_id,
-            )
-            .with_batch_key(batch_key),
-        );
-        store.limiter(|state| &mut state.limits);
-        store
-            .set_fuel(self.config.fuel)
-            .map_err(|e| runtime_error(e.to_string()))?;
-        store.set_epoch_deadline(epoch_deadline(self.config.invocation_timeout));
+        let mut store = self.operation_store(
+            self.operation_state(installation, repository, run.id)
+                .with_batch_key(&run.batch_key),
+        )?;
         let bindings = host_interactive::CatalogExtensionOperation::instantiate_async(
             &mut store,
             &component,
             &self.linkers.interactive,
         )
         .await
-        .map_err(|e| runtime_error(e.to_string()))?;
-        run_operation_batch!(
+        .map_err(runtime_error)?;
+        run_operation_batch(
             &mut store,
             bindings.catalog_host_operations(),
-            request,
-            checkpoint: checkpoint,
-            max_checkpoint_bytes: max_checkpoint_bytes,
-            lifecycle_started: lifecycle_started,
-            cancelling: cancelling,
+            run,
+            cancelling,
         )
+        .await
     }
 }
 

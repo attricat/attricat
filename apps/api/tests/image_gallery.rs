@@ -441,3 +441,77 @@ async fn gallery_changes_return_the_version_an_open_form_saves_against(pool: PgP
     );
     server.abort();
 }
+
+#[sqlx::test]
+async fn gallery_writes_archive_history_and_emit_audited_value_changes(pool: PgPool) {
+    let store = Arc::new(FakeObjectStore::available());
+    let (base, server) = start_server_with_object_store(pool.clone(), store).await;
+    let client = authenticated_client();
+    let bp = blueprint(&client, &base, "ordered = true").await;
+    let entity = create_entity(&client, &base, &bp).await;
+    let entity_id: Uuid = entity["id"].as_str().unwrap().parse().unwrap();
+    let url = format!("{base}/entities/{entity_id}/file-attributes/photos");
+    let mut ids = Vec::new();
+    for _ in 0..2 {
+        let uploaded: Value = upload(&client, &url)
+            .await
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        ids.push(uploaded["files"][0]["id"].as_str().unwrap().to_owned());
+    }
+    let (a, b) = (&ids[0], &ids[1]);
+    client
+        .put(format!("{url}/references"))
+        .json(&json!({"expected_file_ids":[a, b],"file_ids":[b, a]}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+
+    // Appending archives the previous list just like a reorder does.
+    let history: Vec<Vec<String>> = sqlx::query_scalar(
+        "SELECT array_agg(r.file_id::text ORDER BY r.position) FROM attribute_value_history h JOIN attribute_file_reference_history r ON r.attribute_value_history_id = h.id AND r.attribute_value_history_archived_at = h.archived_at WHERE h.entity_id = $1 GROUP BY h.id, h.created_at ORDER BY h.created_at",
+    )
+    .bind(entity_id)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(history, vec![vec![a.clone()], vec![a.clone(), b.clone()]]);
+
+    let events: Vec<(String, Value)> = sqlx::query_as(
+        "SELECT event_type, payload FROM domain_events WHERE aggregate_id = $1 AND event_type = 'attribute_value.changed.v1' ORDER BY sequence",
+    )
+    .bind(entity_id)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    let facts: Vec<(Value, Value)> = events
+        .iter()
+        .map(|(_, payload)| {
+            let fact = &payload["facts"][0];
+            assert_eq!(fact["attribute_code"], "photos");
+            (fact["before_value"].clone(), fact["after_value"].clone())
+        })
+        .collect();
+    assert_eq!(
+        facts,
+        vec![
+            (Value::Null, json!([a])),
+            (json!([a]), json!([a, b])),
+            (json!([a, b]), json!([b, a])),
+        ]
+    );
+    let audited: Vec<String> = sqlx::query_scalar(
+        "SELECT change_kind FROM audit_event_changes c WHERE c.entity_id = $1 AND c.attribute_code = 'photos' ORDER BY c.created_at",
+    )
+    .bind(entity_id)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(audited, ["set", "replace", "replace"]);
+    server.abort();
+}

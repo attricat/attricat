@@ -1,5 +1,6 @@
 //! Versioned status metadata attached to a string attribute's JSON Schema.
 use crate::predicate::{Check, MAX_TRANSITION_CONDITIONS, Usage, validate_checks};
+use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashSet;
 
@@ -174,6 +175,28 @@ pub fn status_configuration_schema() -> Value {
     })
 }
 
+/// The parts of a status configuration that need checks beyond its JSON
+/// Schema. Deserialized only after the configuration matched that schema.
+#[derive(Deserialize)]
+struct StatusConfig {
+    options: Vec<StatusOptionConfig>,
+    transitions: Option<Vec<Value>>,
+}
+
+#[derive(Deserialize)]
+struct StatusOptionConfig {
+    code: String,
+    label: String,
+    lock: Option<Value>,
+    approval: Option<ApprovalConfig>,
+    retention_days: Option<i64>,
+}
+
+#[derive(Deserialize)]
+struct ApprovalConfig {
+    void_to: String,
+}
+
 pub fn validate_status_definition(schema: &Value) -> Result<(), String> {
     let Some(config) = schema.get(STATUS_KEY) else {
         return Ok(());
@@ -184,11 +207,10 @@ pub fn validate_status_definition(schema: &Value) -> Result<(), String> {
     if schema.get("type").and_then(Value::as_str) != Some("string") {
         return Err("status requires a string schema".into());
     }
-    let options = config["options"].as_array().unwrap();
-    let codes: HashSet<_> = options
-        .iter()
-        .map(|option| option["code"].as_str().unwrap())
-        .collect();
+    let config = StatusConfig::deserialize(config)
+        .map_err(|_| "invalid x-attricat-status configuration".to_owned())?;
+    let options = &config.options;
+    let codes: HashSet<_> = options.iter().map(|option| option.code.as_str()).collect();
     let enumeration = schema
         .get("enum")
         .and_then(Value::as_array)
@@ -202,64 +224,65 @@ pub fn validate_status_definition(schema: &Value) -> Result<(), String> {
         return Err("status enum and unique option codes must match".into());
     }
     for option in options {
-        if option["label"].as_str().unwrap().trim().is_empty()
-            || !super::validate_json_schema(schema, &option["code"])?.is_empty()
+        if option.label.trim().is_empty()
+            || !super::validate_json_schema(schema, &Value::from(option.code.as_str()))?.is_empty()
         {
             return Err(
                 "status labels must not be blank and all options must satisfy the schema".into(),
             );
         }
     }
-    let edges = config.get("transitions").and_then(Value::as_array);
-    if let Some(edges) = edges {
-        let mut pairs = HashSet::new();
-        for edge in edges {
-            for endpoint in [&edge["from"], &edge["to"]] {
-                if !endpoint.is_null() && endpoint.as_str().is_none_or(|code| !codes.contains(code))
-                {
-                    return Err("status transition references an unknown option".into());
-                }
-            }
-            if !pairs.insert((edge["from"].to_string(), edge["to"].to_string())) {
-                return Err("status transitions must declare each from/to pair once".into());
-            }
-            edge_conditions(edge)?;
-        }
-        let edge_codes: HashSet<_> = edges
-            .iter()
-            .filter_map(|edge| edge.get("code").and_then(Value::as_str))
-            .collect();
-        if edges
-            .iter()
-            .filter_map(|edge| edge.get("separate_from").and_then(Value::as_array))
-            .flatten()
-            .any(|code| code.as_str().is_none_or(|code| !edge_codes.contains(code)))
-        {
-            return Err("separate_from must name the code of a declared transition".into());
-        }
+    if let Some(edges) = &config.transitions {
+        validate_edges(edges, &codes)?;
     }
     for option in options {
-        let code = option["code"].as_str().unwrap();
+        let code = option.code.as_str();
         // Leaving a locked status must always be an explicit, governable edge.
-        if option.get("lock").is_some() && edges.is_none() {
+        if option.lock.is_some() && config.transitions.is_none() {
             return Err(format!(
                 "status option '{code}' declares a lock, so transitions must be declared"
             ));
         }
-        if option.get("retention_days").is_some() && option.get("lock").is_none() {
+        if option.retention_days.is_some() && option.lock.is_none() {
             return Err(format!(
                 "status option '{code}' declares retention_days without a lock"
             ));
         }
-        if let Some(void_to) = option
-            .get("approval")
-            .and_then(|approval| approval["void_to"].as_str())
-            && (void_to == code || !codes.contains(void_to))
+        if let Some(approval) = &option.approval
+            && (approval.void_to == code || !codes.contains(approval.void_to.as_str()))
         {
             return Err(format!(
                 "approval void_to of status option '{code}' must name another option"
             ));
         }
+    }
+    Ok(())
+}
+
+fn validate_edges(edges: &[Value], codes: &HashSet<&str>) -> Result<(), String> {
+    let mut pairs = HashSet::new();
+    for edge in edges {
+        for endpoint in [&edge["from"], &edge["to"]] {
+            if !endpoint.is_null() && endpoint.as_str().is_none_or(|code| !codes.contains(code)) {
+                return Err("status transition references an unknown option".into());
+            }
+        }
+        if !pairs.insert((edge["from"].to_string(), edge["to"].to_string())) {
+            return Err("status transitions must declare each from/to pair once".into());
+        }
+        edge_conditions(edge)?;
+    }
+    let edge_codes: HashSet<_> = edges
+        .iter()
+        .filter_map(|edge| edge.get("code").and_then(Value::as_str))
+        .collect();
+    if edges
+        .iter()
+        .filter_map(|edge| edge.get("separate_from").and_then(Value::as_array))
+        .flatten()
+        .any(|code| code.as_str().is_none_or(|code| !edge_codes.contains(code)))
+    {
+        return Err("separate_from must name the code of a declared transition".into());
     }
     Ok(())
 }
@@ -404,7 +427,11 @@ pub fn validate_status_transition(
     let Some(config) = schema.get(STATUS_KEY) else {
         return Ok(());
     };
-    if !after.is_null() && !schema["enum"].as_array().unwrap().contains(after) {
+    if !after.is_null()
+        && !schema["enum"]
+            .as_array()
+            .is_some_and(|options| options.contains(after))
+    {
         return Err("unknown status option".into());
     }
     if before == after {

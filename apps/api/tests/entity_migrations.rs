@@ -893,3 +893,123 @@ context_editable = "all"
         value_id
     );
 }
+
+#[sqlx::test]
+async fn migration_audits_field_changes_and_reconciles_publication(pool: PgPool) {
+    let actor = uuid::Uuid::new_v4();
+    sqlx::query("INSERT INTO users (id, email) VALUES ($1, 'migration-publisher@example.test')")
+        .bind(actor)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let repository = CatalogRepository::new(
+        pool.clone(),
+        support::BOOTSTRAP_WORKSPACE_ID.parse().unwrap(),
+    )
+    .with_audit_context(api::repository::AuditContext {
+        actor_user_id: Some(actor),
+        actor_token_id: None,
+        request_id: uuid::Uuid::new_v4(),
+        correlation_id: uuid::Uuid::new_v4(),
+        action: "entity.migrate".into(),
+        authorization_scope: json!({}),
+        target: json!({"type": "entity"}),
+        metadata: json!({}),
+        agent: None,
+    });
+    let source = repository
+        .create_blueprint(CreateBlueprint {
+            definition: format!(
+                "{SCALAR_DEFINITION}\n[[attributes]]\ncode = \"obsolete\"\nvalue_type = \"string\"\n"
+            ),
+        })
+        .await
+        .unwrap();
+    repository
+        .publish_blueprint_revision(source.blueprint.id, 1)
+        .await
+        .unwrap();
+    let entity = repository
+        .create_entity_with_values(
+            source.blueprint.id,
+            1,
+            ["title", "obsolete"]
+                .map(|code| NewAttributeValue::Scalar {
+                    attribute_id: None,
+                    attribute_code: Some(code.to_owned()),
+                    context_id: None,
+                    value: json!(code),
+                })
+                .into(),
+            Vec::new(),
+            json!({}),
+        )
+        .await
+        .unwrap();
+    let context = repository
+        .create_context(api::model::CreateAttributeContext {
+            code: "migration-web".into(),
+            data: json!({}),
+            parent_id: None,
+        })
+        .await
+        .unwrap();
+    repository
+        .set_publication_channel(context.id, true)
+        .await
+        .unwrap();
+    repository
+        .publish_entity(entity.id, context.id)
+        .await
+        .unwrap();
+    repository
+        .create_blueprint_revision(
+            source.blueprint.id,
+            CreateBlueprint {
+                definition: SCALAR_DEFINITION.to_owned(),
+            },
+        )
+        .await
+        .unwrap();
+    repository
+        .publish_blueprint_revision(source.blueprint.id, 2)
+        .await
+        .unwrap();
+    let preview = repository
+        .preview_entity_migration(entity.id)
+        .await
+        .unwrap();
+    repository
+        .migrate_entity_to_latest(
+            entity.id,
+            MigrateEntityRequest {
+                migration_id: preview.migration_id,
+                expected_target_version: 2,
+                values: Vec::new(),
+                relationships: Vec::new(),
+                discard_attributes: vec!["obsolete".to_owned()],
+                removal_policy: None,
+            },
+        )
+        .await
+        .unwrap();
+
+    // Only the discarded value is a field change; the preserved title moved
+    // to the new revision's attribute without changing.
+    let changes: Vec<(String, String)> = sqlx::query_as(
+        "SELECT c.attribute_code, c.change_kind FROM audit_event_changes c WHERE c.entity_id = $1 AND c.audit_event_id = (SELECT latest.audit_event_id FROM audit_event_changes latest WHERE latest.entity_id = $1 ORDER BY latest.created_at DESC LIMIT 1)",
+    )
+    .bind(entity.id)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(changes, vec![("obsolete".to_owned(), "remove".to_owned())]);
+    let unpublished: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM domain_events WHERE aggregate_id = $1 AND event_type = 'entity.unpublished.v1'",
+    )
+    .bind(entity.id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(unpublished, 1);
+}

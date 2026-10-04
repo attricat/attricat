@@ -57,6 +57,7 @@ export const refreshEntity = async (client: QueryClient, entityId: string) => {
     entityQueryKeys.form(entityId),
     entityQueryKeys.preview(entityId),
     entityQueryKeys.changes(entityId),
+    entityQueryKeys.recordControls(entityId),
     entityQueryKeys.publication(entityId),
     entityQueryKeys.resolvedPreviews(entityId),
     entityQueryKeys.hierarchies(entityId),

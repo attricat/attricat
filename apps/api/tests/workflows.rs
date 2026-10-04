@@ -830,7 +830,7 @@ tags = ["needs-review"]"#,
     let write = |code: &str, value: &str| {
         client
             .post(format!("{base_url}/entities/{id}/values"))
-            .json(&json!({"values":[{"kind":"scalar","attribute_code":code,"value":value}]}))
+            .json(&json!({"values":[scalar(code, value)]}))
     };
 
     write("title", "Spec")
@@ -917,28 +917,17 @@ async fn licensed_product(
     license: Option<&Value>,
     status: &str,
 ) -> Uuid {
-    let mut values = vec![json!({"kind":"scalar","attribute_code":"status","value":"draft"})];
+    let mut values = vec![scalar("status", "draft")];
     if let Some(license) = license {
-        values.push(
-            json!({"kind":"relationship","attribute_code":"license","target_entity_id":license["id"]}),
-        );
+        values.push(relationship("license", license));
     }
-    let entity: Value = client
-        .post(format!("{base_url}/v1/entities"))
-        .json(&json!({"blueprint":{"code":"licensed_product"},"values":values}))
-        .send()
-        .await
-        .unwrap()
-        .error_for_status()
-        .unwrap()
-        .json()
-        .await
-        .unwrap();
+    let entity =
+        create_entity_with(client, base_url, "licensed_product", Value::from(values)).await;
     let id = entity["id"].as_str().unwrap();
     if status != "draft" {
         client
             .put(format!("{base_url}/v1/entities/{id}"))
-            .json(&json!({"expected_updated_at":entity["updated_at"],"values":[{"kind":"scalar","attribute_code":"status","value":status}]}))
+            .json(&json!({"expected_updated_at":entity["updated_at"],"values":[scalar("status", status)]}))
             .send()
             .await
             .unwrap()
@@ -1012,13 +1001,8 @@ value_type = "string"
     )
     .await;
     create_blueprint(&client, &base_url, LICENSED_PRODUCT).await;
-    let new_license = || {
-        client
-            .post(format!("{base_url}/v1/entities"))
-            .json(&json!({"blueprint":{"code":"license_record"},"values":[]}))
-    };
-    let license: Value = new_license().send().await.unwrap().json().await.unwrap();
-    let other_license: Value = new_license().send().await.unwrap().json().await.unwrap();
+    let license = create_entity_with(&client, &base_url, "license_record", json!([])).await;
+    let other_license = create_entity_with(&client, &base_url, "license_record", json!([])).await;
     let first = licensed_product(&client, &base_url, Some(&license), "approved").await;
     let second = licensed_product(&client, &base_url, Some(&license), "approved").await;
     let retired = licensed_product(&client, &base_url, Some(&license), "retired").await;
@@ -1079,16 +1063,12 @@ tags = ["needs-review"]"#,
             (Some("approved".into()), false)
         );
     }
-    let targets: Vec<Value> = client
-        .get(format!("{base_url}/workflow-runs/{run_id}/targets"))
-        .send()
-        .await
-        .unwrap()
-        .error_for_status()
-        .unwrap()
-        .json()
-        .await
-        .unwrap();
+    let targets = get_json(
+        &client,
+        format!("{base_url}/workflow-runs/{run_id}/targets"),
+    )
+    .await;
+    let targets = targets.as_array().unwrap();
     assert_eq!(targets.len(), 3);
     let target = |id: Uuid| {
         targets
@@ -1118,14 +1098,12 @@ tags = ["needs-review"]"#,
 
     // A retry revisits only the failed target and never repeats completed writes.
     assert!(!handle_workflow_task_once(&repository).await);
-    let retried: Vec<Value> = client
-        .get(format!("{base_url}/workflow-runs/{run_id}/targets"))
-        .send()
-        .await
-        .unwrap()
-        .json()
-        .await
-        .unwrap();
+    let retried = get_json(
+        &client,
+        format!("{base_url}/workflow-runs/{run_id}/targets"),
+    )
+    .await;
+    let retried = retried.as_array().unwrap();
     let attempts = |id: Uuid| {
         retried
             .iter()
@@ -1270,7 +1248,7 @@ fixed = "Reworked""#,
     let id = document["id"].as_str().unwrap();
     client
         .post(format!("{base_url}/entities/{id}/values"))
-        .json(&json!({"values":[{"kind":"scalar","attribute_code":"body","value":"v1"}]}))
+        .json(&json!({"values":[scalar("body", "v1")]}))
         .send()
         .await
         .unwrap()
@@ -1278,7 +1256,6 @@ fixed = "Reworked""#,
         .unwrap();
     // Publish after the triggering write, so only the workflow's own write
     // can withdraw the publication.
-    let workspace_id: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
     let channel = client
         .post(format!("{base_url}/contexts"))
         .json(&json!({"code": "web_channel", "data": {}}))
@@ -1294,32 +1271,16 @@ fixed = "Reworked""#,
         .unwrap()
         .parse::<Uuid>()
         .unwrap();
-    sqlx::query(
-        "INSERT INTO publication_channels(workspace_id,context_id,enabled) VALUES($1,$2,true)",
-    )
-    .bind(workspace_id)
-    .bind(channel)
-    .execute(&pool)
-    .await
-    .unwrap();
-    let publisher = Uuid::new_v4();
-    sqlx::query("INSERT INTO users(id,email) VALUES($1,$2)")
-        .bind(publisher)
-        .bind(format!("{publisher}@example.test"))
-        .execute(&pool)
-        .await
-        .unwrap();
     let entity_id: Uuid = id.parse().unwrap();
-    sqlx::query("INSERT INTO entity_channel_publications(workspace_id,entity_id,context_id,published_at,published_by_user_id) VALUES($1,$2,$3,now(),$4)")
-        .bind(workspace_id).bind(entity_id).bind(channel).bind(publisher).execute(&pool).await.unwrap();
+    publish_in_channel(&pool, entity_id, channel).await;
     assert_eq!(fan_out_latest_event(&pool, id).await.1, 1);
     let repository = CatalogRepository::system(pool.clone())
-        .for_workspace(workspace_id)
+        .for_workspace(bootstrap_workspace_id())
         .await
         .unwrap();
     assert!(handle_workflow_task_once(&repository).await);
-    let (title, published): (Option<String>, bool) = sqlx::query_as(
-        "SELECT e.projections->'preview'->'default'->>'title', EXISTS (SELECT 1 FROM entity_channel_publications p WHERE p.entity_id = e.id AND p.published_at IS NOT NULL) FROM entities e WHERE e.id = $1",
+    let title: Option<String> = sqlx::query_scalar(
+        "SELECT projections->'preview'->'default'->>'title' FROM entities WHERE id = $1",
     )
     .bind(entity_id)
     .fetch_one(&pool)
@@ -1327,7 +1288,7 @@ fixed = "Reworked""#,
     .unwrap();
     assert_eq!(title.as_deref(), Some("Reworked"));
     assert!(
-        !published,
+        !is_published(&pool, entity_id).await,
         "a workflow write withdraws a changed publication"
     );
     server.abort();

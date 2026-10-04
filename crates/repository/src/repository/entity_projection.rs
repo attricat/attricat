@@ -7,8 +7,22 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use uuid::Uuid;
 
-/// One value source's direct value in a context.
-type DirectLookup<'a> = Box<dyn FnMut(&ContextNode) -> Option<Value> + 'a>;
+/// The value of one value source resolved for the context `path` with the
+/// shared rule, reported with the context it came from.
+fn resolved_value(
+    tree: &ContextTree,
+    path: &[Uuid],
+    inherit: bool,
+    mut direct: impl FnMut(&ContextNode) -> Option<Value>,
+) -> Option<Value> {
+    resolve_on_path(path, inherit, |id| {
+        let context = tree.get(id)?;
+        direct(context).map(|value| (context, value))
+    })
+    .map(|(_, (context, value))| {
+        serde_json::json!({ "value": value, "source_context": { "id": context.id, "code": context.code } })
+    })
+}
 
 /// See [`CatalogRepository::preview_scope`].
 pub(super) struct PreviewScope {
@@ -88,36 +102,22 @@ impl CatalogRepository {
             .and_then(Value::as_object)
             .ok_or(RepositoryError::InvalidPreview)?;
         let tree = &scope.tree;
-        let path: Vec<ContextNode> = tree
-            .path(requested_context.id, true)?
-            .into_iter()
-            .filter_map(|id| tree.get(id).cloned())
-            .collect();
-        let ids: Vec<Uuid> = path.iter().map(|context| context.id).collect();
-        // The shared resolution rule, applied to this read's value sources.
-        let resolve = |inherit: bool, mut direct: DirectLookup<'_>| {
-            resolve_on_path(&ids, inherit, |id| {
-                path.iter()
-                    .find(|context| context.id == id)
-                    .and_then(|context| direct(context).map(|value| (context.id, context.code.clone(), value)))
-            })
-            .map(|(_, (id, code, value))| {
-                serde_json::json!({ "value": value, "source_context": { "id": id, "code": code } })
-            })
-        };
+        let path = tree.path(requested_context.id, true)?;
         let mut values = attributes
             .iter()
             .filter(|attribute| attribute.value_type != "file")
             .filter_map(|attribute| {
-                resolve(
+                resolved_value(
+                    tree,
+                    &path,
                     attribute.context_fallback != "none",
-                    Box::new(|context| {
+                    |context| {
                         preview
                             .get(&context.code)
                             .and_then(Value::as_object)
                             .and_then(|values| values.get(&attribute.code))
                             .cloned()
-                    }),
+                    },
                 )
                 .map(|value| (attribute.code.clone(), value))
             })
@@ -127,9 +127,11 @@ impl CatalogRepository {
             .iter()
             .filter(|attribute| attribute.value_type == "file")
         {
-            if let Some(value) = resolve(
+            if let Some(value) = resolved_value(
+                tree,
+                &path,
                 attribute.context_fallback != "none",
-                Box::new(|context| {
+                |context| {
                     file_values.iter().find_map(|value| match value {
                         FormAttributeValue::File {
                             attribute_code,
@@ -142,7 +144,7 @@ impl CatalogRepository {
                         }
                         _ => None,
                     })
-                }),
+                },
             ) {
                 values.insert(attribute.code.clone(), value);
             }
@@ -160,16 +162,18 @@ impl CatalogRepository {
             .iter()
             .filter(|attribute| attribute.value_type == "relationship")
             .filter_map(|attribute| {
-                resolve(
+                resolved_value(
+                    tree,
+                    &path,
                     attribute.context_fallback != "none",
-                    Box::new(|context| {
+                    |context| {
                         enriched_preview
                             .get(&context.code)
                             .and_then(Value::as_object)
                             .and_then(|values| values.get(&attribute.code))
                             .filter(|value| value.get("items").is_some())
                             .cloned()
-                    }),
+                    },
                 )
                 .map(|value| (attribute.code.clone(), value))
             })
@@ -180,9 +184,11 @@ impl CatalogRepository {
         let reusable_values = reusable_attributes
             .iter()
             .filter_map(|attribute| {
-                resolve(
+                resolved_value(
+                    tree,
+                    &path,
                     attribute.context_fallback != "none",
-                    Box::new(|context| {
+                    |context| {
                         reusable_form_values.iter().find_map(|value| match value {
                             FormAttributeValue::Scalar {
                                 attribute_code,
@@ -213,7 +219,7 @@ impl CatalogRepository {
                             }
                             _ => None,
                         })
-                    }),
+                    },
                 )
                 .map(|value| (attribute.code.clone(), value))
             })

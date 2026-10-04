@@ -439,6 +439,9 @@ impl CatalogRepository {
         input: AttachReusableAttribute,
     ) -> Result<EntityReusableAttribute, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
+        let before = self
+            .entity_audit_snapshot(&mut transaction, entity_id)
+            .await?;
         let entity = self.lock_entity(&mut transaction, entity_id).await?;
         let attachment_id = self
             .attach_reusable_attribute_in_transaction(
@@ -447,7 +450,8 @@ impl CatalogRepository {
                 input.reusable_attribute_revision_id,
             )
             .await?;
-        transaction.commit().await?;
+        self.commit_reusable_attachment(transaction, &entity, before)
+            .await?;
         self.entity_reusable_attributes(entity_id)
             .await?
             .into_iter()
@@ -465,6 +469,9 @@ impl CatalogRepository {
             .await?
             .ok_or(RepositoryError::NotFound("reusable attribute group"))?;
         let mut transaction = self.pool.begin().await?;
+        let before = self
+            .entity_audit_snapshot(&mut transaction, entity_id)
+            .await?;
         let entity = self.lock_entity(&mut transaction, entity_id).await?;
         let mut attachment_ids = Vec::with_capacity(group.reusable_attribute_revision_ids.len());
         for revision_id in group.reusable_attribute_revision_ids {
@@ -477,13 +484,43 @@ impl CatalogRepository {
                 .await?,
             );
         }
-        transaction.commit().await?;
+        self.commit_reusable_attachment(transaction, &entity, before)
+            .await?;
         Ok(self
             .entity_reusable_attributes(entity_id)
             .await?
             .into_iter()
             .filter(|item| attachment_ids.contains(&item.attachment_id))
             .collect())
+    }
+
+    /// Commits attachments as an entity update: a default value they set is
+    /// audited, the entity's publications are reconciled and the task fence is
+    /// checked, like any other write to the entity's attributes.
+    async fn commit_reusable_attachment(
+        &self,
+        mut transaction: Transaction<'_, Postgres>,
+        entity: &Entity,
+        before: Vec<super::entity_commands::AuditValueSnapshot>,
+    ) -> Result<(), RepositoryError> {
+        let after = self
+            .entity_audit_snapshot(&mut transaction, entity.id)
+            .await?;
+        let changes = Self::audit_changes(entity.id, before, after, false);
+        let event = self.core_event(
+            crate::domain_events::ENTITY_UPDATED_V1,
+            "entity",
+            entity.id,
+            serde_json::to_value(crate::domain_events::EntityMutationV1 {
+                entity_id: entity.id,
+                blueprint_id: entity.blueprint_id,
+                blueprint_version: entity.blueprint_version,
+                facts: Self::affected_facts(&changes),
+            })
+            .expect("entity-updated payload is serializable"),
+        );
+        self.commit_entity_mutation(transaction, changes, event)
+            .await
     }
 
     async fn attach_reusable_attribute_in_transaction(

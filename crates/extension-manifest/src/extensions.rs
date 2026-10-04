@@ -29,15 +29,25 @@ pub const FIRST_UNIFIED_HOST_API: Version = Version::new(1, 6, 0);
 /// The last minor of the legacy, mutually exclusive ABI families.
 const LAST_LEGACY_HOST_MINOR: u64 = 5;
 
+/// The newest host contract as a version. Panics only if [`SUPPORTED_HOST_API`]
+/// itself is not SemVer, which the manifest tests rule out.
+fn supported_host_api() -> Version {
+    Version::parse(SUPPORTED_HOST_API).expect("supported host API is SemVer")
+}
+
+/// Whether a `catalog.host_api` range accepts host minor `1.<minor>.0`.
+fn matches_minor(range: &VersionReq, minor: u64) -> bool {
+    range.matches(&Version::new(1, minor, 0))
+}
+
 /// Returns true when a `catalog.host_api` range binds the unified, evolving
 /// host ABI: it matches a unified minor this host supports and no legacy one.
 /// Ranges that also match a legacy minor keep their released legacy binding,
 /// so existing releases never change ABI on a host upgrade.
 pub fn is_unified_host_api(range: &VersionReq) -> bool {
-    let current = Version::parse(SUPPORTED_HOST_API).expect("supported host API is SemVer");
-    !(0..=LAST_LEGACY_HOST_MINOR).any(|minor| range.matches(&Version::new(1, minor, 0)))
-        && (FIRST_UNIFIED_HOST_API.minor..=current.minor)
-            .any(|minor| range.matches(&Version::new(1, minor, 0)))
+    !(0..=LAST_LEGACY_HOST_MINOR).any(|minor| matches_minor(range, minor))
+        && (FIRST_UNIFIED_HOST_API.minor..=supported_host_api().minor)
+            .any(|minor| matches_minor(range, minor))
 }
 
 /// String form of [`is_unified_host_api`]; invalid ranges are never unified.
@@ -1368,9 +1378,7 @@ pub fn selection_action_outlet(outlet: &UiOutlet) -> bool {
 /// Interactive selection operations use the additive 1.5 operation world, so a
 /// release must exclude 1.4 rather than be silently bound to an older ABI.
 fn require_interactive_host_api(range: &VersionReq) -> Result<(), ManifestError> {
-    if is_unified_host_api(range)
-        || (range.matches(&Version::new(1, 5, 0)) && !range.matches(&Version::new(1, 4, 0)))
-    {
+    if is_unified_host_api(range) || (matches_minor(range, 5) && !matches_minor(range, 4)) {
         Ok(())
     } else {
         Err(ManifestError::Invalid(
@@ -1384,11 +1392,8 @@ fn require_operation_host_api(range: &VersionReq) -> Result<(), ManifestError> {
     if is_unified_host_api(range) {
         return Ok(());
     }
-    if (range.matches(&Version::new(1, 2, 0))
-        || range.matches(&Version::new(1, 3, 0))
-        || range.matches(&Version::new(1, 4, 0))
-        || range.matches(&Version::new(1, 5, 0)))
-        && !range.matches(&Version::new(1, 1, 0))
+    if (2..=LAST_LEGACY_HOST_MINOR).any(|minor| matches_minor(range, minor))
+        && !matches_minor(range, 1)
     {
         Ok(())
     } else {
@@ -1402,9 +1407,8 @@ fn require_operation_host_api(range: &VersionReq) -> Result<(), ManifestError> {
 /// Fixed client outlets are host contracts introduced with 1.1. They do not
 /// select a server component world, so any later compatible host accepts them.
 fn require_client_outlet_host_api(range: &VersionReq) -> Result<(), ManifestError> {
-    let current = Version::parse(SUPPORTED_HOST_API).expect("supported host API is SemVer");
-    if !range.matches(&Version::new(1, 0, 0))
-        && (1..=current.minor).any(|minor| range.matches(&Version::new(1, minor, 0)))
+    if !matches_minor(range, 0)
+        && (1..=supported_host_api().minor).any(|minor| matches_minor(range, minor))
     {
         Ok(())
     } else {
@@ -1416,9 +1420,7 @@ fn require_client_outlet_host_api(range: &VersionReq) -> Result<(), ManifestErro
 }
 
 fn require_next_host_api(range: &VersionReq) -> Result<(), ManifestError> {
-    if is_unified_host_api(range)
-        || (range.matches(&Version::new(1, 1, 0)) && !range.matches(&Version::new(1, 0, 0)))
-    {
+    if is_unified_host_api(range) || (matches_minor(range, 1) && !matches_minor(range, 0)) {
         Ok(())
     } else {
         Err(ManifestError::Invalid(

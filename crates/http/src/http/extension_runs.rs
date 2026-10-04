@@ -14,7 +14,7 @@ use axum::{
     response::Response,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::Value;
 use uuid::Uuid;
 
 use super::{
@@ -29,9 +29,9 @@ use crate::{
         selection_action_outlet, validate_schema,
     },
     repository::{
-        AuthorizationActor, CatalogRepository, ExtensionAnnotationNamespace,
-        ExtensionAnnotationPatch, ExtensionAnnotations, InteractiveRun, InteractiveRunArtifact,
-        RepositoryError, StartInteractiveOperation,
+        CatalogRepository, ExtensionAnnotationNamespace, ExtensionAnnotationPatch,
+        ExtensionAnnotations, InteractiveRun, InteractiveRunArtifact, RepositoryError,
+        StartInteractiveOperation,
     },
     storage::ObjectStoreError,
 };
@@ -64,17 +64,15 @@ pub(super) struct RunListQuery {
 }
 
 #[derive(Serialize)]
+pub(super) struct StartRunResponse {
+    run_id: Uuid,
+}
+
+#[derive(Serialize)]
 pub(super) struct RunDetailResponse {
     #[serde(flatten)]
     run: RunResponse,
     artifacts: Vec<InteractiveRunArtifact>,
-}
-
-fn actor(principal: AuthenticatedPrincipal) -> AuthorizationActor {
-    AuthorizationActor {
-        user_id: principal.0,
-        token_id: principal.1,
-    }
 }
 
 /// Which runs a request may address. Extension frames send `scope=own`
@@ -116,7 +114,7 @@ async fn visible_run(
         // Frozen membership is not permission: the initiator must still be
         // able to read every member that may have contributed to the output.
         match repository
-            .ensure_principal_may_read_run_selection(actor(principal), run_id)
+            .ensure_principal_may_read_run_selection(principal.actor(), run_id)
             .await
         {
             Ok(()) => return Ok(run),
@@ -136,7 +134,7 @@ async fn visible_run(
     let operator = state
         .repository
         .principal_may(
-            actor(principal),
+            principal.actor(),
             workspace.0,
             "extensions.manage",
             None,
@@ -174,7 +172,7 @@ pub(super) async fn start(
     principal: AuthenticatedPrincipal,
     ApiPath((extension_id, contribution_id)): ApiPath<(String, String)>,
     ApiJson(input): ApiJson<StartInteractiveRequest>,
-) -> Result<(StatusCode, Json<Value>), ApiError> {
+) -> Result<(StatusCode, Json<StartRunResponse>), ApiError> {
     if input.operation_id.len() > MAX_EXTENSION_IDENTIFIER_BYTES {
         return Err(ApiError::invalid_input(
             "invalid extension operation request".into(),
@@ -230,14 +228,14 @@ pub(super) async fn start(
             blueprint_id: input.selection.blueprint_id,
             blueprint_version: input.selection.blueprint_version,
             context_id: input.selection.context_id,
-            actor: actor(principal),
+            actor: principal.actor(),
         })
         .await
         .map_err(|error| match error {
             RepositoryError::ActorNotAuthorized => ApiError::forbidden(),
             error => error.into(),
         })?;
-    Ok((StatusCode::ACCEPTED, Json(json!({ "run_id": run_id }))))
+    Ok((StatusCode::ACCEPTED, Json(StartRunResponse { run_id })))
 }
 
 /// The signed-in user's own recent interactive runs whose selection they can
@@ -250,7 +248,7 @@ pub(super) async fn list(
     // The list holds only the caller's own runs, so it ignores `scope`.
     Ok(Json(
         repository
-            .interactive_extension_runs(actor(principal), query.extension_id.as_deref())
+            .interactive_extension_runs(principal.actor(), query.extension_id.as_deref())
             .await?
             .into_iter()
             .map(|run| RunResponse::new(run, principal))
@@ -311,12 +309,8 @@ pub(super) async fn cancel(
             .await?
         }
     };
-    if !run.can_cancel {
-        return Err(ApiError::conflict(
-            "extension run can no longer be cancelled",
-        ));
-    }
-    if repository.cancel_extension_operation(run_id).await? {
+    // The run may finish between the read and the cancellation.
+    if run.can_cancel && repository.cancel_extension_operation(run_id).await? {
         Ok(StatusCode::NO_CONTENT)
     } else {
         Err(ApiError::conflict(
@@ -331,9 +325,7 @@ fn download_filename(name: Option<&str>, artifact_id: Uuid) -> String {
         .unwrap_or_default()
         .chars()
         .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
-        .collect::<String>()
-        .trim_start_matches('.')
-        .chars()
+        .skip_while(|c| *c == '.')
         .take(128)
         .collect();
     if cleaned.is_empty() {
@@ -458,7 +450,7 @@ pub(super) async fn repair_annotations(
     let may_write = state
         .repository
         .principal_may(
-            actor(principal),
+            principal.actor(),
             workspace.0,
             "entities.write",
             Some(entity_id),

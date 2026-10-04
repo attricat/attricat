@@ -399,3 +399,125 @@ async fn reconciliation_retains_files_under_an_active_retention_hold(pool: PgPoo
     worker.reconcile().await.unwrap();
     assert_eq!(status().await, "deleted");
 }
+
+/// Inserts an extension release and an operation run in `status` whose input
+/// artifact copies `file_id`'s object key, as run creation does.
+async fn insert_run_with_input_file(pool: &PgPool, release_id: Uuid, file_id: Uuid, status: &str) {
+    let workspace_id = WORKSPACE_ID.parse::<Uuid>().unwrap();
+    let run_id = Uuid::new_v4();
+    sqlx::query("INSERT INTO extension_operation_runs (id, workspace_id, extension_id, installed_release_id, abi_version, operation_id, idempotency_key, status, source_reference) VALUES ($1, $2, 'acme.files', $3, '1.6.0', 'import', $4, $5, jsonb_build_object('input_file_id', $6::text))")
+        .bind(run_id)
+        .bind(workspace_id)
+        .bind(release_id)
+        .bind(run_id.to_string())
+        .bind(status)
+        .bind(file_id)
+        .execute(pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO extension_operation_artifacts (id, workspace_id, extension_id, installed_release_id, operation_run_id, direction, state, content_length, media_type, checksum_sha256, object_key, completed_at) SELECT $1, workspace_id, 'acme.files', $2, $3, 'input', 'completed', byte_size, mime_type, sha256, original_key, now() FROM files WHERE id = $4")
+        .bind(Uuid::new_v4())
+        .bind(release_id)
+        .bind(run_id)
+        .bind(file_id)
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
+async fn insert_extension_release(pool: &PgPool) -> Uuid {
+    let release_id = Uuid::new_v4();
+    sqlx::query("INSERT INTO installed_extension_releases (id, workspace_id, extension_id, version, manifest, manifest_sha256, source) VALUES ($1, $2, 'acme.files', '1.0.0', '{}'::jsonb, $3, 'side_load')")
+        .bind(release_id)
+        .bind(WORKSPACE_ID.parse::<Uuid>().unwrap())
+        .bind("0".repeat(64))
+        .execute(pool)
+        .await
+        .unwrap();
+    release_id
+}
+
+async fn file_status(pool: &PgPool, file_id: Uuid) -> String {
+    sqlx::query_scalar("SELECT status FROM files WHERE id = $1")
+        .bind(file_id)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+#[sqlx::test]
+async fn reconciliation_retains_files_used_as_extension_and_connector_inputs(pool: PgPool) {
+    let workspace_id = WORKSPACE_ID.parse::<Uuid>().unwrap();
+    let store = Arc::new(FakeObjectStore::available());
+    let [scheduled, connector, pending_run, finished_run] = [(); 4].map(|_| Uuid::new_v4());
+    for file_id in [scheduled, connector, pending_run, finished_run] {
+        insert_file(&pool, file_id, &format!("files/{file_id}/original"), false).await;
+    }
+    let release_id = insert_extension_release(&pool).await;
+    sqlx::query("INSERT INTO extension_operation_schedules (id, workspace_id, extension_id, installed_release_id, operation_id, input, configuration_snapshot, source_reference, interval_seconds, next_at) VALUES ($1, $2, 'acme.files', $3, 'import', '{}'::jsonb, '{}'::jsonb, jsonb_build_object('input_file_id', $4::text), 3600, now() + interval '1 hour')")
+        .bind(Uuid::new_v4())
+        .bind(workspace_id)
+        .bind(release_id)
+        .bind(scheduled)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO blueprint_connector_jobs (id, workspace_id, blueprint_id, direction, extension_id, operation_id, context_id, input_file_id) SELECT $1, $2, $3, 'import', 'acme.files', 'import', id, $4 FROM attribute_contexts WHERE workspace_id = $2 AND code = 'default'")
+        .bind(Uuid::new_v4())
+        .bind(workspace_id)
+        .bind(Uuid::new_v4())
+        .bind(connector)
+        .execute(&pool)
+        .await
+        .unwrap();
+    insert_run_with_input_file(&pool, release_id, pending_run, "pending").await;
+    insert_run_with_input_file(&pool, release_id, finished_run, "completed").await;
+
+    worker(pool.clone(), store, 3, 60)
+        .reconcile()
+        .await
+        .unwrap();
+
+    for file_id in [scheduled, connector, pending_run] {
+        assert_eq!(file_status(&pool, file_id).await, "queued");
+    }
+    assert_eq!(file_status(&pool, finished_run).await, "deleted");
+}
+
+#[sqlx::test]
+async fn purge_keeps_objects_of_a_file_referenced_after_deletion_was_scheduled(pool: PgPool) {
+    let store = Arc::new(FakeObjectStore::available());
+    let file_id = Uuid::new_v4();
+    let original_key = format!("files/{file_id}/original");
+    insert_file(&pool, file_id, &original_key, false).await;
+    store
+        .put(
+            &original_key,
+            StoredObject {
+                bytes: png().into(),
+                content_type: Some("image/png".into()),
+            },
+        )
+        .await
+        .unwrap();
+    let worker = worker(pool.clone(), store.clone(), 3, 0);
+    worker.reconcile().await.unwrap();
+    assert_eq!(file_status(&pool, file_id).await, "deleted");
+    // A reference that reconciliation would honour also stops the purge job,
+    // which re-checks the same predicate before deleting any object.
+    let release_id = insert_extension_release(&pool).await;
+    insert_run_with_input_file(&pool, release_id, file_id, "pending").await;
+    worker.reconcile().await.unwrap();
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM file_processing_jobs WHERE file_id = $1 AND kind = 'purge'"
+        )
+        .bind(file_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        1
+    );
+    assert!(worker.run_once().await.unwrap());
+    assert_eq!(store.object_count().await, 1);
+}

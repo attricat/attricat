@@ -33,17 +33,13 @@ async fn add_member(pool: &PgPool, email: &str, state: &str) -> Uuid {
         "INSERT INTO workspace_memberships (id, workspace_id, user_id, state) VALUES ($1, $2, $3, $4)",
     )
     .bind(Uuid::new_v4())
-    .bind(BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap())
+    .bind(bootstrap_workspace_id())
     .bind(user)
     .bind(state)
     .execute(pool)
     .await
     .unwrap();
     user
-}
-
-fn scalar(code: &str, value: impl Into<Value>) -> Value {
-    json!({"kind": "scalar", "attribute_code": code, "value": value.into()})
 }
 
 #[sqlx::test]
@@ -109,16 +105,7 @@ async fn assignment_attributes_reference_members_and_teams(pool: PgPool) {
     assert_eq!(renamed["name"], "Ops");
     assert_eq!(renamed["member_user_ids"], json!([member]));
 
-    let directory: Value = client
-        .get(format!("{base}/directory"))
-        .send()
-        .await
-        .unwrap()
-        .error_for_status()
-        .unwrap()
-        .json()
-        .await
-        .unwrap();
+    let directory = get_json(&client, format!("{base}/directory")).await;
     let former_entry = directory["users"]
         .as_array()
         .unwrap()
@@ -129,12 +116,7 @@ async fn assignment_attributes_reference_members_and_teams(pool: PgPool) {
     assert_eq!(directory["teams"].as_array().unwrap().len(), 2);
 
     create_blueprint(&client, &base, DEFINITION).await;
-    let create = |values: Vec<Value>| {
-        client
-            .post(format!("{base}/v1/entities"))
-            .json(&json!({"blueprint": {"code": "task"}, "values": values}))
-            .send()
-    };
+    let create = |values: Vec<Value>| post_entity(&client, &base, "task", Value::from(values));
     for (code, value) in [
         ("assignee", format!("user:{}", Uuid::new_v4())),
         ("assignee", format!("user:{former}")),
@@ -142,7 +124,7 @@ async fn assignment_attributes_reference_members_and_teams(pool: PgPool) {
         ("assignee", "alice".to_owned()),
         ("owner", format!("team:{team_id}")),
     ] {
-        let response = create(vec![scalar(code, value.clone())]).await.unwrap();
+        let response = create(vec![scalar(code, value.clone())]).await;
         assert_eq!(
             response.status(),
             StatusCode::UNPROCESSABLE_ENTITY,
@@ -160,7 +142,6 @@ async fn assignment_attributes_reference_members_and_teams(pool: PgPool) {
             scalar("assignee", assignee.clone()),
         ])
         .await
-        .unwrap()
         .error_for_status()
         .unwrap()
         .json()
@@ -241,9 +222,7 @@ async fn assignment_attributes_reference_members_and_teams(pool: PgPool) {
         "{}",
         edited.text().await.unwrap()
     );
-    let reassigned = create(vec![scalar("assignee", format!("team:{team_id}"))])
-        .await
-        .unwrap();
+    let reassigned = create(vec![scalar("assignee", format!("team:{team_id}"))]).await;
     assert_eq!(reassigned.status(), StatusCode::UNPROCESSABLE_ENTITY);
 }
 

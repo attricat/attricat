@@ -335,3 +335,59 @@ async fn publication_endpoints_require_an_authenticated_publisher(pool: PgPool) 
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     server.abort();
 }
+
+#[sqlx::test]
+async fn deleting_a_context_announces_its_withdrawn_publications(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let context = client
+        .post(format!("{base_url}/contexts"))
+        .json(&json!({ "code": "publication-retired", "data": {} }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json::<Value>()
+        .await
+        .unwrap();
+    let context_id = context["id"].as_str().unwrap();
+    client
+        .put(format!("{base_url}/publication-channels/{context_id}"))
+        .json(&json!({ "enabled": true }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    let blueprint = create_blueprint(&client, &base_url, PUBLICATION_BLUEPRINT).await;
+    let entity = create_entity(&client, &base_url, &blueprint).await;
+    let entity_id: Uuid = entity["id"].as_str().unwrap().parse().unwrap();
+    client
+        .post(format!("{base_url}/v1/entities/{entity_id}/publications"))
+        .json(&json!({ "context_id": context_id }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+
+    client
+        .delete(format!("{base_url}/contexts/id/{context_id}"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+
+    let unpublished: Vec<Value> = sqlx::query_scalar(
+        "SELECT payload FROM domain_events WHERE aggregate_id = $1 AND event_type = 'entity.unpublished.v1'",
+    )
+    .bind(entity_id)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(unpublished.len(), 1);
+    assert_eq!(unpublished[0]["context_id"], context_id);
+    server.abort();
+}

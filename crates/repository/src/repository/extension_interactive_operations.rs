@@ -84,6 +84,28 @@ struct InteractiveRunRow {
     cancelled_at: Option<DateTime<Utc>>,
 }
 
+/// Execution status of an interactive run. The extension's domain outcome is
+/// reported separately, in its progress.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InteractiveRunStatus {
+    Queued,
+    Running,
+    Cancelling,
+    Cancelled,
+    Completed,
+    Failed,
+}
+
+/// Why a [`InteractiveRunStatus::Failed`] run failed, safe to show its user.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InteractiveRunFailure {
+    /// The initiator lost access to the workspace while the run was queued.
+    AccessRevoked,
+    ExtensionFailed,
+}
+
 /// End-user projection of an interactive run. It omits input, configuration,
 /// checkpoints, storage keys and component diagnostics.
 #[derive(Clone, Debug, Serialize)]
@@ -94,11 +116,9 @@ pub struct InteractiveRun {
     pub operation_id: String,
     #[serde(skip)]
     pub actor_user_id: Option<Uuid>,
-    /// Execution status: `queued`, `running`, `cancelling`, `cancelled`,
-    /// `completed` or `failed`. The extension's domain outcome is in progress.
-    pub status: &'static str,
+    pub status: InteractiveRunStatus,
     pub progress: Value,
-    pub failure: Option<&'static str>,
+    pub failure: Option<InteractiveRunFailure>,
     pub can_cancel: bool,
     pub selection_count: i64,
     pub blueprint_id: Option<Uuid>,
@@ -124,25 +144,30 @@ impl From<InteractiveRunRow> for InteractiveRun {
     fn from(row: InteractiveRunRow) -> Self {
         let started = row.lifecycle_started || row.attempts > 0;
         let status = match row.status.as_str() {
-            "completed" => "completed",
-            "cancelled" => "cancelled",
-            "dead_letter" => "failed",
-            _ if row.cancellation_requested => "cancelling",
-            "leased" => "running",
-            _ if started => "running",
-            _ => "queued",
+            "completed" => InteractiveRunStatus::Completed,
+            "cancelled" => InteractiveRunStatus::Cancelled,
+            "dead_letter" => InteractiveRunStatus::Failed,
+            _ if row.cancellation_requested => InteractiveRunStatus::Cancelling,
+            "leased" => InteractiveRunStatus::Running,
+            _ if started => InteractiveRunStatus::Running,
+            _ => InteractiveRunStatus::Queued,
         };
-        let failure = (status == "failed").then_some(match row.last_error_code.as_deref() {
-            Some(INITIATOR_ACCESS_REVOKED) => "access_revoked",
-            _ => "extension_failed",
-        });
+        let failure = (status == InteractiveRunStatus::Failed).then_some(
+            match row.last_error_code.as_deref() {
+                Some(INITIATOR_ACCESS_REVOKED) => InteractiveRunFailure::AccessRevoked,
+                _ => InteractiveRunFailure::ExtensionFailed,
+            },
+        );
         Self {
             id: row.id,
             extension_id: row.extension_id,
             contribution_id: row.contribution_id,
             operation_id: row.operation_id,
             actor_user_id: row.actor_user_id,
-            can_cancel: matches!(status, "queued" | "running"),
+            can_cancel: matches!(
+                status,
+                InteractiveRunStatus::Queued | InteractiveRunStatus::Running
+            ),
             status,
             progress: row.progress,
             failure,
@@ -297,11 +322,7 @@ impl CatalogRepository {
         let interactive = operation.interactive.as_ref().ok_or_else(|| {
             RepositoryError::InvalidExtension("operation is not exposed for interactive use".into())
         })?;
-        let unique = input
-            .entity_ids
-            .iter()
-            .collect::<std::collections::HashSet<_>>()
-            .len();
+        let unique = input.entity_ids.iter().collect::<HashSet<_>>().len();
         if input.entity_ids.is_empty()
             || input.entity_ids.len() > interactive.max_selection as usize
             || unique != input.entity_ids.len()
@@ -349,7 +370,7 @@ impl CatalogRepository {
                 "selection must contain saved entities from one blueprint revision".into(),
             ));
         }
-        self.ensure_principal_may_all(
+        self.ensure_principal_may(
             &mut transaction,
             input.actor,
             "entities.read",
@@ -391,9 +412,9 @@ impl CatalogRepository {
             }
             return Box::pin(self.start_interactive_operation_attempt(input, true)).await;
         };
-        // Positions are the selection order, starting at zero.
+        // Positions are zero-based, in request order.
         sqlx::query(
-            "INSERT INTO extension_operation_run_entities(operation_run_id,workspace_id,position,entity_id) SELECT $1, $2, (selected.ordinality - 1)::int, selected.entity_id FROM UNNEST($3::uuid[]) WITH ORDINALITY AS selected(entity_id, ordinality)",
+            "INSERT INTO extension_operation_run_entities(operation_run_id,workspace_id,position,entity_id) SELECT $1,$2,(selection.ordinality-1)::int,selection.entity_id FROM unnest($3::uuid[]) WITH ORDINALITY AS selection(entity_id,ordinality)",
         )
         .bind(run_id)
         .bind(self.workspace_id.0)
@@ -421,9 +442,9 @@ impl CatalogRepository {
         Ok(run_id)
     }
 
-    /// The initiator's recent interactive runs, newest first.
-    /// The actor's recent runs whose whole selection they can still read;
-    /// like the detail view, a run with any unreadable member is hidden.
+    /// The initiator's recent interactive runs, newest first, whose whole
+    /// selection they can still read; like the detail view, a run with any
+    /// unreadable member is hidden.
     pub async fn interactive_extension_runs(
         &self,
         actor: AuthorizationActor,
@@ -520,7 +541,7 @@ impl CatalogRepository {
         .bind(self.workspace_id.0)
         .fetch_all(&mut *connection)
         .await?;
-        self.ensure_principal_may_all(&mut connection, actor, "entities.read", &members)
+        self.ensure_principal_may(&mut connection, actor, "entities.read", &members)
             .await
     }
 
@@ -615,14 +636,12 @@ impl CatalogRepository {
                 "operation run lost its lease".into(),
             ));
         }
-        sqlx::query(
-            "UPDATE tasks SET status='dead_letter',failures=failures+1,lease_owner=NULL,lease_token=NULL,lease_until=NULL,last_error_code=$4,last_error_message='the initiating user no longer has access',failed_at=clock_timestamp(),updated_at=clock_timestamp() WHERE id=$1 AND status='leased' AND lease_owner=$2 AND lease_token=$3",
+        self.dead_letter_task_in_transaction(
+            &mut transaction,
+            task,
+            INITIATOR_ACCESS_REVOKED,
+            "the initiating user no longer has access",
         )
-        .bind(task.id)
-        .bind(&task.lease_owner)
-        .bind(task.lease_token)
-        .bind(INITIATOR_ACCESS_REVOKED)
-        .execute(&mut *transaction)
         .await?;
         transaction.commit().await?;
         Ok(())
@@ -832,27 +851,33 @@ mod tests {
 
     #[test]
     fn execution_status_is_separate_from_domain_outcome() {
-        assert_eq!(InteractiveRun::from(row("pending")).status, "queued");
+        assert_eq!(
+            InteractiveRun::from(row("pending")).status,
+            InteractiveRunStatus::Queued
+        );
         let mut started = row("pending");
         started.lifecycle_started = true;
-        assert_eq!(InteractiveRun::from(started).status, "running");
+        assert_eq!(
+            InteractiveRun::from(started).status,
+            InteractiveRunStatus::Running
+        );
         let mut cancelling = row("leased");
         cancelling.cancellation_requested = true;
         let cancelling = InteractiveRun::from(cancelling);
-        assert_eq!(cancelling.status, "cancelling");
+        assert_eq!(cancelling.status, InteractiveRunStatus::Cancelling);
         assert!(!cancelling.can_cancel);
         let completed = InteractiveRun::from(row("completed"));
-        assert_eq!(completed.status, "completed");
+        assert_eq!(completed.status, InteractiveRunStatus::Completed);
         assert!(completed.outputs_expire_at.is_some());
         let mut revoked = row("dead_letter");
         revoked.last_error_code = Some(INITIATOR_ACCESS_REVOKED.into());
         assert_eq!(
             InteractiveRun::from(revoked).failure,
-            Some("access_revoked")
+            Some(InteractiveRunFailure::AccessRevoked)
         );
         assert_eq!(
             InteractiveRun::from(row("dead_letter")).failure,
-            Some("extension_failed")
+            Some(InteractiveRunFailure::ExtensionFailed)
         );
     }
 }

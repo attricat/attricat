@@ -11,7 +11,7 @@ use super::{AppState, audit, error::ApiError};
 use crate::{
     account::{SessionDigest, SessionSecret},
     constants::SESSION_COOKIE,
-    repository::CatalogRepository,
+    repository::{AuthorizationActor, CatalogRepository},
 };
 
 mod policy;
@@ -26,6 +26,17 @@ const CSRF_HEADER: &str = "x-catalog-csrf";
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug)]
 pub(super) struct AuthenticatedPrincipal(pub Uuid, pub Option<Uuid>);
+
+impl AuthenticatedPrincipal {
+    /// The actor that permission checks evaluate: the user, further limited
+    /// by the API token's own permissions when the request used one.
+    pub(super) fn actor(self) -> AuthorizationActor {
+        AuthorizationActor {
+            user_id: self.0,
+            token_id: self.1,
+        }
+    }
+}
 
 /// The workspace selected by the verified credential or browser session.
 #[allow(dead_code)]

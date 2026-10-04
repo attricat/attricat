@@ -35,8 +35,10 @@ export const parsePrincipalReference = (
   value: unknown,
 ): PrincipalReference | undefined => {
   if (typeof value !== 'string') return undefined;
-  const match = referencePattern.exec(value);
-  return match ? { kind: match[1] as PrincipalKind, id: match[2] } : undefined;
+  const [, kind, id] = referencePattern.exec(value) ?? [];
+  return (kind === principalKinds.user || kind === principalKinds.team) && id
+    ? { kind, id }
+    : undefined;
 };
 
 export const principalReference = (kind: PrincipalKind, id: string) =>

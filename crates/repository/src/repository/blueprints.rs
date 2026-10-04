@@ -212,8 +212,16 @@ impl CatalogRepository {
         // Blueprint TOML owns rule definitions. A rule family is stable by
         // blueprint/code; each blueprint revision contributes an immutable rule revision.
         for rule in &compiled.rules {
-            let existing: Option<(Uuid, i64)> = sqlx::query_as("SELECT id, max(version) FROM rules WHERE workspace_id=$1 AND blueprint_id=$2 AND code=$3 GROUP BY id")
-                .bind(self.workspace_id.0).bind(blueprint_id).bind(&rule.code).fetch_optional(&mut **transaction).await?;
+            // The code is workspace-unique: this blueprint may extend its own
+            // family but not take a code that another rule family owns.
+            let families = self.lock_rule_code(transaction, &rule.code).await?;
+            let existing = families
+                .iter()
+                .find(|(_, family_blueprint, _)| *family_blueprint == blueprint_id)
+                .map(|(id, _, version)| (*id, *version));
+            if existing.is_none() && !families.is_empty() {
+                return Err(RepositoryError::RuleCodeTaken);
+            }
             let (rule_id, rule_version) = existing
                 .map(|(id, version)| (id, version + 1))
                 .unwrap_or_else(|| (Uuid::new_v4(), 1));
@@ -521,7 +529,7 @@ impl CatalogRepository {
             if !includes_published {
                 return Err(RepositoryError::BlueprintNotPublished);
             }
-            let (previous_keys, previous_hierarchies) = self
+            let previous_constraints = self
                 .enforced_structural_constraints(&mut transaction, blueprint_id)
                 .await?;
             sqlx::query(
@@ -536,8 +544,7 @@ impl CatalogRepository {
             self.apply_published_structural_constraints(
                 &mut transaction,
                 blueprint_id,
-                &previous_keys,
-                &previous_hierarchies,
+                &previous_constraints,
             )
             .await?;
             self.sync_blueprint_connector_jobs(
@@ -606,7 +613,7 @@ impl CatalogRepository {
             if !includes_published {
                 return Err(RepositoryError::BlueprintNotPublished);
             }
-            let (previous_keys, previous_hierarchies) = self
+            let previous_constraints = self
                 .enforced_structural_constraints(transaction, blueprint_id)
                 .await?;
             blueprint = sqlx::query_as::<_, Db<Blueprint>>(
@@ -624,8 +631,7 @@ impl CatalogRepository {
             self.apply_published_structural_constraints(
                 transaction,
                 blueprint_id,
-                &previous_keys,
-                &previous_hierarchies,
+                &previous_constraints,
             )
             .await?;
             self.sync_blueprint_connector_jobs(

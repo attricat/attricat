@@ -84,9 +84,6 @@ pub enum ToolError {
     Repository(#[from] RepositoryError),
 }
 
-const TOOL_ERROR: &str = "tool_error";
-const FORBIDDEN: &str = "forbidden";
-
 /// The provider-facing payload of a failed tool call. Repository errors use
 /// the same code, message and `details` as the API's error body (see
 /// [`RepositoryError::describe`]), so the agent can name failed checks,
@@ -94,24 +91,23 @@ const FORBIDDEN: &str = "forbidden";
 /// failures use `forbidden` or `tool_error`.
 pub fn tool_error_payload(error: &ToolError) -> Value {
     let ToolError::Repository(error) = error else {
-        let code = match error {
-            ToolError::Forbidden => FORBIDDEN,
-            _ => TOOL_ERROR,
+        let code = if matches!(error, ToolError::Forbidden) {
+            "forbidden"
+        } else {
+            "tool_error"
         };
-        return json!({"code":code,"message":error.to_string()});
+        return json!({"code": code, "message": error.to_string()});
     };
     let description = error.describe();
-    let mut payload = json!({"code":description.code,"message":description.message});
+    let mut payload = json!({"code": description.code, "message": description.message});
     if let Some(mut details) = description.details {
         // Check evidence can list many related entity IDs; keep the payload
         // within the tool result bound by dropping it before anything else.
         if details.to_string().len() > MAX_TOOL_RESULT_BYTES / 2
-            && let Some(items) = details["violations"].as_array_mut()
+            && let Some(violations) = details["violations"].as_array_mut()
         {
-            for item in items {
-                if let Some(item) = item.as_object_mut() {
-                    item.remove("evidence");
-                }
+            for violation in violations.iter_mut().filter_map(Value::as_object_mut) {
+                violation.remove("evidence");
             }
         }
         payload["details"] = details;
@@ -818,11 +814,9 @@ pub async fn execute_read(
                 "target_version":preview.target.blueprint.version,"status":preview.status,"issues":preview.issues})
         }
         "get_entity_record_controls" => {
-            let entity_id = parse_uuid(&arguments, "entity_id")?;
-            let context_id = match arguments.get("context_id") {
-                None | Some(Value::Null) => None,
-                Some(_) => Some(parse_uuid(&arguments, "context_id")?),
-            };
+            #[derive(Deserialize)]
+            struct Input { entity_id: Uuid, context_id: Option<Uuid> }
+            let Input { entity_id, context_id } = decode(arguments)?;
             let transitions = repository
                 .status_transition_access(
                     entity_id,
