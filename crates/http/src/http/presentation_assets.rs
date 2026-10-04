@@ -12,6 +12,7 @@ use uuid::Uuid;
 use super::{
     AppState,
     auth::ScopedRepository,
+    conditional,
     error::ApiError,
     extractors::{ApiPath, ApiQuery},
 };
@@ -77,8 +78,18 @@ pub(super) async fn content(
     State(state): State<AppState>,
     ScopedRepository(repository): ScopedRepository,
     ApiPath(id): ApiPath<Uuid>,
+    request_headers: HeaderMap,
 ) -> Result<Response, ApiError> {
     let asset = repository.get_presentation_asset(id).await?;
+    // Assets are insert-only, so the digest identifies this URL's content.
+    let etag = conditional::entity_tag(&asset.sha256)
+        .ok_or_else(|| ApiError::internal("stored presentation asset digest is invalid"))?;
+    if conditional::not_modified(&request_headers, &etag) {
+        return Ok(conditional::not_modified_response(
+            etag,
+            conditional::IMMUTABLE,
+        ));
+    }
     let expected_size = usize::try_from(asset.byte_size)
         .map_err(|_| ApiError::internal("presentation asset size is invalid"))?;
     let object = get_object_for_integrity(
@@ -109,18 +120,14 @@ pub(super) async fn content(
             .map_err(|_| ApiError::internal("stored presentation asset media type is invalid"))?,
     );
     headers.insert(header::CONTENT_LENGTH, HeaderValue::from(asset.byte_size));
-    headers.insert(
-        header::ETAG,
-        HeaderValue::from_str(&format!("\"{}\"", asset.sha256))
-            .map_err(|_| ApiError::internal("stored presentation asset digest is invalid"))?,
-    );
+    headers.insert(header::ETAG, etag);
     headers.insert(
         header::CONTENT_DISPOSITION,
         HeaderValue::from_static("inline"),
     );
     headers.insert(
         header::CACHE_CONTROL,
-        HeaderValue::from_static("private, no-store"),
+        HeaderValue::from_static(conditional::IMMUTABLE),
     );
     headers.insert(
         "x-content-type-options",

@@ -338,13 +338,26 @@ async fn private_asset_list_metadata_and_content_are_bounded(pool: PgPool) {
         .unwrap();
     assert_eq!(content.status(), StatusCode::OK);
     assert_eq!(content.headers()["content-type"], "image/svg+xml");
-    assert_eq!(content.headers()["cache-control"], "private, no-store");
+    assert_eq!(
+        content.headers()["cache-control"],
+        "private, max-age=31536000, immutable"
+    );
+    let etag = content.headers()["etag"].clone();
     assert_eq!(content.headers()["x-content-type-options"], "nosniff");
     assert_eq!(
         content.headers()["content-security-policy"],
         "default-src 'none'"
     );
     assert_eq!(content.bytes().await.unwrap().as_ref(), NORMALIZED_SVG);
+    let revalidated = client
+        .get(format!("{base_url}/presentation-assets/{id}/content"))
+        .header("if-none-match", etag.clone())
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(revalidated.status(), StatusCode::NOT_MODIFIED);
+    assert_eq!(revalidated.headers()["etag"], etag);
+    assert!(revalidated.bytes().await.unwrap().is_empty());
 
     let permissionless_user = Uuid::new_v4();
     sqlx::query("INSERT INTO users (id,email) VALUES ($1,'permissionless-assets@example.test')")

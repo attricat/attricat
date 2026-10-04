@@ -82,6 +82,8 @@ pub struct FileObject {
     pub display_filename: String,
     pub object_key: String,
     pub status: String,
+    /// Digest of the stored bytes; a file and its variants never change.
+    pub sha256: String,
 }
 
 impl CatalogRepository {
@@ -606,10 +608,10 @@ impl CatalogRepository {
         let workspace_id = self.workspace_id.0;
         let row = match variant_kind {
             Some(kind) => sqlx::query_as::<_, FileObject>(
-                "SELECT v.mime_type, v.byte_size, ''::TEXT AS display_filename, v.object_key, f.status FROM file_variants v JOIN files f ON f.id = v.file_id AND f.workspace_id = v.workspace_id WHERE v.file_id = $1 AND v.workspace_id = $2 AND v.kind = $3 AND f.deleted_at IS NULL",
+                "SELECT v.mime_type, v.byte_size, ''::TEXT AS display_filename, v.object_key, f.status, v.sha256 FROM file_variants v JOIN files f ON f.id = v.file_id AND f.workspace_id = v.workspace_id WHERE v.file_id = $1 AND v.workspace_id = $2 AND v.kind = $3 AND f.deleted_at IS NULL",
             ).bind(file_id).bind(workspace_id).bind(kind).fetch_optional(&self.pool).await?,
             None => sqlx::query_as::<_, FileObject>(
-                "SELECT mime_type, byte_size, display_filename, original_key AS object_key, status FROM files WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL",
+                "SELECT mime_type, byte_size, display_filename, original_key AS object_key, status, sha256 FROM files WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL",
             ).bind(file_id).bind(workspace_id).fetch_optional(&self.pool).await?,
         };
         row.ok_or(RepositoryError::NotFound("file"))

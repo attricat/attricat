@@ -3,6 +3,7 @@ mod audit;
 mod audit_events;
 mod auth;
 mod blueprints;
+mod conditional;
 mod contexts;
 mod data_health;
 mod entities;

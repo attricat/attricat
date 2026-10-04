@@ -15,6 +15,7 @@ use uuid::Uuid;
 use super::{
     AppState,
     auth::ScopedRepository,
+    conditional,
     error::ApiError,
     extractors::{ApiJson, ApiPath, ApiQuery},
 };
@@ -1120,6 +1121,7 @@ pub(super) async fn artifact(
     State(state): State<AppState>,
     ScopedRepository(repository): ScopedRepository,
     ApiPath((extension_id, contribution_id)): ApiPath<(String, String)>,
+    request_headers: HeaderMap,
 ) -> Result<Response, ApiError> {
     let contribution = repository
         .client_extension_contribution(&extension_id, &contribution_id)
@@ -1128,6 +1130,19 @@ pub(super) async fn artifact(
     let artifact_key = contribution
         .artifact_key
         .ok_or_else(|| ApiError::not_found("extension artifact"))?;
+    // An installed release is immutable, but this URL follows upgrades, so
+    // clients revalidate against the release-scoped tag on every use.
+    let etag = conditional::entity_tag(&format!(
+        "{}/{}",
+        contribution.installed_release_id, contribution.id
+    ))
+    .ok_or_else(|| ApiError::internal("extension artifact tag is invalid"))?;
+    if conditional::not_modified(&request_headers, &etag) {
+        return Ok(conditional::not_modified_response(
+            etag,
+            conditional::REVALIDATE,
+        ));
+    }
     let object =
         state
             .object_store
@@ -1147,9 +1162,10 @@ pub(super) async fn artifact(
         header::CONTENT_TYPE,
         HeaderValue::from_static("text/javascript; charset=utf-8"),
     );
+    headers.insert(header::ETAG, etag);
     headers.insert(
         header::CACHE_CONTROL,
-        HeaderValue::from_static("private, no-store"),
+        HeaderValue::from_static(conditional::REVALIDATE),
     );
     headers.insert(
         header::X_CONTENT_TYPE_OPTIONS,

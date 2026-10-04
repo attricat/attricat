@@ -1,5 +1,5 @@
 use super::{
-    AppState,
+    AppState, conditional,
     data_health::invalidate_data_health,
     error::ApiError,
     extractors::{ApiJson, ApiPath},
@@ -646,6 +646,15 @@ async fn download(
         if file.status != "ready" {
             return Err(ApiError::file_processing());
         }
+        let etag = conditional::entity_tag(&file.sha256);
+        if let Some(etag) = etag.as_ref()
+            && conditional::not_modified(headers, etag)
+        {
+            return Ok(conditional::not_modified_response(
+                etag.clone(),
+                conditional::IMMUTABLE,
+            ));
+        }
         // Metadata is database-owned: never trust storage-supplied content types.
         let total = file.byte_size as usize;
         let range = match parse_range(
@@ -683,9 +692,12 @@ async fn download(
         );
         response_headers.insert(header::CONTENT_LENGTH, HeaderValue::from(content_length));
         response_headers.insert(header::ACCEPT_RANGES, HeaderValue::from_static("bytes"));
+        if let Some(etag) = etag {
+            response_headers.insert(header::ETAG, etag);
+        }
         response_headers.insert(
             header::CACHE_CONTROL,
-            HeaderValue::from_static("private, no-store"),
+            HeaderValue::from_static(conditional::IMMUTABLE),
         );
         response_headers.insert(
             header::CONTENT_DISPOSITION,

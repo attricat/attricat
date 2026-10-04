@@ -3662,3 +3662,55 @@ async fn artifact_completion_faults_abort_metadata_and_delete_orphans(pool: sqlx
         "failed outputs are never retained"
     );
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn client_artifacts_revalidate_against_the_installed_release(pool: sqlx::PgPool) {
+    let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
+    let repository = CatalogRepository::system(pool.clone())
+        .for_workspace(workspace)
+        .await
+        .unwrap();
+    let store = Arc::new(FakeObjectStore::available());
+    ExtensionInstaller::new(repository.clone(), store.clone())
+        .install(
+            "github:acme/client@v1.0.0",
+            &client_release_archive("acme.client"),
+        )
+        .await
+        .unwrap();
+    repository
+        .grant_extension("acme.client", "capability", "configuration.read")
+        .await
+        .unwrap();
+    repository.enable_extension("acme.client").await.unwrap();
+    let release = repository
+        .installed_extension("acme.client")
+        .await
+        .unwrap()
+        .installed_release_id;
+    let (base, server) = start_server_with_object_store(pool, store).await;
+    let client = authenticated_client();
+    let url = format!("{base}/extensions/acme.client/panel/artifact");
+    let response = client.get(&url).send().await.unwrap();
+    assert_eq!(response.status(), reqwest::StatusCode::OK);
+    assert_eq!(response.headers()["cache-control"], "private, no-cache");
+    let etag = response.headers()["etag"].clone();
+    assert_eq!(etag, format!("\"{release}/panel\"").as_str());
+    assert_eq!(response.bytes().await.unwrap().as_ref(), b"export {}");
+
+    let revalidated = client
+        .get(&url)
+        .header("if-none-match", etag)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(revalidated.status(), reqwest::StatusCode::NOT_MODIFIED);
+    let stale = client
+        .get(&url)
+        .header("if-none-match", "\"previous-release/panel\"")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(stale.status(), reqwest::StatusCode::OK);
+    server.abort();
+}
