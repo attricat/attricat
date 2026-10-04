@@ -3662,3 +3662,78 @@ async fn artifact_completion_faults_abort_metadata_and_delete_orphans(pool: sqlx
         "failed outputs are never retained"
     );
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn extension_lookup_resolves_like_an_upsert(pool: sqlx::PgPool) {
+    let workspace_id = Uuid::from_u128(0x00000000000040008000000000000002);
+    let repository = CatalogRepository::system(pool.clone())
+        .for_workspace(workspace_id)
+        .await
+        .unwrap()
+        .for_extension("acme.sync");
+    let blueprint = repository
+        .create_blueprint(CreateBlueprint {
+            definition: KEYED_SYNC_BLUEPRINT.into(),
+        })
+        .await
+        .unwrap();
+    repository
+        .publish_blueprint_revision(blueprint.blueprint.id, blueprint.blueprint.version)
+        .await
+        .unwrap();
+    let attribute = |code: &str| {
+        blueprint
+            .attributes
+            .iter()
+            .find(|attribute| attribute.code == code)
+            .unwrap()
+            .id
+    };
+    let mut created = Vec::new();
+    for external_id in ["EXT-9", "EXT-10"] {
+        created.push(
+            repository
+                .create_entity_with_values(
+                    blueprint.blueprint.id,
+                    blueprint.blueprint.version,
+                    vec![
+                        NewAttributeValue::Scalar {
+                            attribute_id: None,
+                            attribute_code: Some("external_id".into()),
+                            context_id: None,
+                            value: json!(external_id),
+                        },
+                        NewAttributeValue::Scalar {
+                            attribute_id: None,
+                            attribute_code: Some("title".into()),
+                            context_id: None,
+                            value: json!("shared title"),
+                        },
+                    ],
+                    vec![],
+                    json!({}),
+                )
+                .await
+                .unwrap(),
+        );
+    }
+    let lookup = |attribute_id, value: &'static str| {
+        repository.extension_catalog_lookup(
+            blueprint.blueprint.id,
+            blueprint.blueprint.version,
+            attribute_id,
+            value,
+        )
+    };
+    // The declared key is case-insensitive, as the upsert resolves it.
+    assert_eq!(
+        lookup(attribute("external_id"), "ext-9")
+            .await
+            .unwrap()
+            .unwrap()
+            .id,
+        created[0].id
+    );
+    // A value shared by several entities names none of them.
+    assert!(lookup(attribute("title"), "shared title").await.is_err());
+}
