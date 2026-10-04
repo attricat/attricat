@@ -123,7 +123,7 @@ A rule attached to a context checks the entity's resolved values in that context
 
 ### Changes to linked records
 
-`linked` and `referenced_by` depend on other records. When a linked or referencing record changes, event-triggered rules also re-run for up to 100 entities that depend on it, so their findings stay current. Rules with only schedule or manual triggers notice the change on their next run.
+`linked` and `referenced_by` depend on other records. When a linked or referencing record changes, event-triggered rules also re-run for up to 100 entities that depend on it, so their findings stay current. That includes a record a referencing record stops pointing to, for example when a corrective action is moved to another nonconformance. Rules with only schedule or manual triggers notice the change on their next run.
 
 The [blueprint reference](/reference/blueprint/#predicates) has the comparison rules for each type and the limits on nesting and linked records.
 

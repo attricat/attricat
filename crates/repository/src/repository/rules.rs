@@ -562,6 +562,13 @@ impl CatalogRepository {
             }
             dependents.extend(sqlx::query_scalar::<_, Uuid>("SELECT DISTINCT av.relationship_target_entity_id FROM attribute_values av JOIN attributes a ON a.id=av.attribute_id AND a.code=$3 JOIN entities t ON t.id=av.relationship_target_entity_id AND t.workspace_id=$1 AND t.deleted_at IS NULL AND t.blueprint_id=$4 AND t.blueprint_version=$5 WHERE av.entity_id=$2 AND av.active LIMIT $6")
                 .bind(ws).bind(event.aggregate_id).bind(relationship).bind(rule.blueprint_id).bind(rule.blueprint_version).bind(MAX_DEPENDENTS).fetch_all(&mut **tx).await?);
+            // A record the write stopped referencing (a removed or re-pointed
+            // relationship) no longer appears above, yet its count changed.
+            let released = changed_relationship_targets(event, relationship);
+            if !released.is_empty() {
+                dependents.extend(sqlx::query_scalar::<_, Uuid>("SELECT id FROM entities WHERE workspace_id=$1 AND id=ANY($2) AND deleted_at IS NULL AND blueprint_id=$3 AND blueprint_version=$4")
+                    .bind(ws).bind(&released).bind(rule.blueprint_id).bind(rule.blueprint_version).fetch_all(&mut **tx).await?);
+            }
         }
         dependents.sort();
         dependents.dedup();
@@ -1028,6 +1035,32 @@ impl CatalogRepository {
         }
         Ok(results)
     }
+}
+
+/// The relationship targets of `attribute_code` that the event's facts
+/// record as added or removed.
+fn changed_relationship_targets(event: &DomainEvent, attribute_code: &str) -> Vec<Uuid> {
+    let Some(facts) = event
+        .payload
+        .get("facts")
+        .and_then(|facts| facts.as_array())
+    else {
+        return Vec::new();
+    };
+    let mut targets: Vec<Uuid> = facts
+        .iter()
+        .filter(|fact| {
+            fact.get("attribute_code").and_then(|code| code.as_str()) == Some(attribute_code)
+        })
+        .filter_map(|fact| {
+            fact.get("relationship_target_entity_id")
+                .and_then(|id| id.as_str())
+                .and_then(|id| id.parse().ok())
+        })
+        .collect();
+    targets.sort();
+    targets.dedup();
+    targets
 }
 
 /// Decides the enable gate from the latest completed full dry run, given as
