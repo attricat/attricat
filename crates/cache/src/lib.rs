@@ -2,13 +2,13 @@
 //!
 //! [`QueryCache`] keeps decoded values in a bounded in-memory LRU (L1); a hit
 //! is an `Arc` clone with no serialization. An optional [`RemoteStore`] (L2)
-//! shares serialized values between replicas, and an [`InvalidationBus`]
-//! tells every replica to drop L1 entries for an invalidated [`Tag`].
+//! shares serialized values between replicas.
 //!
-//! Correctness never depends on the remote tier or the bus: callers either
-//! cache immutable data, embed a generation number they read in the same
-//! request into the key, or accept a bounded [`Policy::Ttl`]. Remote failures
-//! degrade to L1 and the loader; they never fail a request.
+//! Nothing is invalidated across replicas. Correctness comes from the keys:
+//! callers either cache immutable data, embed a generation number they read
+//! in the same request into the key, or accept a bounded [`Policy::Ttl`].
+//! Remote failures degrade to L1 and the loader; they never fail a request,
+//! and remote writes never delay one.
 
 use std::{
     any::Any,
@@ -25,9 +25,8 @@ use bytes::Bytes;
 mod rate_limit;
 mod redis_backend;
 
-use futures_util::{StreamExt, stream::BoxStream};
 pub use rate_limit::{LocalRateLimiter, RateLimiter, RedisRateLimiter};
-pub use redis_backend::{RedisBus, RedisClients, RedisStore, connect as connect_redis};
+pub use redis_backend::Redis;
 use serde::{Serialize, de::DeserializeOwned};
 
 /// A cache key. By convention `namespace:part:part`; the namespace labels
@@ -60,18 +59,15 @@ impl fmt::Display for CacheKey {
     }
 }
 
-/// A group of entries invalidated together, such as one workspace's
-/// extension set.
+/// A group of this replica's L1 entries that [`QueryCache::invalidate_local`]
+/// drops together. Tags are process-local: they do not reach the shared tier
+/// or other replicas, so they must never be what keeps an entry correct.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Tag(Arc<str>);
 
 impl Tag {
     pub fn new(namespace: &str, parts: &[&(dyn fmt::Display + Sync)]) -> Self {
         Self(CacheKey::new(namespace, parts).0)
-    }
-
-    pub fn from_wire(tag: &str) -> Self {
-        Self(tag.into())
     }
 
     pub fn as_str(&self) -> &str {
@@ -99,55 +95,38 @@ pub enum Policy {
 }
 
 impl Policy {
-    fn remote_ttl(self) -> Option<Duration> {
+    /// How long the shared tier keeps an entry.
+    fn remote_ttl(self) -> Duration {
         match self {
             // Remote memory is shared; let unused immutable entries age out.
-            Self::Immutable | Self::Generation => Some(Duration::from_secs(24 * 60 * 60)),
-            Self::Ttl { fresh, stale } => Some(fresh + stale),
+            Self::Immutable | Self::Generation => Duration::from_secs(24 * 60 * 60),
+            Self::Ttl { fresh, stale } => fresh + stale,
         }
     }
 }
 
 #[derive(Debug, thiserror::Error)]
-#[error("{0}")]
-pub struct CacheError(pub String);
+pub enum CacheError {
+    /// The shared tier is disconnected or skipped after repeated failures.
+    #[error("the shared cache tier is unavailable")]
+    Unavailable,
+    #[error("{0}")]
+    Failed(String),
+}
+
+/// A value read from the shared tier.
+pub struct RemoteValue {
+    pub bytes: Bytes,
+    /// How much longer the shared tier keeps the value, when known.
+    pub remaining: Option<Duration>,
+}
 
 /// A shared serialized tier, such as Redis.
 #[async_trait]
 pub trait RemoteStore: Send + Sync {
-    async fn get(&self, key: &str) -> Result<Option<Bytes>, CacheError>;
-    /// Stores `value` and records the key under each tag for
-    /// [`RemoteStore::delete_tag`].
-    async fn set(
-        &self,
-        key: &str,
-        value: Bytes,
-        ttl: Option<Duration>,
-        tags: &[Tag],
-    ) -> Result<(), CacheError>;
-    async fn delete_tag(&self, tag: &Tag) -> Result<(), CacheError>;
-}
-
-/// Tells other replicas which tags were invalidated.
-#[async_trait]
-pub trait InvalidationBus: Send + Sync {
-    async fn publish(&self, tag: &Tag) -> Result<(), CacheError>;
-    fn subscribe(&self) -> BoxStream<'static, Tag>;
-}
-
-/// The bus of a single process: invalidation already dropped the local
-/// entries, so there is nothing to deliver.
-pub struct LocalBus;
-
-#[async_trait]
-impl InvalidationBus for LocalBus {
-    async fn publish(&self, _: &Tag) -> Result<(), CacheError> {
-        Ok(())
-    }
-
-    fn subscribe(&self) -> BoxStream<'static, Tag> {
-        futures_util::stream::empty().boxed()
-    }
+    async fn get(&self, key: &str) -> Result<Option<RemoteValue>, CacheError>;
+    /// Stores `value` for `ttl`.
+    async fn set(&self, key: &str, value: Bytes, ttl: Duration) -> Result<(), CacheError>;
 }
 
 /// Where shared cache state lives.
@@ -155,7 +134,8 @@ impl InvalidationBus for LocalBus {
 pub enum CacheBackend {
     /// Process memory only; the default.
     Memory,
-    /// Process memory in front of Redis, which also carries invalidations.
+    /// Process memory in front of Redis, which also holds the shared
+    /// extension network rate limits.
     Redis { url: String },
 }
 
@@ -164,6 +144,9 @@ pub struct CacheConfig {
     pub backend: CacheBackend,
     /// Maximum number of L1 entries.
     pub max_entries: u64,
+    /// The first segment of every Redis key; the database identity follows
+    /// it.
+    pub key_prefix: String,
 }
 
 impl Default for CacheConfig {
@@ -171,18 +154,20 @@ impl Default for CacheConfig {
         Self {
             backend: CacheBackend::Memory,
             max_entries: 20_000,
+            key_prefix: "attricat".to_owned(),
         }
     }
 }
 
 impl CacheConfig {
-    /// Reads `CACHE_BACKEND` (`memory` or `redis`), `REDIS_URL` and
-    /// `CACHE_MAX_ENTRIES`.
+    /// Reads `CACHE_BACKEND` (`memory` or `redis`), `REDIS_URL`,
+    /// `CACHE_MAX_ENTRIES` and `CACHE_KEY_PREFIX`.
     pub fn from_env() -> Result<Self, String> {
         Self::parse(
             std::env::var("CACHE_BACKEND").ok().as_deref(),
             std::env::var("REDIS_URL").ok().as_deref(),
             std::env::var("CACHE_MAX_ENTRIES").ok().as_deref(),
+            std::env::var("CACHE_KEY_PREFIX").ok().as_deref(),
         )
     }
 
@@ -190,6 +175,7 @@ impl CacheConfig {
         backend: Option<&str>,
         redis_url: Option<&str>,
         max_entries: Option<&str>,
+        key_prefix: Option<&str>,
     ) -> Result<Self, String> {
         let backend = match backend.map(str::trim).filter(|value| !value.is_empty()) {
             None | Some("memory") => CacheBackend::Memory,
@@ -210,9 +196,17 @@ impl CacheConfig {
                 .ok_or("CACHE_MAX_ENTRIES must be a positive integer")?,
             None => Self::default().max_entries,
         };
+        let key_prefix = match key_prefix.map(str::trim).filter(|value| !value.is_empty()) {
+            Some(prefix) if prefix.chars().any(char::is_whitespace) => {
+                return Err("CACHE_KEY_PREFIX must not contain whitespace".to_owned());
+            }
+            Some(prefix) => prefix.to_owned(),
+            None => Self::default().key_prefix,
+        };
         Ok(Self {
             backend,
             max_entries,
+            key_prefix,
         })
     }
 }
@@ -252,7 +246,6 @@ impl Entry {
 struct Inner {
     l1: moka::future::Cache<CacheKey, Entry>,
     l2: Option<Arc<dyn RemoteStore>>,
-    bus: Arc<dyn InvalidationBus>,
     /// One loader per key at a time; waiters re-read L1 when it finishes.
     flights: Mutex<HashMap<CacheKey, Weak<tokio::sync::Mutex<()>>>>,
 }
@@ -280,16 +273,12 @@ impl Default for QueryCache {
 }
 
 impl QueryCache {
-    /// An in-memory cache with the process-local bus.
+    /// An in-memory cache.
     pub fn new(config: CacheConfig) -> Self {
-        Self::with_backends(config, None, Arc::new(LocalBus))
+        Self::with_remote(config, None)
     }
 
-    pub fn with_backends(
-        config: CacheConfig,
-        l2: Option<Arc<dyn RemoteStore>>,
-        bus: Arc<dyn InvalidationBus>,
-    ) -> Self {
+    pub fn with_remote(config: CacheConfig, l2: Option<Arc<dyn RemoteStore>>) -> Self {
         Self {
             inner: Arc::new(Inner {
                 l1: moka::future::Cache::builder()
@@ -297,35 +286,35 @@ impl QueryCache {
                     .support_invalidation_closures()
                     .build(),
                 l2,
-                bus,
                 flights: Mutex::new(HashMap::new()),
             }),
         }
     }
 
     /// Builds the configured cache and the rate limiter that goes with it.
-    /// An unreachable Redis is logged and the process continues in memory:
-    /// the shared tier is an optimization, never a dependency.
-    pub async fn from_config(config: CacheConfig) -> (Self, Arc<dyn RateLimiter>) {
-        match &config.backend {
+    ///
+    /// `database_identity` identifies the database this process serves; Redis
+    /// keys start with `<key_prefix>:<database_identity>:` so deployments
+    /// and databases that share a Redis never read each other's entries.
+    /// An unreachable Redis is retried in the background while the process
+    /// serves from memory: the shared tier is an optimization, never a
+    /// dependency. Only an invalid `REDIS_URL` is an error.
+    pub async fn from_config(
+        config: CacheConfig,
+        database_identity: &str,
+    ) -> Result<(Self, Arc<dyn RateLimiter>), CacheError> {
+        Ok(match &config.backend {
             CacheBackend::Memory => (Self::new(config), Arc::new(LocalRateLimiter::default())),
-            CacheBackend::Redis { url } => match connect_redis(url).await {
-                Ok(clients) => {
-                    let cache = Self::with_backends(
-                        config.clone(),
-                        Some(Arc::new(RedisStore::new(&clients))),
-                        Arc::new(RedisBus::new(&clients)),
-                    );
-                    cache.spawn_invalidation_listener();
-                    tracing::info!("query cache uses Redis as its shared tier");
-                    (cache, Arc::new(RedisRateLimiter::new(&clients)))
-                }
-                Err(error) => {
-                    tracing::error!(%error, "Redis is unavailable; the query cache stays in memory");
-                    (Self::new(config), Arc::new(LocalRateLimiter::default()))
-                }
-            },
-        }
+            CacheBackend::Redis { url } => {
+                let namespace = format!("{}:{database_identity}", config.key_prefix);
+                let redis = Redis::connect(url, &namespace).await?;
+                tracing::info!(%namespace, "query cache uses Redis as its shared tier");
+                (
+                    Self::with_remote(config.clone(), Some(Arc::new(redis.clone()))),
+                    Arc::new(RedisRateLimiter::new(&redis)),
+                )
+            }
+        })
     }
 
     /// Returns the cached value for `key`, or loads, stores and returns it.
@@ -374,16 +363,18 @@ impl QueryCache {
             record(&key, "hit");
             return Ok(value);
         }
-        if let Some(value) = self.remote::<T>(&key).await {
+        if let Some((value, stored_at)) = self.remote::<T>(&key, policy).await {
             record(&key, "remote_hit");
             let value = Arc::new(value);
-            self.store_local(&key, value.clone(), tags, policy).await;
+            self.store_local(&key, value.clone(), tags, policy, stored_at)
+                .await;
             return Ok(value);
         }
         record(&key, "miss");
         let value = Arc::new(load().await?);
-        self.store_local(&key, value.clone(), tags, policy).await;
-        self.store_remote(&key, value.as_ref(), tags, policy).await;
+        self.store_local(&key, value.clone(), tags, policy, Instant::now())
+            .await;
+        self.store_remote(&key, value.as_ref(), policy);
         Ok(value)
     }
 
@@ -410,24 +401,12 @@ impl QueryCache {
         tags: &[Tag],
         policy: Policy,
     ) {
-        self.store_local(&key, value, tags, policy).await;
+        self.store_local(&key, value, tags, policy, Instant::now())
+            .await;
     }
 
-    /// Drops every entry with `tag` here, in the remote tier, and (through
-    /// the bus) on other replicas.
-    pub async fn invalidate(&self, tag: &Tag) {
-        self.invalidate_local(tag);
-        if let Some(l2) = &self.inner.l2
-            && let Err(error) = l2.delete_tag(tag).await
-        {
-            tracing::warn!(%error, %tag, "remote cache invalidation failed");
-        }
-        if let Err(error) = self.inner.bus.publish(tag).await {
-            tracing::warn!(%error, %tag, "cache invalidation broadcast failed");
-        }
-    }
-
-    /// Drops this replica's entries with `tag`.
+    /// Drops this replica's L1 entries with `tag`. The shared tier and other
+    /// replicas keep theirs.
     pub fn invalidate_local(&self, tag: &Tag) {
         let tag = tag.clone();
         if let Err(error) = self
@@ -439,17 +418,6 @@ impl QueryCache {
             self.inner.l1.invalidate_all();
         }
         metrics::counter!("catalog_query_cache_invalidations_total").increment(1);
-    }
-
-    /// Applies invalidations other replicas publish until the bus closes.
-    pub fn spawn_invalidation_listener(&self) -> tokio::task::JoinHandle<()> {
-        let cache = self.clone();
-        let mut tags = self.inner.bus.subscribe();
-        tokio::spawn(async move {
-            while let Some(tag) = tags.next().await {
-                cache.invalidate_local(&tag);
-            }
-        })
     }
 
     pub fn entry_count(&self) -> u64 {
@@ -485,6 +453,7 @@ impl QueryCache {
         value: Arc<T>,
         tags: &[Tag],
         policy: Policy,
+        stored_at: Instant,
     ) {
         self.inner
             .l1
@@ -493,39 +462,54 @@ impl QueryCache {
                 Entry {
                     value,
                     tags: tags.into(),
-                    stored_at: Instant::now(),
+                    stored_at,
                     policy,
                 },
             )
             .await;
     }
 
-    async fn remote<T: DeserializeOwned>(&self, key: &CacheKey) -> Option<T> {
+    /// A fresh value from the shared tier and when it was stored there. A
+    /// TTL entry keeps the age it has in the shared tier, so copying it into
+    /// L1 never extends its life.
+    async fn remote<T: DeserializeOwned>(
+        &self,
+        key: &CacheKey,
+        policy: Policy,
+    ) -> Option<(T, Instant)> {
         let l2 = self.inner.l2.as_ref()?;
-        match l2.get(key.as_str()).await {
-            Ok(Some(bytes)) => match serde_json::from_slice(&bytes) {
-                Ok(value) => Some(value),
-                Err(error) => {
-                    tracing::warn!(%error, %key, "remote cache value could not be decoded");
-                    None
-                }
-            },
-            Ok(None) => None,
+        let remote = match l2.get(key.as_str()).await {
+            Ok(remote) => remote?,
+            Err(CacheError::Unavailable) => return None,
             Err(error) => {
                 tracing::warn!(%error, %key, "remote cache read failed");
+                return None;
+            }
+        };
+        let stored_at = match policy {
+            Policy::Immutable | Policy::Generation => Instant::now(),
+            Policy::Ttl { fresh, .. } => {
+                let age = policy.remote_ttl().checked_sub(remote.remaining?)?;
+                // A stale shared value is reloaded by this caller.
+                if age >= fresh {
+                    return None;
+                }
+                Instant::now().checked_sub(age)?
+            }
+        };
+        match serde_json::from_slice(&remote.bytes) {
+            Ok(value) => Some((value, stored_at)),
+            Err(error) => {
+                tracing::warn!(%error, %key, "remote cache value could not be decoded");
                 None
             }
         }
     }
 
-    async fn store_remote<T: Serialize>(
-        &self,
-        key: &CacheKey,
-        value: &T,
-        tags: &[Tag],
-        policy: Policy,
-    ) {
-        let Some(l2) = self.inner.l2.as_ref() else {
+    /// Writes `value` to the shared tier in the background, so a slow Redis
+    /// never delays the request that loaded it.
+    fn store_remote<T: Serialize>(&self, key: &CacheKey, value: &T, policy: Policy) {
+        let Some(l2) = self.inner.l2.clone() else {
             return;
         };
         let bytes = match serde_json::to_vec(value) {
@@ -535,9 +519,13 @@ impl QueryCache {
                 return;
             }
         };
-        if let Err(error) = l2.set(key.as_str(), bytes, policy.remote_ttl(), tags).await {
-            tracing::warn!(%error, %key, "remote cache write failed");
-        }
+        let key = key.clone();
+        tokio::spawn(async move {
+            match l2.set(key.as_str(), bytes, policy.remote_ttl()).await {
+                Ok(()) | Err(CacheError::Unavailable) => {}
+                Err(error) => tracing::warn!(%error, %key, "remote cache write failed"),
+            }
+        });
     }
 }
 
@@ -560,12 +548,41 @@ mod tests {
         CacheKey::new("test", &[&name])
     }
 
+    /// A shared tier in process memory that records stored TTLs and can
+    /// delay writes.
+    #[derive(Default)]
+    struct FakeRemote {
+        entries: Mutex<HashMap<String, (Bytes, Instant, Duration)>>,
+        write_delay: Duration,
+    }
+
+    #[async_trait]
+    impl RemoteStore for FakeRemote {
+        async fn get(&self, key: &str) -> Result<Option<RemoteValue>, CacheError> {
+            let entries = self.entries.lock().unwrap();
+            Ok(entries.get(key).and_then(|(bytes, stored_at, ttl)| {
+                Some(RemoteValue {
+                    bytes: bytes.clone(),
+                    remaining: Some(ttl.checked_sub(stored_at.elapsed())?),
+                })
+            }))
+        }
+
+        async fn set(&self, key: &str, value: Bytes, ttl: Duration) -> Result<(), CacheError> {
+            tokio::time::sleep(self.write_delay).await;
+            self.entries
+                .lock()
+                .unwrap()
+                .insert(key.to_owned(), (value, Instant::now(), ttl));
+            Ok(())
+        }
+    }
+
     /// Behaviour every backend provides; `peer` shares `cache`'s remote tier
-    /// and bus (for memory, it is a separate process-local cache).
+    /// (for memory, it is a separate process-local cache).
     async fn shared_behaviour(cache: QueryCache, peer: QueryCache, shared: bool) {
         let run = uuid_like();
         let key = CacheKey::new("behaviour", &[&run, &"value"]);
-        let tag = Tag::new("behaviour", &[&run]);
         let loads = Arc::new(AtomicUsize::new(0));
         let load = |value: u32| {
             let loads = loads.clone();
@@ -574,50 +591,36 @@ mod tests {
                 Ok::<_, CacheError>(value)
             }
         };
-        let tags = std::slice::from_ref(&tag);
         assert_eq!(
             *cache
-                .fetch(key.clone(), tags, Policy::Generation, load(1))
+                .fetch(key.clone(), &[], Policy::Generation, load(1))
                 .await
                 .unwrap(),
             1
         );
         assert_eq!(
             *cache
-                .fetch(key.clone(), tags, Policy::Generation, load(2))
+                .fetch(key.clone(), &[], Policy::Generation, load(2))
                 .await
                 .unwrap(),
             1
         );
         assert_eq!(loads.load(Ordering::SeqCst), 1);
         // A peer reads the shared tier instead of loading; a process-local
-        // peer loads for itself.
+        // peer loads for itself. The shared write runs in the background.
+        if let Some(remote) = &peer.inner.l2 {
+            for _ in 0..50 {
+                if remote.get(key.as_str()).await.unwrap().is_some() {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        }
         let peer_value = *peer
-            .fetch(key.clone(), tags, Policy::Generation, load(3))
+            .fetch(key.clone(), &[], Policy::Generation, load(3))
             .await
             .unwrap();
         assert_eq!(peer_value, if shared { 1 } else { 3 });
-        // Invalidation reaches both.
-        cache.invalidate(&tag).await;
-        if shared {
-            for _ in 0..50 {
-                if peer.get::<u32>(&key).await.is_none() {
-                    break;
-                }
-                tokio::time::sleep(Duration::from_millis(20)).await;
-            }
-            assert!(
-                peer.get::<u32>(&key).await.is_none(),
-                "peer L1 was invalidated"
-            );
-        }
-        assert_eq!(
-            *cache
-                .fetch(key.clone(), tags, Policy::Generation, load(4))
-                .await
-                .unwrap(),
-            4
-        );
     }
 
     fn uuid_like() -> String {
@@ -646,30 +649,61 @@ mod tests {
             return;
         };
         let config = CacheConfig {
-            backend: CacheBackend::Redis { url },
+            backend: CacheBackend::Redis { url: url.clone() },
             max_entries: 100,
+            ..CacheConfig::default()
         };
-        let (cache, limiter) = QueryCache::from_config(config.clone()).await;
-        let (peer, _) = QueryCache::from_config(config).await;
-        assert!(cache.inner.l2.is_some(), "Redis is reachable");
-        // Let both subscriptions attach before publishing.
-        tokio::time::sleep(Duration::from_millis(200)).await;
+        let database = uuid_like();
+        let redis = Redis::connect(&url, &format!("attricat-test:{database}"))
+            .await
+            .unwrap();
+        redis.wait_until_connected().await;
+        let remote: Arc<dyn RemoteStore> = Arc::new(redis.clone());
+        let cache = QueryCache::with_remote(config.clone(), Some(remote.clone()));
+        let peer = QueryCache::with_remote(config.clone(), Some(remote));
         shared_behaviour(cache, peer, true).await;
-        let key = uuid_like();
-        assert!(limiter.allow(&key, 1, Duration::from_secs(5)).await);
-        assert!(!limiter.allow(&key, 1, Duration::from_secs(5)).await);
+
+        // Another database identity does not see the entry.
+        let other = Redis::connect(&url, &format!("attricat-test:{database}-other"))
+            .await
+            .unwrap();
+        other.wait_until_connected().await;
+        let key = CacheKey::new("behaviour", &[&"isolated"]);
+        redis
+            .set(
+                key.as_str(),
+                Bytes::from_static(b"1"),
+                Duration::from_secs(5),
+            )
+            .await
+            .unwrap();
+        assert!(other.get(key.as_str()).await.unwrap().is_none());
+        let stored = redis.get(key.as_str()).await.unwrap().unwrap();
+        assert!(stored.remaining.unwrap() <= Duration::from_secs(5));
+
+        // The shared sliding window.
+        let limiter = RedisRateLimiter::new(&redis);
+        let window = Duration::from_millis(300);
+        let rate_key = uuid_like();
+        assert!(limiter.allow(&rate_key, 2, window).await);
+        assert!(limiter.allow(&rate_key, 2, window).await);
+        assert!(!limiter.allow(&rate_key, 2, window).await);
+        tokio::time::sleep(window).await;
+        assert!(limiter.allow(&rate_key, 2, window).await);
     }
 
     #[tokio::test]
-    async fn an_unreachable_redis_degrades_to_memory() {
+    async fn an_unreachable_redis_degrades_to_memory_and_keeps_retrying() {
         let config = CacheConfig {
             backend: CacheBackend::Redis {
                 url: "redis://127.0.0.1:1".to_owned(),
             },
             max_entries: 100,
+            ..CacheConfig::default()
         };
-        let (cache, limiter) = QueryCache::from_config(config).await;
-        assert!(cache.inner.l2.is_none());
+        let (cache, limiter) = QueryCache::from_config(config, "test").await.unwrap();
+        // The shared tier stays configured and reconnects in the background.
+        assert!(cache.inner.l2.is_some());
         let value = cache
             .fetch(key("degraded"), &[], Policy::Immutable, || async {
                 Ok::<_, CacheError>(5_u32)
@@ -678,23 +712,127 @@ mod tests {
             .unwrap();
         assert_eq!(*value, 5);
         assert!(limiter.allow("degraded", 1, Duration::from_secs(1)).await);
+        assert!(!limiter.allow("degraded", 1, Duration::from_secs(1)).await);
     }
 
     #[test]
     fn configuration_defaults_to_memory_and_validates_redis() {
-        let config = CacheConfig::parse(None, None, None).unwrap();
+        let config = CacheConfig::parse(None, None, None, None).unwrap();
         assert_eq!(config.backend, CacheBackend::Memory);
+        assert_eq!(config.key_prefix, "attricat");
+        let redis = CacheConfig::parse(
+            Some("redis"),
+            Some("redis://cache"),
+            Some("10"),
+            Some("prod"),
+        )
+        .unwrap();
         assert_eq!(
-            CacheConfig::parse(Some("redis"), Some("redis://cache"), Some("10"))
-                .unwrap()
-                .backend,
+            redis.backend,
             CacheBackend::Redis {
                 url: "redis://cache".to_owned()
             }
         );
-        assert!(CacheConfig::parse(Some("redis"), None, None).is_err());
-        assert!(CacheConfig::parse(Some("disk"), None, None).is_err());
-        assert!(CacheConfig::parse(None, None, Some("0")).is_err());
+        assert_eq!(redis.key_prefix, "prod");
+        assert!(CacheConfig::parse(Some("redis"), None, None, None).is_err());
+        assert!(CacheConfig::parse(Some("disk"), None, None, None).is_err());
+        assert!(CacheConfig::parse(None, None, Some("0"), None).is_err());
+        assert!(CacheConfig::parse(None, None, None, Some("a b")).is_err());
+    }
+
+    #[tokio::test]
+    async fn remote_writes_do_not_delay_the_loading_request() {
+        let remote = Arc::new(FakeRemote {
+            write_delay: Duration::from_secs(5),
+            ..FakeRemote::default()
+        });
+        let cache = QueryCache::with_remote(CacheConfig::default(), Some(remote));
+        let started = Instant::now();
+        cache
+            .fetch(key("slow"), &[], Policy::Immutable, || async {
+                Ok::<_, CacheError>(1_u32)
+            })
+            .await
+            .unwrap();
+        assert!(started.elapsed() < Duration::from_secs(1));
+    }
+
+    #[tokio::test]
+    async fn remote_ttl_hits_keep_their_shared_age() {
+        let remote = Arc::new(FakeRemote::default());
+        let policy = Policy::Ttl {
+            fresh: Duration::from_millis(100),
+            stale: Duration::from_millis(100),
+        };
+        let writer = QueryCache::with_remote(CacheConfig::default(), Some(remote.clone()));
+        writer
+            .fetch(key("aging"), &[], policy, || async {
+                Ok::<_, CacheError>(1_u32)
+            })
+            .await
+            .unwrap();
+        for _ in 0..50 {
+            if !remote.entries.lock().unwrap().is_empty() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(1)).await;
+        }
+        tokio::time::sleep(Duration::from_millis(60)).await;
+        // A peer copies the shared value with its age...
+        let peer = QueryCache::with_remote(CacheConfig::default(), Some(remote.clone()));
+        let value = peer
+            .fetch(key("aging"), &[], policy, || async {
+                Ok::<_, CacheError>(2_u32)
+            })
+            .await
+            .unwrap();
+        assert_eq!(*value, 1);
+        // ...so it turns stale when the original would, not a full TTL later.
+        tokio::time::sleep(Duration::from_millis(60)).await;
+        assert!(peer.get::<u32>(&key("aging")).await.is_none());
+
+        // A stale shared value is reloaded rather than copied.
+        let late = QueryCache::with_remote(CacheConfig::default(), Some(remote));
+        let value = late
+            .fetch(key("aging"), &[], policy, || async {
+                Ok::<_, CacheError>(3_u32)
+            })
+            .await
+            .unwrap();
+        assert_eq!(*value, 3);
+    }
+
+    #[tokio::test]
+    async fn invalidating_a_tag_drops_only_its_local_entries() {
+        let cache = QueryCache::default();
+        let tag = Tag::new("workspace", &[&"a"]);
+        let other = Tag::new("workspace", &[&"b"]);
+        for (name, tag) in [("a", &tag), ("b", &other)] {
+            cache
+                .fetch(
+                    key(name),
+                    std::slice::from_ref(tag),
+                    Policy::Generation,
+                    || async { Ok::<_, CacheError>(name.to_owned()) },
+                )
+                .await
+                .unwrap();
+        }
+        cache.invalidate_local(&tag);
+        let reloaded = cache
+            .fetch(key("a"), &[tag], Policy::Generation, || async {
+                Ok::<_, CacheError>("reloaded".to_owned())
+            })
+            .await
+            .unwrap();
+        assert_eq!(*reloaded, "reloaded");
+        let kept = cache
+            .fetch(key("b"), &[other], Policy::Generation, || async {
+                Ok::<_, CacheError>("reloaded".to_owned())
+            })
+            .await
+            .unwrap();
+        assert_eq!(*kept, "b");
     }
 
     #[tokio::test]
@@ -724,7 +862,7 @@ mod tests {
         let cache = QueryCache::default();
         let failed: Result<Arc<u32>, CacheError> = cache
             .fetch(key("flaky"), &[], Policy::Immutable, || async {
-                Err(CacheError("down".into()))
+                Err(CacheError::Failed("down".into()))
             })
             .await;
         assert!(failed.is_err());
@@ -735,39 +873,6 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(*value, 1);
-    }
-
-    #[tokio::test]
-    async fn invalidating_a_tag_drops_only_its_entries() {
-        let cache = QueryCache::default();
-        let tag = Tag::new("workspace", &[&"a"]);
-        let other = Tag::new("workspace", &[&"b"]);
-        for (name, tag) in [("a", &tag), ("b", &other)] {
-            cache
-                .fetch(
-                    key(name),
-                    std::slice::from_ref(tag),
-                    Policy::Generation,
-                    || async { Ok::<_, CacheError>(name.to_owned()) },
-                )
-                .await
-                .unwrap();
-        }
-        cache.invalidate(&tag).await;
-        let reloaded = cache
-            .fetch(key("a"), &[tag], Policy::Generation, || async {
-                Ok::<_, CacheError>("reloaded".to_owned())
-            })
-            .await
-            .unwrap();
-        assert_eq!(*reloaded, "reloaded");
-        let kept = cache
-            .fetch(key("b"), &[other], Policy::Generation, || async {
-                Ok::<_, CacheError>("reloaded".to_owned())
-            })
-            .await
-            .unwrap();
-        assert_eq!(*kept, "b");
     }
 
     #[tokio::test]

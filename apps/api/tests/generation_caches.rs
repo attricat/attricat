@@ -202,3 +202,10 @@ async fn published_versions_contexts_and_rules_apply_to_the_next_request(pool: P
     assert_eq!(status, StatusCode::OK, "{body}");
     server.abort();
 }
+
+#[sqlx::test]
+async fn the_database_identity_is_created_once(pool: PgPool) {
+    let repository = CatalogRepository::system(pool.clone());
+    let first = repository.ensure_database_identity().await.unwrap();
+    assert_eq!(repository.ensure_database_identity().await.unwrap(), first);
+}

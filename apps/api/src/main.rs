@@ -208,6 +208,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             .ensure_bootstrap_local_password(&email, password)
             .await?;
     }
+    // Shared cache keys are namespaced by this database's identity.
+    let database_identity = bootstrap_repository.ensure_database_identity().await?;
     maintenance_pool.close().await;
 
     // Every workspace shares these bounded pools. Repository scope is carried
@@ -265,10 +267,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .unwrap_or_else(|_| "http://127.0.0.1:5173/onboarding".to_owned());
 
     // One query cache shared by request handlers and background workers.
-    // With CACHE_BACKEND=redis, replicas also share cached values, cache
-    // invalidations and extension network rate limits; Redis failures
-    // degrade to process memory.
-    let (query_cache, rate_limiter) = QueryCache::from_config(CacheConfig::from_env()?).await;
+    // With CACHE_BACKEND=redis, replicas also share cached values and
+    // extension network rate limits; Redis failures degrade to process
+    // memory while the client reconnects in the background.
+    let (query_cache, rate_limiter) =
+        QueryCache::from_config(CacheConfig::from_env()?, &database_identity.to_string()).await?;
     extension_runtime::use_network_rate_limiter(rate_limiter);
     let task_repository =
         CatalogRepository::system(task_pool.clone()).with_cache(query_cache.clone());

@@ -14,7 +14,7 @@ use sqlx::PgConnection;
 use uuid::Uuid;
 
 use super::{
-    CatalogRepository, RepositoryError,
+    CatalogRepository, RepositoryError, SystemScope,
     checks::{EnabledRule, enabled_rule_sets},
     record_values::ContextTree,
 };
@@ -76,6 +76,25 @@ pub(crate) struct WritePrefetch {
 
 /// Enabled rules per blueprint revision.
 pub(crate) type EnabledRuleSets = HashMap<(Uuid, i64), Vec<EnabledRule>>;
+
+impl CatalogRepository<SystemScope> {
+    /// This database's random identity, created on first use. Shared cache
+    /// keys include it, so two databases behind one Redis never share
+    /// entries. A restored copy of a database keeps the identity, so its
+    /// shared cache must be flushed after the restore.
+    pub async fn ensure_database_identity(&self) -> Result<Uuid, RepositoryError> {
+        let mut tx = self.pool.begin().await?;
+        sqlx::query("INSERT INTO database_identity (id) VALUES ($1) ON CONFLICT DO NOTHING")
+            .bind(Uuid::new_v4())
+            .execute(&mut *tx)
+            .await?;
+        let id = sqlx::query_scalar("SELECT id FROM database_identity")
+            .fetch_one(&mut *tx)
+            .await?;
+        tx.commit().await?;
+        Ok(id)
+    }
+}
 
 impl CatalogRepository {
     /// The context tree at this request's generation.

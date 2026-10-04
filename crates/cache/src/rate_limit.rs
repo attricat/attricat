@@ -7,10 +7,9 @@ use std::{
 };
 
 use async_trait::async_trait;
-use fred::prelude::{Client, KeysInterface};
+use fred::prelude::LuaInterface;
 
-use crate::CacheError;
-use crate::redis_backend::{RedisClients, bounded, error};
+use crate::{CacheError, redis_backend::Redis};
 
 /// Allows at most `limit` events per `window` for each key.
 #[async_trait]
@@ -72,44 +71,62 @@ impl RateLimiter for LocalRateLimiter {
     }
 }
 
-/// A fixed-window counter in Redis, shared by every replica. When Redis is
-/// unavailable the process falls back to its own limiter.
+/// Atomically drops timestamps older than the window, rejects when `limit`
+/// remain, and otherwise records this call. Time comes from the Redis server
+/// so replicas with skewed clocks share one window. The member pairs the
+/// timestamp with the count, which is unique within one microsecond because
+/// scripts run one at a time.
+const SLIDING_WINDOW: &str = r#"
+local time = redis.call('TIME')
+local now = tonumber(time[1]) * 1000000 + tonumber(time[2])
+local window = tonumber(ARGV[1])
+redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', now - window)
+local count = redis.call('ZCARD', KEYS[1])
+if count >= tonumber(ARGV[2]) then
+  return 0
+end
+redis.call('ZADD', KEYS[1], now, string.format('%.0f:%d', now, count))
+redis.call('PEXPIRE', KEYS[1], math.ceil(window / 1000))
+return 1
+"#;
+
+/// The same sliding window as [`LocalRateLimiter`], kept in a Redis sorted
+/// set that every replica shares. While Redis is unavailable each process
+/// falls back to its own limiter, so the effective limit is per replica
+/// until Redis recovers.
 pub struct RedisRateLimiter {
-    client: Client,
+    redis: Redis,
     fallback: LocalRateLimiter,
 }
 
 impl RedisRateLimiter {
-    pub fn new(clients: &RedisClients) -> Self {
+    pub fn new(redis: &Redis) -> Self {
         Self {
-            client: clients.commands.clone(),
+            redis: redis.clone(),
             fallback: LocalRateLimiter::default(),
         }
     }
 
-    async fn count(&self, counter: &str, window_ms: i64) -> Result<u64, CacheError> {
-        let pipeline = self.client.pipeline();
-        let _: () = pipeline.incr(counter).await.map_err(error)?;
-        let _: () = pipeline
-            .pexpire(counter, window_ms * 2, None)
-            .await
-            .map_err(error)?;
-        let (count, _): (u64, i64) = bounded(pipeline.all()).await?;
-        Ok(count)
+    async fn record(&self, key: &str, limit: u32, window: Duration) -> Result<bool, CacheError> {
+        let window_us = window.as_micros().max(1).to_string();
+        let allowed: i64 = self
+            .redis
+            .run(self.redis.client().eval(
+                SLIDING_WINDOW,
+                self.redis.key("rate", key),
+                vec![window_us, limit.to_string()],
+            ))
+            .await?;
+        Ok(allowed == 1)
     }
 }
 
 #[async_trait]
 impl RateLimiter for RedisRateLimiter {
     async fn allow(&self, key: &str, limit: u32, window: Duration) -> bool {
-        let window_ms = window.as_millis().max(1) as i64;
-        let now_ms = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as i64;
-        let counter = format!("attricat:rate:{key}:{}", now_ms / window_ms);
-        match self.count(&counter, window_ms).await {
-            Ok(count) => count <= u64::from(limit),
+        match self.record(key, limit, window).await {
+            Ok(allowed) => allowed,
+            Err(CacheError::Unavailable) => self.fallback.allow_now(key, limit, window),
             Err(error) => {
                 tracing::warn!(%error, "shared rate limit unavailable; using the local limit");
                 self.fallback.allow_now(key, limit, window)
