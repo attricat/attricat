@@ -48,13 +48,54 @@ pub struct UniqueKeyDuplicate {
     pub entity_ids: Vec<Uuid>,
 }
 
+/// Where a unique key's values must be unique.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum UniqueKeyScope {
+    /// Default-context values, across the family.
+    Workspace,
+    /// Each context's resolved values, within that context.
+    Context,
+}
+
+/// A `[[unique_keys]]` declaration of the latest published revision.
 #[derive(Clone, Debug, serde::Deserialize)]
 pub(crate) struct EnforcedUniqueKey {
     pub code: String,
     pub attributes: Vec<String>,
-    pub scope: String,
+    pub scope: UniqueKeyScope,
     #[serde(default)]
     pub case_sensitive: bool,
+}
+
+/// The shape a relationship hierarchy enforces.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Hierarchy {
+    /// No cycles.
+    Acyclic,
+    /// No cycles and at most one parent per entity and context.
+    Tree,
+}
+
+impl Hierarchy {
+    fn parse(value: &str) -> Result<Self, RepositoryError> {
+        match value {
+            "acyclic" => Ok(Self::Acyclic),
+            "tree" => Ok(Self::Tree),
+            other => Err(RepositoryError::InvalidBlueprintDefinition(format!(
+                "unknown relationship hierarchy '{other}'"
+            ))),
+        }
+    }
+}
+
+/// A family's enforced unique keys and hierarchies before a publication, to
+/// tell which of them the publication changes.
+pub(super) struct StructuralConstraints {
+    /// The latest published revision's `unique_keys`, as stored.
+    unique_keys: Value,
+    /// Hierarchy fields by attribute code.
+    hierarchies: BTreeMap<String, Hierarchy>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -117,14 +158,10 @@ impl CatalogRepository {
         lock_unique_keys(transaction, self.workspace_id.0, entity.blueprint_id, false).await?;
         let keys =
             enforced_unique_keys(transaction, self.workspace_id.0, entity.blueprint_id).await?;
-        let contexts = if keys.is_empty() {
-            ContextTree::default()
+        let (contexts, desired) = if keys.is_empty() {
+            (ContextTree::default(), Vec::new())
         } else {
-            ContextTree::load(transaction, self.workspace_id.0).await?
-        };
-        let desired = if keys.is_empty() {
-            Vec::new()
-        } else {
+            let contexts = ContextTree::load(transaction, self.workspace_id.0).await?;
             let records = load_records(
                 transaction,
                 self.workspace_id.0,
@@ -133,7 +170,8 @@ impl CatalogRepository {
                 RecordState::After,
             )
             .await?;
-            key_rows(&keys, &contexts, &records)?
+            let rows = key_rows(&keys, &contexts, &records)?;
+            (contexts, rows)
         };
         let existing = sqlx::query_as::<_, (String, Uuid, String)>(
             "SELECT key_code, context_id, key_hash FROM entity_unique_key_values WHERE workspace_id = $1 AND entity_id = $2",
@@ -150,17 +188,18 @@ impl CatalogRepository {
             .iter()
             .map(|(code, context, hash)| (code.as_str(), *context, hash.as_str()))
             .collect();
-        for (key_code, context_id, key_hash) in existing.iter().filter(|(code, context, hash)| {
-            !wanted.contains(&(code.as_str(), *context, hash.as_str()))
-        }) {
+        let stale: Vec<_> = held.difference(&wanted).collect();
+        if !stale.is_empty() {
             sqlx::query(
-                "DELETE FROM entity_unique_key_values WHERE workspace_id = $1 AND entity_id = $2 AND key_code = $3 AND context_id = $4 AND key_hash = $5",
+                r#"DELETE FROM entity_unique_key_values
+                   WHERE workspace_id = $1 AND entity_id = $2
+                     AND (key_code, context_id, key_hash) IN (SELECT * FROM UNNEST($3::text[], $4::uuid[], $5::text[]))"#,
             )
             .bind(self.workspace_id.0)
             .bind(entity.id)
-            .bind(key_code)
-            .bind(context_id)
-            .bind(key_hash)
+            .bind(stale.iter().map(|(code, ..)| *code).collect::<Vec<_>>())
+            .bind(stale.iter().map(|(_, context, _)| *context).collect::<Vec<_>>())
+            .bind(stale.iter().map(|(.., hash)| *hash).collect::<Vec<_>>())
             .execute(&mut **transaction)
             .await?;
         }
@@ -281,26 +320,32 @@ impl CatalogRepository {
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         blueprint_id: Uuid,
-        previous_keys: &Value,
-        previous_hierarchies: &BTreeMap<String, String>,
+        previous: &StructuralConstraints,
     ) -> Result<(), RepositoryError> {
         let hierarchies = self.enforced_hierarchies(transaction, blueprint_id).await?;
         let changed_hierarchies: Vec<_> = hierarchies
             .iter()
-            .filter(|(code, hierarchy)| previous_hierarchies.get(*code) != Some(*hierarchy))
+            .filter(|(code, hierarchy)| previous.hierarchies.get(*code) != Some(*hierarchy))
             .collect();
         if !changed_hierarchies.is_empty() {
             self.lock_relationship_cardinality_writes(transaction)
                 .await?;
+            let tree = ContextTree::load(transaction, self.workspace_id.0).await?;
             for (code, hierarchy) in changed_hierarchies {
-                self.validate_existing_hierarchy(transaction, blueprint_id, code, hierarchy)
-                    .await?;
+                self.validate_existing_hierarchy(
+                    transaction,
+                    &tree,
+                    blueprint_id,
+                    code,
+                    *hierarchy,
+                )
+                .await?;
             }
         }
         lock_unique_keys(transaction, self.workspace_id.0, blueprint_id, true).await?;
         let keys_value =
             enforced_unique_keys_value(transaction, self.workspace_id.0, blueprint_id).await?;
-        if &keys_value == previous_keys {
+        if keys_value == previous.unique_keys {
             return Ok(());
         }
         self.rebuild_family_unique_keys(transaction, blueprint_id)
@@ -313,11 +358,12 @@ impl CatalogRepository {
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         blueprint_id: Uuid,
-    ) -> Result<(Value, BTreeMap<String, String>), RepositoryError> {
-        Ok((
-            enforced_unique_keys_value(transaction, self.workspace_id.0, blueprint_id).await?,
-            self.enforced_hierarchies(transaction, blueprint_id).await?,
-        ))
+    ) -> Result<StructuralConstraints, RepositoryError> {
+        Ok(StructuralConstraints {
+            unique_keys: enforced_unique_keys_value(transaction, self.workspace_id.0, blueprint_id)
+                .await?,
+            hierarchies: self.enforced_hierarchies(transaction, blueprint_id).await?,
+        })
     }
 
     async fn rebuild_family_unique_keys(
@@ -402,8 +448,8 @@ impl CatalogRepository {
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         blueprint_id: Uuid,
-    ) -> Result<BTreeMap<String, String>, RepositoryError> {
-        Ok(sqlx::query_as::<_, (String, String)>(
+    ) -> Result<BTreeMap<String, Hierarchy>, RepositoryError> {
+        sqlx::query_as::<_, (String, String)>(
             r#"SELECT a.code, a.hierarchy
                FROM attributes a
                WHERE a.workspace_id = $1 AND a.hierarchy IS NOT NULL AND a.deleted_at IS NULL
@@ -417,7 +463,8 @@ impl CatalogRepository {
         .fetch_all(&mut **transaction)
         .await?
         .into_iter()
-        .collect())
+        .map(|(code, hierarchy)| Ok((code, Hierarchy::parse(&hierarchy)?)))
+        .collect()
     }
 
     /// Rejects a new edge that would close a cycle in a hierarchy, or give an
@@ -455,7 +502,7 @@ impl CatalogRepository {
         };
         self.lock_relationship_cardinality_writes(transaction)
             .await?;
-        if hierarchy == "tree" {
+        if hierarchy == Hierarchy::Tree {
             let other_parent = sqlx::query_scalar::<_, Uuid>(
                 r#"SELECT av.relationship_target_entity_id
                    FROM attribute_values av JOIN attributes a ON a.id = av.attribute_id
@@ -553,25 +600,32 @@ impl CatalogRepository {
         .bind(self.workspace_id.0)
         .fetch_all(&mut **transaction)
         .await?;
+        let tree = ContextTree::load(transaction, self.workspace_id.0).await?;
         for blueprint_id in families {
             for (code, hierarchy) in self.enforced_hierarchies(transaction, blueprint_id).await? {
-                self.validate_existing_hierarchy(transaction, blueprint_id, &code, &hierarchy)
-                    .await?;
+                self.validate_existing_hierarchy(
+                    transaction,
+                    &tree,
+                    blueprint_id,
+                    &code,
+                    hierarchy,
+                )
+                .await?;
             }
         }
         Ok(())
     }
 
-    /// Checks a family field's existing edges, resolved in every context,
-    /// when a publication makes it a hierarchy.
+    /// Checks a family field's existing edges, resolved in every context of
+    /// `tree`, when a publication makes it a hierarchy.
     async fn validate_existing_hierarchy(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
+        tree: &ContextTree,
         blueprint_id: Uuid,
         attribute_code: &str,
-        hierarchy: &str,
+        hierarchy: Hierarchy,
     ) -> Result<(), RepositoryError> {
-        let tree = ContextTree::load(transaction, self.workspace_id.0).await?;
         let field = HierarchyField {
             code: attribute_code,
             family: Some(blueprint_id),
@@ -580,8 +634,8 @@ impl CatalogRepository {
         let mut cycles: Vec<Vec<Uuid>> = Vec::new();
         let mut multiple_parents = BTreeSet::new();
         for context in tree.nodes() {
-            let graph = resolve_graph(&edges, &tree, context.id)?;
-            if hierarchy == "tree" {
+            let graph = resolve_graph(&edges, tree, context.id)?;
+            if hierarchy == Hierarchy::Tree {
                 multiple_parents.extend(
                     graph
                         .iter()
@@ -731,13 +785,16 @@ pub(crate) async fn walk_hierarchy(
             };
             for target in targets {
                 if *target == goal {
-                    let mut chain = vec![*source];
-                    while let Some(Some(previous)) = predecessor.get(chain.last().expect("chain")) {
-                        chain.push(*previous);
+                    let mut back = vec![*source];
+                    let mut cursor = *source;
+                    while let Some(Some(previous)) = predecessor.get(&cursor) {
+                        back.push(*previous);
+                        cursor = *previous;
                     }
-                    chain.reverse();
-                    chain.insert(0, goal);
-                    chain.push(goal);
+                    let chain = std::iter::once(goal)
+                        .chain(back.into_iter().rev())
+                        .chain(std::iter::once(goal))
+                        .collect();
                     return Ok(HierarchyWalk::Cycle(chain));
                 }
                 if let std::collections::hash_map::Entry::Vacant(entry) = predecessor.entry(*target)
@@ -841,10 +898,9 @@ fn key_rows(
     let mut rows = Vec::new();
     for record in records.values() {
         for key in keys {
-            let scoped = if key.scope == "context" {
-                &paths
-            } else {
-                &workspace_path
+            let scoped = match key.scope {
+                UniqueKeyScope::Context => &paths,
+                UniqueKeyScope::Workspace => &workspace_path,
             };
             'context: for (context_id, path) in scoped {
                 let mut components = Vec::with_capacity(key.attributes.len());
@@ -981,11 +1037,11 @@ mod tests {
         records
     }
 
-    fn key(code: &str, attributes: &[&str], scope: &str) -> EnforcedUniqueKey {
+    fn key(code: &str, attributes: &[&str], scope: UniqueKeyScope) -> EnforcedUniqueKey {
         EnforcedUniqueKey {
             code: code.to_owned(),
             attributes: attributes.iter().map(|code| (*code).to_owned()).collect(),
-            scope: scope.to_owned(),
+            scope,
             case_sensitive: false,
         }
     }
@@ -1001,12 +1057,17 @@ mod tests {
             ],
             &[],
         );
-        let rows = key_rows(&[key("sku", &["sku"], "workspace")], &contexts, &sources).unwrap();
+        let rows = key_rows(
+            &[key("sku", &["sku"], UniqueKeyScope::Workspace)],
+            &contexts,
+            &sources,
+        )
+        .unwrap();
         assert_eq!(rows.len(), 2, "a blank string is missing");
         assert_eq!(rows[0].key_values, serde_json::json!(["ab-1 x"]));
         assert_eq!(rows[0].key_hash, rows[1].key_hash);
 
-        let mut sensitive = key("sku", &["sku"], "workspace");
+        let mut sensitive = key("sku", &["sku"], UniqueKeyScope::Workspace);
         sensitive.case_sensitive = true;
         let rows = key_rows(&[sensitive], &contexts, &sources).unwrap();
         assert_ne!(rows[0].key_hash, rows[1].key_hash);
@@ -1030,7 +1091,7 @@ mod tests {
             direct.exact = Some(exact.to_owned());
         }
         let rows = key_rows(
-            &[key("price", &["price"], "workspace")],
+            &[key("price", &["price"], UniqueKeyScope::Workspace)],
             &contexts,
             &sources,
         )
@@ -1055,7 +1116,11 @@ mod tests {
         ];
         let sources = records(&rows, &[]);
         let composite = key_rows(
-            &[key("revision", &["document", "revision"], "workspace")],
+            &[key(
+                "revision",
+                &["document", "revision"],
+                UniqueKeyScope::Workspace,
+            )],
             &contexts,
             &sources,
         )
@@ -1064,7 +1129,12 @@ mod tests {
         assert_eq!(composite[0].key_values, serde_json::json!(["d-1", "a"]));
         assert_eq!(composite[0].context_id, Uuid::from_u128(1));
 
-        let slugs = key_rows(&[key("slug", &["slug"], "context")], &contexts, &sources).unwrap();
+        let slugs = key_rows(
+            &[key("slug", &["slug"], UniqueKeyScope::Context)],
+            &contexts,
+            &sources,
+        )
+        .unwrap();
         let by_context: HashMap<_, _> = slugs
             .iter()
             .map(|row| (row.context_id.as_u128(), row.key_values.clone()))
@@ -1078,7 +1148,12 @@ mod tests {
         );
 
         let none = records(&rows, &["slug"]);
-        let slugs = key_rows(&[key("slug", &["slug"], "context")], &contexts, &none).unwrap();
+        let slugs = key_rows(
+            &[key("slug", &["slug"], UniqueKeyScope::Context)],
+            &contexts,
+            &none,
+        )
+        .unwrap();
         assert_eq!(slugs.len(), 2, "fallback none stops inheritance");
     }
 

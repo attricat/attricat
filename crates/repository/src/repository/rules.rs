@@ -465,7 +465,6 @@ impl CatalogRepository {
         tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         event: &DomainEvent,
     ) -> Result<u64, RepositoryError> {
-        const MAX_DEPENDENTS: i64 = 100;
         let ws = self.workspace_id.0;
         let rows: Vec<(Uuid, i64, serde_json::Value, Uuid, i64)> = sqlx::query_as("SELECT r.id,r.version,r.compiled_plan,r.blueprint_id,r.blueprint_version FROM rules r JOIN rule_lifecycles l ON l.rule_id=r.id AND l.workspace_id=r.workspace_id WHERE r.workspace_id=$1 AND r.status='published' AND l.enabled_version=r.version AND $2 > COALESCE(l.activation_sequence,0) FOR SHARE OF l").bind(ws).bind(event.sequence).fetch_all(&mut **tx).await?;
         let event_blueprint: Option<String> = sqlx::query_scalar("SELECT b.code FROM entities e JOIN blueprints b ON b.id=e.blueprint_id AND b.version=e.blueprint_version WHERE e.workspace_id=$1 AND e.id=$2")
@@ -477,59 +476,80 @@ impl CatalogRepository {
             if !compiled.triggers.iter().any(|trigger| matches!(trigger, catalog_rules::Trigger::Event { event_type } if event_type == &event.event_type)) {
                 continue;
             }
-            let requirements =
-                catalog_validation::predicate::Requirements::for_predicates([&compiled.predicate]);
-            let mut dependents: Vec<Uuid> = Vec::new();
-            // The rule evaluates only entities pinned to its revision; their
-            // relationship may be a revision field or an additional attribute.
-            for relationship in &requirements.linked {
-                dependents.extend(
-                    super::references::referencing_entity_ids(
-                        tx,
-                        ws,
-                        super::references::ReferenceQuery {
-                            target: event.aggregate_id,
-                            attribute_code: relationship,
-                            referrers: super::references::Referrers::Revision {
-                                blueprint_id,
-                                version: blueprint_version,
-                            },
-                            only: None,
-                            exclude_target: true,
-                            limit: MAX_DEPENDENTS,
-                        },
-                    )
-                    .await?,
-                );
+            let dependents = Self::rule_dependents(
+                tx,
+                ws,
+                event.aggregate_id,
+                event_blueprint.as_deref(),
+                &compiled,
+                (blueprint_id, blueprint_version),
+            )
+            .await?;
+            if dependents.is_empty() {
+                continue;
             }
-            for (blueprint_code, relationship) in &requirements.referenced_by {
-                if event_blueprint.as_deref() != Some(blueprint_code.as_str()) {
-                    continue;
-                }
-                dependents.extend(sqlx::query_scalar::<_, Uuid>("SELECT DISTINCT av.relationship_target_entity_id FROM attribute_values av JOIN attributes a ON a.id=av.attribute_id AND a.code=$3 JOIN entities t ON t.id=av.relationship_target_entity_id AND t.workspace_id=$1 AND t.deleted_at IS NULL AND t.blueprint_id=$4 AND t.blueprint_version=$5 WHERE av.entity_id=$2 AND av.active LIMIT $6")
-                    .bind(ws).bind(event.aggregate_id).bind(relationship).bind(blueprint_id).bind(blueprint_version).bind(MAX_DEPENDENTS).fetch_all(&mut **tx).await?);
-            }
-            dependents.sort();
-            dependents.dedup();
-            dependents.retain(|dependent| *dependent != event.aggregate_id);
-            dependents.truncate(MAX_DEPENDENTS as usize);
-            for dependent in dependents {
-                let run_id: Option<Uuid> = sqlx::query_scalar("INSERT INTO rule_runs(id,workspace_id,rule_id,rule_version,source,scope_entity_id,idempotency_key) VALUES($1,$2,$3,$4,'event',$5,$6) ON CONFLICT(workspace_id,rule_id,rule_version,source,idempotency_key) DO NOTHING RETURNING id")
-                    .bind(Uuid::new_v4()).bind(ws).bind(rule_id).bind(version).bind(dependent).bind(format!("{}:{dependent}", event.id)).fetch_optional(&mut **tx).await?;
-                if let Some(run_id) = run_id {
-                    self.enqueue_rule_task(
-                        tx,
-                        ws,
-                        run_id,
-                        Some(event.correlation_id),
-                        Some(event.id),
-                    )
+            let run_ids: Vec<Uuid> = std::iter::repeat_with(Uuid::new_v4)
+                .take(dependents.len())
+                .collect();
+            let created: Vec<Uuid> = sqlx::query_scalar("INSERT INTO rule_runs(id,workspace_id,rule_id,rule_version,source,scope_entity_id,idempotency_key) SELECT run.id,$1,$2,$3,'event',run.entity_id,$4 || ':' || run.entity_id FROM UNNEST($5::uuid[],$6::uuid[]) AS run(id,entity_id) ON CONFLICT(workspace_id,rule_id,rule_version,source,idempotency_key) DO NOTHING RETURNING id")
+                .bind(ws).bind(rule_id).bind(version).bind(event.id.to_string()).bind(&run_ids).bind(&dependents).fetch_all(&mut **tx).await?;
+            for run_id in created {
+                self.enqueue_rule_task(tx, ws, run_id, Some(event.correlation_id), Some(event.id))
                     .await?;
-                    inserted += 1;
-                }
+                inserted += 1;
             }
         }
         Ok(inserted)
+    }
+
+    /// Entities pinned to the rule's blueprint `revision` whose `linked` or
+    /// `referenced_by` predicate reads `changed`, other than `changed` itself:
+    /// at most 100, sorted. Their relationship may be a revision field or an
+    /// additional attribute.
+    async fn rule_dependents(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        ws: Uuid,
+        changed: Uuid,
+        changed_blueprint_code: Option<&str>,
+        rule: &catalog_rules::CompiledRule,
+        (blueprint_id, blueprint_version): (Uuid, i64),
+    ) -> Result<Vec<Uuid>, RepositoryError> {
+        const MAX_DEPENDENTS: i64 = 100;
+        let requirements =
+            catalog_validation::predicate::Requirements::for_predicates([&rule.predicate]);
+        let mut dependents: Vec<Uuid> = Vec::new();
+        for relationship in &requirements.linked {
+            dependents.extend(
+                super::references::referencing_entity_ids(
+                    tx,
+                    ws,
+                    super::references::ReferenceQuery {
+                        target: changed,
+                        attribute_code: relationship,
+                        referrers: super::references::Referrers::Revision {
+                            blueprint_id,
+                            version: blueprint_version,
+                        },
+                        only: None,
+                        exclude_target: true,
+                        limit: MAX_DEPENDENTS,
+                    },
+                )
+                .await?,
+            );
+        }
+        for (blueprint_code, relationship) in &requirements.referenced_by {
+            if changed_blueprint_code != Some(blueprint_code.as_str()) {
+                continue;
+            }
+            dependents.extend(sqlx::query_scalar::<_, Uuid>("SELECT DISTINCT av.relationship_target_entity_id FROM attribute_values av JOIN attributes a ON a.id=av.attribute_id AND a.code=$3 JOIN entities t ON t.id=av.relationship_target_entity_id AND t.workspace_id=$1 AND t.deleted_at IS NULL AND t.blueprint_id=$4 AND t.blueprint_version=$5 WHERE av.entity_id=$2 AND av.active LIMIT $6")
+                .bind(ws).bind(changed).bind(relationship).bind(blueprint_id).bind(blueprint_version).bind(MAX_DEPENDENTS).fetch_all(&mut **tx).await?);
+        }
+        dependents.sort_unstable();
+        dependents.dedup();
+        dependents.retain(|dependent| *dependent != changed);
+        dependents.truncate(MAX_DEPENDENTS as usize);
+        Ok(dependents)
     }
     /// Materialize due cron occurrences as durable runs. The occurrence timestamp is the
     /// idempotency key, while schedule state is the only timer/cursor held by the system.
@@ -865,10 +885,7 @@ impl CatalogRepository {
             .map(|context| vec![context])
             .unwrap_or_else(|| scope.context_ids());
         let mut entities = super::checks::load_entities(&mut conn, ws, candidates).await?;
-        let severity = serde_json::to_value(&rule.severity)
-            .ok()
-            .and_then(|value| value.as_str().map(str::to_owned))
-            .unwrap_or_default();
+        let severity = severity_code(&rule.severity);
         let mut results = Vec::with_capacity(candidates.len());
         for entity_id in candidates {
             let Some(subject) = entities.remove(entity_id) else {
@@ -877,7 +894,7 @@ impl CatalogRepository {
             let mut failure: Option<catalog_validation::predicate::Failure> = None;
             let mut failing_contexts = Vec::new();
             for context in &contexts {
-                let outcome = super::checks::evaluate_in_context(
+                let outcomes = super::checks::evaluate_in_context(
                     &mut conn,
                     &scope,
                     &subject,
@@ -885,9 +902,8 @@ impl CatalogRepository {
                     &[],
                     &[&rule.predicate],
                 )
-                .await?
-                .remove(0);
-                if let Err(error) = outcome {
+                .await?;
+                if let Some(Err(error)) = outcomes.into_iter().next() {
                     failing_contexts.push(scope.code(*context));
                     failure.get_or_insert(error);
                 }
@@ -909,10 +925,20 @@ impl CatalogRepository {
                 message,
                 evidence,
                 evaluation_key: rule.raw_definition_hash.clone(),
-                severity: severity.clone(),
+                severity: severity.to_owned(),
             });
         }
         Ok(results)
+    }
+}
+
+/// The `rule_findings.severity` code, spelled as in rule definitions.
+fn severity_code(severity: &catalog_rules::Severity) -> &'static str {
+    match severity {
+        catalog_rules::Severity::Info => "info",
+        catalog_rules::Severity::Warning => "warning",
+        catalog_rules::Severity::Error => "error",
+        catalog_rules::Severity::Critical => "critical",
     }
 }
 
