@@ -112,7 +112,7 @@ value_schema = '''{
 
 Jeśli którykolwiek warunek nie jest spełniony, cały zapis zostaje odrzucony z `422 transition_conditions_unmet` i listą wszystkich niespełnionych warunków. Egzekwowane reguły mogą chronić przejścia w ten sam sposób; zobacz [Egzekwowanie reguły](/pl/builders/rules/#egzekwowanie-reguły).
 
-Aby z wyprzedzeniem sprawdzić, które statusy docelowe są dostępne, wywołaj `GET /v1/entities/{id}/status-transitions?context_id=<uuid>` (bez parametru używany jest kontekst domyślny). Odpowiedź zawiera każde zadeklarowane przejście z zapisanego statusu z polem `allowed`, a dla zablokowanych także `denial_code` i `denial_reason`, oraz `unmet`, czyli niespełnione warunki i egzekwowane reguły. Są one oceniane na zapisanej encji tak, jakby status już się zmienił. Blokada przez warunki ma `denial_code` `transition_conditions_unmet`.
+Aby z wyprzedzeniem sprawdzić, które statusy docelowe są dostępne, wywołaj `GET /v1/entities/{id}/status-transitions?context_id=<uuid>` (bez parametru używany jest kontekst domyślny). Odpowiedź zawiera każde zadeklarowane przejście z zapisanego statusu z polem `allowed`, a dla zablokowanych także `denial_code` i `denial_reason`, oraz `unmet`, czyli niespełnione warunki i egzekwowane reguły. Są one oceniane na zapisanej encji tak, jakby status już się zmienił. Podobnie jak zapis, punkt końcowy sprawdza wybrany kontekst i każdy kontekst, który dziedziczy z niego status, a każdy niespełniony warunek wymienia konteksty, w których nie jest spełniony. Blokada przez warunki ma `denial_code` `transition_conditions_unmet`.
 
 ### Kontroluj cykl życia rekordu
 

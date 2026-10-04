@@ -224,8 +224,11 @@ edges behave as before. Every effective change is recorded in
 declared edges from the saved effective status in that context (default context
 when omitted), each with `allowed`, `denial_code` and `denial_reason` for the
 caller, and `unmet` transition conditions and enforcing rules (see
-[available destinations](#available-destinations)). The status control disables denied edges and shows the reason; the
-server remains authoritative.
+[available destinations](#available-destinations)). Like the write, it checks
+every context whose effective status the edge would change: the selected
+context and each context that inherits the status from it. Each `unmet` entry
+lists the contexts in which it fails. The status control disables denied edges
+and shows the reason; the server remains authoritative.
 
 ### Locks
 

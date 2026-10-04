@@ -137,6 +137,61 @@ fn effective_projection(
     .unwrap_or(Value::Null)
 }
 
+/// The effective status changes that setting `attribute` to `after` in
+/// `context` would make: that context's own change first, then each context
+/// that inherits the value from it.
+fn previewed_status_changes(
+    projection: &Value,
+    tree: &ContextTree,
+    paths: &[(&ContextNode, Vec<Uuid>)],
+    attribute: &StatusAttribute,
+    context: &ContextNode,
+    current: &Value,
+    after: &Value,
+) -> Vec<StatusChange> {
+    let change = |node: &ContextNode, before: Value, after: Value| StatusChange {
+        attribute_code: attribute.code.clone(),
+        schema: attribute.schema.clone(),
+        context_id: node.id,
+        context_code: node.code.clone(),
+        before,
+        after,
+    };
+    let mut changes = vec![change(context, current.clone(), after.clone())];
+    if !attribute.inherit {
+        return changes;
+    }
+    // The projection with the context's own value set (or cleared).
+    let mut written = match projection {
+        Value::Object(values) => values.clone(),
+        _ => serde_json::Map::new(),
+    };
+    let values = written
+        .entry(context.code.clone())
+        .or_insert_with(|| Value::Object(serde_json::Map::new()));
+    if let Value::Object(values) = values {
+        if after.is_null() {
+            values.remove(&attribute.code);
+        } else {
+            values.insert(attribute.code.clone(), after.clone());
+        }
+    }
+    let written = Value::Object(written);
+    for (node, path) in paths {
+        if node.id == context.id || !path.contains(&context.id) {
+            continue;
+        }
+        let resolve = |projection| {
+            effective_projection(projection, tree, path, attribute.inherit, &attribute.code)
+        };
+        let (before, after) = (resolve(projection), resolve(&written));
+        if before != after {
+            changes.push(change(node, before, after));
+        }
+    }
+    changes
+}
+
 /// The resolved value of `code` for the context `path`, `None` when absent.
 fn effective<'a>(record: &'a RecordValues, path: &[Uuid], code: &str) -> Option<&'a Value> {
     record.resolve(code, path).map(|direct| &direct.value)
@@ -1042,6 +1097,7 @@ impl CatalogRepository {
             return Ok(Vec::new());
         }
         let path = tree.path(context.id, true)?;
+        let paths = context_paths(&tree)?;
         let projection = entity.projections.get("preview").unwrap_or(&Value::Null);
         // Every edge is evaluated against the same saved state and rules.
         let rules = enabled_rules(
@@ -1064,29 +1120,53 @@ impl CatalogRepository {
                 .flatten()
                 .filter(|edge| edge.from.as_deref() == current.as_str())
             {
-                let change = StatusChange {
-                    attribute_code: attribute.code.clone(),
-                    schema: attribute.schema.clone(),
-                    context_id: context.id,
-                    context_code: context.code.clone(),
-                    before: current.clone(),
-                    after: edge.to.clone().map_or(Value::Null, Value::String),
-                };
-                let requirements =
-                    transition_requirements(&attribute.schema, &change.before, &change.after);
-                let denial = self
-                    .transition_denial(
-                        &mut transaction,
-                        &entity,
-                        &change,
-                        &requirements,
-                        Some(actor),
-                    )
-                    .await?;
+                let after = edge.to.clone().map_or(Value::Null, Value::String);
+                let requirements = transition_requirements(&attribute.schema, &current, &after);
+                // The write checks every context whose effective status
+                // changes, including inheriting child contexts.
+                let changes = previewed_status_changes(
+                    projection, &tree, &paths, attribute, context, &current, &after,
+                );
+                let mut denial = None;
+                for change in &changes {
+                    let requirements =
+                        transition_requirements(&change.schema, &change.before, &change.after);
+                    denial = self
+                        .transition_denial(
+                            &mut transaction,
+                            &entity,
+                            change,
+                            &requirements,
+                            Some(actor),
+                        )
+                        .await?;
+                    if denial.is_some() {
+                        break;
+                    }
+                }
                 let mut denial_code = denial.as_ref().map(RepositoryError::code);
                 let mut denial_reason = denial.map(|error| error.to_string());
-                let unmet =
-                    transition_unmet(&mut transaction, &scope, &subject, &rules, &change).await?;
+                let mut unmet: Vec<super::CheckViolation> = Vec::new();
+                for change in &changes {
+                    for violation in
+                        transition_unmet(&mut transaction, &scope, &subject, &rules, change).await?
+                    {
+                        match unmet.iter_mut().find(|existing| {
+                            existing.source == violation.source
+                                && existing.code == violation.code
+                                && existing.transition == violation.transition
+                        }) {
+                            Some(existing) => {
+                                for context in violation.contexts {
+                                    if !existing.contexts.contains(&context) {
+                                        existing.contexts.push(context);
+                                    }
+                                }
+                            }
+                            None => unmet.push(violation),
+                        }
+                    }
+                }
                 if denial_code.is_none() && !unmet.is_empty() {
                     denial_code = Some(super::ErrorCode::TransitionConditionsUnmet);
                     denial_reason = Some(
@@ -1100,7 +1180,7 @@ impl CatalogRepository {
                 access.push(StatusTransitionAccess {
                     attribute_code: attribute.code.clone(),
                     from: current.as_str().map(str::to_owned),
-                    to: change.after.as_str().map(str::to_owned),
+                    to: after.as_str().map(str::to_owned),
                     code: requirements.code.clone(),
                     allowed: denial_code.is_none(),
                     denial_code,

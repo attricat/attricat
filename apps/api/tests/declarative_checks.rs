@@ -1328,3 +1328,62 @@ predicate = {type = "one_of", attribute_code = "state", values = ["open"]}"#,
     assert_eq!(open_findings().await, vec![id_of(&second)]);
     server.abort();
 }
+
+/// The status-transitions preview checks every context the write would
+/// change, including child contexts that inherit the status.
+#[sqlx::test]
+async fn transition_preview_covers_inheriting_contexts(pool: PgPool) {
+    let (base, server) = start_server(pool).await;
+    let client = authenticated_client();
+    // The root cause is recorded per context; the status is inherited.
+    let local_root_cause = NONCONFORMANCE.replace(
+        "code = \"root_cause\"\nvalue_type = \"string\"",
+        "code = \"root_cause\"\nvalue_type = \"string\"\ncontext_fallback = \"none\"",
+    );
+    assert_ne!(local_root_cause, NONCONFORMANCE);
+    create_blueprint(&client, &base, &local_root_cause).await;
+    create_blueprint(&client, &base, ACTION).await;
+    let (status, region) = post(
+        &client,
+        format!("{base}/contexts"),
+        json!({"code": "region_x", "data": {}, "parent_id": null}),
+    )
+    .await;
+    assert!(status.is_success(), "{region}");
+    let nc = create_entity_with(
+        &client,
+        &base,
+        "nonconformance",
+        json!([
+            scalar("status", json!("open")),
+            scalar("root_cause", json!("Worn tooling"))
+        ]),
+    )
+    .await;
+    let nc_url = format!("{base}/v1/entities/{}", nc["id"].as_str().unwrap());
+
+    let options = get_json(&client, format!("{nc_url}/status-transitions")).await;
+    let closed = options["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|edge| edge["to"] == "closed")
+        .unwrap();
+    assert_eq!(closed["allowed"], false, "{closed}");
+    assert_eq!(closed["denial_code"], "transition_conditions_unmet");
+    let unmet = closed["unmet"].as_array().unwrap();
+    assert_eq!(unmet.len(), 1, "{closed}");
+    assert_eq!(unmet[0]["code"], "root-cause");
+    assert_eq!(unmet[0]["contexts"], json!(["region_x"]));
+
+    // The write agrees with the preview.
+    let (status, body) = put(
+        &client,
+        nc_url,
+        json!({"expected_updated_at": nc["updated_at"], "values": [scalar("status", json!("closed"))]}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert_eq!(body["error"]["code"], "transition_conditions_unmet");
+    server.abort();
+}

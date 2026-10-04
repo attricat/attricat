@@ -112,7 +112,7 @@ value_schema = '''{
 
 If any condition is unmet, the whole write is rejected with `422 transition_conditions_unmet`, listing every unmet condition. Enforcing rules can guard transitions in the same way; see [Enforce a rule](/builders/rules/#enforce-a-rule).
 
-To find out ahead of time which destinations are available, call `GET /v1/entities/{id}/status-transitions?context_id=<uuid>` (the default context if you leave it out). It returns each declared transition from the saved status with `allowed` and, when blocked, a `denial_code` and `denial_reason`, plus `unmet`: the unmet conditions and enforcing rules, evaluated on the saved entity as if the status had changed. Blocked by conditions shows as `denial_code` `transition_conditions_unmet`.
+To find out ahead of time which destinations are available, call `GET /v1/entities/{id}/status-transitions?context_id=<uuid>` (the default context if you leave it out). It returns each declared transition from the saved status with `allowed` and, when blocked, a `denial_code` and `denial_reason`, plus `unmet`: the unmet conditions and enforcing rules, evaluated on the saved entity as if the status had changed. Like a save, it checks the selected context and every context that inherits the status from it, and each unmet entry lists the contexts where it fails. Blocked by conditions shows as `denial_code` `transition_conditions_unmet`.
 
 ### Control a record's lifecycle
 
