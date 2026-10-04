@@ -1,3 +1,4 @@
+use super::checks::{CheckScope, CheckTransition, enabled_rules, transition_unmet};
 use super::record_values::{
     ContextNode, ContextTree, RecordState, RecordValues, attribute_codes, load_record,
     resolve_on_path,
@@ -12,8 +13,17 @@ use chrono::Utc;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 
-/// A live status attribute: `(id, code, value_schema, context_fallback)`.
-type StatusAttribute = (Uuid, String, Value, String);
+/// A live status attribute of an entity's blueprint revision or one of its
+/// own additional attributes.
+#[derive(Clone, Debug, sqlx::FromRow)]
+struct StatusAttribute {
+    id: Uuid,
+    code: String,
+    #[sqlx(rename = "value_schema")]
+    schema: Value,
+    /// `context_fallback` is not `none`.
+    inherit: bool,
+}
 
 /// One effective status change in one context.
 pub(super) struct StatusChange {
@@ -26,11 +36,29 @@ pub(super) struct StatusChange {
 }
 
 impl StatusChange {
-    pub(super) fn transition(&self) -> super::checks::CheckTransition {
-        super::checks::CheckTransition {
+    pub(super) fn transition(&self) -> CheckTransition {
+        CheckTransition {
             attribute_code: self.attribute_code.clone(),
             from: self.before.as_str().map(str::to_owned),
             to: self.after.as_str().map(str::to_owned),
+        }
+    }
+}
+
+/// How a row of `entity_status_transitions` came about.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TransitionKind {
+    /// A write moved the status along a declared edge.
+    Transition,
+    /// Changed content voided an approval and moved to its `void_to` status.
+    ApprovalVoid,
+}
+
+impl TransitionKind {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Transition => "transition",
+            Self::ApprovalVoid => "approval_void",
         }
     }
 }
@@ -73,6 +101,23 @@ pub struct EntityApproval {
     pub void_status: Option<String>,
 }
 
+/// A context whose saved effective status locks some of the record.
+struct ActiveLock<'a> {
+    context: &'a ContextNode,
+    /// The status attribute declaring the lock.
+    attribute_code: &'a str,
+    status: String,
+    coverage: StatusCoverage,
+}
+
+/// Every context with the path its values are inherited along.
+fn context_paths(tree: &ContextTree) -> Result<Vec<(&ContextNode, Vec<Uuid>)>, RepositoryError> {
+    tree.nodes()
+        .iter()
+        .map(|context| Ok((context, tree.path(context.id, true)?)))
+        .collect()
+}
+
 /// The effective value of `code` in the stored preview projection (keyed by
 /// context code) for the context `path`.
 fn effective_projection(
@@ -91,41 +136,32 @@ fn effective_projection(
     .unwrap_or(Value::Null)
 }
 
-/// The resolved value of `code` in `context`, `None` when absent.
-fn effective<'a>(
-    record: &'a RecordValues,
-    tree: &ContextTree,
-    context: Uuid,
-    code: &str,
-) -> Result<Option<&'a Value>, RepositoryError> {
-    let path = tree.path(context, true)?;
-    Ok(record.resolve(code, &path).map(|direct| &direct.value))
+/// The resolved value of `code` for the context `path`, `None` when absent.
+fn effective<'a>(record: &'a RecordValues, path: &[Uuid], code: &str) -> Option<&'a Value> {
+    record.resolve(code, path).map(|direct| &direct.value)
 }
 
-/// SHA-256 of the covered effective content in one context, as canonical
-/// JSON with sorted keys. Absent values are omitted.
+/// SHA-256 of the covered effective content for the context `path`, as
+/// canonical JSON with sorted keys. Absent values are omitted.
 fn content_digest(
     record: &RecordValues,
-    tree: &ContextTree,
-    context: Uuid,
+    path: &[Uuid],
     coverage: &StatusCoverage,
     status_code: &str,
-) -> Result<String, RepositoryError> {
+) -> String {
     let codes: BTreeSet<&str> = match coverage {
         StatusCoverage::All => record.attributes.keys().map(String::as_str).collect(),
         StatusCoverage::Attributes(codes) => codes.iter().map(String::as_str).collect(),
     };
-    let mut document = Map::new();
-    for code in codes
+    let document: Map<String, Value> = codes
         .into_iter()
         .filter(|code| coverage.covers(code, status_code))
-    {
-        if let Some(value) = effective(record, tree, context, code)? {
-            document.insert(code.to_owned(), value.clone());
-        }
-    }
-    let bytes = serde_json::to_vec(&Value::Object(document)).expect("record content serializes");
-    Ok(format!("{:x}", Sha256::digest(bytes)))
+        .filter_map(|code| Some((code.to_owned(), effective(record, path, code)?.clone())))
+        .collect();
+    format!(
+        "{:x}",
+        Sha256::digest(Value::Object(document).to_string().as_bytes())
+    )
 }
 
 fn label(value: &Value) -> String {
@@ -139,7 +175,7 @@ impl CatalogRepository {
         entity: &Entity,
     ) -> Result<Vec<StatusAttribute>, RepositoryError> {
         Ok(sqlx::query_as::<_, StatusAttribute>(
-            "SELECT id, code, value_schema, context_fallback FROM attributes WHERE ((blueprint_id = $1 AND blueprint_version = $2) OR entity_id = $3) AND deleted_at IS NULL AND value_schema ? $4",
+            "SELECT id, code, value_schema, context_fallback <> 'none' AS inherit FROM attributes WHERE ((blueprint_id = $1 AND blueprint_version = $2) OR entity_id = $3) AND deleted_at IS NULL AND value_schema ? $4",
         )
         .bind(entity.blueprint_id)
         .bind(entity.blueprint_version)
@@ -173,9 +209,14 @@ impl CatalogRepository {
         removed: &[AttributeValueSelector],
     ) -> Result<bool, RepositoryError> {
         let statuses = Self::status_attributes(transaction, entity).await?;
-        Ok(statuses.iter().any(|(id, code, ..)| {
-            removed.iter().any(|selector| &selector.attribute_code == code)
-                || values.iter().any(|value| matches!(value, NewAttributeValue::Scalar { attribute_id, attribute_code, .. } if attribute_id.as_ref() == Some(id) || attribute_code.as_ref() == Some(code)))
+        Ok(statuses.iter().any(|status| {
+            removed
+                .iter()
+                .any(|selector| selector.attribute_code == status.code)
+                || values.iter().any(|value| {
+                    matches!(value, NewAttributeValue::Scalar { attribute_id, attribute_code, .. }
+                        if *attribute_id == Some(status.id) || attribute_code.as_ref() == Some(&status.code))
+                })
         }))
     }
 
@@ -209,26 +250,25 @@ impl CatalogRepository {
     ) -> Result<Vec<StatusChange>, RepositoryError> {
         let after = Self::build_preview_projection(transaction, entity.id).await?;
         let before = entity.projections.get("preview").unwrap_or(&Value::Null);
+        let paths = context_paths(tree)?;
         let mut changes = Vec::new();
-        for (_, code, schema, fallback) in attributes {
-            let inherit = fallback != "none";
-            for context in tree.nodes() {
-                let path = tree.path(context.id, true)?;
-                let (before, after) = (
-                    effective_projection(before, tree, &path, inherit, code),
-                    effective_projection(&after, tree, &path, inherit, code),
-                );
-                validate_status_transition(schema, &before, &after).map_err(|message| {
-                    RepositoryError::AttributeValueSchemaMismatch {
-                        attribute: code.clone(),
+        for attribute in attributes {
+            for (context, path) in &paths {
+                let resolve = |projection| {
+                    effective_projection(projection, tree, path, attribute.inherit, &attribute.code)
+                };
+                let (before, after) = (resolve(before), resolve(&after));
+                validate_status_transition(&attribute.schema, &before, &after).map_err(
+                    |message| RepositoryError::AttributeValueSchemaMismatch {
+                        attribute: attribute.code.clone(),
                         instance_path: String::new(),
                         message: format!("{message} (context: {})", context.code),
-                    }
-                })?;
+                    },
+                )?;
                 if before != after {
                     changes.push(StatusChange {
-                        attribute_code: code.clone(),
-                        schema: schema.clone(),
+                        attribute_code: attribute.code.clone(),
+                        schema: attribute.schema.clone(),
                         context_id: context.id,
                         context_code: context.code.clone(),
                         before,
@@ -372,13 +412,14 @@ impl CatalogRepository {
         }
         for edge in &requirements.separate_from {
             let previous: Option<Option<Uuid>> = sqlx::query_scalar(
-                "SELECT actor_user_id FROM entity_status_transitions WHERE workspace_id = $1 AND entity_id = $2 AND attribute_code = $3 AND context_id = $4 AND edge_code = $5 AND kind = 'transition' ORDER BY occurred_at DESC, id DESC LIMIT 1",
+                "SELECT actor_user_id FROM entity_status_transitions WHERE workspace_id = $1 AND entity_id = $2 AND attribute_code = $3 AND context_id = $4 AND edge_code = $5 AND kind = $6 ORDER BY occurred_at DESC, id DESC LIMIT 1",
             )
             .bind(self.workspace_id.0)
             .bind(entity.id)
             .bind(&change.attribute_code)
             .bind(change.context_id)
             .bind(edge)
+            .bind(TransitionKind::Transition.as_str())
             .fetch_optional(&mut **transaction)
             .await?;
             if previous == Some(Some(actor.user_id)) {
@@ -413,48 +454,58 @@ impl CatalogRepository {
             .record_values(transaction, entity, RecordState::After)
             .await?;
         let all_codes = attribute_codes(&[&before, &after]);
-        for (context, status_code, status, coverage) in locks {
-            let codes: Vec<&str> = match &coverage {
+        for lock in locks {
+            let path = tree.path(lock.context.id, true)?;
+            let codes: Vec<&str> = match &lock.coverage {
                 StatusCoverage::All => all_codes.clone(),
                 StatusCoverage::Attributes(codes) => codes.iter().map(String::as_str).collect(),
             };
-            for code in codes
-                .into_iter()
-                .filter(|code| coverage.covers(code, &status_code))
-            {
-                if effective(&before, tree, context.id, code)?
-                    != effective(&after, tree, context.id, code)?
-                {
-                    return Err(RepositoryError::RecordLocked {
-                        attribute: code.to_owned(),
-                        context: context.code.clone(),
-                        status: status.clone(),
-                    });
-                }
+            if let Some(code) = codes.into_iter().find(|code| {
+                lock.coverage.covers(code, lock.attribute_code)
+                    && effective(&before, &path, code) != effective(&after, &path, code)
+            }) {
+                return Err(RepositoryError::RecordLocked {
+                    attribute: code.to_owned(),
+                    context: lock.context.code.clone(),
+                    status: lock.status,
+                });
             }
         }
         Ok(())
     }
 
-    /// `(context, status attribute, status, coverage)` for every context whose
-    /// saved effective status declares a lock.
+    /// Every context whose saved effective status declares a lock.
     fn active_locks<'a>(
         entity: &Entity,
-        attributes: &[StatusAttribute],
+        attributes: &'a [StatusAttribute],
         tree: &'a ContextTree,
-    ) -> Result<Vec<(&'a ContextNode, String, String, StatusCoverage)>, RepositoryError> {
+    ) -> Result<Vec<ActiveLock<'a>>, RepositoryError> {
         let projection = entity.projections.get("preview").unwrap_or(&Value::Null);
         let mut locks = Vec::new();
-        for (_, code, schema, fallback) in attributes {
-            if !has_record_controls(schema) {
-                continue;
-            }
-            for context in tree.nodes() {
-                let path = tree.path(context.id, true)?;
-                let status =
-                    effective_projection(projection, tree, &path, fallback != "none", code);
-                if let Some(coverage) = status_lock(schema, &status) {
-                    locks.push((context, code.clone(), label(&status), coverage));
+        let controlled: Vec<&StatusAttribute> = attributes
+            .iter()
+            .filter(|attribute| has_record_controls(&attribute.schema))
+            .collect();
+        if controlled.is_empty() {
+            return Ok(locks);
+        }
+        let paths = context_paths(tree)?;
+        for attribute in controlled {
+            for (context, path) in &paths {
+                let status = effective_projection(
+                    projection,
+                    tree,
+                    path,
+                    attribute.inherit,
+                    &attribute.code,
+                );
+                if let Some(coverage) = status_lock(&attribute.schema, &status) {
+                    locks.push(ActiveLock {
+                        context,
+                        attribute_code: &attribute.code,
+                        status: label(&status),
+                        coverage,
+                    });
                 }
             }
         }
@@ -474,7 +525,7 @@ impl CatalogRepository {
         let attributes = Self::status_attributes(transaction, entity).await?;
         if !attributes
             .iter()
-            .any(|(.., schema, _)| has_record_controls(schema))
+            .any(|attribute| has_record_controls(&attribute.schema))
         {
             return Ok(());
         }
@@ -492,16 +543,14 @@ impl CatalogRepository {
         if tree.get(context_id).is_none() {
             return Err(RepositoryError::InvalidContext);
         }
-        for (context, status_code, status, coverage) in
-            Self::active_locks(entity, &attributes, &tree)?
-        {
-            if coverage.covers(attribute_code, &status_code)
-                && tree.path(context.id, inherit)?.contains(&context_id)
+        for lock in Self::active_locks(entity, &attributes, &tree)? {
+            if lock.coverage.covers(attribute_code, lock.attribute_code)
+                && tree.path(lock.context.id, inherit)?.contains(&context_id)
             {
                 return Err(RepositoryError::RecordLocked {
                     attribute: attribute_code.to_owned(),
-                    context: context.code.clone(),
-                    status,
+                    context: lock.context.code.clone(),
+                    status: lock.status,
                 });
             }
         }
@@ -518,19 +567,19 @@ impl CatalogRepository {
         let attributes = Self::status_attributes(transaction, entity).await?;
         if !attributes
             .iter()
-            .any(|(.., schema, _)| has_record_controls(schema))
+            .any(|attribute| has_record_controls(&attribute.schema))
         {
             return Ok(());
         }
         let tree = ContextTree::load(transaction, self.workspace_id.0).await?;
-        if let Some((context, _, status, _)) = Self::active_locks(entity, &attributes, &tree)?
+        if let Some(lock) = Self::active_locks(entity, &attributes, &tree)?
             .into_iter()
             .next()
         {
             return Err(RepositoryError::RecordLocked {
                 attribute: "*".to_owned(),
-                context: context.code.clone(),
-                status,
+                context: lock.context.code.clone(),
+                status: lock.status,
             });
         }
         Ok(())
@@ -560,8 +609,39 @@ impl CatalogRepository {
         let changes = self
             .status_changes(transaction, entity, &attributes, tree)
             .await?;
-        let actor = self.acting_principal();
+        self.record_write_transitions(transaction, entity, &changes)
+            .await?;
+        let needs_content = active_approvals > 0
+            || changes.iter().any(|change| {
+                status_approval(&change.schema, &change.after).is_some()
+                    || status_retention_days(&change.schema, &change.after).is_some()
+            });
+        if !needs_content {
+            return Ok(());
+        }
+        let content = self
+            .record_values(transaction, entity, RecordState::After)
+            .await?;
+        self.record_approvals(transaction, entity, &changes, tree, &content)
+            .await?;
+        self.void_changed_approvals(transaction, entity, &attributes, tree, &content)
+            .await?;
         for change in &changes {
+            self.place_status_retention_holds(transaction, entity, change, tree, &content)
+                .await?;
+        }
+        Ok(())
+    }
+
+    /// Records the write's own transitions, auditing those that leave a
+    /// locked status.
+    async fn record_write_transitions(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        entity: &Entity,
+        changes: &[StatusChange],
+    ) -> Result<(), RepositoryError> {
+        for change in changes {
             let requirements =
                 transition_requirements(&change.schema, &change.before, &change.after);
             let unlocked = status_lock(&change.schema, &change.before).is_some();
@@ -570,7 +650,7 @@ impl CatalogRepository {
                 entity,
                 change,
                 requirements.code.as_deref(),
-                "transition",
+                TransitionKind::Transition,
                 unlocked,
             )
             .await?;
@@ -590,22 +670,21 @@ impl CatalogRepository {
                 .await?;
             }
         }
-        if changes.is_empty() && active_approvals == 0 {
-            return Ok(());
-        }
-        let needs_content = active_approvals > 0
-            || changes.iter().any(|change| {
-                status_approval(&change.schema, &change.after).is_some()
-                    || status_retention_days(&change.schema, &change.after).is_some()
-            });
-        if !needs_content {
-            return Ok(());
-        }
-        let content = self
-            .record_values(transaction, entity, RecordState::After)
-            .await?;
-        // New approvals supersede the previous decision for that status and context.
-        for change in &changes {
+        Ok(())
+    }
+
+    /// Records an approval for every change into a status that declares one,
+    /// superseding the previous decision for that status attribute and context.
+    async fn record_approvals(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        entity: &Entity,
+        changes: &[StatusChange],
+        tree: &ContextTree,
+        content: &RecordValues,
+    ) -> Result<(), RepositoryError> {
+        let actor = self.acting_principal();
+        for change in changes {
             let Some(approval) = status_approval(&change.schema, &change.after) else {
                 continue;
             };
@@ -624,12 +703,11 @@ impl CatalogRepository {
                 StatusCoverage::Attributes(codes) => codes.clone(),
             };
             let content_digest = content_digest(
-                &content,
-                tree,
-                change.context_id,
+                content,
+                &tree.path(change.context_id, true)?,
                 &approval.covers,
                 &change.attribute_code,
-            )?;
+            );
             let approval_id = Uuid::new_v4();
             sqlx::query(
                 "INSERT INTO entity_approvals (id, workspace_id, entity_id, attribute_code, context_id, status, covers_all, covered_attributes, content_digest, approved_by_user_id, approved_by_token_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
@@ -661,24 +739,6 @@ impl CatalogRepository {
             )
             .await?;
         }
-        self.void_changed_approvals(transaction, entity, &attributes, tree, &content)
-            .await?;
-        for change in &changes {
-            if let Some(days) = status_retention_days(&change.schema, &change.after) {
-                let coverage =
-                    status_lock(&change.schema, &change.after).expect("retention requires a lock");
-                self.place_status_retention_holds(
-                    transaction,
-                    entity,
-                    change,
-                    tree,
-                    &content,
-                    &coverage,
-                    days,
-                )
-                .await?;
-            }
-        }
         Ok(())
     }
 
@@ -696,6 +756,13 @@ impl CatalogRepository {
         tree: &ContextTree,
         content: &RecordValues,
     ) -> Result<(), RepositoryError> {
+        struct Voided<'a> {
+            depth: usize,
+            attribute: &'a StatusAttribute,
+            context: &'a ContextNode,
+            status: String,
+            void_to: String,
+        }
         let approvals = sqlx::query_as::<_, (Uuid, String, Uuid, String, bool, Vec<String>, String)>(
             "SELECT id, attribute_code, context_id, status, covers_all, covered_attributes, content_digest FROM entity_approvals WHERE workspace_id = $1 AND entity_id = $2 AND ended_at IS NULL",
         )
@@ -715,17 +782,16 @@ impl CatalogRepository {
             } else {
                 StatusCoverage::Attributes(covered)
             };
-            if content_digest(content, tree, context_id, &coverage, &attribute_code)?
-                == approved_digest
-            {
+            let path = tree.path(context_id, true)?;
+            if content_digest(content, &path, &coverage, &attribute_code) == approved_digest {
                 continue;
             }
             let attribute = attributes
                 .iter()
-                .find(|(_, code, ..)| code == &attribute_code);
+                .find(|attribute| attribute.code == attribute_code);
             let void_to = attribute
-                .and_then(|(_, _, schema, _)| {
-                    status_approval(schema, &Value::String(status.clone()))
+                .and_then(|attribute| {
+                    status_approval(&attribute.schema, &Value::String(status.clone()))
                 })
                 .map(|approval| approval.void_to);
             sqlx::query(
@@ -750,28 +816,37 @@ impl CatalogRepository {
             )
             .await?;
             if let (Some(attribute), Some(void_to)) = (attribute, void_to) {
-                voided.push((
-                    tree.depth(context_id)?,
-                    attribute.clone(),
+                voided.push(Voided {
+                    depth: tree.depth(context_id)?,
+                    attribute,
                     context,
                     status,
                     void_to,
-                ));
+                });
             }
         }
-        voided.sort_by_key(|(depth, ..)| *depth);
-        for (_, (attribute_id, code, _, fallback), context, status, void_to) in voided {
+        voided.sort_by_key(|voided| voided.depth);
+        for voided in voided {
+            let Voided {
+                attribute,
+                context,
+                status,
+                void_to,
+                ..
+            } = voided;
+            // An earlier void may already have moved an inheriting context.
             let projection = Self::build_preview_projection(transaction, entity.id).await?;
             let path = tree.path(context.id, true)?;
-            let current = effective_projection(&projection, tree, &path, fallback != "none", &code);
-            if current != Value::String(status.clone()) {
+            let current =
+                effective_projection(&projection, tree, &path, attribute.inherit, &attribute.code);
+            if current.as_str() != Some(status.as_str()) {
                 continue;
             }
             self.insert_value(
                 transaction,
                 entity,
                 NewAttributeValue::Scalar {
-                    attribute_id: Some(attribute_id),
+                    attribute_id: Some(attribute.id),
                     attribute_code: None,
                     context_id: Some(context.id),
                     value: Value::String(void_to.clone()),
@@ -782,7 +857,7 @@ impl CatalogRepository {
                 transaction,
                 entity,
                 &StatusChange {
-                    attribute_code: code,
+                    attribute_code: attribute.code.clone(),
                     schema: Value::Null,
                     context_id: context.id,
                     context_code: context.code.clone(),
@@ -790,7 +865,7 @@ impl CatalogRepository {
                     after: Value::String(void_to),
                 },
                 None,
-                "approval_void",
+                TransitionKind::ApprovalVoid,
                 false,
             )
             .await?;
@@ -798,7 +873,9 @@ impl CatalogRepository {
         Ok(())
     }
 
-    #[allow(clippy::too_many_arguments)]
+    /// Holds the files covered by the change's destination status for its
+    /// `retention_days`. A status that declares retention without a lock is a
+    /// malformed definition and fails closed.
     async fn place_status_retention_holds(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
@@ -806,58 +883,63 @@ impl CatalogRepository {
         change: &StatusChange,
         tree: &ContextTree,
         content: &RecordValues,
-        coverage: &StatusCoverage,
-        days: i64,
     ) -> Result<(), RepositoryError> {
+        let Some(days) = status_retention_days(&change.schema, &change.after) else {
+            return Ok(());
+        };
+        let coverage = status_lock(&change.schema, &change.after).ok_or_else(|| {
+            RepositoryError::InvalidBlueprintDefinition(format!(
+                "status '{}' of '{}' declares retention_days without a lock",
+                label(&change.after),
+                change.attribute_code
+            ))
+        })?;
         let actor = self.acting_principal();
-        let file_attributes: Vec<&String> = content
+        let path = tree.path(change.context_id, true)?;
+        let file_ids: Vec<(&String, Uuid)> = content
             .attributes
             .iter()
             .filter(|(code, attribute)| {
                 attribute.value_type == "file" && coverage.covers(code, &change.attribute_code)
             })
-            .map(|(code, _)| code)
+            .flat_map(|(code, _)| {
+                effective(content, &path, code)
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|file| file["id"].as_str()?.parse::<Uuid>().ok())
+                    .map(move |file_id| (code, file_id))
+            })
             .collect();
-        for code in file_attributes {
-            let files = effective(content, tree, change.context_id, code)?
-                .cloned()
-                .unwrap_or(Value::Null);
-            for file_id in files
-                .as_array()
-                .into_iter()
-                .flatten()
-                .filter_map(|file| file["id"].as_str())
-                .filter_map(|id| id.parse::<Uuid>().ok())
-            {
-                let hold_id = Uuid::new_v4();
-                let held_until: DateTime<Utc> = sqlx::query_scalar(
-                    "INSERT INTO file_retention_holds (id, workspace_id, file_id, source, entity_id, attribute_code, status, held_until, created_by_user_id) VALUES ($1, $2, $3, 'status', $4, $5, $6, now() + make_interval(days => $7), $8) RETURNING held_until",
-                )
-                .bind(hold_id)
-                .bind(self.workspace_id.0)
-                .bind(file_id)
-                .bind(entity.id)
-                .bind(code)
-                .bind(change.after.as_str())
-                .bind(days as i32)
-                .bind(actor.map(|actor| actor.user_id))
-                .fetch_one(&mut **transaction)
-                .await?;
-                self.write_control_audit_event(
-                    transaction,
-                    "file.retention_hold.place",
-                    entity.id,
-                    serde_json::json!({
-                        "hold_id": hold_id,
-                        "file_id": file_id,
-                        "attribute_code": code,
-                        "context_code": change.context_code,
-                        "status": change.after,
-                        "held_until": held_until,
-                    }),
-                )
-                .await?;
-            }
+        for (code, file_id) in file_ids {
+            let hold_id = Uuid::new_v4();
+            let held_until: DateTime<Utc> = sqlx::query_scalar(
+                "INSERT INTO file_retention_holds (id, workspace_id, file_id, source, entity_id, attribute_code, status, held_until, created_by_user_id) VALUES ($1, $2, $3, 'status', $4, $5, $6, now() + make_interval(days => $7), $8) RETURNING held_until",
+            )
+            .bind(hold_id)
+            .bind(self.workspace_id.0)
+            .bind(file_id)
+            .bind(entity.id)
+            .bind(code)
+            .bind(change.after.as_str())
+            .bind(days as i32)
+            .bind(actor.map(|actor| actor.user_id))
+            .fetch_one(&mut **transaction)
+            .await?;
+            self.write_control_audit_event(
+                transaction,
+                "file.retention_hold.place",
+                entity.id,
+                serde_json::json!({
+                    "hold_id": hold_id,
+                    "file_id": file_id,
+                    "attribute_code": code,
+                    "context_code": change.context_code,
+                    "status": change.after,
+                    "held_until": held_until,
+                }),
+            )
+            .await?;
         }
         Ok(())
     }
@@ -868,7 +950,7 @@ impl CatalogRepository {
         entity: &Entity,
         change: &StatusChange,
         edge_code: Option<&str>,
-        kind: &str,
+        kind: TransitionKind,
         unlocked: bool,
     ) -> Result<(), RepositoryError> {
         let actor = self.acting_principal();
@@ -883,7 +965,7 @@ impl CatalogRepository {
         .bind(change.before.as_str())
         .bind(change.after.as_str())
         .bind(edge_code)
-        .bind(kind)
+        .bind(kind.as_str())
         .bind(unlocked)
         .bind(actor.map(|actor| actor.user_id))
         .bind(actor.and_then(|actor| actor.token_id))
@@ -938,25 +1020,42 @@ impl CatalogRepository {
             Some(id) => tree.get(id).ok_or(RepositoryError::InvalidContext)?,
             None => tree.default_context()?,
         };
+        if attributes.is_empty() {
+            return Ok(Vec::new());
+        }
         let path = tree.path(context.id, true)?;
         let projection = entity.projections.get("preview").unwrap_or(&Value::Null);
+        // Every edge is evaluated against the same saved state and rules.
+        let rules = enabled_rules(
+            &mut transaction,
+            self.workspace_id.0,
+            entity.blueprint_id,
+            entity.blueprint_version,
+        )
+        .await?;
+        let subject = self
+            .record_values(&mut transaction, &entity, RecordState::After)
+            .await?;
+        let scope = CheckScope::new(self.workspace_id.0, tree.clone());
         let mut access = Vec::new();
-        for (_, code, schema, fallback) in &attributes {
-            let current = effective_projection(projection, &tree, &path, fallback != "none", code);
-            for edge in transition_edges(schema)
+        for attribute in &attributes {
+            let current =
+                effective_projection(projection, &tree, &path, attribute.inherit, &attribute.code);
+            for edge in transition_edges(&attribute.schema)
                 .into_iter()
                 .flatten()
                 .filter(|edge| edge.from.as_deref() == current.as_str())
             {
                 let change = StatusChange {
-                    attribute_code: code.clone(),
-                    schema: schema.clone(),
+                    attribute_code: attribute.code.clone(),
+                    schema: attribute.schema.clone(),
                     context_id: context.id,
                     context_code: context.code.clone(),
                     before: current.clone(),
                     after: edge.to.clone().map_or(Value::Null, Value::String),
                 };
-                let requirements = transition_requirements(schema, &change.before, &change.after);
+                let requirements =
+                    transition_requirements(&attribute.schema, &change.before, &change.after);
                 let denial = self
                     .transition_denial(
                         &mut transaction,
@@ -968,21 +1067,20 @@ impl CatalogRepository {
                     .await?;
                 let mut denial_code = denial.as_ref().map(RepositoryError::code);
                 let mut denial_reason = denial.map(|error| error.to_string());
-                let unmet = self
-                    .transition_unmet(&mut transaction, &entity, &tree, &change)
-                    .await?;
+                let unmet =
+                    transition_unmet(&mut transaction, &scope, &subject, &rules, &change).await?;
                 if denial_code.is_none() && !unmet.is_empty() {
                     denial_code = Some(super::TRANSITION_CONDITIONS_UNMET);
                     denial_reason = Some(
                         unmet
                             .iter()
-                            .map(|violation| violation.message.clone())
+                            .map(|violation| violation.message.as_str())
                             .collect::<Vec<_>>()
                             .join("; "),
                     );
                 }
                 access.push(StatusTransitionAccess {
-                    attribute_code: code.clone(),
+                    attribute_code: attribute.code.clone(),
                     from: current.as_str().map(str::to_owned),
                     to: change.after.as_str().map(str::to_owned),
                     code: requirements.code.clone(),

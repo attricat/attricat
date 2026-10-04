@@ -473,7 +473,7 @@ impl CatalogRepository {
             if !includes_published {
                 return Err(RepositoryError::BlueprintNotPublished);
             }
-            let (previous_keys, previous_hierarchies) = self
+            let previous_constraints = self
                 .enforced_structural_constraints(&mut transaction, blueprint_id)
                 .await?;
             sqlx::query(
@@ -487,8 +487,7 @@ impl CatalogRepository {
             self.apply_published_structural_constraints(
                 &mut transaction,
                 blueprint_id,
-                &previous_keys,
-                &previous_hierarchies,
+                &previous_constraints,
             )
             .await?;
             self.sync_blueprint_connector_jobs(
@@ -557,7 +556,7 @@ impl CatalogRepository {
             if !includes_published {
                 return Err(RepositoryError::BlueprintNotPublished);
             }
-            let (previous_keys, previous_hierarchies) = self
+            let previous_constraints = self
                 .enforced_structural_constraints(transaction, blueprint_id)
                 .await?;
             blueprint = sqlx::query_as::<_, Db<Blueprint>>(
@@ -574,8 +573,7 @@ impl CatalogRepository {
             self.apply_published_structural_constraints(
                 transaction,
                 blueprint_id,
-                &previous_keys,
-                &previous_hierarchies,
+                &previous_constraints,
             )
             .await?;
             self.sync_blueprint_connector_jobs(
