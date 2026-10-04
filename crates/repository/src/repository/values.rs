@@ -1,3 +1,5 @@
+use super::entity_commands::Revalidation;
+use super::write_context::WriteContext;
 use super::*;
 use crate::domain_events::{ATTRIBUTE_VALUE_RESTORED_V1, AttributeValueMutationV1};
 use crate::persistence_rows::{Db, IntoDomain};
@@ -723,18 +725,15 @@ impl CatalogRepository {
             context_id: history.context_id,
             value: Value::Null,
         };
-        if expected_updated_at.is_some()
-            || self
-                .has_status_writes(&mut transaction, &entity, &[selector], &[])
-                .await?
-        {
-            self.check_status_precondition(&mut transaction, &entity, expected_updated_at)
-                .await?;
+        let write = WriteContext::load(&mut transaction, self.workspace_id.0, &entity).await?;
+        if expected_updated_at.is_some() || Self::has_status_writes(&write, &[selector], &[]) {
+            Self::check_status_precondition(&write, &entity, expected_updated_at)?;
         }
         let value = match history.relationship_target_entity_id {
             Some(target_entity_id) if history.active => {
-                self.insert_value(
+                self.insert_value_in(
                     &mut transaction,
+                    &write,
                     &entity,
                     NewAttributeValue::Relationship {
                         attribute_id: Some(history.attribute_id),
@@ -756,8 +755,9 @@ impl CatalogRepository {
                 .await?
                 .ok_or(RepositoryError::NotFound("current relationship value"))?,
             None => {
-                self.insert_value(
+                self.insert_value_in(
                     &mut transaction,
+                    &write,
                     &entity,
                     NewAttributeValue::Scalar {
                         attribute_id: Some(history.attribute_id),
@@ -769,7 +769,7 @@ impl CatalogRepository {
                 .await?
             }
         };
-        self.validate_entity_schema(&mut transaction, &entity)
+        self.validate_entity_schema_in(&mut transaction, &write, &entity, Revalidation::Write)
             .await?;
         let preview = Self::build_preview_projection(&mut transaction, entity.id).await?;
         self.store_preview(&mut transaction, entity.id, preview)

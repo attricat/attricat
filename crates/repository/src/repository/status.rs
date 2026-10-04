@@ -2,6 +2,7 @@ use super::record_values::{
     ContextNode, ContextTree, RecordState, RecordValues, attribute_codes, load_record,
     resolve_on_path,
 };
+use super::write_context::WriteContext;
 use super::*;
 use catalog_validation::status::{
     STATUS_KEY, StatusCoverage, TransitionRequirements, has_record_controls, status_approval,
@@ -165,34 +166,26 @@ impl CatalogRepository {
         )
     }
 
-    pub(super) async fn has_status_writes(
-        &self,
-        transaction: &mut Transaction<'_, Postgres>,
-        entity: &Entity,
+    pub(super) fn has_status_writes(
+        write: &WriteContext,
         values: &[NewAttributeValue],
         removed: &[AttributeValueSelector],
-    ) -> Result<bool, RepositoryError> {
-        let statuses = Self::status_attributes(transaction, entity).await?;
-        Ok(statuses.iter().any(|(id, code, ..)| {
+    ) -> bool {
+        write.status_attributes().iter().any(|(id, code, ..)| {
             removed.iter().any(|selector| &selector.attribute_code == code)
                 || values.iter().any(|value| matches!(value, NewAttributeValue::Scalar { attribute_id, attribute_code, .. } if attribute_id.as_ref() == Some(id) || attribute_code.as_ref() == Some(code)))
-        }))
+        })
     }
 
-    pub(super) async fn check_status_precondition(
-        &self,
-        transaction: &mut Transaction<'_, Postgres>,
+    pub(super) fn check_status_precondition(
+        write: &WriteContext,
         entity: &Entity,
         expected_updated_at: Option<DateTime<Utc>>,
     ) -> Result<(), RepositoryError> {
         if expected_updated_at.is_some_and(|expected| expected != entity.updated_at) {
             return Err(RepositoryError::StaleEntity);
         }
-        if expected_updated_at.is_none()
-            && !Self::status_attributes(transaction, entity)
-                .await?
-                .is_empty()
-        {
+        if expected_updated_at.is_none() && !write.status_attributes().is_empty() {
             return Err(RepositoryError::StatusPreconditionRequired);
         }
         Ok(())
@@ -249,8 +242,8 @@ impl CatalogRepository {
         transaction: &mut Transaction<'_, Postgres>,
         entity: &Entity,
     ) -> Result<(), RepositoryError> {
-        let tree = ContextTree::load(transaction, self.workspace_id.0).await?;
-        self.checked_status_changes(transaction, entity, &tree)
+        let write = WriteContext::load(transaction, self.workspace_id.0, entity).await?;
+        self.checked_status_changes(transaction, entity, &write)
             .await
             .map(drop)
     }
@@ -262,9 +255,10 @@ impl CatalogRepository {
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         entity: &Entity,
-        tree: &ContextTree,
+        write: &WriteContext,
     ) -> Result<Vec<StatusChange>, RepositoryError> {
-        let attributes = Self::status_attributes(transaction, entity).await?;
+        let tree = &write.tree;
+        let attributes = write.status_attributes();
         if attributes.is_empty() {
             return Ok(Vec::new());
         }
@@ -544,9 +538,10 @@ impl CatalogRepository {
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         entity: &Entity,
-        tree: &ContextTree,
+        write: &WriteContext,
     ) -> Result<(), RepositoryError> {
-        let attributes = Self::status_attributes(transaction, entity).await?;
+        let tree = &write.tree;
+        let attributes = write.status_attributes();
         let active_approvals: i64 = sqlx::query_scalar(
             "SELECT count(*) FROM entity_approvals WHERE workspace_id = $1 AND entity_id = $2 AND ended_at IS NULL",
         )

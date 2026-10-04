@@ -6,6 +6,7 @@ use super::extension_catalog_data::{
 };
 use super::record_values::{ContextTree, RecordState, RecordValues, load_record};
 use super::values::{NativeValue, ValueType};
+use super::write_context::WriteContext;
 use super::*;
 use crate::domain_events::{
     ATTRIBUTE_VALUE_CHANGED_V1, AttributeValueMutationV1, ENTITY_CREATED_V1, ENTITY_DELETED_V1,
@@ -157,49 +158,40 @@ impl CatalogRepository {
                 system_metadata,
             )
             .await?;
-        let default_context_id = self
-            .resolve_context_id(transaction, None)
-            .await?
-            .expect("the default context is required");
-        let attributes = self
-            .list_attributes_in_transaction(
-                transaction,
-                entity.blueprint_id,
-                entity.blueprint_version,
-            )
+        let write = WriteContext::load(transaction, self.workspace_id.0, &entity).await?;
+        let default_context_id = write.default_context_id()?;
+        let defaults = write
+            .attributes()
+            .iter()
+            .filter(|attribute| {
+                attribute.default_value.is_some()
+                    && !values.iter().any(|value| {
+                        matches!(
+                            value,
+                            NewAttributeValue::Scalar {
+                                attribute_id,
+                                attribute_code,
+                                context_id,
+                                ..
+                            } if (attribute_id == &Some(attribute.id)
+                                || attribute_code.as_deref() == Some(attribute.code.as_str()))
+                                && context_id.is_none_or(|id| id == default_context_id)
+                        )
+                    })
+            })
+            .map(|attribute| NewAttributeValue::Scalar {
+                attribute_id: Some(attribute.id),
+                attribute_code: None,
+                context_id: Some(default_context_id),
+                value: attribute.default_value.clone().expect("filtered above"),
+            })
+            .collect::<Vec<_>>();
+        self.insert_values_in(transaction, &write, &entity, defaults)
             .await?;
-        for attribute in attributes.iter().filter(|attribute| {
-            attribute.default_value.is_some()
-                && !values.iter().any(|value| {
-                    matches!(
-                        value,
-                        NewAttributeValue::Scalar {
-                            attribute_id,
-                            attribute_code,
-                            context_id,
-                            ..
-                        } if (attribute_id == &Some(attribute.id)
-                            || attribute_code.as_deref() == Some(attribute.code.as_str()))
-                            && context_id.is_none_or(|id| id == default_context_id)
-                    )
-                })
-        }) {
-            self.insert_value(
-                transaction,
-                &entity,
-                NewAttributeValue::Scalar {
-                    attribute_id: Some(attribute.id),
-                    attribute_code: None,
-                    context_id: Some(default_context_id),
-                    value: attribute.default_value.clone().expect("filtered above"),
-                },
-            )
+        self.insert_values_in(transaction, &write, &entity, values)
             .await?;
-        }
-        for value in values {
-            self.insert_value(transaction, &entity, value).await?;
-        }
-        self.validate_entity_schema(transaction, &entity).await?;
+        self.validate_entity_schema_in(transaction, &write, &entity, Revalidation::Write)
+            .await?;
         let preview = Self::build_preview_projection(transaction, entity.id).await?;
         let entity = self.store_preview(transaction, entity.id, preview).await?;
         let after = self.entity_audit_snapshot(transaction, entity.id).await?;
@@ -389,13 +381,10 @@ impl CatalogRepository {
         // Snapshot under the lock so a concurrent writer cannot change the
         // audited "before" state between the read and this mutation.
         let before = self.entity_audit_snapshot(transaction, entity_id).await?;
-        if expected_updated_at.is_some()
-            || self
-                .has_status_writes(transaction, &entity, &values, &remove_values)
-                .await?
+        let write = WriteContext::load(transaction, self.workspace_id.0, &entity).await?;
+        if expected_updated_at.is_some() || Self::has_status_writes(&write, &values, &remove_values)
         {
-            self.check_status_precondition(transaction, &entity, expected_updated_at)
-                .await?;
+            Self::check_status_precondition(&write, &entity, expected_updated_at)?;
         }
         if let Some(tags) = &system_tags {
             validate_system_tag_update(&entity.system_tags, tags)?;
@@ -425,16 +414,16 @@ impl CatalogRepository {
             .execute(&mut **transaction)
             .await?;
         }
-        for value in values {
-            self.insert_value(transaction, &entity, value).await?;
-        }
+        self.insert_values_in(transaction, &write, &entity, values)
+            .await?;
         for selector in remove_values {
-            self.remove_scalar_value(transaction, &entity, selector)
+            self.remove_scalar_value(transaction, &write, &entity, selector)
                 .await?;
         }
-        self.replace_relationship_sets(transaction, &entity, relationships)
+        self.replace_relationship_sets(transaction, &write, &entity, relationships)
             .await?;
-        self.validate_entity_schema(transaction, &entity).await?;
+        self.validate_entity_schema_in(transaction, &write, &entity, Revalidation::Write)
+            .await?;
         let preview = Self::build_preview_projection(transaction, entity.id).await?;
         let entity = self.store_preview(transaction, entity.id, preview).await?;
         let after = self.entity_audit_snapshot(transaction, entity_id).await?;
@@ -633,20 +622,17 @@ impl CatalogRepository {
             .entity_audit_snapshot(&mut transaction, entity_id)
             .await?;
 
+        let write = WriteContext::load(&mut transaction, self.workspace_id.0, &entity).await?;
         if input.expected_updated_at.is_some()
-            || self
-                .has_status_writes(&mut transaction, &entity, &input.values, &[])
-                .await?
+            || Self::has_status_writes(&write, &input.values, &[])
         {
-            self.check_status_precondition(&mut transaction, &entity, input.expected_updated_at)
-                .await?;
+            Self::check_status_precondition(&write, &entity, input.expected_updated_at)?;
         }
-        let mut values = Vec::with_capacity(input.values.len());
-        for value in input.values {
-            values.push(self.insert_value(&mut transaction, &entity, value).await?);
-        }
+        let values = self
+            .insert_values_in(&mut transaction, &write, &entity, input.values)
+            .await?;
 
-        self.validate_entity_schema(&mut transaction, &entity)
+        self.validate_entity_schema_in(&mut transaction, &write, &entity, Revalidation::Write)
             .await?;
 
         let preview = Self::build_preview_projection(&mut transaction, entity_id).await?;
@@ -738,16 +724,13 @@ impl CatalogRepository {
         let before = self
             .entity_audit_snapshot(&mut transaction, entity_id)
             .await?;
+        let write = WriteContext::load(&mut transaction, self.workspace_id.0, &entity).await?;
         let mut values = Vec::new();
         for relationship in input.relationships {
-            let context_id = self
-                .resolve_context_id(&mut transaction, relationship.context_id)
-                .await?;
-            let (attribute_id, target_blueprint_codes, context_editable) = self
-                .relationship_attribute(&mut transaction, &entity, &relationship)
-                .await?;
-            self.validate_context_editable(&mut transaction, context_id, &context_editable)
-                .await?;
+            let context_id = Some(write.resolve_context(relationship.context_id)?);
+            let (attribute_id, target_blueprint_codes, context_editable) =
+                Self::relationship_attribute(&write, &relationship)?;
+            write.ensure_editable(context_id, &context_editable)?;
             // Relationship writes are set operations; sorting target IDs gives
             // every concurrent writer the same target-lock order.
             let targets: BTreeSet<_> = relationship.target_entity_ids.into_iter().collect();
@@ -797,7 +780,7 @@ impl CatalogRepository {
                 }
             }
         }
-        self.validate_entity_schema(&mut transaction, &entity)
+        self.validate_entity_schema_in(&mut transaction, &write, &entity, Revalidation::Write)
             .await?;
         self.touch_entity(&mut transaction, entity_id).await?;
         let after = self
@@ -822,18 +805,15 @@ impl CatalogRepository {
     pub(super) async fn replace_relationship_sets(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
+        write: &WriteContext,
         entity: &Entity,
         relationships: Vec<RelationshipTargets>,
     ) -> Result<(), RepositoryError> {
         for relationship in relationships {
-            let context_id = self
-                .resolve_context_id(transaction, relationship.context_id)
-                .await?;
-            let (attribute_id, target_blueprint_codes, context_editable) = self
-                .relationship_attribute(transaction, entity, &relationship)
-                .await?;
-            self.validate_context_editable(transaction, context_id, &context_editable)
-                .await?;
+            let context_id = Some(write.resolve_context(relationship.context_id)?);
+            let (attribute_id, target_blueprint_codes, context_editable) =
+                Self::relationship_attribute(write, &relationship)?;
+            write.ensure_editable(context_id, &context_editable)?;
             let targets: BTreeSet<_> = relationship.target_entity_ids.into_iter().collect();
             for target_id in &targets {
                 self.validate_relationship_target(transaction, *target_id, &target_blueprint_codes)
@@ -868,9 +848,42 @@ impl CatalogRepository {
         Ok(())
     }
 
+    /// Inserts `values` in order. Scalar values are validated in memory as
+    /// they are reached and written together afterwards; relationship values
+    /// keep their per-value checks, which read the values already written.
+    pub(super) async fn insert_values_in(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        write: &WriteContext,
+        entity: &Entity,
+        values: Vec<NewAttributeValue>,
+    ) -> Result<Vec<AttributeValue>, RepositoryError> {
+        let mut inserted = Vec::with_capacity(values.len());
+        for value in values {
+            inserted.push(
+                self.insert_value_in(transaction, write, entity, value)
+                    .await?,
+            );
+        }
+        Ok(inserted)
+    }
+
+    /// [`Self::insert_value_in`] for a caller without a write context.
     pub(super) async fn insert_value(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
+        entity: &Entity,
+        value: NewAttributeValue,
+    ) -> Result<AttributeValue, RepositoryError> {
+        let context = WriteContext::load(transaction, self.workspace_id.0, entity).await?;
+        self.insert_value_in(transaction, &context, entity, value)
+            .await
+    }
+
+    pub(super) async fn insert_value_in(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        write: &WriteContext,
         entity: &Entity,
         value: NewAttributeValue,
     ) -> Result<AttributeValue, RepositoryError> {
@@ -896,48 +909,19 @@ impl CatalogRepository {
                     true,
                 ),
             };
-        let context_id = self.resolve_context_id(transaction, context_id).await?;
+        let context_id = Some(write.resolve_context(context_id)?);
 
         let attribute_label = attribute_code.clone();
-        let (attribute_id, attribute_code, value_type, value_schema, target_blueprint_codes, cardinality, target_cardinality, context_editable) =
-            match (attribute_id, attribute_code.as_deref()) {
-                (Some(attribute_id), None) => {
-                    sqlx::query_as::<_, (Uuid, String, String, Option<Value>, Vec<String>, Option<String>, Option<String>, String)>(
-                        r#"SELECT id, code, value_type, value_schema, CASE WHEN cardinality(target_blueprint_codes) > 0 THEN target_blueprint_codes WHEN target_blueprint_code IS NULL THEN '{}'::text[] ELSE ARRAY[target_blueprint_code] END AS target_blueprint_codes, cardinality, target_cardinality, context_editable
-                   FROM attributes
-                   WHERE id = $1
-                     AND ((blueprint_id = $2 AND blueprint_version = $3) OR entity_id = $4)
-                     AND deleted_at IS NULL"#,
-                    )
-                    .bind(attribute_id)
-                    .bind(entity.blueprint_id)
-                    .bind(entity.blueprint_version)
-                    .bind(entity.id)
-                    .fetch_optional(&mut **transaction)
-                    .await?
-                }
-                (None, Some(attribute_code)) => {
-                    validate_attribute_selector_code(attribute_code)?;
-                    sqlx::query_as::<_, (Uuid, String, String, Option<Value>, Vec<String>, Option<String>, Option<String>, String)>(
-                        r#"SELECT id, code, value_type, value_schema, CASE WHEN cardinality(target_blueprint_codes) > 0 THEN target_blueprint_codes WHEN target_blueprint_code IS NULL THEN '{}'::text[] ELSE ARRAY[target_blueprint_code] END AS target_blueprint_codes, cardinality, target_cardinality, context_editable
-                   FROM attributes
-                   WHERE code = $1
-                     AND ((blueprint_id = $2 AND blueprint_version = $3) OR entity_id = $4)
-                     AND deleted_at IS NULL"#,
-                    )
-                    .bind(attribute_code)
-                    .bind(entity.blueprint_id)
-                    .bind(entity.blueprint_version)
-                    .bind(entity.id)
-                    .fetch_optional(&mut **transaction)
-                    .await?
-                }
-                _ => return Err(RepositoryError::InvalidAttributeSelector),
-            }
-            .ok_or(RepositoryError::AttributeNotApplicable)?;
+        let attribute = write.attribute(attribute_id, attribute_code.as_deref())?;
+        let attribute_id = attribute.id;
+        let attribute_code = attribute.code.clone();
+        let value_type = attribute.value_type.clone();
+        let value_schema = attribute.value_schema.clone();
+        let target_blueprint_codes = attribute.target_blueprint_codes.clone();
+        let cardinality = attribute.cardinality.clone();
+        let target_cardinality = attribute.target_cardinality.clone();
 
-        self.validate_context_editable(transaction, context_id, &context_editable)
-            .await?;
+        write.ensure_editable(context_id, &attribute.context_editable)?;
 
         if (value_type == "relationship") != is_relationship {
             return Err(RepositoryError::AttributeKindMismatch);
@@ -1033,29 +1017,20 @@ impl CatalogRepository {
     async fn remove_scalar_value(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
+        write: &WriteContext,
         entity: &Entity,
         selector: AttributeValueSelector,
     ) -> Result<(), RepositoryError> {
         validate_attribute_selector_code(&selector.attribute_code)?;
-        let context_id = self
-            .resolve_context_id(transaction, selector.context_id)
-            .await?;
-        let attribute = sqlx::query_as::<_, (Uuid, String, String)>(
-            "SELECT id, value_type, context_editable FROM attributes WHERE code = $1 AND ((blueprint_id = $2 AND blueprint_version = $3) OR entity_id = $4) AND deleted_at IS NULL",
-        )
-        .bind(selector.attribute_code)
-        .bind(entity.blueprint_id)
-        .bind(entity.blueprint_version)
-        .bind(entity.id)
-        .fetch_optional(&mut **transaction)
-        .await?
-        .ok_or(RepositoryError::AttributeNotApplicable)?;
-        if attribute.1 == "relationship" {
+        let context_id = Some(write.resolve_context(selector.context_id)?);
+        let attribute = write
+            .by_code(&selector.attribute_code)
+            .ok_or(RepositoryError::AttributeNotApplicable)?;
+        if attribute.value_type == "relationship" {
             return Err(RepositoryError::AttributeKindMismatch);
         }
-        self.validate_context_editable(transaction, context_id, &attribute.2)
-            .await?;
-        self.archive_current_value(transaction, entity.id, attribute.0, context_id, None)
+        write.ensure_editable(context_id, &attribute.context_editable)?;
+        self.archive_current_value(transaction, entity.id, attribute.id, context_id, None)
             .await?;
         Ok(())
     }
@@ -1172,19 +1147,32 @@ impl CatalogRepository {
         entity: &Entity,
         mode: Revalidation,
     ) -> Result<(), RepositoryError> {
-        let tree = ContextTree::load(transaction, self.workspace_id.0).await?;
+        let write = WriteContext::load(transaction, self.workspace_id.0, entity).await?;
+        self.validate_entity_schema_in(transaction, &write, entity, mode)
+            .await
+    }
+
+    pub(super) async fn validate_entity_schema_in(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        write: &WriteContext,
+        entity: &Entity,
+        mode: Revalidation,
+    ) -> Result<(), RepositoryError> {
+        let tree = &write.tree;
         // The write's own status changes, validated before system effects
         // (approval voids) add transitions of their own.
         let changes = match mode {
             Revalidation::Write => {
-                self.checked_status_changes(transaction, entity, &tree)
+                self.checked_status_changes(transaction, entity, write)
                     .await?
             }
             Revalidation::Structural => Vec::new(),
         };
-        self.validate_principal_values(transaction, entity).await?;
+        self.validate_principal_values(transaction, entity, write)
+            .await?;
         if mode == Revalidation::Write {
-            self.apply_status_effects_in(transaction, entity, &tree)
+            self.apply_status_effects_in(transaction, entity, write)
                 .await?;
         }
         // Every value write validates here, so unique keys stay current.
@@ -1207,12 +1195,12 @@ impl CatalogRepository {
             RecordValues::empty(entity.id, entity.blueprint_id, entity.blueprint_version)
         });
         if let Some(entity_schema) = &entity_schema {
-            validate_json_entity_schema(&tree, &record, entity_schema)?;
+            validate_json_entity_schema(tree, &record, entity_schema)?;
         }
         self.enforce_declarative_checks(
             transaction,
             entity_schema.as_ref(),
-            &tree,
+            tree,
             &record,
             &changes,
         )
@@ -1233,34 +1221,22 @@ impl CatalogRepository {
         self.store_preview(transaction, entity.id, preview).await
     }
 
-    async fn relationship_attribute(
-        &self,
-        transaction: &mut Transaction<'_, Postgres>,
-        entity: &Entity,
+    fn relationship_attribute(
+        write: &WriteContext,
         relationship: &RelationshipTargets,
     ) -> Result<(Uuid, Vec<String>, String), RepositoryError> {
-        let attribute = match (relationship.attribute_id, relationship.attribute_code.as_deref()) {
-            (Some(id), None) => sqlx::query_as::<_, (Uuid, String, Vec<String>, String)>(
-                "SELECT id, value_type, CASE WHEN cardinality(target_blueprint_codes) > 0 THEN target_blueprint_codes WHEN target_blueprint_code IS NULL THEN '{}'::text[] ELSE ARRAY[target_blueprint_code] END AS target_blueprint_codes, context_editable FROM attributes WHERE id = $1 AND ((blueprint_id = $2 AND blueprint_version = $3) OR entity_id = $4) AND deleted_at IS NULL",
-            ).bind(id).bind(entity.blueprint_id).bind(entity.blueprint_version).bind(entity.id).fetch_optional(&mut **transaction).await?,
-            (None, Some(code)) => {
-                validate_attribute_selector_code(code)?;
-                sqlx::query_as::<_, (Uuid, String, Vec<String>, String)>(
-                    "SELECT id, value_type, CASE WHEN cardinality(target_blueprint_codes) > 0 THEN target_blueprint_codes WHEN target_blueprint_code IS NULL THEN '{}'::text[] ELSE ARRAY[target_blueprint_code] END AS target_blueprint_codes, context_editable FROM attributes WHERE code = $1 AND ((blueprint_id = $2 AND blueprint_version = $3) OR entity_id = $4) AND deleted_at IS NULL",
-                )
-                .bind(code)
-                .bind(entity.blueprint_id)
-                .bind(entity.blueprint_version)
-                .bind(entity.id)
-                .fetch_optional(&mut **transaction)
-                .await?
-            }
-            _ => return Err(RepositoryError::InvalidAttributeSelector),
-        }.ok_or(RepositoryError::AttributeNotApplicable)?;
-        if attribute.1 != "relationship" {
+        let attribute = write.attribute(
+            relationship.attribute_id,
+            relationship.attribute_code.as_deref(),
+        )?;
+        if attribute.value_type != "relationship" {
             return Err(RepositoryError::AttributeKindMismatch);
         }
-        Ok((attribute.0, attribute.2, attribute.3))
+        Ok((
+            attribute.id,
+            attribute.target_blueprint_codes.clone(),
+            attribute.context_editable.clone(),
+        ))
     }
 
     async fn validate_relationship_target(

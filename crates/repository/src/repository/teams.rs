@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 
 use catalog_validation::principal::{
-    CURRENT_USER_FILTER_VALUE, PRINCIPAL_KEY, PrincipalKind, PrincipalRef, principal_kinds,
+    CURRENT_USER_FILTER_VALUE, PrincipalKind, PrincipalRef, principal_kinds,
     validate_principal_value,
 };
 use chrono::{DateTime, Utc};
@@ -323,16 +323,9 @@ impl CatalogRepository {
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         entity: &Entity,
+        write: &super::write_context::WriteContext,
     ) -> Result<(), RepositoryError> {
-        let attributes = sqlx::query_as::<_, (String, Value)>(
-            "SELECT code, value_schema FROM attributes WHERE ((blueprint_id = $1 AND blueprint_version = $2) OR entity_id = $3) AND deleted_at IS NULL AND value_schema ? $4",
-        )
-        .bind(entity.blueprint_id)
-        .bind(entity.blueprint_version)
-        .bind(entity.id)
-        .bind(PRINCIPAL_KEY)
-        .fetch_all(&mut **transaction)
-        .await?;
+        let attributes = write.principal_attributes();
         if attributes.is_empty() {
             return Ok(());
         }

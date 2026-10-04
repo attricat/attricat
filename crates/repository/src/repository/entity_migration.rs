@@ -1,3 +1,5 @@
+use super::entity_commands::Revalidation;
+use super::write_context::WriteContext;
 use super::*;
 use crate::domain_events::{
     ENTITY_MIGRATED_V1, EntityMigratedV1, EventSource, EventSourceKind, NewDomainEvent,
@@ -331,13 +333,12 @@ impl CatalogRepository {
                 .record(lock_started.elapsed().as_secs_f64());
         }
         let entity = self.lock_entity(&mut transaction, entity_id).await?;
+        let source_write =
+            WriteContext::load(&mut transaction, self.workspace_id.0, &entity).await?;
         if expected_updated_at.is_some()
-            || self
-                .has_status_writes(&mut transaction, &entity, &input.values, &[])
-                .await?
+            || Self::has_status_writes(&source_write, &input.values, &[])
         {
-            self.check_status_precondition(&mut transaction, &entity, expected_updated_at)
-                .await?;
+            Self::check_status_precondition(&source_write, &entity, expected_updated_at)?;
         }
         let migration = sqlx::query_as::<_, (Uuid, i64, i64, String)>(
             "SELECT entity_id, source_version, target_version, status FROM entity_blueprint_migrations WHERE id = $1 AND workspace_id = $2 FOR UPDATE",
@@ -666,24 +667,30 @@ impl CatalogRepository {
                         .len() as u64
                 })
                 .sum::<u64>();
-        if expected_updated_at.is_none()
-            && self
-                .has_status_writes(&mut transaction, &target_entity, &input.values, &[])
-                .await?
-        {
+        let write =
+            WriteContext::load(&mut transaction, self.workspace_id.0, &target_entity).await?;
+        if expected_updated_at.is_none() && Self::has_status_writes(&write, &input.values, &[]) {
             return Err(RepositoryError::StatusPreconditionRequired);
         }
-        for value in input.values {
-            self.insert_value(&mut transaction, &target_entity, value)
-                .await?;
-        }
-        self.replace_relationship_sets(&mut transaction, &target_entity, input.relationships)
+        self.insert_values_in(&mut transaction, &write, &target_entity, input.values)
             .await?;
+        self.replace_relationship_sets(
+            &mut transaction,
+            &write,
+            &target_entity,
+            input.relationships,
+        )
+        .await?;
         // A migration is not an implicit escape hatch from the source status policy.
         self.validate_status_values(&mut transaction, &entity)
             .await?;
-        self.validate_entity_schema(&mut transaction, &target_entity)
-            .await?;
+        self.validate_entity_schema_in(
+            &mut transaction,
+            &write,
+            &target_entity,
+            Revalidation::Write,
+        )
+        .await?;
         let preview = Self::build_preview_projection(&mut transaction, entity.id).await?;
         let target_entity = self
             .store_preview(&mut transaction, entity.id, preview)

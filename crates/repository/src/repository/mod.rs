@@ -84,6 +84,7 @@ mod workflow_actions;
 mod workflow_runs;
 mod workflows;
 mod workspace_navigation;
+mod write_context;
 
 fn summarize_violations(violations: &[CheckViolation]) -> String {
     violations
