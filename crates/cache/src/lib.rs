@@ -27,7 +27,7 @@ mod redis_backend;
 
 use futures_util::{StreamExt, stream::BoxStream};
 pub use rate_limit::{LocalRateLimiter, RateLimiter, RedisRateLimiter};
-pub use redis_backend::{RedisBus, RedisStore, connect as connect_redis};
+pub use redis_backend::{RedisBus, RedisClients, RedisStore, connect as connect_redis};
 use serde::{Serialize, de::DeserializeOwned};
 
 /// A cache key. By convention `namespace:part:part`; the namespace labels
@@ -310,15 +310,15 @@ impl QueryCache {
         match &config.backend {
             CacheBackend::Memory => (Self::new(config), Arc::new(LocalRateLimiter::default())),
             CacheBackend::Redis { url } => match connect_redis(url).await {
-                Ok((client, connection)) => {
+                Ok(clients) => {
                     let cache = Self::with_backends(
                         config.clone(),
-                        Some(Arc::new(RedisStore::new(connection.clone()))),
-                        Arc::new(RedisBus::new(client, connection.clone())),
+                        Some(Arc::new(RedisStore::new(&clients))),
+                        Arc::new(RedisBus::new(&clients)),
                     );
                     cache.spawn_invalidation_listener();
                     tracing::info!("query cache uses Redis as its shared tier");
-                    (cache, Arc::new(RedisRateLimiter::new(connection)))
+                    (cache, Arc::new(RedisRateLimiter::new(&clients)))
                 }
                 Err(error) => {
                     tracing::error!(%error, "Redis is unavailable; the query cache stays in memory");

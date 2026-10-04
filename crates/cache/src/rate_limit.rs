@@ -7,7 +7,10 @@ use std::{
 };
 
 use async_trait::async_trait;
-use redis::aio::ConnectionManager;
+use fred::prelude::{Client, KeysInterface};
+
+use crate::CacheError;
+use crate::redis_backend::{RedisClients, bounded, error};
 
 /// Allows at most `limit` events per `window` for each key.
 #[async_trait]
@@ -72,50 +75,43 @@ impl RateLimiter for LocalRateLimiter {
 /// A fixed-window counter in Redis, shared by every replica. When Redis is
 /// unavailable the process falls back to its own limiter.
 pub struct RedisRateLimiter {
-    connection: ConnectionManager,
+    client: Client,
     fallback: LocalRateLimiter,
 }
 
 impl RedisRateLimiter {
-    pub fn new(connection: ConnectionManager) -> Self {
+    pub fn new(clients: &RedisClients) -> Self {
         Self {
-            connection,
+            client: clients.commands.clone(),
             fallback: LocalRateLimiter::default(),
         }
+    }
+
+    async fn count(&self, counter: &str, window_ms: i64) -> Result<u64, CacheError> {
+        let pipeline = self.client.pipeline();
+        let _: () = pipeline.incr(counter).await.map_err(error)?;
+        let _: () = pipeline
+            .pexpire(counter, window_ms * 2, None)
+            .await
+            .map_err(error)?;
+        let (count, _): (u64, i64) = bounded(pipeline.all()).await?;
+        Ok(count)
     }
 }
 
 #[async_trait]
 impl RateLimiter for RedisRateLimiter {
     async fn allow(&self, key: &str, limit: u32, window: Duration) -> bool {
-        let window_ms = window.as_millis().max(1) as u64;
+        let window_ms = window.as_millis().max(1) as i64;
         let now_ms = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
-            .as_millis() as u64;
+            .as_millis() as i64;
         let counter = format!("attricat:rate:{key}:{}", now_ms / window_ms);
-        let mut connection = self.connection.clone();
-        let mut pipeline = redis::pipe();
-        pipeline
-            .cmd("INCR")
-            .arg(&counter)
-            .cmd("PEXPIRE")
-            .arg(&counter)
-            .arg(window_ms * 2)
-            .ignore();
-        let result = tokio::time::timeout(
-            Duration::from_millis(250),
-            pipeline.query_async::<(u64,)>(&mut connection),
-        )
-        .await;
-        match result {
-            Ok(Ok((count,))) => count <= u64::from(limit),
-            Ok(Err(error)) => {
+        match self.count(&counter, window_ms).await {
+            Ok(count) => count <= u64::from(limit),
+            Err(error) => {
                 tracing::warn!(%error, "shared rate limit unavailable; using the local limit");
-                self.fallback.allow_now(key, limit, window)
-            }
-            Err(_) => {
-                tracing::warn!("shared rate limit timed out; using the local limit");
                 self.fallback.allow_now(key, limit, window)
             }
         }

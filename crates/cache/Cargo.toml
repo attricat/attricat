@@ -9,10 +9,10 @@ publish.workspace = true
 [dependencies]
 async-trait.workspace = true
 bytes.workspace = true
+fred = { version = "10", default-features = false, features = ["i-std", "i-pubsub", "subscriber-client"] }
 futures-util.workspace = true
 metrics.workspace = true
 moka = { version = "0.12", features = ["future"] }
-redis = { version = "0.32", default-features = false, features = ["tokio-comp", "connection-manager"] }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
