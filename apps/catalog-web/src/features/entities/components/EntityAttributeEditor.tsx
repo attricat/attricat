@@ -2,9 +2,9 @@ import { Tooltip, useTheme } from '@mui/material';
 import { InfoIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { Attribute, ComponentReference } from '../api';
+import type { StatusTransitionAccess } from '../recordControls';
 import type { FileMetadata } from '../../files/schemas';
 import { attributeValueTypes } from '../valueTypes';
-import type { StatusDestination } from '../status';
 import { FileAttributeEditor } from '../../files/FileAttributeEditor';
 import { RelationshipField } from './RelationshipField';
 import { smallIconSize } from '../../../components/iconSizes';
@@ -16,7 +16,7 @@ export const EntityAttributeEditor = ({
   component,
   statusBaseline = null,
   inheritedStatus = null,
-  statusDestinations,
+  statusTransitions,
   contextId,
   disabled,
   required,
@@ -34,7 +34,7 @@ export const EntityAttributeEditor = ({
   component?: ComponentReference | null;
   statusBaseline?: string | null;
   inheritedStatus?: string | null;
-  statusDestinations?: readonly StatusDestination[];
+  statusTransitions?: readonly StatusTransitionAccess[];
   contextId: string | null;
   disabled: boolean;
   required?: boolean;
@@ -78,7 +78,7 @@ export const EntityAttributeEditor = ({
         component={component}
         statusBaseline={statusBaseline}
         inheritedStatus={inheritedStatus}
-        statusDestinations={statusDestinations}
+        statusTransitions={statusTransitions}
         value={value}
         disabled={effectiveDisabled}
         required={required}

@@ -50,7 +50,7 @@ Kilka wskazówek:
 
 - **Jeden schemat na słownik.** Kolor nie jest kategorią tylko dlatego, że oba pojawiają się przy produkcie. Trzymaj je osobno, chyba że mają wspólne znaczenie i cykl życia.
 - **Nazywaj relacje zgodnie z ich znaczeniem.** `materials` i `certifications` są czytelniejsze niż ogólne `tags`. Zachowaj ogólną relację `labels` dla adnotacji, które przecinają wiele dziedzin.
-- **Zachowaj stały atrybut z kodem**, gdy potrzebują go integracje. Same relacje zawsze używają UUID encji.
+- **Zachowaj stały atrybut z kodem**, gdy potrzebują go integracje, i zadeklaruj go jako [klucz unikalny](/pl/builders/validation/#klucze-unikalne), aby nie dało się go użyć ponownie. Same relacje zawsze używają UUID encji.
 - **Użyj atrybutu skalarnego** dla wartości wewnętrznych i niewspółdzielonych: SKU, notatki tekstowej.
 
 ### Pojedynczy wybór i powiązania wyłączne
@@ -67,6 +67,23 @@ cardinality = "one"
 
 Dodaj `target_cardinality = "one"` tylko wtedy, gdy każdy cel może zostać przypisany tylko raz, na przykład produkt i jego unikalny rekord kodu kreskowego.
 
+### Powiązania z kilkoma rodzajami encji
+
+Relacja może wskazywać dowolny schemat, jeden schemat albo listę schematów. Użyj listy, gdy powiązanie ma jasne znaczenie, ale więcej niż jeden rodzaj celu, np. przedmiot oceny zgodności:
+
+```toml
+[[attributes]]
+code = "subject"
+value_type = "relationship"
+target_blueprints = ["product", "product_revision", "material", "part"]
+```
+
+Powiązania z innymi schematami są odrzucane, okno wyboru encji pozwala wskazać, który z wymienionych schematów przeszukać, a każdy z nich może pokazać powiązania blokiem `incoming_relationship_list`. Zamiast jednej nieograniczonej relacji wybieraj jedną relację na znaczenie.
+
+### Klucze biznesowe
+
+Numery części, dokumentów czy inwentarzowe identyfikują encję dla ludzi i innych systemów. Zadeklaruj je jako [klucze unikalne](/pl/builders/validation/#klucze-unikalne); łącz atrybuty, gdy identyfikator jest unikalny tylko w obrębie czegoś innego, np. oznaczenie wersji w obrębie dokumentu albo numer części w obrębie producenta.
+
 ## Hierarchie
 
 Dodaj do schematu klasyfikacji relację do niego samego:
@@ -77,8 +94,11 @@ Dodaj do schematu klasyfikacji relację do niego samego:
 code = "parent"
 value_type = "relationship"
 target_blueprint = "category"
-cardinality = "one"
+tree = true
+context_editable = "default"
 ```
+
+`tree = true` sprawia, że relacja jest jednokrotnego wyboru, i odrzuca każde powiązanie, które uczyniłoby kategorię własnym przodkiem (`409 relationship_cycle`). Dla struktur, w których encja może mieć kilka celów, ale nigdy nie może wrócić do siebie, takich jak zależności czy łańcuchy poprzedników, użyj `acyclic = true`. Oba ustawienia wymagają `context_editable = "default"`, więc hierarchia jest taka sama w każdym kontekście. Publikacja któregokolwiek z nich na istniejących danych zgłasza cykle, które już istnieją.
 
 **Przeglądarka encji** wykrywa relacje odwołujące się do własnego schematu i zamienia filtr dla `product.categories` w drzewo z sumowanymi licznikami. Wybranie *Shirts* obejmuje także produkty przypisane do kategorii podrzędnych. Zobacz [Przeglądanie encji](/pl/guides/explore/#fasety-relacji).
 

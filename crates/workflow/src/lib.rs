@@ -36,6 +36,11 @@ pub enum Trigger {
         event_type: String,
         envelope: BTreeMap<String, Value>,
         facts: BTreeMap<String, Value>,
+        /// Optional changed-attribute filter: the event matches only when one
+        /// of its payload facts names one of these attribute codes. Empty means
+        /// no filter, which keeps stored revisions without the field unchanged.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        attributes: Vec<String>,
     },
     /// A management caller supplies one UUID entity target; no arbitrary payload is accepted.
     Manual,
@@ -71,6 +76,15 @@ pub enum Action {
     AttributeWrite {
         attribute_code: String,
         value: ScalarSource,
+    },
+    /// Applies fixed local actions to every live entity whose
+    /// `relationship_attribute` currently targets the trigger entity. Each
+    /// target is a separate, idempotent entity write; more than `max_targets`
+    /// referencing entities fails the action before any target is changed.
+    ReferencingEntitiesUpdate {
+        relationship_attribute: String,
+        max_targets: u32,
+        actions: Vec<Action>,
     },
 }
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -121,6 +135,7 @@ struct RawEventTrigger {
     envelope: BTreeMap<String, Value>,
     #[serde(default)]
     facts: BTreeMap<String, Value>,
+    attributes: Option<Vec<String>>,
 }
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
@@ -142,7 +157,18 @@ enum RawAction {
         fixed: Option<Value>,
         event_field: Option<String>,
     },
+    ReferencingEntitiesUpdate {
+        relationship_attribute: String,
+        max_targets: Option<u32>,
+        actions: Vec<RawAction>,
+    },
 }
+
+/// Default and hard upper bound for `referencing_entities_update` targets.
+pub const DEFAULT_REFERENCING_TARGETS: u32 = 100;
+pub const MAX_REFERENCING_TARGETS: u32 = 500;
+const MAX_NESTED_ACTIONS: usize = 20;
+const MAX_TRIGGER_ATTRIBUTES: usize = 100;
 
 pub fn parse(source: &str) -> Result<WorkflowDefinition, WorkflowError> {
     let raw: Raw = toml::from_str(source)?;
@@ -204,6 +230,7 @@ fn trigger(raw: RawTrigger, version: u32) -> Result<Trigger, WorkflowError> {
             event_type,
             envelope,
             facts,
+            attributes,
         }) => {
             if !ENTITY_TRIGGER_EVENTS.contains(&event_type.as_str()) {
                 return Err(WorkflowError::Invalid(format!(
@@ -212,10 +239,27 @@ fn trigger(raw: RawTrigger, version: u32) -> Result<Trigger, WorkflowError> {
             }
             envelope_map(&envelope)?;
             facts_map(&facts)?;
+            let attributes = match attributes {
+                None => Vec::new(),
+                Some(codes) => {
+                    if event_type == "entity.migrated.v1" {
+                        return Err(WorkflowError::Invalid(
+                            "entity.migrated.v1 carries no attribute facts, so it cannot filter on attributes".into(),
+                        ));
+                    }
+                    let codes =
+                        limited_strings(codes, "trigger attribute", MAX_TRIGGER_ATTRIBUTES)?;
+                    for code in &codes {
+                        valid_code(code, "trigger attribute code")?;
+                    }
+                    codes
+                }
+            };
             Ok(Trigger::Event {
                 event_type,
                 envelope,
                 facts,
+                attributes,
             })
         }
         RawTrigger::V2 {
@@ -401,7 +445,62 @@ fn action(a: RawAction) -> Result<Action, WorkflowError> {
                 value,
             })
         }
+        RawAction::ReferencingEntitiesUpdate {
+            relationship_attribute,
+            max_targets,
+            actions,
+        } => {
+            valid_code(&relationship_attribute, "relationship_attribute")?;
+            let max_targets = max_targets.unwrap_or(DEFAULT_REFERENCING_TARGETS);
+            if max_targets == 0 || max_targets > MAX_REFERENCING_TARGETS {
+                return Err(WorkflowError::Invalid(format!(
+                    "max_targets must be between 1 and {MAX_REFERENCING_TARGETS}"
+                )));
+            }
+            if actions.is_empty() || actions.len() > MAX_NESTED_ACTIONS {
+                return Err(WorkflowError::Invalid(format!(
+                    "referencing_entities_update requires 1 to {MAX_NESTED_ACTIONS} actions"
+                )));
+            }
+            let actions = actions
+                .into_iter()
+                .map(|nested| match nested {
+                    RawAction::ReferencingEntitiesUpdate { .. } => Err(WorkflowError::Invalid(
+                        "referencing_entities_update cannot be nested".into(),
+                    )),
+                    RawAction::AttributeWrite {
+                        event_field: Some(_),
+                        ..
+                    } => Err(WorkflowError::Invalid(
+                        "referencing_entities_update attribute writes require fixed values".into(),
+                    )),
+                    nested => action(nested),
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(Action::ReferencingEntitiesUpdate {
+                relationship_attribute,
+                max_targets,
+                actions,
+            })
+        }
     }
+}
+
+/// Whether an entity event's payload facts name at least one of `attributes`.
+/// An empty filter always matches. Facts exist only for values that actually
+/// changed, so an unchanged write never satisfies a filter.
+pub fn changed_attributes_match(attributes: &[String], payload: &Value) -> bool {
+    attributes.is_empty()
+        || payload
+            .get("facts")
+            .and_then(Value::as_array)
+            .is_some_and(|facts| {
+                facts.iter().any(|fact| {
+                    fact.get("attribute_code")
+                        .and_then(Value::as_str)
+                        .is_some_and(|code| attributes.iter().any(|wanted| wanted == code))
+                })
+            })
 }
 fn non_empty(v: &str, n: &str) -> Result<(), WorkflowError> {
     if v.trim().is_empty() {
@@ -530,5 +629,95 @@ mod tests {
     fn extension_contract_is_explicit_but_not_generic() {
         assert!(parse("format_version=2\ncode='x'\nname='x'\n[[triggers]]\ntype='extension_event'\nprovider='example'\nevent_type='plugin.example.changed.v1'\ncontract_version=1\n[[actions]]\ntype='system_tags_add'\ntags=['x']").is_ok());
         assert!(parse("format_version=2\ncode='x'\nname='x'\n[[triggers]]\ntype='extension_event'\nprovider='example'\nevent_type='entity.updated.v1'\ncontract_version=1\n[[actions]]\ntype='system_tags_add'\ntags=['x']").is_err())
+    }
+
+    const HEAD: &str = "format_version=2\ncode='x'\nname='x'\n";
+
+    #[test]
+    fn event_trigger_filters_on_changed_attributes() {
+        let parsed = parse(&format!("{HEAD}[[triggers]]\nevent_type='attribute_value.changed.v1'\nattributes=['body','title']\n[[actions]]\ntype='system_tags_add'\ntags=['x']")).unwrap();
+        let Trigger::Event { attributes, .. } = &parsed.triggers[0] else {
+            panic!("expected an event trigger")
+        };
+        assert_eq!(attributes, &["body".to_owned(), "title".to_owned()]);
+        for invalid in [
+            "attributes=[]",
+            "attributes=['a','a']",
+            "attributes=['Not A Code']",
+        ] {
+            assert!(parse(&format!("{HEAD}[[triggers]]\nevent_type='entity.updated.v1'\n{invalid}\n[[actions]]\ntype='system_tags_add'\ntags=['x']")).is_err(), "{invalid}");
+        }
+        assert!(parse(&format!("{HEAD}[[triggers]]\nevent_type='entity.migrated.v1'\nattributes=['a']\n[[actions]]\ntype='system_tags_add'\ntags=['x']")).is_err());
+        assert!(parse(&format!("{HEAD}[[triggers]]\ntype='manual'\nattributes=['a']\n[[actions]]\ntype='system_tags_add'\ntags=['x']")).is_err());
+    }
+
+    #[test]
+    fn stored_plans_without_attribute_filters_still_deserialize() {
+        let stored = serde_json::json!({"type":"event","event_type":"entity.updated.v1","envelope":{},"facts":{}});
+        let trigger: Trigger = serde_json::from_value(stored.clone()).unwrap();
+        assert!(matches!(&trigger, Trigger::Event { attributes, .. } if attributes.is_empty()));
+        assert_eq!(serde_json::to_value(&trigger).unwrap(), stored);
+    }
+
+    #[test]
+    fn changed_attribute_matching_reads_fact_codes() {
+        let payload =
+            serde_json::json!({"facts":[{"attribute_code":"title"},{"attribute_code":"license"}]});
+        assert!(changed_attributes_match(&[], &payload));
+        assert!(changed_attributes_match(&["license".into()], &payload));
+        assert!(!changed_attributes_match(&["body".into()], &payload));
+        assert!(!changed_attributes_match(
+            &["body".into()],
+            &serde_json::json!({"facts":[]})
+        ));
+        assert!(!changed_attributes_match(
+            &["body".into()],
+            &serde_json::json!({})
+        ));
+    }
+
+    #[test]
+    fn referencing_update_is_bounded_and_fixed() {
+        let ok = parse(&format!("{HEAD}[[triggers]]\nevent_type='entity.updated.v1'\n[[actions]]\ntype='referencing_entities_update'\nrelationship_attribute='license'\nmax_targets=25\n[[actions.actions]]\ntype='attribute_write'\nattribute_code='status'\nfixed='in_review'\n[[actions.actions]]\ntype='system_tags_add'\ntags=['needs-review']")).unwrap();
+        assert_eq!(
+            ok.actions[0],
+            Action::ReferencingEntitiesUpdate {
+                relationship_attribute: "license".into(),
+                max_targets: 25,
+                actions: vec![
+                    Action::AttributeWrite {
+                        attribute_code: "status".into(),
+                        value: ScalarSource::Fixed {
+                            fixed: "in_review".into()
+                        },
+                    },
+                    Action::SystemTagsAdd {
+                        tags: vec!["needs-review".into()]
+                    },
+                ],
+            }
+        );
+        let default = parse(&format!("{HEAD}[[triggers]]\ntype='manual'\n[[actions]]\ntype='referencing_entities_update'\nrelationship_attribute='license'\n[[actions.actions]]\ntype='system_tags_add'\ntags=['x']")).unwrap();
+        assert!(matches!(
+            default.actions[0],
+            Action::ReferencingEntitiesUpdate {
+                max_targets: DEFAULT_REFERENCING_TARGETS,
+                ..
+            }
+        ));
+        for invalid in [
+            "max_targets=0\n[[actions.actions]]\ntype='system_tags_add'\ntags=['x']",
+            "max_targets=501\n[[actions.actions]]\ntype='system_tags_add'\ntags=['x']",
+            "actions=[]",
+            "[[actions.actions]]\ntype='attribute_write'\nattribute_code='status'\nevent_field='facts.0.after_value'",
+            "[[actions.actions]]\ntype='referencing_entities_update'\nrelationship_attribute='x'\n[[actions.actions.actions]]\ntype='system_tags_add'\ntags=['x']",
+            "unknown=1\n[[actions.actions]]\ntype='system_tags_add'\ntags=['x']",
+        ] {
+            assert!(parse(&format!("{HEAD}[[triggers]]\nevent_type='entity.updated.v1'\n[[actions]]\ntype='referencing_entities_update'\nrelationship_attribute='license'\n{invalid}")).is_err(), "{invalid}");
+        }
+        let compiled = compile(&format!("{HEAD}[[triggers]]\ntype='manual'\n[[actions]]\ntype='referencing_entities_update'\nrelationship_attribute='license'\n[[actions.actions]]\ntype='system_tags_add'\ntags=['x']")).unwrap();
+        let round_trip: CompiledWorkflow =
+            serde_json::from_value(serde_json::to_value(&compiled).unwrap()).unwrap();
+        assert_eq!(round_trip, compiled);
     }
 }

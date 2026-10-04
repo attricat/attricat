@@ -12,7 +12,8 @@ pub(super) struct ApiError {
     status: StatusCode,
     code: &'static str,
     message: String,
-    /// Structured, code-specific data returned as `error.details`.
+    /// Machine-readable context for clients that recover from the error,
+    /// such as the entity holding a conflicting unique key.
     details: Option<serde_json::Value>,
 }
 impl ApiError {
@@ -346,6 +347,25 @@ impl From<RepositoryError> for ApiError {
                 message: error.to_string(),
                 details: None,
             },
+            RepositoryError::StatusTransitionForbidden(_) => Self {
+                status: StatusCode::FORBIDDEN,
+                code: "status_transition_forbidden",
+                message: error.to_string(),
+                details: None,
+            },
+            RepositoryError::StatusSeparationOfDuties { .. } => Self {
+                status: StatusCode::FORBIDDEN,
+                code: "status_separation_of_duties",
+                message: error.to_string(),
+                details: None,
+            },
+            RepositoryError::RecordLocked { .. } => Self {
+                status: StatusCode::CONFLICT,
+                code: "record_locked",
+                message: error.to_string(),
+                details: None,
+            },
+            RepositoryError::InvalidRetentionHold(_) => Self::invalid_input(error.to_string()),
             RepositoryError::NotFound(resource) => Self::not_found(resource),
             RepositoryError::ActorNotAuthorized => Self::forbidden(),
             RepositoryError::ReservedAnnotationNamespace(_)
@@ -539,6 +559,85 @@ impl From<RepositoryError> for ApiError {
                 code: "relationship_target_type_mismatch",
                 message: error.to_string(),
                 details: None,
+            },
+            RepositoryError::EntityBatchOperationFailed {
+                index,
+                entity_id,
+                source,
+            } => {
+                // Keep the failing operation's own status and code so clients
+                // recover exactly as for the single-entity request.
+                let mut inner = Self::from(*source);
+                inner.message = format!("operation {index}: {}", inner.message);
+                let mut details = match inner.details.take() {
+                    Some(serde_json::Value::Object(details)) => details,
+                    _ => serde_json::Map::new(),
+                };
+                details.insert("operation_index".to_owned(), serde_json::json!(index));
+                details.insert("entity_id".to_owned(), serde_json::json!(entity_id));
+                inner.details = Some(serde_json::Value::Object(details));
+                inner
+            }
+            RepositoryError::InvalidEntityBatch(_) => Self::invalid_input(error.to_string()),
+            RepositoryError::EntityIdTaken(_) => Self {
+                status: StatusCode::CONFLICT,
+                code: "entity_id_taken",
+                message: error.to_string(),
+                details: None,
+            },
+            RepositoryError::UniqueKeyConflict {
+                ref key,
+                ref context,
+                ref values,
+                conflicting_entity_id,
+            } => Self {
+                status: StatusCode::CONFLICT,
+                code: "unique_key_conflict",
+                message: error.to_string(),
+                details: Some(serde_json::json!({
+                    "key": key,
+                    "context": context,
+                    "values": values,
+                    "conflicting_entity_id": conflicting_entity_id,
+                })),
+            },
+            RepositoryError::UniqueKeyDuplicates {
+                ref duplicates,
+                total,
+            } => Self {
+                status: StatusCode::CONFLICT,
+                code: "unique_key_duplicates",
+                message: error.to_string(),
+                details: Some(serde_json::json!({
+                    "duplicates": duplicates,
+                    "total": total,
+                })),
+            },
+            RepositoryError::RelationshipCycle {
+                ref attribute,
+                ref path,
+            } => Self {
+                status: StatusCode::CONFLICT,
+                code: "relationship_cycle",
+                message: error.to_string(),
+                details: Some(serde_json::json!({
+                    "attribute": attribute,
+                    "path": path,
+                })),
+            },
+            RepositoryError::RelationshipHierarchyViolations {
+                ref attribute,
+                ref cycles,
+                ref multiple_parents,
+            } => Self {
+                status: StatusCode::CONFLICT,
+                code: "relationship_hierarchy_violations",
+                message: error.to_string(),
+                details: Some(serde_json::json!({
+                    "attribute": attribute,
+                    "cycles": cycles,
+                    "multiple_parents": multiple_parents,
+                })),
             },
             RepositoryError::RelationshipCardinalityConflict { .. } => Self {
                 status: StatusCode::CONFLICT,

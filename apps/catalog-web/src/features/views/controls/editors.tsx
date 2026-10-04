@@ -3,13 +3,12 @@ import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import { attributeLabel } from '../../entities/entityDisplay';
 import {
-  blockedStatusDestination,
   statusTransitionAllowed,
   type StatusConfiguration,
-  type StatusDestination,
 } from '../../entities/status';
 import { MarkdownEditor } from '../../markdown/MarkdownEditor';
 import type { ValueEditorProps } from '../components/componentTypes';
+import type { StatusTransitionAccess } from '../../entities/recordControls';
 import { COLOR_PICKER_SEED, parseColor, validateColor } from './color';
 import { validateEmail } from './email';
 import { TextControlEditor } from './TextControl';
@@ -116,7 +115,7 @@ export const StatusEditor = ({
   value,
   baseline,
   inheritedValue,
-  destinations,
+  transitions = [],
   disabled,
   error,
   helperText,
@@ -125,21 +124,23 @@ export const StatusEditor = ({
   config: StatusConfiguration;
   baseline: string | null;
   inheritedValue: string | null;
-  destinations?: readonly StatusDestination[];
+  /** Server-evaluated access to edges leaving the saved status. */
+  transitions?: readonly StatusTransitionAccess[];
 }) => {
   const { t } = useTranslation();
   const id = useId();
   const known =
     !value || config.options.some((option) => option.code === value);
-  const blocked = (next: string) =>
-    blockedStatusDestination(destinations, baseline, next || inheritedValue);
+  // Permission, role and separation-of-duties checks need the server; the
+  // graph alone cannot say who may take an edge.
+  const denial = (next: string) => {
+    const target = next || inheritedValue;
+    if (target === baseline) return undefined;
+    return transitions.find((edge) => edge.to === target && !edge.allowed);
+  };
   const allowed = (next: string) =>
     statusTransitionAllowed(config, baseline, next || inheritedValue) &&
-    !blocked(next);
-  const unmetText = (next: string) =>
-    blocked(next)
-      ?.unmet.map((violation) => violation.message)
-      .join(' ') || undefined;
+    !denial(next);
   const terminal =
     !config.options.some(
       (option) => option.code !== baseline && allowed(option.code),
@@ -187,19 +188,27 @@ export const StatusEditor = ({
         </MenuItem>
       )}
       {config.options.map((option) => {
-        const unmet = unmetText(option.code);
+        const denied = denial(option.code);
         return (
           <MenuItem
             key={option.code}
             value={option.code}
             disabled={!allowed(option.code)}
           >
-            {unmet ? (
+            {denied ? (
               <ListItemText
                 primary={option.label}
-                secondary={t('entities.statusConditionsUnmet', {
-                  conditions: unmet,
-                })}
+                secondary={
+                  denied.denial_code === 'transition_conditions_unmet'
+                    ? t('entities.statusConditionsUnmet', {
+                        conditions: (denied.unmet ?? [])
+                          .map((violation) => violation.message)
+                          .join(' '),
+                      })
+                    : denied.denial_code === 'status_separation_of_duties'
+                      ? t('entities.statusSeparationOfDuties')
+                      : t('entities.statusTransitionNotPermitted')
+                }
               />
             ) : (
               option.label

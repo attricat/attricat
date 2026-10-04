@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
-  blockedStatusDestination,
   statusConfiguration,
-  statusDestinationsFor,
   statusLabel,
+  statusLocks,
   statusParentContexts,
   statusTransitionAllowed,
   savedStatusValue,
@@ -76,41 +75,53 @@ describe('status configuration', () => {
   });
 });
 
-describe('server status destinations', () => {
-  const blocked = {
-    to: 'live',
-    allowed: false,
-    reason: 'conditions_unmet',
-    unmet: [],
+describe('status locks', () => {
+  const controlled: Attribute = {
+    ...statusAttribute,
+    value_schema: {
+      type: 'string',
+      enum: ['draft', 'live', 'done'],
+      'x-attricat-status': {
+        version: 1,
+        options: [
+          { code: 'draft', label: 'Draft' },
+          { code: 'live', label: 'Live', lock: ['title'] },
+          { code: 'done', label: 'Done', lock: 'all' },
+        ],
+        transitions: [
+          { from: null, to: 'draft' },
+          { from: 'draft', to: 'live', code: 'release', roles: ['reviewer'] },
+          { from: 'live', to: 'done' },
+        ],
+      },
+    },
   };
-  const options = [
+  const attributes: Attribute[] = [
+    controlled,
+    { code: 'title', value_type: 'string' },
+    { code: 'notes', value_type: 'string' },
+  ];
+  const saved = (status: string) => [
     {
+      kind: 'scalar' as const,
       attribute_code: 'status',
-      context_id: '123e4567-e89b-12d3-a456-426614174000',
-      context_code: 'default',
-      current: 'draft',
-      destinations: [blocked, { to: 'done', allowed: true, unmet: [] }],
+      context_id: 'default',
+      value: status,
     },
   ];
 
-  it('blocks only disallowed destinations that change the status', () => {
-    const destinations = statusDestinationsFor(options, 'status', 'draft');
-    expect(blockedStatusDestination(destinations, 'draft', 'live')).toBe(
-      blocked,
-    );
-    expect(
-      blockedStatusDestination(destinations, 'draft', 'done'),
-    ).toBeUndefined();
-    expect(
-      blockedStatusDestination(destinations, 'live', 'live'),
-    ).toBeUndefined();
-    expect(blockedStatusDestination(undefined, 'draft', 'live')).toBe(
-      undefined,
-    );
-  });
-
-  it('ignores destinations evaluated from another saved status', () => {
-    expect(statusDestinationsFor(options, 'status', 'live')).toBeUndefined();
-    expect(statusDestinationsFor(options, 'phase', 'draft')).toBeUndefined();
+  it('follows the saved status of the context', () => {
+    expect(statusLocks(attributes, saved('draft'), 'default', [])).toEqual({});
+    expect(statusLocks(attributes, saved('live'), 'default', [])).toEqual({
+      title: 'Live',
+    });
+    expect(statusLocks(attributes, saved('done'), 'default', [])).toEqual({
+      title: 'Done',
+      notes: 'Done',
+    });
+    expect(statusLocks(attributes, saved('done'), 'web', ['default'])).toEqual({
+      title: 'Done',
+      notes: 'Done',
+    });
   });
 });

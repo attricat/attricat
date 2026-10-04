@@ -192,3 +192,20 @@ and fail with `422 publication_checks_failed`. See [API](api.md#declarative-chec
 Errors: `422 invalid_rule_definition`, `409 rule_dry_run_required`,
 `409 rule_has_existing_violations`. Writes rejected by an enforcing rule return
 `422 rule_violation`.
+
+## Rules installed by solution packs
+
+A [solution pack](solution-packs.md#rules-workflows-and-saved-searches) can
+declare standalone rules for its own blueprints. Applying the pack creates each
+rule through the same path as `POST /rules`: the definition is compiled with the
+same parser, attached to the plan's created or mapped blueprint revision (and
+optional created or mapped context), and published. A rule the pack declares as
+enabled is then enabled exactly as `POST /rules/{rule_id}/versions/1/enable`
+would, recording the lifecycle activation boundary and schedule cursors in the
+same transaction. Other rules stay published but disabled.
+
+The pack's rule code becomes `<prefix>_<code>`, so a plan reports an existing
+rule code as a conflict instead of creating a second family. Rules embedded in a
+seeded blueprint's `[[rules]]` behave as for any blueprint: they are published
+with it and start disabled. After installation, seeded rules are ordinary rules;
+a pack never updates, re-enables, or removes them.

@@ -4,6 +4,7 @@ import { Alert, Button, Typography } from '@mui/material';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getEntityForm, getCurrentBlueprint, updateEntity } from './api';
+import { getStatusTransitions } from './recordControls';
 import { EDIT_ENTITY_FORM_ID } from './constants';
 import { draftEditors } from '../drafts/constants';
 import { EditEntityToolbar } from './components/EditEntityToolbar';
@@ -73,6 +74,12 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
   const { contextId, contexts, defaultContextId, setSelectedContext } =
     useEntityContextSelection();
   const resolvedPreview = useResolvedEntityPreview(entityId, contextId);
+  // Explains which transitions this user may take; the server still decides.
+  const statusTransitions = useQuery({
+    queryKey: entityQueryKeys.statusTransitions(entityId, contextId),
+    queryFn: ({ signal }) => getStatusTransitions(entityId, contextId, signal),
+    enabled: contextId !== null,
+  });
   const blueprint = entityForm.data?.blueprint.blueprint;
   const schemaOutdated =
     currentBlueprint.data && entityForm.data
@@ -165,6 +172,7 @@ export const EditEntityPage = ({ entityId }: { entityId: string }) => {
             blueprint={entityForm.data.blueprint}
             disabled={!entityForm.data.can_write}
             expectedUpdatedAt={entityForm.data.entity.updated_at}
+            statusTransitions={statusTransitions.data}
             statusParentContextIds={statusParentContexts(
               contexts.data ?? [],
               contextId,

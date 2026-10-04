@@ -6,6 +6,41 @@
       "items": {
         "additionalProperties": false,
         "properties": {
+          "approval": {
+            "additionalProperties": false,
+            "properties": {
+              "covers": {
+                "oneOf": [
+                  {
+                    "const": "all"
+                  },
+                  {
+                    "items": {
+                      "maxLength": 257,
+                      "minLength": 1,
+                      "pattern": "^[A-Za-z0-9_-]+(:[A-Za-z0-9_-]+)?$",
+                      "type": "string"
+                    },
+                    "maxItems": 500,
+                    "minItems": 1,
+                    "type": "array",
+                    "uniqueItems": true
+                  }
+                ]
+              },
+              "void_to": {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9_-]+$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "covers",
+              "void_to"
+            ],
+            "type": "object"
+          },
           "code": {
             "maxLength": 128,
             "minLength": 1,
@@ -16,6 +51,30 @@
             "maxLength": 200,
             "minLength": 1,
             "type": "string"
+          },
+          "lock": {
+            "oneOf": [
+              {
+                "const": "all"
+              },
+              {
+                "items": {
+                  "maxLength": 257,
+                  "minLength": 1,
+                  "pattern": "^[A-Za-z0-9_-]+(:[A-Za-z0-9_-]+)?$",
+                  "type": "string"
+                },
+                "maxItems": 500,
+                "minItems": 1,
+                "type": "array",
+                "uniqueItems": true
+              }
+            ]
+          },
+          "retention_days": {
+            "maximum": 36600,
+            "minimum": 1,
+            "type": "integer"
           },
           "tone": {
             "enum": [
@@ -41,6 +100,12 @@
       "items": {
         "additionalProperties": false,
         "properties": {
+          "code": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "type": "string"
+          },
           "conditions": {
             "items": {
               "additionalProperties": false,
@@ -82,6 +147,35 @@
               "string",
               "null"
             ]
+          },
+          "permission": {
+            "maxLength": 128,
+            "pattern": "^[a-z_]+\\.[a-z_]+$",
+            "type": "string"
+          },
+          "roles": {
+            "items": {
+              "maxLength": 64,
+              "minLength": 1,
+              "pattern": "^[a-z][a-z0-9_-]*$",
+              "type": "string"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "separate_from": {
+            "items": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "type": "string"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "type": "array",
+            "uniqueItems": true
           },
           "to": {
             "type": [

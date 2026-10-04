@@ -3,7 +3,7 @@ title: Install and manage solution packs
 description: Inspect, plan, apply, and operate existing solution packs safely.
 ---
 
-A solution pack is a versioned `.tar.zst` archive supplied by a publisher. It sets up a workspace for a use case with blueprints, navigation, extension layouts, label translations, presentation assets, guidance, and optional sample data.
+A solution pack is a versioned `.tar.zst` archive supplied by a publisher. It sets up a new installation for a use case with blueprints, contexts and publication channels, rules, workflows, saved searches, navigation, extension layouts, label translations, presentation assets, guidance, and optional sample data.
 
 After applying a pack, users work with its resources through normal Attricat features. There is no pack service to keep running, and packs do not own, synchronize, or remove those resources later.
 
@@ -22,7 +22,7 @@ If an archive is rejected, ask its publisher for a compatible release rather tha
 acli solution-pack inspect --file pack.tar.zst
 ```
 
-The server validates the archive and returns its identity, version, digest, resource summaries, and sample warnings. It does not apply resources or persist the archive. Validation is not a guarantee that the pack is suitable for your workspace.
+The server validates the archive and returns its identity, version, digest, resource summaries, and sample warnings. Its `seeds` summary lists the packs this one requires, the contexts and channels it declares, its rules and workflows with whether each will be enabled, and its saved searches. It does not apply resources or persist the archive. Validation is not a guarantee that the pack is suitable for your workspace.
 
 ## 2. Plan
 
@@ -40,15 +40,23 @@ Planning saves an immutable dry run without changing catalog resources. Review r
 
 | Action | Meaning |
 | --- | --- |
-| `create` | Create a blueprint, asset, or selected sample entity. |
-| `map` | Reuse an explicitly selected compatible resource. |
+| `create` | Create a blueprint, context, publication channel, rule, workflow, saved search, asset, or selected sample entity. |
+| `map` | Reuse an explicitly selected compatible resource or context, or a resource a required pack installed. |
 | `append` | Add navigation, extension-layout, or translation entries. |
-| `satisfied` | The requested setting already exists exactly. |
+| `satisfied` | The requested setting or publication channel already exists exactly. |
 | `skip` | Leave an optional unavailable item out. |
 | `conflict` | Existing workspace state prevents the operation. |
 | `blocked` | A requirement is unmet or the change is unsupported. |
 
 Only ready plans can be applied. Plans expire after 24 hours if application has not started.
+
+### Rules, workflows, and saved searches
+
+- **Rules** are created for the pack's blueprints and published. The plan summary shows whether each will be enabled; the others stay disabled until you enable them. Rules need published blueprints, so `--blueprint-publication draft` blocks a rule for a newly created blueprint.
+- **Workflows** are published and enabled only when the pack says so.
+- **Saved searches** are shared with the whole workspace and appear under **Saved searches** in Explore. You own the ones created by the plan you apply.
+
+New rule and workflow codes start with your prefix. Enabled rules and workflows react to later changes, including sample entities created by the same plan, so review them before applying. After installation they are ordinary resources you manage as usual.
 
 ## 3. Resolve conflicts
 
@@ -71,6 +79,28 @@ acli solution-pack plan --file pack.tar.zst --prefix example \
 ```
 
 You must select existing resources explicitly; Attricat does not silently overwrite them. If an extension requirement is blocked, resolve it through extension administration and create a fresh plan.
+
+### Contexts and publication channels
+
+A pack can create [contexts](/guides/contexts/), for example for markets or languages, and make some of them [publication channels](/guides/publishing/). New contexts get prefixed codes such as `example_pl`. To use a context you already have, map it:
+
+```sh
+acli context list
+acli solution-pack plan --file pack.tar.zst --prefix example \
+  --blueprint-publication publish \
+  --map-context contexts/poland=PL
+```
+
+A mapped context is used as it is. If the pack wants it as a channel, an existing matching channel is `satisfied` and a missing one is created. A channel that is switched off when the pack expects it on, or the reverse, is a `publication_channel_mismatch` conflict: change the channel yourself or skip the mapping. Rules, saved searches, and sample values that belong to the pack's context use the created or mapped context.
+
+### Required packs
+
+A pack can depend on other packs, for example to share a Supplier blueprint. The plan shows each as a `prerequisite` action:
+
+- `map`: a completed installation of the required pack, with a version the pack accepts, is reused.
+- `blocked` with `prerequisite_missing` or `prerequisite_incompatible`: install a suitable version of the required pack first, then create a new plan.
+
+Blueprints shared with a required pack are reused only when they still match exactly (`prerequisite_blueprint_match`). If someone changed or removed that blueprint, the plan reports a conflict instead of creating a copy. Attricat never installs required packs for you.
 
 ### Extensions
 
@@ -97,7 +127,7 @@ Checks are informational. A false result does not undo resources or block an oth
 
 ## Retry and recovery
 
-Retry interrupted or resumable failed applications with the same plan ID. The server verifies completed steps and continues pending steps without duplication. A started application can resume after plan expiry, subject to its own retention deadline.
+Retry interrupted or resumable failed applications with the same plan ID. The server verifies completed steps and continues pending steps without duplication; each context, channel, rule, workflow, and saved search is created together with the record of its step. A started application can resume after plan expiry, subject to its own retention deadline.
 
 If workspace changes make a plan stale, review completed steps and diagnostics before creating another plan. If a later step fails permanently, earlier successful writes remain in the workspace; Attricat does not roll them back.
 
@@ -110,11 +140,11 @@ acli solution-pack plan --file pack-v2.tar.zst --prefix example \
 
 Select one completed application of the same pack in the same workspace. The release must be strictly newer, and `--from-application` cannot be combined with explicit maps.
 
-Unchanged exact published blueprints and unchanged assets can be reused; new resources can be created. Changed definitions are blocked as `update_not_supported`. Removed resources are reported without deletion. Missing or modified prior targets may conflict. Agree on a supported migration procedure with the publisher for changes the pack cannot apply.
+Unchanged exact published blueprints and unchanged assets can be reused; new resources can be created. Contexts from the earlier installation are reused, and rules, workflows, saved searches, and channels it already created are skipped as `provided_by_prior_application`, never updated. Changed definitions are blocked as `update_not_supported`. Removed resources are reported without deletion. Missing or modified prior targets may conflict. Agree on a supported migration procedure with the publisher for changes the pack cannot apply.
 
 ## Optional sample data
 
-Add `--include-sample-data` during planning only after reviewing the warning. Samples are created in the default context against published blueprints and receive a visible **Sample** badge. They are ordinary entities: creation emits audit records and `entity.created.v1` events, may run enabled workflows/extensions, and may cause external effects. Values can remain in ordinary audit/event history after temporary pack staging is removed.
+Add `--include-sample-data` during planning only after reviewing the warning. Samples are created against published blueprints and receive a visible **Sample** badge. Their values are set in the default context, or in one of the pack's contexts when the pack says so. Samples can also attach files bundled in the pack, such as images or PDFs; planning uploads them to ordinary file storage, and they appear on the sample entities as ordinary files. Attricat checks each file's type and the attribute's file rules, but cannot tell whether its content is fictional. They are ordinary entities: creation emits audit records and `entity.created.v1` events, may run enabled workflows/extensions, and may cause external effects. Values can remain in ordinary audit/event history after temporary pack staging is removed.
 
 The first plan with samples selected reserves that exact combination of release, archive, and dataset. A second plan cannot select the same combination, even after expiry or abandonment; changing the prefix does not reset the reservation. Retry the original plan. If it expires before application starts, coordinate a new release with the publisher.
 
@@ -124,7 +154,7 @@ A started sample-selected application has a fixed 30-day resumability window. To
 acli solution-pack applications abandon <application-id>
 ```
 
-Abandoning an application removes staged inputs. Previously created entities and ordinary audit/event history remain unchanged. Later releases do not reset live sample values or restore removed sample markers. There is no dataset reset or automatic cleanup command.
+Abandoning an application removes staged inputs, including bundled files that were never attached. Previously created entities and ordinary audit/event history remain unchanged. Deleting a sample entity removes it with its values in every context and its files, like any other entity; stored files follow ordinary file retention. Later releases do not reset live sample values or restore removed sample markers. There is no dataset reset or automatic cleanup command.
 
 ## Translations
 
@@ -132,6 +162,6 @@ A pack can ship [label translations](/builders/translations/), shown as the `wor
 
 ## Limits and removal
 
-Packs cannot create contexts or publication channels, change membership or role grants, install extensions from anywhere but the official registry, upgrade installed extensions, run executable installers, resolve prerequisite packs automatically, or update existing blueprints.
+Packs cannot change existing contexts or channels, change membership or role grants, install extensions from anywhere but the official registry, upgrade installed extensions, run executable installers, install required packs, or update existing blueprints, rules, workflows, or saved searches.
 
 There is no pack-level uninstall or rollback. Administrators may edit or remove individual resources through ordinary operations, subject to authorization, dependencies, publication, and retention rules. Review business data before deleting anything; resources referenced by application history may be shared or modified.

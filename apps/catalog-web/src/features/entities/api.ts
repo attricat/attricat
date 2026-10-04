@@ -27,7 +27,6 @@ import {
   updateEntityRequestSchema,
   entityPublicationStatusSchema,
   entityPublicationReadinessSchema,
-  statusTransitionOptionsSchema,
   uuidSchema,
 } from './schemas';
 
@@ -52,7 +51,6 @@ export type {
   NewAttributeValue,
   RelationshipTargets,
   ResolvedEntityPreview,
-  StatusTransitionOptions,
   ViewDefinition,
   ViewNode,
 } from './schemas';
@@ -259,17 +257,6 @@ export const getEntityPublicationReadiness = (
   request(
     `/api/v1/entities/${encodeURIComponent(uuidSchema.parse(id))}/publications/readiness`,
     z.array(entityPublicationReadinessSchema),
-    signal === undefined ? undefined : { signal },
-  );
-/** Status destinations from the saved state, with unmet conditions. */
-export const getEntityStatusTransitions = (
-  id: string,
-  contextId: string,
-  signal?: AbortSignal,
-) =>
-  request(
-    `/api/v1/entities/${encodeURIComponent(uuidSchema.parse(id))}/status-transitions?${new URLSearchParams({ context_id: uuidSchema.parse(contextId) })}`,
-    z.array(statusTransitionOptionsSchema),
     signal === undefined ? undefined : { signal },
   );
 export const publishEntity = (id: string, contextId: string) =>

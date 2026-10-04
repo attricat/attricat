@@ -46,8 +46,10 @@ from = "seo.meta_title"
                     default_value: None,
                     file_policy: None,
                     target_blueprint: None,
+                    target_blueprints: vec![],
                     cardinality: None,
                     target_cardinality: None,
+                    hierarchy: None,
                     tags: vec![],
                     context_fallback: "default".to_owned(),
                     context_editable: "all".to_owned(),
@@ -63,8 +65,10 @@ from = "seo.meta_title"
                     default_value: None,
                     file_policy: None,
                     target_blueprint: None,
+                    target_blueprints: vec![],
                     cardinality: None,
                     target_cardinality: None,
+                    hierarchy: None,
                     tags: vec![],
                     context_fallback: "default".to_owned(),
                     context_editable: "all".to_owned(),
@@ -1231,4 +1235,214 @@ value_type = "number"
         "[[views.edit.tabs]]\nlabel = \"Pricing\"\nchildren = [{ type = \"field\", field = \"price\" }]",
     );
     compile(parse(&placed).unwrap(), &[], &placed).unwrap();
+}
+
+fn compile_source(source: &str) -> Result<catalog_blueprint::CompiledBlueprint, BlueprintError> {
+    compile(parse(source)?, &[], source)
+}
+
+const STRUCTURAL_BLUEPRINT: &str = r#"
+format_version = 1
+code = "part"
+name = "Part"
+kind = "entity"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["part_number"]
+
+[[unique_keys]]
+code = "manufacturer_part"
+attributes = ["manufacturer", "part_number"]
+
+[[unique_keys]]
+code = "slug"
+attributes = ["slug"]
+scope = "context"
+case_sensitive = true
+
+[[attributes]]
+code = "part_number"
+value_type = "string"
+
+[[attributes]]
+code = "slug"
+value_type = "string"
+
+[[attributes]]
+code = "manufacturer"
+value_type = "relationship"
+target_blueprint = "manufacturer"
+cardinality = "one"
+
+[[attributes]]
+code = "subject"
+value_type = "relationship"
+target_blueprints = ["product", "material", "part"]
+
+[[attributes]]
+code = "parent"
+value_type = "relationship"
+target_blueprint = "part"
+tree = true
+context_editable = "default"
+
+[[attributes]]
+code = "predecessors"
+value_type = "relationship"
+target_blueprints = ["part"]
+acyclic = true
+context_editable = "default"
+"#;
+
+#[test]
+fn compiles_unique_keys_target_sets_and_hierarchies() {
+    let compiled = compile_source(STRUCTURAL_BLUEPRINT).unwrap();
+    assert_eq!(compiled.unique_keys.len(), 2);
+    assert_eq!(compiled.unique_keys[0].scope, "workspace");
+    assert!(!compiled.unique_keys[0].case_sensitive);
+    assert_eq!(compiled.unique_keys[1].scope, "context");
+    assert!(compiled.unique_keys[1].case_sensitive);
+    let attribute = |code: &str| {
+        compiled
+            .attributes
+            .iter()
+            .find(|attribute| attribute.code == code)
+            .unwrap()
+            .clone()
+    };
+    let subject = attribute("subject");
+    assert_eq!(subject.target_blueprint, None);
+    assert_eq!(subject.target_blueprints, ["product", "material", "part"]);
+    let manufacturer = attribute("manufacturer");
+    assert_eq!(
+        manufacturer.target_blueprint.as_deref(),
+        Some("manufacturer")
+    );
+    assert_eq!(manufacturer.target_blueprints, ["manufacturer"]);
+    let parent = attribute("parent");
+    assert_eq!(parent.hierarchy.as_deref(), Some("tree"));
+    assert_eq!(parent.cardinality.as_deref(), Some("one"));
+    let predecessors = attribute("predecessors");
+    assert_eq!(predecessors.hierarchy.as_deref(), Some("acyclic"));
+    assert_eq!(predecessors.cardinality.as_deref(), Some("many"));
+    // A one-element list is the single-target form.
+    assert_eq!(predecessors.target_blueprint.as_deref(), Some("part"));
+}
+
+#[test]
+fn rejects_invalid_structural_constraints() {
+    let cases = [
+        (
+            STRUCTURAL_BLUEPRINT.replace(r#"attributes = ["slug"]"#, r#"attributes = ["missing"]"#),
+            "unknown attribute 'missing'",
+        ),
+        (
+            STRUCTURAL_BLUEPRINT.replace(
+                r#"attributes = ["slug"]"#,
+                r#"attributes = ["slug", "slug"]"#,
+            ),
+            "listed twice",
+        ),
+        (
+            STRUCTURAL_BLUEPRINT.replace(r#"attributes = ["slug"]"#, r#"attributes = ["subject"]"#),
+            "cardinality = \"one\"",
+        ),
+        (
+            STRUCTURAL_BLUEPRINT.replace(r#"scope = "context""#, r#"scope = "channel""#),
+            "unsupported scope",
+        ),
+        (
+            STRUCTURAL_BLUEPRINT.replace(
+                r#"code = "slug"
+attributes"#,
+                r#"code = "manufacturer_part"
+attributes"#,
+            ),
+            "duplicated",
+        ),
+        (
+            STRUCTURAL_BLUEPRINT.replace(
+                r#"target_blueprints = ["product", "material", "part"]"#,
+                r#"target_blueprints = ["product", "product"]"#,
+            ),
+            "listed more than once",
+        ),
+        (
+            STRUCTURAL_BLUEPRINT.replace(
+                r#"target_blueprints = ["product", "material", "part"]"#,
+                r#"target_blueprints = ["product"]
+target_blueprint = "part""#,
+            ),
+            "not both",
+        ),
+        (
+            STRUCTURAL_BLUEPRINT.replace(
+                "tree = true\ncontext_editable = \"default\"",
+                "tree = true\ncardinality = \"many\"\ncontext_editable = \"default\"",
+            ),
+            "at most one target",
+        ),
+        (
+            STRUCTURAL_BLUEPRINT.replace(
+                "acyclic = true\ncontext_editable = \"default\"",
+                "acyclic = true",
+            ),
+            "context_editable",
+        ),
+        (
+            STRUCTURAL_BLUEPRINT.replace(
+                r#"target_blueprints = ["part"]
+acyclic = true"#,
+                r#"target_blueprints = ["product"]
+acyclic = true"#,
+            ),
+            "own blueprint 'part'",
+        ),
+    ];
+    for (source, expected) in cases {
+        let error = compile_source(&source).unwrap_err().to_string();
+        assert!(error.contains(expected), "{expected}: {error}");
+    }
+
+    let scalar_hierarchy = r#"
+format_version = 1
+code = "note"
+name = "Note"
+kind = "entity"
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["title"]
+
+[[attributes]]
+code = "title"
+value_type = "string"
+acyclic = true
+"#;
+    assert!(matches!(
+        compile_source(scalar_hierarchy),
+        Err(BlueprintError::InvalidAttributeDeclaration(_))
+    ));
+
+    let mixin_key = r#"
+format_version = 1
+code = "identity"
+name = "Identity"
+kind = "mixin"
+
+[[unique_keys]]
+code = "sku"
+attributes = ["sku"]
+
+[[attributes]]
+code = "sku"
+value_type = "string"
+"#;
+    assert!(
+        compile_source(mixin_key)
+            .unwrap_err()
+            .to_string()
+            .contains("only entity blueprints")
+    );
 }

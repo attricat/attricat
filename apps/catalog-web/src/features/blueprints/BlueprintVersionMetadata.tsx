@@ -125,7 +125,11 @@ export const BlueprintVersionMetadata = ({
                     <TableCell>{attribute.code}</TableCell>
                     <TableCell>{attribute.value_type}</TableCell>
                     <TableCell>
-                      {attribute.target_blueprint_code ?? emptyValuePlaceholder}
+                      {attribute.target_blueprint_codes?.length
+                        ? attribute.target_blueprint_codes.join(', ')
+                        : (attribute.target_blueprint_code ??
+                          emptyValuePlaceholder)}
+                      {attribute.hierarchy && ` (${attribute.hierarchy})`}
                     </TableCell>
                     <TableCell>{JSON.stringify(attribute.tags)}</TableCell>
                     <TableCell>

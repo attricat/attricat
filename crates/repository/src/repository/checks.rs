@@ -67,27 +67,6 @@ pub struct PublicationReadiness {
     pub violations: Vec<CheckViolation>,
 }
 
-/// Whether a status destination can be chosen from the saved state.
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct StatusDestination {
-    pub to: String,
-    pub allowed: bool,
-    /// `transition_not_allowed` or `conditions_unmet` when not allowed.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub reason: Option<&'static str>,
-    pub unmet: Vec<CheckViolation>,
-}
-
-/// Destinations of one status attribute in one context.
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct StatusTransitionOptions {
-    pub attribute_code: String,
-    pub context_id: Uuid,
-    pub context_code: String,
-    pub current: Option<String>,
-    pub destinations: Vec<StatusDestination>,
-}
-
 #[derive(Clone, Debug)]
 pub(crate) struct ContextNode {
     pub id: Uuid,
@@ -155,13 +134,6 @@ impl CheckScope {
 
     pub(crate) fn context_ids(&self) -> Vec<Uuid> {
         self.contexts.iter().map(|context| context.id).collect()
-    }
-
-    pub(crate) fn by_code(&self, code: &str) -> Option<Uuid> {
-        self.contexts
-            .iter()
-            .find(|context| context.code == code)
-            .map(|context| context.id)
     }
 }
 
@@ -659,7 +631,7 @@ impl CatalogRepository {
             .transpose()
             .map_err(RepositoryError::InvalidBlueprintDefinition)?
             .unwrap_or_default();
-        let changes = self.status_changes(transaction, entity).await?;
+        let changes = self.effective_status_changes(transaction, entity).await?;
         let rules = enabled_rules(
             transaction,
             self.workspace_id.0,
@@ -784,155 +756,89 @@ impl CatalogRepository {
         Ok(())
     }
 
-    /// Lists each status attribute's destinations from the saved state in a
-    /// context, explaining graph restrictions and unmet conditions or
-    /// enforcing rules, so clients can disable blocked choices.
-    pub async fn status_transition_options(
+    /// Transition conditions and enforcing rules that the saved state plus the
+    /// change's destination would not satisfy, for the status control.
+    pub(super) async fn transition_unmet(
         &self,
-        entity_id: Uuid,
-        context_id: Option<Uuid>,
-    ) -> Result<Vec<StatusTransitionOptions>, RepositoryError> {
-        let entity = self
-            .get_entity(entity_id)
-            .await?
-            .ok_or(RepositoryError::NotFound("entity"))?;
-        let mut transaction = self.pool.begin().await?;
-        sqlx::query("SET TRANSACTION READ ONLY")
-            .execute(&mut *transaction)
-            .await?;
-        let scope = CheckScope::load(&mut transaction, self.workspace_id.0).await?;
-        let context_id = match context_id {
-            Some(context_id) => context_id,
-            None => scope
-                .by_code("default")
-                .ok_or(RepositoryError::InvalidContext)?,
-        };
-        let path = scope.path(context_id)?;
-        let statuses: Vec<(String, Value)> = sqlx::query_as(
-            "SELECT code, value_schema FROM attributes WHERE ((blueprint_id = $1 AND blueprint_version = $2) OR entity_id = $3) AND deleted_at IS NULL AND value_schema ? 'x-attricat-status' ORDER BY position, code",
-        )
-        .bind(entity.blueprint_id)
-        .bind(entity.blueprint_version)
-        .bind(entity.id)
-        .fetch_all(&mut *transaction)
-        .await?;
-        let subject = load_entities(&mut transaction, self.workspace_id.0, &[entity.id])
-            .await?
-            .remove(&entity.id)
-            .ok_or(RepositoryError::NotFound("entity"))?;
-        let record = subject.resolve(&path);
+        transaction: &mut Transaction<'_, Postgres>,
+        entity: &Entity,
+        change: &StatusChange,
+    ) -> Result<Vec<CheckViolation>, RepositoryError> {
+        let conditions = catalog_validation::status::transition_conditions(
+            &change.schema,
+            &change.before,
+            &change.after,
+        );
         let rules = enabled_rules(
-            &mut transaction,
+            transaction,
             self.workspace_id.0,
             entity.blueprint_id,
             entity.blueprint_version,
         )
         .await?;
-        let mut options = Vec::with_capacity(statuses.len());
-        for (attribute_code, schema) in statuses {
-            let current = record
-                .values
-                .get(&attribute_code)
-                .cloned()
-                .unwrap_or(Value::Null);
-            let codes: Vec<String> = schema["enum"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .filter_map(|code| code.as_str().map(str::to_owned))
-                .filter(|code| current.as_str() != Some(code))
-                .collect();
-            let mut destinations = Vec::with_capacity(codes.len());
-            for to in codes {
-                let after = Value::String(to.clone());
-                if catalog_validation::status::validate_status_transition(&schema, &current, &after)
-                    .is_err()
-                {
-                    destinations.push(StatusDestination {
-                        to,
-                        allowed: false,
-                        reason: Some("transition_not_allowed"),
-                        unmet: Vec::new(),
-                    });
-                    continue;
-                }
-                let transition = CheckTransition {
-                    attribute_code: attribute_code.clone(),
-                    from: current.as_str().map(str::to_owned),
-                    to: Some(to.clone()),
-                };
-                let conditions =
-                    catalog_validation::status::transition_conditions(&schema, &current, &after);
-                let mut jobs: Vec<Job> = conditions
-                    .iter()
-                    .map(|condition| Job {
-                        source: CheckSource::TransitionCondition,
-                        code: &condition.code,
-                        message: condition.message.as_deref(),
-                        predicate: &condition.predicate,
-                        severity: None,
-                        transition: Some(transition.clone()),
-                    })
-                    .collect();
-                for rule in &rules {
-                    let guards = rule
-                        .compiled
-                        .enforcement
-                        .as_ref()
-                        .is_some_and(|enforcement| {
-                            enforcement.guards_transition(
-                                &attribute_code,
-                                current.as_str(),
-                                Some(&to),
-                            )
-                        });
-                    if guards
-                        && rule
-                            .context_id
-                            .is_none_or(|rule_context| rule_context == context_id)
-                    {
-                        jobs.push(Job {
-                            source: CheckSource::Rule,
-                            code: &rule.code,
-                            message: None,
-                            predicate: &rule.compiled.predicate,
-                            severity: Some(severity(&rule.compiled)),
-                            transition: Some(transition.clone()),
-                        });
-                    }
-                }
-                let predicates: Vec<&Predicate> = jobs.iter().map(|job| job.predicate).collect();
-                let outcomes = evaluate_in_context(
-                    &mut transaction,
-                    &scope,
-                    &subject,
-                    context_id,
-                    &[(attribute_code.clone(), after)],
-                    &predicates,
-                )
-                .await?;
-                let mut unmet = Vec::new();
-                for (job, outcome) in jobs.iter().zip(outcomes) {
-                    if let Err(failure) = outcome {
-                        record_violation(&mut unmet, job, scope.code(context_id), failure);
-                    }
-                }
-                destinations.push(StatusDestination {
-                    to,
-                    allowed: unmet.is_empty(),
-                    reason: (!unmet.is_empty()).then_some("conditions_unmet"),
-                    unmet,
+        let transition = change.transition();
+        let mut jobs: Vec<Job> = conditions
+            .iter()
+            .map(|condition| Job {
+                source: CheckSource::TransitionCondition,
+                code: &condition.code,
+                message: condition.message.as_deref(),
+                predicate: &condition.predicate,
+                severity: None,
+                transition: Some(transition.clone()),
+            })
+            .collect();
+        for rule in &rules {
+            let guards = rule
+                .compiled
+                .enforcement
+                .as_ref()
+                .is_some_and(|enforcement| {
+                    enforcement.guards_transition(
+                        &change.attribute_code,
+                        change.before.as_str(),
+                        change.after.as_str(),
+                    )
+                });
+            if guards
+                && rule
+                    .context_id
+                    .is_none_or(|context| context == change.context_id)
+            {
+                jobs.push(Job {
+                    source: CheckSource::Rule,
+                    code: &rule.code,
+                    message: None,
+                    predicate: &rule.compiled.predicate,
+                    severity: Some(severity(&rule.compiled)),
+                    transition: Some(transition.clone()),
                 });
             }
-            options.push(StatusTransitionOptions {
-                attribute_code,
-                context_id,
-                context_code: scope.code(context_id),
-                current: current.as_str().map(str::to_owned),
-                destinations,
-            });
         }
-        transaction.rollback().await?;
-        Ok(options)
+        if jobs.is_empty() {
+            return Ok(Vec::new());
+        }
+        let scope = CheckScope::load(transaction, self.workspace_id.0).await?;
+        let subject = load_entities(transaction, self.workspace_id.0, &[entity.id])
+            .await?
+            .remove(&entity.id)
+            .ok_or(RepositoryError::NotFound("entity"))?;
+        let predicates: Vec<&Predicate> = jobs.iter().map(|job| job.predicate).collect();
+        let outcomes = evaluate_in_context(
+            transaction,
+            &scope,
+            &subject,
+            change.context_id,
+            &[(change.attribute_code.clone(), change.after.clone())],
+            &predicates,
+        )
+        .await?;
+        let mut unmet = Vec::new();
+        for (job, outcome) in jobs.iter().zip(outcomes) {
+            if let Err(failure) = outcome {
+                record_violation(&mut unmet, job, change.context_code.clone(), failure);
+            }
+        }
+        Ok(unmet)
     }
 }

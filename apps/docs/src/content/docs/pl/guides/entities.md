@@ -23,6 +23,7 @@ Formularz informuje, skąd pochodzi każda wartość:
 - **Dziedziczone z kontekstu *X*** oznacza, że ten kontekst nie ma wartości i pokazuje wartość przodka. Wpisanie wartości tworzy nadpisanie tylko dla tego kontekstu. Wyczyszczenie nadpisania przywraca wartość dziedziczoną.
 - **Zarządzane w kontekście domyślnym** oznacza, że atrybut można edytować tylko w kontekście domyślnym.
 - **Zarządzane przez działania systemowe** oznacza, że atrybut jest `readonly`: utrzymuje go integracja, przepływ pracy lub agent.
+- **Zablokowane, gdy rekord ma status *X*** oznacza, że status rekordu zamraża to pole. Zobacz [Rekordy kontrolowane](#rekordy-kontrolowane).
 
 Zapis waliduje całą encję w każdym kontekście. Jeśli zmiana unieważniłaby którykolwiek kontekst, nic nie zostaje zapisane, a formularz wskazuje problem. Zobacz [Walidacja](/pl/builders/validation/).
 
@@ -44,7 +45,7 @@ Aby to naprawić, przeczytaj wymienione warunki i uzupełnij to, czego wymagają
 
 Warunki są sprawdzane w każdym kontekście, w którym zmienia się status. Jeśli status jest dziedziczony, zmiana w kontekście domyślnym musi spełniać warunki również w każdym kontekście potomnym.
 
-Aby sprawdzić, które statusy są dostępne i dlaczego inne są zablokowane, bez próby zapisu, wywołaj `GET /v1/entities/{id}/status-transitions` z opcjonalnym `context_id`. Każdy status docelowy ma pola `allowed`, `reason` i `unmet` z niespełnionymi warunkami.
+Aby sprawdzić, które statusy są dostępne i dlaczego inne są zablokowane, bez próby zapisu, wywołaj `GET /v1/entities/{id}/status-transitions` z opcjonalnym `context_id`. Każde przejście ma pola `allowed`, `denial_reason` (gdy jest zablokowane) i `unmet` z niespełnionymi warunkami.
 
 ## Relacje
 
@@ -59,6 +60,17 @@ Pola plików przyjmują przesłane pliki po zapisaniu encji. Wybierz lub upuść
 Nowy plik przechodzi przez następujące stany: **Przesyłanie**, **W kolejce**, **Przetwarzanie** i **Gotowy**. Obrazy otrzymują miniaturę i wersję w rozmiarze do wyświetlania. Plik można pobrać, gdy jest gotowy. Jeśli przetwarzanie się nie powiedzie, plik pokazuje stan **Niepowodzenie**; administrator może ponowić próbę.
 
 Pola plików przyjmujące tylko obrazy wyświetlają galerię. Wybierz obraz, aby otworzyć większy podgląd z powiększaniem i przechodzeniem do poprzedniego lub następnego obrazu. W formularzu edycji możesz dodawać i usuwać obrazy oraz przesuwać je wcześniej lub później, jeśli kolejność plików atrybutu ma znaczenie. Usunięcie obrazu odłącza go od encji.
+
+## Rekordy kontrolowane
+
+Niektóre schematy używają statusów do kontrolowania cyklu życia rekordu. Wtedy:
+
+- Lista wyboru statusu wyłącza przejścia, których nie możesz wykonać, i wyjaśnia dlaczego: przejście wymaga uprawnienia lub roli, której nie masz, albo musi je wykonać ktoś inny (np. osoba, która przesłała dokument do przeglądu, nie może go zatwierdzić).
+- W statusie ostatecznym, takim jak *Released*, część pól lub wszystkie są tylko do odczytu, nie można dodawać ani usuwać plików, a encji nie można usunąć. Aby poprawić rekord, zmień jego status przejściem korygującym przewidzianym w schemacie, zapisz, a potem edytuj. Korekta jest zapisywana w dzienniku audytu.
+- Gdy rekord zostaje zatwierdzony, zatwierdzenie jest powiązane z dokładnie tą treścią, którą przejrzano. Edycja tej treści unieważnia zatwierdzenie, a rekord w tym samym zapisie wraca do wcześniejszego statusu.
+- Pliki sfinalizowanych rekordów mogą być objęte blokadą retencji do określonej daty.
+
+Panel **Kontrola rekordu** na stronie encji wyświetla zatwierdzenia wraz z informacją, kto i kiedy zatwierdził oraz czy zatwierdzenie jest nadal ważne, a także blokady retencji plików encji.
 
 ## Komentarze
 
@@ -96,7 +108,7 @@ Jeśli obszar roboczy korzysta z kanałów publikacji, strona encji pokazuje jej
 
 ## Usuwanie encji
 
-**Usuń encję** jest dostępne z uprawnieniem `entities.delete` na pasku narzędzi encji lub w menu wiersza w Przeglądarce. Usunięta encja znika z wyszukiwania, podglądów i okien wyboru relacji. Jej historia zostaje zachowana.
+**Usuń encję** jest dostępne z uprawnieniem `entities.delete` na pasku narzędzi encji lub w menu wiersza w Przeglądarce. Usunięta encja znika z wyszukiwania, podglądów i okien wyboru relacji. Jej historia zostaje zachowana. Rekordu w zablokowanym statusie nie można usunąć.
 
 ## Z wiersza poleceń
 

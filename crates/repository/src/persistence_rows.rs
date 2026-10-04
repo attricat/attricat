@@ -100,29 +100,44 @@ domain_row!(Blueprint {
     definition,
     definition_hash,
 });
-domain_row!(Attribute {
-    id,
-    blueprint_id,
-    blueprint_version,
-    code,
-    name,
-    value_type,
-    value_schema,
-    extension_type,
-    default_value,
-    file_policy,
-    target_blueprint_code,
-    cardinality,
-    target_cardinality,
-    tags,
-    context_fallback,
-    context_editable,
-    readonly,
-    position,
-    created_at,
-    updated_at,
-    deleted_at,
-});
+impl DomainRow for Attribute {
+    fn from_pg_row(row: &PgRow) -> Result<Self, sqlx::Error> {
+        let target_blueprint_code: Option<String> = row.try_get("target_blueprint_code")?;
+        // A multi-target list is stored only when there is more than one
+        // target; clients always receive the complete allowed set.
+        let mut target_blueprint_codes: Vec<String> = row.try_get("target_blueprint_codes")?;
+        if target_blueprint_codes.is_empty()
+            && let Some(code) = &target_blueprint_code
+        {
+            target_blueprint_codes.push(code.clone());
+        }
+        Ok(Self {
+            id: row.try_get("id")?,
+            blueprint_id: row.try_get("blueprint_id")?,
+            blueprint_version: row.try_get("blueprint_version")?,
+            code: row.try_get("code")?,
+            name: row.try_get("name")?,
+            value_type: row.try_get("value_type")?,
+            value_schema: row.try_get("value_schema")?,
+            extension_type: row.try_get("extension_type")?,
+            default_value: row.try_get("default_value")?,
+            file_policy: row.try_get("file_policy")?,
+            target_blueprint_code,
+            target_blueprint_codes,
+            cardinality: row.try_get("cardinality")?,
+            target_cardinality: row.try_get("target_cardinality")?,
+            hierarchy: row.try_get("hierarchy")?,
+            tags: row.try_get("tags")?,
+            context_fallback: row.try_get("context_fallback")?,
+            context_editable: row.try_get("context_editable")?,
+            readonly: row.try_get("readonly")?,
+            position: row.try_get("position")?,
+            created_at: row.try_get("created_at")?,
+            updated_at: row.try_get("updated_at")?,
+            deleted_at: row.try_get("deleted_at")?,
+        })
+    }
+}
 domain_row!(ReusableAttribute {
     id,
     definition_id,

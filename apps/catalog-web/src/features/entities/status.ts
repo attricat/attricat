@@ -1,9 +1,5 @@
 import { z } from 'zod';
-import type {
-  Attribute,
-  FormAttributeValue,
-  StatusTransitionOptions,
-} from './api';
+import type { Attribute, FormAttributeValue } from './api';
 
 export const STATUS_SCHEMA_KEY = 'x-attricat-status';
 const codeSchema = z
@@ -11,6 +7,12 @@ const codeSchema = z
   .min(1)
   .max(128)
   .regex(/^[A-Za-z0-9_-]+$/);
+const coverageSchema = z.union([
+  z.literal('all'),
+  z.array(z.string().min(1).max(257)).min(1).max(500),
+]);
+/** Attributes locked by a status or covered by its approval. */
+export type StatusCoverage = z.infer<typeof coverageSchema>;
 export const statusConfigurationSchema = z
   .object({
     version: z.literal(1),
@@ -23,6 +25,12 @@ export const statusConfigurationSchema = z
             tone: z
               .enum(['default', 'success', 'warning', 'error', 'info'])
               .optional(),
+            lock: coverageSchema.optional(),
+            approval: z
+              .object({ covers: coverageSchema, void_to: codeSchema })
+              .strict()
+              .optional(),
+            retention_days: z.number().int().min(1).max(36600).optional(),
           })
           .strict(),
       )
@@ -34,6 +42,10 @@ export const statusConfigurationSchema = z
           .object({
             from: codeSchema.nullable(),
             to: codeSchema.nullable(),
+            code: codeSchema.optional(),
+            permission: z.string().max(128).optional(),
+            roles: z.array(z.string().min(1).max(64)).min(1).max(20).optional(),
+            separate_from: z.array(codeSchema).min(1).max(20).optional(),
           })
           .strict(),
       )
@@ -71,35 +83,6 @@ export const statusTransitionAllowed = (
       (edge) => edge.from === before && edge.to === after,
     );
   return after !== null;
-};
-
-export type StatusDestination = StatusTransitionOptions['destinations'][number];
-
-/**
- * The server-evaluated destination that blocks moving from `before` to
- * `after`, if any. Without server destinations (for example, an unsaved
- * entity) only the transition graph applies.
- */
-export const blockedStatusDestination = (
-  destinations: readonly StatusDestination[] | undefined,
-  before: string | null,
-  after: string | null,
-): StatusDestination | undefined => {
-  if (!destinations || after === null || after === before) return undefined;
-  const destination = destinations.find((item) => item.to === after);
-  return destination && !destination.allowed ? destination : undefined;
-};
-
-/** Server destinations for one status attribute from the form's baseline. */
-export const statusDestinationsFor = (
-  options: readonly StatusTransitionOptions[] | undefined,
-  attributeCode: string,
-  baseline: string | null,
-): StatusDestination[] | undefined => {
-  const match = options?.find((item) => item.attribute_code === attributeCode);
-  // A response for another saved state (for example, a concurrent edit) does
-  // not describe the transitions this form will submit.
-  return match && match.current === baseline ? match.destinations : undefined;
 };
 
 export const statusParentContexts = (
@@ -159,3 +142,43 @@ export const statusLabel = (
   statusConfiguration(attribute)?.options.find(
     (option) => option.code === value,
   )?.label;
+
+/** `all` never covers the status attribute that declares it. */
+export const statusCovers = (
+  coverage: StatusCoverage,
+  attributeCode: string,
+  statusCode: string,
+) =>
+  coverage === 'all'
+    ? attributeCode !== statusCode
+    : coverage.includes(attributeCode);
+
+/**
+ * Attribute codes made read-only by the saved status of each status attribute
+ * in this context, mapped to that status label. The server enforces the same
+ * lock on every write path; this only explains it in the form.
+ */
+export const statusLocks = (
+  attributes: readonly Attribute[],
+  values: readonly FormAttributeValue[],
+  contextId: string | null,
+  parentContextIds: readonly string[],
+): Record<string, string> => {
+  const locks: Record<string, string> = {};
+  for (const statusAttribute of attributes) {
+    const config = statusConfiguration(statusAttribute);
+    if (!config) continue;
+    const { current } = savedStatusState(
+      statusAttribute,
+      values,
+      contextId,
+      parentContextIds,
+    );
+    const option = config.options.find((item) => item.code === current);
+    if (!option?.lock) continue;
+    for (const attribute of attributes)
+      if (statusCovers(option.lock, attribute.code, statusAttribute.code))
+        locks[attribute.code] ??= option.label;
+  }
+  return locks;
+};

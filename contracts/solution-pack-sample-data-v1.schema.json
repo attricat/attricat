@@ -24,6 +24,7 @@
               "required": ["attribute", "value"],
               "properties": {
                 "attribute": {"type": "string", "pattern": "^blueprints/[a-z][a-z0-9_-]*/attributes/[a-z][a-z0-9_-]*$", "maxLength": 272},
+                "context": {"$ref": "#/$defs/context"},
                 "value": {
                   "oneOf": [
                     {"type": ["string", "number", "integer", "boolean"]},
@@ -48,9 +49,33 @@
               "required": ["attribute", "targets"],
               "properties": {
                 "attribute": {"type": "string", "pattern": "^blueprints/[a-z][a-z0-9_-]*/attributes/[a-z][a-z0-9_-]*$", "maxLength": 272},
+                "context": {"$ref": "#/$defs/context"},
                 "targets": {
                   "type": "array", "minItems": 1, "maxItems": 128, "uniqueItems": true,
                   "items": {"type": "string", "pattern": "^sample-entities/[a-z][a-z0-9_-]*$", "maxLength": 144}
+                }
+              }
+            }
+          },
+          "files": {
+            "type": "array", "maxItems": 128,
+            "items": {
+              "type": "object", "additionalProperties": false,
+              "required": ["attribute", "files"],
+              "properties": {
+                "attribute": {"type": "string", "pattern": "^blueprints/[a-z][a-z0-9_-]*/attributes/[a-z][a-z0-9_-]*$", "maxLength": 272},
+                "context": {"$ref": "#/$defs/context"},
+                "files": {
+                  "type": "array", "minItems": 1, "maxItems": 16,
+                  "items": {
+                    "type": "object", "additionalProperties": false,
+                    "required": ["path", "filename", "media_type"],
+                    "properties": {
+                      "path": {"type": "string", "pattern": "^sample-data/files/[A-Za-z0-9_-][A-Za-z0-9._-]*(?:/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$", "maxLength": 512},
+                      "filename": {"type": "string", "minLength": 3, "maxLength": 255},
+                      "media_type": {"enum": ["image/png", "image/jpeg", "image/webp", "application/pdf", "text/plain"]}
+                    }
+                  }
                 }
               }
             }
@@ -58,5 +83,8 @@
         }
       }
     }
+  },
+  "$defs": {
+    "context": {"type": "string", "pattern": "^contexts/[a-z][a-z0-9_-]*$", "maxLength": 128}
   }
 }

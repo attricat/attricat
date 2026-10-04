@@ -9,9 +9,10 @@ use crate::{
     catalog_service::CatalogMutationService,
     constants::DEFAULT_PAGE_SIZE,
     model::{
-        AppendAttributeValues, AttributeValue, CreateEntityFormRequest, Entity, EntityFormResponse,
-        IncomingRelationshipsPage, IncomingRelationshipsRequest, MigrateEntityRequest,
-        PublicationContextRequest, RelationshipMutation, UpdateEntityFormRequest,
+        AppendAttributeValues, AttributeValue, CreateEntityFormRequest, Entity, EntityBatchRequest,
+        EntityBatchResponse, EntityFormResponse, IncomingRelationshipsPage,
+        IncomingRelationshipsRequest, MigrateEntityRequest, PublicationContextRequest,
+        RelationshipMutation, UpdateEntityFormRequest,
     },
     repository::decode_search_cursor,
 };
@@ -467,6 +468,28 @@ pub(super) async fn create_entity_form(
     invalidate_data_health(&state, &repository);
     Ok((StatusCode::CREATED, Json(entity)))
 }
+/// Applies creates, updates (including status transitions) and deletes to
+/// several entities in one transaction. Every operation is authorized against
+/// its own entity before anything runs.
+pub(super) async fn apply_entity_batch(
+    State(state): State<AppState>,
+    super::auth::AuthenticatedPrincipal(user, token): super::auth::AuthenticatedPrincipal,
+    super::auth::ActiveWorkspace(workspace_id): super::auth::ActiveWorkspace,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    ApiJson(input): ApiJson<EntityBatchRequest>,
+) -> Result<Json<EntityBatchResponse>, ApiError> {
+    if !repository
+        .is_authorized_for_entity_batch(user, workspace_id, token, &input)
+        .await?
+    {
+        return Err(ApiError::forbidden());
+    }
+    let response = CatalogMutationService::new(&repository)
+        .apply_entity_batch(input)
+        .await?;
+    invalidate_data_health(&state, &repository);
+    Ok(Json(response))
+}
 pub(super) async fn duplicate_entity(
     State(state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
@@ -569,22 +592,6 @@ pub(super) async fn entity_publication_readiness(
     ApiPath(entity_id): ApiPath<Uuid>,
 ) -> Result<Json<Vec<crate::repository::PublicationReadiness>>, ApiError> {
     Ok(Json(repository.publication_readiness(entity_id).await?))
-}
-#[derive(Deserialize)]
-pub(super) struct StatusTransitionQuery {
-    context_id: Option<Uuid>,
-}
-/// Status destinations from the saved state, with unmet conditions.
-pub(super) async fn entity_status_transitions(
-    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
-    ApiPath(entity_id): ApiPath<Uuid>,
-    super::extractors::ApiQuery(query): super::extractors::ApiQuery<StatusTransitionQuery>,
-) -> Result<Json<Vec<crate::repository::StatusTransitionOptions>>, ApiError> {
-    Ok(Json(
-        repository
-            .status_transition_options(entity_id, query.context_id)
-            .await?,
-    ))
 }
 pub(super) async fn publish_entity(
     State(state): State<AppState>,

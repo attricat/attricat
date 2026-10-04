@@ -4,7 +4,7 @@ use sha2::{Digest, Sha256};
 
 use crate::{
     AttributeDeclaration, BlueprintDefinition, BlueprintError, BlueprintKind, CompiledBlueprint,
-    EffectiveAttribute, ResolvedInclude,
+    EffectiveAttribute, ResolvedInclude, UniqueKeyDefinition,
 };
 
 pub fn compile(
@@ -44,8 +44,10 @@ pub fn compile(
             default_value,
             file_policy,
             target_blueprint,
+            target_blueprints,
             cardinality,
             target_cardinality,
+            hierarchy,
             tags,
             context_fallback,
             context_editable,
@@ -65,8 +67,10 @@ pub fn compile(
                 local.default_value.clone(),
                 local.file_policy.clone(),
                 local.target_blueprint.clone(),
+                local.target_blueprints.clone(),
                 local.cardinality.clone(),
                 local.target_cardinality.clone(),
+                local.hierarchy.clone(),
                 local.tags.clone(),
                 local.context_fallback.clone(),
                 local.context_editable.clone(),
@@ -97,8 +101,10 @@ pub fn compile(
                     attribute.default_value.clone(),
                     attribute.file_policy.clone(),
                     attribute.target_blueprint.clone(),
+                    attribute.target_blueprints.clone(),
                     attribute.cardinality.clone(),
                     attribute.target_cardinality.clone(),
+                    attribute.hierarchy.clone(),
                     attribute.tags.clone(),
                     attribute.context_fallback.clone(),
                     attribute.context_editable.clone(),
@@ -115,8 +121,10 @@ pub fn compile(
             default_value,
             file_policy,
             target_blueprint,
+            target_blueprints,
             cardinality,
             target_cardinality,
+            hierarchy,
             tags,
             context_fallback,
             context_editable,
@@ -130,6 +138,8 @@ pub fn compile(
         validate_entity_schema_attributes(schema, &attributes)?;
     }
     validate_declarative_checks(&definition, &attributes)?;
+    validate_unique_key_attributes(&definition.unique_keys, &attributes)?;
+    validate_selected_hierarchies(&definition.code, &definition.kind, &attributes)?;
     if definition.kind == BlueprintKind::Entity && !definition.views.contains_key("dropdown_option")
     {
         return Err(BlueprintError::MissingDropdownOptionView);
@@ -163,6 +173,7 @@ pub fn compile(
         views: definition.views,
         entity_schema: definition.entity_schema,
         rules: definition.rules,
+        unique_keys: definition.unique_keys,
         attributes,
     })
 }
@@ -238,6 +249,67 @@ fn validate_declarative_checks(
                 }
             }
         }
+    }
+    Ok(())
+}
+
+/// Key attributes must have one comparable value per context: scalars other
+/// than JSON, or relationships limited to one target.
+fn validate_unique_key_attributes(
+    keys: &[UniqueKeyDefinition],
+    attributes: &[EffectiveAttribute],
+) -> Result<(), BlueprintError> {
+    for key in keys {
+        for code in &key.attributes {
+            let attribute = attributes
+                .iter()
+                .find(|attribute| attribute.code == *code)
+                .ok_or_else(|| BlueprintError::InvalidUniqueKey {
+                    key: key.code.clone(),
+                    message: format!("unknown attribute '{code}'"),
+                })?;
+            let supported = match attribute.value_type.as_str() {
+                "json" | "file" => false,
+                "relationship" => attribute.cardinality.as_deref() == Some("one"),
+                _ => true,
+            };
+            if !supported {
+                return Err(BlueprintError::InvalidUniqueKey {
+                    key: key.code.clone(),
+                    message: format!(
+                        "attribute '{code}' must be a scalar other than json, or a relationship with cardinality = \"one\""
+                    ),
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
+/// A hierarchy selected from a mixin must still be able to target the
+/// consuming blueprint.
+fn validate_selected_hierarchies(
+    blueprint_code: &str,
+    kind: &BlueprintKind,
+    attributes: &[EffectiveAttribute],
+) -> Result<(), BlueprintError> {
+    if *kind != BlueprintKind::Entity {
+        return Ok(());
+    }
+    if let Some(attribute) = attributes.iter().find(|attribute| {
+        attribute.hierarchy.is_some()
+            && !attribute.target_blueprints.is_empty()
+            && !attribute
+                .target_blueprints
+                .iter()
+                .any(|target| target == blueprint_code)
+    }) {
+        return Err(BlueprintError::InvalidRelationshipHierarchy {
+            code: attribute.code.clone(),
+            message: format!(
+                "a hierarchy must be able to target its own blueprint '{blueprint_code}'"
+            ),
+        });
     }
     Ok(())
 }

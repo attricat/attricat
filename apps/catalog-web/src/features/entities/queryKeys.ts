@@ -26,15 +26,19 @@ export const entityQueryKeys = {
   form: (entityId: string) => ['entity-form', entityId] as const,
   preview: (entityId: string) => ['entity-preview', entityId] as const,
   changes: (entityId: string) => ['entity-changes', entityId] as const,
+  recordControls: (entityId: string) =>
+    ['entity-record-controls', entityId] as const,
+  statusTransitions: (entityId: string, contextId: string | null) =>
+    [
+      ...entityQueryKeys.recordControls(entityId),
+      'transitions',
+      contextId,
+    ] as const,
   publications: () => ['entity-publications'] as const,
   publication: (entityId: string) =>
     [...entityQueryKeys.publications(), entityId] as const,
   publicationReadiness: (entityId: string) =>
     [...entityQueryKeys.publication(entityId), 'readiness'] as const,
-  statusTransitionResults: (entityId: string) =>
-    ['entity-status-transitions', entityId] as const,
-  statusTransitions: (entityId: string, contextId: string) =>
-    [...entityQueryKeys.statusTransitionResults(entityId), contextId] as const,
   migrationPreview: (entityId: string) =>
     ['entity-migration-preview', entityId] as const,
   resolvedPreviews: (entityId: string) =>

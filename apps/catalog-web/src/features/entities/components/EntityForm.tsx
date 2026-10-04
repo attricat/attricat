@@ -1,5 +1,4 @@
 import { useForm, useStore } from '@tanstack/react-form';
-import { useQuery } from '@tanstack/react-query';
 import { Alert, Button, Paper, Stack, Typography } from '@mui/material';
 import type {
   Attribute,
@@ -42,15 +41,14 @@ import { useTranslation } from 'react-i18next';
 import { attributeValueTypes } from '../valueTypes';
 import { EntityBlueprintSelect } from './EntityBlueprintSelect';
 import {
-  blockedStatusDestination,
   savedStatusState,
   statusConfiguration,
-  statusDestinationsFor,
+  statusLocks,
   statusTransitionAllowed,
 } from '../status';
 import { checkViolationError, violationFieldErrors } from '../checkViolations';
-import { entityStatusTransitionOptions } from '../queryOptions';
 import { CheckViolationsAlert } from './CheckViolationsAlert';
+import type { StatusTransitionAccess } from '../recordControls';
 import { EntityFormAttributeEditor } from './EntityFormAttributeEditor';
 
 export type EntityFormHandle = {
@@ -83,6 +81,8 @@ const pickDraftFields = (
 type EntityFormProps = {
   expectedUpdatedAt?: string;
   statusParentContextIds?: readonly string[];
+  /** The caller's access to declared status edges from the saved status. */
+  statusTransitions?: readonly StatusTransitionAccess[];
   blueprint?: BlueprintWithAttributes;
   draft?: EntityFormDraft;
   initialValues?: ReturnType<typeof valuesForForm>;
@@ -122,6 +122,7 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
       blueprint,
       expectedUpdatedAt,
       statusParentContextIds = [],
+      statusTransitions = [],
       draft: draftOptions,
       initialValues = {},
       contextId = null,
@@ -175,17 +176,6 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
       },
     );
     const fieldEditors = viewFieldEditors(fieldComponents, editableAttributes);
-    const hasStatusAttribute = editableAttributes.some((attribute) =>
-      Boolean(statusConfiguration(attribute)),
-    );
-    // Only a saved entity has server-evaluated transition conditions; a new
-    // one relies on the transition graph alone.
-    const statusTransitions = useQuery({
-      ...entityStatusTransitionOptions(entityId ?? '', contextId ?? ''),
-      enabled: Boolean(
-        entityId && contextId && expectedUpdatedAt && hasStatusAttribute,
-      ),
-    });
     const checks = checkViolationError(error);
     // A field's server violation is cleared once the user edits that field.
     const [editedAfterError, setEditedAfterError] = useState<{
@@ -212,6 +202,16 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
         codes: current.error === error ? [...current.codes, code] : [code],
       }));
     };
+    const lockedAttributes = statusLocks(
+      blueprint ? [...blueprint.attributes, ...reusableAttributes] : [],
+      savedValues,
+      contextId,
+      statusParentContextIds,
+    );
+    // Locked values are never resubmitted; the server rejects any change.
+    const submittedAttributes = editableAttributes.filter(
+      (attribute) => lockedAttributes[attribute.code] === undefined,
+    );
     const unplacedRequired =
       blueprint && editView && !showAllAttributes
         ? unplacedRequiredAttributes(
@@ -251,19 +251,21 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
           statusParentContextIds,
         );
         const after = fields[attribute.code] || saved.inherited;
-        const blocked = blockedStatusDestination(
-          statusDestinationsFor(
-            statusTransitions.data,
-            attribute.code,
-            saved.current,
-          ),
-          saved.current,
-          after,
-        );
-        if (!statusTransitionAllowed(config, saved.current, after) || blocked)
-          validation.fieldErrors[attribute.code] =
-            blocked?.unmet.map((violation) => violation.message).join(' ') ||
-            t('entities.statusTransitionDenied');
+        if (!statusTransitionAllowed(config, saved.current, after))
+          validation.fieldErrors[attribute.code] = t(
+            'entities.statusTransitionDenied',
+          );
+        else if (after !== saved.current) {
+          const denied = statusTransitions.find(
+            (edge) =>
+              edge.attribute_code === attribute.code &&
+              edge.to === after &&
+              !edge.allowed,
+          );
+          if (denied)
+            validation.fieldErrors[attribute.code] =
+              denied.denial_reason ?? t('entities.statusTransitionDenied');
+        }
       }
       setFieldErrors(validation.fieldErrors);
       setFormError(validation.formError);
@@ -289,19 +291,19 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
         onSubmit({
           ...(savedVersion ? { expected_updated_at: savedVersion } : {}),
           values: serializeAttributeValues(
-            editableAttributes,
+            submittedAttributes,
             value.fields,
             contextId,
             fieldEditors,
           ),
           relationships: relationshipTargetsForForm(
-            editableAttributes,
+            submittedAttributes,
             value.fields,
             contextId,
           ),
           remove_values: removedFormValues(
             savedValues,
-            editableAttributes,
+            submittedAttributes,
             value.fields,
             contextId,
           ),
@@ -363,7 +365,8 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
       entityId,
       existingValues,
       statusSavedValues: savedValues,
-      statusTransitions: statusTransitions.data,
+      lockedAttributes,
+      statusTransitions,
       fieldErrors: { ...serverFieldErrors, ...fieldErrors },
       highlightedAttributes,
       migrationReviewMessages,

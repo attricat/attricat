@@ -83,26 +83,24 @@ a `code`, an optional `message` and a `predicate`.
 
 ### Available destinations
 
-`GET /v1/entities/{id}/status-transitions?context_id=` (default context when
-omitted; `entities.read`) evaluates each status attribute from the saved state:
+`GET /v1/entities/{id}/status-transitions?context_id=` (described under
+[controlled records](#controlled-records)) also evaluates each declared edge's
+conditions and the enforcing rules that guard it, on the saved state plus the
+edge's destination. Each item has `unmet` in the violation shape. When the
+caller may take the edge but `unmet` is not empty, `allowed` is `false`,
+`denial_code` is `transition_conditions_unmet` and `denial_reason` joins the
+unmet messages:
 
 ```json
-[{
-  "attribute_code": "status", "context_id": "…", "context_code": "default",
-  "current": "open",
-  "destinations": [
-    { "to": "draft", "allowed": false, "reason": "transition_not_allowed", "unmet": [] },
-    { "to": "closed", "allowed": false, "reason": "conditions_unmet",
-      "unmet": [{ "source": "transition_condition", "code": "has-root-cause", "…": "…" }] }
-  ]
-}]
+{ "items": [{
+  "attribute_code": "status", "from": "open", "to": "closed", "code": null,
+  "allowed": false, "denial_code": "transition_conditions_unmet",
+  "denial_reason": "Record the root cause",
+  "unmet": [{ "source": "transition_condition", "code": "has-root-cause", "…": "…" }]
+}] }
 ```
 
-Destinations exclude the current value. `reason` is `transition_not_allowed`
-for an undeclared edge and `conditions_unmet` when conditions or enforcing
-rules guarding that transition fail; `unmet` uses the violation shape. The
-saved state plus the destination is evaluated, so unsaved form edits are not
-considered.
+Unsaved form edits are not considered.
 
 ## Display and editing
 
@@ -145,3 +143,122 @@ Legacy extension/agent write paths that cannot supply a precondition cannot
 edit statuses; they may continue writing unrelated attributes. Server-owned
 transactional workflow actions still validate transitions against their locked
 starting state.
+
+## Controlled records
+
+Edges and options accept optional controls. They are part of the same
+versioned `x-attricat-status` annotation and are validated with it.
+
+```json
+{
+  "options": [
+    { "code": "approved", "label": "Approved",
+      "approval": { "covers": ["title", "procedure"], "void_to": "review" } },
+    { "code": "released", "label": "Released",
+      "lock": "all", "retention_days": 3650 }
+  ],
+  "transitions": [
+    { "from": "draft", "to": "review", "code": "submit" },
+    { "from": "review", "to": "approved", "code": "approve",
+      "roles": ["reviewer"], "separate_from": ["submit"] },
+    { "from": "approved", "to": "released", "code": "release",
+      "permission": "entities.publish" },
+    { "from": "released", "to": "draft", "code": "correct", "roles": ["owner"] }
+  ]
+}
+```
+
+Definition rules: each `from`/`to` pair appears once; `separate_from` names
+edge `code`s declared in the same graph; an option with `lock` requires a
+declared `transitions` array, so leaving a lock is always an explicit edge;
+`retention_days` (1–36,600) requires `lock`; `approval.void_to` names another
+option. Plain codes in `lock` and `approval.covers` must be attributes of the
+effective entity blueprint; qualified `namespace:code` reusable attributes are
+attached per entity and are not checked at publication.
+
+### Transition requirements
+
+`permission`, `roles` and `separate_from` add to the edge check, for every
+effective change in every context:
+
+- `permission`: the acting principal holds the permission for the entity
+  (workspace, blueprint-family or entity grant). A personal API token must also
+  carry it.
+- `roles`: the actor holds at least one of the role codes (system or
+  workspace-local) through a workspace, blueprint-family or entity grant.
+- `separate_from`: the actor is not the `actor_user_id` of the most recent
+  `entity_status_transitions` row for the same entity, attribute and context
+  whose `edge_code` is one of the listed codes.
+
+The acting principal is the interactive extension initiator, otherwise the
+request or agent audit actor (the human who approved an agent change), otherwise
+the initiating actor recorded on the triggering event for workflows and other
+event handlers. A restricted edge with no identifiable actor is denied.
+
+Denials return `403 status_transition_forbidden` or
+`403 status_separation_of_duties` and roll back the whole write. Unrestricted
+edges behave as before. Every effective change is recorded in
+`entity_status_transitions` with its edge code, actor and token.
+
+`GET /v1/entities/{entity_id}/status-transitions?context_id=…` returns the
+declared edges from the saved effective status in that context (default context
+when omitted), each with `allowed`, `denial_code` and `denial_reason` for the
+caller, and `unmet` transition conditions and enforcing rules (see
+[available destinations](#available-destinations)). The status control disables denied edges and shows the reason; the
+server remains authoritative.
+
+### Locks
+
+When a context's saved effective status has `lock`, the covered attributes'
+effective values in that context must be identical in the transaction's
+original and final states. `"all"` covers every attribute, relationship and file
+except the declaring status attribute. Comparisons use stored columns,
+relationship target sets and ordered file references with their SHA-256, so
+resaving identical values is not a change. Original values are reconstructed
+from rows created before the transaction plus rows the transaction archived.
+File uploads, links and reorders, which modify reference rows in place, are
+checked before writing against the written context and every context that
+inherits from it.
+
+The check runs on every path that validates statuses: entity create/update,
+value append and removal, relationship mutations, workflow actions, extension
+catalog batches, history restoration, reusable attribute attachment and
+migration (against the source definition). Entity deletion is refused while any
+context is locked. A violation returns `409 record_locked`.
+
+Locks are evaluated from the starting status, so moving into a locked status may
+carry final edits, while leaving one must be a pure status change. An effective
+change away from a locking status is recorded with `unlocked = true` and audited
+as `entity.record.unlock` with the attribute, context, endpoints and edge code.
+
+### Approvals
+
+Entering an option with `approval` records an `entity_approvals` row for that
+attribute and context: actor, time, covered attributes (or `covers_all`) and the
+SHA-256 of the covered effective content as canonical JSON. A new approval for
+the same attribute and context supersedes the previous one
+(`end_reason = 'superseded'`).
+
+After every write, active approvals whose covered content digest changed are
+ended with `end_reason = 'content_changed'`. If the context's effective status
+still equals the approved option, the same transaction writes the option's
+`void_to` value in that context (parents first, skipping contexts that already
+inherit the void status) and records an `approval_void` transition. This
+automatic change bypasses edge and permission checks by design. Audit actions
+are `entity.approval.record` and `entity.approval.void`.
+`GET /v1/entities/{entity_id}/approvals` lists approvals newest first.
+
+### Retention
+
+Entering an option with `retention_days` creates `file_retention_holds` rows for
+every file referenced by the locked attributes in that context, held until the
+transaction time plus the period, and audits each as
+`file.retention_hold.place`. Reclamation skips held files; see
+[Production operations](operations.md#file-retention-holds).
+
+### Agent
+
+Agent mutations run as the approving user and hit the same checks. Tool errors
+carry the stable codes above, and the read-only `get_entity_record_controls`
+tool returns transition access, approvals and holds so the agent can explain a
+denial instead of retrying.

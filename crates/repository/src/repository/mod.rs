@@ -38,6 +38,7 @@ mod bootstrap;
 mod checks;
 mod contexts;
 mod domain_events;
+mod entity_batches;
 mod entity_commands;
 mod entity_comments;
 mod entity_migration;
@@ -61,6 +62,7 @@ mod health;
 mod lexicon;
 mod members;
 mod presentation_assets;
+mod retention_holds;
 mod reusable_attributes;
 mod roles;
 mod rules;
@@ -69,10 +71,12 @@ mod scope;
 mod sessions;
 mod solution_packs;
 mod status;
+mod structural_constraints;
 mod tasks;
 mod tokens;
 mod upload_intents;
 mod values;
+mod workflow_actions;
 mod workflow_runs;
 mod workflows;
 mod workspace_navigation;
@@ -88,11 +92,11 @@ fn summarize_violations(violations: &[CheckViolation]) -> String {
 
 pub use checks::{
     CheckSource, CheckTransition, CheckViolation, MAX_REPORTED_VIOLATIONS, PublicationReadiness,
-    StatusDestination, StatusTransitionOptions,
 };
 pub use entity_comments::{COMMENT_PAGE_SIZE, EntityComment};
 pub use lexicon::{LexiconEntry, LexiconImportMode, LexiconImportSummary};
 pub use saved_views::SavedView;
+pub use structural_constraints::UniqueKeyDuplicate;
 
 pub use agents::{
     AgentRun, AgentRunEvent, AgentToolCall, ApprovalDecision, Conversation, ConversationMessage,
@@ -143,6 +147,7 @@ pub use extensions::{
 pub use files::{FileObject, FilePolicy, FileUploadResult, NewUploadedFile};
 pub use members::{WorkspaceInvitation, WorkspaceMember};
 pub use presentation_assets::{MAX_PRESENTATION_ASSET_PAGE_SIZE, PresentationAsset};
+pub use retention_holds::FileRetentionHold;
 pub use roles::{Permission, WorkspaceGrantTarget, WorkspaceRole};
 pub use rules::{ClaimedRuleRun, RuleCandidateResult};
 pub use solution_packs::SolutionPackCheckResult;
@@ -151,11 +156,12 @@ pub use solution_packs::{
     SolutionPackApplicationSummary, SolutionPackCheckRun, SolutionPackCheckRunSummary,
     SolutionPackPlan,
 };
+pub use status::{EntityApproval, StatusTransitionAccess};
 pub use tasks::{BackgroundProcessingStatus, ClaimedTask, TaskError, TaskSummary};
 pub use tokens::PersonalApiToken;
 pub use upload_intents::AbandonedUpload;
 pub use workflow_runs::WorkflowRun;
-pub use workflow_runs::{ClaimedWorkflowRun, WorkflowActionResult};
+pub use workflow_runs::{ClaimedWorkflowRun, WorkflowActionResult, WorkflowRunTarget};
 pub use workspace_navigation::{ExploreNavigationEntry, ExploreNavigationItem};
 
 #[derive(Debug, sqlx::FromRow)]
@@ -313,6 +319,16 @@ impl FromStr for ValueHistoryRetentionDays {
     }
 }
 
+/// Why a status transition was refused to its actor.
+#[derive(Debug)]
+pub struct StatusTransitionDenial {
+    pub attribute: String,
+    pub context: String,
+    pub from: String,
+    pub to: String,
+    pub reason: String,
+}
+
 #[derive(Debug, Error)]
 pub enum RepositoryError {
     #[error("comment must contain 1 to 10000 characters and no null characters")]
@@ -323,6 +339,29 @@ pub enum RepositoryError {
     StaleEntity,
     #[error("status edits require expected_updated_at from the entity form")]
     StatusPreconditionRequired,
+    #[error(
+        "status transition of '{}' from {} to {} is not permitted (context: {}): {}",
+        .0.attribute, .0.from, .0.to, .0.context, .0.reason
+    )]
+    StatusTransitionForbidden(Box<StatusTransitionDenial>),
+    #[error(
+        "status transition of '{attribute}' must be made by someone other than the user who made the '{edge}' transition (context: {context})"
+    )]
+    StatusSeparationOfDuties {
+        attribute: String,
+        context: String,
+        edge: String,
+    },
+    #[error(
+        "'{attribute}' is locked while the record is '{status}' (context: {context}); use a permitted correction transition first"
+    )]
+    RecordLocked {
+        attribute: String,
+        context: String,
+        status: String,
+    },
+    #[error("invalid retention hold: {0}")]
+    InvalidRetentionHold(String),
     #[error("{0} was not found")]
     NotFound(&'static str),
     #[error("the initiating user is no longer authorized for this entity")]
@@ -447,6 +486,49 @@ pub enum RepositoryError {
         source_entity_id: Uuid,
         target_entity_id: Uuid,
         conflicting_source_entity_id: Option<Uuid>,
+    },
+    #[error(
+        "unique key '{key}' already has values {values} on entity {conflicting_entity_id} in context '{context}'"
+    )]
+    UniqueKeyConflict {
+        key: String,
+        context: String,
+        values: Value,
+        conflicting_entity_id: Uuid,
+    },
+    #[error(
+        "{total} unique key value(s) are already shared by more than one entity; resolve the duplicates before publishing: {}",
+        structural_constraints::describe_duplicates(.duplicates)
+    )]
+    UniqueKeyDuplicates {
+        duplicates: Vec<UniqueKeyDuplicate>,
+        total: usize,
+    },
+    #[error(
+        "relationship '{attribute}' would create a cycle: {}",
+        .path.iter().map(Uuid::to_string).collect::<Vec<_>>().join(" -> ")
+    )]
+    RelationshipCycle { attribute: String, path: Vec<Uuid> },
+    #[error(
+        "existing '{attribute}' relationships contain {} cycle(s) and {} entities with more than one parent; resolve them before publishing: {}",
+        .cycles.len(),
+        .multiple_parents.len(),
+        structural_constraints::describe_hierarchy_violations(.cycles, .multiple_parents)
+    )]
+    RelationshipHierarchyViolations {
+        attribute: String,
+        cycles: Vec<Vec<Uuid>>,
+        multiple_parents: Vec<Uuid>,
+    },
+    #[error("invalid entity batch: {0}")]
+    InvalidEntityBatch(String),
+    #[error("entity {0} already exists")]
+    EntityIdTaken(Uuid),
+    #[error("batch operation {index} failed; no changes were applied: {source}")]
+    EntityBatchOperationFailed {
+        index: usize,
+        entity_id: Option<Uuid>,
+        source: Box<RepositoryError>,
     },
     #[error("entity preview must be a JSON object organized by context")]
     InvalidPreview,

@@ -247,8 +247,11 @@ export const attributeSchema = z
     name: z.string().nullish(),
     value_type: valueTypeSchema,
     target_blueprint_code: z.string().nullable().optional(),
+    /** Every allowed target blueprint; empty means any blueprint. */
+    target_blueprint_codes: z.array(z.string()).optional(),
     cardinality: z.enum(['one', 'many']).nullable().optional(),
     target_cardinality: z.enum(['one', 'many']).nullable().optional(),
+    hierarchy: z.enum(['acyclic', 'tree']).nullable().optional(),
     context_fallback: z.enum(['default', 'none']).optional(),
     context_editable: z.enum(['all', 'default']).optional(),
     readonly: z.boolean().optional(),
@@ -369,20 +372,6 @@ export const entityPublicationReadinessSchema = z.object({
   context_code: z.string(),
   ready: z.boolean(),
   violations: z.array(checkViolationSchema),
-});
-export const statusTransitionOptionsSchema = z.object({
-  attribute_code: z.string(),
-  context_id: uuidSchema,
-  context_code: z.string(),
-  current: z.string().nullable(),
-  destinations: z.array(
-    z.object({
-      to: z.string(),
-      allowed: z.boolean(),
-      reason: z.string().optional(),
-      unmet: z.array(checkViolationSchema),
-    }),
-  ),
 });
 export const entityIdentitySchema = z.object({
   id: uuidSchema,
@@ -687,9 +676,6 @@ export type EntityPublicationStatus = z.infer<
 export type CheckViolation = z.infer<typeof checkViolationSchema>;
 export type EntityPublicationReadiness = z.infer<
   typeof entityPublicationReadinessSchema
->;
-export type StatusTransitionOptions = z.infer<
-  typeof statusTransitionOptionsSchema
 >;
 export type EntityAuditChange = z.infer<typeof entityAuditChangeSchema>;
 export type EntityItem = z.infer<typeof entityItemSchema>;

@@ -151,6 +151,8 @@ is the primary key.
   fully resolved entity document. It is versioned with the blueprint.
 - `definition_hash` is the SHA-256 hash of the exact raw TOML source.
 - `deleted_at` implements soft deletion.
+- `unique_keys` is the compiled JSONB array of `[[unique_keys]]`. The latest
+  published revision's keys apply to the whole family.
 - `blueprints_active_version_idx` supports selecting the newest published version.
 
 The current blueprint is derived, not stored: it is the published, non-deleted
@@ -189,6 +191,12 @@ they are never independently authored or edited.
   normalized scalar value. It is versioned with the attribute definition.
 - Relationship attributes may declare `target_blueprint` in TOML. Its compiled
   `target_blueprint_code` restricts targets to that entity blueprint family.
+  `target_blueprints` with more than one entry is stored in
+  `target_blueprint_codes` (`'{}'` otherwise) and `target_blueprint_code` stays
+  null; repository writes accept any listed family.
+- `hierarchy` is `acyclic`, `tree`, or null. Repository transactions reject
+  edges that would close a cycle through the field (see
+  [Structural constraints](#structural-constraints)).
 - `cardinality` and `target_cardinality` are directional blueprint metadata.
   Repository transactions enforce them; the database deliberately has no
   business-value check or uniqueness constraint for cardinality.
@@ -333,6 +341,34 @@ purging are safe to run repeatedly.
 - JSONB GIN indexes exist for entity projections and context data.
 
 `updated_at` is application-managed. No trigger updates timestamps.
+
+### Structural constraints
+
+`entity_unique_key_values` is the unique-key index. Each row holds one entity's
+normalized value for one enforced key in one context (`key_values` plus its
+SHA-256 `key_hash`; workspace-scoped keys use the default context). The
+constraint `UNIQUE (workspace_id, blueprint_id, key_code, context_id,
+key_hash)` is the declarative guarantee: when two transactions write the same
+value, the second waits on the first's index entry and then fails, which the
+repository reports as `409 unique_key_conflict` naming the committed holder.
+
+Repository code owns everything else, inside the write transaction:
+
+- Every value write rebuilds the written entity's rows from the entity
+  validation step every write path runs (`validate_entity_schema`), after
+  taking a shared per-family advisory lock. Entity deletion removes its rows.
+- Publication takes the same lock exclusively, then re-indexes the family when
+  the latest published revision's keys changed, reporting existing duplicates
+  instead of failing on the constraint.
+- Context creation copies the parent's context-scoped rows; reparenting
+  revalidates every entity, which recomputes them; context deletion cascades.
+- Hierarchy (`attributes.hierarchy`) checks walk existing edges of the family
+  field when an edge is inserted, under the workspace relationship lock shared
+  by all relationship writers. Publication checks existing edges with the same
+  lock.
+
+Declare new structural constraints as data (blueprint columns and index
+tables with `UNIQUE`/`CHECK`), never as triggers or functions.
 
 ## Projections
 

@@ -8,8 +8,9 @@ Attricat waliduje każdy zapis na serwerze, zanim cokolwiek zostanie zapisane. W
 1. **Typ atrybutu.** Atrybut `number` odrzuca `"abc"`; `date` odrzuca `2026-13-01`.
 2. **`value_schema`** w atrybucie: JSON Schema dla jednej wartości.
 3. **`entity_schema`** w schemacie: JSON Schema dla całej encji.
-4. **Kontrole** w `x-attricat-checks` schematu encji: porównania atrybutów i kontrole powiązanych rekordów.
-5. **Warunki** przejść statusu oraz **egzekwowane reguły**.
+4. **`unique_keys`** w schemacie: identyfikatory biznesowe, których dwie encje nie mogą współdzielić. Zobacz [Klucze unikalne](#klucze-unikalne).
+5. **Kontrole** w `x-attricat-checks` schematu encji: porównania atrybutów i kontrole powiązanych rekordów.
+6. **Warunki** przejść statusu oraz **egzekwowane reguły**.
 
 Oba schematy walidacji używają JSON Schema Draft 2020-12. Aplikacja internetowa korzysta z tych samych schematów, aby ostrzegać Cię podczas pisania, ale liczy się odpowiedź serwera.
 
@@ -111,7 +112,9 @@ value_schema = '''{
 
 Jeśli którykolwiek warunek nie jest spełniony, cały zapis zostaje odrzucony z `422 transition_conditions_unmet` i listą wszystkich niespełnionych warunków. Egzekwowane reguły mogą chronić przejścia w ten sam sposób; zobacz [Egzekwowanie reguły](/pl/builders/rules/#egzekwowanie-reguły).
 
-Aby z wyprzedzeniem sprawdzić, które statusy docelowe są dostępne, wywołaj `GET /v1/entities/{id}/status-transitions?context_id=<uuid>` (bez parametru używany jest kontekst domyślny). Dla każdego atrybutu statusu odpowiedź zawiera bieżący kod i każdy status docelowy z polami `allowed`, `reason` (`transition_not_allowed` lub `conditions_unmet`) oraz `unmet`, czyli niespełnionymi warunkami i egzekwowanymi regułami. Są one oceniane na zapisanej encji tak, jakby status już się zmienił.
+Aby z wyprzedzeniem sprawdzić, które statusy docelowe są dostępne, wywołaj `GET /v1/entities/{id}/status-transitions?context_id=<uuid>` (bez parametru używany jest kontekst domyślny). Odpowiedź zawiera każde zadeklarowane przejście z zapisanego statusu z polem `allowed`, a dla zablokowanych także `denial_code` i `denial_reason`, oraz `unmet`, czyli niespełnione warunki i egzekwowane reguły. Są one oceniane na zapisanej encji tak, jakby status już się zmienił. Blokada przez warunki ma `denial_code` `transition_conditions_unmet`.
+
+Status może też ograniczać, kto może wykonać poszczególne przejścia, blokować sfinalizowane rekordy i wiązać zatwierdzenia z przejrzaną treścią. Zobacz [Kontroluj cykl życia rekordu](/pl/builders/blueprints/#krok-10-kontroluj-cykl-życia-rekordu).
 
 ## Ogranicz całą encję
 
@@ -269,6 +272,30 @@ Przy zapisie kontrole, warunki i egzekwowane reguły działają w tej kolejnośc
 | `evidence` | Szczegóły, np. porównywane wartości lub identyfikatory powiązanych rekordów, które nie przeszły kontroli. |
 
 W aplikacji internetowej formularz edycji wymienia kontrole, które nie przeszły, wraz z kontekstami, i pokazuje każdy komunikat przy polach wymienionych w `attributes`. Komunikat przy polu znika, gdy je edytujesz. Klienci API otrzymują te same informacje w `attributes`. Aby usunąć problem, zmień te atrybuty w wymienionych kontekstach albo popraw powiązane lub wskazujące rekordy, o których mówi komunikat, i zapisz ponownie. Przy zmianie statusu sprawdź niespełnione warunki przez [punkt końcowy status-transitions](#warunki-przejść).
+
+## Klucze unikalne
+
+Schemat walidacji sprawdza jedną encję naraz, więc nie powstrzyma dwóch encji przed otrzymaniem tego samego numeru części. Zadeklaruj zamiast tego klucz unikalny:
+
+```toml
+[[unique_keys]]
+code = "part_number"
+attributes = ["part_number"]
+
+[[unique_keys]]
+code = "document_revision"
+attributes = ["document", "revision_label"]
+```
+
+Drugi klucz jest złożony: dokument może mieć tylko jedną wersję `B`, ale każdy dokument może mieć własną. Klucze mogą łączyć do ośmiu atrybutów skalarnych lub relacji z jednym celem.
+
+- **Porównywanie.** Tekst jest przycinany, ciągi białych znaków stają się jedną spacją, a wielkość liter jest pomijana, więc `ABC-1` i ` abc-1 ` kolidują. Ustaw `case_sensitive = true`, aby porównywać tekst dokładnie. Liczby są porównywane według wartości, a relacje według powiązanej encji.
+- **Brakujące wartości.** Encja bez wartości któregoś atrybutu klucza nie jest sprawdzana względem tego klucza. Jeśli każda encja musi go mieć, oznacz atrybuty jako wymagane w `entity_schema`.
+- **Konteksty.** Domyślnie klucz porównuje wartości z kontekstu domyślnego. Przy `scope = "context"` porównuje wartości wyświetlane w każdym kontekście, także dziedziczone, więc np. slug może być unikalny w każdym rynku.
+- **Równoczesne zapisy.** Baza danych sprawdza klucz w trakcie zapisu. Jeśli dwie osoby zapiszą ten sam numer części w tym samym momencie, jeden zapis się powiedzie, a drugi otrzyma `409 unique_key_conflict` z konfliktową encją w `error.details.conflicting_entity_id`.
+- **Dodanie klucza później.** Publikacja wersji, która dodaje klucz, najpierw sprawdza istniejące encje. Duplikaty powodują błąd publikacji `409 unique_key_duplicates` z listą encji współdzielących każdą wartość. Od publikacji klucz obejmuje każdą encję schematu, także encje na starszych wersjach.
+
+Wszystkie opcje opisuje sekcja [Klucze unikalne](/pl/reference/blueprint/#klucze-unikalne).
 
 ## Walidacja a konteksty
 

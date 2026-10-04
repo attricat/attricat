@@ -366,3 +366,36 @@ async fn reconciliation_delays_and_idempotently_purges_unreferenced_files(pool: 
         1
     );
 }
+
+#[sqlx::test]
+async fn reconciliation_retains_files_under_an_active_retention_hold(pool: PgPool) {
+    let store = Arc::new(FakeObjectStore::available());
+    let file_id = Uuid::new_v4();
+    insert_file(&pool, file_id, &format!("files/{file_id}/original"), false).await;
+    let hold_id = Uuid::new_v4();
+    sqlx::query("INSERT INTO file_retention_holds (id, workspace_id, file_id, source, reason, held_until) VALUES ($1, $2, $3, 'explicit', 'Legal hold', now() + interval '1 day')")
+        .bind(hold_id)
+        .bind(WORKSPACE_ID.parse::<Uuid>().unwrap())
+        .bind(file_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let worker = worker(pool.clone(), store, 3, 0);
+    let status = || async {
+        sqlx::query_scalar::<_, String>("SELECT status FROM files WHERE id = $1")
+            .bind(file_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap()
+    };
+    worker.reconcile().await.unwrap();
+    assert_eq!(status().await, "queued");
+    // An expired hold no longer protects the file.
+    sqlx::query("UPDATE file_retention_holds SET created_at = now() - interval '2 days', held_until = now() - interval '1 second' WHERE id = $1")
+        .bind(hold_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    worker.reconcile().await.unwrap();
+    assert_eq!(status().await, "deleted");
+}

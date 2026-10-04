@@ -3,7 +3,7 @@
 pub use catalog_domain::{account, agents, model, task_queue};
 pub use catalog_events as domain_events;
 pub use catalog_extension_manifest::{extension_policy, extensions};
-pub use catalog_solution_pack::{solution_pack_sample_data, solution_packs};
+pub use catalog_solution_pack::{solution_pack_sample_data, solution_pack_seeds, solution_packs};
 pub use catalog_storage as storage;
 
 mod blueprint_resolver;

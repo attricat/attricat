@@ -8,8 +8,9 @@ Attricat validates every write on the server before anything is saved. Validatio
 1. **The attribute type.** A `number` attribute rejects `"abc"`; a `date` rejects `2026-13-01`.
 2. **`value_schema`** on an attribute: a JSON Schema for one value.
 3. **`entity_schema`** on a blueprint: a JSON Schema for the whole entity.
-4. **Checks** in the entity schema's `x-attricat-checks`: comparisons between attributes and checks on linked records.
-5. **Conditions** on status transitions, and **enforcing rules**.
+4. **`unique_keys`** on a blueprint: business identifiers no two entities may share. See [Unique keys](#unique-keys).
+5. **Checks** in the entity schema's `x-attricat-checks`: comparisons between attributes and checks on linked records.
+6. **Conditions** on status transitions, and **enforcing rules**.
 
 Both schemas use JSON Schema Draft 2020-12. The web app uses the same schemas to warn you while you type, but the server's answer is the one that counts.
 
@@ -111,7 +112,9 @@ value_schema = '''{
 
 If any condition is unmet, the whole write is rejected with `422 transition_conditions_unmet`, listing every unmet condition. Enforcing rules can guard transitions in the same way; see [Enforce a rule](/builders/rules/#enforce-a-rule).
 
-To find out ahead of time which destinations are available, call `GET /v1/entities/{id}/status-transitions?context_id=<uuid>` (the default context if you leave it out). For each status attribute it returns the current code and each destination with `allowed`, a `reason` (`transition_not_allowed` or `conditions_unmet`), and the `unmet` conditions and enforcing rules, evaluated on the saved entity as if the status had changed.
+To find out ahead of time which destinations are available, call `GET /v1/entities/{id}/status-transitions?context_id=<uuid>` (the default context if you leave it out). It returns each declared transition from the saved status with `allowed` and, when blocked, a `denial_code` and `denial_reason`, plus `unmet`: the unmet conditions and enforcing rules, evaluated on the saved entity as if the status had changed. Blocked by conditions shows as `denial_code` `transition_conditions_unmet`.
+
+A status can also restrict who may make each transition, lock finalized records, and bind approvals to reviewed content. See [Control a record's lifecycle](/builders/blueprints/#step-10-control-a-records-lifecycle).
 
 ## Constrain the whole entity
 
@@ -269,6 +272,30 @@ On a save, checks, conditions, and enforcing rules run in that order, after the 
 | `evidence` | Details such as the compared values or the IDs of failing linked records. |
 
 In the web app, the edit form lists the failed checks with the contexts they failed in, and shows each message on the fields named in `attributes`. A field's message clears once you edit that field. API clients get the same information from `attributes`. To fix the problem, change those attributes in the listed contexts, or fix the linked or referring records the message names, and save again. For a status change, check which conditions are unmet with the [status-transitions endpoint](#conditions-on-transitions).
+
+## Unique keys
+
+A schema checks one entity at a time, so it cannot stop two entities from getting the same part number. Declare a unique key instead:
+
+```toml
+[[unique_keys]]
+code = "part_number"
+attributes = ["part_number"]
+
+[[unique_keys]]
+code = "document_revision"
+attributes = ["document", "revision_label"]
+```
+
+The second key is composite: a document can have only one revision `B`, but every document can have its own. Keys can combine up to eight scalar attributes or single-target relationships.
+
+- **Comparison.** Text is trimmed, runs of whitespace become one space, and case is ignored, so `ABC-1` and ` abc-1 ` collide. Set `case_sensitive = true` to compare text exactly. Numbers compare by value and relationships by the linked entity.
+- **Missing values.** An entity without a value for one of the key's attributes is not checked against that key. Require the attributes in `entity_schema` if every entity must have one.
+- **Contexts.** By default a key compares default-context values. With `scope = "context"`, it compares the values each context shows, including inherited ones, so a slug can be unique per market.
+- **Concurrent saves.** The database checks the key inside the save. If two people save the same part number at the same moment, one save succeeds and the other gets `409 unique_key_conflict` with the conflicting entity in `error.details.conflicting_entity_id`.
+- **Adding a key later.** Publishing a revision that adds a key first checks existing entities. Duplicates make publication fail with `409 unique_key_duplicates`, listing the entities that share each value. The key then covers every entity of the blueprint, including those still on older revisions.
+
+See [Unique keys](/reference/blueprint/#unique-keys) for every option.
 
 ## Validation and contexts
 

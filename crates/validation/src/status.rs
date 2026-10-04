@@ -4,8 +4,167 @@ use serde_json::Value;
 use std::collections::HashSet;
 
 pub const STATUS_KEY: &str = "x-attricat-status";
+/// Attribute selectors in lock and approval lists: a blueprint attribute code
+/// or a qualified `namespace:code` reusable attribute.
+const ATTRIBUTE_SELECTOR_PATTERN: &str = "^[A-Za-z0-9_-]+(:[A-Za-z0-9_-]+)?$";
+/// About one hundred years.
+pub const MAX_RETENTION_DAYS: i64 = 36_600;
+
+/// Attributes made read-only by a status, or covered by an approval.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum StatusCoverage {
+    /// Every attribute, relationship and file of the record except the status
+    /// attribute that declares the coverage.
+    All,
+    Attributes(Vec<String>),
+}
+
+impl StatusCoverage {
+    pub fn parse(value: &Value) -> Option<Self> {
+        match value {
+            Value::String(all) if all == "all" => Some(Self::All),
+            Value::Array(codes) => Some(Self::Attributes(
+                codes
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_owned)
+                    .collect(),
+            )),
+            _ => None,
+        }
+    }
+
+    /// Whether `code` is covered. `status_code` is the declaring attribute,
+    /// which `All` never covers: its changes are governed by transitions.
+    pub fn covers(&self, code: &str, status_code: &str) -> bool {
+        match self {
+            Self::All => code != status_code,
+            Self::Attributes(codes) => codes.iter().any(|item| item == code),
+        }
+    }
+}
+
+/// The approval declared by a status option.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StatusApproval {
+    pub covers: StatusCoverage,
+    pub void_to: String,
+}
+
+/// Restrictions declared on one transition edge.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct TransitionRequirements {
+    pub code: Option<String>,
+    pub permission: Option<String>,
+    pub roles: Vec<String>,
+    pub separate_from: Vec<String>,
+}
+
+impl TransitionRequirements {
+    pub fn is_restricted(&self) -> bool {
+        self.permission.is_some() || !self.roles.is_empty() || !self.separate_from.is_empty()
+    }
+}
+
+fn status_option<'a>(schema: &'a Value, code: &Value) -> Option<&'a Value> {
+    schema
+        .get(STATUS_KEY)?
+        .get("options")?
+        .as_array()?
+        .iter()
+        .find(|option| &option["code"] == code)
+}
+
+/// The lock declared by the option `code`; absent and unknown codes lock nothing.
+pub fn status_lock(schema: &Value, code: &Value) -> Option<StatusCoverage> {
+    StatusCoverage::parse(status_option(schema, code)?.get("lock")?)
+}
+
+pub fn status_approval(schema: &Value, code: &Value) -> Option<StatusApproval> {
+    let approval = status_option(schema, code)?.get("approval")?;
+    Some(StatusApproval {
+        covers: StatusCoverage::parse(&approval["covers"])?,
+        void_to: approval["void_to"].as_str()?.to_owned(),
+    })
+}
+
+pub fn status_retention_days(schema: &Value, code: &Value) -> Option<i64> {
+    status_option(schema, code)?.get("retention_days")?.as_i64()
+}
+
+/// Whether any option declares a lock, an approval or a retention period.
+pub fn has_record_controls(schema: &Value) -> bool {
+    schema
+        .get(STATUS_KEY)
+        .and_then(|config| config.get("options"))
+        .and_then(Value::as_array)
+        .is_some_and(|options| {
+            options.iter().any(|option| {
+                option.get("lock").is_some()
+                    || option.get("approval").is_some()
+                    || option.get("retention_days").is_some()
+            })
+        })
+}
+
+/// The restrictions of the declared edge for a change. Unchanged values,
+/// undeclared edges and unrestricted graphs have none.
+pub fn transition_requirements(
+    schema: &Value,
+    before: &Value,
+    after: &Value,
+) -> TransitionRequirements {
+    let edge = schema
+        .get(STATUS_KEY)
+        .and_then(|config| config.get("transitions"))
+        .and_then(Value::as_array)
+        .and_then(|edges| {
+            edges
+                .iter()
+                .find(|edge| &edge["from"] == before && &edge["to"] == after)
+        });
+    let Some(edge) = edge.filter(|_| before != after) else {
+        return TransitionRequirements::default();
+    };
+    let strings = |key: &str| {
+        edge.get(key)
+            .and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_owned)
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    TransitionRequirements {
+        code: edge.get("code").and_then(Value::as_str).map(str::to_owned),
+        permission: edge
+            .get("permission")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
+        roles: strings("roles"),
+        separate_from: strings("separate_from"),
+    }
+}
 
 pub fn status_configuration_schema() -> Value {
+    let code = serde_json::json!({"type": "string", "minLength": 1, "maxLength": 128, "pattern": super::CODE_PATTERN});
+    let coverage = serde_json::json!({"oneOf": [
+        {"const": "all"},
+        {"type": "array", "minItems": 1, "maxItems": 500, "uniqueItems": true, "items": {
+            "type": "string", "minLength": 1, "maxLength": 257, "pattern": ATTRIBUTE_SELECTOR_PATTERN
+        }}
+    ]});
+    let conditions = serde_json::json!({"type": "array", "maxItems": MAX_TRANSITION_CONDITIONS, "items": {
+        "type": "object", "additionalProperties": false, "required": ["code", "predicate"],
+        "properties": {
+            "code": code,
+            "message": {"type": "string", "minLength": 1, "maxLength": crate::predicate::MAX_MESSAGE_LENGTH},
+            "predicate": {"type": "object", "required": ["type"], "properties": {"type": {"type": "string"}}}
+        }
+    }});
     serde_json::json!({
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "title": "Attricat status control v1",
@@ -16,23 +175,29 @@ pub fn status_configuration_schema() -> Value {
             "options": {"type": "array", "minItems": 1, "maxItems": 100, "items": {
                 "type": "object", "additionalProperties": false, "required": ["code", "label"],
                 "properties": {
-                    "code": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": super::CODE_PATTERN},
+                    "code": code,
                     "label": {"type": "string", "minLength": 1, "maxLength": 200},
-                    "tone": {"enum": ["default", "success", "warning", "error", "info"]}
+                    "tone": {"enum": ["default", "success", "warning", "error", "info"]},
+                    "lock": coverage,
+                    "approval": {
+                        "type": "object", "additionalProperties": false, "required": ["covers", "void_to"],
+                        "properties": {"covers": coverage, "void_to": code}
+                    },
+                    "retention_days": {"type": "integer", "minimum": 1, "maximum": MAX_RETENTION_DAYS}
                 }
             }},
             "transitions": {"type": "array", "maxItems": 10000, "uniqueItems": true, "items": {
                 "type": "object", "additionalProperties": false, "required": ["from", "to"],
                 "properties": {
-                    "from": {"type": ["string", "null"]}, "to": {"type": ["string", "null"]},
-                    "conditions": {"type": "array", "maxItems": MAX_TRANSITION_CONDITIONS, "items": {
-                        "type": "object", "additionalProperties": false, "required": ["code", "predicate"],
-                        "properties": {
-                            "code": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": super::CODE_PATTERN},
-                            "message": {"type": "string", "minLength": 1, "maxLength": crate::predicate::MAX_MESSAGE_LENGTH},
-                            "predicate": {"type": "object", "required": ["type"], "properties": {"type": {"type": "string"}}}
-                        }
-                    }}
+                    "from": {"type": ["string", "null"]},
+                    "to": {"type": ["string", "null"]},
+                    "code": code,
+                    "permission": {"type": "string", "maxLength": 128, "pattern": "^[a-z_]+\\.[a-z_]+$"},
+                    "roles": {"type": "array", "minItems": 1, "maxItems": 20, "uniqueItems": true, "items": {
+                        "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-z][a-z0-9_-]*$"
+                    }},
+                    "separate_from": {"type": "array", "minItems": 1, "maxItems": 20, "uniqueItems": true, "items": code},
+                    "conditions": conditions
                 }
             }}
         }
@@ -75,7 +240,8 @@ pub fn validate_status_definition(schema: &Value) -> Result<(), String> {
             );
         }
     }
-    if let Some(edges) = config.get("transitions").and_then(Value::as_array) {
+    let edges = config.get("transitions").and_then(Value::as_array);
+    if let Some(edges) = edges {
         let mut pairs = HashSet::new();
         for edge in edges {
             for endpoint in [&edge["from"], &edge["to"]] {
@@ -85,9 +251,44 @@ pub fn validate_status_definition(schema: &Value) -> Result<(), String> {
                 }
             }
             if !pairs.insert((edge["from"].to_string(), edge["to"].to_string())) {
-                return Err("status transitions must declare each edge once".into());
+                return Err("status transitions must declare each from/to pair once".into());
             }
             edge_conditions(edge)?;
+        }
+        let edge_codes: HashSet<_> = edges
+            .iter()
+            .filter_map(|edge| edge.get("code").and_then(Value::as_str))
+            .collect();
+        if edges
+            .iter()
+            .filter_map(|edge| edge.get("separate_from").and_then(Value::as_array))
+            .flatten()
+            .any(|code| code.as_str().is_none_or(|code| !edge_codes.contains(code)))
+        {
+            return Err("separate_from must name the code of a declared transition".into());
+        }
+    }
+    for option in options {
+        let code = option["code"].as_str().unwrap();
+        // Leaving a locked status must always be an explicit, governable edge.
+        if option.get("lock").is_some() && edges.is_none() {
+            return Err(format!(
+                "status option '{code}' declares a lock, so transitions must be declared"
+            ));
+        }
+        if option.get("retention_days").is_some() && option.get("lock").is_none() {
+            return Err(format!(
+                "status option '{code}' declares retention_days without a lock"
+            ));
+        }
+        if let Some(void_to) = option
+            .get("approval")
+            .and_then(|approval| approval["void_to"].as_str())
+            && (void_to == code || !codes.contains(void_to))
+        {
+            return Err(format!(
+                "approval void_to of status option '{code}' must name another option"
+            ));
         }
     }
     Ok(())
@@ -223,6 +424,91 @@ mod tests {
         assert!(validate_status_transition(&s, &json!("done"), &json!("draft")).is_ok());
         assert!(validate_status_transition(&s, &json!("done"), &Value::Null).is_err());
     }
+    fn controlled() -> Value {
+        let mut s = schema();
+        s[STATUS_KEY]["options"][1]["approval"] = json!({"covers":"all","void_to":"draft"});
+        s[STATUS_KEY]["options"][2]["lock"] = json!(["title", "acme:weight"]);
+        s[STATUS_KEY]["options"][2]["retention_days"] = json!(3650);
+        s[STATUS_KEY]["transitions"] = json!([
+            {"from":null,"to":"draft"},
+            {"from":"draft","to":"live","code":"submit"},
+            {"from":"live","to":"done","code":"release","permission":"entities.publish","roles":["reviewer"],"separate_from":["submit"]},
+            {"from":"done","to":"draft","code":"correct","roles":["owner"]}
+        ]);
+        s
+    }
+
+    #[test]
+    fn reads_record_controls_and_edge_requirements() {
+        let s = controlled();
+        assert!(validate_status_definition(&s).is_ok());
+        assert!(has_record_controls(&s));
+        assert!(!has_record_controls(&schema()));
+        assert_eq!(
+            status_lock(&s, &json!("done")),
+            Some(StatusCoverage::Attributes(vec![
+                "title".into(),
+                "acme:weight".into()
+            ]))
+        );
+        assert_eq!(status_lock(&s, &json!("draft")), None);
+        assert_eq!(status_lock(&s, &Value::Null), None);
+        assert_eq!(status_retention_days(&s, &json!("done")), Some(3650));
+        let approval = status_approval(&s, &json!("live")).unwrap();
+        assert_eq!(approval.void_to, "draft");
+        assert!(approval.covers.covers("title", "status"));
+        assert!(!approval.covers.covers("status", "status"));
+        let release = transition_requirements(&s, &json!("live"), &json!("done"));
+        assert_eq!(release.code.as_deref(), Some("release"));
+        assert_eq!(release.permission.as_deref(), Some("entities.publish"));
+        assert_eq!(release.roles, ["reviewer"]);
+        assert_eq!(release.separate_from, ["submit"]);
+        assert!(release.is_restricted());
+        assert!(!transition_requirements(&s, &json!("draft"), &json!("live")).is_restricted());
+        assert_eq!(
+            transition_requirements(&s, &json!("done"), &json!("done")),
+            TransitionRequirements::default()
+        );
+    }
+
+    #[test]
+    fn rejects_inconsistent_record_controls() {
+        let mut unrestricted = controlled();
+        unrestricted[STATUS_KEY]
+            .as_object_mut()
+            .unwrap()
+            .remove("transitions");
+        let mut retention = controlled();
+        retention[STATUS_KEY]["options"][1]["retention_days"] = json!(1);
+        let mut void_self = controlled();
+        void_self[STATUS_KEY]["options"][1]["approval"]["void_to"] = json!("live");
+        let mut void_unknown = controlled();
+        void_unknown[STATUS_KEY]["options"][1]["approval"]["void_to"] = json!("gone");
+        let mut separation = controlled();
+        separation[STATUS_KEY]["transitions"][2]["separate_from"] = json!(["review"]);
+        let mut duplicate = controlled();
+        duplicate[STATUS_KEY]["transitions"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({"from":"draft","to":"live","code":"other"}));
+        let mut permission = controlled();
+        permission[STATUS_KEY]["transitions"][2]["permission"] = json!("Entities publish");
+        let mut lock = controlled();
+        lock[STATUS_KEY]["options"][2]["lock"] = json!("everything");
+        for (name, s) in [
+            ("unrestricted", unrestricted),
+            ("retention", retention),
+            ("void_self", void_self),
+            ("void_unknown", void_unknown),
+            ("separation", separation),
+            ("duplicate", duplicate),
+            ("permission", permission),
+            ("lock", lock),
+        ] {
+            assert!(validate_status_definition(&s).is_err(), "{name}");
+        }
+    }
+
     #[test]
     fn edges_carry_strict_conditions() {
         let mut s = schema();

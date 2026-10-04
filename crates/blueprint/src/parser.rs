@@ -7,7 +7,8 @@ use serde::Deserialize;
 use crate::{
     AttributeDeclaration, BlueprintDefinition, BlueprintError, BlueprintKind,
     CONNECTOR_JOB_DIRECTIONS, ConnectorJobDefinition, FilePolicy, IncludeRef, KNOWN_VIEW_NAMES,
-    LocalAttributeDeclaration, PublicationPolicy, ViewDefinition,
+    LocalAttributeDeclaration, MAX_UNIQUE_KEY_ATTRIBUTES, PublicationPolicy, UNIQUE_KEY_SCOPES,
+    UniqueKeyDefinition, ViewDefinition,
 };
 
 pub const ATTRIBUTE_VALUE_TYPES: &[&str] = &[
@@ -70,6 +71,10 @@ struct RawBlueprintDefinition {
     #[serde(default)]
     #[schemars(schema_with = "catalog_rules::embedded_rules_schema")]
     rules: Vec<toml::Value>,
+    /// Business keys whose normalized values must be unique across the
+    /// blueprint family. Entity blueprints only.
+    #[serde(default)]
+    unique_keys: Vec<UniqueKeyDefinition>,
     /// Attributes in display order. Each declares exactly one of `value_type`,
     /// `extension_type`, or `from`.
     #[schemars(length(min = 1))]
@@ -145,6 +150,25 @@ struct RawAttributeDeclaration {
         )
     )]
     target_blueprint: Option<String>,
+    /// Several blueprints that relationship targets may use. Cannot be
+    /// combined with `target_blueprint`.
+    #[serde(default)]
+    #[schemars(
+        length(min = 1),
+        extend(
+            "x-attricat-reference" = "blueprint",
+            "x-attricat-value-types" = ["relationship"]
+        )
+    )]
+    target_blueprints: Vec<String>,
+    /// Reject relationship writes that would form a cycle through this
+    /// self-referencing attribute. Requires `context_editable = "default"`.
+    #[schemars(extend("x-attricat-value-types" = ["relationship"]))]
+    acyclic: Option<bool>,
+    /// An acyclic hierarchy in which every entity has at most one target
+    /// (parent). Implies `acyclic` and `cardinality = "one"`.
+    #[schemars(extend("x-attricat-value-types" = ["relationship"]))]
+    tree: Option<bool>,
     /// Free-form metadata. `hidden`, `hidden:form`, `hidden:detail`,
     /// `hidden:explorer`, and `hidden:metadata` hide the attribute from default UI.
     #[serde(default)]
@@ -289,9 +313,22 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                             value_type,
                         });
                     }
-                    if attribute.target_blueprint.is_some() && value_type != "relationship" {
+                    if (attribute.target_blueprint.is_some()
+                        || !attribute.target_blueprints.is_empty()
+                        || attribute.acyclic.is_some()
+                        || attribute.tree.is_some())
+                        && value_type != "relationship"
+                    {
                         return Err(BlueprintError::InvalidAttributeDeclaration(attribute.code));
                     }
+                    let (target_blueprint, target_blueprints) =
+                        parse_relationship_targets(&attribute)?;
+                    let hierarchy = parse_relationship_hierarchy(
+                        &attribute,
+                        &raw.code,
+                        &raw.kind,
+                        &target_blueprints,
+                    )?;
                     if value_type == "relationship" && attribute.value_schema.is_some() {
                         return Err(BlueprintError::RelationshipValueSchema {
                             code: attribute.code,
@@ -316,10 +353,14 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                         return Err(BlueprintError::InvalidAttributeDeclaration(attribute.code));
                     }
                     let (cardinality, target_cardinality) = if value_type == "relationship" {
-                        let cardinality = attribute
-                            .cardinality
-                            .clone()
-                            .unwrap_or_else(|| "many".to_owned());
+                        // A tree gives every entity at most one parent.
+                        let cardinality = attribute.cardinality.clone().unwrap_or_else(|| {
+                            if hierarchy.as_deref() == Some("tree") {
+                                "one".to_owned()
+                            } else {
+                                "many".to_owned()
+                            }
+                        });
                         let (cardinality, target_cardinality) = if cardinality == "one_to_one" {
                             if attribute.target_cardinality.is_some() {
                                 return Err(BlueprintError::InvalidRelationshipCardinality(
@@ -342,6 +383,12 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                             return Err(BlueprintError::InvalidRelationshipCardinality(
                                 attribute.code,
                             ));
+                        }
+                        if hierarchy.as_deref() == Some("tree") && cardinality != "one" {
+                            return Err(BlueprintError::InvalidRelationshipHierarchy {
+                                code: attribute.code,
+                                message: "a tree allows at most one target per entity; use cardinality = \"one\"".into(),
+                            });
                         }
                         (Some(cardinality), Some(target_cardinality))
                     } else {
@@ -390,9 +437,6 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                             }
                         })?;
                     }
-                    if let Some(target_blueprint) = &attribute.target_blueprint {
-                        validate_code(target_blueprint, "attribute target_blueprint")?;
-                    }
                     if !CONTEXT_FALLBACKS.contains(&attribute.context_fallback.as_str()) {
                         return Err(BlueprintError::InvalidContextFallback {
                             code: attribute.code,
@@ -420,9 +464,11 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                         extension_configuration: None,
                         default_value: attribute.default_value,
                         file_policy,
-                        target_blueprint: attribute.target_blueprint,
+                        target_blueprint,
+                        target_blueprints,
                         cardinality,
                         target_cardinality,
+                        hierarchy,
                         tags: attribute.tags,
                         context_fallback: attribute.context_fallback,
                         context_editable: attribute.context_editable,
@@ -430,7 +476,11 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                     }))
                 }
                 (None, None, Some(source))
-                    if attribute.target_blueprint.is_none() && attribute.name.is_none() =>
+                    if attribute.target_blueprint.is_none()
+                        && attribute.target_blueprints.is_empty()
+                        && attribute.acyclic.is_none()
+                        && attribute.tree.is_none()
+                        && attribute.name.is_none() =>
                 {
                     let (include_alias, attribute_code) =
                         parse_selection(&attribute.code, &source)?;
@@ -444,6 +494,9 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                     if extension_type.trim().is_empty()
                         || attribute.value_schema.is_some()
                         || attribute.target_blueprint.is_some()
+                        || !attribute.target_blueprints.is_empty()
+                        || attribute.acyclic.is_some()
+                        || attribute.tree.is_some()
                         || attribute.cardinality.is_some()
                         || attribute.target_cardinality.is_some()
                         || attribute.ordered.is_some()
@@ -483,8 +536,10 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                         default_value: attribute.default_value,
                         file_policy: None,
                         target_blueprint: None,
+                        target_blueprints: Vec::new(),
                         cardinality: None,
                         target_cardinality: None,
+                        hierarchy: None,
                         tags: attribute.tags,
                         context_fallback: attribute.context_fallback,
                         context_editable: attribute.context_editable,
@@ -530,6 +585,8 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
         })?;
     }
 
+    validate_unique_keys(&raw.unique_keys, &raw.kind, &codes)?;
+
     let definition = BlueprintDefinition {
         format_version: raw.format_version,
         code: raw.code,
@@ -541,10 +598,120 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
         publication: raw.publication,
         connector_jobs: raw.connector_jobs,
         rules,
+        unique_keys: raw.unique_keys,
         attributes,
     };
     crate::lexicon_text::validate_lexicon_references(&definition)?;
     Ok(definition)
+}
+
+/// Normalizes `target_blueprint`/`target_blueprints` into the single-target
+/// field (kept for single-target consumers) and the complete allowed set.
+fn parse_relationship_targets(
+    attribute: &RawAttributeDeclaration,
+) -> Result<(Option<String>, Vec<String>), BlueprintError> {
+    let invalid = |message: &str| BlueprintError::InvalidTargetBlueprints {
+        code: attribute.code.clone(),
+        message: message.to_owned(),
+    };
+    if attribute.target_blueprint.is_some() && !attribute.target_blueprints.is_empty() {
+        return Err(invalid(
+            "declare either target_blueprint or target_blueprints, not both",
+        ));
+    }
+    if let Some(target) = &attribute.target_blueprint {
+        validate_code(target, "attribute target_blueprint")?;
+        return Ok((Some(target.clone()), vec![target.clone()]));
+    }
+    let mut seen = HashSet::new();
+    for target in &attribute.target_blueprints {
+        validate_code(target, "attribute target_blueprints")?;
+        if !seen.insert(target.as_str()) {
+            return Err(invalid(&format!("'{target}' is listed more than once")));
+        }
+    }
+    Ok(match attribute.target_blueprints.as_slice() {
+        [] => (None, Vec::new()),
+        [single] => (Some(single.clone()), vec![single.clone()]),
+        targets => (None, targets.to_vec()),
+    })
+}
+
+fn parse_relationship_hierarchy(
+    attribute: &RawAttributeDeclaration,
+    blueprint_code: &str,
+    kind: &BlueprintKind,
+    targets: &[String],
+) -> Result<Option<String>, BlueprintError> {
+    let invalid = |message: &str| BlueprintError::InvalidRelationshipHierarchy {
+        code: attribute.code.clone(),
+        message: message.to_owned(),
+    };
+    let hierarchy = match (attribute.acyclic, attribute.tree) {
+        (_, Some(true)) if attribute.acyclic == Some(false) => {
+            return Err(invalid("a tree is always acyclic; remove acyclic = false"));
+        }
+        (_, Some(true)) => "tree",
+        (Some(true), _) => "acyclic",
+        _ => return Ok(None),
+    };
+    // Cycle checks follow direct default-context edges. Contextual overrides
+    // would let inherited values combine into a cycle no single write closes.
+    if attribute.context_editable != "default" {
+        return Err(invalid(
+            "hierarchies are shared by every context; set context_editable = \"default\"",
+        ));
+    }
+    if *kind == BlueprintKind::Entity
+        && !targets.is_empty()
+        && !targets.iter().any(|target| target == blueprint_code)
+    {
+        return Err(invalid(&format!(
+            "a hierarchy must be able to target its own blueprint '{blueprint_code}'"
+        )));
+    }
+    Ok(Some(hierarchy.to_owned()))
+}
+
+fn validate_unique_keys(
+    keys: &[UniqueKeyDefinition],
+    kind: &BlueprintKind,
+    attribute_codes: &HashSet<String>,
+) -> Result<(), BlueprintError> {
+    let mut key_codes = HashSet::new();
+    for key in keys {
+        let invalid = |message: String| BlueprintError::InvalidUniqueKey {
+            key: key.code.clone(),
+            message,
+        };
+        validate_code(&key.code, "unique key code")?;
+        if *kind != BlueprintKind::Entity {
+            return Err(invalid(
+                "only entity blueprints can define unique keys".into(),
+            ));
+        }
+        if !key_codes.insert(key.code.as_str()) {
+            return Err(invalid("the key code is duplicated".into()));
+        }
+        if key.attributes.is_empty() || key.attributes.len() > MAX_UNIQUE_KEY_ATTRIBUTES {
+            return Err(invalid(format!(
+                "a key combines 1 to {MAX_UNIQUE_KEY_ATTRIBUTES} attributes"
+            )));
+        }
+        let mut seen = HashSet::new();
+        for attribute in &key.attributes {
+            if !attribute_codes.contains(attribute) {
+                return Err(invalid(format!("unknown attribute '{attribute}'")));
+            }
+            if !seen.insert(attribute.as_str()) {
+                return Err(invalid(format!("attribute '{attribute}' is listed twice")));
+            }
+        }
+        if !UNIQUE_KEY_SCOPES.contains(&key.scope.as_str()) {
+            return Err(invalid(format!("unsupported scope '{}'", key.scope)));
+        }
+    }
+    Ok(())
 }
 
 fn parse_file_policy(
