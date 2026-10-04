@@ -57,8 +57,11 @@ that state itself.
 `facts` is the audit before/after diff of the mutation, so it has one entry per
 value that actually changed: an identical re-save yields no fact. Relationship
 attributes produce one fact per added or removed target (`relationship_add` or
-`relationship_remove`). File attributes are excluded: file-reference uploads,
-links, reorders and removals write audit evidence but enqueue no domain event.
+`relationship_remove`). File attribute writes (uploads, links, reorders and
+removals) emit `attribute_value.changed.v1` with one fact per changed
+attribute/context; its `before_value` and `after_value` are the ordered array of
+file IDs, or `null` when the list is empty. Every file write archives the
+previous list to value history, including appends to a many-valued attribute.
 System tags and metadata are not attribute values and produce no facts.
 Workflow event triggers can filter on these facts' `attribute_code` values; see
 [Workflows](workflows.md#changed-attribute-filters).
@@ -66,7 +69,20 @@ Workflow event triggers can filter on these facts' `attribute_code` values; see
 Core types are constants in `api::domain_events` and currently include:
 
 - `entity.created.v1`, `entity.updated.v1`, `entity.deleted.v1`,
-  `entity.migrated.v1`, `entity.published.v1`, and `entity.unpublished.v1`
+  `entity.migrated.v1`, `entity.published.v1`, and `entity.unpublished.v1`.
+  Publication payloads carry `entity_id`, `context_id` (the channel),
+  `published_at`, `published_by_user_id` and an optional `reason`.
+  `entity.published.v1` has `reason = "blueprint_bulk"` when it comes from
+  publishing a blueprint revision's entities, and no reason otherwise.
+  `entity.unpublished.v1` always has one of these reasons:
+  - `manual`: a person unpublished the entity from the channel.
+  - `entity_changed`: an entity edit withdrew every publication, because the
+    actor holds no `[publication].retain_on_edit_roles` role.
+  - `checks_failed`: a retained edit left the entity failing the channel's
+    required rules or `require_valid_entity`, so only that channel's
+    publication was withdrawn.
+  - `context_changed`: the channel context was changed or deleted.
+  - `entity_deleted`: the entity was deleted.
 - `entity.annotations_changed.v1`, emitted when an extension (or an operator
   repair) changes one extension's annotation namespace. Its payload names the
   entity, blueprint revision, `extension_id`, new `revision`, and the tags and

@@ -327,8 +327,29 @@ worker-produced variant metadata and object keys. File bytes are not stored in
 PostgreSQL, and original object keys are not returned by the API.
 
 `attribute_file_references` binds a file to its file attribute, entity, and
-context in display order. It and `workspace_memberships.avatar_file_id` are the
-sources of truth for whether a file remains reachable. `files.purpose` is
+context in display order. A live file stays alive while any of these still
+references it (the `FILE_UNREFERENCED` predicate in
+`crates/repository/src/repository/files.rs` is the single definition, and a new
+kind of reference must be added there):
+
+- an attribute file reference (`attribute_file_references`);
+- a member avatar (`workspace_memberships.avatar_file_id`);
+- an unexpired conversation upload window (`files.attachment_expires_at`) or a
+  conversation message attachment (`conversation_message_attachments`);
+- an active retention hold (`file_retention_holds` not released and
+  `held_until` in the future);
+- a blueprint connector job's input file (`blueprint_connector_jobs.input_file_id`);
+- an extension operation schedule's `source_reference.input_file_id`;
+- an input artifact of a `pending` or `leased` extension operation run, matched
+  by the file's original object key, because input artifacts copy the key rather
+  than the file ID.
+
+Reconciliation locks its candidate rows with `FOR UPDATE SKIP LOCKED` before
+marking them deleted. Every writer that adds a reference to an existing file
+must therefore first lock the live file row with `SELECT … FOR UPDATE` (checking
+`deleted_at IS NULL`) in the same transaction: reconciliation then skips the
+file until the reference commits, and a reference attempted after the file was
+marked deleted fails its own live-file check. `files.purpose` is
 `attachment` for uploads that can be linked to entities or conversations and
 `avatar` for member avatars, which the worker turns into one square `avatar`
 variant and which cannot be linked to entity attributes. `file_processing_jobs` is a durable work queue owned by the file
