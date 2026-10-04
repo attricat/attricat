@@ -4704,3 +4704,75 @@ fn publication_channel_required_rules_compare_as_a_set() {
     disabled.enabled = false;
     assert!(!channel(&["a"]).same_settings(&disabled));
 }
+
+#[test]
+fn saved_search_state_is_validated_with_physical_codes_while_planning() {
+    // A state just under the size limit with logical keys grows past it once
+    // its context is mapped to an existing context with a long code.
+    let mut search: Value = serde_json::from_slice(UNNAMED_SEARCH).unwrap();
+    let base = serde_json::to_vec(&search["state"]).unwrap().len();
+    search["state"]["attributeFilters"][0]["value"] =
+        json!("x".repeat(catalog_validation::saved_search::MAX_STATE_BYTES - 20 - base));
+    let bytes = serde_json::to_vec(&search).unwrap();
+    let path = "saved-searches/unnamed.json";
+    let (mut manifest, files) = seed_manifest();
+    manifest["resources"]["saved_searches"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|resource| resource["path"] == path)
+        .unwrap()["sha256"] = json!(digest(&bytes));
+    let files = files
+        .into_iter()
+        .map(|(candidate, content)| {
+            if candidate == path {
+                (candidate, bytes.as_slice())
+            } else {
+                (candidate, content)
+            }
+        })
+        .collect::<Vec<_>>();
+    let pack = ValidatedSolutionPack::from_tar_zst(&archive(&manifest, &files)).unwrap();
+    let plan = |context_code: String| {
+        build_solution_pack_plan(
+            &pack,
+            "ecom",
+            BlueprintPublication::Publish,
+            &seed_workspace(SeedWorkspaceSnapshot {
+                existing_contexts: BTreeMap::from([(
+                    "contexts/pl".to_owned(),
+                    crate::solution_pack_seeds::ExistingContextSnapshot {
+                        id: uuid::Uuid::from_u128(7),
+                        code: context_code,
+                        publication_channel: Some(
+                            crate::solution_pack_seeds::ExistingPublicationChannel {
+                                enabled: true,
+                                required_rule_codes: Vec::new(),
+                                require_valid_entity: false,
+                            },
+                        ),
+                    },
+                )]),
+                ..Default::default()
+            }),
+        )
+        .unwrap()
+    };
+    let short = plan("PL".to_owned());
+    assert_eq!(
+        action(&short, "saved-searches/unnamed").action,
+        PlanActionKind::Create
+    );
+    let long = plan("P".repeat(100));
+    let search = action(&long, "saved-searches/unnamed");
+    assert_eq!(
+        (search.action, search.reason_code),
+        (PlanActionKind::Blocked, "saved_search_state_invalid")
+    );
+    assert_eq!(
+        search.summary["invalid_state_reason"],
+        "search state exceeds 32 KiB"
+    );
+    assert!(search.normalized_payload.is_none());
+    assert!(!long.ready);
+}

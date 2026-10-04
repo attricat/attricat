@@ -588,27 +588,48 @@ fn plan_saved_searches(input: &DependentPlanInput<'_>, (mappings, actions): &mut
             .pack
             .saved_search(&resource.key)
             .expect("validated saved search");
-        let outcome = if !search
+        let blueprint = &input.blueprint_mappings[&search.blueprint];
+        let context = input.context_mapping(search.context.as_deref());
+        let dependencies_available = search
             .referenced_blueprints
             .iter()
             .all(|key| input.blueprint_available(key))
-            || !input.context_available(search.context.as_deref())
-        {
+            && input.context_available(search.context.as_deref());
+        // Physical codes can make a state that was valid with logical keys
+        // invalid, for example longer than the size limit. Apply validates
+        // the same state, so the plan blocks it instead of failing apply.
+        let state = dependencies_available
+            .then(|| physical_search_state(search, input.blueprint_mappings, context));
+        let invalid_state = state.as_ref().and_then(|state| {
+            saved_search::validate_state(saved_search::EXPLORER_SEARCH_KIND, state).err()
+        });
+        let outcome = if !dependencies_available {
             (PlanActionKind::Blocked, "dependency_not_creatable")
+        } else if invalid_state.is_some() {
+            (PlanActionKind::Blocked, "saved_search_state_invalid")
         } else {
             (PlanActionKind::Create, "target_absent")
         };
         let (action, reason_code) = optional_outcome(resource.required, outcome);
-        let blueprint = &input.blueprint_mappings[&search.blueprint];
-        let context = input.context_mapping(search.context.as_deref());
         let normalized_payload = (action == PlanActionKind::Create).then(|| {
             serde_json::json!({
                 "name": search.name,
                 "description": search.description,
                 "visibility": "workspace",
-                "state": physical_search_state(search, input.blueprint_mappings, context),
+                "state": state,
             })
         });
+        let mut summary = serde_json::json!({
+            "required": resource.required,
+            "name": search.name,
+            "blueprint": search.blueprint,
+            "blueprint_code": blueprint.target_code,
+            "context": search.context,
+            "visibility": "workspace",
+        });
+        if let Some(reason) = invalid_state {
+            summary["invalid_state_reason"] = Value::String(reason);
+        }
         mappings.push(PlannedMapping {
             resource_kind: PlanResourceKind::SavedSearch,
             logical_key: resource.key.clone(),
@@ -623,14 +644,7 @@ fn plan_saved_searches(input: &DependentPlanInput<'_>, (mappings, actions): &mut
             logical_key: resource.key.clone(),
             action,
             reason_code,
-            summary: serde_json::json!({
-                "required": resource.required,
-                "name": search.name,
-                "blueprint": search.blueprint,
-                "blueprint_code": blueprint.target_code,
-                "context": search.context,
-                "visibility": "workspace",
-            }),
+            summary,
             normalized_payload,
             preconditions: target_absent_precondition(
                 action,

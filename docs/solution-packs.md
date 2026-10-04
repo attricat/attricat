@@ -163,7 +163,10 @@ created or mapped workspace context.
 - **Saved searches** are created as named Explore searches with **Workspace**
   visibility, so they appear in every authorized member's saved searches. The
   person who applies the plan owns them. Their blueprint, relationship and
-  context references use the plan's physical codes.
+  context references use the plan's physical codes. Planning validates the
+  search with those codes like any saved-search write; a search that becomes
+  invalid, for example larger than 32 KiB, is `saved_search_state_invalid` and
+  its summary gives `invalid_state_reason`.
 
 Enabled rules and workflows react to later workspace activity, including sample
 entities created by the same application. Review them before applying. Once
