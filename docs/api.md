@@ -580,7 +580,7 @@ results report the same `code`, `message` and `details`.
 | `403` | `status_separation_of_duties` | `attribute`, `context`, `edge` (the earlier transition made by this user) |
 | `409` | `record_locked` | `attribute`, `context`, `status` (the locking status) |
 | `409` | `unique_key_conflict` | `key`, `context`, normalized `values`, `conflicting_entity_id` |
-| `409` | `unique_key_duplicates` | `duplicates` (up to 20 `{ key, context, values, entity_ids }`) and `total`; returned by blueprint publication |
+| `409` | `unique_key_duplicates` | `duplicates` (up to 20 `{ key, context, values, entity_ids }`) and `total`; returned by blueprint publication and context reparenting |
 | `409` | `relationship_cycle` | `attribute`, and `path`: entity IDs from the written entity back to it |
 | `409` | `relationship_hierarchy_violations` | `attribute`, `cycles`, `multiple_parents`; returned by blueprint publication |
 | `409` | `relationship_cardinality_conflict` | `attribute`, `context_id`, `source_entity_id`, `target_entity_id`, `conflicting_source_entity_id` |

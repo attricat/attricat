@@ -543,7 +543,7 @@ pub enum RepositoryError {
         conflicting_entity_id: Uuid,
     },
     #[error(
-        "{total} unique key value(s) are already shared by more than one entity; resolve the duplicates before publishing: {}",
+        "{total} unique key value(s) are already shared by more than one entity; resolve the duplicates first: {}",
         structural_constraints::describe_duplicates(.duplicates)
     )]
     UniqueKeyDuplicates {

@@ -40,7 +40,7 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | `relationship_target_type_mismatch` | 422 | Schemat powiązanej encji nie jest dozwolony przez `target_blueprint` ani `target_blueprints`. |
 | `relationship_cycle` | 409 | Powiązanie zamknęłoby cykl w relacji `acyclic` lub `tree`. `details.path` wymienia identyfikatory encji wzdłuż cyklu. |
 | `unique_key_conflict` | 409 | Inna encja ma już te wartości klucza unikalnego. `details` zawiera `key`, `context`, `values` i `conflicting_entity_id`. |
-| `unique_key_duplicates` | 409 | Publikacja nowego klucza unikalnego nie powiodła się, bo istniejące encje współdzielą wartości. `details.duplicates` je wymienia. |
+| `unique_key_duplicates` | 409 | Publikacja nowego klucza unikalnego lub przeniesienie kontekstu pod innego rodzica nie powiodły się, bo istniejące encje współdzieliłyby wartości. `details.duplicates` je wymienia. |
 | `relationship_hierarchy_violations` | 409 | Publikacja `acyclic` lub `tree` nie powiodła się, bo istniejące powiązania zawierają cykle lub nadmiarowych rodziców. `details` je wymienia. |
 | `stale_entity` | 409 | `expected_updated_at` nie odpowiada już encji. Wczytaj ją ponownie i spróbuj jeszcze raz. |
 | `status_precondition_required` | 428 | Zapis atrybutu statusu nie zawiera `expected_updated_at`. Odczytaj encję i wyślij jej `updated_at`. |

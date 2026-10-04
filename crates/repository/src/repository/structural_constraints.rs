@@ -171,7 +171,7 @@ impl CatalogRepository {
                 RecordState::After,
             )
             .await?;
-            let rows = key_rows(&keys, &contexts, &records)?;
+            let rows = key_rows(&keys, &contexts, &records, None)?;
             (contexts, rows)
         };
         let existing = sqlx::query_as::<_, (String, Uuid, String)>(
@@ -264,52 +264,87 @@ impl CatalogRepository {
         Ok(())
     }
 
-    /// A new context resolves exactly like its parent until it receives
-    /// values, so context-scoped key values are copied from the parent.
+    /// Takes the per-family key lock exclusively for every family whose
+    /// latest published revision has context-scoped keys, in ID order. Every
+    /// key writer holds the same lock shared until it commits, so a context
+    /// change that holds these locks sees every committed key row and no
+    /// writer computes rows against the old context tree. Returns the
+    /// families.
+    pub(super) async fn lock_context_unique_keys(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+    ) -> Result<Vec<Uuid>, RepositoryError> {
+        let families: Vec<Uuid> = sqlx::query_scalar(
+            r#"SELECT id FROM (
+                   SELECT DISTINCT ON (id) id, unique_keys FROM blueprints
+                   WHERE workspace_id = $1 AND status = 'published' AND deleted_at IS NULL
+                   ORDER BY id, version DESC
+               ) latest
+               WHERE unique_keys @> '[{"scope":"context"}]'::jsonb
+               ORDER BY id"#,
+        )
+        .bind(self.workspace_id.0)
+        .fetch_all(&mut **transaction)
+        .await?;
+        for blueprint_id in &families {
+            lock_unique_keys(transaction, self.workspace_id.0, *blueprint_id, true).await?;
+        }
+        Ok(families)
+    }
+
+    /// Indexes a new context's context-scoped key values. The context has no
+    /// values yet, so each entity resolves there like in the parent except
+    /// for attributes with `context_fallback = "none"`, which are missing.
+    /// The caller holds [`Self::lock_context_unique_keys`].
     pub(super) async fn seed_context_unique_keys(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
+        families: &[Uuid],
         context_id: Uuid,
-        parent_id: Uuid,
     ) -> Result<(), RepositoryError> {
-        let has_context_keys = sqlx::query_scalar::<_, bool>(
-            r#"SELECT EXISTS (SELECT 1 FROM blueprints
-                WHERE workspace_id = $1 AND status = 'published' AND deleted_at IS NULL
-                  AND unique_keys @> '[{"scope":"context"}]'::jsonb)"#,
-        )
-        .bind(self.workspace_id.0)
-        .fetch_one(&mut **transaction)
-        .await?;
-        if !has_context_keys {
+        if families.is_empty() {
             return Ok(());
         }
-        // Wait for in-flight entity writers so every committed parent row is
-        // copied; later writes recompute every context for their entity.
-        sqlx::query("LOCK TABLE entities IN SHARE ROW EXCLUSIVE MODE")
-            .execute(&mut **transaction)
+        let contexts = ContextTree::load(transaction, self.workspace_id.0).await?;
+        for blueprint_id in families {
+            let keys: Vec<_> =
+                enforced_unique_keys(transaction, self.workspace_id.0, *blueprint_id)
+                    .await?
+                    .into_iter()
+                    .filter(|key| key.scope == UniqueKeyScope::Context)
+                    .collect();
+            if keys.is_empty() {
+                continue;
+            }
+            let records = load_records(
+                transaction,
+                self.workspace_id.0,
+                Selection::Family(*blueprint_id),
+                Some(&key_codes(&keys)),
+                RecordState::After,
+            )
             .await?;
-        sqlx::query(
-            r#"INSERT INTO entity_unique_key_values
-                   (workspace_id, blueprint_id, key_code, context_id, key_hash, key_values, entity_id)
-               SELECT k.workspace_id, k.blueprint_id, k.key_code, $3, k.key_hash, k.key_values, k.entity_id
-               FROM entity_unique_key_values k
-               WHERE k.workspace_id = $1 AND k.context_id = $2
-                 AND EXISTS (
-                     SELECT 1
-                     FROM LATERAL (
-                         SELECT b.unique_keys FROM blueprints b
-                         WHERE b.workspace_id = k.workspace_id AND b.id = k.blueprint_id
-                           AND b.status = 'published' AND b.deleted_at IS NULL
-                         ORDER BY b.version DESC LIMIT 1
-                     ) latest, jsonb_array_elements(latest.unique_keys) declared
-                     WHERE declared ->> 'code' = k.key_code AND declared ->> 'scope' = 'context'
-                 )"#,
-        )
-        .bind(self.workspace_id.0)
-        .bind(parent_id)
-        .bind(context_id)
-        .execute(&mut **transaction)
-        .await?;
+            let rows = key_rows(&keys, &contexts, &records, Some(context_id))?;
+            self.store_key_rows(transaction, *blueprint_id, &contexts, &rows)
+                .await?;
+        }
+        Ok(())
+    }
+
+    /// Re-indexes `families` after a context reparent changed how values
+    /// are inherited. Entities are not re-synced one by one, because a row
+    /// computed under the new tree could collide with another entity's row
+    /// that is still stale; real duplicates are reported together. The
+    /// caller holds [`Self::lock_context_unique_keys`].
+    pub(super) async fn rebuild_context_unique_keys(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        families: &[Uuid],
+    ) -> Result<(), RepositoryError> {
+        for blueprint_id in families {
+            self.rebuild_family_unique_keys(transaction, *blueprint_id)
+                .await?;
+        }
         Ok(())
     }
 
@@ -392,9 +427,22 @@ impl CatalogRepository {
             RecordState::After,
         )
         .await?;
-        let rows = key_rows(&keys, &contexts, &records)?;
+        let rows = key_rows(&keys, &contexts, &records, None)?;
+        self.store_key_rows(transaction, blueprint_id, &contexts, &rows)
+            .await
+    }
+
+    /// Inserts a family's freshly computed key rows, reporting values that
+    /// several of them share instead of failing on the unique constraint.
+    async fn store_key_rows(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        blueprint_id: Uuid,
+        contexts: &ContextTree,
+        rows: &[KeyRow],
+    ) -> Result<(), RepositoryError> {
         let mut groups: BTreeMap<(&str, Uuid, &str), Vec<&KeyRow>> = BTreeMap::new();
-        for row in &rows {
+        for row in rows {
             groups
                 .entry((row.key_code.as_str(), row.context_id, row.key_hash.as_str()))
                 .or_default()
@@ -882,20 +930,29 @@ async fn lock_unique_keys(
     Ok(())
 }
 
-/// Computes every key row for `records`. A key without a value for one of its
-/// attributes in a context is absent there. Workspace keys use the default
-/// context only; context keys resolve every context with inheritance.
+/// Computes every key row for `records`, or only `only_context`'s. A key
+/// without a value for one of its attributes in a context is absent there.
+/// Workspace keys use the default context only; context keys resolve every
+/// context with inheritance.
 fn key_rows(
     keys: &[EnforcedUniqueKey],
     contexts: &ContextTree,
     records: &BTreeMap<Uuid, RecordValues>,
+    only_context: Option<Uuid>,
 ) -> Result<Vec<KeyRow>, RepositoryError> {
     let default_context = contexts.default_context()?.id;
+    let wanted = |context_id: Uuid| only_context.is_none_or(|only| only == context_id);
     let mut paths: Vec<(Uuid, Vec<Uuid>)> = Vec::new();
     for context in contexts.nodes() {
-        paths.push((context.id, contexts.path(context.id, true)?));
+        if wanted(context.id) {
+            paths.push((context.id, contexts.path(context.id, true)?));
+        }
     }
-    let workspace_path = vec![(default_context, vec![default_context])];
+    let workspace_path = if wanted(default_context) {
+        vec![(default_context, vec![default_context])]
+    } else {
+        Vec::new()
+    };
     let mut rows = Vec::new();
     for record in records.values() {
         for key in keys {
@@ -1062,6 +1119,7 @@ mod tests {
             &[key("sku", &["sku"], UniqueKeyScope::Workspace)],
             &contexts,
             &sources,
+            None,
         )
         .unwrap();
         assert_eq!(rows.len(), 2, "a blank string is missing");
@@ -1070,7 +1128,7 @@ mod tests {
 
         let mut sensitive = key("sku", &["sku"], UniqueKeyScope::Workspace);
         sensitive.case_sensitive = true;
-        let rows = key_rows(&[sensitive], &contexts, &sources).unwrap();
+        let rows = key_rows(&[sensitive], &contexts, &sources, None).unwrap();
         assert_ne!(rows[0].key_hash, rows[1].key_hash);
         assert_eq!(rows[1].key_values, serde_json::json!(["AB-1 x"]));
     }
@@ -1095,6 +1153,7 @@ mod tests {
             &[key("price", &["price"], UniqueKeyScope::Workspace)],
             &contexts,
             &sources,
+            None,
         )
         .unwrap();
         assert_eq!(rows[0].key_values, serde_json::json!(["1.5"]));
@@ -1124,6 +1183,7 @@ mod tests {
             )],
             &contexts,
             &sources,
+            None,
         )
         .unwrap();
         assert_eq!(composite.len(), 1, "entity 11 has no revision");
@@ -1134,6 +1194,7 @@ mod tests {
             &[key("slug", &["slug"], UniqueKeyScope::Context)],
             &contexts,
             &sources,
+            None,
         )
         .unwrap();
         let by_context: HashMap<_, _> = slugs
@@ -1153,9 +1214,29 @@ mod tests {
             &[key("slug", &["slug"], UniqueKeyScope::Context)],
             &contexts,
             &none,
+            None,
         )
         .unwrap();
         assert_eq!(slugs.len(), 2, "fallback none stops inheritance");
+
+        let pl_web = Uuid::from_u128(3);
+        let only = |records| {
+            key_rows(
+                &[
+                    key("slug", &["slug"], UniqueKeyScope::Context),
+                    key("document", &["document"], UniqueKeyScope::Workspace),
+                ],
+                &contexts,
+                records,
+                Some(pl_web),
+            )
+            .unwrap()
+        };
+        let inherited = only(&sources);
+        assert_eq!(inherited.len(), 1, "workspace keys live in default only");
+        assert_eq!(inherited[0].context_id, pl_web);
+        assert_eq!(inherited[0].key_values, serde_json::json!(["koszula"]));
+        assert!(only(&none).is_empty(), "a new context has no direct values");
     }
 
     #[test]

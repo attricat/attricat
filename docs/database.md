@@ -408,10 +408,15 @@ Repository code owns everything else, inside the write transaction:
 - Publication takes the same lock exclusively, then re-indexes the family when
   the latest published revision's keys changed, reporting existing duplicates
   instead of failing on the constraint.
-- Context creation copies the parent's context-scoped rows; reparenting
-  revalidates every entity structurally (see
-  [Status control](status-control.md)), which recomputes them, and rechecks
-  every hierarchy; context deletion cascades.
+- Context creation and reparenting first take the lock exclusively for
+  every family with context-scoped keys, in ID order, so they see every
+  committed row and no writer computes rows against the old tree. Creation
+  indexes the new context from the family's values (as in the parent, except
+  that `context_fallback = "none"` attributes are missing there). Reparenting
+  re-indexes those families as a whole, reporting real duplicates as
+  `409 unique_key_duplicates`, then revalidates every entity structurally
+  (see [Status control](status-control.md)) and rechecks every hierarchy.
+  Context deletion cascades.
 - Key values are the entity's values resolved per context like every other
   read (nearest context with a value; `context_fallback = "none"` stops
   inheritance) and normalized: strings trimmed, whitespace collapsed and

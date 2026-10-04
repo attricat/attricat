@@ -76,6 +76,9 @@ impl CatalogRepository {
         if !parent_exists {
             return Err(RepositoryError::InvalidContext);
         }
+        // Key writers hold these locks shared until they commit, so the new
+        // context is indexed from committed values and later writes see it.
+        let key_families = self.lock_context_unique_keys(transaction).await?;
         let context = query_as::<_, Db<AttributeContext>>(
             r#"INSERT INTO attribute_contexts (id, workspace_id, code, data, parent_id)
             VALUES ($1, $2, $3, $4, $5) RETURNING id, code, data, parent_id"#,
@@ -88,7 +91,7 @@ impl CatalogRepository {
         .fetch_one(&mut **transaction)
         .await?
         .into_domain();
-        self.seed_context_unique_keys(transaction, context_id, parent_id)
+        self.seed_context_unique_keys(transaction, &key_families, context_id)
             .await?;
         advance_generation(transaction, workspace_id, Generation::Contexts).await?;
         Ok(context)
@@ -169,6 +172,9 @@ impl CatalogRepository {
         sqlx::query("LOCK TABLE entities IN SHARE ROW EXCLUSIVE MODE")
             .execute(&mut *transaction)
             .await?;
+        // The table lock does not wait for writers that hold only entity row
+        // locks; every key writer holds its family's key lock until commit.
+        let key_families = self.lock_context_unique_keys(&mut transaction).await?;
         let context_code = sqlx::query_scalar::<_, String>(
             "SELECT code FROM attribute_contexts WHERE id = $1 AND workspace_id = $2",
         )
@@ -204,6 +210,10 @@ impl CatalogRepository {
             .bind(self.workspace_id.0)
             .fetch_all(&mut *transaction).await?
             .into_domain();
+        // Re-index whole families first: syncing entities one at a time
+        // could collide with another entity's still-stale row.
+        self.rebuild_context_unique_keys(&mut transaction, &key_families)
+            .await?;
         // Reparenting is not an edit of any entity: it is revalidated
         // structurally, without transition enforcement or status effects.
         for entity in &entities {

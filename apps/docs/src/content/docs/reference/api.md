@@ -40,7 +40,7 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `relationship_target_type_mismatch` | 422 | The linked entity's blueprint is not allowed by `target_blueprint` or `target_blueprints`. |
 | `relationship_cycle` | 409 | The link would close a cycle in an `acyclic` or `tree` relationship. `details.path` lists the entity IDs around the cycle. |
 | `unique_key_conflict` | 409 | Another entity already has these values for a unique key. `details` has `key`, `context`, `values`, and `conflicting_entity_id`. |
-| `unique_key_duplicates` | 409 | Publishing a new unique key failed because existing entities share values. `details.duplicates` lists them. |
+| `unique_key_duplicates` | 409 | Publishing a new unique key, or moving a context to another parent, failed because existing entities would share values. `details.duplicates` lists them. |
 | `relationship_hierarchy_violations` | 409 | Publishing `acyclic` or `tree` failed because existing links contain cycles or extra parents. `details` lists them. |
 | `stale_entity` | 409 | `expected_updated_at` no longer matches the entity. Reload it and try again. |
 | `status_precondition_required` | 428 | A write to a status attribute did not send `expected_updated_at`. Read the entity and send its `updated_at`. |

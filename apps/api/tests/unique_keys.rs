@@ -570,6 +570,157 @@ value_type = "string"
     assert_eq!(
         current_values(&client, &base_url, &copy).await,
         vec![json!("Shirt")]
+||||||| parent of 701ffd5 (Index context unique keys under the exclusive family lock)
+
+const DEFAULT_CONTEXT: &str = "00000000-0000-4000-8000-000000000001";
+
+async fn create_context(client: &Client, base_url: &str, code: &str, parent: &str) -> Value {
+    client
+        .post(format!("{base_url}/contexts"))
+        .json(&json!({ "code": code, "data": {}, "parent_id": parent }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap()
+}
+
+async fn set_scalar(
+    client: &Client,
+    base_url: &str,
+    entity: &Value,
+    context: &Value,
+    code: &str,
+    value: &str,
+) -> reqwest::Response {
+    client
+        .post(format!(
+            "{base_url}/entities/{}/values",
+            entity["id"].as_str().unwrap()
+        ))
+        .json(&json!({ "values": [{
+            "kind": "scalar", "attribute_code": code,
+            "context_id": context["id"], "value": value,
+        }] }))
+        .send()
+        .await
+        .unwrap()
+}
+
+#[sqlx::test]
+async fn new_contexts_do_not_inherit_keys_of_attributes_without_fallback(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    create_blueprint(
+        &client,
+        &base_url,
+        r#"
+format_version = 1
+code = "uk_handle"
+name = "Handle"
+kind = "entity"
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["handle"]
+[[unique_keys]]
+code = "handle"
+attributes = ["handle"]
+scope = "context"
+[[attributes]]
+code = "handle"
+value_type = "string"
+context_fallback = "none"
+"#,
+    )
+    .await;
+    let first = create_entity_with(
+        &client,
+        &base_url,
+        "uk_handle",
+        json!([scalar("handle", json!("x"))]),
+    )
+    .await;
+    let second = create_entity_with(&client, &base_url, "uk_handle", json!([])).await;
+    let polish = create_context(&client, &base_url, "uk-none-pl", DEFAULT_CONTEXT).await;
+
+    // The first entity has no Polish handle, so "x" is free there.
+    set_scalar(&client, &base_url, &second, &polish, "handle", "x")
+        .await
+        .error_for_status()
+        .unwrap();
+    let taken = set_scalar(&client, &base_url, &first, &polish, "handle", "X").await;
+    assert_eq!(taken.status(), StatusCode::CONFLICT);
+    assert_eq!(
+        taken.json::<Value>().await.unwrap()["error"]["details"]["conflicting_entity_id"],
+        second["id"]
+    );
+
+    server.abort();
+}
+
+#[sqlx::test]
+async fn reparenting_a_context_can_swap_two_entities_key_values(pool: PgPool) {
+    let (base_url, server) = start_server(pool).await;
+    let client = authenticated_client();
+    create_blueprint(
+        &client,
+        &base_url,
+        r#"
+format_version = 1
+code = "uk_swap"
+name = "Swap"
+kind = "entity"
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["slug"]
+[[unique_keys]]
+code = "slug"
+attributes = ["slug"]
+scope = "context"
+[[attributes]]
+code = "slug"
+value_type = "string"
+"#,
+    )
+    .await;
+    let polish = create_context(&client, &base_url, "uk-swap-pl", DEFAULT_CONTEXT).await;
+    let moved = create_context(&client, &base_url, "uk-swap-x", DEFAULT_CONTEXT).await;
+    let slugs = |default: &str, local: &str| {
+        let mut local_slug = scalar("slug", json!(local));
+        local_slug["context_id"] = polish["id"].clone();
+        json!([scalar("slug", json!(default)), local_slug])
+    };
+    let first = create_entity_with(&client, &base_url, "uk_swap", slugs("a", "b")).await;
+    create_entity_with(&client, &base_url, "uk_swap", slugs("b", "a")).await;
+
+    // X resolves a/b under default and b/a under Polish.
+    client
+        .put(format!(
+            "{base_url}/contexts/id/{}",
+            moved["id"].as_str().unwrap()
+        ))
+        .json(&json!({ "parent_id": polish["id"], "data": {} }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+
+    let third = create_entity_with(
+        &client,
+        &base_url,
+        "uk_swap",
+        json!([scalar("slug", json!("c"))]),
+    )
+    .await;
+    let taken = set_scalar(&client, &base_url, &third, &moved, "slug", "b").await;
+    assert_eq!(taken.status(), StatusCode::CONFLICT);
+    assert_eq!(
+        taken.json::<Value>().await.unwrap()["error"]["details"]["conflicting_entity_id"],
+        first["id"]
     );
 
     server.abort();
