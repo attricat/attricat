@@ -23,19 +23,26 @@ export const RuleRevisionCell = ({
       });
 };
 
-// Findings and runs carry only entity IDs, and there is no batch label lookup.
-export const EntityIdLink = ({ entityId }: { entityId: string }) => {
+/** Links an entity by its display label, or by a short ID until one loads. */
+export const EntityIdLink = ({
+  entityId,
+  label,
+}: {
+  entityId: string;
+  label: string | undefined;
+}) => {
   const { t } = useTranslation();
   return (
-    <Link
-      aria-label={t('rules.openEntity', { id: entityId })}
-      params={{ entityId }}
-      title={entityId}
-      to="/entities/$entityId"
-    >
-      <Box component="span" sx={{ fontFamily: 'monospace' }}>
-        {entityId.slice(0, SHORT_ENTITY_ID_LENGTH)}
-      </Box>
+    <Link params={{ entityId }} title={entityId} to="/entities/$entityId">
+      {label ?? (
+        <Box
+          aria-label={t('rules.entityWithoutLabel', { id: entityId })}
+          component="span"
+          sx={{ fontFamily: 'monospace' }}
+        >
+          {entityId.slice(0, SHORT_ENTITY_ID_LENGTH)}
+        </Box>
+      )}
     </Link>
   );
 };

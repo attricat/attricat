@@ -1068,3 +1068,42 @@ pub(super) async fn relationship_tree_facet_children(
             .await?,
     ))
 }
+
+/// Most entities one label lookup may name.
+const MAX_ENTITY_LABEL_IDS: usize = 100;
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct EntityLabelsRequest {
+    entity_ids: Vec<Uuid>,
+}
+
+#[derive(serde::Serialize)]
+pub(super) struct EntityLabelsResponse {
+    items: Vec<crate::model::EntityLabel>,
+}
+
+/// Names entities that other views only know by ID. Unreadable, deleted and
+/// unknown IDs are omitted alike, so the response does not reveal which exist.
+pub(super) async fn entity_labels(
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    super::auth::AuthenticatedPrincipal(caller, _): super::auth::AuthenticatedPrincipal,
+    super::auth::ActiveWorkspace(workspace): super::auth::ActiveWorkspace,
+    ApiJson(input): ApiJson<EntityLabelsRequest>,
+) -> Result<Json<EntityLabelsResponse>, ApiError> {
+    let mut entity_ids = input.entity_ids;
+    entity_ids.sort_unstable();
+    entity_ids.dedup();
+    if entity_ids.is_empty() || entity_ids.len() > MAX_ENTITY_LABEL_IDS {
+        return Err(ApiError::invalid_input(format!(
+            "entity_ids must contain between 1 and {MAX_ENTITY_LABEL_IDS} distinct IDs"
+        )));
+    }
+    let readable = repository
+        .authorized_entity_ids(caller, workspace, "entities.read", &entity_ids)
+        .await?;
+    entity_ids.retain(|id| readable.contains(id));
+    Ok(Json(EntityLabelsResponse {
+        items: repository.entity_labels(&entity_ids).await?,
+    }))
+}

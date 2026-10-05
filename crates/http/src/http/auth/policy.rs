@@ -20,6 +20,9 @@ pub(super) enum TargetKind {
     /// Entity batches: the handler authorizes every operation against its own
     /// entity, so entity-scoped grants work as for single-entity writes.
     EntityBatch,
+    /// Entity label lookups: the handler keeps only the requested entities
+    /// the caller may read, so entity- and blueprint-scoped grants work.
+    EntityList,
     WorkspaceNavigation,
     ContextId,
     ContextCode,
@@ -431,6 +434,9 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     if path == "/v1/entities/batch" {
         return Some(write(TargetKind::EntityBatch));
     }
+    if path == "/v1/entities/labels" {
+        return Some(read(TargetKind::EntityList));
+    }
     if path == "/v1/entities/search"
         || path == "/v1/entities/facets/relationship-tree/children"
         || path == "/entities"
@@ -452,7 +458,8 @@ pub(super) fn target(path: &str, kind: TargetKind) -> (Option<Uuid>, Option<Stri
         TargetKind::FileRead
         | TargetKind::WorkspaceNavigation
         | TargetKind::ExtensionRun
-        | TargetKind::EntityBatch => (None, None),
+        | TargetKind::EntityBatch
+        | TargetKind::EntityList => (None, None),
         TargetKind::EntityId => {
             let index = if segments.first() == Some(&"v1") {
                 2
@@ -476,6 +483,17 @@ pub(super) fn target(path: &str, kind: TargetKind) -> (Option<Uuid>, Option<Stri
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn entity_labels_are_reads_filtered_by_the_handler() {
+        let labels = policy(&Method::POST, "/v1/entities/labels").unwrap();
+        assert_eq!(labels.permission, "entities.read");
+        assert!(matches!(labels.target, TargetKind::EntityList));
+        assert_eq!(
+            target("/v1/entities/labels", TargetKind::EntityList),
+            (None, None)
+        );
+    }
 
     #[test]
     fn role_grants_require_both_member_and_grant_permissions() {

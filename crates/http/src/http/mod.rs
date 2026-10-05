@@ -892,6 +892,7 @@ pub fn router(state: AppState) -> Router {
             "/v1/entities/search",
             post(entity_reads::search_entity_previews),
         )
+        .route("/v1/entities/labels", post(entity_reads::entity_labels))
         .route(
             "/v1/entities/facets/relationship-tree/children",
             post(entity_reads::relationship_tree_facet_children),

@@ -165,6 +165,7 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `POST` | `/entities/{id}/relationships/replace` | Replace relationship target sets. |
 | `POST` | `/entities/{id}/relationships/remove` | Remove relationship targets. |
 | `POST` | `/v1/entities/search` | Search a selected blueprint across published revisions by default, or one explicit revision; supports text queries, validated filters, facets, and sorting. |
+| `POST` | `/v1/entities/labels` | Display labels for `{"entity_ids": [...]}` (1–100 IDs): `{"items": [{"id", "blueprint_code", "display"}]}`, with `display` per context code. Only live entities the caller may read are returned; other IDs are omitted. |
 | `POST` | `/v1/entities` | Create an entity atomically with form values and optional system annotations. |
 | `POST` | `/v1/entities/batch` | Apply create, update, and delete operations to several entities in one transaction; see [Entity batches](#entity-batches). |
 | `GET`, `PUT` | `/v1/entities/{id}` | Read or update an entity form atomically, including optional system annotations. |

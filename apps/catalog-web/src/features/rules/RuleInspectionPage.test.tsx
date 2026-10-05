@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { ApiRequestError } from '../../api/request';
 import { currentSession } from '../auth/api';
+import { getEntityLabels } from '../entities/api';
 import {
   acknowledgeFinding,
   disableRule,
@@ -44,6 +45,9 @@ vi.mock('@tanstack/react-router', () => ({
     ),
 }));
 vi.mock('../auth/api', () => ({ currentSession: vi.fn() }));
+vi.mock('../entities/api', () => ({
+  getEntityLabels: vi.fn(() => Promise.resolve({ items: [] })),
+}));
 vi.mock('./api', () => ({
   acknowledgeFinding: vi.fn(),
   disableRule: vi.fn(),
@@ -284,14 +288,24 @@ describe('RuleInspectionPage', () => {
     vi.mocked(listFindings).mockResolvedValue([
       { ...finding, entity_id: entityId },
     ]);
+    vi.mocked(getEntityLabels).mockResolvedValue({
+      items: [
+        {
+          id: entityId,
+          blueprint_code: 'product',
+          display: { default: 'Laptop' },
+        },
+      ],
+    });
     renderPage('findings');
     const row = (await screen.findByText('Check failed')).closest('tr')!;
     expect(await within(row).findByText('Check v1')).toBeTruthy();
-    const link = within(row).getByRole('link', {
-      name: `Open entity ${entityId}`,
-    });
+    const link = await within(row).findByRole('link', { name: 'Laptop' });
     expect(link.getAttribute('href')).toBe(`/entities/${entityId}`);
-    expect(link.textContent).toBe('223e4567');
+    expect(getEntityLabels).toHaveBeenCalledWith(
+      [entityId],
+      expect.any(AbortSignal),
+    );
   });
 
   it('names the rule revision and scope of each run', async () => {
@@ -340,7 +354,7 @@ describe('RuleInspectionPage', () => {
     // A revision missing from the definitions still identifies its rule.
     expect(within(scoped).getByText('Rule 423e4567 v4')).toBeTruthy();
     expect(
-      within(scoped).getByRole('link', { name: `Open entity ${id}` }),
-    ).toBeTruthy();
+      within(scoped).getByRole('link', { name: `Entity ${id}` }).textContent,
+    ).toBe(id.slice(0, 8));
   });
 });

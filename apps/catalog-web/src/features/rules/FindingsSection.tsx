@@ -26,6 +26,7 @@ export const FindingsSection = ({
   canManage,
   error,
   findings,
+  entityLabels,
   onAcknowledge,
   revisions,
 }: {
@@ -33,6 +34,7 @@ export const FindingsSection = ({
   canManage: boolean;
   error: boolean;
   findings: Awaited<ReturnType<typeof listFindings>> | undefined;
+  entityLabels: ReadonlyMap<string, string>;
   onAcknowledge: (id: string) => void;
   revisions: RuleRevisions;
 }) => {
@@ -86,7 +88,10 @@ export const FindingsSection = ({
                     />
                   </TableCell>
                   <TableCell>
-                    <EntityIdLink entityId={finding.entity_id} />
+                    <EntityIdLink
+                      entityId={finding.entity_id}
+                      label={entityLabels.get(finding.entity_id)}
+                    />
                   </TableCell>
                   <TableCell>
                     {t(`rules.findingStates.${finding.state}`, {

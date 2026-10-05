@@ -118,6 +118,7 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 | `GET`, `DELETE` | `/entities/{id}` | Read or delete an entity. |
 | `POST` | `/v1/entities/{id}/duplicate` | Create a copy of an entity with its values, relationships, and files. Unique-key values are left out. |
 | `POST` | `/v1/entities/search` | Search. See below. |
+| `POST` | `/v1/entities/labels` | Display labels for up to 100 entity IDs: `{"entity_ids": [...]}`. Returns only live entities you can read; other IDs are left out. |
 | `POST` | `/v1/entities/facets/relationship-tree/children` | One page of a relationship facet's children, with counts. |
 | `GET` | `/entities/{id}/preview` | Values per context, with related entities inline. |
 | `GET` | `/entities/{id}/resolved-preview?context_id=…` | Values resolved in one context, with the context each came from. |

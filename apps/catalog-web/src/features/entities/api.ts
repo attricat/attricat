@@ -8,6 +8,7 @@ import {
 import {
   blueprintSchema,
   blueprintWithAttributesSchema,
+  entityLabelsResponseSchema,
   createEntityRequestSchema,
   entityHierarchySchema,
   entityAuditChangeSchema,
@@ -122,6 +123,16 @@ export const listEntityBlueprints = (signal?: AbortSignal) =>
     z.array(blueprintSchema),
     signal === undefined ? undefined : { signal },
   );
+export const getEntityLabels = (
+  entityIds: readonly string[],
+  signal?: AbortSignal,
+) =>
+  request('/api/v1/entities/labels', entityLabelsResponseSchema, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ entity_ids: z.array(uuidSchema).parse(entityIds) }),
+    ...(signal === undefined ? {} : { signal }),
+  });
 export const getEntityPreview = (id: string, signal?: AbortSignal) =>
   request(
     `/api/entities/${encodeURIComponent(uuidSchema.parse(id))}/preview?relationship_depth=${ENTITY_PREVIEW_QUERY.relationshipDepth}&relationship_limit=${ENTITY_PREVIEW_QUERY.relationshipLimit}`,

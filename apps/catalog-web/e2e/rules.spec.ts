@@ -96,8 +96,8 @@ attribute_code = "${attribute}"`,
   await expect(findingRow).toContainText('Open');
   await expect(findingRow).toContainText(`${ruleName} v1`);
   await expect(
-    findingRow.getByRole('link', { name: `Open entity ${missing.id}` }),
-  ).toBeVisible();
+    findingRow.getByRole('link', { name: 'Incomplete product' }),
+  ).toHaveAttribute('href', `/entities/${missing.id}`);
   await findingRow.getByRole('button', { name: 'Acknowledge' }).click();
   await expect(findingRow).toContainText('Acknowledged');
   await expect(

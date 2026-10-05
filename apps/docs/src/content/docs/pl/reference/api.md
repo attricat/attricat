@@ -118,6 +118,7 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 | `GET`, `DELETE` | `/entities/{id}` | Odczytuje lub usuwa encję. |
 | `POST` | `/v1/entities/{id}/duplicate` | Tworzy kopię encji z jej wartościami, relacjami i plikami. Wartości kluczy unikalnych nie są kopiowane. |
 | `POST` | `/v1/entities/search` | Wyszukiwanie. Zobacz poniżej. |
+| `POST` | `/v1/entities/labels` | Etykiety wyświetlane dla maksymalnie 100 identyfikatorów encji: `{"entity_ids": [...]}`. Zwraca tylko istniejące encje, które możesz odczytać; pozostałe identyfikatory są pomijane. |
 | `POST` | `/v1/entities/facets/relationship-tree/children` | Jedna strona elementów podrzędnych fasety relacji, z liczebnościami. |
 | `GET` | `/entities/{id}/preview` | Wartości w poszczególnych kontekstach, z powiązanymi encjami osadzonymi w odpowiedzi. |
 | `GET` | `/entities/{id}/resolved-preview?context_id=…` | Wartości rozstrzygnięte w jednym kontekście, wraz z kontekstem, z którego pochodzi każda z nich. |

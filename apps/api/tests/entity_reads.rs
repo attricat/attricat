@@ -505,3 +505,160 @@ async fn soft_deleted_entity_is_hidden_from_reads_and_relationship_previews(pool
 
     server.abort();
 }
+
+#[sqlx::test]
+async fn entity_labels_name_only_live_entities_the_caller_may_read(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let owner = authenticated_client();
+    let blueprint = create_blueprint(
+        &owner,
+        &base_url,
+        r#"
+format_version = 1
+code = "labelled_product"
+name = "Labelled product"
+kind = "entity"
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["title"]
+[[attributes]]
+code = "title"
+value_type = "string"
+"#,
+    )
+    .await;
+    let contexts: Vec<Value> = owner
+        .get(format!("{base_url}/contexts"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let default_context = contexts
+        .iter()
+        .find(|context| context["code"] == "default")
+        .unwrap()["id"]
+        .clone();
+    let mut ids = Vec::new();
+    for title in ["First", "Second", "Deleted"] {
+        let entity: Value = owner
+            .post(format!("{base_url}/v1/entities"))
+            .json(&json!({
+                "blueprint": {"code": "labelled_product", "version": blueprint["blueprint"]["version"]},
+                "values": [{"kind": "scalar", "attribute_code": "title", "value": title, "context_id": default_context}],
+            }))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        ids.push(entity["id"].as_str().unwrap().parse::<Uuid>().unwrap());
+    }
+    let (first, second, deleted) = (ids[0], ids[1], ids[2]);
+    owner
+        .delete(format!("{base_url}/entities/{deleted}"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    let labels = |client: &Client, entity_ids: Vec<Uuid>| {
+        client
+            .post(format!("{base_url}/v1/entities/labels"))
+            .json(&json!({ "entity_ids": entity_ids }))
+            .send()
+    };
+
+    let named: Value = labels(&owner, vec![second, first, deleted, Uuid::new_v4(), first])
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let mut items = named["items"].as_array().unwrap().clone();
+    items.sort_by_key(|item| item["display"]["default"].as_str().unwrap().to_owned());
+    assert_eq!(items.len(), 2, "{named}");
+    assert_eq!(items[0]["id"], json!(first));
+    assert_eq!(items[0]["display"]["default"], "First");
+    assert_eq!(items[0]["blueprint_code"], "labelled_product");
+    assert_eq!(items[1]["id"], json!(second));
+    assert_eq!(items[1]["display"]["default"], "Second");
+
+    for entity_ids in [Vec::new(), (0..101).map(|_| Uuid::new_v4()).collect()] {
+        let refused = labels(&owner, entity_ids).await.unwrap();
+        assert!(refused.status().is_client_error(), "{}", refused.status());
+    }
+
+    // A viewer granted one entity learns nothing about the others.
+    let workspace = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
+    let mut clients = Vec::new();
+    for (email, grant) in [
+        ("label-entity-viewer@example.test", Some(first)),
+        ("label-no-grant@example.test", None),
+    ] {
+        let user = Uuid::new_v4();
+        let membership = Uuid::new_v4();
+        sqlx::query("INSERT INTO users (id, email) VALUES ($1, $2)")
+            .bind(user)
+            .bind(email)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query(
+            "INSERT INTO workspace_memberships (id, workspace_id, user_id) VALUES ($1, $2, $3)",
+        )
+        .bind(membership)
+        .bind(workspace)
+        .bind(user)
+        .execute(&pool)
+        .await
+        .unwrap();
+        if let Some(entity) = grant {
+            sqlx::query("INSERT INTO role_grants (id, workspace_id, membership_id, role_id, scope_type, scope_target_id) VALUES ($1, $2, $3, '00000000-0000-4000-8000-000000000104', 'entity', $4)")
+                .bind(Uuid::new_v4())
+                .bind(workspace)
+                .bind(membership)
+                .bind(entity)
+                .execute(&pool)
+                .await
+                .unwrap();
+        }
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "x-catalog-user-id",
+            HeaderValue::from_str(&user.to_string()).unwrap(),
+        );
+        headers.insert(
+            "x-catalog-workspace-id",
+            HeaderValue::from_str(&workspace.to_string()).unwrap(),
+        );
+        clients.push(Client::builder().default_headers(headers).build().unwrap());
+    }
+    let scoped: Value = labels(&clients[0], vec![first, second])
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(scoped["items"].as_array().unwrap().len(), 1, "{scoped}");
+    assert_eq!(scoped["items"][0]["id"], json!(first));
+    // Without any read grant the lookup is filtered, like other entity lists.
+    let ungranted: Value = labels(&clients[1], vec![first])
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(ungranted["items"], json!([]));
+    server.abort();
+}

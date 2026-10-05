@@ -15,10 +15,12 @@ import { EntityIdLink, RuleRevisionCell } from './RuleCells';
 import type { RuleRevisions } from './ruleRevisions';
 
 export const RunsSection = ({
+  entityLabels,
   error,
   revisions,
   runs,
 }: {
+  entityLabels: ReadonlyMap<string, string>;
   error: boolean;
   revisions: RuleRevisions;
   runs: Awaited<ReturnType<typeof listRuleRuns>> | undefined;
@@ -58,7 +60,10 @@ export const RunsSection = ({
                 </TableCell>
                 <TableCell>
                   {item.scope_entity_id ? (
-                    <EntityIdLink entityId={item.scope_entity_id} />
+                    <EntityIdLink
+                      entityId={item.scope_entity_id}
+                      label={entityLabels.get(item.scope_entity_id)}
+                    />
                   ) : (
                     t('rules.allEntities')
                   )}

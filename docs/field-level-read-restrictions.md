@@ -26,6 +26,10 @@ filters by attribute.
   - Collection routes (`TargetKind::None`: search, facets, saved searches,
     `GET /entities`) need a **workspace** grant. Narrower grants get `403`.
     The routes never filter rows.
+  - Entity label lookups (`TargetKind::EntityList`, `POST /v1/entities/labels`)
+    keep only the requested entities that `authorized_entity_ids` accepts, so
+    workspace, blueprint-family and entity grants each see their own entities.
+    Other IDs are omitted, and so are unknown and deleted ones.
   - `context_subtree` grants only match context routes (`TargetKind::Context*`).
     They do not authorize entity reads or value writes, and they never filter
     values by context. `apps/docs/.../operate/workspaces.md` describes an
@@ -55,6 +59,7 @@ return.
 | Display labels | `entity_projection.rs` `display_label` | wherever a label is returned | Built at read time from `views.dropdown_option.fields` over the stored preview projection. A sensitive field listed there appears in pickers, facets, related columns, hierarchy and incoming lists. |
 | Write responses | update, append, duplicate, restore, migration preview | `entities.write` | The full entity or values. |
 | Search | `POST /v1/entities/search` (`entity_reads.rs`, `entity_search.rs`) | `entities.read`, workspace grant | Preview, display, table values, related values, and `match_explanations[].matching_attribute_code`. |
+| Entity labels | `POST /v1/entities/labels` (`entity_reads.rs`, `entity_search.rs`) | `entities.read` per entity | Display labels per context: the `dropdown_option` view's fields. |
 | Facets | relationship-tree facet routes | workspace grant | Target display labels. |
 | Saved searches | `/saved-views`, `/view-state-links` | workspace grant | Stored filter values and query text, shared across the workspace. |
 | Explorer | the web app calls the search and entity routes above | — | Client-side column hiding is presentation only. Full previews are in the payload and the query cache. |

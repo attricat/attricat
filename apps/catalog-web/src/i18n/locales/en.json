@@ -1406,8 +1406,8 @@
     },
     "ruleRevision": "{{name}} v{{version}}",
     "unknownRule": "Rule {{id}} v{{version}}",
-    "openEntity": "Open entity {{id}}",
-    "allEntities": "All entities"
+    "allEntities": "All entities",
+    "entityWithoutLabel": "Entity {{id}}"
   },
   "reusableAttributes": {
     "editor": {

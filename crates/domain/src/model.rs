@@ -430,6 +430,14 @@ pub struct IncomingRelationshipItem {
     pub display: Value,
 }
 
+/// Display labels of one entity, per context, for naming it in other views.
+#[derive(Clone, Debug, Serialize)]
+pub struct EntityLabel {
+    pub id: Uuid,
+    pub blueprint_code: String,
+    pub display: Value,
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct IncomingRelationshipsPage {
     pub items: Vec<IncomingRelationshipItem>,

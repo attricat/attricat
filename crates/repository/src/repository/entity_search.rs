@@ -125,6 +125,15 @@ struct RelatedTablePreviewRow {
 }
 
 #[derive(sqlx::FromRow)]
+struct EntityLabelRow {
+    id: Uuid,
+    blueprint_code: String,
+    preview: Value,
+    blueprint_views: Value,
+    blueprint_context_fallback: Value,
+}
+
+#[derive(sqlx::FromRow)]
 struct IncomingRelationshipRow {
     id: Uuid,
     blueprint_code: String,
@@ -333,6 +342,48 @@ impl CatalogRepository {
             None
         };
         Ok(EntityPreviewPage { items, next_cursor })
+    }
+
+    /// Display labels of the live entities among `entity_ids`, in ID order.
+    /// Callers authorize the IDs first; unknown and deleted IDs are omitted.
+    pub async fn entity_labels(
+        &self,
+        entity_ids: &[Uuid],
+    ) -> Result<Vec<EntityLabel>, RepositoryError> {
+        if entity_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let rows = sqlx::query_as::<_, EntityLabelRow>(
+            r#"SELECT e.id, b.code AS blueprint_code, e.projections -> 'preview' AS preview,
+                      b.views AS blueprint_views,
+                      (SELECT COALESCE(jsonb_object_agg(attribute.code, attribute.context_fallback), '{}'::jsonb)
+                         FROM attributes attribute
+                        WHERE attribute.workspace_id = $2
+                          AND attribute.blueprint_id = e.blueprint_id
+                          AND attribute.blueprint_version = e.blueprint_version
+                          AND attribute.deleted_at IS NULL) AS blueprint_context_fallback
+               FROM entities e
+               JOIN blueprints b ON b.id = e.blueprint_id AND b.version = e.blueprint_version
+                AND b.workspace_id = $2
+               WHERE e.workspace_id = $2 AND e.deleted_at IS NULL AND e.id = ANY($1)
+               ORDER BY e.id"#,
+        )
+        .bind(entity_ids)
+        .bind(self.workspace_id.0)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows
+            .into_iter()
+            .map(|row| EntityLabel {
+                id: row.id,
+                blueprint_code: row.blueprint_code,
+                display: super::entity_projection::display_labels(
+                    &row.preview,
+                    &row.blueprint_views,
+                    &row.blueprint_context_fallback,
+                ),
+            })
+            .collect())
     }
 
     pub async fn incoming_relationships(

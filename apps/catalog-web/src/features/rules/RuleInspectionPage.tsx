@@ -18,6 +18,7 @@ import {
   type Rule,
 } from './api';
 import {
+  FINDING_STATE_RESOLVED,
   RULE_HAS_EXISTING_VIOLATIONS,
   RULE_SECTION_FINDINGS,
   RULE_SECTION_RULES,
@@ -31,6 +32,7 @@ import { FindingsSection } from './FindingsSection';
 import { ruleQueryKeys } from './queryKeys';
 import { ruleDefinitionsOptions } from './queryOptions';
 import { ruleRevisionsByKey } from './ruleRevisions';
+import { useEntityLabels } from '../entities/useEntityLabels';
 import { RulesSection } from './RulesSection';
 import { RunsSection } from './RunsSection';
 import { RuleIcon } from '../../components/systemIcons';
@@ -65,6 +67,18 @@ export const RuleInspectionPage = ({
     queryFn: listRuleRuns,
     enabled: canRead && section === RULE_SECTION_RUNS,
   });
+  // Name the entities the visible findings and runs refer to.
+  const entityLabels = useEntityLabels(
+    section === RULE_SECTION_FINDINGS
+      ? (findings.data ?? [])
+          .filter((finding) => finding.state !== FINDING_STATE_RESOLVED)
+          .map((finding) => finding.entity_id)
+      : section === RULE_SECTION_RUNS
+        ? (runs.data ?? []).flatMap((run) =>
+            run.scope_entity_id ? [run.scope_entity_id] : [],
+          )
+        : [],
+  );
   const refresh = () =>
     queryClient.invalidateQueries({ queryKey: ruleQueryKeys.all });
   const acknowledge = useMutation({
@@ -202,12 +216,14 @@ export const RuleInspectionPage = ({
             acknowledging={acknowledge.isPending}
             canManage={canManage}
             error={findings.isError}
+            entityLabels={entityLabels}
             findings={findings.data}
             revisions={revisions}
           />
         )}
         {section === RULE_SECTION_RUNS && (
           <RunsSection
+            entityLabels={entityLabels}
             error={runs.isError}
             revisions={revisions}
             runs={runs.data}

@@ -102,6 +102,15 @@ export type ViewDefinition =
     >;
 
 export const uuidSchema = z.uuid();
+export const entityLabelsResponseSchema = z.object({
+  items: z.array(
+    z.object({
+      id: z.uuid(),
+      blueprint_code: z.string(),
+      display: z.record(z.string(), z.string()),
+    }),
+  ),
+});
 const jsonObjectSchema = z.record(z.string(), z.unknown());
 const jsonSchemaSchema = z.union([jsonObjectSchema, z.boolean()]);
 const componentReferenceSchema = z.object({

@@ -1444,8 +1444,8 @@
     },
     "ruleRevision": "{{name}} v{{version}}",
     "unknownRule": "Reguła {{id}} v{{version}}",
-    "openEntity": "Otwórz encję {{id}}",
-    "allEntities": "Wszystkie encje"
+    "allEntities": "Wszystkie encje",
+    "entityWithoutLabel": "Encja {{id}}"
   },
   "reusableAttributes": {
     "editor": {

@@ -243,6 +243,7 @@ pub(super) async fn authorize(
                 | policy::TargetKind::WorkspaceNavigation
                 | policy::TargetKind::ExtensionRun
                 | policy::TargetKind::EntityBatch
+                | policy::TargetKind::EntityList
         );
         if handler_authorized && !is_active_principal().await? {
             return Err(ApiError::forbidden());

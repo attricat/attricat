@@ -8,6 +8,8 @@ export const SMART_FILL_MAX_CONTENT_LENGTH = 32_768;
 export const SMART_FILL_MAX_ATTACHMENTS = 16;
 
 export const ENTITY_SEARCH_PAGE_SIZE = 25;
+/** Most entity IDs one label lookup may name; the API enforces the same. */
+export const ENTITY_LABEL_BATCH_SIZE = 100;
 export const ENTITY_CHANGES_PAGE_SIZE = 25;
 
 /** Query parameters used when fetching a lightweight entity preview. */
