@@ -53,6 +53,22 @@ const discoverySchema = z.object({
   sign_in_methods: z.array(z.string()),
 });
 
+/** Seeded per-role accounts sharing one password; `null` unless configured. */
+const sampleLoginsSchema = z
+  .object({
+    demo: z.boolean(),
+    login_identifier: z.string(),
+    password: z.string(),
+    /** Ordered from least to most privileged. */
+    accounts: z.array(z.object({ role: z.string(), email: z.string() })),
+  })
+  .nullable();
+
+export type SampleLogins = NonNullable<z.infer<typeof sampleLoginsSchema>>;
+
+export const fetchSampleLogins = async () =>
+  request('/api/auth/sample-logins', sampleLoginsSchema);
+
 export const discoverWorkspace = async (loginIdentifier: string) => {
   return request('/api/auth/discover', discoverySchema, {
     method: 'POST',

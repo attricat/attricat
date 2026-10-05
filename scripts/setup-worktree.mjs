@@ -94,6 +94,9 @@ let env = existsSync(envFile)
 if (!/^CATALOG_DEVTOOLS=/m.test(env)) {
   env = setEnvValue(env, "CATALOG_DEVTOOLS", "true");
 }
+if (!/^CATALOG_SAMPLE_ACCOUNTS=/m.test(env)) {
+  env = setEnvValue(env, "CATALOG_SAMPLE_ACCOUNTS", "true");
+}
 
 env = setEnvValue(
   env,

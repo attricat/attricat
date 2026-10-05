@@ -8,7 +8,7 @@ alongside the HTTP status; some add an `error.details` object (see
 
 ## Authorization
 
-`GET /health`, `GET /health/live`, `GET /health/ready`, `POST /auth/discover`, `POST /auth/login`,
+`GET /health`, `GET /health/live`, `GET /health/ready`, `POST /auth/discover`, `GET /auth/sample-logins`, `POST /auth/login`,
 `POST /auth/password-reset`, `POST /auth/password-reset/confirm`, and
 `POST /onboarding/complete` are public. Browser requests authenticate
 with the opaque HttpOnly `catalog_session` cookie created by login; missing,
@@ -98,6 +98,7 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `GET`, `POST` | `/extensions/{extension_id}/annotation-namespace` | Inventory an extension's annotation namespace, or explicitly adopt pre-existing annotations under that name for an installed extension (`extensions.read` / `extensions.manage`). |
 | `POST` | `/extensions/{extension_id}/annotation-namespace/entities/{entity_id}` | Operator repair or cleanup of one claimed namespace on an entity using the extension annotation patch shape (`extensions.manage` and `entities.write` on the entity). |
 | `POST` | `/auth/discover` | Resolve a normalized workspace identifier and return its sign-in methods; rate-limited and intentionally minimal. |
+| `GET` | `/auth/sample-logins` | Return the sample accounts, their shared password and the workspace identifier when `CATALOG_SAMPLE_ACCOUNTS` or `CATALOG_DEMO_MODE` is on, otherwise `null`. Demo mode also rejects password reset and member, role-grant, ownership, invitation and user-creation changes with `403 disabled_in_demo`. |
 | `POST` | `/auth/login` | Sign in with a previously resolved workspace identifier, email, and password. |
 | `POST` | `/auth/password-reset` | Request a password-reset message for a local account. |
 | `POST` | `/auth/password-reset/confirm` | Consume a password-reset secret and set a new password. |

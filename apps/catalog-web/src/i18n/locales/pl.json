@@ -105,6 +105,14 @@
     "workspace": "Obszar roboczy",
     "continue": "Kontynuuj",
     "changeWorkspace": "Zmień obszar roboczy",
+    "demoNotice": "To publiczny obszar roboczy demonstracyjny. Wybierz konto, a dane logowania zostaną wpisane za Ciebie.",
+    "sampleAccount": "Zaloguj jako",
+    "sampleRoles": {
+      "viewer": "Przeglądający",
+      "editor": "Edytor",
+      "admin": "Administrator",
+      "owner": "Właściciel"
+    },
     "email": "E-mail",
     "password": "Hasło",
     "forgotPassword": "Nie pamiętasz hasła?",

@@ -17,10 +17,10 @@ use api::{
     extension_registry::{DEFAULT_OFFICIAL_REGISTRY, GitHubRegistry, GitHubRepository},
     extension_runtime::{self, ExtensionRuntime, ExtensionRuntimeConfig},
     file_access::AllowFileAccess,
-    http::{AppState, BuildInfo, StreamControl, router},
+    http::{AppState, BuildInfo, SampleAccount, SampleLogins, StreamControl, router},
     mail::SmtpMailDelivery,
     maintenance,
-    repository::{CatalogRepository, ValueHistoryRetentionDays},
+    repository::{CatalogRepository, SystemRepository, ValueHistoryRetentionDays},
     rule_runtime,
     solution_pack_extensions::{
         LocalExtensionReleases, OfficialExtensionRegistry, OfficialExtensionReleases,
@@ -99,8 +99,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let workspace_id = std::env::var("CATALOG_WORKSPACE_ID")
         .unwrap_or_else(|_| "00000000-0000-4000-8000-000000000002".to_owned())
         .parse::<Uuid>()?;
+    // A public demo deployment signs visitors in to the bootstrap workspace
+    // with seeded per-role accounts, which the web app offers to pre-fill.
+    let demo_mode = boolean_env("CATALOG_DEMO_MODE", false)?;
+    let sample_accounts = demo_mode || boolean_env("CATALOG_SAMPLE_ACCOUNTS", false)?;
     let bootstrap_workspace_name = std::env::var("CATALOG_BOOTSTRAP_WORKSPACE_NAME")
-        .unwrap_or_else(|_| "Default workspace".to_owned());
+        .unwrap_or_else(|_| {
+            if demo_mode {
+                "Demo"
+            } else {
+                "Default workspace"
+            }
+            .to_owned()
+        });
     let bootstrap_owner_email = std::env::var("CATALOG_BOOTSTRAP_OWNER_EMAIL")
         .unwrap_or_else(|_| "owner@example.test".to_owned())
         .trim()
@@ -110,6 +121,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .map(|value| value.parse())
         .transpose()?;
     let bootstrap_owner_password = std::env::var("CATALOG_BOOTSTRAP_OWNER_PASSWORD").ok();
+    if sample_accounts && bootstrap_owner_password.is_none() {
+        return Err(
+            "CATALOG_SAMPLE_ACCOUNTS and CATALOG_DEMO_MODE require CATALOG_BOOTSTRAP_OWNER_PASSWORD"
+                .into(),
+        );
+    }
     let e2e_fixture = std::env::var("CATALOG_E2E_FIXTURE_EMAIL")
         .ok()
         .zip(std::env::var("CATALOG_E2E_FIXTURE_PASSWORD").ok());
@@ -172,6 +189,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             &bootstrap_owner_email,
         )
         .await?;
+    if demo_mode {
+        bootstrap_repository
+            .set_bootstrap_login_identifier(workspace_id, DEMO_LOGIN_IDENTIFIER)
+            .await?;
+    }
     // The migration defines the identity/RBAC schema, but configuration is
     // available only after migrations. Bootstrap the configured owner here so
     // a fresh installation receives its initial durable owner grant.
@@ -184,11 +206,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             &bootstrap_owner_email,
         )
         .await?;
-    if let Some(password) = bootstrap_owner_password {
+    if let Some(password) = &bootstrap_owner_password {
         bootstrap_repository
-            .ensure_bootstrap_local_password(&bootstrap_owner_email, password)
+            .ensure_bootstrap_local_password(&bootstrap_owner_email, password.clone())
             .await?;
     }
+    let sample_logins = match bootstrap_owner_password.filter(|_| sample_accounts) {
+        Some(password) => Some(
+            seed_sample_accounts(
+                &bootstrap_repository,
+                workspace_id,
+                &bootstrap_owner_email,
+                password,
+                demo_mode,
+            )
+            .await?,
+        ),
+        None => None,
+    };
     // The browser E2E harness needs an independent principal for server-side
     // fixture setup, because login rotation deliberately invalidates a user's
     // prior browser session. This is unavailable unless both test-only values
@@ -424,6 +459,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 DEFAULT_HTTP_DEFAULT_BODY_BYTES,
             )?,
             devtools_enabled,
+            demo_mode,
+            sample_logins,
             build_info: BuildInfo {
                 version: env!("CARGO_PKG_VERSION"),
                 branch: env!("ATTRICAT_BUILD_BRANCH"),
@@ -470,6 +507,54 @@ async fn shutdown_signal() {
 }
 
 const MAX_GLOBAL_POOL_CONNECTIONS: u32 = 100;
+/// Sign-in identifier of the bootstrap workspace in `CATALOG_DEMO_MODE`.
+const DEMO_LOGIN_IDENTIFIER: &str = "demo.attricat.com";
+/// Built-in roles that receive a seeded account beside the bootstrap owner,
+/// from least to most privileged.
+const SAMPLE_ACCOUNT_ROLES: [&str; 3] = ["viewer", "editor", "admin"];
+
+/// Seeds `<role>@<owner domain>` accounts that share the owner's password, so
+/// demos and local development can sign in at each built-in role.
+async fn seed_sample_accounts(
+    repository: &SystemRepository,
+    workspace_id: Uuid,
+    owner_email: &str,
+    password: String,
+    demo: bool,
+) -> Result<SampleLogins, Box<dyn std::error::Error + Send + Sync>> {
+    let domain = owner_email
+        .split_once('@')
+        .map(|(_, domain)| domain)
+        .ok_or("CATALOG_BOOTSTRAP_OWNER_EMAIL must be a valid email address")?;
+    let mut accounts = Vec::new();
+    for role in SAMPLE_ACCOUNT_ROLES {
+        let email = format!("{role}@{domain}");
+        // An owner configured as e.g. admin@ keeps only the owner role.
+        if email == owner_email {
+            continue;
+        }
+        repository
+            .ensure_sample_account(workspace_id, &email, role)
+            .await?;
+        repository
+            .ensure_bootstrap_local_password(&email, password.clone())
+            .await?;
+        accounts.push(SampleAccount {
+            role: role.to_owned(),
+            email,
+        });
+    }
+    accounts.push(SampleAccount {
+        role: "owner".to_owned(),
+        email: owner_email.to_owned(),
+    });
+    Ok(SampleLogins {
+        demo,
+        login_identifier: repository.workspace_login_identifier(workspace_id).await?,
+        password,
+        accounts,
+    })
+}
 
 fn pool_connections(
     name: &str,

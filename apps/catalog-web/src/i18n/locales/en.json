@@ -105,6 +105,14 @@
     "workspace": "Workspace",
     "continue": "Continue",
     "changeWorkspace": "Change workspace",
+    "demoNotice": "This is a public demo workspace. Pick an account to sign in as; its details are filled in for you.",
+    "sampleAccount": "Sign in as",
+    "sampleRoles": {
+      "viewer": "Viewer",
+      "editor": "Editor",
+      "admin": "Admin",
+      "owner": "Owner"
+    },
     "email": "Email",
     "password": "Password",
     "forgotPassword": "Forgot password?",
