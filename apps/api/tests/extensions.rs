@@ -2637,7 +2637,7 @@ async fn artifact_wit_component_copies_a_large_approved_input_in_bounded_chunks(
         },
         repository::StartExtensionOperation,
         storage::StoredObject,
-        task_worker::TaskHandler,
+        task_worker::{TaskHandler, TaskOutcome},
     };
     use catalog_domain::task_queue::TaskKind;
     use sha2::{Digest, Sha256};
@@ -2723,9 +2723,21 @@ async fn artifact_wit_component_copies_a_large_approved_input_in_bounded_chunks(
         .await
         .unwrap()
         .unwrap();
-    let runtime = ExtensionRuntime::new(store.clone(), ExtensionRuntimeConfig::default()).unwrap();
+    // Hashing 128 KiB in the guest takes about the whole default 10M fuel
+    // budget per batch. This test covers bounded chunking, not the fuel limit.
+    let runtime = ExtensionRuntime::new(
+        store.clone(),
+        ExtensionRuntimeConfig {
+            fuel: 50_000_000,
+            ..ExtensionRuntimeConfig::default()
+        },
+    )
+    .unwrap();
     let handler = ExtensionOperationTaskHandler::new(repository.clone(), runtime);
-    handler.handle(task).await.unwrap();
+    assert!(matches!(
+        handler.handle(task).await.unwrap(),
+        TaskOutcome::Complete
+    ));
 
     let (artifact_id, key, checksum, length): (Uuid, String, String, i64) = sqlx::query_as(
         "SELECT id,object_key,checksum_sha256,content_length FROM extension_operation_artifacts WHERE operation_run_id=$1 AND direction='output' AND state='completed'",
