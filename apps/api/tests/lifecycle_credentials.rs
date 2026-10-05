@@ -191,6 +191,8 @@ async fn revoking_workspace_access_keeps_other_workspaces_and_account_tokens(poo
     let (owner, first, second) = two_owned_workspaces(&pool, "scoped-revoke").await;
     // A pending onboarding in the second workspace.
     invite(&repository, owner, second, email, vec![5; 32], vec![6; 32]).await;
+    // The first workspace also has an outstanding onboarding invitation.
+    invite(&repository, owner, first, email, vec![11; 32], vec![12; 32]).await;
     // An active membership in the first workspace.
     let membership_id = Uuid::new_v4();
     sqlx::query("INSERT INTO workspace_memberships (id, workspace_id, user_id, state) VALUES ($1, $2, $3, 'active')")
@@ -202,6 +204,21 @@ async fn revoking_workspace_access_keeps_other_workspaces_and_account_tokens(poo
             .await
             .unwrap()
     );
+
+    assert!(matches!(
+        repository
+            .complete_workspace_onboarding(&[11; 32], &[12; 32], "hash")
+            .await,
+        Err(api::repository::RepositoryError::InvitationInvalid)
+    ));
+    let invitations_revoked: Vec<bool> = sqlx::query_scalar(
+        "SELECT revoked_at IS NOT NULL FROM workspace_invitations WHERE token_digest = ANY($1) ORDER BY token_digest",
+    )
+    .bind(vec![vec![5u8; 32], vec![11u8; 32]])
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(invitations_revoked, vec![false, true]);
 
     repository
         .complete_workspace_onboarding(&[5; 32], &[6; 32], "hash")

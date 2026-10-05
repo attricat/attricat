@@ -108,11 +108,18 @@ and replaces both values; login also revokes older workspace sessions. `POST
 after eight hours and are revoked on account/password changes, membership changes,
 and role-grant changes.
 
+Deactivating a member or revoking a role grant also revokes that user's pending
+invitations and onboarding links in the affected workspace. Acceptance is
+serialized with revocation, so an older invitation cannot restore that access.
+Invitations for other workspaces are untouched. A new administrator-issued
+invitation can authorize access again.
+
 Production cookies are `Secure`, `HttpOnly` (session only), `SameSite=Lax`, and
 path-scoped to `/`. `SESSION_COOKIE_SECURE=false` is exclusively for local HTTP
 development and test servers. Every cookie-authenticated unsafe request must send
 `X-Catalog-Csrf` equal to the current CSRF cookie. Login attempts are durably limited
-to five failures per normalized workspace/email pair in fifteen minutes.
+to five failures per normalized account email in fifteen minutes, shared across
+workspaces.
 
 ## User preferences
 

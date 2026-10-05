@@ -66,9 +66,18 @@ an exhaustive audit of every source file.
   was released. File and shared task workers now poll execution and renewal
   concurrently, and drop execution resources before lease-loss cleanup.
 
+- **Invitation-based access restoration:** an older pending invitation could
+  reactivate a disabled member or restore a revoked role grant, including when
+  acceptance raced with deactivation. Access revocation now invalidates pending
+  invitations in that workspace. Invitation creation, acceptance, onboarding and
+  revocation share the workspace lock before taking invitation or membership
+  locks. New administrator-issued invitations and other workspaces' invitations
+  remain usable.
+
 Regression coverage is in `apps/api/tests/security_hardening.rs`,
-`apps/api/tests/worker_hardening.rs`, and `apps/api/tests/agent_stream_security.rs`,
-existing agent, personal-token and controlled-record tests, and HTTP/archive
+`apps/api/tests/worker_hardening.rs`, `apps/api/tests/agent_stream_security.rs`,
+`apps/api/tests/membership_revocation.rs`, existing agent, personal-token,
+lifecycle and controlled-record tests, and HTTP/archive
 unit tests. Worker lock contention and cancellation are covered in
 `crates/workers/src/file_worker.rs` and `crates/workers/src/heartbeat.rs`.
 
@@ -85,19 +94,26 @@ resumes. Relationship pages can contain no
 visible items and still have a `next_cursor`; clients must follow the cursor.
 See [API read safety](api.md#relationship-read-safety) for preview budgets.
 
+For access revoked before this upgrade, review and revoke the affected users'
+remaining pending invitations. The invitation fix invalidates links during
+subsequent access revocations; it does not rewrite historical invitation records.
+
 ## Verification scope
 
 Verification uses the Rust workspace tests, focused security regressions,
 frontend unit tests, Clippy, formatting, dependency-policy checks and the
 worktree's readiness endpoint. The clean, non-overlapping workspace run passed
-853 Rust tests (3 opt-in tests ignored); all 815 frontend unit tests passed.
+856 Rust tests (3 opt-in tests ignored); all 815 frontend unit tests passed.
 Workspace Clippy, formatting, dependency-policy checks and readiness passed.
 This verification ran after rebasing onto `main` at `77ccaf1`, including its
 demo-mode changes.
-The latest follow-up reviewed entity-batch authorization and atomicity, context
-mutation locking, controlled-record protections, and file download/cache
-handling. It found no additional confirmed major issue and made no
-implementation changes. Passing tests are not a security guarantee.
+An earlier follow-up reviewed entity-batch authorization and atomicity, context
+mutation locking, controlled-record protections, and file download/cache handling
+without finding an additional confirmed major issue. The latest credential
+lifecycle review reproduced the invitation restoration gap in three failing
+regressions before fixing it. Coverage includes sequential HTTP acceptance,
+concurrent deactivation/acceptance, fresh reauthorization, and unaffected
+cross-workspace onboarding. Passing tests are not a security guarantee.
 
 The sibling `../../attricat-extension-example` checkout was unavailable, so its
 specific package/side-load/enable/event workflow could not be exercised.
