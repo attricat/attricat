@@ -84,6 +84,7 @@ test('saves an Explorer search and restores it through a short URL', async ({
   page,
 }) => {
   const code = `saved_${suffix()}`;
+  const savedName = `My saved products ${code}`;
   await createEntityBlueprint(
     code,
     'Saved products',
@@ -101,7 +102,7 @@ test('saves an Explorer search and restores it through a short URL', async ({
   await page
     .getByRole('dialog', { name: 'Save search' })
     .getByRole('textbox', { name: 'Name' })
-    .fill('My saved products');
+    .fill(savedName);
   await page
     .getByRole('dialog', { name: 'Save search' })
     .getByRole('button', { name: 'Save search' })
@@ -116,7 +117,7 @@ test('saves an Explorer search and restores it through a short URL', async ({
     page.getByRole('button', { name: 'Share search' }),
   ).toBeEnabled();
   const activator = page.getByRole('button', {
-    name: 'Saved search: My saved products',
+    name: `Saved search: ${savedName}`,
   });
   await expect(activator).toHaveAttribute('aria-pressed', 'true');
   await activator.click();
@@ -125,7 +126,7 @@ test('saves an Explorer search and restores it through a short URL', async ({
   });
   await expect(
     savedSearchDialog.getByRole('button', {
-      name: 'Delete saved search My saved products',
+      name: `Delete saved search ${savedName}`,
     }),
   ).toBeVisible();
   const filter = savedSearchDialog.getByRole('searchbox', {
@@ -135,10 +136,9 @@ test('saves an Explorer search and restores it through a short URL', async ({
   await expect(
     savedSearchDialog.getByText('No saved searches match this filter.'),
   ).toBeVisible();
-  await filter.fill('MY SAVED PROD');
-  await expect(
-    savedSearchDialog.getByText('My saved products').first(),
-  ).toBeVisible();
+  // The filter ignores case.
+  await filter.fill(savedName.toUpperCase());
+  await expect(savedSearchDialog.getByText(savedName)).toBeVisible();
   await savedSearchDialog
     .getByRole('button', { name: 'Clear saved search' })
     .click();
