@@ -1,7 +1,0 @@
-.env
-traefik/certs/
-traefik/dynamic/maintenance.yml
-traefik/dynamic/maintenance.tmp
-.reset-lock/
-.reset-status.json
-compose.override.yml
