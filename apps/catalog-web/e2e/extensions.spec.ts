@@ -82,7 +82,7 @@ value_type = "number"
 
 [views.table]
 type = "table"
-columns = [{ field = "price_net", renderer = { id = "attricat-extension-example.table-cell", version = 1 } }]
+columns = [{ field = "price_net", renderer = { id = "attricat-extension-example.computed-number", version = 1, props = { precision = 2, unit = "EUR" } } }]
 
 [extensions.attricat-extension-example.formulas]
 price_gross = "price_net * (1 + 0.23)"`,
@@ -90,9 +90,11 @@ price_gross = "price_net * (1 + 0.23)"`,
   const entity = await createEntity(blueprint, [scalar('price_net', 100)]);
 
   await page.goto(`/entities/${entity.id}`);
+  // The decoration asks the server component for the formula index, which
+  // compiles its WASM on first use.
   await expect(
     page.getByLabel('View extension content for Price gross'),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 90_000 });
   await expect(
     page.getByLabel('View extension content for Price net'),
   ).toHaveCount(0);
@@ -116,22 +118,30 @@ price_gross = "price_net * (1 + 0.23)"`,
     )
     .toContain(123);
 
-  await page.goto('/');
-  await page.getByLabel('Select a Blueprint').click();
-  await page.getByRole('option', { name: `Formula product (${code})` }).click();
-  await page.getByRole('button', { name: 'Search', exact: true }).click();
   const cellFrame = page.frameLocator(
-    'iframe[title="attricat-extension-example.table-cell"]',
+    'iframe[title="attricat-extension-example.computed-number"]',
   );
-  await expect(cellFrame.getByText('Example cell: 100')).toBeVisible();
+  // The Explorer shows its built-in cell when a renderer frame takes longer
+  // than 1.5 s to start, which a cold artifact load can miss; reload to retry.
+  await expect(async () => {
+    await page.goto(`/?blueprint=${code}`);
+    await expect(cellFrame.getByText(/100\.00\s*EUR/)).toBeVisible({
+      timeout: 10_000,
+    });
+  }).toPass({ timeout: 60_000 });
 
   await page.getByLabel(`Entity actions for ${entity.id}`).click();
   await expect(page.getByLabel('Extension actions')).toBeVisible();
   await page.getByLabel('Extension actions').click();
   const rowAction = page
-    .frameLocator('iframe[title="example-row-action"]')
-    .getByRole('button', { name: 'Example row action' });
+    .frameLocator('iframe[title="recalculate-selection-row"]')
+    .getByRole('button', { name: /^Recalculate formulas/ });
   await expect(rowAction).toBeVisible();
   await rowAction.click();
-  await expect(page.getByText(`Row action for ${entity.id}`)).toBeVisible();
+  const dialog = page.frameLocator('iframe[title="Recalculate formulas"]');
+  await expect(dialog.getByText('1 selected entity')).toBeVisible();
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(
+    page.locator('iframe[title="Recalculate formulas"]'),
+  ).toHaveCount(0);
 });
