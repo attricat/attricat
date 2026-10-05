@@ -3,7 +3,10 @@ mod support;
 use std::{sync::Arc, time::Duration};
 
 use api::{
-    agent_tools::{ToolError, execute_mutation, execute_read},
+    agent_tools::{
+        ToolError, change_names, change_summary_named, execute_mutation, execute_read,
+        pin_entity_versions,
+    },
     agent_worker,
     agents::AgentProviderConfig,
     file_worker::{FileWorker, WorkerConfig},
@@ -15,6 +18,686 @@ use axum::{Router, routing::post};
 use reqwest::multipart::{Form, Part};
 use support::*;
 use tokio::time::{sleep, timeout};
+
+#[sqlx::test]
+async fn agent_blueprint_reads_list_summaries_and_fetch_one_definition(pool: PgPool) {
+    let (_base_url, server) = start_server(pool.clone()).await;
+    let workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
+    let actor: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
+    let repository = CatalogRepository::system(pool)
+        .for_workspace(workspace)
+        .await
+        .unwrap();
+    let definition = |attribute: &str| {
+        format!(
+            "format_version = 1\ncode = \"agent_desk\"\nname = \"Desk\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"{attribute}\"]\n\n[[attributes]]\ncode = \"{attribute}\"\nvalue_type = \"string\""
+        )
+    };
+    let created = execute_mutation(
+        &repository,
+        actor,
+        "create_blueprint",
+        json!({"definition": definition("title")}),
+    )
+    .await
+    .unwrap();
+    let id = created["blueprint"]["id"].as_str().unwrap().to_owned();
+    let get =
+        |arguments: Value| execute_read(&repository, actor, workspace, "get_blueprint", arguments);
+
+    // With no published revision, the latest draft is returned.
+    let draft = get(json!({"code":"agent_desk"})).await.unwrap();
+    assert_eq!(draft["blueprint"]["status"], "draft");
+    assert_eq!(draft["attributes"][0]["code"], "title");
+
+    execute_mutation(
+        &repository,
+        actor,
+        "publish_blueprint",
+        json!({"blueprint_id":id,"version":1}),
+    )
+    .await
+    .unwrap();
+    execute_mutation(
+        &repository,
+        actor,
+        "create_blueprint_revision",
+        json!({"blueprint_id":id,"definition":definition("label")}),
+    )
+    .await
+    .unwrap();
+
+    // The published revision wins over a newer draft; an exact version
+    // reaches the draft.
+    let published = get(json!({"code":"agent_desk"})).await.unwrap();
+    assert_eq!(published["blueprint"]["version"], 1);
+    assert!(
+        published["blueprint"]["definition"]
+            .as_str()
+            .unwrap()
+            .contains("title")
+    );
+    let next = get(json!({"code":"agent_desk","version":2})).await.unwrap();
+    assert_eq!(next["blueprint"]["status"], "draft");
+    assert!(matches!(
+        get(json!({"code":"agent_desk","version":3})).await,
+        Err(ToolError::Repository(RepositoryError::NotFound(_)))
+    ));
+
+    // Listing is a bounded summary without definitions or schemas.
+    let listed = execute_read(&repository, actor, workspace, "list_blueprints", json!({}))
+        .await
+        .unwrap();
+    let desk = listed
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|blueprint| blueprint["code"] == "agent_desk")
+        .unwrap();
+    assert_eq!(desk["version"], 2);
+    assert_eq!(desk["status"], "draft");
+    assert_eq!(desk["kind"], "entity");
+    for omitted in ["definition", "entity_schema", "views", "attributes"] {
+        assert!(
+            desk.get(omitted).is_none(),
+            "{omitted} should not be listed"
+        );
+    }
+
+    let guide = execute_read(
+        &repository,
+        actor,
+        workspace,
+        "blueprint_authoring_guide",
+        json!({"topic":"status_control"}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(guide["topic"], "status_control");
+    assert!(
+        guide["markdown"]
+            .as_str()
+            .unwrap()
+            .contains("x-attricat-status")
+    );
+    let default = execute_read(
+        &repository,
+        actor,
+        workspace,
+        "blueprint_authoring_guide",
+        json!({}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(default["topic"], "blueprints");
+    assert!(
+        execute_read(
+            &repository,
+            actor,
+            workspace,
+            "blueprint_authoring_guide",
+            json!({"topic":"storage"})
+        )
+        .await
+        .is_err()
+    );
+    server.abort();
+}
+
+#[sqlx::test]
+async fn approved_entity_edits_apply_to_the_proposed_state_and_name_their_targets(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let blueprint = create_blueprint(&client, &base_url,
+        "format_version = 1\ncode = \"pinned_desk\"\nname = \"Pinned desk\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"\n\n[[attributes]]\ncode = \"related\"\nvalue_type = \"relationship\"\ntarget_blueprint = \"pinned_desk\"").await;
+    let entity = create_entity(&client, &base_url, &blueprint).await;
+    let entity_id = entity["id"].as_str().unwrap().to_owned();
+    let other = create_entity(&client, &base_url, &blueprint).await;
+    let workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
+    let actor: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
+    let repository = CatalogRepository::system(pool)
+        .for_workspace(workspace)
+        .await
+        .unwrap();
+    let set_title = |title: &str| {
+        json!({"entity_id": entity_id, "values": [
+            {"kind":"scalar","attribute_code":"title","context_id":null,"value":title}
+        ]})
+    };
+    execute_mutation(
+        &repository,
+        actor,
+        "set_entity_values",
+        set_title("Oak desk"),
+    )
+    .await
+    .unwrap();
+
+    // A proposal without expected_updated_at is pinned to the current state,
+    // and its summary names the entity by its display label.
+    let mut proposal = set_title("Walnut desk");
+    pin_entity_versions(&repository, "set_entity_values", &mut proposal)
+        .await
+        .unwrap();
+    let pinned = proposal["expected_updated_at"].clone();
+    assert!(pinned.is_string());
+    let names = change_names(
+        &repository,
+        actor,
+        workspace,
+        "set_entity_values",
+        &proposal,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        change_summary_named("set_entity_values", &proposal, &names).unwrap(),
+        format!("Set attribute values on entity pinned_desk 'Oak desk' ({entity_id}).")
+    );
+
+    // An explicit expected_updated_at is kept as the model supplied it.
+    let mut explicit =
+        json!({"entity_id": entity_id, "expected_updated_at": "2026-01-01T00:00:00Z"});
+    pin_entity_versions(&repository, "delete_entity", &mut explicit)
+        .await
+        .unwrap();
+    assert_eq!(explicit["expected_updated_at"], "2026-01-01T00:00:00Z");
+
+    // Someone saves the entity while the proposal waits for approval.
+    execute_mutation(
+        &repository,
+        actor,
+        "set_entity_values",
+        set_title("Pine desk"),
+    )
+    .await
+    .unwrap();
+    assert!(matches!(
+        execute_mutation(&repository, actor, "set_entity_values", proposal).await,
+        Err(ToolError::Repository(RepositoryError::StaleEntity))
+    ));
+    let mut deletion = json!({"entity_id": entity_id});
+    let mut batch = json!({"operations": [
+        {"op":"update","entity_id": entity_id,"values": []},
+        {"op":"create","blueprint":{"code":"pinned_desk"}}
+    ]});
+    pin_entity_versions(&repository, "apply_entity_batch", &mut batch)
+        .await
+        .unwrap();
+    assert!(batch["operations"][0]["expected_updated_at"].is_string());
+    assert!(batch["operations"][1].get("expected_updated_at").is_none());
+    pin_entity_versions(&repository, "delete_entity", &mut deletion)
+        .await
+        .unwrap();
+    assert_ne!(deletion["expected_updated_at"], pinned);
+    execute_mutation(
+        &repository,
+        actor,
+        "update_entity_annotations",
+        json!({"entity_id": entity_id, "system_tags": ["reviewed"]}),
+    )
+    .await
+    .unwrap();
+    for (name, arguments) in [
+        ("delete_entity", deletion.clone()),
+        (
+            "update_entity_annotations",
+            json!({"entity_id": entity_id, "system_tags": [], "expected_updated_at": deletion["expected_updated_at"]}),
+        ),
+        (
+            "remove_entity_values",
+            json!({"entity_id": entity_id, "remove_values": [{"attribute_code":"title"}], "expected_updated_at": deletion["expected_updated_at"]}),
+        ),
+        (
+            "replace_entity_relationships",
+            json!({"entity_id": entity_id, "relationships": [{"attribute_code":"related","target_entity_ids":[other["id"]]}], "expected_updated_at": deletion["expected_updated_at"]}),
+        ),
+        (
+            "remove_entity_relationships",
+            json!({"entity_id": entity_id, "relationships": [{"attribute_code":"related","target_entity_ids":[other["id"]]}], "expected_updated_at": deletion["expected_updated_at"]}),
+        ),
+        (
+            "link_file",
+            json!({"entity_id": entity_id, "attribute_code":"title", "file_id": Uuid::new_v4(), "expected_updated_at": deletion["expected_updated_at"]}),
+        ),
+    ] {
+        assert!(
+            matches!(
+                execute_mutation(&repository, actor, name, arguments).await,
+                Err(ToolError::Repository(RepositoryError::StaleEntity))
+            ),
+            "{name} must refuse a stale proposal"
+        );
+    }
+
+    // A current pin lets the write through.
+    let mut link = json!({"entity_id": entity_id, "relationships": [{"attribute_code":"related","target_entity_ids":[other["id"]]}]});
+    pin_entity_versions(&repository, "replace_entity_relationships", &mut link)
+        .await
+        .unwrap();
+    execute_mutation(&repository, actor, "replace_entity_relationships", link)
+        .await
+        .unwrap();
+
+    // A migration proposed before another edit is refused too.
+    let blueprint_id = blueprint["blueprint"]["id"].as_str().unwrap();
+    let revision = execute_mutation(&repository, actor, "create_blueprint_revision", json!({
+        "blueprint_id": blueprint_id,
+        "definition": "format_version = 1\ncode = \"pinned_desk\"\nname = \"Pinned desk\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"\n\n[[attributes]]\ncode = \"related\"\nvalue_type = \"relationship\"\ntarget_blueprint = \"pinned_desk\"\n\n[[attributes]]\ncode = \"finish\"\nvalue_type = \"string\""
+    }))
+    .await
+    .unwrap();
+    execute_mutation(
+        &repository,
+        actor,
+        "publish_blueprint",
+        json!({"blueprint_id": blueprint_id, "version": revision["blueprint"]["version"]}),
+    )
+    .await
+    .unwrap();
+    let mut migration = json!({"entity_id": entity_id});
+    pin_entity_versions(&repository, "migrate_entity", &mut migration)
+        .await
+        .unwrap();
+    execute_mutation(
+        &repository,
+        actor,
+        "set_entity_values",
+        set_title("Ash desk"),
+    )
+    .await
+    .unwrap();
+    assert!(matches!(
+        execute_mutation(&repository, actor, "migrate_entity", migration).await,
+        Err(ToolError::Repository(RepositoryError::StaleEntity))
+    ));
+    let mut migration = json!({"entity_id": entity_id});
+    pin_entity_versions(&repository, "migrate_entity", &mut migration)
+        .await
+        .unwrap();
+    assert_eq!(
+        execute_mutation(&repository, actor, "migrate_entity", migration)
+            .await
+            .unwrap()["migrated"],
+        true
+    );
+
+    let mut current = json!({"entity_id": entity_id});
+    pin_entity_versions(&repository, "delete_entity", &mut current)
+        .await
+        .unwrap();
+    execute_mutation(&repository, actor, "delete_entity", current)
+        .await
+        .unwrap();
+    server.abort();
+}
+
+#[sqlx::test]
+async fn agent_reads_incoming_links_hierarchies_labels_and_reusable_attributes(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    create_blueprint(&client, &base_url,
+        "format_version = 1\ncode = \"linked_part\"\nname = \"Linked part\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"\n\n[[attributes]]\ncode = \"parent\"\nvalue_type = \"relationship\"\ntarget_blueprint = \"linked_part\"\ncardinality = \"one\"").await;
+    create_blueprint(&client, &base_url,
+        "format_version = 1\ncode = \"linked_order\"\nname = \"Linked order\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"\n\n[[attributes]]\ncode = \"parts\"\nvalue_type = \"relationship\"\ntarget_blueprint = \"linked_part\"").await;
+    let create = |blueprint: &'static str,
+                  title: &'static str,
+                  links: Vec<(&'static str, Value)>| {
+        let client = client.clone();
+        let base_url = base_url.clone();
+        async move {
+            let mut values = vec![
+                json!({"kind":"scalar","attribute_code":"title","context_id":null,"value":title}),
+            ];
+            values.extend(links.into_iter().map(|(field, target)| {
+                json!({"kind":"relationship","attribute_code":field,"context_id":null,"target_entity_id":target})
+            }));
+            let entity: Value = client
+                .post(format!("{base_url}/v1/entities"))
+                .json(&json!({"blueprint":{"code":blueprint},"values":values}))
+                .send()
+                .await
+                .unwrap()
+                .error_for_status()
+                .unwrap()
+                .json()
+                .await
+                .unwrap();
+            entity["id"].clone()
+        }
+    };
+    let root = create("linked_part", "Frame", vec![]).await;
+    let wheel = create("linked_part", "Wheel", vec![("parent", root.clone())]).await;
+    let spoke = create("linked_part", "Spoke", vec![("parent", wheel.clone())]).await;
+    create("linked_order", "Order 1", vec![("parts", root.clone())]).await;
+    let workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
+    let actor: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
+    let repository = CatalogRepository::system(pool)
+        .for_workspace(workspace)
+        .await
+        .unwrap();
+    let read = |name: &'static str, arguments: Value| {
+        execute_read(&repository, actor, workspace, name, arguments)
+    };
+
+    // Without selectors, every linking field is found and searched.
+    let incoming = read("get_incoming_relationships", json!({"entity_id": root}))
+        .await
+        .unwrap();
+    assert_eq!(
+        incoming["fields"],
+        json!([
+            {"source_blueprint":"linked_order","field":"parts","source_count":1},
+            {"source_blueprint":"linked_part","field":"parent","source_count":1},
+        ])
+    );
+    assert_eq!(incoming["items"].as_array().unwrap().len(), 2);
+    let paged = read(
+        "get_incoming_relationships",
+        json!({"entity_id": root, "relationships": [{"source_blueprint":"linked_part","field":"parent"}], "page": {"size": 1}}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(paged["items"][0]["id"], wheel);
+    assert_eq!(paged["items"][0]["display"]["default"], "Wheel");
+    assert!(paged["next_cursor"].is_null());
+    let unlinked = read("get_incoming_relationships", json!({"entity_id": spoke}))
+        .await
+        .unwrap();
+    assert_eq!(unlinked["fields"], json!([]));
+    assert_eq!(unlinked["items"], json!([]));
+    assert!(
+        read(
+            "get_incoming_relationships",
+            json!({"entity_id": root, "page": {"size": 51}})
+        )
+        .await
+        .is_err()
+    );
+
+    let hierarchy = read(
+        "get_entity_hierarchy",
+        json!({"entity_id": spoke, "field": "parent"}),
+    )
+    .await
+    .unwrap();
+    let path: Vec<_> = hierarchy["paths"][0]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["id"].clone())
+        .collect();
+    assert!(path.contains(&root) && path.contains(&wheel), "{hierarchy}");
+    assert_eq!(hierarchy["cycle_detected"], false);
+    assert!(
+        read(
+            "get_entity_hierarchy",
+            json!({"entity_id": spoke, "field": "title"})
+        )
+        .await
+        .is_err()
+    );
+
+    let labels = read(
+        "get_entity_labels",
+        json!({"entity_ids": [root, wheel, Uuid::new_v4()]}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(labels["items"].as_array().unwrap().len(), 2);
+    assert!(
+        read("get_entity_labels", json!({"entity_ids": []}))
+            .await
+            .is_err()
+    );
+
+    let draft: Value = client
+        .post(format!("{base_url}/reusable-attributes"))
+        .json(&json!({"definition": "code = \"weight\"\nname = \"Weight\"\nvalue_type = \"number\"\n"}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let listed = read("list_reusable_attributes", json!({})).await.unwrap();
+    assert_eq!(listed["attributes"], json!([]));
+    let drafts = read("list_reusable_attributes", json!({"include_drafts": true}))
+        .await
+        .unwrap();
+    assert_eq!(drafts["attributes"][0]["code"], "weight");
+    assert!(drafts["attributes"][0].get("definition").is_none());
+    let full = read(
+        "list_reusable_attributes",
+        json!({"code": format!("{}:weight", draft["namespace"].as_str().unwrap()), "include_drafts": true}),
+    )
+    .await
+    .unwrap();
+    assert!(
+        full["revisions"][0]["definition"]
+            .as_str()
+            .unwrap()
+            .contains("weight")
+    );
+    assert!(
+        read("list_reusable_attributes", json!({"code": "missing"}))
+            .await
+            .is_err()
+    );
+    server.abort();
+}
+
+#[sqlx::test]
+async fn agent_duplicates_comments_validates_and_reviews_catalog_health(pool: PgPool) {
+    CatalogRepository::system(pool.clone())
+        .ensure_rule_permissions()
+        .await
+        .unwrap();
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let definition = |extra: &str| {
+        format!(
+            "format_version = 1\ncode = \"noted_item\"\nname = \"Noted item\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"{extra}"
+        )
+    };
+    let blueprint = create_blueprint(&client, &base_url, &definition("")).await;
+    let blueprint_id = blueprint["blueprint"]["id"].as_str().unwrap().to_owned();
+    let entity = create_entity(&client, &base_url, &blueprint).await;
+    let entity_id = entity["id"].as_str().unwrap().to_owned();
+    let workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
+    let actor: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
+    let repository = CatalogRepository::system(pool.clone())
+        .for_workspace(workspace)
+        .await
+        .unwrap();
+    let read = |name: &'static str, arguments: Value| {
+        execute_read(&repository, actor, workspace, name, arguments)
+    };
+    execute_mutation(
+        &repository,
+        actor,
+        "set_entity_values",
+        json!({"entity_id": entity_id, "values": [
+            {"kind":"scalar","attribute_code":"title","context_id":null,"value":"Lamp"}
+        ]}),
+    )
+    .await
+    .unwrap();
+
+    let copy = execute_mutation(
+        &repository,
+        actor,
+        "duplicate_entity",
+        json!({"entity_id": entity_id}),
+    )
+    .await
+    .unwrap();
+    assert_ne!(copy["id"], entity["id"]);
+    let labels = read("get_entity_labels", json!({"entity_ids": [copy["id"]]}))
+        .await
+        .unwrap();
+    assert_eq!(labels["items"][0]["display"]["default"], "Lamp");
+
+    // Comments are written as the initiating user and read back bounded.
+    for body in [
+        "First note".to_owned(),
+        "x".repeat(1_500),
+        "Third note".to_owned(),
+    ] {
+        execute_mutation(
+            &repository,
+            actor,
+            "add_entity_comment",
+            json!({"entity_id": entity_id, "body": body}),
+        )
+        .await
+        .unwrap();
+    }
+    assert!(
+        execute_mutation(
+            &repository,
+            actor,
+            "add_entity_comment",
+            json!({"entity_id": entity_id, "body": "  "})
+        )
+        .await
+        .is_err()
+    );
+    let first = read(
+        "list_entity_comments",
+        json!({"entity_id": entity_id, "limit": 2}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(first["items"][0]["body"], "Third note");
+    assert_eq!(first["items"][0]["author_user_id"], json!(actor));
+    assert_eq!(first["items"][1]["body"].as_str().unwrap().len(), 1_000);
+    assert_eq!(first["items"][1]["body_truncated"], true);
+    let rest = read(
+        "list_entity_comments",
+        json!({"entity_id": entity_id, "limit": 2, "before": first["next_before"]}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(rest["items"][0]["body"], "First note");
+    assert!(rest["next_before"].is_null());
+
+    let rule = "format_version = 1\ncode = \"noted_title\"\nname = \"Noted title\"\nseverity = \"warning\"\n[[triggers]]\ntype = \"manual\"\n[predicate]\ntype = \"required\"\nattribute_code = \"title\"";
+    assert_eq!(
+        read("validate_rule_definition", json!({"definition": rule}))
+            .await
+            .unwrap()["valid"],
+        true
+    );
+    assert!(matches!(
+        read(
+            "validate_rule_definition",
+            json!({"definition": "format_version = 1"})
+        )
+        .await,
+        Err(ToolError::Repository(
+            RepositoryError::InvalidRuleDefinition(_)
+        ))
+    ));
+    let workflow = "format_version = 2\ncode = \"noted_workflow\"\nname = \"Noted workflow\"\n[[triggers]]\ntype = \"manual\"\n[[actions]]\ntype = \"system_tags_add\"\ntags = [\"checked\"]";
+    assert_eq!(
+        read(
+            "validate_workflow_definition",
+            json!({"definition": workflow})
+        )
+        .await
+        .unwrap()["valid"],
+        true
+    );
+    assert!(matches!(
+        read(
+            "validate_workflow_definition",
+            json!({"definition": "code = 'x'"})
+        )
+        .await,
+        Err(ToolError::Repository(
+            RepositoryError::InvalidWorkflowDefinition(_)
+        ))
+    ));
+
+    let created: Value = client
+        .post(format!("{base_url}/rules"))
+        .json(&json!({"blueprint_id": blueprint_id, "blueprint_version": 1, "context_id": null, "definition": rule}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let finding_id = Uuid::new_v4();
+    sqlx::query("INSERT INTO rule_findings (id,workspace_id,rule_id,rule_version,entity_id,evaluation_key,severity,message,evidence) VALUES ($1,$2,$3,1,$4,'noted','warning','Check title','{}')")
+        .bind(finding_id)
+        .bind(workspace)
+        .bind(created["id"].as_str().unwrap().parse::<Uuid>().unwrap())
+        .bind(entity_id.parse::<Uuid>().unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+    let acknowledged = execute_mutation(
+        &repository,
+        actor,
+        "acknowledge_rule_finding",
+        json!({"finding_id": finding_id}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(acknowledged["state"], "acknowledged");
+
+    // A published revision that removes an attribute reports what a batch
+    // migration would drop.
+    let revision = execute_mutation(&repository, actor, "create_blueprint_revision", json!({
+        "blueprint_id": blueprint_id,
+        "definition": "format_version = 1\ncode = \"noted_item\"\nname = \"Noted item\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"label\"]\n\n[[attributes]]\ncode = \"label\"\nvalue_type = \"string\"",
+    }))
+    .await
+    .unwrap();
+    let version = revision["blueprint"]["version"].clone();
+    execute_mutation(
+        &repository,
+        actor,
+        "publish_blueprint",
+        json!({"blueprint_id": blueprint_id, "version": version}),
+    )
+    .await
+    .unwrap();
+    let impact = read(
+        "preview_blueprint_migration_impact",
+        json!({"blueprint_id": blueprint_id, "version": version}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(impact["removed_attribute_codes"], json!(["title"]));
+    assert_eq!(impact["entities_with_removed_values"], 2);
+
+    let health = read(
+        "data_health_details",
+        json!({"section": "blueprints", "blueprint": "noted_item"}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(health["items"].as_array().unwrap().len(), 1);
+    assert_eq!(health["items"][0]["active_entities"], 2);
+    for section in ["freshness", "completeness", "contexts", "relationships"] {
+        read("data_health_details", json!({"section": section}))
+            .await
+            .unwrap();
+    }
+    assert!(
+        read("data_health_details", json!({"section": "storage"}))
+            .await
+            .is_err()
+    );
+    server.abort();
+}
 
 #[sqlx::test]
 async fn agent_annotation_and_context_edits_use_catalog_validation(pool: PgPool) {
@@ -1243,6 +1926,7 @@ async fn agent_read_tools_enforce_initiator_permissions_and_scopes(pool: PgPool)
 
     for (name, arguments) in [
         ("list_blueprints", json!({})),
+        ("get_blueprint", json!({"code":"product"})),
         ("list_contexts", json!({})),
         ("get_context", json!({"context_id":context["id"]})),
         ("data_health_summary", json!({})),
@@ -1266,6 +1950,21 @@ async fn agent_read_tools_enforce_initiator_permissions_and_scopes(pool: PgPool)
         ),
         ("get_entity", json!({"entity_id": entity["id"]})),
         (
+            "get_incoming_relationships",
+            json!({"entity_id": entity["id"]}),
+        ),
+        (
+            "get_entity_hierarchy",
+            json!({"entity_id": entity["id"], "field": "parent"}),
+        ),
+        ("list_reusable_attributes", json!({})),
+        ("list_entity_comments", json!({"entity_id": entity["id"]})),
+        (
+            "validate_rule_definition",
+            json!({"definition": "format_version = 1"}),
+        ),
+        ("data_health_details", json!({"section": "blueprints"})),
+        (
             "get_entity_context_preview",
             json!({"entity_id": entity["id"], "context_id": context["id"]}),
         ),
@@ -1275,6 +1974,19 @@ async fn agent_read_tools_enforce_initiator_permissions_and_scopes(pool: PgPool)
             Err(ToolError::Forbidden)
         ));
     }
+    // Labels are filtered per entity, so an unreadable entity is omitted.
+    assert_eq!(
+        execute_read(
+            &repository,
+            actor,
+            workspace,
+            "get_entity_labels",
+            json!({"entity_ids": [entity["id"]]}),
+        )
+        .await
+        .unwrap()["items"],
+        json!([])
+    );
 
     let scoped_reader = repository
         .create_workspace_role(

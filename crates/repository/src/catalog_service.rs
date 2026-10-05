@@ -140,6 +140,16 @@ impl<'a> CatalogMutationService<'a> {
         self.repository.delete_entity(entity_id).await
     }
 
+    pub async fn delete_entity_checked(
+        &self,
+        entity_id: Uuid,
+        expected_updated_at: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> Result<(), RepositoryError> {
+        self.repository
+            .delete_entity_checked(entity_id, expected_updated_at)
+            .await
+    }
+
     pub async fn duplicate_entity(&self, entity_id: Uuid) -> Result<Entity, RepositoryError> {
         self.repository.duplicate_entity(entity_id).await
     }
@@ -273,6 +283,20 @@ impl<'a> CatalogMutationService<'a> {
         self.repository.remove_relationships(entity_id, input).await
     }
 
+    /// Replaces (`replace`) or removes relationship targets with an optional
+    /// optimistic-concurrency precondition.
+    pub async fn mutate_relationships_checked(
+        &self,
+        entity_id: Uuid,
+        input: RelationshipMutation,
+        replace: bool,
+        expected_updated_at: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> Result<Vec<AttributeValue>, RepositoryError> {
+        self.repository
+            .mutate_relationships_checked(entity_id, input, replace, expected_updated_at)
+            .await
+    }
+
     pub async fn link_file(
         &self,
         entity_id: Uuid,
@@ -280,8 +304,26 @@ impl<'a> CatalogMutationService<'a> {
         context_id: Option<Uuid>,
         file_id: Uuid,
     ) -> Result<FileMetadata, RepositoryError> {
+        self.link_file_checked(entity_id, attribute_code, context_id, file_id, None)
+            .await
+    }
+
+    pub async fn link_file_checked(
+        &self,
+        entity_id: Uuid,
+        attribute_code: &str,
+        context_id: Option<Uuid>,
+        file_id: Uuid,
+        expected_updated_at: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> Result<FileMetadata, RepositoryError> {
         self.repository
-            .link_file_to_attribute(entity_id, attribute_code, context_id, file_id)
+            .link_file_to_attribute_checked(
+                entity_id,
+                attribute_code,
+                context_id,
+                file_id,
+                expected_updated_at,
+            )
             .await
     }
 

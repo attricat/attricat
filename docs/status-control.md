@@ -152,8 +152,8 @@ returns `409 stale_entity`, even if the requested transition is still valid.
 Refresh, review the latest state, and explicitly restore/review a draft before
 retrying. Non-status writes retain their existing API compatibility.
 
-Legacy extension/agent write paths that cannot supply a precondition cannot
-edit statuses; they may continue writing unrelated attributes. Server-owned
+Legacy extension write paths that cannot supply a precondition cannot edit
+statuses; they may continue writing unrelated attributes. Server-owned
 transactional workflow actions still validate transitions against their locked
 starting state.
 
@@ -285,3 +285,11 @@ Agent mutations run as the approving user and hit the same checks. Tool errors
 carry the stable codes above, and the read-only `get_entity_record_controls`
 tool returns transition access, approvals and holds so the agent can explain a
 denial instead of retrying.
+
+Every single-entity agent edit (values, value removal and restore,
+annotations, relationships, file links, blueprint migration and deletion) and
+each update or delete in an agent batch carries `expected_updated_at`. When the agent omits it, the runner records the
+entity's `updated_at` when the change is proposed, so the approved write
+applies to the state the approver saw and returns `409 stale_entity` if the
+entity changed while it waited for approval. The same precondition lets these
+edits change a status.

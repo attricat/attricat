@@ -780,7 +780,10 @@ ordered events. `GET /agent/approvals` lists pending tool calls (optionally by
 `conversation_id`), and the existing approve/reject routes enqueue the resumed
 run after atomically recording the decision. Decisions are accepted only while
 a call is pending; a repeated or contradictory decision returns the normal
-`approval_already_decided` conflict and never executes the write again.
+`approval_already_decided` conflict and never executes the write again. Each
+pending call's `change_summary` names the entities, contexts and blueprints it
+targets by display label or code, alongside their IDs, when the initiating user
+may read them.
 
 Conversation titles are limited to 512 bytes and messages to 1–32,768 bytes.
 Upload standalone conversation files with multipart `POST`
@@ -800,7 +803,16 @@ or run request returns `503 service_unavailable` when the API has no configured
 provider/worker. Runs retain provider/model snapshots and safe error codes, but
 never provider credentials or raw provider response bodies. Read tools run
 automatically; every mutation is emitted as an approval proposal before it
-reaches a repository write. Built-in tools include exact blueprint-revision
+reaches a repository write. `list_blueprints` returns blueprint summaries
+without definitions; `get_blueprint` reads one blueprint's definition and
+attributes by code, and `blueprint_authoring_guide` serves the authoring
+documentation one topic per call so every result stays within the tool result
+bound. `get_incoming_relationships` lists the relationship fields that link to
+an entity with a count per field, then pages through the linking entities;
+`get_entity_hierarchy` reads a self-referencing hierarchy; `get_entity_labels`
+names up to 100 entities, omitting those the initiating user cannot read; and
+`list_reusable_attributes` lists reusable attribute definitions and groups.
+Built-in tools include exact blueprint-revision
 inspection and read-only entity migration assessment, plus approved replacement
 or removal of relationship targets. Replacement sets the complete target list
 for each specified attribute/context (an empty list clears it); removal unlinks
@@ -819,8 +831,18 @@ and paged workflow-run statuses (excluding event payloads and error bodies).
 Exact rule/workflow definition reads, paged rule-run summaries, and targeted
 workflow-run summaries provide follow-up context without compiled plans,
 internal cursors, trigger payloads, or error bodies. They require
-`data_health.read`, `rules.read`, and `workflows.read` respectively; no rule or
-workflow management action is exposed to the agent. The agent may inspect a
+`data_health.read`, `rules.read`, and `workflows.read` respectively.
+`data_health_details` reads one data-health breakdown, optionally for one
+blueprint. `validate_rule_definition` and `validate_workflow_definition` compile
+a draft without saving it (`rules.read`, `workflows.read`). The only rule or
+workflow management action exposed to the agent is the approved
+`acknowledge_rule_finding` (`rules.manage`); it cannot create, enable, run or
+replay rules or workflows. `preview_blueprint_migration_impact` reports what a
+safe batch migration to a published revision would change, without starting
+one. The agent can propose an approved `duplicate_entity` (`entities.write`)
+and, like any entity reader, an approved `add_entity_comment` written as the
+initiating user; `list_entity_comments` returns bounded pages with each body cut
+to 1,000 characters. The agent may inspect a
 context by ID, then propose an approved parent/data replacement or deletion;
 it can also propose approved entity system-tag/metadata updates. Omitted
 annotation fields remain unchanged, and context deletion is rejected when the

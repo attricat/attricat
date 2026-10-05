@@ -625,9 +625,19 @@ impl CatalogRepository {
     }
 
     pub async fn delete_entity(&self, entity_id: Uuid) -> Result<(), RepositoryError> {
+        self.delete_entity_checked(entity_id, None).await
+    }
+
+    /// Deletes an entity, failing with [`RepositoryError::StaleEntity`] when
+    /// `expected_updated_at` is set and no longer current.
+    pub async fn delete_entity_checked(
+        &self,
+        entity_id: Uuid,
+        expected_updated_at: Option<DateTime<Utc>>,
+    ) -> Result<(), RepositoryError> {
         let mut transaction = self.pool.begin().await?;
         let (changes, event) = self
-            .delete_entity_in_transaction(&mut transaction, entity_id, None)
+            .delete_entity_in_transaction(&mut transaction, entity_id, expected_updated_at)
             .await?;
         self.commit_entity_mutation(transaction, changes, event)
             .await?;
@@ -795,7 +805,8 @@ impl CatalogRepository {
         entity_id: Uuid,
         input: RelationshipMutation,
     ) -> Result<Vec<AttributeValue>, RepositoryError> {
-        self.mutate_relationships(entity_id, input, true).await
+        self.mutate_relationships(entity_id, input, true, None)
+            .await
     }
 
     pub async fn remove_relationships(
@@ -803,7 +814,22 @@ impl CatalogRepository {
         entity_id: Uuid,
         input: RelationshipMutation,
     ) -> Result<Vec<AttributeValue>, RepositoryError> {
-        self.mutate_relationships(entity_id, input, false).await
+        self.mutate_relationships(entity_id, input, false, None)
+            .await
+    }
+
+    /// Replaces (`replace`) or removes relationship targets, failing with
+    /// [`RepositoryError::StaleEntity`] when `expected_updated_at` is set and
+    /// no longer current.
+    pub async fn mutate_relationships_checked(
+        &self,
+        entity_id: Uuid,
+        input: RelationshipMutation,
+        replace: bool,
+        expected_updated_at: Option<DateTime<Utc>>,
+    ) -> Result<Vec<AttributeValue>, RepositoryError> {
+        self.mutate_relationships(entity_id, input, replace, expected_updated_at)
+            .await
     }
 
     async fn mutate_relationships(
@@ -811,6 +837,7 @@ impl CatalogRepository {
         entity_id: Uuid,
         input: RelationshipMutation,
         replace: bool,
+        expected_updated_at: Option<DateTime<Utc>>,
     ) -> Result<Vec<AttributeValue>, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
         if !input.relationships.is_empty() {
@@ -818,6 +845,9 @@ impl CatalogRepository {
                 .await?;
         }
         let entity = self.lock_entity(&mut transaction, entity_id).await?;
+        if expected_updated_at.is_some_and(|expected| expected != entity.updated_at) {
+            return Err(RepositoryError::StaleEntity);
+        }
         let before = self
             .entity_audit_snapshot(&mut transaction, entity_id)
             .await?;
