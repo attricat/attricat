@@ -17,6 +17,131 @@ use support::*;
 use tokio::time::{sleep, timeout};
 
 #[sqlx::test]
+async fn agent_blueprint_reads_list_summaries_and_fetch_one_definition(pool: PgPool) {
+    let (_base_url, server) = start_server(pool.clone()).await;
+    let workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
+    let actor: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
+    let repository = CatalogRepository::system(pool)
+        .for_workspace(workspace)
+        .await
+        .unwrap();
+    let definition = |attribute: &str| {
+        format!(
+            "format_version = 1\ncode = \"agent_desk\"\nname = \"Desk\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"{attribute}\"]\n\n[[attributes]]\ncode = \"{attribute}\"\nvalue_type = \"string\""
+        )
+    };
+    let created = execute_mutation(
+        &repository,
+        actor,
+        "create_blueprint",
+        json!({"definition": definition("title")}),
+    )
+    .await
+    .unwrap();
+    let id = created["blueprint"]["id"].as_str().unwrap().to_owned();
+    let get =
+        |arguments: Value| execute_read(&repository, actor, workspace, "get_blueprint", arguments);
+
+    // With no published revision, the latest draft is returned.
+    let draft = get(json!({"code":"agent_desk"})).await.unwrap();
+    assert_eq!(draft["blueprint"]["status"], "draft");
+    assert_eq!(draft["attributes"][0]["code"], "title");
+
+    execute_mutation(
+        &repository,
+        actor,
+        "publish_blueprint",
+        json!({"blueprint_id":id,"version":1}),
+    )
+    .await
+    .unwrap();
+    execute_mutation(
+        &repository,
+        actor,
+        "create_blueprint_revision",
+        json!({"blueprint_id":id,"definition":definition("label")}),
+    )
+    .await
+    .unwrap();
+
+    // The published revision wins over a newer draft; an exact version
+    // reaches the draft.
+    let published = get(json!({"code":"agent_desk"})).await.unwrap();
+    assert_eq!(published["blueprint"]["version"], 1);
+    assert!(
+        published["blueprint"]["definition"]
+            .as_str()
+            .unwrap()
+            .contains("title")
+    );
+    let next = get(json!({"code":"agent_desk","version":2})).await.unwrap();
+    assert_eq!(next["blueprint"]["status"], "draft");
+    assert!(matches!(
+        get(json!({"code":"agent_desk","version":3})).await,
+        Err(ToolError::Repository(RepositoryError::NotFound(_)))
+    ));
+
+    // Listing is a bounded summary without definitions or schemas.
+    let listed = execute_read(&repository, actor, workspace, "list_blueprints", json!({}))
+        .await
+        .unwrap();
+    let desk = listed
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|blueprint| blueprint["code"] == "agent_desk")
+        .unwrap();
+    assert_eq!(desk["version"], 2);
+    assert_eq!(desk["status"], "draft");
+    assert_eq!(desk["kind"], "entity");
+    for omitted in ["definition", "entity_schema", "views", "attributes"] {
+        assert!(
+            desk.get(omitted).is_none(),
+            "{omitted} should not be listed"
+        );
+    }
+
+    let guide = execute_read(
+        &repository,
+        actor,
+        workspace,
+        "blueprint_authoring_guide",
+        json!({"topic":"status_control"}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(guide["topic"], "status_control");
+    assert!(
+        guide["markdown"]
+            .as_str()
+            .unwrap()
+            .contains("x-attricat-status")
+    );
+    let default = execute_read(
+        &repository,
+        actor,
+        workspace,
+        "blueprint_authoring_guide",
+        json!({}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(default["topic"], "blueprints");
+    assert!(
+        execute_read(
+            &repository,
+            actor,
+            workspace,
+            "blueprint_authoring_guide",
+            json!({"topic":"rules"})
+        )
+        .await
+        .is_err()
+    );
+    server.abort();
+}
+
+#[sqlx::test]
 async fn agent_annotation_and_context_edits_use_catalog_validation(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -1243,6 +1368,7 @@ async fn agent_read_tools_enforce_initiator_permissions_and_scopes(pool: PgPool)
 
     for (name, arguments) in [
         ("list_blueprints", json!({})),
+        ("get_blueprint", json!({"code":"product"})),
         ("list_contexts", json!({})),
         ("get_context", json!({"context_id":context["id"]})),
         ("data_health_summary", json!({})),

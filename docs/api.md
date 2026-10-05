@@ -800,7 +800,11 @@ or run request returns `503 service_unavailable` when the API has no configured
 provider/worker. Runs retain provider/model snapshots and safe error codes, but
 never provider credentials or raw provider response bodies. Read tools run
 automatically; every mutation is emitted as an approval proposal before it
-reaches a repository write. Built-in tools include exact blueprint-revision
+reaches a repository write. `list_blueprints` returns blueprint summaries
+without definitions; `get_blueprint` reads one blueprint's definition and
+attributes by code, and `blueprint_authoring_guide` serves the authoring
+documentation one topic per call so every result stays within the tool result
+bound. Built-in tools include exact blueprint-revision
 inspection and read-only entity migration assessment, plus approved replacement
 or removal of relationship targets. Replacement sets the complete target list
 for each specified attribute/context (an empty list clears it); removal unlinks

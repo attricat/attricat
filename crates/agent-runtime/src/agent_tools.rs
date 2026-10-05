@@ -23,6 +23,15 @@ use crate::{
 const BLUEPRINT_AUTHORING_GUIDE: &str = include_str!("../../../docs/blueprints.md");
 const VIEW_CONFIGURATION_GUIDE: &str = include_str!("../../../docs/views.md");
 const JSON_SCHEMA_GUIDE: &str = include_str!("../../../docs/json-schema-validation.md");
+const STATUS_CONTROL_GUIDE: &str = include_str!("../../../docs/status-control.md");
+/// Authoring documentation served one topic per call, so each result stays
+/// within the tool result bound as the documents grow.
+const AUTHORING_GUIDE_TOPICS: [(&str, &str); 4] = [
+    ("blueprints", BLUEPRINT_AUTHORING_GUIDE),
+    ("views", VIEW_CONFIGURATION_GUIDE),
+    ("json_schema", JSON_SCHEMA_GUIDE),
+    ("status_control", STATUS_CONTROL_GUIDE),
+];
 const MAX_SEARCH_FILTERS: usize = 20;
 
 #[derive(Deserialize)]
@@ -44,6 +53,26 @@ fn valid_saved_filter(filter: &crate::model::SearchFilter) -> bool {
 
 fn attribute_filter_parameters() -> Value {
     json!({"type":"array","maxItems":20,"items":{"type":"object","required":["field","operator","value"],"properties":{"field":{"type":"string"},"operator":{"type":"string","enum":["eq","contains","starts_with","gt","gte","lt","lte"]},"value":{"type":["string","number","boolean"]}},"additionalProperties":false}})
+}
+
+/// One `values` entry for entity creation, batches and migrations.
+fn attribute_value_parameters() -> Value {
+    json!({"type":"array","items":{"type":"object","required":["kind","attribute_code"],"properties":{
+        "kind":{"type":"string","enum":["scalar","relationship"]},
+        "attribute_code":{"type":"string"},
+        "context_id":{"type":["string","null"],"format":"uuid"},
+        "value":{"description":"Typed JSON value; required when kind is scalar."},
+        "target_entity_id":{"type":"string","format":"uuid","description":"Required when kind is relationship."}
+    },"additionalProperties":false}})
+}
+
+fn relationship_targets_parameters() -> Value {
+    json!({"type":"array","items":{
+        "type":"object","required":["attribute_code","target_entity_ids"],"properties":{
+            "attribute_code":{"type":"string"},"context_id":{"type":["string","null"],"format":"uuid"},
+            "target_entity_ids":{"type":"array","maxItems":100,"items":{"type":"string","format":"uuid"}}
+        },"additionalProperties":false
+    }})
 }
 
 fn relationship_filter_parameters() -> Value {
@@ -119,13 +148,18 @@ pub fn definitions() -> Vec<ToolDefinition> {
     vec![
         definition(
             "blueprint_authoring_guide",
-            "Get the complete TOML blueprint, view, file-attribute, and JSON Schema authoring syntax. Call this before drafting a blueprint.",
-            json!({"type":"object","additionalProperties":false}),
+            "Get one topic of the blueprint authoring documentation. blueprints (the default) covers the TOML syntax, attributes, relationships, includes, unique_keys, file attributes and checks; views covers view configuration; json_schema covers value_schema validation; status_control covers status attributes, transitions and controlled records. Call it with blueprints before drafting a blueprint, and with another topic when the draft needs that feature.",
+            json!({"type":"object","properties":{"topic":{"type":"string","enum":AUTHORING_GUIDE_TOPICS.map(|(topic, _)| topic)}},"additionalProperties":false}),
         ),
         definition(
             "list_blueprints",
-            "List the catalogue's current blueprints, including their persisted TOML definitions and compiled attributes.",
+            "List the catalogue's blueprints as summaries of their latest revision: id, code, name, kind (entity or mixin), version, status (draft or published) and timestamps. Use get_blueprint for a blueprint's definition and attributes.",
             json!({"type":"object","additionalProperties":false}),
+        ),
+        definition(
+            "get_blueprint",
+            "Get one blueprint by code, including its TOML definition and compiled attributes. Without version, returns the highest published revision, or the latest draft when none is published; with version, returns that exact revision, including drafts. Call this before creating entities of a blueprint or revising it.",
+            json!({"type":"object","required":["code"],"properties":{"code":{"type":"string"},"version":{"type":"integer","minimum":1}},"additionalProperties":false}),
         ),
         definition(
             "get_blueprint_revision",
@@ -244,18 +278,18 @@ pub fn definitions() -> Vec<ToolDefinition> {
         ),
         definition(
             "create_blueprint_revision",
-            "Create the next draft revision of an existing blueprint from complete revised TOML. Use list_blueprints for the id and blueprint_authoring_guide before drafting. This change requires approval.",
+            "Create the next draft revision of an existing blueprint from complete revised TOML. Use get_blueprint for the id and current definition, and blueprint_authoring_guide before drafting. This change requires approval.",
             json!({"type":"object","required":["blueprint_id","definition"],"properties":{"blueprint_id":{"type":"string","format":"uuid"},"definition":{"type":"string","description":"Complete revised TOML; retain the existing blueprint code."}},"additionalProperties":false}),
         ),
         definition(
             "publish_blueprint",
-            "Publish an existing draft blueprint revision. Use the id and version returned by create_blueprint, create_blueprint_revision, or list_blueprints. Publishing new unique_keys or an acyclic or tree hierarchy first checks existing entities and fails with unique_key_duplicates or relationship_hierarchy_violations naming the entities to fix. This change requires approval.",
+            "Publish an existing draft blueprint revision. Use the id and version returned by create_blueprint, create_blueprint_revision, list_blueprints, or get_blueprint. Publishing new unique_keys or an acyclic or tree hierarchy first checks existing entities and fails with unique_key_duplicates or relationship_hierarchy_violations naming the entities to fix. This change requires approval.",
             json!({"type":"object","required":["blueprint_id","version"],"properties":{"blueprint_id":{"type":"string","format":"uuid"},"version":{"type":"integer","minimum":1}},"additionalProperties":false}),
         ),
         definition(
             "create_entity",
             "Create an entity from an existing blueprint. This change requires approval. blueprint must contain the existing blueprint code and optional version; never embed a blueprint definition here. Scalar values use {kind:'scalar', attribute_code:'...', context_id:null, value:<typed JSON value>}; relationships use {kind:'relationship', attribute_code:'...', context_id:null, target_entity_id:'UUID'}. Values must respect the blueprint's unique_keys (409 unique_key_conflict names the entity that already holds the key), relationship target blueprints (422 relationship_target_type_mismatch), and acyclic or tree hierarchies (409 relationship_cycle).",
-            json!({"type":"object","required":["blueprint"],"properties":{"blueprint":{"type":"object","required":["code"],"properties":{"code":{"type":"string"},"version":{"type":"integer"}},"additionalProperties":false},"values":{"type":"array"},"system_tags":{"type":"array","items":{"type":"string"}},"system_metadata":{"type":"object"}},"additionalProperties":false}),
+            json!({"type":"object","required":["blueprint"],"properties":{"blueprint":{"type":"object","required":["code"],"properties":{"code":{"type":"string"},"version":{"type":"integer","minimum":1}},"additionalProperties":false},"values":attribute_value_parameters(),"system_tags":{"type":"array","items":{"type":"string"}},"system_metadata":{"type":"object"}},"additionalProperties":false}),
         ),
         definition(
             "apply_entity_batch",
@@ -265,8 +299,8 @@ pub fn definitions() -> Vec<ToolDefinition> {
                 "entity_id":{"type":"string","format":"uuid"},
                 "blueprint":{"type":"object","required":["code"],"properties":{"code":{"type":"string"},"version":{"type":"integer","minimum":1}},"additionalProperties":false},
                 "expected_updated_at":{"type":"string","format":"date-time"},
-                "values":{"type":"array"},
-                "relationships":{"type":"array","items":{"type":"object","required":["attribute_code","target_entity_ids"],"properties":{"attribute_code":{"type":"string"},"context_id":{"type":["string","null"],"format":"uuid"},"target_entity_ids":{"type":"array","maxItems":100,"items":{"type":"string","format":"uuid"}}},"additionalProperties":false}},
+                "values":attribute_value_parameters(),
+                "relationships":relationship_targets_parameters(),
                 "remove_values":{"type":"array","items":{"type":"object","required":["attribute_code"],"properties":{"attribute_code":{"type":"string"},"context_id":{"type":["string","null"],"format":"uuid"}},"additionalProperties":false}},
                 "system_tags":{"type":"array","items":{"type":"string"}},
                 "system_metadata":{"type":"object"}
@@ -305,7 +339,7 @@ pub fn definitions() -> Vec<ToolDefinition> {
         definition(
             "migrate_entity",
             "Upgrade an entity to the latest published revision of its blueprint. Call preview_entity_migration first to assess compatibility without a write. Supply replacement scalar values, relationship target sets, or discarded attribute codes if needed. This change requires approval; with no remediation input, a ready entity is migrated immediately after approval.",
-            json!({"type":"object","required":["entity_id"],"properties":{"entity_id":{"type":"string","format":"uuid"},"values":{"type":"array"},"relationships":{"type":"array"},"discard_attributes":{"type":"array","items":{"type":"string"}}},"additionalProperties":false}),
+            json!({"type":"object","required":["entity_id"],"properties":{"entity_id":{"type":"string","format":"uuid"},"values":attribute_value_parameters(),"relationships":relationship_targets_parameters(),"discard_attributes":{"type":"array","items":{"type":"string"}}},"additionalProperties":false}),
         ),
         definition(
             "preview_entity_migration",
@@ -465,14 +499,12 @@ fn next_history_offset(has_more: bool, offset: i64, limit: i64) -> Option<i64> {
 }
 
 fn relationship_mutation_parameters() -> Value {
+    let mut relationships = relationship_targets_parameters();
+    relationships["minItems"] = json!(1);
+    relationships["maxItems"] = json!(20);
     json!({"type":"object","required":["entity_id","relationships"],"properties":{
         "entity_id":{"type":"string","format":"uuid"},
-        "relationships":{"type":"array","minItems":1,"maxItems":20,"items":{
-            "type":"object","required":["attribute_code","target_entity_ids"],"properties":{
-                "attribute_code":{"type":"string"},"context_id":{"type":["string","null"],"format":"uuid"},
-                "target_entity_ids":{"type":"array","maxItems":100,"items":{"type":"string","format":"uuid"}}
-            },"additionalProperties":false
-        }}},"additionalProperties":false})
+        "relationships":relationships},"additionalProperties":false})
 }
 
 fn definition(name: &'static str, description: &'static str, parameters: Value) -> ToolDefinition {
@@ -490,6 +522,7 @@ pub fn kind(name: &str) -> Result<ToolKind, ToolError> {
     match name {
         "blueprint_authoring_guide"
         | "list_blueprints"
+        | "get_blueprint"
         | "get_blueprint_revision"
         | "list_contexts"
         | "get_workspace_directory"
@@ -768,13 +801,44 @@ pub async fn execute_read(
         return Err(ToolError::Forbidden);
     }
     let result = match name {
-        "blueprint_authoring_guide" => json!({
-            "blueprints_markdown": BLUEPRINT_AUTHORING_GUIDE,
-            "views_markdown": VIEW_CONFIGURATION_GUIDE,
-            "json_schema_markdown": JSON_SCHEMA_GUIDE,
-        }),
-        "list_blueprints" => {
-            serde_json::to_value(repository.list_blueprints().await?).expect("models serialize")
+        "blueprint_authoring_guide" => {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct Input { topic: Option<String> }
+            let topic = decode::<Input>(arguments)?.topic.unwrap_or_else(|| "blueprints".into());
+            let (topic, markdown) = AUTHORING_GUIDE_TOPICS.iter()
+                .find(|(code, _)| *code == topic)
+                .ok_or_else(|| ToolError::InvalidArguments(format!(
+                    "topic must be one of {}",
+                    AUTHORING_GUIDE_TOPICS.map(|(code, _)| code).join(", ")
+                )))?;
+            json!({
+                "topic": topic,
+                "markdown": markdown,
+                "other_topics": AUTHORING_GUIDE_TOPICS.iter()
+                    .map(|(code, _)| *code).filter(|code| code != topic).collect::<Vec<_>>(),
+            })
+        }
+        "list_blueprints" => json!(repository.list_blueprints().await?.into_iter()
+            .map(|blueprint| json!({"id":blueprint.id,"code":blueprint.code,"name":blueprint.name,
+                "kind":blueprint.kind,"version":blueprint.version,"status":blueprint.status,
+                "published_at":blueprint.published_at,"updated_at":blueprint.updated_at}))
+            .collect::<Vec<_>>()),
+        "get_blueprint" => {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct Input { code: String, version: Option<i64> }
+            let input: Input = decode(arguments)?;
+            let blueprint = match input.version {
+                Some(version) if version > 0 => repository.get_blueprint_by_code_and_version(&input.code, version).await?,
+                Some(_) => return Err(ToolError::InvalidArguments("version must be positive".into())),
+                None => match repository.get_blueprint_by_code(&input.code).await? {
+                    Some(published) => Some(published),
+                    None => repository.get_blueprint_by_code_including_drafts(&input.code).await?,
+                },
+            };
+            serde_json::to_value(blueprint.ok_or(RepositoryError::NotFound("blueprint"))?)
+                .expect("blueprint serializes")
         }
         "get_blueprint_revision" => {
             let blueprint_id = parse_uuid(&arguments, "blueprint_id")?;
@@ -2205,7 +2269,9 @@ async fn read_authorized(
     let (permission, target_id, target_code) = match name {
         // This is static product documentation, not workspace catalog data.
         "blueprint_authoring_guide" => return Ok(true),
-        "list_blueprints" | "get_blueprint_revision" => ("blueprints.read", None, None),
+        "list_blueprints" | "get_blueprint" | "get_blueprint_revision" => {
+            ("blueprints.read", None, None)
+        }
         "data_health_summary" => ("data_health.read", None, None),
         "list_rule_findings" | "get_rule_definition" | "list_rule_runs" => {
             ("rules.read", None, None)
@@ -2743,15 +2809,65 @@ mod tests {
     }
 
     #[test]
-    fn authoring_guide_fits_the_tool_result_bound() {
-        let guide = json!({
-            "blueprints_markdown": super::BLUEPRINT_AUTHORING_GUIDE,
-            "views_markdown": super::VIEW_CONFIGURATION_GUIDE,
-            "json_schema_markdown": super::JSON_SCHEMA_GUIDE,
-        });
-        assert!(bounded(guide).is_ok());
+    fn each_authoring_guide_topic_fits_the_tool_result_bound_with_headroom() {
+        let schema = &definitions()
+            .into_iter()
+            .find(|tool| tool.function.name == "blueprint_authoring_guide")
+            .unwrap()
+            .function
+            .parameters;
+        assert_eq!(
+            schema["properties"]["topic"]["enum"],
+            json!(["blueprints", "views", "json_schema", "status_control"])
+        );
+        for (topic, markdown) in super::AUTHORING_GUIDE_TOPICS {
+            // Leave room for each document to grow before it reaches the bound.
+            let result = json!({"topic": topic, "markdown": markdown, "other_topics": ["views"]});
+            assert!(
+                serde_json::to_vec(&result).unwrap().len() < MAX_TOOL_RESULT_BYTES * 3 / 4,
+                "the {topic} guide is close to the tool result bound; split it into topics"
+            );
+        }
         assert!(super::JSON_SCHEMA_GUIDE.contains("x-attricat-checks"));
         assert!(super::BLUEPRINT_AUTHORING_GUIDE.contains("rules.enforcement"));
+        assert!(super::STATUS_CONTROL_GUIDE.contains("x-attricat-status"));
+    }
+
+    #[test]
+    fn entity_value_parameters_describe_each_value_shape() {
+        let definitions = definitions();
+        let parameters = |name: &str| {
+            definitions
+                .iter()
+                .find(|tool| tool.function.name == name)
+                .unwrap()
+                .function
+                .parameters
+                .clone()
+        };
+        let values = super::attribute_value_parameters();
+        assert_eq!(parameters("create_entity")["properties"]["values"], values);
+        assert_eq!(parameters("migrate_entity")["properties"]["values"], values);
+        let batch = &parameters("apply_entity_batch")["properties"]["operations"]["items"];
+        assert_eq!(batch["properties"]["values"], values);
+        assert_eq!(
+            batch["properties"]["relationships"],
+            parameters("migrate_entity")["properties"]["relationships"]
+        );
+        assert_eq!(
+            values["items"]["properties"]["kind"]["enum"],
+            json!(["scalar", "relationship"])
+        );
+        // Every documented value shape decodes into the repository model.
+        let target = uuid::Uuid::new_v4();
+        for value in [
+            json!({"kind":"scalar","attribute_code":"name","context_id":null,"value":"Desk"}),
+            json!({"kind":"relationship","attribute_code":"category","target_entity_id":target}),
+        ] {
+            serde_json::from_value::<crate::model::NewAttributeValue>(value).unwrap();
+        }
+        assert_eq!(kind("get_blueprint").unwrap(), ToolKind::Read);
+        assert_eq!(parameters("get_blueprint")["required"], json!(["code"]));
     }
 
     #[test]
