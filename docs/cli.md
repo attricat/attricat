@@ -324,7 +324,7 @@ and `command --payload` is the contribution-defined JSON payload.
 file as the operation's `source_reference`; the destination reference is empty.
 Run and schedule listings omit stored inputs and configuration. Use `download
 --output` for completed operation artifacts; it never writes bytes to stdout.
-See [extension operations](extensions.md#durable-server-operations-host-api-12)
+See [extension operations](extensions.md#durable-server-operations)
 for release pinning, idempotency, and replay semantics.
 
 `file upload` streams each repeated `--file` as a `files` multipart part and

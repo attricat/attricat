@@ -1,11 +1,11 @@
-//! Fixture for the `catalog:host@1.5.0` interactive operation world. Each
+//! Interactive operation fixture (`catalog:host@1.0.0`). Each
 //! batch reads one selection member, appends a deterministic line to a run
 //! output, and annotates the member in the component's own namespace. It also
 //! probes the selection boundary so host tests can assert the denials.
 
 wit_bindgen::generate!({
-    path: "../extension-runtime/wit-interactive",
-    world: "catalog-extension-operation",
+    path: "../extension-runtime/wit-host",
+    world: "operation-extension",
 });
 
 use catalog::host::{artifacts, catalog_data, selection};

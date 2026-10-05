@@ -32,7 +32,7 @@ Projektuj z myślą o tym: Twoje rozszerzenie prosi o uprawnienia, a administrat
   "icons": { "48": "assets/icon-48.svg" },
   "catalog": {
     "id": "acme.inventory",
-    "host_api": ">=1.1.0, <2.0.0"
+    "host_api": ">=1.0.0, <2.0.0"
   },
   "permissions": ["catalog.read"],
   "artifacts": [
@@ -69,7 +69,7 @@ Trzy numery wersji są od siebie niezależne:
 | --- | --- |
 | `manifest_version` | Format manifestu. Obecnie `1`. |
 | `version` | Twoje wydanie, w formacie SemVer. |
-| `catalog.host_api` | Zakres SemVer wersji API hosta Attricat, z którymi działa Twój kod, np. `>=1.1.0, <2.0.0`. |
+| `catalog.host_api` | Zakres SemVer wersji API hosta Attricat, z którymi działa Twój kod, np. `>=1.0.0, <2.0.0`. |
 
 Attricat nigdy nie instaluje wydania, którego zakres `host_api` nie obejmuje działającej wersji API hosta.
 

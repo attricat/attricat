@@ -65,7 +65,7 @@ objects on an ambiguous database-commit error.
 ## Stable assets
 
 - SQL migrations remain under `apps/api/migrations`; `api::MIGRATOR` embeds that directory and SQLx CLI commands keep the same source path.
-- Extension WIT 1.0 and 1.1 contracts are owned by `crates/extension-runtime/wit` and `wit-next`. Moving the files did not change package, world, or interface definitions.
+- The extension host WIT contract (`catalog:host`) is owned by `crates/extension-runtime/wit-host`; released snapshots in `crates/extension-runtime/wit-released` are frozen.
 - HTTP routes, JSON representations, event contracts, CLI behavior, configuration names, and deployed binary names are compatibility boundaries.
 - Database migrations remain declarative. Authorization, validation, transitions, audit, retention, and retries remain explicit Rust code and transactions.
 

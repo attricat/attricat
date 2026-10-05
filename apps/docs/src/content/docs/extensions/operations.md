@@ -5,8 +5,6 @@ description: Long-running, checkpointed extension operations for imports, export
 
 An **operation** is long-running server work, such as exporting 200,000 products to CSV or importing a supplier feed. Operations run in batches in the background, save a checkpoint after each batch, and survive restarts.
 
-Operations need a release built for `catalog:host@1.2.0` or later.
-
 ## Declare an operation
 
 ```json
@@ -68,7 +66,7 @@ Add `interactive` to an operation to let signed-in users start it for an entity 
 {"id": "generate", "handler": "generate", "request_schema": {"type": "object"}, "interactive": {"version": 1, "max_selection": 50}}
 ```
 
-It needs `client.operations.start`. Build new extensions for the [unified host ABI](/extensions/server/#use-the-unified-abi-for-new-extensions): set `"host_api": ">=1.6.0, <2.0.0"` and use the `catalog:host@1.6.0` `catalog-extension` or `operation-extension` world in `crates/extension-runtime/wit-host/`, whose `selection` interface works inside an interactive run. The legacy path, a `catalog.host_api` range compatible with 1.5 but not 1.4, uses the frozen `catalog:host@1.5.0` world in `wit-interactive/` (the 1.4 world plus `selection`) and still runs, but can't be combined with event handlers or commands.
+It needs `client.operations.start`. Build the component against the `catalog-extension` or `operation-extension` [world](/extensions/server/#host-api-version); its `selection` interface works inside an interactive run.
 
 When a run starts, Catalog checks that the user can read every selected entity and freezes the user, release, input, context, and the ordered selection. Then:
 
@@ -95,7 +93,7 @@ You name local tags and keys only; Catalog adds the namespace. A patch has 1 to 
 
 If entities already have data under your extension ID, an operator must adopt the namespace before your first write. Do not store signed URLs or secrets in annotations, and do not treat a tag as proof that a file is still downloadable: outputs expire.
 
-## File transfers (host API 1.4)
+## File transfers
 
 With `network.request` and a host permission that sets `max_transfer_bytes`, a component can move large files over HTTPS without passing bytes through JSON:
 
@@ -104,9 +102,9 @@ With `network.request` and a host permission that sets `max_transfer_bytes`, a c
 
 A delivery attempt is recorded before any network traffic. After a timeout or crash the result is `uncertain` and it is never resent automatically. `acli extension-operation deliveries <run-id>` shows the delivery history.
 
-## Catalog access in operations (host API 1.4)
+## Catalog access in operations
 
-Operations built for exactly the 1.4 connector world can call `catalog-data.read` and `catalog-data.batch` (the same JSON as `catalog.read.v1` and `catalog.command.v1`), plus connector-shaped `schema`, `page`, and `upsert-batch` calls. Pages hold up to 100 entities and batches up to 100 intents. Batches must carry the current batch key, and each intent key is recorded, so a replayed batch returns `already_applied` instead of writing twice.
+Operations can call `catalog-data.read` and `catalog-data.batch` (the same JSON as `catalog.read.v1` and `catalog.command.v1`), plus connector-shaped `schema`, `page`, and `upsert-batch` calls. Pages hold up to 100 entities and batches up to 100 intents. Batches must carry the current batch key, and each intent key is recorded, so a replayed batch returns `already_applied` instead of writing twice.
 
 Page cursors resolve values as of the first page, using value history, and expire after 30 days. This is not a database snapshot: entities created, deleted, or migrated during a long export can still change which entities appear. Freeze the source if you need an exact export.
 
@@ -161,4 +159,4 @@ acli connector-job list <blueprint-id>
 acli connector-job run <job-id> --idempotency-key manual-2026-03-01
 ```
 
-Connector jobs need a release that uses the unified host ABI (1.6+) or the `catalog:host@1.4.0` connector world, and managing them needs `extensions.manage`. Jobs cannot be triggered by catalog events yet; run them manually or on an interval.
+Managing connector jobs needs `extensions.manage`. Jobs cannot be triggered by catalog events yet; run them manually or on an interval.

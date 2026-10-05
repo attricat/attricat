@@ -1,8 +1,8 @@
-//! Packaged v1.4 transfer fixture. The local policy probe never uses network;
+//! Packaged transfer fixture. The local policy probe never uses network;
 //! the optional public-internet probe exercises range input and delivery.
 wit_bindgen::generate!({
-    path: "../extension-runtime/wit-connectors",
-    world: "catalog-extension-operation",
+    path: "../extension-runtime/wit-host",
+    world: "operation-extension",
 });
 use exports::catalog::host::operations::{BatchResult, Guest, OperationRequest};
 use serde_json::{Value, json};

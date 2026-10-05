@@ -18,50 +18,10 @@ use thiserror::Error;
 use url::Url;
 
 pub const MANIFEST_VERSION: u32 = 1;
-/// The newest host contract accepted by manifests. Components importing
-/// `catalog:host@1.0.0` remain supported by the unchanged v1 WIT package.
-pub const SUPPORTED_HOST_API: &str = "1.6.0";
-/// The first unified host ABI. Releases before it were parallel worlds
-/// (1.0/1.1 event-command, 1.2-1.5 operation) selected by excluding the
-/// previous minor; from this version onward every minor is an additive
-/// superset of the previous one and offers every server feature.
-pub const FIRST_UNIFIED_HOST_API: Version = Version::new(1, 6, 0);
-/// The last minor of the legacy, mutually exclusive ABI families.
-const LAST_LEGACY_HOST_MINOR: u64 = 5;
-
-/// The newest host contract as a version. Panics only if [`SUPPORTED_HOST_API`]
-/// itself is not SemVer, which the manifest tests rule out.
-fn supported_host_api() -> Version {
-    Version::parse(SUPPORTED_HOST_API).expect("supported host API is SemVer")
-}
-
-/// Whether a `catalog.host_api` range accepts host minor `1.<minor>.0`.
-fn matches_minor(range: &VersionReq, minor: u64) -> bool {
-    range.matches(&Version::new(1, minor, 0))
-}
-
-/// Returns true when a `catalog.host_api` range binds the unified, evolving
-/// host ABI: it matches a unified minor this host supports and no legacy one.
-/// Ranges that also match a legacy minor keep their released legacy binding,
-/// so existing releases never change ABI on a host upgrade.
-pub fn is_unified_host_api(range: &VersionReq) -> bool {
-    !(0..=LAST_LEGACY_HOST_MINOR).any(|minor| matches_minor(range, minor))
-        && (FIRST_UNIFIED_HOST_API.minor..=supported_host_api().minor)
-            .any(|minor| matches_minor(range, minor))
-}
-
-/// String form of [`is_unified_host_api`]; invalid ranges are never unified.
-pub fn is_unified_host_api_range(range: &str) -> bool {
-    VersionReq::parse(range).is_ok_and(|range| is_unified_host_api(&range))
-}
-
-/// Recorded operation-run ABIs at or after the first unified ABI are executed
-/// through the current unified world.
-pub fn is_unified_abi_version(abi_version: &str) -> bool {
-    Version::parse(abi_version).is_ok_and(|version| {
-        version.major == FIRST_UNIFIED_HOST_API.major && version >= FIRST_UNIFIED_HOST_API
-    })
-}
+/// The host ABI accepted by manifests: the `catalog:host` WIT package version.
+/// It evolves additively, so a manifest whose `catalog.host_api` range accepts
+/// it may use every server and client feature.
+pub const SUPPORTED_HOST_API: &str = "1.0.0";
 pub const MAX_EXTENSION_ARCHIVE_BYTES: usize = 32 * 1024 * 1024;
 pub const MAX_EXTENSION_UNPACKED_BYTES: usize = 128 * 1024 * 1024;
 pub const MAX_EXTENSION_ARCHIVE_ENTRIES: usize = 256;
@@ -688,7 +648,6 @@ impl Manifest {
             ));
         }
         if let Some(configuration) = &self.scoped_configuration {
-            require_next_host_api(&range)?;
             if configuration.version == 0
                 || !configuration.schema.is_object()
                 || configuration.scopes.is_empty()
@@ -735,9 +694,6 @@ impl Manifest {
             for handler in &server.event_handlers {
                 handler.validate(&self.permissions)?;
             }
-            if !server.commands.is_empty() {
-                require_next_host_api(&range)?;
-            }
             unique(
                 server.commands.iter().map(|command| &command.id),
                 "server command",
@@ -745,28 +701,23 @@ impl Manifest {
             for command in &server.commands {
                 command.validate(&self.permissions)?;
             }
-            if !server.operations.is_empty() {
-                require_operation_host_api(&range)?;
-            }
             unique(
                 server.operations.iter().map(|operation| &operation.id),
                 "server operation",
             )?;
             for operation in &server.operations {
                 operation.validate()?;
-                if operation.interactive.is_some() {
-                    require_interactive_host_api(&range)?;
-                    if !self
+                if operation.interactive.is_some()
+                    && !self
                         .permissions
                         .iter()
                         .chain(&self.optional_permissions)
                         .any(|item| item == "client.operations.start")
-                    {
-                        return Err(ManifestError::Invalid(format!(
-                            "interactive operation '{}' requires client.operations.start",
-                            operation.id
-                        )));
-                    }
+                {
+                    return Err(ManifestError::Invalid(format!(
+                        "interactive operation '{}' requires client.operations.start",
+                        operation.id
+                    )));
                 }
             }
             if (!server.event_handlers.is_empty()
@@ -867,9 +818,6 @@ impl Manifest {
                 )));
             }
             if let Some(outlet) = &contribution.outlet {
-                if !matches!(outlet, UiOutlet::Navigation | UiOutlet::EntityPreviewPanel) {
-                    require_client_outlet_host_api(&range)?;
-                }
                 let required = match outlet {
                     UiOutlet::Navigation | UiOutlet::EntityPreviewPanel => None,
                     UiOutlet::BlueprintAttributeConfiguration => {
@@ -969,28 +917,21 @@ impl Manifest {
                 .outlet
                 .as_ref()
                 .is_some_and(selection_action_outlet)
-            {
-                if !matches!(
+                && !matches!(
                     contribution.version,
                     1 | SELECTION_ACTION_CONTRIBUTION_VERSION
-                ) {
-                    return Err(ManifestError::Invalid(format!(
-                        "selection action contribution '{}' supports versions 1 and 2",
-                        contribution.id
-                    )));
-                }
-                if contribution.version == SELECTION_ACTION_CONTRIBUTION_VERSION {
-                    require_interactive_host_api(&range)?;
-                }
+                )
+            {
+                return Err(ManifestError::Invalid(format!(
+                    "selection action contribution '{}' supports versions 1 and 2",
+                    contribution.id
+                )));
             }
-            if contribution.outlet == Some(UiOutlet::ActionDialog) {
-                require_interactive_host_api(&range)?;
-                if contribution.version != 1 {
-                    return Err(ManifestError::Invalid(format!(
-                        "action dialog contribution '{}' must use version 1",
-                        contribution.id
-                    )));
-                }
+            if contribution.outlet == Some(UiOutlet::ActionDialog) && contribution.version != 1 {
+                return Err(ManifestError::Invalid(format!(
+                    "action dialog contribution '{}' must use version 1",
+                    contribution.id
+                )));
             }
             if matches!(
                 contribution.kind,
@@ -1375,61 +1316,6 @@ pub fn selection_action_outlet(outlet: &UiOutlet) -> bool {
     )
 }
 
-/// Interactive selection operations use the additive 1.5 operation world, so a
-/// release must exclude 1.4 rather than be silently bound to an older ABI.
-fn require_interactive_host_api(range: &VersionReq) -> Result<(), ManifestError> {
-    if is_unified_host_api(range) || (matches_minor(range, 5) && !matches_minor(range, 4)) {
-        Ok(())
-    } else {
-        Err(ManifestError::Invalid(
-            "selection-aware actions and interactive operations require catalog.host_api compatible with 1.6 (or 1.5 but not 1.4)"
-                .into(),
-        ))
-    }
-}
-
-fn require_operation_host_api(range: &VersionReq) -> Result<(), ManifestError> {
-    if is_unified_host_api(range) {
-        return Ok(());
-    }
-    if (2..=LAST_LEGACY_HOST_MINOR).any(|minor| matches_minor(range, minor))
-        && !matches_minor(range, 1)
-    {
-        Ok(())
-    } else {
-        Err(ManifestError::Invalid(
-            "server operations require catalog.host_api compatible with 1.6 (or 1.2-1.5 but not 1.1)"
-                .into(),
-        ))
-    }
-}
-
-/// Fixed client outlets are host contracts introduced with 1.1. They do not
-/// select a server component world, so any later compatible host accepts them.
-fn require_client_outlet_host_api(range: &VersionReq) -> Result<(), ManifestError> {
-    if !matches_minor(range, 0)
-        && (1..=supported_host_api().minor).any(|minor| matches_minor(range, minor))
-    {
-        Ok(())
-    } else {
-        Err(ManifestError::Invalid(
-            "this UI outlet requires catalog.host_api compatible with 1.1 or newer but not 1.0"
-                .into(),
-        ))
-    }
-}
-
-fn require_next_host_api(range: &VersionReq) -> Result<(), ManifestError> {
-    if is_unified_host_api(range) || (matches_minor(range, 1) && !matches_minor(range, 0)) {
-        Ok(())
-    } else {
-        Err(ManifestError::Invalid(
-            "this declaration requires catalog.host_api compatible with 1.6 (or 1.1 but not 1.0)"
-                .into(),
-        ))
-    }
-}
-
 fn unique<'a>(values: impl Iterator<Item = &'a String>, label: &str) -> Result<(), ManifestError> {
     let mut seen = HashSet::new();
     for value in values {
@@ -1745,21 +1631,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn unified_host_api_excludes_every_legacy_minor() {
-        let unified = |range: &str| is_unified_host_api(&VersionReq::parse(range).unwrap());
-        assert!(unified(">=1.6.0, <2.0.0"));
-        assert!(unified("^1.6"));
-        assert!(!unified(">=1.5.0, <2.0.0"));
-        assert!(!unified(">=1.1.0, <2.0.0"));
-        assert!(!unified(">=1.0.0, <2.0.0"));
-        assert!(
-            !unified(">=1.7.0, <2.0.0"),
-            "1.7 is not supported by this host yet"
-        );
-        assert!(is_unified_abi_version("1.6.0"));
-        assert!(!is_unified_abi_version("1.5.0"));
-        assert!(!is_unified_abi_version("1.4"));
-        assert!(!is_unified_abi_version("2.0.0"));
+    fn host_api_ranges_must_accept_the_supported_abi() {
+        let mut value = manifest();
+        for range in ["^1.0", ">=1.0.0, <2.0.0", "1.0.0"] {
+            value.catalog.host_api = range.into();
+            assert!(value.validate(SUPPORTED_HOST_API).is_ok(), "{range}");
+        }
+        for range in [">=1.1.0, <2.0.0", "^2", "<1.0.0"] {
+            value.catalog.host_api = range.into();
+            assert!(value.validate(SUPPORTED_HOST_API).is_err(), "{range}");
+        }
     }
 
     #[test]
@@ -2016,9 +1897,8 @@ mod tests {
     }
 
     #[test]
-    fn operations_require_the_immutable_v12_contract_and_bounded_objects() {
+    fn operations_require_bounded_object_contracts() {
         let mut value = manifest();
-        value.catalog.host_api = ">=1.2.0, <2.0.0".into();
         value.server.as_mut().unwrap().operations = vec![ServerOperation {
             id: "import-records".into(),
             handler: "import-records".into(),
@@ -2028,12 +1908,7 @@ mod tests {
             interactive: None,
         }];
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
-        value.catalog.host_api = ">=1.4.0, <2.0.0".into();
-        assert!(value.validate(SUPPORTED_HOST_API).is_ok());
 
-        value.catalog.host_api = ">=1.1.0, <2.0.0".into();
-        assert!(value.validate(SUPPORTED_HOST_API).is_err());
-        value.catalog.host_api = ">=1.2.0, <2.0.0".into();
         value.server.as_mut().unwrap().operations[0].request_schema = serde_json::json!([]);
         assert!(value.validate(SUPPORTED_HOST_API).is_err());
     }
@@ -2045,7 +1920,7 @@ mod tests {
             "version": "1.0.0",
             "description": "Selection documents",
             "icons": {"48": "icon.png"},
-            "catalog": {"id": "acme.documents", "host_api": ">=1.5.0, <2.0.0"},
+            "catalog": {"id": "acme.documents", "host_api": ">=1.0.0, <2.0.0"},
             "permissions": [
                 "catalog.read",
                 "catalog.annotations.write",
@@ -2074,21 +1949,11 @@ mod tests {
     }
 
     #[test]
-    fn interactive_operations_and_selection_actions_require_the_v15_contract() {
+    fn interactive_operations_and_selection_actions_validate_their_contract() {
         let value = interactive_manifest();
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
 
         let mut invalid = value.clone();
-        invalid.catalog.host_api = ">=1.4.0, <2.0.0".into();
-        assert!(
-            invalid
-                .validate(SUPPORTED_HOST_API)
-                .unwrap_err()
-                .to_string()
-                .contains("1.5 but not 1.4")
-        );
-
-        invalid = value.clone();
         invalid
             .permissions
             .retain(|permission| permission != "client.operations.start");
@@ -2122,15 +1987,12 @@ mod tests {
     }
 
     #[test]
-    fn version_one_selection_actions_remain_valid_for_older_ranges() {
+    fn version_one_selection_actions_need_no_server_operation() {
         let mut value = interactive_manifest();
-        value.catalog.host_api = ">=1.1.0, <2.0.0".into();
         value.server = None;
         value.ui.truncate(1);
         value.ui[0].version = 1;
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
-        value.ui[0].version = 2;
-        assert!(value.validate(SUPPORTED_HOST_API).is_err());
     }
 
     #[test]
@@ -2191,7 +2053,6 @@ mod tests {
     #[test]
     fn recognizes_artifact_stream_capabilities() {
         let mut value = manifest();
-        value.catalog.host_api = ">=1.3.0, <2.0.0".into();
         value.permissions = vec![
             "network.request".into(),
             "webhooks.receive".into(),
@@ -2210,7 +2071,6 @@ mod tests {
     #[test]
     fn validates_mediated_capabilities_and_matching_placement() {
         let mut value = manifest();
-        value.catalog.host_api = ">=1.1.0, <2.0.0".into();
         value.permissions.push("client.confirmation".into());
         value.permissions.push("client.explorer_action".into());
         value.artifacts.push(Artifact {
@@ -2237,7 +2097,6 @@ mod tests {
     #[test]
     fn validates_explorer_table_cell_renderer_contract() {
         let mut value = manifest();
-        value.catalog.host_api = ">=1.1.0, <2.0.0".into();
         value.permissions.push("client.explorer_table_cell".into());
         value.artifacts.push(Artifact {
             id: "client".into(),
@@ -2270,7 +2129,6 @@ mod tests {
     #[test]
     fn validates_generic_scoped_configuration_and_commands() {
         let mut value = manifest();
-        value.catalog.host_api = ">=1.1.0, <2.0.0".into();
         value.permissions.extend([
             "configuration.write".into(),
             "client.commands".into(),
@@ -2320,7 +2178,6 @@ mod tests {
     #[test]
     fn validates_explicit_context_outlet_kinds_and_capabilities() {
         let mut value = manifest();
-        value.catalog.host_api = ">=1.1.0, <2.0.0".into();
         value.permissions.push("client.explorer_row_action".into());
         value.artifacts.push(Artifact {
             id: "client".into(),

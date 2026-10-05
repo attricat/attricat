@@ -206,7 +206,7 @@ fn unified_archive() -> (String, Vec<(&'static str, String)>, Vec<u8>) {
         "version": "1.0.0",
         "description": "round-trip measurement",
         "icons": {"48": "icon.png"},
-        "catalog": {"id": UNIFIED_EXTENSION, "host_api": ">=1.6.0, <2.0.0"},
+        "catalog": {"id": UNIFIED_EXTENSION, "host_api": ">=1.0.0, <2.0.0"},
         "permissions": permissions,
         "configuration": {"version": 1, "schema": {"type": "object", "additionalProperties": false}},
         "artifacts": [{"id": "server", "kind": "server_wasm", "path": "server.wasm"}],

@@ -81,16 +81,14 @@ event/action. Unit tests alone are not sufficient for these changes. See
 ## Extension host ABI evolution
 
 The server extension ABI evolves additively. `crates/extension-runtime/wit-host/`
-(`catalog:host@1.6.0` and later) is the only WIT package that may change; the
-legacy `wit`, `wit-next`, `wit-operations`, `wit-artifacts`, `wit-connectors`
-and `wit-interactive` packages are frozen. When extending the ABI:
+(`catalog:host@1.0.0` and later) is the only WIT package. When extending the ABI:
 
 - Add new functions, interfaces, types or worlds to `wit-host`. Never remove,
   rename or change a released item, never add cases or fields to a released
   type, and never add exports to a released world.
 - Never create a new `wit-*` directory, a parallel world family, or a
-  `host_api` gate of the form "matches X but not X-1". Gate features with
-  `is_unified_host_api` so that every unified release can use every feature.
+  `host_api` gate of the form "matches X but not X-1". Every release that
+  accepts the supported ABI can use every feature.
 - When releasing a version, bump the `wit-host` package and
   `SUPPORTED_HOST_API` together, then add the frozen copy at
   `wit-released/catalog-host-<version>.wit`. Do not edit existing snapshots.

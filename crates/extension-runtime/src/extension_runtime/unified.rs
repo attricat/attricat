@@ -1,25 +1,19 @@
-//! Host implementation of the unified, evolving `catalog:host@1.6.0` ABI.
+//! Host implementation of the `catalog:host` ABI, currently 1.0.0.
 //!
-//! 1.6 merges the released 1.1 event/command world and the released 1.5
-//! operation world into one package. Every import is linked for every
-//! invocation; the host instantiates the component once and loads only the
-//! export the invocation needs, so a component may target the combined
-//! `catalog-extension` world or the narrower `handler-extension` or
-//! `operation-extension` world.
+//! Every import is linked for every invocation; the host instantiates the
+//! component once and loads only the export the invocation needs, so a
+//! component may target the combined `catalog-extension` world or the
+//! narrower `handler-extension` or `operation-extension` world.
 //!
-//! The behavior of each import is the released behavior it came from. Run-bound
-//! interfaces delegate to the 1.5 operation implementation (including the
-//! interactive selection confinement) and fail outside an operation run.
-//! Direct catalog access through `api` delegates to the 1.1 implementation and
-//! fails inside an operation run, so a run can never bypass its scope.
+//! Run-bound interfaces are implemented by the operation state (including
+//! the interactive selection confinement) and fail outside an operation run.
+//! Direct catalog access through `api` fails inside an operation run, so a
+//! run can never bypass its scope.
 //!
 //! Export lookup is semver-aware in wasmtime, so components built against an
-//! earlier unified release keep working when this host binds a later,
-//! additive one.
+//! earlier 1.x release keep working when this host binds a later, additive one.
 
-use super::interactive::host_interactive::catalog::host as v15;
 use super::*;
-use host_v11::catalog::host as v11;
 
 pub(super) mod host_unified {
     wasmtime::component::bindgen!({
@@ -62,53 +56,13 @@ impl UnifiedState {
     }
 }
 
-fn to_v11_scope(scope: v16::api::ConfigurationScope) -> v11::api::ConfigurationScope {
-    v11::api::ConfigurationScope {
-        kind: match scope.kind {
-            v16::api::ConfigurationScopeKind::Blueprint => {
-                v11::api::ConfigurationScopeKind::Blueprint
-            }
-            v16::api::ConfigurationScopeKind::Attribute => {
-                v11::api::ConfigurationScopeKind::Attribute
-            }
-        },
-        blueprint_id: scope.blueprint_id,
-        blueprint_version: scope.blueprint_version,
-        attribute_id: scope.attribute_id,
-    }
-}
-
 impl v16::api::Host for UnifiedState {
     async fn read(
         &mut self,
         request: v16::api::ReadRequest,
     ) -> Result<v16::api::ReadResponse, String> {
         self.deny_in_run()?;
-        let request = match request {
-            v16::api::ReadRequest::Entity(input) => {
-                v11::api::ReadRequest::Entity(v11::api::EntityReference {
-                    entity_id: input.entity_id,
-                })
-            }
-            v16::api::ReadRequest::Values(input) => {
-                v11::api::ReadRequest::Values(v11::api::EntityReference {
-                    entity_id: input.entity_id,
-                })
-            }
-            v16::api::ReadRequest::Resolved(input) => {
-                v11::api::ReadRequest::Resolved(v11::api::ResolvedRead {
-                    entity_id: input.entity_id,
-                    context_id: input.context_id,
-                })
-            }
-        };
-        let response = <HostState as v11::api::Host>::read(&mut self.host, request).await?;
-        Ok(v16::api::ReadResponse {
-            entity: response.entity,
-            blueprint: response.blueprint,
-            direct_values: response.direct_values,
-            resolved_values: response.resolved_values,
-        })
+        self.host.read(request).await
     }
 
     async fn write(
@@ -116,73 +70,52 @@ impl v16::api::Host for UnifiedState {
         request: v16::api::WriteRequest,
     ) -> Result<v16::api::WriteResponse, String> {
         self.deny_in_run()?;
-        let request = v11::api::WriteRequest {
-            entity_id: request.entity_id,
-            values: request
-                .values
-                .into_iter()
-                .map(|value| v11::api::ScalarWrite {
-                    attribute_id: value.attribute_id,
-                    attribute_code: value.attribute_code,
-                    context_id: value.context_id,
-                    value: value.value,
-                })
-                .collect(),
-        };
-        let response = <HostState as v11::api::Host>::write(&mut self.host, request).await?;
-        Ok(v16::api::WriteResponse {
-            values: response.values,
-        })
+        self.host.write(request).await
     }
 
     async fn scoped_configuration_get(
         &mut self,
         scope: v16::api::ConfigurationScope,
     ) -> Result<Option<String>, String> {
-        <HostState as v11::api::Host>::scoped_configuration_get(&mut self.host, to_v11_scope(scope))
-            .await
+        self.host.scoped_configuration_get(scope).await
     }
 
     async fn scoped_configuration_set(
         &mut self,
         request: v16::api::ScopedConfigurationUpdate,
     ) -> Result<(), String> {
-        let request = v11::api::ScopedConfigurationUpdate {
-            scope: to_v11_scope(request.scope),
-            value: request.value,
-        };
-        <HostState as v11::api::Host>::scoped_configuration_set(&mut self.host, request).await
+        self.host.scoped_configuration_set(request).await
     }
 
     async fn call(&mut self, operation: String, request: String) -> Result<String, String> {
         if matches!(operation.as_str(), "catalog.read.v1" | "catalog.command.v1") {
             self.deny_in_run()?;
         }
-        <HostState as v11::api::Host>::call(&mut self.host, operation, request).await
+        self.host.call(operation, request).await
     }
 
     async fn log(&mut self, level: String, message: String) -> Result<(), String> {
-        <HostState as v11::api::Host>::log(&mut self.host, level, message).await
+        self.host.log(level, message).await
     }
 }
 
 impl v16::selection::Host for UnifiedState {
     async fn describe(&mut self) -> Result<String, String> {
-        <OperationState as v15::selection::Host>::describe(self.run()?).await
+        <OperationState as v16::selection::Host>::describe(self.run()?).await
     }
 
     async fn page(&mut self, cursor: String, limit: u32) -> Result<String, String> {
-        <OperationState as v15::selection::Host>::page(self.run()?, cursor, limit).await
+        <OperationState as v16::selection::Host>::page(self.run()?, cursor, limit).await
     }
 }
 
 impl v16::catalog_data::Host for UnifiedState {
     async fn read(&mut self, request: String) -> Result<String, String> {
-        <OperationState as v15::catalog_data::Host>::read(self.run()?, request).await
+        <OperationState as v16::catalog_data::Host>::read(self.run()?, request).await
     }
 
     async fn batch(&mut self, request: String) -> Result<String, String> {
-        <OperationState as v15::catalog_data::Host>::batch(self.run()?, request).await
+        <OperationState as v16::catalog_data::Host>::batch(self.run()?, request).await
     }
 }
 
@@ -193,7 +126,7 @@ impl v16::catalog::Host for UnifiedState {
         blueprint_version: u64,
         context_id: String,
     ) -> Result<String, String> {
-        <OperationState as v15::catalog::Host>::schema(
+        <OperationState as v16::catalog::Host>::schema(
             self.run()?,
             blueprint_id,
             blueprint_version,
@@ -210,7 +143,7 @@ impl v16::catalog::Host for UnifiedState {
         cursor: String,
         limit: u32,
     ) -> Result<String, String> {
-        <OperationState as v15::catalog::Host>::page(
+        <OperationState as v16::catalog::Host>::page(
             self.run()?,
             blueprint_id,
             blueprint_version,
@@ -222,17 +155,17 @@ impl v16::catalog::Host for UnifiedState {
     }
 
     async fn upsert_batch(&mut self, request: String) -> Result<(), String> {
-        <OperationState as v15::catalog::Host>::upsert_batch(self.run()?, request).await
+        <OperationState as v16::catalog::Host>::upsert_batch(self.run()?, request).await
     }
 }
 
 impl v16::transfer::Host for UnifiedState {
     async fn fetch_input(&mut self, request: String) -> Result<String, String> {
-        <OperationState as v15::transfer::Host>::fetch_input(self.run()?, request).await
+        <OperationState as v16::transfer::Host>::fetch_input(self.run()?, request).await
     }
 
     async fn deliver_output(&mut self, request: String) -> Result<String, String> {
-        <OperationState as v15::transfer::Host>::deliver_output(self.run()?, request).await
+        <OperationState as v16::transfer::Host>::deliver_output(self.run()?, request).await
     }
 }
 
@@ -241,7 +174,7 @@ impl v16::artifacts::Host for UnifiedState {
         &mut self,
         artifact_id: String,
     ) -> Result<Resource<InputArtifactStream>, String> {
-        <OperationState as v15::artifacts::Host>::open_input(self.run()?, artifact_id).await
+        <OperationState as v16::artifacts::Host>::open_input(self.run()?, artifact_id).await
     }
 
     async fn describe_input(
@@ -249,7 +182,7 @@ impl v16::artifacts::Host for UnifiedState {
         handle: Resource<InputArtifactStream>,
     ) -> Result<v16::artifacts::InputMetadata, String> {
         let metadata =
-            <OperationState as v15::artifacts::Host>::describe_input(self.run()?, handle).await?;
+            <OperationState as v16::artifacts::Host>::describe_input(self.run()?, handle).await?;
         Ok(v16::artifacts::InputMetadata {
             content_length: metadata.content_length,
             media_type: metadata.media_type,
@@ -262,14 +195,14 @@ impl v16::artifacts::Host for UnifiedState {
         handle: Resource<InputArtifactStream>,
         max_bytes: u32,
     ) -> Result<Vec<u8>, String> {
-        <OperationState as v15::artifacts::Host>::read(self.run()?, handle, max_bytes).await
+        <OperationState as v16::artifacts::Host>::read(self.run()?, handle, max_bytes).await
     }
 
     async fn create_output(
         &mut self,
         media_type: String,
     ) -> Result<Resource<OutputArtifactStream>, String> {
-        <OperationState as v15::artifacts::Host>::create_output(self.run()?, media_type).await
+        <OperationState as v16::artifacts::Host>::create_output(self.run()?, media_type).await
     }
 
     async fn write(
@@ -277,7 +210,7 @@ impl v16::artifacts::Host for UnifiedState {
         handle: Resource<OutputArtifactStream>,
         bytes: Vec<u8>,
     ) -> Result<(), String> {
-        <OperationState as v15::artifacts::Host>::write(self.run()?, handle, bytes).await
+        <OperationState as v16::artifacts::Host>::write(self.run()?, handle, bytes).await
     }
 
     async fn complete(
@@ -285,7 +218,7 @@ impl v16::artifacts::Host for UnifiedState {
         handle: Resource<OutputArtifactStream>,
         checksum_sha256: String,
     ) -> Result<v16::artifacts::OutputMetadata, String> {
-        let metadata = <OperationState as v15::artifacts::Host>::complete(
+        let metadata = <OperationState as v16::artifacts::Host>::complete(
             self.run()?,
             handle,
             checksum_sha256,
@@ -300,7 +233,7 @@ impl v16::artifacts::Host for UnifiedState {
     }
 
     async fn abort(&mut self, handle: Resource<OutputArtifactStream>) -> Result<(), String> {
-        <OperationState as v15::artifacts::Host>::abort(self.run()?, handle).await
+        <OperationState as v16::artifacts::Host>::abort(self.run()?, handle).await
     }
 
     async fn append_output(
@@ -310,7 +243,7 @@ impl v16::artifacts::Host for UnifiedState {
         batch_key: String,
         bytes: Vec<u8>,
     ) -> Result<(), String> {
-        <OperationState as v15::artifacts::Host>::append_output(
+        <OperationState as v16::artifacts::Host>::append_output(
             self.run()?,
             name,
             media_type,
@@ -321,7 +254,7 @@ impl v16::artifacts::Host for UnifiedState {
     }
 
     async fn finalize_output(&mut self, name: String) -> Result<String, String> {
-        <OperationState as v15::artifacts::Host>::finalize_output(self.run()?, name).await
+        <OperationState as v16::artifacts::Host>::finalize_output(self.run()?, name).await
     }
 }
 
@@ -331,7 +264,7 @@ impl v16::artifacts::HostInputArtifact for UnifiedState {
     async fn drop(&mut self, handle: Resource<InputArtifactStream>) -> wasmtime::Result<()> {
         match self.operation.as_mut() {
             Some(run) => {
-                <OperationState as v15::artifacts::HostInputArtifact>::drop(run, handle).await
+                <OperationState as v16::artifacts::HostInputArtifact>::drop(run, handle).await
             }
             None => Ok(()),
         }
@@ -342,7 +275,7 @@ impl v16::artifacts::HostOutputArtifact for UnifiedState {
     async fn drop(&mut self, handle: Resource<OutputArtifactStream>) -> wasmtime::Result<()> {
         match self.operation.as_mut() {
             Some(run) => {
-                <OperationState as v15::artifacts::HostOutputArtifact>::drop(run, handle).await
+                <OperationState as v16::artifacts::HostOutputArtifact>::drop(run, handle).await
             }
             None => Ok(()),
         }

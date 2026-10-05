@@ -5,27 +5,11 @@ description: Uruchamiaj kod rozszerzenia na serwerze jako komponent WebAssembly,
 
 Serwerowy kod rozszerzenia to **komponent** WebAssembly zadeklarowany jako artefakt `server_wasm`. Działa w piaskownicy bez kontekstu WASI: bez systemu plików, zmiennych środowiskowych, zegara, gniazd i wstępnie otwartych plików. Wszystko, co robi, przechodzi przez wywołania hosta, a host przy każdym wywołaniu sprawdza uprawnienia przyznane rozszerzeniu.
 
-## Wersje API hosta
+## Wersja API hosta
 
-Interfejs hosta jest zdefiniowany w pakietach WIT w repozytorium Attricat, w katalogu `crates/extension-runtime/`. Każda opublikowana wersja jest niezmienna.
+Interfejs hosta to pakiet WIT `catalog:host@1.0.0` w pliku `crates/extension-runtime/wit-host/catalog-extension.wit` w repozytorium Attricat. Ustaw `catalog.host_api` w manifeście na zakres, który go obejmuje, np. `">=1.0.0, <2.0.0"`. Każde wydanie z takim zakresem może używać wszystkich funkcji: procedur obsługi zdarzeń, poleceń, typowanego odczytu i zapisu, konfiguracji zakresowej, wszystkich rodzajów [operacji](/pl/extensions/operations/) i wszystkich miejsc osadzenia po stronie klienta.
 
-| Wersja | Katalog WIT | Dodaje |
-| --- | --- | --- |
-| `catalog:host@1.0.0` | `wit/` | `api.call` i `api.log` z żądaniami JSON. |
-| `catalog:host@1.1.0` | `wit-next/` | Typowane funkcje `read`, `write` i konfiguracji zakresowej. |
-| `catalog:host@1.2.0` | `wit-operations/` | Trwałe [operacje](/pl/extensions/operations/). |
-| `catalog:host@1.3.0` | `wit-artifacts/` | Artefakty wejściowe i wyjściowe operacji. |
-| `catalog:host@1.4.0` | `wit-connectors/` | Wywołania katalogu przez konektory i przesyłanie plików przez HTTPS. |
-| `catalog:host@1.5.0` | `wit-interactive/` | [Operacje interaktywne](/pl/extensions/operations/#operacje-interaktywne) na zaznaczeniu. |
-| `catalog:host@1.6.0` | `wit-host/` | **Ujednolicone ABI**: wszystko z 1.1 i 1.5 w jednym pakiecie. |
-
-Ustaw `catalog.host_api` w manifeście na zakres, dla którego zbudowano Twój komponent.
-
-### Używaj ujednoliconego ABI w nowych rozszerzeniach
-
-Wersje do 1.5 tworzą dwie osobne rodziny. 1.0 i 1.1 obsługują zdarzenia i polecenia. 1.2–1.5 uruchamiają operacje. Wydanie oparte na jednej z nich nie może używać funkcji drugiej rodziny, więc jedno wydanie nie może mieć jednocześnie poleceń klienta i operacji interaktywnych.
-
-Od 1.6 jest jedno ABI, które tylko się rozrasta. Ustaw `"host_api": ">=1.6.0, <2.0.0"`, a komponent może łączyć procedury obsługi zdarzeń, polecenia, konfigurację zakresową i wszystkie rodzaje operacji. Zbuduj go dla jednego ze światów z `wit-host/`:
+Zbuduj komponent dla jednego z tych światów:
 
 | Świat | Eksportuje |
 | --- | --- |
@@ -35,9 +19,7 @@ Od 1.6 jest jedno ABI, które tylko się rozrasta. Ustaw `"host_api": ">=1.6.0, 
 
 Wszystkie importy są zawsze dostępne, ale część działa tylko we właściwym miejscu. Interfejsy operacji (`artifacts`, `catalog-data`, `catalog`, `transfer`, `selection`) zwracają błąd poza przebiegiem operacji. W przebiegu błąd zwracają typowane funkcje `read` i `write` oraz wywołania `catalog.read.v1` i `catalog.command.v1`; używaj wtedy interfejsów katalogu przypisanych do przebiegu.
 
-Kolejne wersje 1.x tylko rozszerzają 1.6. Komponent zbudowany dla 1.6 działa na nowszych hostach bez przebudowy.
-
-Zakresy obejmujące 1.5 lub starsze wersje, np. `>=1.1.0, <2.0.0`, zachowują swój dotychczasowy świat.
+Kolejne wersje 1.x tylko rozszerzają 1.0. Komponent zbudowany dla wcześniejszej wersji 1.x działa na nowszych hostach bez przebudowy.
 
 ## Obsługuj zdarzenia katalogu
 
@@ -75,7 +57,7 @@ Zapis wykonany podczas obsługi zdarzenia jest przypisywany użytkownikowi lub t
 
 Wywołania JSON `catalog.read.v1` i `catalog.command.v1` dodają odczyty stronicowane, kanały zmian, wyszukiwanie pojedynczego atrybutu oraz partie intencji `create`, `update`, `relationships` i `upsert`. Upsert dopasowuje encję po zadeklarowanym atrybucie klucza biznesowego, tworzy ją tylko wtedy, gdy żadna encja nie pasuje, i kończy się błędem, jeśli pasuje więcej niż jedna. Zbiory relacji z upsertu są stosowane zarówno wtedy, gdy aktualizuje on dopasowaną encję, jak i wtedy, gdy ją tworzy.
 
-Wyszukiwanie działa dokładnie tak samo jak dopasowanie w upsercie. Jeśli sam atrybut tekstowy jest zadeklarowanym kluczem unikalnym, wyszukiwanie korzysta ze znormalizowanych wartości tego klucza we wszystkich wersjach Schematu; w przeciwnym razie dopasowuje dokładny tekst wśród encji żądanej wersji. Wartość pasująca do więcej niż jednej encji kończy się błędem `lookup matched multiple entities`, zamiast zwracać jedną z nich. To zachowanie hosta dotyczy każdej wersji API hosta, więc widzą je także rozszerzenia zbudowane dla starszej wersji.
+Wyszukiwanie działa dokładnie tak samo jak dopasowanie w upsercie. Jeśli sam atrybut tekstowy jest zadeklarowanym kluczem unikalnym, wyszukiwanie korzysta ze znormalizowanych wartości tego klucza we wszystkich wersjach Schematu; w przeciwnym razie dopasowuje dokładny tekst wśród encji żądanej wersji. Wartość pasująca do więcej niż jednej encji kończy się błędem `lookup matched multiple entities`, zamiast zwracać jedną z nich.
 
 ## Magazyn
 
@@ -83,7 +65,7 @@ Z `storage.extension` wywołania `storage.get.v1`, `storage.set.v1`, `storage.de
 
 ## Konfiguracja
 
-`configuration.get.v1` zwraca konfigurację instalacji (wymaga `configuration.read`). Konfigurację zakresową dla Schematu lub atrybutu odczytuje się i zapisuje przez typowane funkcje API hosta 1.1 (wymaga `configuration.write`).
+`configuration.get.v1` zwraca konfigurację instalacji (wymaga `configuration.read`). Konfigurację zakresową dla Schematu lub atrybutu odczytuje się i zapisuje przez typowane funkcje interfejsu `api` (wymaga `configuration.write`).
 
 ## Polecenia dla Twojego interfejsu
 

@@ -25,8 +25,6 @@ use super::{
     extension_annotations::own_annotations,
 };
 
-/// Interactive runs use the additive 1.5 operation world.
-pub const INTERACTIVE_OPERATION_ABI: &str = "1.5.0";
 /// Completed output remains downloadable for this long.
 pub const OPERATION_OUTPUT_RETENTION_DAYS: i64 = 30;
 const MAX_CLIENT_IDEMPOTENCY_BYTES: usize = 64;
@@ -387,9 +385,7 @@ impl CatalogRepository {
         .bind(self.workspace_id.0)
         .bind(&input.extension_id)
         .bind(release)
-        .bind(super::extension_operations::operation_run_abi(
-            &manifest.catalog.host_api,
-        )?)
+        .bind(crate::extensions::SUPPORTED_HOST_API)
         .bind(&input.operation_id)
         .bind(input.actor.user_id)
         .bind(input.actor.token_id)

@@ -63,7 +63,7 @@ fn archive(extension_id: &str, server: &[u8]) -> Vec<u8> {
         "version": "1.0.0",
         "description": "interactive operation integration test",
         "icons": {"48": "icon.png"},
-        "catalog": {"id": extension_id, "host_api": ">=1.5.0, <2.0.0"},
+        "catalog": {"id": extension_id, "host_api": ">=1.0.0, <2.0.0"},
         "permissions": PERMISSIONS,
         "configuration": {"version": 1, "schema": {"type": "object", "additionalProperties": false}},
         "artifacts": [

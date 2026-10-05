@@ -91,7 +91,7 @@ Explorer contexts never include the search query, filters, or row values. A sele
 
 ### Selection context
 
-Contributions to `entity_action`, `explorer_row_action`, and `explorer_bulk_action` can declare `"version": 2` (host API 1.6+, or a range compatible with 1.5 but not 1.4). They then receive one shape for every surface:
+Contributions to `entity_action`, `explorer_row_action`, and `explorer_bulk_action` can declare `"version": 2`. They then receive one shape for every surface:
 
 ```json
 {

@@ -1,6 +1,6 @@
 wit_bindgen::generate!({
-    path: "../extension-runtime/wit-artifacts",
-    world: "catalog-extension-operation",
+    path: "../extension-runtime/wit-host",
+    world: "operation-extension",
 });
 
 use exports::catalog::host::operations::{BatchResult, Guest, OperationRequest};

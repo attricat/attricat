@@ -1,28 +1,12 @@
-//! Host implementation of the additive `catalog:host@1.5.0` operation world.
+//! Run-bound host interfaces of `catalog:host@1.0.0`, for operation runs.
 //!
-//! Artifact, transfer and administrative catalog calls keep their released
-//! 1.4 behavior. Interactive runs are additionally confined to their frozen
-//! selection: generic page/lookup reads and connector calls are rejected, and
-//! every write is checked against the selection and the initiator's live grants.
+//! Artifact, transfer and administrative catalog calls apply to every run.
+//! Interactive runs are additionally confined to their frozen selection:
+//! generic page/lookup reads and connector calls are rejected, and every
+//! write is checked against the selection and the initiator's live grants.
 
 use super::*;
 use crate::repository::{ExtensionCatalogBatch, InteractiveRunScope};
-
-pub(super) mod host_interactive {
-    wasmtime::component::bindgen!({
-        path: "wit-interactive",
-        world: "catalog-extension-operation",
-        with: {
-            "catalog:host/artifacts.input-artifact": crate::extension_runtime::InputArtifactStream,
-            "catalog:host/artifacts.output-artifact": crate::extension_runtime::OutputArtifactStream,
-        },
-        imports: { default: async },
-        exports: { default: async },
-    });
-}
-
-use host_connector::catalog::host as v14;
-use host_interactive::catalog::host as v15;
 
 const SELECTION_SCOPE_ERROR: &str =
     "interactive runs read catalog data through their run-bound selection";
@@ -69,7 +53,7 @@ impl OperationState {
     }
 }
 
-impl v15::selection::Host for OperationState {
+impl wit::selection::Host for OperationState {
     async fn describe(&mut self) -> Result<String, String> {
         let scope = load_scope(&self.repository, self.run_id)
             .await?
@@ -100,12 +84,12 @@ impl v15::selection::Host for OperationState {
     }
 }
 
-impl v15::catalog_data::Host for OperationState {
+impl wit::catalog_data::Host for OperationState {
     async fn read(&mut self, request: String) -> Result<String, String> {
         if load_scope(&self.repository, self.run_id).await?.is_some() {
             return Err(SELECTION_SCOPE_ERROR.into());
         }
-        <Self as v14::catalog_data::Host>::read(self, request).await
+        self.catalog_data_read(request).await
     }
 
     async fn batch(&mut self, request: String) -> Result<String, String> {
@@ -113,7 +97,7 @@ impl v15::catalog_data::Host for OperationState {
             return Err("request exceeds host JSON limit".into());
         }
         let Some(scope) = load_scope(&self.repository, self.run_id).await? else {
-            return <Self as v14::catalog_data::Host>::batch(self, request).await;
+            return self.catalog_data_batch(request).await;
         };
         let input: CatalogCommandRequest = parse_storage_request(&request)?;
         let CatalogCommandRequest::Batch { batch } = input;
@@ -122,7 +106,7 @@ impl v15::catalog_data::Host for OperationState {
     }
 }
 
-impl v15::catalog::Host for OperationState {
+impl wit::catalog::Host for OperationState {
     async fn schema(
         &mut self,
         blueprint_id: String,
@@ -132,7 +116,7 @@ impl v15::catalog::Host for OperationState {
         if load_scope(&self.repository, self.run_id).await?.is_some() {
             return Err(SELECTION_SCOPE_ERROR.into());
         }
-        <Self as v14::catalog::Host>::schema(self, blueprint_id, blueprint_version, context_id)
+        self.catalog_schema(blueprint_id, blueprint_version, context_id)
             .await
     }
 
@@ -147,49 +131,42 @@ impl v15::catalog::Host for OperationState {
         if load_scope(&self.repository, self.run_id).await?.is_some() {
             return Err(SELECTION_SCOPE_ERROR.into());
         }
-        <Self as v14::catalog::Host>::page(
-            self,
-            blueprint_id,
-            blueprint_version,
-            context_id,
-            cursor,
-            limit,
-        )
-        .await
+        self.catalog_page(blueprint_id, blueprint_version, context_id, cursor, limit)
+            .await
     }
 
     async fn upsert_batch(&mut self, request: String) -> Result<(), String> {
         if load_scope(&self.repository, self.run_id).await?.is_some() {
             return Err(SELECTION_SCOPE_ERROR.into());
         }
-        <Self as v14::catalog::Host>::upsert_batch(self, request).await
+        self.catalog_upsert_batch(request).await
     }
 }
 
-impl v15::transfer::Host for OperationState {
+impl wit::transfer::Host for OperationState {
     async fn fetch_input(&mut self, request: String) -> Result<String, String> {
-        <Self as v14::transfer::Host>::fetch_input(self, request).await
+        self.transfer_fetch_input(request).await
     }
 
     async fn deliver_output(&mut self, request: String) -> Result<String, String> {
-        <Self as v14::transfer::Host>::deliver_output(self, request).await
+        self.transfer_deliver_output(request).await
     }
 }
 
-impl v15::artifacts::Host for OperationState {
+impl wit::artifacts::Host for OperationState {
     async fn open_input(
         &mut self,
         artifact_id: String,
     ) -> Result<Resource<InputArtifactStream>, String> {
-        <Self as v14::artifacts::Host>::open_input(self, artifact_id).await
+        self.artifacts_open_input(artifact_id).await
     }
 
     async fn describe_input(
         &mut self,
         handle: Resource<InputArtifactStream>,
-    ) -> Result<v15::artifacts::InputMetadata, String> {
-        let metadata = <Self as v14::artifacts::Host>::describe_input(self, handle).await?;
-        Ok(v15::artifacts::InputMetadata {
+    ) -> Result<wit::artifacts::InputMetadata, String> {
+        let metadata = self.artifacts_describe_input(handle).await?;
+        Ok(wit::artifacts::InputMetadata {
             content_length: metadata.content_length,
             media_type: metadata.media_type,
             checksum_sha256: metadata.checksum_sha256,
@@ -201,14 +178,14 @@ impl v15::artifacts::Host for OperationState {
         handle: Resource<InputArtifactStream>,
         max_bytes: u32,
     ) -> Result<Vec<u8>, String> {
-        <Self as v14::artifacts::Host>::read(self, handle, max_bytes).await
+        self.artifacts_read(handle, max_bytes).await
     }
 
     async fn create_output(
         &mut self,
         media_type: String,
     ) -> Result<Resource<OutputArtifactStream>, String> {
-        <Self as v14::artifacts::Host>::create_output(self, media_type).await
+        self.artifacts_create_output(media_type).await
     }
 
     async fn write(
@@ -216,17 +193,16 @@ impl v15::artifacts::Host for OperationState {
         handle: Resource<OutputArtifactStream>,
         bytes: Vec<u8>,
     ) -> Result<(), String> {
-        <Self as v14::artifacts::Host>::write(self, handle, bytes).await
+        self.artifacts_write(handle, bytes).await
     }
 
     async fn complete(
         &mut self,
         handle: Resource<OutputArtifactStream>,
         checksum_sha256: String,
-    ) -> Result<v15::artifacts::OutputMetadata, String> {
-        let metadata =
-            <Self as v14::artifacts::Host>::complete(self, handle, checksum_sha256).await?;
-        Ok(v15::artifacts::OutputMetadata {
+    ) -> Result<wit::artifacts::OutputMetadata, String> {
+        let metadata = self.artifacts_complete(handle, checksum_sha256).await?;
+        Ok(wit::artifacts::OutputMetadata {
             artifact_id: metadata.artifact_id,
             content_length: metadata.content_length,
             media_type: metadata.media_type,
@@ -235,7 +211,7 @@ impl v15::artifacts::Host for OperationState {
     }
 
     async fn abort(&mut self, handle: Resource<OutputArtifactStream>) -> Result<(), String> {
-        <Self as v14::artifacts::Host>::abort(self, handle).await
+        self.artifacts_abort(handle).await
     }
 
     async fn append_output(
@@ -245,66 +221,23 @@ impl v15::artifacts::Host for OperationState {
         batch_key: String,
         bytes: Vec<u8>,
     ) -> Result<(), String> {
-        <Self as v14::artifacts::Host>::append_output(self, name, media_type, batch_key, bytes)
+        self.artifacts_append_output(name, media_type, batch_key, bytes)
             .await
     }
 
     async fn finalize_output(&mut self, name: String) -> Result<String, String> {
-        <Self as v14::artifacts::Host>::finalize_output(self, name).await
+        self.artifacts_finalize_output(name).await
     }
 }
 
-impl v15::artifacts::HostInputArtifact for OperationState {
+impl wit::artifacts::HostInputArtifact for OperationState {
     async fn drop(&mut self, handle: Resource<InputArtifactStream>) -> wasmtime::Result<()> {
-        <Self as v14::artifacts::HostInputArtifact>::drop(self, handle).await
+        self.artifacts_drop_input(handle).await
     }
 }
 
-impl v15::artifacts::HostOutputArtifact for OperationState {
+impl wit::artifacts::HostOutputArtifact for OperationState {
     async fn drop(&mut self, handle: Resource<OutputArtifactStream>) -> wasmtime::Result<()> {
-        <Self as v14::artifacts::HostOutputArtifact>::drop(self, handle).await
+        self.artifacts_drop_output(handle).await
     }
-}
-
-impl ExtensionRuntime {
-    /// Executes one batch through the 1.5 world. The lifecycle mirrors the
-    /// released 1.4 connector world exactly.
-    pub(super) async fn invoke_interactive_batch(
-        &self,
-        installation: &ExtensionRuntimeInstallation,
-        repository: CatalogRepository,
-        run: &ClaimedExtensionOperationRun,
-        cancelling: bool,
-    ) -> Result<(Value, Value, bool), ExtensionRuntimeError> {
-        let component = self.component(installation).await?;
-        let mut store = self.operation_store(
-            self.operation_state(installation, repository, run.id)
-                .with_batch_key(&run.batch_key),
-        )?;
-        let bindings = host_interactive::CatalogExtensionOperation::instantiate_async(
-            &mut store,
-            &component,
-            &self.linkers.interactive,
-        )
-        .await
-        .map_err(runtime_error)?;
-        run_operation_batch(
-            &mut store,
-            bindings.catalog_host_operations(),
-            run,
-            cancelling,
-        )
-        .await
-    }
-}
-
-/// The interactive operation world's linker; built once per runtime.
-pub(super) fn linker(engine: &Engine) -> Result<Linker<OperationState>, ExtensionRuntimeError> {
-    let mut linker = Linker::new(engine);
-    host_interactive::CatalogExtensionOperation::add_to_linker::<
-        OperationState,
-        HasSelf<OperationState>,
-    >(&mut linker, |state| state)
-    .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))?;
-    Ok(linker)
 }

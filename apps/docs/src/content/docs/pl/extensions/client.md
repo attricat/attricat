@@ -91,7 +91,7 @@ Konteksty przeglądarki encji nigdy nie zawierają zapytania wyszukiwania, filtr
 
 ### Kontekst zaznaczenia
 
-Kontrybucje do `entity_action`, `explorer_row_action` i `explorer_bulk_action` mogą zadeklarować `"version": 2` (API hosta 1.6+ lub zakres zgodny z 1.5, ale nie z 1.4). Otrzymują wtedy jeden kształt kontekstu na każdej powierzchni:
+Kontrybucje do `entity_action`, `explorer_row_action` i `explorer_bulk_action` mogą zadeklarować `"version": 2`. Otrzymują wtedy jeden kształt kontekstu na każdej powierzchni:
 
 ```json
 {

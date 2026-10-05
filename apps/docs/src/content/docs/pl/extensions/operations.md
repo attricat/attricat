@@ -5,8 +5,6 @@ description: Długotrwałe operacje rozszerzeń z punktami kontrolnymi do import
 
 **Operacja** to długotrwała praca po stronie serwera, np. eksport 200 000 produktów do CSV albo import pliku od dostawcy. Operacje działają w tle w partiach, po każdej partii zapisują punkt kontrolny i przetrwają ponowne uruchomienia.
 
-Operacje wymagają wydania zbudowanego dla `catalog:host@1.2.0` lub nowszego.
-
 ## Zadeklaruj operację
 
 ```json
@@ -68,7 +66,7 @@ Dodaj `interactive` do operacji, aby zalogowani użytkownicy mogli ją uruchomi�
 {"id": "generate", "handler": "generate", "request_schema": {"type": "object"}, "interactive": {"version": 1, "max_selection": 50}}
 ```
 
-Wymaga to `client.operations.start`. Nowe rozszerzenia buduj dla [ujednoliconego ABI hosta](/pl/extensions/server/#używaj-ujednoliconego-abi-w-nowych-rozszerzeniach): ustaw `"host_api": ">=1.6.0, <2.0.0"` i użyj świata `catalog-extension` lub `operation-extension` pakietu `catalog:host@1.6.0` z `crates/extension-runtime/wit-host/`, którego interfejs `selection` działa w uruchomieniu interaktywnym. Starsza ścieżka, czyli zakres `catalog.host_api` zgodny z 1.5, ale nie z 1.4, używa zamrożonego świata `catalog:host@1.5.0` z `wit-interactive/` (świat 1.4 z interfejsem `selection`) i nadal działa, ale nie da się jej łączyć z obsługą zdarzeń ani poleceniami.
+Wymaga to `client.operations.start`. Zbuduj komponent dla [świata](/pl/extensions/server/#wersja-api-hosta) `catalog-extension` lub `operation-extension`; jego interfejs `selection` działa w uruchomieniu interaktywnym.
 
 Przy starcie Catalog sprawdza, czy użytkownik może odczytać każdą zaznaczoną encję, i utrwala użytkownika, wydanie, dane wejściowe, kontekst oraz uporządkowane zaznaczenie. Następnie:
 
@@ -95,7 +93,7 @@ Podajesz tylko lokalne nazwy tagów i kluczy; Catalog dodaje przestrzeń nazw. �
 
 Jeśli encje mają już dane pod identyfikatorem Twojego rozszerzenia, operator musi przejąć przestrzeń nazw przed Twoim pierwszym zapisem. Nie zapisuj w adnotacjach podpisanych adresów URL ani sekretów i nie traktuj tagu jako dowodu, że plik nadal można pobrać: wyniki wygasają.
 
-## Przesyłanie plików (API hosta 1.4)
+## Przesyłanie plików
 
 Z `network.request` i uprawnieniem hosta, które ustawia `max_transfer_bytes`, komponent może przenosić duże pliki przez HTTPS bez przekazywania bajtów przez JSON:
 
@@ -104,9 +102,9 @@ Z `network.request` i uprawnieniem hosta, które ustawia `max_transfer_bytes`, k
 
 Próba dostarczenia jest zapisywana przed jakimkolwiek ruchem sieciowym. Po przekroczeniu limitu czasu lub awarii wynik to `uncertain` i nigdy nie jest wysyłany ponownie automatycznie. `acli extension-operation deliveries <run-id>` pokazuje historię dostarczeń.
 
-## Dostęp do katalogu w operacjach (API hosta 1.4)
+## Dostęp do katalogu w operacjach
 
-Operacje zbudowane dokładnie dla świata konektorów 1.4 mogą wywoływać `catalog-data.read` i `catalog-data.batch` (ten sam JSON co `catalog.read.v1` i `catalog.command.v1`) oraz wywołania w kształcie konektora: `schema`, `page` i `upsert-batch`. Strony mieszczą do 100 encji, a partie do 100 intencji. Partie muszą zawierać bieżący klucz partii, a klucz każdej intencji jest zapisywany, więc odtworzona partia zwraca `already_applied` zamiast zapisywać dwukrotnie.
+Operacje mogą wywoływać `catalog-data.read` i `catalog-data.batch` (ten sam JSON co `catalog.read.v1` i `catalog.command.v1`) oraz wywołania w kształcie konektora: `schema`, `page` i `upsert-batch`. Strony mieszczą do 100 encji, a partie do 100 intencji. Partie muszą zawierać bieżący klucz partii, a klucz każdej intencji jest zapisywany, więc odtworzona partia zwraca `already_applied` zamiast zapisywać dwukrotnie.
 
 Kursory stron rozwiązują wartości według stanu z pierwszej strony, korzystając z historii wartości, i wygasają po 30 dniach. To nie jest migawka bazy danych: encje tworzone, usuwane lub migrowane w trakcie długiego eksportu nadal mogą zmienić to, które encje się pojawią. Jeśli potrzebujesz dokładnego eksportu, zamroź źródło.
 
@@ -161,4 +159,4 @@ acli connector-job list <blueprint-id>
 acli connector-job run <job-id> --idempotency-key manual-2026-03-01
 ```
 
-Zadania konektorów wymagają wydania korzystającego z ujednoliconego ABI hosta (1.6+) lub ze świata konektorów `catalog:host@1.4.0`, a zarządzanie nimi wymaga `extensions.manage`. Zadań nie można jeszcze wyzwalać zdarzeniami katalogu; uruchamiaj je ręcznie lub cyklicznie.
+Zarządzanie zadaniami konektorów wymaga `extensions.manage`. Zadań nie można jeszcze wyzwalać zdarzeniami katalogu; uruchamiaj je ręcznie lub cyklicznie.

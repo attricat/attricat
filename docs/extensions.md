@@ -198,32 +198,20 @@ implemented. Webhook delivery remains follow-on work.
 
 ## Host ABI versions and evolution
 
-`catalog.host_api` selects the component ABI the host binds for a release.
-There are two eras.
+The host ABI is the single WIT package `catalog:host` at
+`crates/extension-runtime/wit-host/catalog-extension.wit`, currently
+`catalog:host@1.0.0` (`SUPPORTED_HOST_API` in `crates/extension-manifest`). A
+release's `catalog.host_api` range must accept that version, for example
+`">=1.0.0, <2.0.0"` or `"^1.0"`. A release whose range accepts it may use every
+server and client feature in one component: event handlers, client commands,
+typed reads and writes, scoped configuration, scheduled, connector and
+interactive operations, artifacts, transfer, connector jobs, every UI outlet,
+and version 2 selection actions. There are no per-feature `host_api` gates.
 
-**Legacy worlds (1.0–1.5, frozen).** Each of these is a separate, immutable WIT
-package. They form two parallel families: the event/command world
-(`wit/` 1.0, `wit-next/` 1.1, which exports `handler`) and the operation world
-(`wit-operations/` 1.2, `wit-artifacts/` 1.3, `wit-connectors/` 1.4,
-`wit-interactive/` 1.5, which export `operations`). A legacy release is bound
-by excluding the previous minor (for example "1.5 but not 1.4"). Because the
-families never merged, no legacy range can declare both `server.commands` and
-interactive operations. The legacy rules are unchanged and existing releases
-keep exactly the world they were built for.
-
-**Unified ABI (1.6 and later).** `crates/extension-runtime/wit-host/` is the
-single `catalog:host` package that evolves. 1.6 contains every 1.1
-`api`/`handler` item and every 1.5 operation interface, unchanged. A range that
-matches a unified minor and **no** legacy minor (for example
-`">=1.6.0, <2.0.0"`) binds the unified ABI. Such a release may use every server
-feature in one component: event handlers, client commands, scoped
-configuration, scheduled, connector and interactive operations, connector jobs,
-and version 2 selection actions. `is_unified_host_api` in
-`crates/extension-manifest` is the only place that makes this decision, and the
-manifest validator, event dispatcher, command broker, operation runs and
-connector jobs all call it.
-
-A component targets the combined `catalog-extension` world, or the narrower
+The package defines the interfaces `api`, `handler`, `artifacts`,
+`catalog-data`, `catalog`, `transfer`, `selection` and `operations`. The
+`imports` world imports every host interface. A component targets the combined
+`catalog-extension` world (exports `handler` and `operations`), or the narrower
 `handler-extension` or `operation-extension` world. The host links every
 import for every invocation and loads only the export it needs. Run-bound
 interfaces (`artifacts`, `catalog-data`, `catalog`, `transfer`, `selection`)
@@ -234,9 +222,11 @@ their selection, reach catalog data only through their run-scoped interfaces.
 Other `api` calls (configuration, secrets, storage, events, network, logging)
 work in both, still checked against capabilities at each call.
 
-### Host ABI evolution rules
+### Host ABI evolution
 
-These rules apply to every change to `wit-host/` and to the code that binds it:
+The package evolves additively: every later 1.x release must be a strict
+superset of the previous one. These rules apply to every change to `wit-host/`
+and to the code that binds it:
 
 1. **Additive only.** A new minor may add functions, interfaces, types, world
    imports and worlds. It must never remove, rename or change the signature of
@@ -252,21 +242,25 @@ These rules apply to every change to `wit-host/` and to the code that binds it:
 4. **Behavior is versioned with the ABI.** A released function keeps its
    semantics. Stricter behavior needs a new function or an opt-in field on a
    new type.
-5. **No new mutually exclusive ranges.** Feature gates must accept every unified
-   ABI (`is_unified_host_api`), never "X but not X-1".
+5. **No mutually exclusive ranges.** Never gate a feature on a `host_api` range
+   of the form "matches X but not X-1". Every release that accepts the
+   supported ABI can use every feature.
 
 `released_host_abis_are_preserved` (in
 `crates/extension-runtime/src/extension_runtime/abi_evolution_tests.rs`)
-enforces rules 1–3 against every snapshot. wasmtime resolves imports and
-exports with semver-compatible names, so a component built for 1.6 instantiates
-unchanged against a host that binds a later 1.x unified package.
+enforces rules 1–3 against every snapshot in `wit-released/`. wasmtime resolves
+imports and exports with semver-compatible names, so a component built for an
+earlier 1.x instantiates unchanged against a host that binds a later 1.x
+package.
 
 ## Server WASM runtime
 
 A `server_wasm` artifact is a WebAssembly **component** using the checked-in
-`catalog:host@1.0.0` WIT package at `crates/extension-runtime/wit/catalog-extension.wit`.
+`catalog:host` WIT package at `crates/extension-runtime/wit-host/catalog-extension.wit`.
 Components receive no WASI context, filesystem, environment, clock, socket, or
-pre-opened descriptor. The only imports are `api.call` and `api.log`.
+pre-opened descriptor. Their only imports are the host interfaces described in
+[Host ABI versions and evolution](#host-abi-versions-and-evolution); event
+handlers use `api.call` and `api.log` for JSON requests.
 
 A server manifest may declare `server.event_handlers`. Each handler has a
 stable ID, the v1 `handle-event` component export, and one or more exact
@@ -284,7 +278,7 @@ messages (16 KiB). Every operation is capability checked at the point of call.
 `configuration.get.v1` is available to components with
 `configuration.read`. `storage.get.v1`, `storage.set.v1` (also accepted as
 `storage.put.v1`), `storage.delete.v1`, and `storage.list.v1` are available to
-components with `storage.extension`. The legacy JSON
+components with `storage.extension`. The JSON
 `catalog.read.v1` surface additionally provides bounded `page`, `changes`, and
 single-attribute `lookup` requests; `page` cursors pin a database-clock snapshot
 and `changes` cursors pin a domain-event sequence high-water mark. Cursors are
@@ -293,8 +287,7 @@ business key (below): a single-attribute unique key on a string attribute uses
 its normalized index
 across every revision of the blueprint family, and a value that matches more
 than one entity fails with `lookup matched multiple entities` rather than
-returning an arbitrary match. This is a host behavior change that applies to
-every host ABI version. `catalog.command.v1` accepts a bounded,
+returning an arbitrary match. `catalog.command.v1` accepts a bounded,
 idempotent batch of typed `create`, `update`, `relationships`, or `upsert`
 intents. Each intent runs the ordinary entity create or update path (validation,
 checks, audit, publication reconciliation and its domain event). An upsert
@@ -409,17 +402,17 @@ ignore events whose source is their own extension ID to prevent feedback loops.
 Request/response calls, cancellation, and shared state are deliberately out of
 scope for this contract and require a separately versioned design.
 
-## Durable server operations (host API 1.2)
+## Durable server operations
 
-A release compatible with `catalog:host@1.2.0` may declare `server.operations`. Its immutable WIT records (`operation-request` and `batch-result`) are the typed, versioned operation ABI; operation IDs, run IDs, batch keys, checkpoint, progress, and completion state are not overloaded into an unversioned host call.
+A release may declare `server.operations`. Its WIT records (`operation-request` and `batch-result`) are the typed, versioned operation ABI; operation IDs, run IDs, batch keys, checkpoint, progress, and completion state are not overloaded into an unversioned host call.
 Each operation has a stable ID, component handler selector, object request schema,
-and 64 KiB-or-smaller request/checkpoint limits. The immutable v1.2 WIT package is at
-`crates/extension-runtime/wit-operations/catalog-extension.wit`. Artifact
-streams use the additive immutable v1.3 package at
-`crates/extension-runtime/wit-artifacts/catalog-extension.wit`; its request
-contains the run ID, handler selector, configuration snapshot, input, checkpoint,
-and durable batch key. Its operation world calls `prepare`, `start`,
-`process-batch`, `checkpoint`, `finish`, and cooperative `cancel`.
+and 64 KiB-or-smaller request/checkpoint limits. The `operations` interface in
+`crates/extension-runtime/wit-host/catalog-extension.wit` receives a request
+containing the run ID, handler selector, configuration snapshot, input,
+checkpoint, and durable batch key. The host calls `prepare`, `start`,
+`process-batch`, `checkpoint`, `finish`, and cooperative `cancel`. The batch
+key is scoped to the run: `<run_id>:<batch_number>`. Every run records host
+ABI version 1.0.0.
 
 Catalog creates one durable run per workspace, pinned installed release, operation,
 and idempotency key. The task queue leases the run with a fresh token; every
@@ -435,8 +428,8 @@ cancelling leased work invokes cooperative cancellation at the next batch.
 
 `POST /extensions/{extension_id}/operations` starts a run, while operators can
 list `GET /extension-operation-runs`, cancel a run, or replay only a dead-lettered
-run through its corresponding `cancel` and `replay` endpoints. The v1.3 artifact operation
-WIT imports host-managed `artifacts` resources. Releases need explicit
+run through its corresponding `cancel` and `replay` endpoints. Operations
+import host-managed `artifacts` resources. Releases need explicit
 `artifacts.read` and/or `artifacts.write` grants. Components open only run-bound
 approved inputs, read or write at most 64 KiB per call, and exchange opaque
 resource handles rather than object keys. An operation caller attaches a ready
@@ -454,12 +447,10 @@ management API or written to audit metadata. Configuration and diagnostics are
 redacted before management-visible persistence; secret-, credential-, password-,
 token-, key-, and authorization-named fields are replaced with `[redacted]`.
 
-### Connector catalog calls (host API 1.4)
+### Connector catalog calls
 
-Releases whose host API range includes 1.4 **but excludes 1.3** use the additive
-`wit-connectors/catalog-extension.wit` operation world. Earlier releases keep
-using the v1.3 world. In addition to artifacts, the new world imports
-`catalog-data.read` and `catalog-data.batch`. Both take/return the same JSON
+In addition to artifacts, operations import `catalog-data.read` and
+`catalog-data.batch`. Both take/return the same JSON
 shapes as `catalog.read.v1` and `catalog.command.v1` respectively. Calls are
 limited to 64 KiB of JSON; page size is at most 100 and batches at most 100
 intents. The host refreshes the release and grant before each call, requires
@@ -564,8 +555,7 @@ history remains available. Set `enabled = false` in the TOML to pause a job.
 For the packaged CSV connector, supply its `profile` and columns in `input`;
 Attricat overwrites the profile's blueprint ID, version and context on each
 run. Export declarations have no channel field: they cover all enabled
-publication channels. Only releases using the `catalog:host@1.4.0` connector
-world are accepted. Interval jobs accept 60–2592000 seconds.
+publication channels. Interval jobs accept 60–2592000 seconds.
 
 ```http
 GET /blueprints/{blueprint_id}/connector-jobs
@@ -593,8 +583,8 @@ excluded from subsequent pages; data already delivered externally cannot be
 recalled. Retried manual keys return the same run IDs. Run status and artifacts
 remain available via `/extension-operation-runs`.
 
-This uses the released 1.4 connector ABI: the host enforces page filters from
-run metadata without extending the WIT signature. Existing unscoped operations
+The host enforces page filters from run metadata; the `catalog` interface
+signature carries no filter. Existing unscoped operations
 and schedules remain available separately. Catalog-event triggers are not
 configured for connector jobs yet; run them manually or on an interval.
 
@@ -718,7 +708,7 @@ contextual actions—not an application-wide navigation tree.
   Its strict context is `entity_id`, `blueprint_id`, `blueprint_version`, and
   `context_version: 1`; it deliberately does not include search state or entity
   values. A version 2 contribution receives the
-  [selection context](#selection-aware-actions-and-interactive-operations-host-api-15)
+  [selection context](#selection-aware-actions-and-interactive-operations)
   instead.
 - **`explorer_table_cell`** (`embedded`, requiring
   `client.explorer_table_cell`) mounts a sandboxed renderer for a configured
@@ -952,7 +942,7 @@ runtime descriptor. Extension UI must provide its own localized
 text and accessible labels; the host owns the surrounding landmarks, focus,
 loading state, and failure announcements.
 
-## Selection-aware actions and interactive operations (host API 1.5)
+## Selection-aware actions and interactive operations
 
 An extension can let a signed-in user process one entity from its preview or
 Explorer row, or up to 50 selected Explorer entities, as a durable background
@@ -963,9 +953,8 @@ in the extension.
 ### Selection context
 
 Contributions to `entity_action`, `explorer_row_action`, and
-`explorer_bulk_action` may declare `"version": 2`, which requires the unified
-host ABI (1.6+) or a legacy `catalog.host_api` range compatible with 1.5 but not 1.4. Version 1
-contributions keep their released contexts. A version 2 contribution receives:
+`explorer_bulk_action` may declare `"version": 2`. Version 1 contributions
+keep their released contexts. A version 2 contribution receives:
 
 ```json
 {
@@ -994,12 +983,10 @@ A `server.operations` entry exposes itself to these actions with:
 {"id": "generate", "handler": "generate", "request_schema": {"type": "object"}, "interactive": {"version": 1, "max_selection": 50}}
 ```
 
-`max_selection` is 1–50. The release needs `client.operations.start`. A unified
-release (1.6+) runs it in the [unified world](#host-abi-versions-and-evolution);
-a legacy release runs it in the `catalog:host@1.5.0` world at
-`crates/extension-runtime/wit-interactive/catalog-extension.wit`. That world is
-the released 1.4 connector world plus a `selection` interface and the
-`annotate` catalog intent; the 1.4 package is unchanged.
+`max_selection` is 1–50. The release needs `client.operations.start`. The run
+reads its selection through the `selection` interface of
+`crates/extension-runtime/wit-host/catalog-extension.wit` and can write
+annotations with the `annotate` catalog intent.
 
 Starting a run (through `catalog.operations.start` or
 `POST /extensions/{extension_id}/{contribution_id}/operations`) checks the
@@ -1076,7 +1063,7 @@ With the `catalog.annotations.write` capability an extension can patch its own
 annotation namespace on an entity: tags named `<extension-id>:<tag>` and the
 object at `system_metadata[<extension-id>]`. Callers supply only local names; the
 host derives the namespace from the extension's provenance, so one extension can
-never write another's. The intent is available from 1.5 operation batches and
+never write another's. The intent is available from operation batches and
 from any `catalog.command.v1` batch (for example a client command) when the
 capability is granted; an annotation-only batch does not need `catalog.write`.
 
@@ -1115,12 +1102,10 @@ change a claimed namespace. Operators repair or clean up a namespace on one
 entity with `POST
 /extensions/{extension_id}/annotation-namespace/entities/{entity_id}`.
 
-## Context-aware catalog APIs (host API 1.1)
+## Context-aware catalog APIs
 
-`catalog:host@1.0.0` remains a supported immutable ABI. New components may use
-`crates/extension-runtime/wit-next/catalog-extension.wit` (`catalog:host@1.1.0`); manifests use
-`catalog.host_api` SemVer ranges and are never silently downgraded. The v1.1
-WIT interface has typed `read`, `write`, `scoped-configuration-get`, and
+The `api` interface in `crates/extension-runtime/wit-host/catalog-extension.wit`
+has typed `read`, `write`, `scoped-configuration-get`, and
 `scoped-configuration-set` functions. Dynamic attribute and configuration
 values are JSON strings bounded to 64 KiB; identifiers, scope kinds, response
 shapes, and write selectors are typed WIT records and variants. Components have
@@ -1200,10 +1185,10 @@ This test installs the actual packaged component into a migrated PostgreSQL
 workspace, grants its capabilities, runs an export, a 17-row multi-batch import and a multi-batch export
 through the production Wasmtime task handler, restarts the runtime between
 batches, and verifies output/download and 30-day retention. The
-`packaged_v14_transfer_import_rejects_ssrf_without_network_io` test packages
-a second component and exercises the actual v1.4 transfer WIT denial path.
+`packaged_transfer_import_rejects_ssrf_without_network_io` test packages
+a second component and exercises the actual `transfer` WIT denial path.
 When public HTTPS is available, set `ATTRICAT_PUBLIC_HTTP_TRANSFER_TEST=1`
-and run `packaged_v14_public_http_transfer_and_redirect_policy` to exercise
+and run `packaged_public_http_transfer_and_redirect_policy` to exercise
 real bounded HTTPS input, denied redirects and idempotency-keyed PUT delivery
 through that packaged component. The test requires `httpbin.org`; it is
 opt-in to keep offline CI deterministic. For an
@@ -1218,14 +1203,14 @@ without exposing input or secrets.
 
 When available, the sibling checkout at `../../attricat-extension-example`
 contains the packaged `attricat-extension-example` formula component using the
-released `catalog:host@1.1.0` ABI and sandboxed client contributions. It
+`catalog:host` ABI and sandboxed client contributions. It
 responds to `entity.updated.v1` by writing a calculated numeric attribute.
 
 The same checkout's `just pack` also writes `dist/reference-documents.tar.zst`
 (`attricat.reference-documents`), which exercises selection-aware actions: grant all of
 its permissions and enable it, then use **Generate document** from an entity
 preview, an Explorer row, or an Explorer selection. It renders PDFs (separate,
-ZIP, or combined) in the 1.5 operation world, writes a `report.json` with
+ZIP, or combined) in an interactive operation run, writes a `report.json` with
 per-entity results, and annotates entities whose output was finalized. An
 entity without values fails rendering on purpose, which exercises partial
 failures without failing the run.

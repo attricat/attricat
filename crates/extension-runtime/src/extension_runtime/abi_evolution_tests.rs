@@ -1,6 +1,6 @@
-//! Enforces additive evolution of the unified host ABI.
+//! Enforces additive evolution of the host ABI.
 //!
-//! Every released unified ABI is frozen in `wit-released/catalog-host-<version>.wit`.
+//! Every released ABI is frozen in `wit-released/catalog-host-<version>.wit`.
 //! The current `wit-host` package must contain every released interface,
 //! function, type and world unchanged. New functions, interfaces, types,
 //! world imports and worlds may be added; nothing released may be removed,
@@ -153,11 +153,11 @@ fn released_host_abis_are_preserved() {
         .name
         .version
         .clone()
-        .expect("the unified host ABI package is versioned");
+        .expect("the host ABI package is versioned");
     assert_eq!(
         current_version.to_string(),
         crate::extensions::SUPPORTED_HOST_API,
-        "SUPPORTED_HOST_API must name the unified wit-host package version"
+        "SUPPORTED_HOST_API must name the wit-host package version"
     );
 
     let released_dir = Path::new(CRATE_DIR).join("wit-released");

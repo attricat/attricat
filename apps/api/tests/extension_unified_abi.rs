@@ -1,6 +1,5 @@
-//! One release on the unified `catalog:host@1.6.0` ABI declares an event
-//! handler, a client command, scoped configuration and an interactive
-//! operation, which no legacy `host_api` range can combine.
+//! One release on the `catalog:host@1.0.0` ABI declares an event handler, a
+//! client command, scoped configuration and an interactive operation.
 
 mod support;
 
@@ -52,7 +51,7 @@ fn manifest() -> Value {
         "version": "1.0.0",
         "description": "unified host ABI integration test",
         "icons": {"48": "icon.png"},
-        "catalog": {"id": EXTENSION, "host_api": ">=1.6.0, <2.0.0"},
+        "catalog": {"id": EXTENSION, "host_api": ">=1.0.0, <2.0.0"},
         "permissions": PERMISSIONS,
         "configuration": {"version": 1, "schema": {"type": "object", "additionalProperties": false}},
         "scoped_configuration": {"version": 1, "schema": {"type": "object"}, "scopes": ["blueprint"]},
@@ -87,25 +86,6 @@ fn archive(server: &[u8]) -> Vec<u8> {
         ("server.wasm", server),
         ("client.js", b"export const mount = () => {};"),
     ])
-}
-
-#[test]
-fn legacy_ranges_cannot_combine_commands_and_interactive_operations() {
-    for legacy in [">=1.1.0, <2.0.0", ">=1.5.0, <2.0.0"] {
-        let mut value = manifest();
-        value["catalog"]["host_api"] = json!(legacy);
-        let manifest: api::extensions::Manifest = serde_json::from_value(value).unwrap();
-        assert!(
-            manifest
-                .validate(api::extensions::SUPPORTED_HOST_API)
-                .is_err(),
-            "{legacy} must stay bound to a legacy world"
-        );
-    }
-    let manifest: api::extensions::Manifest = serde_json::from_value(manifest()).unwrap();
-    manifest
-        .validate(api::extensions::SUPPORTED_HOST_API)
-        .unwrap();
 }
 
 #[sqlx::test(migrations = "./migrations")]

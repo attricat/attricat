@@ -187,8 +187,8 @@ fn transfer_test_archive(component: &[u8]) -> Vec<u8> {
         .collect();
     let manifest = serde_json::to_vec(&json!({
         "manifest_version":1,"name":"Transfer probe","version":"1.0.0",
-        "description":"v1.4 real host transfer policy fixture","icons":{"48":"icon.png"},
-        "catalog":{"id":"acme.transfer-probe","host_api":">=1.4.0, <2.0.0"},
+        "description":"Real host transfer policy fixture","icons":{"48":"icon.png"},
+        "catalog":{"id":"acme.transfer-probe","host_api":">=1.0.0, <2.0.0"},
         "permissions":["network.request","artifacts.read","artifacts.write"],
         "host_permissions":[
             {"id":"api","matches":["https://api.example.com/v1/*"],"methods":["GET"],"max_transfer_bytes":16777216},
@@ -217,7 +217,7 @@ fn artifact_operation_release_archive(extension_id: &str, component: &[u8]) -> V
         "version": "1.0.0",
         "description": "artifact WIT runtime integration test",
         "icons": {"48": "icon.png"},
-        "catalog": {"id": extension_id, "host_api": ">=1.3.0, <2.0.0"},
+        "catalog": {"id": extension_id, "host_api": ">=1.0.0, <2.0.0"},
         "permissions": ["artifacts.read", "artifacts.write"],
         "artifacts": [{"id": "server", "kind": "server_wasm", "path": "server.wasm"}],
         "configuration": {"version": 1, "schema": {"type": "object", "additionalProperties": false}},
@@ -243,7 +243,7 @@ fn operation_release_archive(extension_id: &str) -> Vec<u8> {
         "version": "1.0.0",
         "description": "durable operation integration test",
         "icons": {"48": "icon.png"},
-        "catalog": {"id": extension_id, "host_api": ">=1.2.0, <2.0.0"},
+        "catalog": {"id": extension_id, "host_api": ">=1.0.0, <2.0.0"},
         "artifacts": [{"id": "server", "kind": "server_wasm", "path": "server.wasm"}],
         "configuration": {"version": 1, "schema": {"type": "object", "additionalProperties": false}},
         "server": {"operations": [{
@@ -1497,9 +1497,9 @@ async fn operation_runs_keep_a_batch_key_across_crash_reclaim_and_fence_stale_ch
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(first_run.batch_key, "same-request:0");
+    assert_eq!(first_run.batch_key, format!("{run_id}:0"));
     // Simulate a process crash before its checkpoint transaction. Reclaiming
-    // must reissue the same idempotency key so a prior domain commit is safe.
+    // must reissue the same batch key so a prior domain commit is safe.
     sqlx::query("UPDATE tasks SET lease_until=clock_timestamp()-interval '1 second' WHERE id=$1")
         .bind(first.id)
         .execute(&pool)
@@ -2761,7 +2761,7 @@ async fn artifact_wit_component_copies_a_large_approved_input_in_bounded_chunks(
 }
 
 #[sqlx::test(migrations = "./migrations")]
-async fn packaged_v14_transfer_import_rejects_ssrf_without_network_io(pool: sqlx::PgPool) {
+async fn packaged_transfer_import_rejects_ssrf_without_network_io(pool: sqlx::PgPool) {
     use api::{
         extension_runtime::{
             ExtensionOperationTaskHandler, ExtensionRuntime, ExtensionRuntimeConfig,
@@ -2842,7 +2842,7 @@ async fn packaged_v14_transfer_import_rejects_ssrf_without_network_io(pool: sqlx
 // Opt in only when public HTTPS is reachable. No local/private address is
 // allowed by the broker, so a loopback test server cannot exercise this path.
 #[sqlx::test(migrations = "./migrations")]
-async fn packaged_v14_public_http_transfer_and_redirect_policy(pool: sqlx::PgPool) {
+async fn packaged_public_http_transfer_and_redirect_policy(pool: sqlx::PgPool) {
     use api::{
         extension_runtime::{
             ExtensionOperationTaskHandler, ExtensionRuntime, ExtensionRuntimeConfig,

@@ -32,7 +32,7 @@ Design with that in mind: your extension asks for capabilities; an administrator
   "icons": { "48": "assets/icon-48.svg" },
   "catalog": {
     "id": "acme.inventory",
-    "host_api": ">=1.1.0, <2.0.0"
+    "host_api": ">=1.0.0, <2.0.0"
   },
   "permissions": ["catalog.read"],
   "artifacts": [
@@ -69,7 +69,7 @@ Three version numbers are independent:
 | --- | --- |
 | `manifest_version` | The manifest format. Currently `1`. |
 | `version` | Your release, as SemVer. |
-| `catalog.host_api` | The SemVer range of Attricat host APIs your code works with, such as `>=1.1.0, <2.0.0`. |
+| `catalog.host_api` | The SemVer range of Attricat host APIs your code works with, such as `>=1.0.0, <2.0.0`. |
 
 Attricat never installs a release whose `host_api` range does not include the running host API.
 

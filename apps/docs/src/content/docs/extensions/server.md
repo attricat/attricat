@@ -5,27 +5,11 @@ description: Run extension code on the server as a WebAssembly component, react 
 
 Server-side extension code is a WebAssembly **component** declared as a `server_wasm` artifact. It runs in a sandbox with no WASI context: no file system, environment variables, clock, sockets, or pre-opened files. Everything it does goes through calls to the host, and the host checks the extension's grants on every call.
 
-## Host API versions
+## Host API version
 
-The host interface is defined in WIT packages in the Attricat repository under `crates/extension-runtime/`. Each published version is immutable.
+The host interface is the WIT package `catalog:host@1.0.0`, in `crates/extension-runtime/wit-host/catalog-extension.wit` in the Attricat repository. Set `catalog.host_api` in your manifest to a range that accepts it, such as `">=1.0.0, <2.0.0"`. Every release with such a range can use every feature: event handlers, commands, typed reads and writes, scoped configuration, every kind of [operation](/extensions/operations/), and all client outlets.
 
-| Version | WIT directory | Adds |
-| --- | --- | --- |
-| `catalog:host@1.0.0` | `wit/` | `api.call` and `api.log` with JSON requests. |
-| `catalog:host@1.1.0` | `wit-next/` | Typed `read`, `write`, and scoped-configuration functions. |
-| `catalog:host@1.2.0` | `wit-operations/` | Durable [operations](/extensions/operations/). |
-| `catalog:host@1.3.0` | `wit-artifacts/` | Operation input and output artifacts. |
-| `catalog:host@1.4.0` | `wit-connectors/` | Connector catalog calls and HTTPS file transfer. |
-| `catalog:host@1.5.0` | `wit-interactive/` | [Interactive operations](/extensions/operations/#interactive-operations) over a selection. |
-| `catalog:host@1.6.0` | `wit-host/` | **Unified ABI**: everything from 1.1 and 1.5 in one package. |
-
-Set `catalog.host_api` in your manifest to the range your component is built for.
-
-### Use the unified ABI for new extensions
-
-Versions up to 1.5 are two separate families. 1.0 and 1.1 handle events and commands. 1.2 to 1.5 run operations. A release on one of them can't use the other family's features, so one release can't have both client commands and interactive operations.
-
-From 1.6 there is one ABI that only grows. Use `"host_api": ">=1.6.0, <2.0.0"` and your component can use event handlers, commands, scoped configuration and every kind of operation together. Build it against one of these worlds in `wit-host/`:
+Build your component against one of these worlds:
 
 | World | Exports |
 | --- | --- |
@@ -35,9 +19,7 @@ From 1.6 there is one ABI that only grows. Use `"host_api": ">=1.6.0, <2.0.0"` a
 
 Every import is always available, but some only work in the right place. The operation interfaces (`artifacts`, `catalog-data`, `catalog`, `transfer`, `selection`) return an error outside an operation run. Inside a run, the typed `read` and `write` functions and the `catalog.read.v1` and `catalog.command.v1` calls return an error; use the run's own catalog interfaces instead.
 
-Later 1.x versions only add to 1.6. A component built for 1.6 keeps working on newer hosts without a rebuild.
-
-Ranges that include 1.5 or earlier, such as `>=1.1.0, <2.0.0`, keep their legacy world.
+Later 1.x versions only add to 1.0. A component built for an earlier 1.x keeps working on newer hosts without a rebuild.
 
 ## Handle catalog events
 
@@ -75,7 +57,7 @@ A write made while handling an event is attributed to the user or token behind t
 
 The JSON `catalog.read.v1` and `catalog.command.v1` calls add paged reads, change feeds, single-attribute lookups, and batches of `create`, `update`, `relationships`, and `upsert` intents. An upsert matches on a declared business key attribute, creates only when no entity matches, and fails if more than one does. Its relationship sets apply whether it updates a match or creates the entity.
 
-A lookup resolves exactly like an upsert. If the attribute alone is a declared unique key on a string attribute, the lookup uses that key's normalized values across every revision of the blueprint family; otherwise it matches the exact text among entities of the requested revision. A value that matches more than one entity fails with `lookup matched multiple entities` instead of returning one of them. This host behavior applies to every host API version, so extensions built against an older version see it too.
+A lookup resolves exactly like an upsert. If the attribute alone is a declared unique key on a string attribute, the lookup uses that key's normalized values across every revision of the blueprint family; otherwise it matches the exact text among entities of the requested revision. A value that matches more than one entity fails with `lookup matched multiple entities` instead of returning one of them.
 
 ## Storage
 
@@ -83,7 +65,7 @@ With `storage.extension`, `storage.get.v1`, `storage.set.v1`, `storage.delete.v1
 
 ## Configuration
 
-`configuration.get.v1` returns the installation configuration (needs `configuration.read`). Scoped configuration per blueprint or attribute is read and written through the typed functions in host API 1.1 (needs `configuration.write`).
+`configuration.get.v1` returns the installation configuration (needs `configuration.read`). Scoped configuration per blueprint or attribute is read and written through the typed `api` functions (needs `configuration.write`).
 
 ## Commands for your UI
 

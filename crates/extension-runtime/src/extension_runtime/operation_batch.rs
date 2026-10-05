@@ -1,9 +1,8 @@
-//! The released operation-batch lifecycle, shared by every operation world.
+//! The operation-batch lifecycle.
 //!
-//! The 1.2/1.3, 1.4, 1.5 and unified worlds all export the same
-//! `catalog:host/operations` interface, but bindgen generates distinct types
-//! for each world. [`OperationsExport`] abstracts over those types so that one
-//! function, [`run_operation_batch`], owns the lifecycle and its validation.
+//! [`OperationsExport`] wraps the bindgen types of the `catalog:host/operations`
+//! export so that one function, [`run_operation_batch`], owns the lifecycle and
+//! its validation.
 
 use std::future::Future;
 
@@ -11,9 +10,7 @@ use serde_json::{Value, json};
 use wasmtime::Store;
 
 use super::{
-    ExtensionRuntimeError, MAX_HOST_JSON_BYTES, host_connector::exports::catalog::host as v14,
-    host_operations::exports::catalog::host as v12,
-    interactive::host_interactive::exports::catalog::host as v15,
+    ExtensionRuntimeError, MAX_HOST_JSON_BYTES,
     unified::host_unified::exports::catalog::host as v16,
 };
 use crate::repository::ClaimedExtensionOperationRun;
@@ -35,7 +32,7 @@ pub(super) struct BatchOutput {
     done: bool,
 }
 
-/// One world's `catalog:host/operations` export.
+/// The `catalog:host/operations` export.
 pub(super) trait OperationsExport: Sync {
     type Request: Send + Sync;
 
@@ -116,7 +113,7 @@ macro_rules! impl_operations_export {
     )+};
 }
 
-impl_operations_export!(v12, v14, v15, v16);
+impl_operations_export!(v16);
 
 fn to_json(value: &Value) -> Result<String, ExtensionRuntimeError> {
     serde_json::to_string(value).map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))

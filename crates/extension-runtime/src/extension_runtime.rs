@@ -24,7 +24,6 @@ use url::Url;
 use async_trait::async_trait;
 use catalog_cache::{LocalRateLimiter, RateLimiter};
 use catalog_repository::round_trips::measure;
-use semver::{Version, VersionReq};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -56,57 +55,19 @@ use crate::{
     task_worker::{TaskHandler, TaskHandlerError, TaskOutcome},
 };
 
-wasmtime::component::bindgen!({
-    path: "wit",
-    world: "catalog-extension",
-    imports: { default: async },
-    exports: { default: async },
-});
-mod host_operations {
-    wasmtime::component::bindgen!({
-        path: "wit-artifacts",
-        world: "catalog-extension-operation",
-        with: {
-            "catalog:host/artifacts.input-artifact": crate::extension_runtime::InputArtifactStream,
-            "catalog:host/artifacts.output-artifact": crate::extension_runtime::OutputArtifactStream,
-        },
-        imports: { default: async },
-        exports: { default: async },
-    });
-}
-mod host_connector {
-    wasmtime::component::bindgen!({
-        path: "wit-connectors",
-        world: "catalog-extension-operation",
-        with: {
-            "catalog:host/artifacts.input-artifact": crate::extension_runtime::InputArtifactStream,
-            "catalog:host/artifacts.output-artifact": crate::extension_runtime::OutputArtifactStream,
-        },
-        imports: { default: async },
-        exports: { default: async },
-    });
-}
-
 #[cfg(test)]
 mod abi_evolution_tests;
 mod interactive;
 mod operation_batch;
 mod unified;
 
+use unified::host_unified::catalog::host as wit;
+
 use operation_batch::run_operation_batch;
-mod host_v11 {
-    wasmtime::component::bindgen!({
-        path: "wit-next",
-        world: "catalog-extension",
-        imports: { default: async },
-        exports: { default: async },
-    });
-}
 
 const MAX_HOST_MESSAGE_BYTES: usize = 16 * 1024;
 const MAX_HOST_JSON_BYTES: usize = 64 * 1024;
 /// The recorded ABI of runs bound to the released 1.4 connector world.
-const CONNECTOR_OPERATION_ABI: &str = "1.4.0";
 const MAX_CACHED_COMPONENTS: usize = 64;
 const MAX_WRITE_VALUES: usize = 100;
 const EPOCH_TICK_INTERVAL: Duration = Duration::from_millis(10);
@@ -201,45 +162,13 @@ impl ComponentCache {
 /// One linker per host world. Linking host functions depends only on the
 /// engine and the world, so it is done once per runtime, not per invocation.
 struct Linkers {
-    v1: Linker<HostState>,
-    v11: Linker<HostState>,
     unified: Linker<unified::UnifiedState>,
-    operations: Linker<OperationState>,
-    connector: Linker<OperationState>,
-    interactive: Linker<OperationState>,
 }
 
 impl Linkers {
     fn new(engine: &Engine) -> Result<Self, ExtensionRuntimeError> {
-        let runtime = |error: wasmtime::Error| ExtensionRuntimeError::Runtime(error.to_string());
-        let mut v1 = Linker::new(engine);
-        CatalogExtension::add_to_linker::<HostState, HasSelf<HostState>>(&mut v1, |state| state)
-            .map_err(runtime)?;
-        let mut v11 = Linker::new(engine);
-        host_v11::CatalogExtension::add_to_linker::<HostState, HasSelf<HostState>>(
-            &mut v11,
-            |state| state,
-        )
-        .map_err(runtime)?;
-        let mut operations = Linker::new(engine);
-        host_operations::CatalogExtensionOperation::add_to_linker::<
-            OperationState,
-            HasSelf<OperationState>,
-        >(&mut operations, |state| state)
-        .map_err(runtime)?;
-        let mut connector = Linker::new(engine);
-        host_connector::CatalogExtensionOperation::add_to_linker::<
-            OperationState,
-            HasSelf<OperationState>,
-        >(&mut connector, |state| state)
-        .map_err(runtime)?;
         Ok(Self {
-            v1,
-            v11,
             unified: unified::linker(engine)?,
-            operations,
-            connector,
-            interactive: interactive::linker(engine)?,
         })
     }
 }
@@ -404,68 +333,8 @@ impl ExtensionRuntime {
         run: &ClaimedExtensionOperationRun,
         cancelling: bool,
     ) -> Result<(Value, Value, bool), ExtensionRuntimeError> {
-        let abi_version = run.abi_version.as_str();
-        if crate::extensions::is_unified_abi_version(abi_version) {
-            return self
-                .invoke_unified_batch(installation, repository, run, cancelling)
-                .await;
-        }
-        if abi_version == crate::repository::INTERACTIVE_OPERATION_ABI {
-            return self
-                .invoke_interactive_batch(installation, repository, run, cancelling)
-                .await;
-        }
-        if abi_version == CONNECTOR_OPERATION_ABI {
-            return self
-                .invoke_connector_batch(installation, repository, run, cancelling)
-                .await;
-        }
-        let component = self.component(installation).await?;
-        // The 1.2/1.3 world predates batch-keyed host writes.
-        let mut store =
-            self.operation_store(self.operation_state(installation, repository, run.id))?;
-        let bindings = host_operations::CatalogExtensionOperation::instantiate_async(
-            &mut store,
-            &component,
-            &self.linkers.operations,
-        )
-        .await
-        .map_err(runtime_error)?;
-        run_operation_batch(
-            &mut store,
-            bindings.catalog_host_operations(),
-            run,
-            cancelling,
-        )
-        .await
-    }
-
-    async fn invoke_connector_batch(
-        &self,
-        installation: &ExtensionRuntimeInstallation,
-        repository: CatalogRepository,
-        run: &ClaimedExtensionOperationRun,
-        cancelling: bool,
-    ) -> Result<(Value, Value, bool), ExtensionRuntimeError> {
-        let component = self.component(installation).await?;
-        let mut store = self.operation_store(
-            self.operation_state(installation, repository, run.id)
-                .with_batch_key(&run.batch_key),
-        )?;
-        let bindings = host_connector::CatalogExtensionOperation::instantiate_async(
-            &mut store,
-            &component,
-            &self.linkers.connector,
-        )
-        .await
-        .map_err(runtime_error)?;
-        run_operation_batch(
-            &mut store,
-            bindings.catalog_host_operations(),
-            run,
-            cancelling,
-        )
-        .await
+        self.invoke_unified_batch(installation, repository, run, cancelling)
+            .await
     }
 
     fn operation_state(
@@ -475,25 +344,11 @@ impl ExtensionRuntime {
         run_id: Uuid,
     ) -> OperationState {
         OperationState::new(
-            self.config.max_memory_bytes,
             installation.clone(),
             repository,
             self.object_store.clone(),
             run_id,
         )
-    }
-
-    /// A sandboxed store for one operation batch, with the memory limiter,
-    /// fuel and epoch deadline applied.
-    fn operation_store(
-        &self,
-        state: OperationState,
-    ) -> Result<Store<OperationState>, ExtensionRuntimeError> {
-        let mut store = Store::new(&self.engine, state);
-        store.limiter(|state| &mut state.limits);
-        store.set_fuel(self.config.fuel).map_err(runtime_error)?;
-        store.set_epoch_deadline(epoch_deadline(self.config.invocation_timeout));
-        Ok(store)
     }
 
     /// Invokes a v1.1 component command after its HTTP broker has resolved a
@@ -506,97 +361,14 @@ impl ExtensionRuntime {
         request: &str,
         max_response_bytes: u64,
     ) -> Result<String, ExtensionRuntimeError> {
-        if crate::extensions::is_unified_host_api_range(&installation.manifest.catalog.host_api) {
-            return self
-                .invoke_unified_command(
-                    installation,
-                    repository,
-                    handler,
-                    request,
-                    max_response_bytes,
-                )
-                .await;
-        }
-        let component = self.component(installation).await?;
-        let state = HostState::new(
-            installation.clone(),
+        self.invoke_unified_command(
+            installation,
             repository,
-            self.config.max_memory_bytes,
-        );
-        let mut store = Store::new(&self.engine, state);
-        store.limiter(|state| &mut state.limits);
-        store
-            .set_fuel(self.config.fuel)
-            .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))?;
-        store.set_epoch_deadline(epoch_deadline(self.config.invocation_timeout));
-        let instance = host_v11::CatalogExtension::instantiate_async(
-            &mut store,
-            &component,
-            &self.linkers.v11,
+            handler,
+            request,
+            max_response_bytes,
         )
         .await
-        .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))?;
-        let command = host_v11::exports::catalog::host::handler::CommandRequest {
-            handler: handler.to_owned(),
-            payload: request.to_owned(),
-        };
-        let result = instance
-            .catalog_host_handler()
-            .call_handle_command(&mut store, &command)
-            .await;
-        match result {
-            Ok(Ok(response))
-                if response.payload.len() <= MAX_HOST_JSON_BYTES
-                    && response.payload.len() <= max_response_bytes as usize =>
-            {
-                Ok(response.payload)
-            }
-            Ok(Ok(_)) => Err(ExtensionRuntimeError::Runtime(
-                "command response exceeds its declared byte limit".into(),
-            )),
-            Ok(Err(error)) => Err(ExtensionRuntimeError::Runtime(error)),
-            Err(error) => Err(ExtensionRuntimeError::Runtime(error.to_string())),
-        }
-    }
-
-    async fn invoke_v11_event(
-        &self,
-        installation: &ExtensionRuntimeInstallation,
-        repository: CatalogRepository,
-        handler: &ManifestEventHandler,
-        event: &DomainEvent,
-    ) -> Result<(), ExtensionRuntimeError> {
-        let component = self.component(installation).await?;
-        let state = HostState::new(
-            installation.clone(),
-            repository,
-            self.config.max_memory_bytes,
-        );
-        let mut store = Store::new(&self.engine, state);
-        store.limiter(|state| &mut state.limits);
-        store
-            .set_fuel(self.config.fuel)
-            .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))?;
-        store.set_epoch_deadline(epoch_deadline(self.config.invocation_timeout));
-        let instance = host_v11::CatalogExtension::instantiate_async(
-            &mut store,
-            &component,
-            &self.linkers.v11,
-        )
-        .await
-        .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))?;
-        let result = instance
-            .catalog_host_handler()
-            .call_handle_event(&mut store, &to_wit_v11_event(event))
-            .await;
-        match result {
-            Ok(Ok(())) => Ok(()),
-            Ok(Err(message)) => Err(ExtensionRuntimeError::Runtime(format!(
-                "handler '{}' failed: {message}",
-                handler.id
-            ))),
-            Err(error) => Err(ExtensionRuntimeError::Runtime(error.to_string())),
-        }
     }
 
     async fn invoke(
@@ -606,50 +378,8 @@ impl ExtensionRuntime {
         handler: &ManifestEventHandler,
         event: &DomainEvent,
     ) -> Result<(), ExtensionRuntimeError> {
-        if crate::extensions::is_unified_host_api_range(&installation.manifest.catalog.host_api) {
-            return self
-                .invoke_unified_event(installation, repository, handler, event)
-                .await;
-        }
-        if uses_v11(&installation.manifest.catalog.host_api) {
-            return self
-                .invoke_v11_event(installation, repository, handler, event)
-                .await;
-        }
-        let component = self.component(installation).await?;
-
-        let state = HostState::new(
-            installation.clone(),
-            repository,
-            self.config.max_memory_bytes,
-        );
-        let mut store = Store::new(&self.engine, state);
-        store.limiter(|state| &mut state.limits);
-        store
-            .set_fuel(self.config.fuel)
-            .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))?;
-        store.set_epoch_deadline(epoch_deadline(self.config.invocation_timeout));
-
-        let instance =
-            CatalogExtension::instantiate_async(&mut store, &component, &self.linkers.v1)
-                .await
-                .map_err(|error| ExtensionRuntimeError::Runtime(error.to_string()))?;
-        let result = instance
-            .catalog_host_handler()
-            .call_handle_event(&mut store, &to_wit_event(event))
-            .await;
-        match result {
-            Ok(Ok(())) => {
-                metrics::counter!("catalog_extension_invocations_total", "outcome" => "completed")
-                    .increment(1);
-                Ok(())
-            }
-            Ok(Err(message)) => Err(ExtensionRuntimeError::Runtime(format!(
-                "handler '{}' failed: {message}",
-                handler.id
-            ))),
-            Err(error) => Err(ExtensionRuntimeError::Runtime(error.to_string())),
-        }
+        self.invoke_unified_event(installation, repository, handler, event)
+            .await
     }
 }
 
@@ -671,37 +401,6 @@ fn epoch_deadline(timeout: Duration) -> u64 {
         .max(1) as u64
 }
 
-fn uses_v11(range: &str) -> bool {
-    let Ok(range) = VersionReq::parse(range) else {
-        return false;
-    };
-    range.matches(&Version::new(1, 1, 0)) && !range.matches(&Version::new(1, 0, 0))
-}
-
-fn to_wit_v11_event(event: &DomainEvent) -> host_v11::catalog::host::api::Event {
-    host_v11::catalog::host::api::Event {
-        id: event.id.to_string(),
-        event_type: event.event_type.clone(),
-        aggregate_kind: event.aggregate_kind.clone(),
-        aggregate_id: event.aggregate_id.to_string(),
-        correlation_id: event.correlation_id.to_string(),
-        causation_id: event.causation_id.map(|id| id.to_string()),
-        payload: event.payload.to_string(),
-    }
-}
-
-fn to_wit_event(event: &DomainEvent) -> catalog::host::api::Event {
-    catalog::host::api::Event {
-        id: event.id.to_string(),
-        event_type: event.event_type.clone(),
-        aggregate_kind: event.aggregate_kind.clone(),
-        aggregate_id: event.aggregate_id.to_string(),
-        correlation_id: event.correlation_id.to_string(),
-        causation_id: event.causation_id.map(|id| id.to_string()),
-        payload: event.payload.to_string(),
-    }
-}
-
 const MAX_ARTIFACT_CHUNK_BYTES: usize = 64 * 1024;
 
 pub struct InputArtifactStream {
@@ -716,7 +415,6 @@ pub struct OutputArtifactStream {
 }
 
 struct OperationState {
-    limits: StoreLimits,
     installation: ExtensionRuntimeInstallation,
     repository: CatalogRepository,
     object_store: Arc<dyn ObjectStore>,
@@ -727,16 +425,12 @@ struct OperationState {
 
 impl OperationState {
     fn new(
-        max_memory_bytes: usize,
         installation: ExtensionRuntimeInstallation,
         repository: CatalogRepository,
         object_store: Arc<dyn ObjectStore>,
         run_id: Uuid,
     ) -> Self {
         Self {
-            limits: StoreLimitsBuilder::new()
-                .memory_size(max_memory_bytes)
-                .build(),
             installation,
             repository,
             object_store,
@@ -827,7 +521,7 @@ impl HostState {
     }
 }
 
-impl catalog::host::api::Host for HostState {
+impl HostState {
     async fn call(&mut self, operation: String, request: String) -> Result<String, String> {
         if request.len() > MAX_HOST_JSON_BYTES {
             return Err("request exceeds host JSON limit".into());
@@ -935,18 +629,17 @@ impl catalog::host::api::Host for HostState {
     }
 }
 
-impl host_v11::catalog::host::api::Host for HostState {
+impl HostState {
     async fn read(
         &mut self,
-        request: host_v11::catalog::host::api::ReadRequest,
-    ) -> Result<host_v11::catalog::host::api::ReadResponse, String> {
+        request: wit::api::ReadRequest,
+    ) -> Result<wit::api::ReadResponse, String> {
         self.require_active("catalog.read").await?;
         let (entity_id, context_id) = match request {
-            host_v11::catalog::host::api::ReadRequest::Entity(input)
-            | host_v11::catalog::host::api::ReadRequest::Values(input) => {
+            wit::api::ReadRequest::Entity(input) | wit::api::ReadRequest::Values(input) => {
                 (parse_uuid(&input.entity_id, "entity ID")?, None)
             }
-            host_v11::catalog::host::api::ReadRequest::Resolved(input) => (
+            wit::api::ReadRequest::Resolved(input) => (
                 parse_uuid(&input.entity_id, "entity ID")?,
                 Some(parse_uuid(&input.context_id, "context ID")?),
             ),
@@ -978,7 +671,7 @@ impl host_v11::catalog::host::api::Host for HostState {
             ),
             None => None,
         };
-        Ok(host_v11::catalog::host::api::ReadResponse {
+        Ok(wit::api::ReadResponse {
             entity: bounded_serialize(&entity)?,
             blueprint: bounded_serialize(&blueprint)?,
             direct_values: bounded_serialize(&direct_values)?,
@@ -991,8 +684,8 @@ impl host_v11::catalog::host::api::Host for HostState {
 
     async fn write(
         &mut self,
-        request: host_v11::catalog::host::api::WriteRequest,
-    ) -> Result<host_v11::catalog::host::api::WriteResponse, String> {
+        request: wit::api::WriteRequest,
+    ) -> Result<wit::api::WriteResponse, String> {
         self.require_active("catalog.write").await?;
         if request.values.is_empty() || request.values.len() > MAX_WRITE_VALUES {
             return Err("writes require 1-100 scalar values".into());
@@ -1031,14 +724,14 @@ impl host_v11::catalog::host::api::Host for HostState {
             )
             .await
             .map_err(|error| error.to_string())?;
-        Ok(host_v11::catalog::host::api::WriteResponse {
+        Ok(wit::api::WriteResponse {
             values: bounded_serialize(&values)?,
         })
     }
 
     async fn scoped_configuration_get(
         &mut self,
-        scope: host_v11::catalog::host::api::ConfigurationScope,
+        scope: wit::api::ConfigurationScope,
     ) -> Result<Option<String>, String> {
         self.require_active("configuration.write").await?;
         let value = self
@@ -1055,7 +748,7 @@ impl host_v11::catalog::host::api::Host for HostState {
 
     async fn scoped_configuration_set(
         &mut self,
-        request: host_v11::catalog::host::api::ScopedConfigurationUpdate,
+        request: wit::api::ScopedConfigurationUpdate,
     ) -> Result<(), String> {
         self.require_active("configuration.write").await?;
         let value = parse_bounded_json(&request.value, "scoped configuration value")?;
@@ -1068,14 +761,6 @@ impl host_v11::catalog::host::api::Host for HostState {
             )
             .await
             .map_err(|error| error.to_string())
-    }
-
-    async fn call(&mut self, operation: String, request: String) -> Result<String, String> {
-        <Self as catalog::host::api::Host>::call(self, operation, request).await
-    }
-
-    async fn log(&mut self, level: String, message: String) -> Result<(), String> {
-        <Self as catalog::host::api::Host>::log(self, level, message).await
     }
 }
 
@@ -1492,13 +1177,13 @@ fn parse_uuid(value: &str, label: &str) -> Result<Uuid, String> {
 }
 
 fn to_configuration_scope(
-    scope: host_v11::catalog::host::api::ConfigurationScope,
+    scope: wit::api::ConfigurationScope,
 ) -> Result<ExtensionConfigurationScope, String> {
     let kind = match scope.kind {
-        host_v11::catalog::host::api::ConfigurationScopeKind::Blueprint => {
+        wit::api::ConfigurationScopeKind::Blueprint => {
             crate::extensions::ConfigurationScope::Blueprint
         }
-        host_v11::catalog::host::api::ConfigurationScopeKind::Attribute => {
+        wit::api::ConfigurationScopeKind::Attribute => {
             crate::extensions::ConfigurationScope::Attribute
         }
     };
@@ -2065,9 +1750,8 @@ mod tests {
     use uuid::Uuid;
 
     use super::{
-        MAX_ARTIFACT_CHUNK_BYTES, NETWORK_RATE_LIMIT, allow_network_request, host_v11,
-        parse_bounded_json, require_operation_batch_key, to_configuration_scope, transfer_url,
-        uses_v11, valid_secret_name,
+        MAX_ARTIFACT_CHUNK_BYTES, NETWORK_RATE_LIMIT, allow_network_request, parse_bounded_json,
+        require_operation_batch_key, to_configuration_scope, transfer_url, valid_secret_name, wit,
     };
 
     /// The smallest valid component: the component-model binary header.
@@ -2129,13 +1813,6 @@ mod tests {
     }
 
     #[test]
-    fn selects_an_explicit_abi_without_upgrading_v1_ranges() {
-        assert!(!uses_v11("^1.0"));
-        assert!(uses_v11(">=1.1.0, <2.0.0"));
-        assert!(!uses_v11(">=1.0.0, <2.0.0"));
-    }
-
-    #[test]
     fn bulk_transfer_denies_plaintext_urls_credentials_and_queries() {
         assert!(transfer_url("https://example.com/v1/data").is_ok());
         for url in [
@@ -2185,285 +1862,18 @@ mod tests {
     }
 
     #[test]
-    fn typed_v11_inputs_reject_oversized_json_and_invalid_scopes() {
+    fn typed_api_inputs_reject_oversized_json_and_invalid_scopes() {
         assert!(parse_bounded_json(&"x".repeat(65_537), "value").is_err());
         assert!(parse_bounded_json("{", "value").is_err());
         assert!(
-            to_configuration_scope(host_v11::catalog::host::api::ConfigurationScope {
-                kind: host_v11::catalog::host::api::ConfigurationScopeKind::Attribute,
+            to_configuration_scope(wit::api::ConfigurationScope {
+                kind: wit::api::ConfigurationScopeKind::Attribute,
                 blueprint_id: "not-a-uuid".into(),
                 blueprint_version: 1,
                 attribute_id: Some("also-not-a-uuid".into()),
             })
             .is_err()
         );
-    }
-}
-
-impl host_operations::catalog::host::artifacts::Host for OperationState {
-    async fn open_input(
-        &mut self,
-        artifact_id: String,
-    ) -> Result<Resource<InputArtifactStream>, String> {
-        let (repository, extension_id, release_id) = self.artifact_access("artifacts.read")?;
-        ensure_operation_artifact_access(repository, extension_id, release_id, "artifacts.read")
-            .await?;
-        let artifact = self
-            .repository
-            .extension_operation_input_artifact(
-                self.run_id,
-                &self.installation.extension_id,
-                self.installation.installed_release_id,
-                &artifact_id,
-            )
-            .await
-            .map_err(|_| "operation input artifact is not authorized".to_owned())?;
-        self.artifacts
-            .push(InputArtifactStream {
-                artifact,
-                offset: 0,
-            })
-            .map_err(|_| "artifact handle limit reached".to_owned())
-    }
-
-    async fn describe_input(
-        &mut self,
-        handle: Resource<InputArtifactStream>,
-    ) -> Result<host_operations::catalog::host::artifacts::InputMetadata, String> {
-        let (repository, extension_id, release_id) = self.artifact_access("artifacts.read")?;
-        ensure_operation_artifact_access(repository, extension_id, release_id, "artifacts.read")
-            .await?;
-        let artifact = self
-            .artifacts
-            .get(&handle)
-            .map_err(|_| "invalid artifact handle".to_owned())?;
-        Ok(host_operations::catalog::host::artifacts::InputMetadata {
-            content_length: artifact.artifact.content_length as u64,
-            media_type: artifact.artifact.media_type.clone(),
-            checksum_sha256: artifact
-                .artifact
-                .checksum_sha256
-                .clone()
-                .unwrap_or_default(),
-        })
-    }
-
-    async fn read(
-        &mut self,
-        handle: Resource<InputArtifactStream>,
-        max_bytes: u32,
-    ) -> Result<Vec<u8>, String> {
-        let (repository, extension_id, release_id) = self.artifact_access("artifacts.read")?;
-        ensure_operation_artifact_access(repository, extension_id, release_id, "artifacts.read")
-            .await?;
-        let max_bytes =
-            usize::try_from(max_bytes).map_err(|_| "invalid artifact chunk".to_owned())?;
-        if max_bytes == 0 || max_bytes > MAX_ARTIFACT_CHUNK_BYTES {
-            return Err("artifact read chunk exceeds limit".into());
-        }
-        let (key, offset, length) = {
-            let stream = self
-                .artifacts
-                .get(&handle)
-                .map_err(|_| "invalid artifact handle".to_owned())?;
-            (
-                stream
-                    .artifact
-                    .object_key
-                    .clone()
-                    .ok_or_else(|| "artifact is unavailable".to_owned())?,
-                stream.offset,
-                stream.artifact.content_length,
-            )
-        };
-        if offset >= length {
-            return Ok(Vec::new());
-        }
-        let end = (offset + max_bytes as i64 - 1).min(length - 1);
-        let object = self
-            .object_store
-            .get_range(&key, Some(&format!("bytes={offset}-{end}")))
-            .await
-            .map_err(|_| "artifact storage is unavailable".to_owned())?;
-        if object.bytes.len() > max_bytes {
-            return Err("artifact storage returned oversized chunk".into());
-        }
-        let bytes = object.bytes.to_vec();
-        self.artifacts
-            .get_mut(&handle)
-            .map_err(|_| "invalid artifact handle".to_owned())?
-            .offset += bytes.len() as i64;
-        Ok(bytes)
-    }
-
-    async fn create_output(
-        &mut self,
-        media_type: String,
-    ) -> Result<Resource<OutputArtifactStream>, String> {
-        let (repository, extension_id, release_id) = self.artifact_access("artifacts.write")?;
-        ensure_operation_artifact_access(repository, extension_id, release_id, "artifacts.write")
-            .await?;
-        let artifact = self
-            .repository
-            .create_extension_operation_output_artifact(
-                self.run_id,
-                &self.installation.extension_id,
-                self.installation.installed_release_id,
-                &media_type,
-            )
-            .await
-            .map_err(|_| "operation artifact quota exhausted".to_owned())?;
-        let path = std::env::temp_dir().join(format!("catalog-operation-artifact-{}", artifact.id));
-        File::create(&path).map_err(|_| "temporary artifact storage is unavailable".to_owned())?;
-        self.artifacts
-            .push(OutputArtifactStream {
-                artifact,
-                path,
-                hasher: Sha256::new(),
-            })
-            .map_err(|_| "artifact handle limit reached".to_owned())
-    }
-
-    async fn write(
-        &mut self,
-        handle: Resource<OutputArtifactStream>,
-        bytes: Vec<u8>,
-    ) -> Result<(), String> {
-        let (repository, extension_id, release_id) = self.artifact_access("artifacts.write")?;
-        ensure_operation_artifact_access(repository, extension_id, release_id, "artifacts.write")
-            .await?;
-        if bytes.is_empty() || bytes.len() > MAX_ARTIFACT_CHUNK_BYTES {
-            return Err("artifact write chunk exceeds limit".into());
-        }
-        let artifact_id = self
-            .artifacts
-            .get(&handle)
-            .map_err(|_| "invalid artifact handle".to_owned())?
-            .artifact
-            .id;
-        self.repository
-            .reserve_extension_operation_artifact_bytes(
-                artifact_id,
-                self.run_id,
-                bytes.len() as i64,
-            )
-            .await
-            .map_err(|_| "operation artifact quota exhausted".to_owned())?;
-        let output = self
-            .artifacts
-            .get_mut(&handle)
-            .map_err(|_| "invalid artifact handle".to_owned())?;
-        OpenOptions::new()
-            .append(true)
-            .open(&output.path)
-            .and_then(|mut file| file.write_all(&bytes))
-            .map_err(|_| "temporary artifact storage is unavailable".to_owned())?;
-        output.hasher.update(&bytes);
-        Ok(())
-    }
-
-    async fn complete(
-        &mut self,
-        handle: Resource<OutputArtifactStream>,
-        checksum_sha256: String,
-    ) -> Result<host_operations::catalog::host::artifacts::OutputMetadata, String> {
-        let (repository, extension_id, release_id) = self.artifact_access("artifacts.write")?;
-        ensure_operation_artifact_access(repository, extension_id, release_id, "artifacts.write")
-            .await?;
-        let output = self
-            .artifacts
-            .delete(handle)
-            .map_err(|_| "invalid artifact handle".to_owned())?;
-        let actual = format!("{:x}", output.hasher.finalize());
-        if checksum_sha256 != actual {
-            let _ = self
-                .repository
-                .abort_extension_operation_artifact(output.artifact.id, self.run_id)
-                .await;
-            let _ = std::fs::remove_file(&output.path);
-            return Err("artifact checksum mismatch".into());
-        }
-        // The prefix is an immutable storage format contract. Future artifact
-        // layouts get a new version rather than changing how v1 objects read.
-        let key = format!("extension-operation-artifacts/v1/{}", output.artifact.id);
-        if self
-            .object_store
-            .put_file(&key, &output.path, Some(&output.artifact.media_type))
-            .await
-            .is_err()
-        {
-            let _ = self
-                .repository
-                .abort_extension_operation_artifact(output.artifact.id, self.run_id)
-                .await;
-            let _ = std::fs::remove_file(&output.path);
-            return Err("artifact storage is unavailable".into());
-        }
-        let artifact = match self
-            .repository
-            .complete_extension_operation_artifact(output.artifact.id, self.run_id, &actual, &key)
-            .await
-        {
-            Ok(artifact) => artifact,
-            Err(_) => {
-                // An object write can succeed before its database completion
-                // transaction. Delete that orphan before returning; the
-                // incomplete row is also terminalized so retry cannot expose it.
-                let _ = self.object_store.delete(&key).await;
-                let _ = self
-                    .repository
-                    .abort_extension_operation_artifact(output.artifact.id, self.run_id)
-                    .await;
-                let _ = std::fs::remove_file(&output.path);
-                return Err("operation output artifact is not completable".into());
-            }
-        };
-        let _ = std::fs::remove_file(&output.path);
-        Ok(host_operations::catalog::host::artifacts::OutputMetadata {
-            artifact_id: artifact.id.to_string(),
-            content_length: artifact.content_length as u64,
-            media_type: artifact.media_type,
-            checksum_sha256: actual,
-        })
-    }
-
-    async fn abort(&mut self, handle: Resource<OutputArtifactStream>) -> Result<(), String> {
-        let (repository, extension_id, release_id) = self.artifact_access("artifacts.write")?;
-        ensure_operation_artifact_access(repository, extension_id, release_id, "artifacts.write")
-            .await?;
-        let output = self
-            .artifacts
-            .delete(handle)
-            .map_err(|_| "invalid artifact handle".to_owned())?;
-        self.repository
-            .abort_extension_operation_artifact(output.artifact.id, self.run_id)
-            .await
-            .map_err(|_| "operation output artifact could not be aborted".to_owned())?;
-        let _ = std::fs::remove_file(&output.path);
-        Ok(())
-    }
-}
-
-impl host_operations::catalog::host::artifacts::HostInputArtifact for OperationState {
-    async fn drop(&mut self, handle: Resource<InputArtifactStream>) -> wasmtime::Result<()> {
-        self.artifacts.delete(handle)?;
-        Ok(())
-    }
-}
-
-impl host_operations::catalog::host::artifacts::HostOutputArtifact for OperationState {
-    async fn drop(&mut self, handle: Resource<OutputArtifactStream>) -> wasmtime::Result<()> {
-        if let Ok(output) = self.artifacts.delete(handle) {
-            // Resource destruction is the normal trap/unwind cleanup path.
-            // It must terminalize the durable record immediately rather than
-            // relying solely on the periodic abandoned-stream sweep.
-            let _ = self
-                .repository
-                .abort_extension_operation_artifact(output.artifact.id, self.run_id)
-                .await;
-            let _ = std::fs::remove_file(&output.path);
-        }
-        Ok(())
     }
 }
 
@@ -2640,8 +2050,8 @@ impl OperationState {
     }
 }
 
-impl host_connector::catalog::host::transfer::Host for OperationState {
-    async fn fetch_input(&mut self, request: String) -> Result<String, String> {
+impl OperationState {
+    async fn transfer_fetch_input(&mut self, request: String) -> Result<String, String> {
         let input: TransferFetch = parse_host_request(&request, "transfer request")?;
         if !transfer_key_valid(&input.transfer_key)
             || input.max_bytes == 0
@@ -2808,7 +2218,7 @@ impl host_connector::catalog::host::transfer::Host for OperationState {
         result
     }
 
-    async fn deliver_output(&mut self, request: String) -> Result<String, String> {
+    async fn transfer_deliver_output(&mut self, request: String) -> Result<String, String> {
         let input: TransferDelivery = parse_host_request(&request, "delivery request")?;
         if !transfer_key_valid(&input.delivery_key)
             || !matches!(input.method.as_str(), "PUT" | "POST")
@@ -2907,8 +2317,8 @@ impl host_connector::catalog::host::transfer::Host for OperationState {
     }
 }
 
-impl host_connector::catalog::host::catalog::Host for OperationState {
-    async fn schema(
+impl OperationState {
+    async fn catalog_schema(
         &mut self,
         blueprint_id: String,
         blueprint_version: u64,
@@ -2949,7 +2359,7 @@ impl host_connector::catalog::host::catalog::Host for OperationState {
         )
     }
 
-    async fn page(
+    async fn catalog_page(
         &mut self,
         blueprint_id: String,
         blueprint_version: u64,
@@ -3027,7 +2437,7 @@ impl host_connector::catalog::host::catalog::Host for OperationState {
         bounded_serialize(&json!({"rows":rows,"next_cursor":page.next_cursor}))
     }
 
-    async fn upsert_batch(&mut self, request: String) -> Result<(), String> {
+    async fn catalog_upsert_batch(&mut self, request: String) -> Result<(), String> {
         if request.len() > MAX_HOST_JSON_BYTES {
             return Err("request exceeds host JSON limit".into());
         }
@@ -3113,8 +2523,8 @@ impl host_connector::catalog::host::catalog::Host for OperationState {
     }
 }
 
-impl host_connector::catalog::host::catalog_data::Host for OperationState {
-    async fn read(&mut self, request: String) -> Result<String, String> {
+impl OperationState {
+    async fn catalog_data_read(&mut self, request: String) -> Result<String, String> {
         if request.len() > MAX_HOST_JSON_BYTES {
             return Err("request exceeds host JSON limit".into());
         }
@@ -3132,7 +2542,7 @@ impl host_connector::catalog::host::catalog_data::Host for OperationState {
         host.catalog_read_call(&request).await
     }
 
-    async fn batch(&mut self, request: String) -> Result<String, String> {
+    async fn catalog_data_batch(&mut self, request: String) -> Result<String, String> {
         if request.len() > MAX_HOST_JSON_BYTES {
             return Err("request exceeds host JSON limit".into());
         }
@@ -3161,8 +2571,8 @@ impl host_connector::catalog::host::catalog_data::Host for OperationState {
     }
 }
 
-impl host_connector::catalog::host::artifacts::Host for OperationState {
-    async fn append_output(
+impl OperationState {
+    async fn artifacts_append_output(
         &mut self,
         name: String,
         media_type: String,
@@ -3205,7 +2615,7 @@ impl host_connector::catalog::host::artifacts::Host for OperationState {
         Ok(())
     }
 
-    async fn finalize_output(&mut self, name: String) -> Result<String, String> {
+    async fn artifacts_finalize_output(&mut self, name: String) -> Result<String, String> {
         let (repository, extension_id, release_id) = self.artifact_access("artifacts.write")?;
         ensure_operation_artifact_access(repository, extension_id, release_id, "artifacts.write")
             .await?;
@@ -3307,7 +2717,7 @@ impl host_connector::catalog::host::artifacts::Host for OperationState {
         result
     }
 
-    async fn open_input(
+    async fn artifacts_open_input(
         &mut self,
         artifact_id: String,
     ) -> Result<Resource<InputArtifactStream>, String> {
@@ -3332,10 +2742,10 @@ impl host_connector::catalog::host::artifacts::Host for OperationState {
             .map_err(|_| "artifact handle limit reached".to_owned())
     }
 
-    async fn describe_input(
+    async fn artifacts_describe_input(
         &mut self,
         handle: Resource<InputArtifactStream>,
-    ) -> Result<host_connector::catalog::host::artifacts::InputMetadata, String> {
+    ) -> Result<wit::artifacts::InputMetadata, String> {
         let (repository, extension_id, release_id) = self.artifact_access("artifacts.read")?;
         ensure_operation_artifact_access(repository, extension_id, release_id, "artifacts.read")
             .await?;
@@ -3343,7 +2753,7 @@ impl host_connector::catalog::host::artifacts::Host for OperationState {
             .artifacts
             .get(&handle)
             .map_err(|_| "invalid artifact handle".to_owned())?;
-        Ok(host_connector::catalog::host::artifacts::InputMetadata {
+        Ok(wit::artifacts::InputMetadata {
             content_length: artifact.artifact.content_length as u64,
             media_type: artifact.artifact.media_type.clone(),
             checksum_sha256: artifact
@@ -3354,7 +2764,7 @@ impl host_connector::catalog::host::artifacts::Host for OperationState {
         })
     }
 
-    async fn read(
+    async fn artifacts_read(
         &mut self,
         handle: Resource<InputArtifactStream>,
         max_bytes: u32,
@@ -3402,7 +2812,7 @@ impl host_connector::catalog::host::artifacts::Host for OperationState {
         Ok(bytes)
     }
 
-    async fn create_output(
+    async fn artifacts_create_output(
         &mut self,
         media_type: String,
     ) -> Result<Resource<OutputArtifactStream>, String> {
@@ -3430,7 +2840,7 @@ impl host_connector::catalog::host::artifacts::Host for OperationState {
             .map_err(|_| "artifact handle limit reached".to_owned())
     }
 
-    async fn write(
+    async fn artifacts_write(
         &mut self,
         handle: Resource<OutputArtifactStream>,
         bytes: Vec<u8>,
@@ -3468,11 +2878,11 @@ impl host_connector::catalog::host::artifacts::Host for OperationState {
         Ok(())
     }
 
-    async fn complete(
+    async fn artifacts_complete(
         &mut self,
         handle: Resource<OutputArtifactStream>,
         checksum_sha256: String,
-    ) -> Result<host_connector::catalog::host::artifacts::OutputMetadata, String> {
+    ) -> Result<wit::artifacts::OutputMetadata, String> {
         let (repository, extension_id, release_id) = self.artifact_access("artifacts.write")?;
         ensure_operation_artifact_access(repository, extension_id, release_id, "artifacts.write")
             .await?;
@@ -3525,7 +2935,7 @@ impl host_connector::catalog::host::artifacts::Host for OperationState {
             }
         };
         let _ = std::fs::remove_file(&output.path);
-        Ok(host_connector::catalog::host::artifacts::OutputMetadata {
+        Ok(wit::artifacts::OutputMetadata {
             artifact_id: artifact.id.to_string(),
             content_length: artifact.content_length as u64,
             media_type: artifact.media_type,
@@ -3533,7 +2943,10 @@ impl host_connector::catalog::host::artifacts::Host for OperationState {
         })
     }
 
-    async fn abort(&mut self, handle: Resource<OutputArtifactStream>) -> Result<(), String> {
+    async fn artifacts_abort(
+        &mut self,
+        handle: Resource<OutputArtifactStream>,
+    ) -> Result<(), String> {
         let (repository, extension_id, release_id) = self.artifact_access("artifacts.write")?;
         ensure_operation_artifact_access(repository, extension_id, release_id, "artifacts.write")
             .await?;
@@ -3550,15 +2963,21 @@ impl host_connector::catalog::host::artifacts::Host for OperationState {
     }
 }
 
-impl host_connector::catalog::host::artifacts::HostInputArtifact for OperationState {
-    async fn drop(&mut self, handle: Resource<InputArtifactStream>) -> wasmtime::Result<()> {
+impl OperationState {
+    async fn artifacts_drop_input(
+        &mut self,
+        handle: Resource<InputArtifactStream>,
+    ) -> wasmtime::Result<()> {
         self.artifacts.delete(handle)?;
         Ok(())
     }
 }
 
-impl host_connector::catalog::host::artifacts::HostOutputArtifact for OperationState {
-    async fn drop(&mut self, handle: Resource<OutputArtifactStream>) -> wasmtime::Result<()> {
+impl OperationState {
+    async fn artifacts_drop_output(
+        &mut self,
+        handle: Resource<OutputArtifactStream>,
+    ) -> wasmtime::Result<()> {
         if let Ok(output) = self.artifacts.delete(handle) {
             // Resource destruction is the normal trap/unwind cleanup path.
             // It must terminalize the durable record immediately rather than
