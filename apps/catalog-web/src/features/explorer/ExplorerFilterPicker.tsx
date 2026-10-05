@@ -1,6 +1,6 @@
 import { Button, Chip, Stack, Typography } from '@mui/material';
 import { PlusIcon } from 'lucide-react';
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { compactOutlinedActionButtonSx } from '../../components/CompactOutlinedActionButton';
 import type { Attribute } from '../entities/api';
@@ -68,6 +68,23 @@ export const ExplorerFilterPicker = ({
   });
   // Open for each new external request while rendering, so the dialog starts
   // from the requested draft without an extra effect pass.
+  const chipRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const addButtonRef = useRef<HTMLButtonElement>(null);
+  const removedIndex = useRef<number | null>(null);
+  // Deleting a chip removes the focused element. Move focus to the chip that
+  // took its place, else the previous one, else Add filter, so keyboard focus
+  // stays in the list (and inside a surrounding drawer or dialog).
+  useLayoutEffect(() => {
+    const index = removedIndex.current;
+    if (index === null) return;
+    removedIndex.current = null;
+    const next = chipRefs.current[Math.min(index, filters.length - 1)];
+    (next ?? addButtonRef.current)?.focus();
+  }, [filters]);
+  const remove = (index: number) => {
+    removedIndex.current = index;
+    onRemove(index);
+  };
   const [handledRequest, setHandledRequest] = useState(filterRequest);
   if (filterRequest !== handledRequest) {
     setHandledRequest(filterRequest);
@@ -173,13 +190,17 @@ export const ExplorerFilterPicker = ({
               directory.data,
             )}
             onClick={() => openFilter(filter, index)}
-            onDelete={() => onRemove(index)}
+            onDelete={() => remove(index)}
+            ref={(element: HTMLDivElement | null) => {
+              chipRefs.current[index] = element;
+            }}
             size="small"
           />
         ))}
         <Button
           color="primary"
           onClick={() => openEditor(null, emptyAttributeFilterDraft)}
+          ref={addButtonRef}
           size="small"
           startIcon={<PlusIcon size={smallIconSize} />}
           sx={compactOutlinedActionButtonSx}

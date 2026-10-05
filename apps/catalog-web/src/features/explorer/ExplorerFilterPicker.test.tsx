@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
+import { useState } from 'react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import '../../i18n';
@@ -10,6 +11,7 @@ import {
 } from '../entities/api';
 import { ExplorerFilterPicker } from './ExplorerFilterPicker';
 import type { RelationshipFilterAttribute } from './relationshipFilterTypes';
+import type { AttributeFilter } from './search';
 
 vi.mock('../entities/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../entities/api')>();
@@ -133,5 +135,50 @@ describe('ExplorerFilterPicker', () => {
     );
     await user.click(screen.getByRole('combobox', { name: 'Value' }));
     expect(await screen.findByRole('option', { name: 'Live' })).toBeTruthy();
+  });
+
+  it('keeps keyboard focus in the list when filters are removed', async () => {
+    const Picker = () => {
+      const [filters, setFilters] = useState<AttributeFilter[]>([
+        { field: 'stock', operator: 'gt', value: 5 },
+        { field: 'stock', operator: 'lt', value: 50 },
+      ]);
+      return (
+        <ExplorerFilterPicker
+          attributes={[{ code: 'stock', value_type: 'integer' }]}
+          blueprintName="Product"
+          filters={filters}
+          onAdd={vi.fn()}
+          onAddRelationship={vi.fn()}
+          onRemove={(index) =>
+            setFilters((current) =>
+              current.filter((_, position) => position !== index),
+            )
+          }
+          onUpdate={vi.fn()}
+        />
+      );
+    };
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <Picker />
+      </QueryClientProvider>,
+    );
+    const user = userEvent.setup();
+    const chips = () =>
+      screen
+        .getAllByRole('button')
+        .filter((element) => element.classList.contains('MuiChip-root'));
+
+    chips()[0].focus();
+    await user.keyboard('{Delete}');
+    expect(chips()).toHaveLength(1);
+    expect(document.activeElement).toBe(chips()[0]);
+
+    await user.keyboard('{Delete}');
+    expect(chips()).toHaveLength(0);
+    expect(document.activeElement).toBe(
+      screen.getByRole('button', { name: 'Add filter' }),
+    );
   });
 });
