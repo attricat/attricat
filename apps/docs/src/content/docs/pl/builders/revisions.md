@@ -87,4 +87,4 @@ Podsumowanie grupuje encje w `ready`, `needs_input`, `blocked` i `failed`. Encje
 - **Nie używaj ponownie kodów.** Jeśli `weight` zmienia jednostkę z gramów na kilogramy, dodaj `weight_kg` i wycofaj `weight`. Ponowne użycie kodu sprawia, że stare wartości wyglądają na poprawne, choć są błędne.
 - **Najpierw poluzuj, potem zaostrz.** Opublikuj wersję, która dodaje pole, uzupełnij je w całym katalogu, a potem opublikuj wersję, która czyni je wymaganym.
 - **Uważaj na liczność.** Zmiana relacji z `many` na `one` blokuje każdą encję, która ma więcej niż jeden cel.
-- **Aktualizuj dołączenia świadomie.** Nowa wersja domieszki trafia do schematu dopiero wtedy, gdy opublikujesz wersję schematu, która na nią wskazuje.
+- **Aktualizuj include świadomie.** Nowa wersja mixinu trafia do schematu dopiero wtedy, gdy opublikujesz wersję schematu, która na nią wskazuje.

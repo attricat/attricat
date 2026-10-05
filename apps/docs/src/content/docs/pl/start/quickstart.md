@@ -129,6 +129,6 @@ Gdy masz już kilka produktów i kategorii:
 
 ## Kolejne kroki
 
-- [Tworzenie schematu](/pl/builders/blueprints/) omawia pliki, układy, domieszki i nie tylko.
+- [Tworzenie schematu](/pl/builders/blueprints/) omawia pliki, układy, mixiny i nie tylko.
 - [Modelowanie katalogu](/pl/builders/modeling/) pomaga zdecydować, co powinno być encją, atrybutem, a co kontekstem.
 - [Administrowanie obszarem roboczym](/pl/operate/workspaces/) wyjaśnia, jak zaprosić zespół.

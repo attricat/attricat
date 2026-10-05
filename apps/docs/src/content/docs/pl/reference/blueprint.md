@@ -9,7 +9,7 @@ Kompilator jest rygorystyczny. Nieznany klucz, wartość złego typu lub odwoła
 
 ## Kody
 
-Kody schematów, kody atrybutów, aliasy dołączeń, cele relacji, kody reguł, kody zadań konektorów i kody ról w `[publication]` muszą być **kodami**: niepustymi ciągami złożonymi z liter ASCII, cyfr, `-` i `_`. `product`, `seo-fields` i `stock_on_hand` są prawidłowe. `product type` i `prodükt` nie są.
+Kody schematów, kody atrybutów, aliasy include, cele relacji, kody reguł, kody zadań konektorów i kody ról w `[publication]` muszą być **kodami**: niepustymi ciągami złożonymi z liter ASCII, cyfr, `-` i `_`. `product`, `seo-fields` i `stock_on_hand` są prawidłowe. `product type` i `prodükt` nie są.
 
 ## Tłumaczone etykiety
 
@@ -30,9 +30,9 @@ entity_schema = '''{ "type": "object", "required": ["title"] }'''
 | `format_version` | liczba całkowita | Tak | Musi wynosić `1`. |
 | `code` | kod | Tak | Identyfikator rodziny schematów. Nie może się zmieniać między wersjami. |
 | `name` | ciąg znaków | Tak | Nazwa wyświetlana. Może się zmieniać między wersjami. |
-| `kind` | `"entity"` lub `"mixin"` | Tak | Schemat `entity` może mieć encje. Domieszka (`mixin`) jedynie dostarcza atrybuty innym schematom przez `[[includes]]`. |
+| `kind` | `"entity"` lub `"mixin"` | Tak | Schemat `entity` może mieć encje. Mixin jedynie dostarcza atrybuty innym schematom przez `[[includes]]`. |
 | `attributes` | tablica tabel | Tak | Co najmniej jeden atrybut. Zobacz [Atrybuty](#atrybuty). |
-| `includes` | tablica tabel | Nie | Domieszki, z których ten schemat pobiera atrybuty. Zobacz [Dołączenia](#dołączenia). |
+| `includes` | tablica tabel | Nie | Mixiny, z których ten schemat pobiera atrybuty. Zobacz [Include](#include). |
 | `views` | tabela | Encja: tak | Układy dla aplikacji webowej. Schematy encji muszą definiować `views.dropdown_option`. Zobacz [Widoki](#widoki). |
 | `entity_schema` | ciąg znaków (JSON) | Nie | JSON Schema dla całej encji, opcjonalnie z [`x-attricat-checks`](#kontrole-encji). Tylko schematy encji. Zobacz [Walidacja](/pl/builders/validation/). |
 | `publication` | tabela | Nie | Zasady ponownego zatwierdzania publikacji. Zobacz [Publikacja](#publikacja). |
@@ -56,9 +56,9 @@ value_type = "string"
 | Klucz | Typ | Domyślnie | Opis |
 | --- | --- | --- | --- |
 | `code` | kod | Wymagany | Unikalny w obrębie schematu, łącznie z atrybutami pobranymi z domieszek. |
-| `name` | ciąg znaków | `code` w czytelnej formie | Czytelna etykieta wyświetlana w formularzach, filtrach, podglądach oraz jako domyślny nagłówek kolumny tabeli. Nie może być pusta. Niedozwolona razem z `from`; wybrany atrybut zachowuje nazwę atrybutu domieszki. |
+| `name` | ciąg znaków | `code` w czytelnej formie | Czytelna etykieta wyświetlana w formularzach, filtrach, podglądach oraz jako domyślny nagłówek kolumny tabeli. Nie może być pusta. Niedozwolona razem z `from`; wybrany atrybut zachowuje nazwę atrybutu mixinu. |
 | `value_type` | ciąg znaków | | Jeden z [typów wartości](#typy-wartości). |
-| `from` | ciąg znaków | | `"<include-alias>.<attribute-code>"`. Materializuje atrybut z dołączonej domieszki. `code` musi być równy kodowi atrybutu domieszki. |
+| `from` | ciąg znaków | | `"<include-alias>.<attribute-code>"`. Materializuje atrybut z mixinu wskazanego przez include. `code` musi być równy kodowi atrybutu mixinu. |
 | `extension_type` | ciąg znaków | | `"<extension-id>:<type-id>@<semver-range>"`. Używa typu atrybutu zadeklarowanego przez włączone rozszerzenie. Zobacz [Typy atrybutów z rozszerzeń](#typy-atrybutów-z-rozszerzeń). |
 | `context_fallback` | `"default"` lub `"none"` | `"default"` | Co pokazuje kontekst bez własnej wartości. `default` przechodzi w górę drzewa kontekstów do najbliższego przodka z wartością. `none` nie pokazuje niczego. |
 | `context_editable` | `"all"` lub `"default"` | `"all"` | Gdzie można zapisywać wartości. `default` ogranicza zapisy do kontekstu domyślnego: inne konteksty pokazują pole tylko do odczytu, a API odrzuca w nich zapisy. |
@@ -264,9 +264,9 @@ Gdy schemat jest zapisywany, Attricat odnajduje włączone rozszerzenie `com.acm
 
 `extension_type` nie można łączyć z `value_schema`, kluczami relacji ani kluczami plików.
 
-## Dołączenia
+## Include
 
-Domieszki współdzielą definicje atrybutów między schematami. Dołączenie przypina jedną konkretną opublikowaną wersję domieszki. Każdy potrzebny atrybut trzeba następnie wybrać przez `from`.
+Mixiny współdzielą definicje atrybutów między schematami. Include przypina jedną konkretną opublikowaną wersję mixinu. Każdy potrzebny atrybut trzeba następnie wybrać przez `from`.
 
 ```toml
 [[includes]]
@@ -282,10 +282,10 @@ from = "seo.meta_title"
 | Klucz | Typ | Opis |
 | --- | --- | --- |
 | `alias` | kod | Lokalna nazwa używana w `from`. Unikalna w obrębie schematu. |
-| `code` | kod | Kod schematu domieszki. |
-| `version` | dodatnia liczba całkowita | Konkretna opublikowana wersja domieszki. |
+| `code` | kod | Kod schematu mixinu. |
+| `version` | dodatnia liczba całkowita | Konkretna opublikowana wersja mixinu. |
 
-Wybrany atrybut zachowuje wszystkie ustawienia z domieszki. Aby uwzględnić zmiany w domieszce, opublikuj nową wersję domieszki i wskaż ją w `version` w nowej wersji schematu, który z niej korzysta.
+Wybrany atrybut zachowuje wszystkie ustawienia z mixinu. Aby uwzględnić zmiany w mixinie, opublikuj nową wersję mixinu i wskaż ją w `version` w nowej wersji schematu, który z niej korzysta.
 
 ## Widoki
 
@@ -614,9 +614,9 @@ Kilka reguł kompilacji, które łatwo przeoczyć:
 
 - `format_version` inny niż `1` jest odrzucany.
 - Schemat encji bez `views.dropdown_option` jest odrzucany.
-- `entity_schema` w domieszce jest odrzucany.
+- `entity_schema` w mixinie jest odrzucany.
 - `entity_schema` może wskazywać tylko atrybuty, które schemat posiada, w swoich kluczach najwyższego poziomu `required`, `properties`, `dependentRequired` i `dependentSchemas`.
 - Predykaty w `x-attricat-checks`, warunkach przejść (`conditions`) i `[[rules]]` muszą wskazywać atrybuty, które schemat posiada, o typach pasujących do predykatu. Porównanie porządkujące na łańcuchu znaków albo porównanie daty z liczbą jest odrzucane.
 - `target_blueprint`, `target_blueprints`, `acyclic` i `tree` w atrybucie innym niż relacja są odrzucane.
-- `unique_keys` w domieszce, klucz wskazujący nieznany atrybut, atrybut `json`, plikowy lub relację z wieloma celami, a także klucz wymieniający atrybut dwa razy są odrzucane.
+- `unique_keys` w mixinie, klucz wskazujący nieznany atrybut, atrybut `json`, plikowy lub relację z wieloma celami, a także klucz wymieniający atrybut dwa razy są odrzucane.
 - `from` musi mieć postać `alias.code`, gdzie `code` odpowiada kodowi samego atrybutu.

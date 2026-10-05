@@ -140,7 +140,7 @@ Konteksty pełnią też rolę [kanałów eksportu](/pl/guides/publishing/), gdy 
 
 Definicje atrybutów można współdzielić na dwa sposoby.
 
-**Domieszki** współdzielą atrybuty między schematami. Domieszka to schemat z `kind = "mixin"`; inne schematy dołączają jedną konkretną wersję i wybierają jej atrybuty przez `from`. Używaj ich dla grup pól, których wiele schematów potrzebuje w tej samej postaci, np. SEO lub wymiarów. Zobacz [Tworzenie schematu](/pl/builders/blueprints/#krok-9-udostępnij-atrybuty-w-domieszce).
+**Mixiny** współdzielą atrybuty między schematami. Mixin to schemat z `kind = "mixin"`; inne schematy przypinają przez include jedną konkretną wersję i wybierają jej atrybuty przez `from`. Używaj ich dla grup pól, których wiele schematów potrzebuje w tej samej postaci, np. SEO lub wymiarów. Zobacz [Tworzenie schematu](/pl/builders/blueprints/#krok-9-udostępnij-atrybuty-w-mixinie).
 
 **Atrybuty wielokrotnego użytku** to rejestr pojedynczych definicji atrybutów w obszarze roboczym, zarządzany w **Zarządzanie → Atrybuty wielokrotnego użytku**. Edytorzy mogą dołączyć opublikowany atrybut wielokrotnego użytku lub ich grupę do pojedynczej encji. Używaj ich dla okazjonalnych pól, których potrzebują tylko niektóre encje i które nie należą do schematu. Definicja jest zapisana w TOML:
 

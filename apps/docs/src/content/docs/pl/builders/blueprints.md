@@ -1,6 +1,6 @@
 ---
 title: Tworzenie schematu
-description: Zbuduj schemat od pustego pliku do opublikowanej wersji z relacjami, widokami, walidacją i domieszką.
+description: Zbuduj schemat od pustego pliku do opublikowanej wersji z relacjami, widokami, walidacją i mixinem.
 ---
 
 Schemat to dokument TOML opisujący jeden rodzaj rekordu katalogu: jego atrybuty, ich zachowanie w kontekstach, sposób walidacji i układ w aplikacji internetowej. Ten przewodnik krok po kroku buduje mały katalog produktów. Każdy użyty tu klucz jest opisany w [dokumentacji TOML schematu](/pl/reference/blueprint/).
@@ -273,9 +273,9 @@ entity_schema = '''
 
 Kontrola, która nie przejdzie, powoduje odrzucenie zapisu z `422 entity_check_failed`. Kontrole mogą też sprawdzać powiązane rekordy. Zobacz [Walidacja](/pl/builders/validation/#porównuj-atrybuty-za-pomocą-kontroli).
 
-## Krok 9: udostępnij atrybuty w domieszce
+## Krok 9: udostępnij atrybuty w mixinie
 
-Gdy kilka schematów potrzebuje tych samych pól, np. metadanych SEO, umieść je w domieszce:
+Gdy kilka schematów potrzebuje tych samych pól, np. metadanych SEO, umieść je w mixinie:
 
 ```toml
 format_version = 1
@@ -292,7 +292,7 @@ code = "meta_description"
 value_type = "string"
 ```
 
-Opublikuj ją, a następnie dołącz do `product` i wybierz potrzebne atrybuty:
+Opublikuj go, a następnie dodaj do `product` jako include i wybierz potrzebne atrybuty:
 
 ```toml
 [[includes]]
@@ -309,7 +309,7 @@ code = "meta_description"
 from = "seo.meta_description"
 ```
 
-Dołączenie przypina konkretną wersję domieszki. Opublikowanie wersji 2 `seo` nie zmienia `product`, dopóki nie opublikujesz nowej wersji `product`, która dołącza wersję 2.
+Include przypina konkretną wersję mixinu. Opublikowanie wersji 2 `seo` nie zmienia `product`, dopóki nie opublikujesz nowej wersji `product`, której include wskazuje wersję 2.
 
 ## Krok 10: kontroluj cykl życia rekordu
 

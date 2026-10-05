@@ -43,7 +43,7 @@ fields = ["title"]
 
 Schemat może też definiować schematy walidacji, układy stron, reguły jakości danych i zadania konektorów.
 
-**Domieszki** to schematy, które istnieją tylko po to, by dołączać je do innych. Sprzedawca trzyma pola SEO w domieszce `seo`, używanej zarówno przez `product`, jak i `category`.
+**Mixiny** to schematy, które istnieją tylko po to, by inne schematy pobierały z nich atrybuty przez include. Sprzedawca trzyma pola SEO w mixinie `seo`, używanej zarówno przez `product`, jak i `category`.
 
 ## Wersje
 
