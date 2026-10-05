@@ -312,8 +312,26 @@ impl CatalogRepository {
         context_id: Option<Uuid>,
         file_id: Uuid,
     ) -> Result<FileMetadata, RepositoryError> {
+        self.link_file_to_attribute_checked(entity_id, attribute_code, context_id, file_id, None)
+            .await
+    }
+
+    /// [`Self::link_file_to_attribute`], failing with
+    /// [`RepositoryError::StaleEntity`] when `expected_updated_at` is set and
+    /// no longer current.
+    pub async fn link_file_to_attribute_checked(
+        &self,
+        entity_id: Uuid,
+        attribute_code: &str,
+        context_id: Option<Uuid>,
+        file_id: Uuid,
+        expected_updated_at: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> Result<FileMetadata, RepositoryError> {
         let mut transaction = self.pool.begin().await?;
         let entity = self.lock_entity(&mut transaction, entity_id).await?;
+        if expected_updated_at.is_some_and(|expected| expected != entity.updated_at) {
+            return Err(RepositoryError::StaleEntity);
+        }
         let (change, file_ids) = self
             .prepare_file_link(
                 &mut transaction,

@@ -286,9 +286,9 @@ carry the stable codes above, and the read-only `get_entity_record_controls`
 tool returns transition access, approvals and holds so the agent can explain a
 denial instead of retrying.
 
-Each single-entity agent edit (values, value removal and restore, annotations,
-deletion) and each update or delete in an agent batch carries
-`expected_updated_at`. When the agent omits it, the runner records the
+Every single-entity agent edit (values, value removal and restore,
+annotations, relationships, file links, blueprint migration and deletion) and
+each update or delete in an agent batch carries `expected_updated_at`. When the agent omits it, the runner records the
 entity's `updated_at` when the change is proposed, so the approved write
 applies to the state the approver saw and returns `409 stale_entity` if the
 entity changed while it waited for approval. The same precondition lets these

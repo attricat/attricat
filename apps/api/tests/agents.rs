@@ -149,9 +149,10 @@ async fn approved_entity_edits_apply_to_the_proposed_state_and_name_their_target
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
     let blueprint = create_blueprint(&client, &base_url,
-        "format_version = 1\ncode = \"pinned_desk\"\nname = \"Pinned desk\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"").await;
+        "format_version = 1\ncode = \"pinned_desk\"\nname = \"Pinned desk\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"\n\n[[attributes]]\ncode = \"related\"\nvalue_type = \"relationship\"\ntarget_blueprint = \"pinned_desk\"").await;
     let entity = create_entity(&client, &base_url, &blueprint).await;
     let entity_id = entity["id"].as_str().unwrap().to_owned();
+    let other = create_entity(&client, &base_url, &blueprint).await;
     let workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
     let actor: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
     let repository = CatalogRepository::system(pool)
@@ -247,6 +248,18 @@ async fn approved_entity_edits_apply_to_the_proposed_state_and_name_their_target
             "remove_entity_values",
             json!({"entity_id": entity_id, "remove_values": [{"attribute_code":"title"}], "expected_updated_at": deletion["expected_updated_at"]}),
         ),
+        (
+            "replace_entity_relationships",
+            json!({"entity_id": entity_id, "relationships": [{"attribute_code":"related","target_entity_ids":[other["id"]]}], "expected_updated_at": deletion["expected_updated_at"]}),
+        ),
+        (
+            "remove_entity_relationships",
+            json!({"entity_id": entity_id, "relationships": [{"attribute_code":"related","target_entity_ids":[other["id"]]}], "expected_updated_at": deletion["expected_updated_at"]}),
+        ),
+        (
+            "link_file",
+            json!({"entity_id": entity_id, "attribute_code":"title", "file_id": Uuid::new_v4(), "expected_updated_at": deletion["expected_updated_at"]}),
+        ),
     ] {
         assert!(
             matches!(
@@ -256,6 +269,59 @@ async fn approved_entity_edits_apply_to_the_proposed_state_and_name_their_target
             "{name} must refuse a stale proposal"
         );
     }
+
+    // A current pin lets the write through.
+    let mut link = json!({"entity_id": entity_id, "relationships": [{"attribute_code":"related","target_entity_ids":[other["id"]]}]});
+    pin_entity_versions(&repository, "replace_entity_relationships", &mut link)
+        .await
+        .unwrap();
+    execute_mutation(&repository, actor, "replace_entity_relationships", link)
+        .await
+        .unwrap();
+
+    // A migration proposed before another edit is refused too.
+    let blueprint_id = blueprint["blueprint"]["id"].as_str().unwrap();
+    let revision = execute_mutation(&repository, actor, "create_blueprint_revision", json!({
+        "blueprint_id": blueprint_id,
+        "definition": "format_version = 1\ncode = \"pinned_desk\"\nname = \"Pinned desk\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"\n\n[[attributes]]\ncode = \"related\"\nvalue_type = \"relationship\"\ntarget_blueprint = \"pinned_desk\"\n\n[[attributes]]\ncode = \"finish\"\nvalue_type = \"string\""
+    }))
+    .await
+    .unwrap();
+    execute_mutation(
+        &repository,
+        actor,
+        "publish_blueprint",
+        json!({"blueprint_id": blueprint_id, "version": revision["blueprint"]["version"]}),
+    )
+    .await
+    .unwrap();
+    let mut migration = json!({"entity_id": entity_id});
+    pin_entity_versions(&repository, "migrate_entity", &mut migration)
+        .await
+        .unwrap();
+    execute_mutation(
+        &repository,
+        actor,
+        "set_entity_values",
+        set_title("Ash desk"),
+    )
+    .await
+    .unwrap();
+    assert!(matches!(
+        execute_mutation(&repository, actor, "migrate_entity", migration).await,
+        Err(ToolError::Repository(RepositoryError::StaleEntity))
+    ));
+    let mut migration = json!({"entity_id": entity_id});
+    pin_entity_versions(&repository, "migrate_entity", &mut migration)
+        .await
+        .unwrap();
+    assert_eq!(
+        execute_mutation(&repository, actor, "migrate_entity", migration)
+            .await
+            .unwrap()["migrated"],
+        true
+    );
+
     let mut current = json!({"entity_id": entity_id});
     pin_entity_versions(&repository, "delete_entity", &mut current)
         .await

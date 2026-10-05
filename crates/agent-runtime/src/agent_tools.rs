@@ -36,12 +36,16 @@ const AUTHORING_GUIDE_TOPICS: [(&str, &str); 4] = [
 const MAX_SEARCH_FILTERS: usize = 20;
 /// Single-entity mutations whose approved write must apply to the entity
 /// state the proposal was made against; see [`pin_entity_versions`].
-const VERSION_PINNED_TOOLS: [&str; 5] = [
+const VERSION_PINNED_TOOLS: [&str; 9] = [
     "set_entity_values",
     "remove_entity_values",
     "restore_entity_value",
     "update_entity_annotations",
     "delete_entity",
+    "replace_entity_relationships",
+    "remove_entity_relationships",
+    "link_file",
+    "migrate_entity",
 ];
 
 /// How a version-pinned tool's `expected_updated_at` behaves.
@@ -361,18 +365,27 @@ pub fn definitions() -> Vec<ToolDefinition> {
         ),
         definition(
             "replace_entity_relationships",
-            "Replace the complete target set for each specified relationship attribute and context on an entity. An empty target_entity_ids array clears that set. Targets must belong to the attribute's target_blueprint_codes, and acyclic or tree relationships reject links that form a cycle (relationship_cycle names the path). Inspect the entity first and review every target ID; this change requires approval.",
+            concat!(
+                "Replace the complete target set for each specified relationship attribute and context on an entity. An empty target_entity_ids array clears that set. Targets must belong to the attribute's target_blueprint_codes, and acyclic or tree relationships reject links that form a cycle (relationship_cycle names the path). Inspect the entity first and review every target ID; this change requires approval.",
+                pinned_note!()
+            ),
             relationship_mutation_parameters(),
         ),
         definition(
             "remove_entity_relationships",
-            "Remove only the specified existing relationship targets on an entity, preserving other targets. Inspect the entity first; this change requires approval.",
+            concat!(
+                "Remove only the specified existing relationship targets on an entity, preserving other targets. Inspect the entity first; this change requires approval.",
+                pinned_note!()
+            ),
             relationship_mutation_parameters(),
         ),
         definition(
             "migrate_entity",
-            "Upgrade an entity to the latest published revision of its blueprint. Call preview_entity_migration first to assess compatibility without a write. Supply replacement scalar values, relationship target sets, or discarded attribute codes if needed. This change requires approval; with no remediation input, a ready entity is migrated immediately after approval.",
-            json!({"type":"object","required":["entity_id"],"properties":{"entity_id":{"type":"string","format":"uuid"},"values":attribute_value_parameters(),"relationships":relationship_targets_parameters(),"discard_attributes":{"type":"array","items":{"type":"string"}}},"additionalProperties":false}),
+            concat!(
+                "Upgrade an entity to the latest published revision of its blueprint. Call preview_entity_migration first to assess compatibility without a write. Supply replacement scalar values, relationship target sets, or discarded attribute codes if needed. This change requires approval; with no remediation input, a ready entity is migrated immediately after approval.",
+                pinned_note!()
+            ),
+            json!({"type":"object","required":["entity_id"],"properties":{"entity_id":{"type":"string","format":"uuid"},"expected_updated_at":expected_updated_at_parameter(),"values":attribute_value_parameters(),"relationships":relationship_targets_parameters(),"discard_attributes":{"type":"array","items":{"type":"string"}}},"additionalProperties":false}),
         ),
         definition(
             "preview_entity_migration",
@@ -411,8 +424,11 @@ pub fn definitions() -> Vec<ToolDefinition> {
         ),
         definition(
             "link_file",
-            "Attach an existing workspace file to an entity file attribute. Conversation attachments include their file IDs. This change requires approval.",
-            json!({"type":"object","required":["entity_id","attribute_code","file_id"],"properties":{"entity_id":{"type":"string","format":"uuid"},"attribute_code":{"type":"string"},"file_id":{"type":"string","format":"uuid"},"context_id":{"type":["string","null"],"format":"uuid"}},"additionalProperties":false}),
+            concat!(
+                "Attach an existing workspace file to an entity file attribute. Conversation attachments include their file IDs. This change requires approval.",
+                pinned_note!()
+            ),
+            json!({"type":"object","required":["entity_id","attribute_code","file_id"],"properties":{"entity_id":{"type":"string","format":"uuid"},"expected_updated_at":expected_updated_at_parameter(),"attribute_code":{"type":"string"},"file_id":{"type":"string","format":"uuid"},"context_id":{"type":["string","null"],"format":"uuid"}},"additionalProperties":false}),
         ),
         definition(
             "list_saved_searches",
@@ -540,6 +556,7 @@ fn relationship_mutation_parameters() -> Value {
     relationships["maxItems"] = json!(20);
     json!({"type":"object","required":["entity_id","relationships"],"properties":{
         "entity_id":{"type":"string","format":"uuid"},
+        "expected_updated_at":expected_updated_at_parameter(),
         "relationships":relationships},"additionalProperties":false})
 }
 
@@ -1720,15 +1737,16 @@ pub async fn execute_mutation(
             .expect("value serializes")
         }
         "replace_entity_relationships" | "remove_entity_relationships" => {
-            let (entity_id, relationships) =
+            let (entity_id, relationships, expected_updated_at) =
                 decode_relationship_mutation(arguments, name == "remove_entity_relationships")?;
-            let service = CatalogMutationService::new(repository);
-            let input = crate::model::RelationshipMutation { relationships };
-            let updated = if name == "replace_entity_relationships" {
-                service.replace_relationships(entity_id, input).await?
-            } else {
-                service.remove_relationships(entity_id, input).await?
-            };
+            let updated = CatalogMutationService::new(repository)
+                .mutate_relationships_checked(
+                    entity_id,
+                    crate::model::RelationshipMutation { relationships },
+                    name == "replace_entity_relationships",
+                    expected_updated_at,
+                )
+                .await?;
             serde_json::to_value(updated).expect("relationship values serialize")
         }
         "migrate_entity" => {
@@ -1736,6 +1754,7 @@ pub async fn execute_mutation(
             #[serde(deny_unknown_fields)]
             struct Input {
                 entity_id: Uuid,
+                expected_updated_at: Option<DateTime<Utc>>,
                 #[serde(default)]
                 values: Vec<crate::model::NewAttributeValue>,
                 #[serde(default)]
@@ -1759,7 +1778,7 @@ pub async fn execute_mutation(
                 })
             } else {
                 let entity = CatalogMutationService::new(repository)
-                    .migrate_entity(
+                    .migrate_entity_checked(
                         input.entity_id,
                         crate::model::MigrateEntityRequest {
                             migration_id: preview.migration_id,
@@ -1769,6 +1788,7 @@ pub async fn execute_mutation(
                             discard_attributes: input.discard_attributes,
                             removal_policy: None,
                         },
+                        input.expected_updated_at,
                     )
                     .await?;
                 json!({"migrated": true, "entity": entity})
@@ -1819,15 +1839,17 @@ pub async fn execute_mutation(
                 attribute_code: String,
                 file_id: Uuid,
                 context_id: Option<Uuid>,
+                expected_updated_at: Option<DateTime<Utc>>,
             }
             let input: Input = decode(arguments)?;
             serde_json::to_value(
                 CatalogMutationService::new(repository)
-                    .link_file(
+                    .link_file_checked(
                         input.entity_id,
                         &input.attribute_code,
                         input.context_id,
                         input.file_id,
+                        input.expected_updated_at,
                     )
                     .await?,
             )
@@ -2210,14 +2232,23 @@ pub async fn execute_mutation(
     bounded(result)
 }
 
+/// The entity, relationship sets and optional `expected_updated_at` of a
+/// relationship replacement or removal.
+type RelationshipMutationInput = (
+    Uuid,
+    Vec<crate::model::RelationshipTargets>,
+    Option<DateTime<Utc>>,
+);
+
 fn decode_relationship_mutation(
     arguments: Value,
     removing: bool,
-) -> Result<(Uuid, Vec<crate::model::RelationshipTargets>), ToolError> {
+) -> Result<RelationshipMutationInput, ToolError> {
     #[derive(Deserialize)]
     #[serde(deny_unknown_fields)]
     struct Input {
         entity_id: Uuid,
+        expected_updated_at: Option<DateTime<Utc>>,
         relationships: Vec<crate::model::RelationshipTargets>,
     }
     let input: Input = decode(arguments)?;
@@ -2251,7 +2282,11 @@ fn decode_relationship_mutation(
             return Err(ToolError::InvalidArguments("relationship sets require unique attribute/context and at most 100 unique targets (nonempty when removing)".into()));
         }
     }
-    Ok((input.entity_id, input.relationships))
+    Ok((
+        input.entity_id,
+        input.relationships,
+        input.expected_updated_at,
+    ))
 }
 
 fn agent_table_paths(blueprint: &crate::model::BlueprintWithAttributes) -> HashMap<String, String> {
