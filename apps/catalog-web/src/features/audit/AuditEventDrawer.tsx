@@ -42,9 +42,16 @@ export const AuditEventDrawer = ({
   return (
     <Drawer
       anchor="right"
-      aria-labelledby={titleId}
       onClose={onClose}
       open={Boolean(event)}
+      // The temporary drawer is modal, so its panel is announced as a dialog.
+      slotProps={{
+        paper: {
+          'aria-labelledby': titleId,
+          'aria-modal': true,
+          role: 'dialog',
+        },
+      }}
     >
       <Box sx={{ p: 3, width: { xs: '100vw', sm: auditDrawerWidth } }}>
         <Typography component="h2" id={titleId} variant="h6">

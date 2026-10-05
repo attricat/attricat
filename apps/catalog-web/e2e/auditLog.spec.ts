@@ -23,10 +23,7 @@ test('records a browser edit and filters the audit log', async ({ page }) => {
   await expect(update).toContainText('success');
 
   await update.getByRole('button', { name: /^View details for/ }).click();
-  // The MUI drawer has no dialog role, so locate its panel by its heading.
-  const drawer = page
-    .locator('.MuiDrawer-paper')
-    .filter({ has: page.getByRole('heading', { name: 'Audit event' }) });
+  const drawer = page.getByRole('dialog', { name: 'Audit event' });
   await expect(drawer).toContainText(entity.id);
   await expect(drawer).toContainText('Request ID');
   await page.keyboard.press('Escape');

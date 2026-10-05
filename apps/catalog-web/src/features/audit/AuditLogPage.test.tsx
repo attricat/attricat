@@ -79,9 +79,8 @@ describe('AuditLogPage', () => {
       name: 'View details for entity.updated by Ada Lovelace',
     });
     await user.click(detailsButton);
-    expect(
-      await screen.findByRole('heading', { name: 'Audit event' }),
-    ).toBeTruthy();
+    const dialog = await screen.findByRole('dialog', { name: 'Audit event' });
+    expect(dialog.getAttribute('aria-modal')).toBe('true');
     expect(outletMount).toHaveBeenCalledWith({
       outlet: 'audit_event_panel',
       context: { context_version: 1, event_id: event.id },
@@ -89,13 +88,13 @@ describe('AuditLogPage', () => {
 
     await user.keyboard('{Escape}');
     await waitFor(() =>
-      expect(screen.queryByRole('heading', { name: 'Audit event' })).toBeNull(),
+      expect(screen.queryByRole('dialog', { name: 'Audit event' })).toBeNull(),
     );
 
     detailsButton.focus();
     await user.keyboard('{Enter}');
     expect(
-      await screen.findByRole('heading', { name: 'Audit event' }),
+      await screen.findByRole('dialog', { name: 'Audit event' }),
     ).toBeTruthy();
   });
 
