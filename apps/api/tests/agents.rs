@@ -136,7 +136,7 @@ async fn agent_blueprint_reads_list_summaries_and_fetch_one_definition(pool: PgP
             actor,
             workspace,
             "blueprint_authoring_guide",
-            json!({"topic":"rules"})
+            json!({"topic":"storage"})
         )
         .await
         .is_err()
@@ -483,6 +483,216 @@ async fn agent_reads_incoming_links_hierarchies_labels_and_reusable_attributes(p
     );
     assert!(
         read("list_reusable_attributes", json!({"code": "missing"}))
+            .await
+            .is_err()
+    );
+    server.abort();
+}
+
+#[sqlx::test]
+async fn agent_duplicates_comments_validates_and_reviews_catalog_health(pool: PgPool) {
+    CatalogRepository::system(pool.clone())
+        .ensure_rule_permissions()
+        .await
+        .unwrap();
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let definition = |extra: &str| {
+        format!(
+            "format_version = 1\ncode = \"noted_item\"\nname = \"Noted item\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"{extra}"
+        )
+    };
+    let blueprint = create_blueprint(&client, &base_url, &definition("")).await;
+    let blueprint_id = blueprint["blueprint"]["id"].as_str().unwrap().to_owned();
+    let entity = create_entity(&client, &base_url, &blueprint).await;
+    let entity_id = entity["id"].as_str().unwrap().to_owned();
+    let workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
+    let actor: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
+    let repository = CatalogRepository::system(pool.clone())
+        .for_workspace(workspace)
+        .await
+        .unwrap();
+    let read = |name: &'static str, arguments: Value| {
+        execute_read(&repository, actor, workspace, name, arguments)
+    };
+    execute_mutation(
+        &repository,
+        actor,
+        "set_entity_values",
+        json!({"entity_id": entity_id, "values": [
+            {"kind":"scalar","attribute_code":"title","context_id":null,"value":"Lamp"}
+        ]}),
+    )
+    .await
+    .unwrap();
+
+    let copy = execute_mutation(
+        &repository,
+        actor,
+        "duplicate_entity",
+        json!({"entity_id": entity_id}),
+    )
+    .await
+    .unwrap();
+    assert_ne!(copy["id"], entity["id"]);
+    let labels = read("get_entity_labels", json!({"entity_ids": [copy["id"]]}))
+        .await
+        .unwrap();
+    assert_eq!(labels["items"][0]["display"]["default"], "Lamp");
+
+    // Comments are written as the initiating user and read back bounded.
+    for body in [
+        "First note".to_owned(),
+        "x".repeat(1_500),
+        "Third note".to_owned(),
+    ] {
+        execute_mutation(
+            &repository,
+            actor,
+            "add_entity_comment",
+            json!({"entity_id": entity_id, "body": body}),
+        )
+        .await
+        .unwrap();
+    }
+    assert!(
+        execute_mutation(
+            &repository,
+            actor,
+            "add_entity_comment",
+            json!({"entity_id": entity_id, "body": "  "})
+        )
+        .await
+        .is_err()
+    );
+    let first = read(
+        "list_entity_comments",
+        json!({"entity_id": entity_id, "limit": 2}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(first["items"][0]["body"], "Third note");
+    assert_eq!(first["items"][0]["author_user_id"], json!(actor));
+    assert_eq!(first["items"][1]["body"].as_str().unwrap().len(), 1_000);
+    assert_eq!(first["items"][1]["body_truncated"], true);
+    let rest = read(
+        "list_entity_comments",
+        json!({"entity_id": entity_id, "limit": 2, "before": first["next_before"]}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(rest["items"][0]["body"], "First note");
+    assert!(rest["next_before"].is_null());
+
+    let rule = "format_version = 1\ncode = \"noted_title\"\nname = \"Noted title\"\nseverity = \"warning\"\n[[triggers]]\ntype = \"manual\"\n[predicate]\ntype = \"required\"\nattribute_code = \"title\"";
+    assert_eq!(
+        read("validate_rule_definition", json!({"definition": rule}))
+            .await
+            .unwrap()["valid"],
+        true
+    );
+    assert!(matches!(
+        read(
+            "validate_rule_definition",
+            json!({"definition": "format_version = 1"})
+        )
+        .await,
+        Err(ToolError::Repository(
+            RepositoryError::InvalidRuleDefinition(_)
+        ))
+    ));
+    let workflow = "format_version = 2\ncode = \"noted_workflow\"\nname = \"Noted workflow\"\n[[triggers]]\ntype = \"manual\"\n[[actions]]\ntype = \"system_tags_add\"\ntags = [\"checked\"]";
+    assert_eq!(
+        read(
+            "validate_workflow_definition",
+            json!({"definition": workflow})
+        )
+        .await
+        .unwrap()["valid"],
+        true
+    );
+    assert!(matches!(
+        read(
+            "validate_workflow_definition",
+            json!({"definition": "code = 'x'"})
+        )
+        .await,
+        Err(ToolError::Repository(
+            RepositoryError::InvalidWorkflowDefinition(_)
+        ))
+    ));
+
+    let created: Value = client
+        .post(format!("{base_url}/rules"))
+        .json(&json!({"blueprint_id": blueprint_id, "blueprint_version": 1, "context_id": null, "definition": rule}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let finding_id = Uuid::new_v4();
+    sqlx::query("INSERT INTO rule_findings (id,workspace_id,rule_id,rule_version,entity_id,evaluation_key,severity,message,evidence) VALUES ($1,$2,$3,1,$4,'noted','warning','Check title','{}')")
+        .bind(finding_id)
+        .bind(workspace)
+        .bind(created["id"].as_str().unwrap().parse::<Uuid>().unwrap())
+        .bind(entity_id.parse::<Uuid>().unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+    let acknowledged = execute_mutation(
+        &repository,
+        actor,
+        "acknowledge_rule_finding",
+        json!({"finding_id": finding_id}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(acknowledged["state"], "acknowledged");
+
+    // A published revision that removes an attribute reports what a batch
+    // migration would drop.
+    let revision = execute_mutation(&repository, actor, "create_blueprint_revision", json!({
+        "blueprint_id": blueprint_id,
+        "definition": "format_version = 1\ncode = \"noted_item\"\nname = \"Noted item\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"label\"]\n\n[[attributes]]\ncode = \"label\"\nvalue_type = \"string\"",
+    }))
+    .await
+    .unwrap();
+    let version = revision["blueprint"]["version"].clone();
+    execute_mutation(
+        &repository,
+        actor,
+        "publish_blueprint",
+        json!({"blueprint_id": blueprint_id, "version": version}),
+    )
+    .await
+    .unwrap();
+    let impact = read(
+        "preview_blueprint_migration_impact",
+        json!({"blueprint_id": blueprint_id, "version": version}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(impact["removed_attribute_codes"], json!(["title"]));
+    assert_eq!(impact["entities_with_removed_values"], 2);
+
+    let health = read(
+        "data_health_details",
+        json!({"section": "blueprints", "blueprint": "noted_item"}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(health["items"].as_array().unwrap().len(), 1);
+    assert_eq!(health["items"][0]["active_entities"], 2);
+    for section in ["freshness", "completeness", "contexts", "relationships"] {
+        read("data_health_details", json!({"section": section}))
+            .await
+            .unwrap();
+    }
+    assert!(
+        read("data_health_details", json!({"section": "storage"}))
             .await
             .is_err()
     );
@@ -1748,6 +1958,12 @@ async fn agent_read_tools_enforce_initiator_permissions_and_scopes(pool: PgPool)
             json!({"entity_id": entity["id"], "field": "parent"}),
         ),
         ("list_reusable_attributes", json!({})),
+        ("list_entity_comments", json!({"entity_id": entity["id"]})),
+        (
+            "validate_rule_definition",
+            json!({"definition": "format_version = 1"}),
+        ),
+        ("data_health_details", json!({"section": "blueprints"})),
         (
             "get_entity_context_preview",
             json!({"entity_id": entity["id"], "context_id": context["id"]}),

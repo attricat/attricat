@@ -831,8 +831,18 @@ and paged workflow-run statuses (excluding event payloads and error bodies).
 Exact rule/workflow definition reads, paged rule-run summaries, and targeted
 workflow-run summaries provide follow-up context without compiled plans,
 internal cursors, trigger payloads, or error bodies. They require
-`data_health.read`, `rules.read`, and `workflows.read` respectively; no rule or
-workflow management action is exposed to the agent. The agent may inspect a
+`data_health.read`, `rules.read`, and `workflows.read` respectively.
+`data_health_details` reads one data-health breakdown, optionally for one
+blueprint. `validate_rule_definition` and `validate_workflow_definition` compile
+a draft without saving it (`rules.read`, `workflows.read`). The only rule or
+workflow management action exposed to the agent is the approved
+`acknowledge_rule_finding` (`rules.manage`); it cannot create, enable, run or
+replay rules or workflows. `preview_blueprint_migration_impact` reports what a
+safe batch migration to a published revision would change, without starting
+one. The agent can propose an approved `duplicate_entity` (`entities.write`)
+and, like any entity reader, an approved `add_entity_comment` written as the
+initiating user; `list_entity_comments` returns bounded pages with each body cut
+to 1,000 characters. The agent may inspect a
 context by ID, then propose an approved parent/data replacement or deletion;
 it can also propose approved entity system-tag/metadata updates. Omitted
 annotation fields remain unchanged, and context deletion is rejected when the
