@@ -1372,7 +1372,9 @@
       "source": "Source",
       "status": "Status",
       "evaluated": "Evaluated",
-      "findings": "Findings"
+      "findings": "Findings",
+      "entity": "Entity",
+      "scope": "Scope"
     },
     "enabled": "Enabled",
     "disabled": "Disabled",
@@ -1401,7 +1403,11 @@
       "running": "Running",
       "completed": "Completed",
       "failed": "Failed"
-    }
+    },
+    "ruleRevision": "{{name}} v{{version}}",
+    "unknownRule": "Rule {{id}} v{{version}}",
+    "openEntity": "Open entity {{id}}",
+    "allEntities": "All entities"
   },
   "reusableAttributes": {
     "editor": {

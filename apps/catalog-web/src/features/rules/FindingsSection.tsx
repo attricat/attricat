@@ -13,6 +13,8 @@ import {
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import type { listFindings } from './api';
+import { EntityIdLink, RuleRevisionCell } from './RuleCells';
+import type { RuleRevisions } from './ruleRevisions';
 import {
   ERROR_FINDING_SEVERITIES,
   FINDING_STATE_OPEN,
@@ -25,12 +27,14 @@ export const FindingsSection = ({
   error,
   findings,
   onAcknowledge,
+  revisions,
 }: {
   acknowledging: boolean;
   canManage: boolean;
   error: boolean;
   findings: Awaited<ReturnType<typeof listFindings>> | undefined;
   onAcknowledge: (id: string) => void;
+  revisions: RuleRevisions;
 }) => {
   const { t } = useTranslation();
   return (
@@ -49,6 +53,8 @@ export const FindingsSection = ({
             <TableRow>
               <TableCell>{t('rules.columns.severity')}</TableCell>
               <TableCell>{t('rules.columns.finding')}</TableCell>
+              <TableCell>{t('rules.columns.rule')}</TableCell>
+              <TableCell>{t('rules.columns.entity')}</TableCell>
               <TableCell>{t('rules.columns.state')}</TableCell>
               <TableCell />
             </TableRow>
@@ -72,6 +78,16 @@ export const FindingsSection = ({
                     />
                   </TableCell>
                   <TableCell>{finding.message}</TableCell>
+                  <TableCell>
+                    <RuleRevisionCell
+                      revisions={revisions}
+                      ruleId={finding.rule_id}
+                      version={finding.rule_version}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <EntityIdLink entityId={finding.entity_id} />
+                  </TableCell>
                   <TableCell>
                     {t(`rules.findingStates.${finding.state}`, {
                       defaultValue: finding.state,

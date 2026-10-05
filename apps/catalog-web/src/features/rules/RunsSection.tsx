@@ -11,12 +11,16 @@ import {
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import type { listRuleRuns } from './api';
+import { EntityIdLink, RuleRevisionCell } from './RuleCells';
+import type { RuleRevisions } from './ruleRevisions';
 
 export const RunsSection = ({
   error,
+  revisions,
   runs,
 }: {
   error: boolean;
+  revisions: RuleRevisions;
   runs: Awaited<ReturnType<typeof listRuleRuns>> | undefined;
 }) => {
   const { t } = useTranslation();
@@ -34,6 +38,8 @@ export const RunsSection = ({
         <Table size="small">
           <TableHead>
             <TableRow>
+              <TableCell>{t('rules.columns.rule')}</TableCell>
+              <TableCell>{t('rules.columns.scope')}</TableCell>
               <TableCell>{t('rules.columns.source')}</TableCell>
               <TableCell>{t('rules.columns.status')}</TableCell>
               <TableCell>{t('rules.columns.evaluated')}</TableCell>
@@ -43,6 +49,20 @@ export const RunsSection = ({
           <TableBody>
             {(runs ?? []).map((item) => (
               <TableRow key={item.id}>
+                <TableCell>
+                  <RuleRevisionCell
+                    revisions={revisions}
+                    ruleId={item.rule_id}
+                    version={item.rule_version}
+                  />
+                </TableCell>
+                <TableCell>
+                  {item.scope_entity_id ? (
+                    <EntityIdLink entityId={item.scope_entity_id} />
+                  ) : (
+                    t('rules.allEntities')
+                  )}
+                </TableCell>
                 <TableCell>
                   {item.dry_run
                     ? t('rules.dryRunSuffix', { source: item.source })

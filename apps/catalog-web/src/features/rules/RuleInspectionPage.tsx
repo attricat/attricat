@@ -30,6 +30,7 @@ import {
 import { FindingsSection } from './FindingsSection';
 import { ruleQueryKeys } from './queryKeys';
 import { ruleDefinitionsOptions } from './queryOptions';
+import { ruleRevisionsByKey } from './ruleRevisions';
 import { RulesSection } from './RulesSection';
 import { RunsSection } from './RunsSection';
 import { RuleIcon } from '../../components/systemIcons';
@@ -51,10 +52,9 @@ export const RuleInspectionPage = ({
   });
   const canRead = session.data?.capabilities?.rules_read === true;
   const canManage = session.data?.capabilities?.rules_manage === true;
-  const rules = useQuery({
-    ...ruleDefinitionsOptions(),
-    enabled: canRead && section === RULE_SECTION_RULES,
-  });
+  // Findings and runs name their rule revision from the definitions.
+  const rules = useQuery({ ...ruleDefinitionsOptions(), enabled: canRead });
+  const revisions = ruleRevisionsByKey(rules.data ?? []);
   const findings = useQuery({
     queryKey: ruleQueryKeys.findings(),
     queryFn: () => listFindings(),
@@ -203,10 +203,15 @@ export const RuleInspectionPage = ({
             canManage={canManage}
             error={findings.isError}
             findings={findings.data}
+            revisions={revisions}
           />
         )}
         {section === RULE_SECTION_RUNS && (
-          <RunsSection error={runs.isError} runs={runs.data} />
+          <RunsSection
+            error={runs.isError}
+            revisions={revisions}
+            runs={runs.data}
+          />
         )}
       </Box>
     </PageContainer>

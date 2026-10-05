@@ -1410,7 +1410,9 @@
       "source": "Źródło",
       "status": "Status",
       "evaluated": "Ocenione",
-      "findings": "Ustalenia"
+      "findings": "Ustalenia",
+      "entity": "Encja",
+      "scope": "Zakres"
     },
     "enabled": "Włączona",
     "disabled": "Wyłączona",
@@ -1439,7 +1441,11 @@
       "running": "W toku",
       "completed": "Zakończony",
       "failed": "Niepowodzenie"
-    }
+    },
+    "ruleRevision": "{{name}} v{{version}}",
+    "unknownRule": "Reguła {{id}} v{{version}}",
+    "openEntity": "Otwórz encję {{id}}",
+    "allEntities": "Wszystkie encje"
   },
   "reusableAttributes": {
     "editor": {

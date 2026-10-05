@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { forwardRef, type ComponentPropsWithoutRef } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { ApiRequestError } from '../../api/request';
 import { currentSession } from '../auth/api';
@@ -12,6 +12,7 @@ import {
   disableRule,
   enableRuleRevision,
   listFindings,
+  listRuleRuns,
   listRules,
   runRuleNow,
   type Finding,
@@ -20,6 +21,19 @@ import {
 import { RuleInspectionPage } from './RuleInspectionPage';
 
 vi.mock('@tanstack/react-router', () => ({
+  Link: ({
+    children,
+    params,
+    to,
+    ...props
+  }: ComponentPropsWithoutRef<'a'> & {
+    params: { entityId: string };
+    to: string;
+  }) => (
+    <a {...props} href={to.replace('$entityId', params.entityId)}>
+      {children}
+    </a>
+  ),
   createLink: () =>
     forwardRef<HTMLAnchorElement, ComponentPropsWithoutRef<'a'>>(
       ({ children, ...props }, ref) => (
@@ -75,7 +89,7 @@ const finding: Finding = {
   created_at: '',
   updated_at: '',
 };
-const renderPage = (section: 'rules' | 'findings') => {
+const renderPage = (section: 'rules' | 'findings' | 'runs') => {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -87,6 +101,7 @@ const renderPage = (section: 'rules' | 'findings') => {
 };
 
 describe('RuleInspectionPage', () => {
+  beforeEach(() => vi.mocked(listRules).mockResolvedValue([rule]));
   afterEach(() => vi.clearAllMocks());
 
   it('disables both run variants while a run is pending', async () => {
@@ -261,5 +276,71 @@ describe('RuleInspectionPage', () => {
       within(alert).getByRole('button', { name: 'Enable anyway' }),
     );
     expect(enableRuleRevision).toHaveBeenLastCalledWith(id, 1, true);
+  });
+
+  it('names the rule revision and links the entity of each finding', async () => {
+    const entityId = '223e4567-e89b-42d3-a456-426614174000';
+    vi.mocked(currentSession).mockResolvedValue(manager);
+    vi.mocked(listFindings).mockResolvedValue([
+      { ...finding, entity_id: entityId },
+    ]);
+    renderPage('findings');
+    const row = (await screen.findByText('Check failed')).closest('tr')!;
+    expect(await within(row).findByText('Check v1')).toBeTruthy();
+    const link = within(row).getByRole('link', {
+      name: `Open entity ${entityId}`,
+    });
+    expect(link.getAttribute('href')).toBe(`/entities/${entityId}`);
+    expect(link.textContent).toBe('223e4567');
+  });
+
+  it('names the rule revision and scope of each run', async () => {
+    vi.mocked(currentSession).mockResolvedValue(manager);
+    vi.mocked(listRuleRuns).mockResolvedValue([
+      {
+        id,
+        rule_id: id,
+        rule_version: 1,
+        source: 'manual',
+        dry_run: false,
+        scope_entity_id: null,
+        status: 'completed',
+        candidate_cursor: null,
+        candidates_evaluated: 2,
+        findings_created: 1,
+        findings_resolved: 0,
+        attempts: 1,
+        last_error: null,
+        completed_at: null,
+        created_at: '',
+      },
+      {
+        id: '323e4567-e89b-42d3-a456-426614174000',
+        rule_id: '423e4567-e89b-42d3-a456-426614174000',
+        rule_version: 4,
+        source: 'event',
+        dry_run: false,
+        scope_entity_id: id,
+        status: 'completed',
+        candidate_cursor: null,
+        candidates_evaluated: 1,
+        findings_created: 0,
+        findings_resolved: 0,
+        attempts: 1,
+        last_error: null,
+        completed_at: null,
+        created_at: '',
+      },
+    ]);
+    renderPage('runs');
+    await screen.findByText('Check v1');
+    const [, manual, scoped] = screen.getAllByRole('row');
+    expect(within(manual).getByText('Check v1')).toBeTruthy();
+    expect(within(manual).getByText('All entities')).toBeTruthy();
+    // A revision missing from the definitions still identifies its rule.
+    expect(within(scoped).getByText('Rule 423e4567 v4')).toBeTruthy();
+    expect(
+      within(scoped).getByRole('link', { name: `Open entity ${id}` }),
+    ).toBeTruthy();
   });
 });
