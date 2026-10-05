@@ -51,6 +51,20 @@ export const statusConfigurationSchema = z
             permission: z.string().max(128).optional(),
             roles: z.array(z.string().min(1).max(64)).min(1).max(20).optional(),
             separate_from: z.array(codeSchema).min(1).max(20).optional(),
+            conditions: z
+              .array(
+                z
+                  .object({
+                    code: codeSchema,
+                    message: z.string().min(1).max(500).optional(),
+                    // Match the public status metadata contract. Predicate
+                    // semantics and transition access are checked by the server.
+                    predicate: z.object({ type: z.string() }).passthrough(),
+                  })
+                  .strict(),
+              )
+              .max(16)
+              .optional(),
           })
           .strict(),
       )

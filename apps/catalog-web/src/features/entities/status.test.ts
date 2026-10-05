@@ -75,6 +75,84 @@ describe('status configuration', () => {
       statusConfiguration({ code: 'text', value_type: 'string' }),
     ).toBeUndefined();
   });
+  it('preserves conditional transition metadata, labels, locks and server denials', () => {
+    const conditions = [
+      {
+        code: 'complete',
+        message: 'Record a title',
+        predicate: { type: 'required', attribute_code: 'title' },
+      },
+    ];
+    const attribute: Attribute = {
+      code: 'status',
+      value_type: 'string',
+      value_schema: {
+        type: 'string',
+        enum: ['draft', 'live'],
+        'x-attricat-status': {
+          version: 1,
+          options: [
+            { code: 'draft', label: '{{Draft|status}}' },
+            { code: 'live', label: 'Live', lock: 'all' },
+          ],
+          transitions: [
+            { from: null, to: 'draft' },
+            { from: 'draft', to: 'live', conditions },
+          ],
+        },
+      },
+    };
+    const config = statusConfiguration(attribute)!;
+    expect(config?.transitions?.[1].conditions).toEqual(conditions);
+    expect(statusLabel(attribute, 'draft')).toBe('Draft');
+    expect(
+      statusLocks(
+        [attribute, { code: 'title', value_type: 'string' }],
+        [
+          {
+            kind: 'scalar',
+            attribute_code: 'status',
+            context_id: 'default',
+            value: 'live',
+          },
+        ],
+        'default',
+        [],
+      ),
+    ).toEqual({ title: 'Live' });
+    const denied = {
+      attribute_code: 'status',
+      from: 'draft',
+      to: 'live',
+      code: null,
+      allowed: false,
+      denial_code: 'transition_conditions_unmet' as const,
+      denial_reason: 'Record a title',
+    };
+    expect(
+      statusTransitionDenial(config, {
+        attributeCode: 'status',
+        baseline: 'draft',
+        inherited: null,
+        selected: 'live',
+        transitions: [denied],
+      }),
+    ).toEqual({ kind: 'access', access: denied });
+    for (const malformed of [
+      [{ code: 'bad', predicate: {} }],
+      [{ code: 'bad', predicate: { type: 'required' }, unexpected: true }],
+      [{ code: '', predicate: { type: 'required' } }],
+      Array.from({ length: 17 }, () => conditions[0]),
+    ]) {
+      const invalid = structuredClone(attribute);
+      const metadata = (invalid.value_schema as Record<string, unknown>)[
+        'x-attricat-status'
+      ] as typeof config;
+      metadata.transitions![1].conditions = malformed as typeof conditions;
+      expect(statusConfiguration(invalid)).toBeUndefined();
+    }
+  });
+
   it('checks initial, terminal, unchanged and forbidden transitions', () => {
     const config = statusConfiguration(statusAttribute)!;
     expect(statusTransitionAllowed(config, null, 'draft')).toBe(true);
