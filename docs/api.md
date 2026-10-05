@@ -780,7 +780,10 @@ ordered events. `GET /agent/approvals` lists pending tool calls (optionally by
 `conversation_id`), and the existing approve/reject routes enqueue the resumed
 run after atomically recording the decision. Decisions are accepted only while
 a call is pending; a repeated or contradictory decision returns the normal
-`approval_already_decided` conflict and never executes the write again.
+`approval_already_decided` conflict and never executes the write again. Each
+pending call's `change_summary` names the entities, contexts and blueprints it
+targets by display label or code, alongside their IDs, when the initiating user
+may read them.
 
 Conversation titles are limited to 512 bytes and messages to 1–32,768 bytes.
 Upload standalone conversation files with multipart `POST`

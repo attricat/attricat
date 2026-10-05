@@ -625,9 +625,19 @@ impl CatalogRepository {
     }
 
     pub async fn delete_entity(&self, entity_id: Uuid) -> Result<(), RepositoryError> {
+        self.delete_entity_checked(entity_id, None).await
+    }
+
+    /// Deletes an entity, failing with [`RepositoryError::StaleEntity`] when
+    /// `expected_updated_at` is set and no longer current.
+    pub async fn delete_entity_checked(
+        &self,
+        entity_id: Uuid,
+        expected_updated_at: Option<DateTime<Utc>>,
+    ) -> Result<(), RepositoryError> {
         let mut transaction = self.pool.begin().await?;
         let (changes, event) = self
-            .delete_entity_in_transaction(&mut transaction, entity_id, None)
+            .delete_entity_in_transaction(&mut transaction, entity_id, expected_updated_at)
             .await?;
         self.commit_entity_mutation(transaction, changes, event)
             .await?;

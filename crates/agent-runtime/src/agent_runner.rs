@@ -29,7 +29,7 @@ const TOOLS_PROMPT: &str = "You are a catalogue assistant. Use tools for catalog
 const ERRORS_PROMPT: &str = "A failed tool call returns the API error code as code, a message and, when the error has structured context, details. The codes below report deliberate controls or conflicts, not faults: never retry an unchanged call after an error, and never work around a control through other tools; explain the error in plain language first, then propose a corrected change or tell the user who must act.";
 
 /// Status attributes, approvals and record locks.
-const RECORD_CONTROLS_PROMPT: &str = "Status attributes can restrict who may make a transition (a permission or role, or a different user than an earlier named transition) and can lock a record. To change a status, propose apply_entity_batch with an update operation that carries expected_updated_at from get_entity; set_entity_values and the other single-entity tools cannot change a status and fail with status_precondition_required. For status_transition_forbidden, status_separation_of_duties (details name the attribute, context and earlier edge) or record_locked (details name the locked attribute, context and status), call get_entity_record_controls to explain which transitions the user may take, who must act, and which correction transition unlocks the record. An edit to content covered by an approval voids that approval and returns the record to its declared status in the same change, so warn the user before proposing such edits. Files of finalized records may be under a retention hold until a stated date.";
+const RECORD_CONTROLS_PROMPT: &str = "Status attributes can restrict who may make a transition (a permission or role, or a different user than an earlier named transition) and can lock a record. To change a status, read the entity with get_entity, then propose set_entity_values (or an apply_entity_batch update when other entities change too) carrying its expected_updated_at. status_precondition_required means a status change was proposed without that version, as migrate_entity does: read the entity and propose the status change separately. For status_transition_forbidden, status_separation_of_duties (details name the attribute, context and earlier edge) or record_locked (details name the locked attribute, context and status), call get_entity_record_controls to explain which transitions the user may take, who must act, and which correction transition unlocks the record. An edit to content covered by an approval voids that approval and returns the record to its declared status in the same change, so warn the user before proposing such edits. Files of finalized records may be under a retention hold until a stated date.";
 
 /// Declarative predicates shared by rules, entity checks, transition
 /// conditions and channel gates, and how to explain their failures.
@@ -39,7 +39,7 @@ const CHECKS_PROMPT: &str = "Rules, entity checks (x-attricat-checks), status tr
 const STRUCTURAL_CONSTRAINTS_PROMPT: &str = "When one business change touches several entities, such as releasing a new revision and superseding the previous one or recording a movement and updating an item's current location, propose a single apply_entity_batch instead of separate mutations, so the user approves it once and it applies all-or-nothing. Choose a new UUID for each created entity_id that later operations link to, and order operations so each is valid when it runs. A failed batch applies nothing; its error keeps the failing operation's own code and details and adds details.operation_index, so fix that operation and propose the whole batch again. Blueprints can declare unique_keys, relationship target_blueprints, and acyclic or tree hierarchies; read the blueprint definition before proposing writes. unique_key_conflict means another entity already holds that business key (details name the key, the normalized values, the context and conflicting_entity_id): inspect the conflicting entity, explain the conflict, and offer to update that entity, choose a different value, or stop. Keys ignore case and surrounding or repeated whitespace unless the key is case-sensitive. relationship_cycle means the link would make an entity its own ancestor; explain details.path and propose a different target. relationship_target_type_mismatch means the target belongs to a blueprint the relationship does not allow; search the allowed blueprints instead. When publish_blueprint fails with unique_key_duplicates or relationship_hierarchy_violations, list the entities named in details and propose fixing them first; do not remove the constraint unless the user asks.";
 
 /// Approval and reporting rules that close the prompt.
-const APPROVAL_PROMPT: &str = "Never claim a mutation happened until its tool result says so. All mutations require human approval.";
+const APPROVAL_PROMPT: &str = "Never claim a mutation happened until its tool result says so. All mutations require human approval. stale_entity means someone saved the entity after you read it or proposed the change: read it again, explain what changed, and propose the change again only if it still applies.";
 
 /// The system prompt sections, in order; [`system_prompt`] joins them with
 /// single spaces.
@@ -216,7 +216,7 @@ async fn drive(
     // defensively if one still returns several. This keeps the assistant's
     // complete tool-call list matched by either an approval or a tool result.
     for call in tool_calls {
-        let arguments: Value = match serde_json::from_str::<Value>(&call.function.arguments) {
+        let mut arguments: Value = match serde_json::from_str::<Value>(&call.function.arguments) {
             Ok(value) if value.is_object() => value,
             _ => {
                 fail_run(
@@ -242,20 +242,39 @@ async fn drive(
                 return Ok(());
             }
         };
+        let (actor, workspace) = match memo.initiator {
+            Some(initiator) => initiator,
+            None => {
+                let initiator = repository.agent_run_initiator(run_id).await?;
+                memo.initiator = Some(initiator);
+                initiator
+            }
+        };
         if kind == ToolKind::Mutation {
-            let summary = match agent_tools::change_summary(&call.function.name, &arguments) {
-                Ok(value) => value,
-                Err(_) => {
-                    fail_run(
-                        repository,
-                        run_id,
-                        "invalid_tool_arguments",
-                        "provider supplied invalid mutation arguments",
-                    )
-                    .await?;
-                    return Ok(());
-                }
-            };
+            agent_tools::pin_entity_versions(repository, &call.function.name, &mut arguments)
+                .await?;
+            let names = agent_tools::change_names(
+                repository,
+                actor,
+                workspace,
+                &call.function.name,
+                &arguments,
+            )
+            .await?;
+            let summary =
+                match agent_tools::change_summary_named(&call.function.name, &arguments, &names) {
+                    Ok(value) => value,
+                    Err(_) => {
+                        fail_run(
+                            repository,
+                            run_id,
+                            "invalid_tool_arguments",
+                            "provider supplied invalid mutation arguments",
+                        )
+                        .await?;
+                        return Ok(());
+                    }
+                };
             let tool = repository
                 .create_agent_tool_call(
                     run_id,
@@ -288,14 +307,6 @@ async fn drive(
                 "pending_approval",
             )
             .await?;
-        let (actor, workspace) = match memo.initiator {
-            Some(initiator) => initiator,
-            None => {
-                let initiator = repository.agent_run_initiator(run_id).await?;
-                memo.initiator = Some(initiator);
-                initiator
-            }
-        };
         let file_attachments = if matches!(call.function.name.as_str(), "view_image" | "read_file")
         {
             arguments

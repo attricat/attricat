@@ -3,7 +3,10 @@ mod support;
 use std::{sync::Arc, time::Duration};
 
 use api::{
-    agent_tools::{ToolError, execute_mutation, execute_read},
+    agent_tools::{
+        ToolError, change_names, change_summary_named, execute_mutation, execute_read,
+        pin_entity_versions,
+    },
     agent_worker,
     agents::AgentProviderConfig,
     file_worker::{FileWorker, WorkerConfig},
@@ -138,6 +141,128 @@ async fn agent_blueprint_reads_list_summaries_and_fetch_one_definition(pool: PgP
         .await
         .is_err()
     );
+    server.abort();
+}
+
+#[sqlx::test]
+async fn approved_entity_edits_apply_to_the_proposed_state_and_name_their_targets(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let blueprint = create_blueprint(&client, &base_url,
+        "format_version = 1\ncode = \"pinned_desk\"\nname = \"Pinned desk\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"").await;
+    let entity = create_entity(&client, &base_url, &blueprint).await;
+    let entity_id = entity["id"].as_str().unwrap().to_owned();
+    let workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
+    let actor: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
+    let repository = CatalogRepository::system(pool)
+        .for_workspace(workspace)
+        .await
+        .unwrap();
+    let set_title = |title: &str| {
+        json!({"entity_id": entity_id, "values": [
+            {"kind":"scalar","attribute_code":"title","context_id":null,"value":title}
+        ]})
+    };
+    execute_mutation(
+        &repository,
+        actor,
+        "set_entity_values",
+        set_title("Oak desk"),
+    )
+    .await
+    .unwrap();
+
+    // A proposal without expected_updated_at is pinned to the current state,
+    // and its summary names the entity by its display label.
+    let mut proposal = set_title("Walnut desk");
+    pin_entity_versions(&repository, "set_entity_values", &mut proposal)
+        .await
+        .unwrap();
+    let pinned = proposal["expected_updated_at"].clone();
+    assert!(pinned.is_string());
+    let names = change_names(
+        &repository,
+        actor,
+        workspace,
+        "set_entity_values",
+        &proposal,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        change_summary_named("set_entity_values", &proposal, &names).unwrap(),
+        format!("Set attribute values on entity pinned_desk 'Oak desk' ({entity_id}).")
+    );
+
+    // An explicit expected_updated_at is kept as the model supplied it.
+    let mut explicit =
+        json!({"entity_id": entity_id, "expected_updated_at": "2026-01-01T00:00:00Z"});
+    pin_entity_versions(&repository, "delete_entity", &mut explicit)
+        .await
+        .unwrap();
+    assert_eq!(explicit["expected_updated_at"], "2026-01-01T00:00:00Z");
+
+    // Someone saves the entity while the proposal waits for approval.
+    execute_mutation(
+        &repository,
+        actor,
+        "set_entity_values",
+        set_title("Pine desk"),
+    )
+    .await
+    .unwrap();
+    assert!(matches!(
+        execute_mutation(&repository, actor, "set_entity_values", proposal).await,
+        Err(ToolError::Repository(RepositoryError::StaleEntity))
+    ));
+    let mut deletion = json!({"entity_id": entity_id});
+    let mut batch = json!({"operations": [
+        {"op":"update","entity_id": entity_id,"values": []},
+        {"op":"create","blueprint":{"code":"pinned_desk"}}
+    ]});
+    pin_entity_versions(&repository, "apply_entity_batch", &mut batch)
+        .await
+        .unwrap();
+    assert!(batch["operations"][0]["expected_updated_at"].is_string());
+    assert!(batch["operations"][1].get("expected_updated_at").is_none());
+    pin_entity_versions(&repository, "delete_entity", &mut deletion)
+        .await
+        .unwrap();
+    assert_ne!(deletion["expected_updated_at"], pinned);
+    execute_mutation(
+        &repository,
+        actor,
+        "update_entity_annotations",
+        json!({"entity_id": entity_id, "system_tags": ["reviewed"]}),
+    )
+    .await
+    .unwrap();
+    for (name, arguments) in [
+        ("delete_entity", deletion.clone()),
+        (
+            "update_entity_annotations",
+            json!({"entity_id": entity_id, "system_tags": [], "expected_updated_at": deletion["expected_updated_at"]}),
+        ),
+        (
+            "remove_entity_values",
+            json!({"entity_id": entity_id, "remove_values": [{"attribute_code":"title"}], "expected_updated_at": deletion["expected_updated_at"]}),
+        ),
+    ] {
+        assert!(
+            matches!(
+                execute_mutation(&repository, actor, name, arguments).await,
+                Err(ToolError::Repository(RepositoryError::StaleEntity))
+            ),
+            "{name} must refuse a stale proposal"
+        );
+    }
+    let mut current = json!({"entity_id": entity_id});
+    pin_entity_versions(&repository, "delete_entity", &mut current)
+        .await
+        .unwrap();
+    execute_mutation(&repository, actor, "delete_entity", current)
+        .await
+        .unwrap();
     server.abort();
 }
 

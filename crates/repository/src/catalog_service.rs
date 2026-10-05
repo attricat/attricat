@@ -140,6 +140,16 @@ impl<'a> CatalogMutationService<'a> {
         self.repository.delete_entity(entity_id).await
     }
 
+    pub async fn delete_entity_checked(
+        &self,
+        entity_id: Uuid,
+        expected_updated_at: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> Result<(), RepositoryError> {
+        self.repository
+            .delete_entity_checked(entity_id, expected_updated_at)
+            .await
+    }
+
     pub async fn duplicate_entity(&self, entity_id: Uuid) -> Result<Entity, RepositoryError> {
         self.repository.duplicate_entity(entity_id).await
     }
