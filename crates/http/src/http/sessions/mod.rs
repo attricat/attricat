@@ -75,6 +75,29 @@ pub(super) struct DiscoveryResponse {
     sign_in_methods: Vec<&'static str>,
 }
 
+/// Seeded accounts of a demo or development deployment, one per built-in
+/// role and sharing one password. These values are deliberately public.
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct SampleLogins {
+    /// The deployment is a public demo with no other workspace.
+    pub demo: bool,
+    pub login_identifier: String,
+    pub password: String,
+    /// Ordered from least to most privileged.
+    pub accounts: Vec<SampleAccount>,
+}
+
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct SampleAccount {
+    pub role: String,
+    pub email: String,
+}
+
+/// Returns `null` unless the deployment seeds sample accounts.
+pub(super) async fn sample_logins(State(state): State<AppState>) -> Json<Option<SampleLogins>> {
+    Json(state.sample_logins)
+}
+
 pub(super) async fn discover(
     State(state): State<AppState>,
     ApiJson(request): ApiJson<DiscoveryRequest>,
@@ -106,6 +129,9 @@ pub(super) async fn request_password_reset(
     State(state): State<AppState>,
     ApiJson(request): ApiJson<PasswordResetRequest>,
 ) -> Result<axum::http::StatusCode, ApiError> {
+    if state.demo_mode {
+        return Err(ApiError::disabled_in_demo());
+    }
     let email = request.email.trim().to_lowercase();
     let rate_key = digest_login_key(&email);
     if !state
@@ -159,6 +185,9 @@ pub(super) async fn confirm_password_reset(
     State(state): State<AppState>,
     ApiJson(request): ApiJson<PasswordResetConfirmation>,
 ) -> Result<axum::http::StatusCode, ApiError> {
+    if state.demo_mode {
+        return Err(ApiError::disabled_in_demo());
+    }
     let secret = ActionTokenSecret::from_delivery_value(request.token).map_err(|_| {
         ApiError::invalid_input("password reset link is invalid or expired".to_owned())
     })?;

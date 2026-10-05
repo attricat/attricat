@@ -320,6 +320,7 @@ fn is_public_route(path: &str) -> bool {
             | "/health/ready"
             | "/auth/login"
             | "/auth/discover"
+            | "/auth/sample-logins"
             | "/auth/password-reset"
             | "/auth/password-reset/confirm"
             | "/onboarding/complete"
@@ -342,6 +343,7 @@ mod route_tests {
         for route in [
             "/auth/login",
             "/auth/discover",
+            "/auth/sample-logins",
             "/health/ready",
             "/onboarding/complete",
         ] {

@@ -65,6 +65,8 @@ On startup the API makes sure one workspace and its owner exist. These values ar
 | `CATALOG_BOOTSTRAP_OWNER_EMAIL` | `owner@example.test` | Email of the initial owner. It is trimmed and lowercased. Startup creates the user, membership, and owner grant if they do not exist. Always set a real address in a deployment. |
 | `CATALOG_BOOTSTRAP_OWNER_ID` | Random UUID | Optional fixed UUID for the bootstrap owner. |
 | `CATALOG_BOOTSTRAP_OWNER_PASSWORD` | Unset | Optional first password for a newly created owner. It is hashed before storage and never changes an existing password. Supply it for the first start only, then remove it. |
+| `CATALOG_DEMO_MODE` | `false` | For public demo deployments only. Turns on `CATALOG_SAMPLE_ACCOUNTS`, gives the initial workspace the sign-in identifier `demo.attricat.com` and the default name `Demo`, and opens the sign-in page on that workspace with the editor account selected. Visitors can switch to the viewer, admin or owner account. Password reset, member and role-grant changes, ownership transfer, invitations and new users are turned off so visitors cannot lock the shared accounts out. Never enable it for a workspace with real data. |
+| `CATALOG_SAMPLE_ACCOUNTS` | `false` | Creates `viewer@`, `editor@` and `admin@` accounts on the owner's email domain, each with that built-in role and the `CATALOG_BOOTSTRAP_OWNER_PASSWORD` password (which must then stay set). The sign-in page offers them in a picker. Anyone who can reach the server can sign in with them, so use it only for local development and demos. |
 
 The bootstrap workspace's sign-in identifier is `default.local`.
 

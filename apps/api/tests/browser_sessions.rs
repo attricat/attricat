@@ -504,3 +504,108 @@ async fn display_name_updates_the_account_and_rejects_invalid_names(pool: PgPool
     assert_eq!(stored.as_deref(), Some("Ada Lovelace"));
     server.abort();
 }
+
+#[sqlx::test]
+async fn sample_accounts_hold_their_roles_and_are_published(pool: PgPool) {
+    let client = Client::new();
+    let (base_url, server) = start_server_with_config(pool.clone(), |_| {}).await;
+    let body: serde_json::Value = client
+        .get(format!("{base_url}/auth/sample-logins"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(body, serde_json::Value::Null);
+    server.abort();
+
+    let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
+    let system = CatalogRepository::system(pool.clone());
+    // Seeding twice leaves one membership with one grant.
+    for _ in 0..2 {
+        system
+            .ensure_sample_account(workspace_id, "Editor@Example.test", "editor")
+            .await
+            .unwrap();
+    }
+    let roles: Vec<String> = sqlx::query_scalar("SELECT r.code FROM users u JOIN workspace_memberships m ON m.user_id = u.id JOIN role_grants g ON g.membership_id = m.id JOIN roles r ON r.id = g.role_id WHERE u.email = 'editor@example.test' AND m.workspace_id = $1")
+        .bind(workspace_id)
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(roles, ["editor"]);
+
+    let logins = api::http::SampleLogins {
+        demo: false,
+        login_identifier: "default.local".to_owned(),
+        password: "shared-password".to_owned(),
+        accounts: vec![api::http::SampleAccount {
+            role: "editor".to_owned(),
+            email: "editor@example.test".to_owned(),
+        }],
+    };
+    let (base_url, server) = start_server_with_config(pool, |state| {
+        state.sample_logins = Some(logins);
+    })
+    .await;
+    let body: serde_json::Value = client
+        .get(format!("{base_url}/auth/sample-logins"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(
+        body,
+        serde_json::json!({
+            "demo": false,
+            "login_identifier": "default.local",
+            "password": "shared-password",
+            "accounts": [{ "role": "editor", "email": "editor@example.test" }],
+        })
+    );
+    server.abort();
+}
+
+#[sqlx::test]
+async fn demo_mode_refuses_changes_that_could_lock_visitors_out(pool: PgPool) {
+    let (base_url, server) = start_server_with_config(pool, |state| state.demo_mode = true).await;
+    let anonymous = Client::new();
+    let owner = authenticated_client();
+    let member = Uuid::new_v4();
+    let grant = Uuid::new_v4();
+    let role = Uuid::new_v4();
+    let requests = [
+        anonymous
+            .post(format!("{base_url}/auth/password-reset"))
+            .json(&serde_json::json!({ "email": "owner@example.test" })),
+        anonymous
+            .post(format!("{base_url}/auth/password-reset/confirm"))
+            .json(&serde_json::json!({ "token": "any", "password": "a new password value" })),
+        owner
+            .put(format!("{base_url}/workspace/members/{member}"))
+            .json(&serde_json::json!({ "state": "inactive" })),
+        owner
+            .post(format!("{base_url}/workspace/members/{member}/grants"))
+            .json(&serde_json::json!({ "role_id": role, "scope_type": "workspace", "scope_target_id": BOOTSTRAP_WORKSPACE_ID })),
+        owner.delete(format!("{base_url}/workspace/members/{member}/grants/{grant}")),
+        owner.post(format!("{base_url}/workspace/members/{member}/transfer-ownership")),
+        owner
+            .post(format!("{base_url}/workspace/invitations"))
+            .json(&serde_json::json!({ "email": "someone@example.test", "role_id": role, "scope_type": "workspace", "scope_target_id": BOOTSTRAP_WORKSPACE_ID,
+                "expires_at": "2099-01-01T00:00:00Z" })),
+        owner
+            .post(format!("{base_url}/workspace/users"))
+            .json(&serde_json::json!({ "email": "someone@example.test", "role_id": role, "scope_type": "workspace", "scope_target_id": BOOTSTRAP_WORKSPACE_ID })),
+    ];
+    for request in requests {
+        let response = request.send().await.unwrap();
+        let path = response.url().path().to_owned();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN, "{path}");
+        let error: serde_json::Value = response.json().await.unwrap();
+        assert_eq!(error["error"]["code"], "disabled_in_demo", "{path}");
+    }
+    server.abort();
+}

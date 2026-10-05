@@ -429,6 +429,8 @@ async fn start_configured_server(
         readiness_permits: Arc::new(tokio::sync::Semaphore::new(2)),
         default_body_limit: 2 * 1024 * 1024,
         devtools_enabled,
+        demo_mode: false,
+        sample_logins: None,
         build_info: BuildInfo {
             version: env!("CARGO_PKG_VERSION"),
             branch: env!("ATTRICAT_BUILD_BRANCH"),

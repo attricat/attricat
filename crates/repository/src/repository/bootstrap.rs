@@ -28,6 +28,27 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
         Ok(())
     }
 
+    /// Assigns the deployment-selected sign-in identifier to the bootstrap
+    /// workspace. Only demo deployments use this; identifiers are otherwise
+    /// fixed at provisioning.
+    pub async fn set_bootstrap_login_identifier(
+        &self,
+        workspace_id: Uuid,
+        login_identifier: &str,
+    ) -> Result<(), RepositoryError> {
+        let updated = sqlx::query(
+            "UPDATE workspaces SET login_identifier = $2, updated_at = now() WHERE id = $1 AND deleted_at IS NULL",
+        )
+        .bind(workspace_id)
+        .bind(login_identifier)
+        .execute(&self.pool)
+        .await?;
+        if updated.rows_affected() != 1 {
+            return Err(RepositoryError::BootstrapWorkspaceNotActive);
+        }
+        Ok(())
+    }
+
     /// Creates the first owner grant when the workspace does not yet have one.
     pub async fn ensure_bootstrap_workspace_owner(
         &self,
@@ -84,6 +105,58 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
                 .execute(&mut *transaction)
                 .await?;
         }
+        transaction.commit().await?;
+        Ok(())
+    }
+
+    /// Ensures a sample account holds the given built-in role across the
+    /// workspace. Existing users, memberships and grants are left unchanged.
+    pub async fn ensure_sample_account(
+        &self,
+        workspace_id: Uuid,
+        email: &str,
+        role_code: &str,
+    ) -> Result<(), RepositoryError> {
+        let mut transaction = self.pool.begin().await?;
+        let email = email.trim().to_lowercase();
+        sqlx::query("SELECT id FROM workspaces WHERE id = $1 FOR UPDATE")
+            .bind(workspace_id)
+            .execute(&mut *transaction)
+            .await?;
+        sqlx::query("INSERT INTO users (id, email) VALUES ($1, $2) ON CONFLICT (email) DO NOTHING")
+            .bind(Uuid::new_v4())
+            .bind(&email)
+            .execute(&mut *transaction)
+            .await?;
+        let user_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE email = $1 FOR UPDATE")
+            .bind(&email)
+            .fetch_one(&mut *transaction)
+            .await?;
+        sqlx::query("INSERT INTO workspace_memberships (id, workspace_id, user_id) VALUES ($1, $2, $3) ON CONFLICT (workspace_id, user_id) DO NOTHING")
+            .bind(Uuid::new_v4())
+            .bind(workspace_id)
+            .bind(user_id)
+            .execute(&mut *transaction)
+            .await?;
+        let membership_id: Uuid = sqlx::query_scalar(
+            "SELECT id FROM workspace_memberships WHERE workspace_id = $1 AND user_id = $2",
+        )
+        .bind(workspace_id)
+        .bind(user_id)
+        .fetch_one(&mut *transaction)
+        .await?;
+        let role_id: Uuid =
+            sqlx::query_scalar("SELECT id FROM roles WHERE code = $1 AND is_system")
+                .bind(role_code)
+                .fetch_one(&mut *transaction)
+                .await?;
+        sqlx::query("INSERT INTO role_grants (id, workspace_id, membership_id, role_id, scope_type, scope_target_id) VALUES ($1, $2, $3, $4, 'workspace', $2) ON CONFLICT DO NOTHING")
+            .bind(Uuid::new_v4())
+            .bind(workspace_id)
+            .bind(membership_id)
+            .bind(role_id)
+            .execute(&mut *transaction)
+            .await?;
         transaction.commit().await?;
         Ok(())
     }

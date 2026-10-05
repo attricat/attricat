@@ -113,10 +113,15 @@ pub struct AppState {
     pub default_body_limit: usize,
     /// Enables sanitized development-only timing phases for the Explorer.
     pub devtools_enabled: bool,
+    /// A public demo: actions that could lock visitors out are refused.
+    pub demo_mode: bool,
+    /// Seeded per-role accounts that the web sign-in offers to pre-fill.
+    pub sample_logins: Option<SampleLogins>,
     pub build_info: BuildInfo,
 }
 
 pub use self::data_health::DataHealthCache;
+pub use self::sessions::{SampleAccount, SampleLogins};
 pub use self::streams::StreamControl;
 pub use self::system::BuildInfo;
 
@@ -574,6 +579,7 @@ pub fn router(state: AppState) -> Router {
             "/extensions/{extension_id}/{contribution_id}/artifact",
             get(extensions::artifact),
         )
+        .route("/auth/sample-logins", get(sessions::sample_logins))
         .route("/auth/discover", post(sessions::discover))
         .route("/auth/login", post(sessions::login))
         .route(

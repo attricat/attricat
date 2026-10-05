@@ -84,6 +84,15 @@ pub(super) struct CompleteOnboardingRequest {
     onboarding_secret: String,
     password: String,
 }
+/// Demo visitors share seeded accounts, so membership, grants and invitations
+/// are fixed there; invitations would also send mail on the visitor's behalf.
+fn reject_in_demo(state: &AppState) -> Result<(), ApiError> {
+    if state.demo_mode {
+        return Err(ApiError::disabled_in_demo());
+    }
+    Ok(())
+}
+
 pub(super) async fn create_workspace_user(
     State(state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
@@ -91,6 +100,7 @@ pub(super) async fn create_workspace_user(
     ActiveWorkspace(workspace): ActiveWorkspace,
     ApiJson(input): ApiJson<CreateWorkspaceUserRequest>,
 ) -> Result<(StatusCode, Json<CreatedWorkspaceUser>), ApiError> {
+    reject_in_demo(&state)?;
     let email = deliverable_email(&input.email)?;
     let invite_fields = (
         input.role_id,
@@ -273,13 +283,14 @@ pub(super) async fn list_members(
 }
 
 pub(super) async fn update_member(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     AuthenticatedPrincipal(actor, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace): ActiveWorkspace,
     ApiPath(id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<UpdateMemberRequest>,
 ) -> Result<StatusCode, ApiError> {
+    reject_in_demo(&state)?;
     if repository
         .set_workspace_membership_state(id, actor, workspace, &input.state)
         .await?
@@ -291,13 +302,14 @@ pub(super) async fn update_member(
 }
 
 pub(super) async fn grant_role(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     AuthenticatedPrincipal(actor, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace): ActiveWorkspace,
     ApiPath(member_id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<GrantRoleRequest>,
 ) -> Result<(StatusCode, Json<GrantedRole>), ApiError> {
+    reject_in_demo(&state)?;
     let id = repository
         .grant_workspace_member_role(
             actor,
@@ -312,12 +324,13 @@ pub(super) async fn grant_role(
 }
 
 pub(super) async fn revoke_role(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     AuthenticatedPrincipal(actor, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace): ActiveWorkspace,
     ApiPath((member_id, grant_id)): ApiPath<(Uuid, Uuid)>,
 ) -> Result<StatusCode, ApiError> {
+    reject_in_demo(&state)?;
     repository
         .revoke_workspace_member_role(actor, workspace, member_id, grant_id)
         .await?;
@@ -325,12 +338,13 @@ pub(super) async fn revoke_role(
 }
 
 pub(super) async fn transfer_ownership(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     AuthenticatedPrincipal(actor, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace): ActiveWorkspace,
     ApiPath(id): ApiPath<Uuid>,
 ) -> Result<StatusCode, ApiError> {
+    reject_in_demo(&state)?;
     repository
         .transfer_workspace_ownership(actor, workspace, id)
         .await?;
@@ -344,6 +358,7 @@ pub(super) async fn create_invitation(
     ActiveWorkspace(workspace): ActiveWorkspace,
     ApiJson(input): ApiJson<CreateInvitationRequest>,
 ) -> Result<(StatusCode, Json<CreatedInvitation>), ApiError> {
+    reject_in_demo(&state)?;
     let email = deliverable_email(&input.email)?;
     let mut bytes = [0u8; 32];
     rand::rngs::OsRng.fill_bytes(&mut bytes);

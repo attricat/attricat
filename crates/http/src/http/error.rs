@@ -64,6 +64,14 @@ impl ApiError {
             "you are not authorized to perform this action",
         )
     }
+    /// The shared demo accounts must keep working for every visitor.
+    pub(super) fn disabled_in_demo() -> Self {
+        Self::new(
+            StatusCode::FORBIDDEN,
+            "disabled_in_demo",
+            "this action is disabled in the demo",
+        )
+    }
     pub(super) fn not_found(resource: &'static str) -> Self {
         Self::new(
             StatusCode::NOT_FOUND,

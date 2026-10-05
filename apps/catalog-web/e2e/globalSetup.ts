@@ -280,6 +280,9 @@ export default async () => {
     CATALOG_BOOTSTRAP_OWNER_ID: bootstrapOwnerId,
     CATALOG_BOOTSTRAP_OWNER_EMAIL: bootstrapOwnerEmail,
     CATALOG_BOOTSTRAP_OWNER_PASSWORD: bootstrapOwnerPassword,
+    // Specs assume the bootstrap owner is the only seeded member.
+    CATALOG_SAMPLE_ACCOUNTS: 'false',
+    CATALOG_DEMO_MODE: 'false',
     SESSION_COOKIE_SECURE: 'false',
     SMTP_HOST: '127.0.0.1',
     SMTP_PORT: e2eMailpitSmtpPort,
