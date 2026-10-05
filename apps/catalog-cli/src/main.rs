@@ -3584,16 +3584,7 @@ async fn solution_pack_plan_upload(
         "--map",
         "blueprints/",
         "EXISTING_CODE",
-        |code| {
-            let valid = !code.is_empty()
-                && code.len() <= 128
-                && code.as_bytes()[0].is_ascii_lowercase()
-                && code
-                    .bytes()
-                    .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
-                && !code.ends_with('_');
-            valid.then(|| json!({ "code": code }))
-        },
+        blueprint_mapping_value,
     )?;
     let asset_maps = parse_pack_mappings(
         requested_asset_maps,
@@ -3649,6 +3640,19 @@ async fn solution_pack_plan_upload(
             .map_err(|error| CliError::Transport(error.to_string()))?,
     )
     .await
+}
+
+// Match the solution-pack planner's stable-code contract, including codes it
+// generates from hyphenated logical keys. Existing mappings are not prefixes.
+fn blueprint_mapping_value(code: &str) -> Option<Value> {
+    let valid = !code.is_empty()
+        && code.len() <= 128
+        && code.as_bytes()[0].is_ascii_lowercase()
+        && code.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'_' | b'-')
+        })
+        && Uuid::parse_str(code).is_err();
+    valid.then(|| json!({ "code": code }))
 }
 
 /// Parses `LOGICAL_KEY=VALUE` solution-pack mapping flags into the JSON parts
@@ -4514,6 +4518,69 @@ fn segment(value: impl std::fmt::Display) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn blueprint_mapping_accepts_planner_generated_stable_codes() {
+        for code in [
+            "seed_environmental-declaration",
+            "material_specification",
+            "a-",
+            "a_",
+        ] {
+            let requested = vec![format!("blueprints/environmental-declaration={code}")];
+            let parts = parse_pack_mappings(
+                &requested,
+                "--map",
+                "blueprints/",
+                "EXISTING_CODE",
+                blueprint_mapping_value,
+            )
+            .unwrap();
+            assert_eq!(
+                serde_json::from_str::<Value>(&parts[0]).unwrap(),
+                json!({"key":"blueprints/environmental-declaration","code":code})
+            );
+        }
+        assert!(blueprint_mapping_value(&"a".repeat(128)).is_some());
+    }
+
+    #[test]
+    fn blueprint_mapping_rejects_non_stable_codes_and_duplicate_keys() {
+        for code in [
+            "",
+            "Uppercase",
+            "1code",
+            "-code",
+            "has space",
+            "a/b",
+            "é",
+            "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        ] {
+            assert!(blueprint_mapping_value(code).is_none(), "{code}");
+        }
+        assert!(blueprint_mapping_value(&"a".repeat(129)).is_none());
+        let requested = vec!["blueprints/item=one".into(), "blueprints/item=two".into()];
+        assert!(
+            parse_pack_mappings(
+                &requested,
+                "--map",
+                "blueprints/",
+                "EXISTING_CODE",
+                blueprint_mapping_value
+            )
+            .is_err()
+        );
+        assert!(
+            parse_pack_mappings(
+                &["contexts/item=one".into()],
+                "--map",
+                "blueprints/",
+                "EXISTING_CODE",
+                blueprint_mapping_value
+            )
+            .is_err()
+        );
+    }
 
     #[test]
     fn auth_preferences_require_exactly_one_time_zone_choice() {
