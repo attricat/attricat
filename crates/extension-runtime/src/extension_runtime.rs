@@ -171,6 +171,8 @@ struct ComponentCacheKey {
 struct ComponentCache {
     components: HashMap<ComponentCacheKey, Arc<Component>>,
     lru: VecDeque<ComponentCacheKey>,
+    /// Compilations in progress, so concurrent misses share one compile.
+    compiling: HashMap<ComponentCacheKey, Arc<tokio::sync::OnceCell<Arc<Component>>>>,
 }
 
 impl ComponentCache {
@@ -316,35 +318,80 @@ impl ExtensionRuntime {
             installed_release_id: installation.installed_release_id,
             artifact_id: artifact.id.clone(),
         };
-        if let Some(component) = self
+        self.cached_component(key, || async {
+            Ok(self
+                .object_store
+                .get(&installed_artifact_key(
+                    installation.installed_release_id,
+                    &artifact.id,
+                ))
+                .await?
+                .bytes)
+        })
+        .await
+    }
+
+    /// Returns the compiled component for `key`, compiling the bytes from
+    /// `load` on a miss. Concurrent misses share one compilation.
+    async fn cached_component<Load, Loading, Bytes>(
+        &self,
+        key: ComponentCacheKey,
+        load: Load,
+    ) -> Result<Arc<Component>, ExtensionRuntimeError>
+    where
+        Load: FnOnce() -> Loading,
+        Loading: std::future::Future<Output = Result<Bytes, ExtensionRuntimeError>>,
+        Bytes: AsRef<[u8]> + Send + 'static,
+    {
+        let compiling = {
+            let mut cache = self
+                .components
+                .lock()
+                .expect("component cache is not poisoned");
+            if let Some(component) = cache.get(&key) {
+                metrics::counter!("catalog_extension_component_cache_total", "outcome" => "hit")
+                    .increment(1);
+                return Ok(component);
+            }
+            cache.compiling.entry(key.clone()).or_default().clone()
+        };
+        let compiled = compiling
+            .get_or_try_init(|| async {
+                let bytes = load().await?;
+                // Compiling takes seconds of CPU; keep it off the async workers
+                // so it cannot stall unrelated requests.
+                let engine = self.engine.clone();
+                let component =
+                    tokio::task::spawn_blocking(move || Component::new(&engine, &bytes))
+                        .await
+                        .map_err(|error| {
+                            ExtensionRuntimeError::Runtime(format!(
+                                "component compilation failed: {error}"
+                            ))
+                        })?
+                        .map_err(|error| {
+                            ExtensionRuntimeError::Runtime(format!("invalid component: {error}"))
+                        })?;
+                metrics::counter!("catalog_extension_component_cache_total", "outcome" => "miss")
+                    .increment(1);
+                Ok::<_, ExtensionRuntimeError>(Arc::new(component))
+            })
+            .await
+            .cloned();
+        let mut cache = self
             .components
             .lock()
-            .expect("component cache is not poisoned")
+            .expect("component cache is not poisoned");
+        // A failed compile leaves the cell empty; dropping it lets a later
+        // call retry. Only the caller's own cell is removed.
+        if cache
+            .compiling
             .get(&key)
+            .is_some_and(|cell| Arc::ptr_eq(cell, &compiling))
         {
-            metrics::counter!("catalog_extension_component_cache_total", "outcome" => "hit")
-                .increment(1);
-            return Ok(component);
+            cache.compiling.remove(&key);
         }
-        let bytes = self
-            .object_store
-            .get(&installed_artifact_key(
-                key.installed_release_id,
-                &key.artifact_id,
-            ))
-            .await?
-            .bytes;
-        let component = Arc::new(Component::new(&self.engine, &bytes).map_err(|error| {
-            ExtensionRuntimeError::Runtime(format!("invalid component: {error}"))
-        })?);
-        let component = self
-            .components
-            .lock()
-            .expect("component cache is not poisoned")
-            .insert(key, component);
-        metrics::counter!("catalog_extension_component_cache_total", "outcome" => "miss")
-            .increment(1);
-        Ok(component)
+        Ok(cache.insert(key, compiled?))
     }
 
     /// Executes one bounded operation batch. The component and its ABI come
@@ -2022,6 +2069,64 @@ mod tests {
         parse_bounded_json, require_operation_batch_key, to_configuration_scope, transfer_url,
         uses_v11, valid_secret_name,
     };
+
+    /// The smallest valid component: the component-model binary header.
+    const EMPTY_COMPONENT: &[u8] = b"\0asm\x0d\x00\x01\x00";
+
+    fn runtime() -> super::ExtensionRuntime {
+        super::ExtensionRuntime::new(
+            std::sync::Arc::new(crate::storage::FakeObjectStore::available()),
+            super::ExtensionRuntimeConfig::default(),
+        )
+        .unwrap()
+    }
+
+    fn cache_key() -> super::ComponentCacheKey {
+        super::ComponentCacheKey {
+            installed_release_id: Uuid::new_v4(),
+            artifact_id: "server".into(),
+        }
+    }
+
+    #[tokio::test]
+    async fn concurrent_component_misses_share_one_compilation() {
+        let runtime = runtime();
+        let key = cache_key();
+        let loads = std::sync::atomic::AtomicUsize::new(0);
+        let load = || async {
+            loads.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            Ok(EMPTY_COMPONENT)
+        };
+        let (first, second) = tokio::join!(
+            runtime.cached_component(key.clone(), load),
+            runtime.cached_component(key.clone(), load),
+        );
+        assert!(std::sync::Arc::ptr_eq(&first.unwrap(), &second.unwrap()));
+        assert_eq!(loads.load(std::sync::atomic::Ordering::SeqCst), 1);
+        // Later calls are cache hits and leave no compilation behind.
+        runtime.cached_component(key, load).await.unwrap();
+        assert_eq!(loads.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert!(runtime.components.lock().unwrap().compiling.is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_failed_component_compilation_is_retried() {
+        let runtime = runtime();
+        let key = cache_key();
+        let invalid: &[u8] = b"not a component";
+        assert!(
+            runtime
+                .cached_component(key.clone(), || async { Ok(invalid) })
+                .await
+                .is_err()
+        );
+        assert!(runtime.components.lock().unwrap().compiling.is_empty());
+        runtime
+            .cached_component(key, || async { Ok(EMPTY_COMPONENT) })
+            .await
+            .unwrap();
+    }
 
     #[test]
     fn selects_an_explicit_abi_without_upgrading_v1_ranges() {
