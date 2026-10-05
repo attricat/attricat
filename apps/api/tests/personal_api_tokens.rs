@@ -365,9 +365,18 @@ async fn member_management_token_cannot_grant_or_revoke_without_roles_grant(pool
         .json::<Value>()
         .await
         .unwrap();
+    let mut delegated: Vec<String> =
+        sqlx::query_scalar("SELECT permission_code FROM role_permissions WHERE role_id=$1")
+            .bind(VIEWER_ROLE_ID)
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    delegated.extend(["members.manage".to_owned(), "roles.grant".to_owned()]);
+    delegated.sort();
+    delegated.dedup();
     let permitted = owner_client
         .post(format!("{base_url}/personal-access-tokens"))
-        .json(&json!({"label":"role grants", "permissions":["members.manage", "roles.grant"]}))
+        .json(&json!({"label":"role grants", "permissions":delegated}))
         .send()
         .await
         .unwrap()

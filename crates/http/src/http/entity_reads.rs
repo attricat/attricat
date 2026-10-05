@@ -83,6 +83,7 @@ pub(super) async fn get_entity(
 }
 pub(super) async fn get_preview(
     State(state): State<AppState>,
+    principal: super::auth::AuthenticatedPrincipal,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(entity_id): ApiPath<Uuid>,
     ApiQuery(query): ApiQuery<PreviewQuery>,
@@ -104,6 +105,7 @@ pub(super) async fn get_preview(
         )));
     }
     let (entity, context) = repository
+        .with_authorization_actor(principal.actor())
         .preview(entity_id, depth, limit.into())
         .await?
         .ok_or_else(|| ApiError::not_found("entity"))?;
@@ -119,11 +121,13 @@ pub(super) async fn get_preview(
 }
 pub(super) async fn get_entity_hierarchy(
     State(state): State<AppState>,
+    principal: super::auth::AuthenticatedPrincipal,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(entity_id): ApiPath<Uuid>,
     ApiQuery(query): ApiQuery<HierarchyQuery>,
 ) -> Result<Json<crate::model::EntityHierarchyResponse>, ApiError> {
     repository
+        .with_authorization_actor(principal.actor())
         .hierarchy(
             entity_id,
             query.context_id,
@@ -136,11 +140,13 @@ pub(super) async fn get_entity_hierarchy(
 }
 pub(super) async fn get_resolved_preview(
     State(_state): State<AppState>,
+    principal: super::auth::AuthenticatedPrincipal,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(entity_id): ApiPath<Uuid>,
     ApiQuery(query): ApiQuery<ResolvedPreviewQuery>,
 ) -> Result<Json<ResolvedEntityPreviewResponse>, ApiError> {
     repository
+        .with_authorization_actor(principal.actor())
         .resolved_preview(entity_id, query.context_id, 1)
         .await?
         .map(Json)

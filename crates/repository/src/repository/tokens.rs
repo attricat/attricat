@@ -159,6 +159,71 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
         }))
     }
 
+    /// Delegation must not turn a restricted request token into the owner's
+    /// full authority. Reuse the mutation connection and lock the credential
+    /// so a concurrent revocation cannot race a successful delegation.
+    pub(super) async fn ensure_token_can_delegate_on(
+        &self,
+        connection: &mut sqlx::PgConnection,
+        user_id: Uuid,
+        workspace_id: Uuid,
+        permissions: &[String],
+    ) -> Result<(), RepositoryError> {
+        let actor = self.authorization_actor.or_else(|| {
+            let audit = self.audit_context.as_ref()?;
+            Some(super::AuthorizationActor {
+                user_id: audit.actor_user_id?,
+                token_id: audit.actor_token_id,
+            })
+        });
+        let Some(actor) = actor.filter(|actor| actor.token_id.is_some()) else {
+            return Ok(());
+        };
+        if actor.user_id != user_id {
+            return Err(RepositoryError::TokenPermissionsUnavailable);
+        }
+        let token = sqlx::query_scalar::<_, Uuid>(
+            "SELECT id FROM personal_api_tokens WHERE id=$1 AND user_id=$2 AND workspace_id=$3 AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > clock_timestamp()) FOR SHARE",
+        ).bind(actor.token_id).bind(user_id).bind(workspace_id)
+            .fetch_optional(&mut *connection).await?;
+        let Some(token) = token else {
+            return Err(RepositoryError::TokenPermissionsUnavailable);
+        };
+        let allowed: bool = sqlx::query_scalar(
+            "SELECT NOT EXISTS (SELECT 1 FROM unnest($2::text[]) requested(permission) WHERE NOT EXISTS (SELECT 1 FROM personal_api_token_permissions p WHERE p.token_id=$1 AND p.permission_code=requested.permission))",
+        ).bind(token).bind(permissions).fetch_one(connection).await?;
+        if !allowed {
+            return Err(RepositoryError::TokenPermissionsUnavailable);
+        }
+        Ok(())
+    }
+
+    /// Hold the role stable until the delegating mutation commits.
+    pub(super) async fn ensure_token_can_delegate_role_on(
+        &self,
+        connection: &mut sqlx::PgConnection,
+        user_id: Uuid,
+        workspace_id: Uuid,
+        role_id: Uuid,
+    ) -> Result<(), RepositoryError> {
+        sqlx::query(
+            "SELECT id FROM roles WHERE id=$1 AND (is_system OR workspace_id=$2) FOR SHARE",
+        )
+        .bind(role_id)
+        .bind(workspace_id)
+        .fetch_optional(&mut *connection)
+        .await?
+        .ok_or(RepositoryError::NotFound("workspace role"))?;
+        let permissions = sqlx::query_scalar::<_, String>(
+            "SELECT permission_code FROM role_permissions WHERE role_id=$1",
+        )
+        .bind(role_id)
+        .fetch_all(&mut *connection)
+        .await?;
+        self.ensure_token_can_delegate_on(connection, user_id, workspace_id, &permissions)
+            .await
+    }
+
     pub async fn personal_api_token_permissions(
         &self,
         token_id: Uuid,

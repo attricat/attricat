@@ -259,6 +259,7 @@ impl RepositoryError {
             | Self::InvalidReusableAttributeDefinition(_)
             | Self::ReusableAttributeNotPublished
             | Self::InvalidPreview
+            | Self::PreviewExpansionLimit
             | Self::InvalidHierarchyRelationship
             | Self::InvalidAgentState(_)
             | Self::InvalidExtension(_)

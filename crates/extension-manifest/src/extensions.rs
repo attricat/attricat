@@ -1412,6 +1412,17 @@ pub struct ExtensionPackage {
 
 impl ExtensionPackage {
     pub fn from_tar_zst(archive: &[u8]) -> Result<Self, ManifestError> {
+        // Include tar headers and padding, not just regular-file payloads.
+        Self::from_tar_zst_with_expanded_limit(
+            archive,
+            MAX_EXTENSION_UNPACKED_BYTES + (MAX_EXTENSION_ARCHIVE_ENTRIES + 1) * 1024,
+        )
+    }
+
+    fn from_tar_zst_with_expanded_limit(
+        archive: &[u8],
+        expanded_limit: usize,
+    ) -> Result<Self, ManifestError> {
         if archive.len() > MAX_EXTENSION_ARCHIVE_BYTES {
             return Err(ManifestError::Invalid(
                 "extension archive exceeds the compressed size limit".into(),
@@ -1420,7 +1431,10 @@ impl ExtensionPackage {
         let decoder = zstd::stream::read::Decoder::new(Cursor::new(archive)).map_err(|_| {
             ManifestError::Invalid("extension archive is not valid zstd data".into())
         })?;
-        let mut tar = tar::Archive::new(decoder);
+        // Tar consumes GNU/PAX metadata and directory payloads before yielding
+        // regular entries. Bound the entire decoder so those bytes cannot
+        // evade our entry and regular-file size limits.
+        let mut tar = tar::Archive::new(decoder.take(expanded_limit as u64 + 1));
         let mut manifest_bytes = None;
         let mut files = BTreeMap::new();
         let mut total_bytes = 0usize;
@@ -1494,6 +1508,26 @@ impl ExtensionPackage {
                     "extension archive contains duplicate file paths".into(),
                 ));
             }
+        }
+        let mut decoder = tar.into_inner();
+        let mut trailing = [0u8; 8192];
+        loop {
+            let count = decoder.read(&mut trailing).map_err(|_| {
+                ManifestError::Invalid("extension archive could not be decompressed".into())
+            })?;
+            if count == 0 {
+                break;
+            }
+            if trailing[..count].iter().any(|byte| *byte != 0) {
+                return Err(ManifestError::Invalid(
+                    "extension archive contains data after the tar end marker".into(),
+                ));
+            }
+        }
+        if decoder.limit() == 0 {
+            return Err(ManifestError::Invalid(
+                "extension archive exceeds the expanded size limit".into(),
+            ));
         }
         let manifest_bytes = manifest_bytes.ok_or_else(|| {
             ManifestError::Invalid("extension archive must contain manifest.json".into())
@@ -1750,6 +1784,38 @@ mod tests {
     fn manifest() -> Manifest {
         serde_json::from_value(serde_json::json!({"manifest_version":1,"name":"Acme","version":"1.2.3","description":"test extension","icons":{"48":"icon.png"},"catalog":{"id":"acme.test","host_api":"^1.0"},"permissions":["network.request","webhooks.receive"],"host_permissions":[{"id":"acme","matches":["https://api.acme.example/v1/*"],"methods":["GET"]}],"artifacts":[{"id":"server","kind":"server_wasm","path":"server.wasm"}],"configuration":{"version":1,"schema":{"type":"object","required":["url"],"properties":{"url":{"type":"string"}},"additionalProperties":false}},"server":{"webhooks":[{"id":"events","event_type":"webhook.acme.events.v1","handler":"handle_events_v1","methods":["POST"],"authentication":{"type":"hmac-sha256","signature_header":"X-Signature","timestamp_header":"X-Timestamp","max_age_seconds":300,"secret":"webhook_secret"},"max_body_bytes":1024}]}})).unwrap()
     }
+    #[test]
+    fn bounds_tar_metadata_and_trailing_expansion() {
+        // A tar end marker followed by highly compressible padding used to
+        // leave the decoder unchecked. Exercise a small limit, not a 128MiB
+        // allocation, and reject nonzero data after the end marker too.
+        for bytes in [vec![0u8; 8192], {
+            let mut bytes = vec![0u8; 1024];
+            bytes.extend_from_slice(b"hidden trailing data");
+            bytes
+        }] {
+            let compressed = zstd::stream::encode_all(Cursor::new(bytes), 1).unwrap();
+            let error = ExtensionPackage::from_tar_zst_with_expanded_limit(&compressed, 4096)
+                .err()
+                .expect("invalid archive");
+            assert!(
+                error.to_string().contains("expanded size limit")
+                    || error.to_string().contains("after the tar end marker")
+            );
+        }
+        // GNU long-name metadata is interpreted by tar before a file entry
+        // reaches our regular-file checks.
+        let mut header = tar::Header::new_gnu();
+        header.set_entry_type(tar::EntryType::GNULongName);
+        header.set_path("././@LongLink").unwrap();
+        header.set_size(8192);
+        header.set_cksum();
+        let mut bytes = header.as_bytes().to_vec();
+        bytes.extend_from_slice(&vec![b'a'; 8192]);
+        let compressed = zstd::stream::encode_all(Cursor::new(bytes), 1).unwrap();
+        assert!(ExtensionPackage::from_tar_zst_with_expanded_limit(&compressed, 4096).is_err());
+    }
+
     #[test]
     fn validates_contract_boundaries() {
         let value = manifest();

@@ -193,6 +193,8 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
             .await?;
         let id = Uuid::new_v4();
         let mut tx = self.pool.begin().await?;
+        self.ensure_token_can_delegate_on(&mut tx, actor_id, workspace_id, permissions)
+            .await?;
         sqlx::query(
             "INSERT INTO roles (id, code, workspace_id, is_system) VALUES ($1, $2, $3, false)",
         )
@@ -225,6 +227,8 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
         self.validate_role_input(actor_id, workspace_id, code, permissions)
             .await?;
         let mut tx = self.pool.begin().await?;
+        self.ensure_token_can_delegate_on(&mut tx, actor_id, workspace_id, permissions)
+            .await?;
         if sqlx::query(
             "UPDATE roles SET code = $1 WHERE id = $2 AND workspace_id = $3 AND NOT is_system",
         )
@@ -277,7 +281,7 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
     ) -> Result<(), RepositoryError> {
         self.require_permission(actor_id, workspace_id, "roles.manage")
             .await?;
-        if role_id == OWNER_ROLE_ID {
+        if role_id == OWNER_ROLE_ID || replacement_role_id == Some(role_id) {
             return Err(RepositoryError::NotFound("workspace-local role"));
         }
         let mut tx = self.pool.begin().await?;
@@ -307,6 +311,8 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
             self.commit_mutation(tx).await?;
             return Ok(());
         };
+        self.ensure_token_can_delegate_role_on(&mut tx, actor_id, workspace_id, replacement)
+            .await?;
         let valid: bool = sqlx::query_scalar(
             "SELECT EXISTS (SELECT 1 FROM roles WHERE id=$1 AND (is_system OR workspace_id=$2))",
         )

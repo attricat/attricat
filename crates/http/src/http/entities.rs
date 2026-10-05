@@ -85,7 +85,7 @@ fn smart_fill_definition() -> ToolDefinition {
 
 pub(super) async fn smart_fill_entity_form(
     State(state): State<AppState>,
-    super::auth::AuthenticatedPrincipal(user, _): super::auth::AuthenticatedPrincipal,
+    principal @ super::auth::AuthenticatedPrincipal(user, _): super::auth::AuthenticatedPrincipal,
     super::auth::ActiveWorkspace(workspace_id): super::auth::ActiveWorkspace,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiJson(input): ApiJson<SmartFillEntityFormRequest>,
@@ -105,8 +105,8 @@ pub(super) async fn smart_fill_entity_form(
         ));
     }
     if !repository
-        .is_authorized(
-            user,
+        .principal_may(
+            principal.actor(),
             workspace_id,
             "entities.read",
             Some(input.entity_id),
@@ -504,7 +504,7 @@ pub(super) async fn duplicate_entity(
 
 pub(super) async fn get_entity_form(
     State(_state): State<AppState>,
-    super::auth::AuthenticatedPrincipal(user, _): super::auth::AuthenticatedPrincipal,
+    principal: super::auth::AuthenticatedPrincipal,
     super::auth::ActiveWorkspace(workspace_id): super::auth::ActiveWorkspace,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(entity_id): ApiPath<Uuid>,
@@ -524,7 +524,13 @@ pub(super) async fn get_entity_form(
         async { Ok(repository.reusable_form_values(entity_id).await?) },
         async {
             Ok(repository
-                .is_authorized(user, workspace_id, "entities.write", Some(entity_id), None)
+                .principal_may(
+                    principal.actor(),
+                    workspace_id,
+                    "entities.write",
+                    Some(entity_id),
+                    None,
+                )
                 .await?)
         },
     )?;
@@ -558,6 +564,7 @@ pub(super) async fn update_entity_form(
 }
 pub(super) async fn list_incoming_relationships(
     State(state): State<AppState>,
+    principal: super::auth::AuthenticatedPrincipal,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(entity_id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<IncomingRelationshipsRequest>,
@@ -583,6 +590,7 @@ pub(super) async fn list_incoming_relationships(
     };
     Ok(Json(
         repository
+            .with_authorization_actor(principal.actor())
             .incoming_relationships(entity_id, input.relationships, limit.into(), cursor)
             .await?,
     ))

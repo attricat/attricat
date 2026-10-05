@@ -374,8 +374,12 @@ impl CatalogRepository {
         model: &str,
     ) -> Result<AgentRun, RepositoryError> {
         let workspace_id = self.workspace_id.0;
-        let run: AgentRun = sqlx::query_as("INSERT INTO agent_runs (id, workspace_id, conversation_id, origin, status, provider_base_url, model, initiated_by_user_id) SELECT $1, $2, $3, 'interactive', 'queued', $4, $5, $6 WHERE EXISTS (SELECT 1 FROM conversations WHERE id = $3 AND workspace_id = $2) RETURNING id, conversation_id, origin, status, provider_base_url, model, started_at, finished_at, error_code, error_message, created_at")
-            .bind(Uuid::new_v4()).bind(workspace_id).bind(conversation_id).bind(provider_base_url).bind(model).bind(actor)
+        let token_id = self
+            .authorization_actor
+            .filter(|principal| principal.user_id == actor)
+            .and_then(|principal| principal.token_id);
+        let run: AgentRun = sqlx::query_as("INSERT INTO agent_runs (id, workspace_id, conversation_id, origin, status, provider_base_url, model, initiated_by_user_id, initiated_by_token_id, authority_recorded) SELECT $1, $2, $3, 'interactive', 'queued', $4, $5, $6, $7, true WHERE EXISTS (SELECT 1 FROM conversations WHERE id = $3 AND workspace_id = $2) RETURNING id, conversation_id, origin, status, provider_base_url, model, started_at, finished_at, error_code, error_message, created_at")
+            .bind(Uuid::new_v4()).bind(workspace_id).bind(conversation_id).bind(provider_base_url).bind(model).bind(actor).bind(token_id)
             .fetch_optional(&mut **tx).await?.ok_or(RepositoryError::NotFound("conversation"))?;
         self.enqueue_task(
             tx,
@@ -417,6 +421,15 @@ impl CatalogRepository {
         );
         if !valid {
             return Err(RepositoryError::InvalidAgentState("invalid run transition"));
+        }
+        // A streamed approval notification can be answered before the runner
+        // finishes delivering its tool-call wave. Queue that decision now,
+        // under the run lock, rather than leaving it parked indefinitely.
+        let resume_ready = next_status == "awaiting_approval"
+            && Self::agent_decisions_ready(&mut tx, run_id).await?;
+        let next_status = if resume_ready { "queued" } else { next_status };
+        if resume_ready {
+            self.enqueue_agent_resume(&mut tx, run_id).await?;
         }
         let terminal = matches!(
             next_status,
@@ -490,6 +503,30 @@ impl CatalogRepository {
             .fetch_optional(&self.pool).await?
             .and_then(|(actor, workspace): (Option<Uuid>, Uuid)| actor.map(|actor| (actor, workspace)))
             .ok_or(RepositoryError::InvalidAgentState("agent run has no initiating user"))
+    }
+
+    pub async fn agent_run_actor(
+        &self,
+        run_id: Uuid,
+    ) -> Result<super::AuthorizationActor, RepositoryError> {
+        let (user_id, token_id, authority_recorded): (Option<Uuid>, Option<Uuid>, bool) = sqlx::query_as(
+            "SELECT initiated_by_user_id, initiated_by_token_id, authority_recorded FROM agent_runs WHERE id=$1 AND workspace_id=$2",
+        ).bind(run_id).bind(self.workspace_id.0).fetch_optional(&self.pool).await?
+            .ok_or(RepositoryError::NotFound("agent run"))?;
+        // Legacy runs did not record whether they used a PAT. Treating their
+        // NULL token as a browser session would keep the old escalation path
+        // alive after an upgrade. They must be resubmitted with bound authority.
+        if !authority_recorded {
+            return Err(RepositoryError::InvalidAgentState(
+                "agent run predates credential binding; submit a new request",
+            ));
+        }
+        Ok(super::AuthorizationActor {
+            user_id: user_id.ok_or(RepositoryError::InvalidAgentState(
+                "agent run has no initiating user",
+            ))?,
+            token_id,
+        })
     }
 
     pub async fn get_agent_run(&self, run_id: Uuid) -> Result<AgentRun, RepositoryError> {
@@ -651,9 +688,10 @@ impl CatalogRepository {
         Ok(event)
     }
 
-    /// Makes an approval decision exactly once. The run transition and durable
-    /// event share one transaction, so a restart cannot observe a decision
-    /// without its replayable status evidence.
+    /// Makes an approval decision exactly once. One resume is queued after
+    /// every sibling call is decided, under the run lock. Queuing once per
+    /// decision lets competing workers mistake a healthy run for a reclaimed
+    /// execution and can lose decisions arriving during provider delivery.
     pub async fn decide_tool_call(
         &self,
         tool_call_id: Uuid,
@@ -661,10 +699,23 @@ impl CatalogRepository {
         decision: ApprovalDecision,
     ) -> Result<AgentToolCall, RepositoryError> {
         let mut tx = self.pool.begin().await?;
+        // Match the producer's lock order: run first, then its tool call.
+        // This also serializes decisions on different sibling calls.
+        let run_status: String = sqlx::query_scalar("SELECT run.status FROM agent_runs run JOIN agent_tool_calls call ON call.run_id=run.id WHERE call.id=$1 AND run.workspace_id=$2 FOR UPDATE OF run")
+            .bind(tool_call_id).bind(self.workspace_id.0).fetch_optional(&mut *tx).await?
+            .ok_or(RepositoryError::NotFound("agent tool call"))?;
         let call: AgentToolCall = sqlx::query_as("SELECT id, run_id, sequence, provider_call_id, tool_name, arguments, change_summary, result, error, state, decided_by_user_id, decided_at, created_at, completed_at FROM agent_tool_calls WHERE id = $1 AND EXISTS (SELECT 1 FROM agent_runs run WHERE run.id = agent_tool_calls.run_id AND run.workspace_id = $2) FOR UPDATE")
             .bind(tool_call_id).bind(self.workspace_id.0).fetch_optional(&mut *tx).await?.ok_or(RepositoryError::NotFound("agent tool call"))?;
         if call.state != "pending_approval" {
             return Err(RepositoryError::ApprovalAlreadyDecided);
+        }
+        if !matches!(
+            run_status.as_str(),
+            "running" | "awaiting_approval" | "queued"
+        ) {
+            return Err(RepositoryError::InvalidAgentState(
+                "cannot decide a terminal run",
+            ));
         }
         let state = match decision {
             ApprovalDecision::Approve => "approved",
@@ -672,7 +723,15 @@ impl CatalogRepository {
         };
         let call: AgentToolCall = sqlx::query_as("UPDATE agent_tool_calls SET state = $2, decided_by_user_id = $3, decided_at = now() WHERE id = $1 RETURNING id, run_id, sequence, provider_call_id, tool_name, arguments, change_summary, result, error, state, decided_by_user_id, decided_at, created_at, completed_at")
             .bind(tool_call_id).bind(state).bind(actor).fetch_one(&mut *tx).await?;
-        sqlx::query("UPDATE agent_runs SET status = 'queued' WHERE id = $1 AND status = 'awaiting_approval'").bind(call.run_id).execute(&mut *tx).await?;
+        if run_status == "awaiting_approval"
+            && Self::agent_decisions_ready(&mut tx, call.run_id).await?
+        {
+            sqlx::query("UPDATE agent_runs SET status='queued' WHERE id=$1")
+                .bind(call.run_id)
+                .execute(&mut *tx)
+                .await?;
+            self.enqueue_agent_resume(&mut tx, call.run_id).await?;
+        }
         let sequence: i64 = sqlx::query_scalar(
             "SELECT COALESCE(MAX(sequence) + 1, 0) FROM agent_run_events WHERE run_id = $1",
         )
@@ -681,23 +740,41 @@ impl CatalogRepository {
         .await?;
         sqlx::query("INSERT INTO agent_run_events (id, run_id, sequence, event_type, payload) VALUES ($1, $2, $3, 'status', $4)")
             .bind(Uuid::new_v4()).bind(call.run_id).bind(sequence).bind(serde_json::json!({"tool_call_id": tool_call_id, "decision": state})).execute(&mut *tx).await?;
+        tx.commit().await?;
+        Ok(call)
+    }
+
+    async fn agent_decisions_ready(
+        tx: &mut Transaction<'_, Postgres>,
+        run_id: Uuid,
+    ) -> Result<bool, RepositoryError> {
+        Ok(sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM agent_tool_calls WHERE run_id=$1 AND state IN ('approved','rejected') AND completed_at IS NULL) AND NOT EXISTS (SELECT 1 FROM agent_tool_calls WHERE run_id=$1 AND state='pending_approval' AND completed_at IS NULL)")
+            .bind(run_id).fetch_one(&mut **tx).await?)
+    }
+
+    /// The caller holds the run row lock and is moving it from running or
+    /// awaiting_approval to queued, never from an already-queued state.
+    async fn enqueue_agent_resume(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        run_id: Uuid,
+    ) -> Result<(), RepositoryError> {
         let generation: i32 = sqlx::query_scalar("SELECT COALESCE(MAX(generation) + 1, 0) FROM tasks WHERE workspace_id = $1 AND kind = 'agent_run.v1' AND subject_id = $2")
-            .bind(self.workspace_id.0).bind(call.run_id).fetch_one(&mut *tx).await?;
+            .bind(self.workspace_id.0).bind(run_id).fetch_one(&mut **tx).await?;
         self.enqueue_task(
-            &mut tx,
+            tx,
             crate::task_queue::TaskInsert {
                 workspace_id: self.workspace_id.0,
                 kind: crate::task_queue::TaskKind::AgentRunV1,
-                subject_id: call.run_id,
+                subject_id: run_id,
                 generation,
-                payload: serde_json::json!({"agent_run_id": call.run_id.to_string()}),
+                payload: serde_json::json!({"agent_run_id": run_id.to_string()}),
                 correlation_id: None,
                 causation_id: None,
             },
         )
         .await?;
-        tx.commit().await?;
-        Ok(call)
+        Ok(())
     }
 }
 
@@ -785,7 +862,7 @@ impl CatalogRepository {
         &self,
         conversation_id: Option<Uuid>,
     ) -> Result<Vec<AgentToolCall>, RepositoryError> {
-        Ok(sqlx::query_as("SELECT call.id, call.run_id, call.sequence, call.provider_call_id, call.tool_name, call.arguments, call.change_summary, call.result, call.error, call.state, call.decided_by_user_id, call.decided_at, call.created_at, call.completed_at FROM agent_tool_calls call JOIN agent_runs run ON run.id = call.run_id WHERE run.workspace_id = $1 AND call.state = 'pending_approval' AND ($2::uuid IS NULL OR run.conversation_id = $2) ORDER BY call.created_at")
+        Ok(sqlx::query_as("SELECT call.id, call.run_id, call.sequence, call.provider_call_id, call.tool_name, call.arguments, call.change_summary, call.result, call.error, call.state, call.decided_by_user_id, call.decided_at, call.created_at, call.completed_at FROM agent_tool_calls call JOIN agent_runs run ON run.id = call.run_id WHERE run.workspace_id = $1 AND run.status IN ('running','awaiting_approval','queued') AND call.state = 'pending_approval' AND ($2::uuid IS NULL OR run.conversation_id = $2) ORDER BY call.created_at")
             .bind(self.workspace_id.0).bind(conversation_id).fetch_all(&self.pool).await?)
     }
 

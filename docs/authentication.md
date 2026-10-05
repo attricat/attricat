@@ -187,6 +187,16 @@ checked during credential validation, and authenticated session/profile routes
 also require an active workspace membership. `last_used_at` is updated at most
 once per minute rather than on every request.
 
+Role creation, editing, duplication, replacement, invitations, grants, and
+ownership transfer cannot delegate permissions omitted from the request token.
+Agent runs retain their initiating token and recheck its live permissions for
+reads and approved mutations, including after a worker restart. Approving an
+agent mutation also requires the approver's own permission for that operation;
+`agents.run` alone is not approval authority. Queued or approval-waiting runs
+created before credential binding was introduced fail closed when next executed;
+resubmit those requests after upgrading. Their missing token provenance cannot
+safely be treated as browser-session authority.
+
 The CLI reads the bearer secret from `CATALOG_TOKEN` (or `--token`).
 
 ## Attribute visibility

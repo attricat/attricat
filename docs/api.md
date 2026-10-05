@@ -197,6 +197,18 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `GET` | `/data-health/storage` | Read storage metrics. |
 | `POST` | `/data-health/refresh` | Clear cached data-health responses. |
 
+### Relationship read safety
+
+Relationship previews and hierarchy paths omit unreadable related entities;
+file-hold reads require access to a referencing entity. Incoming-relationship
+queries require `entities.read`, not write permission, and filter unreadable
+sources. Continue using `next_cursor` even when a filtered page has no items.
+
+Preview hydration has global limits of 4,096 fetched relationship rows and
+4,096 path expansions, in addition to per-field depth and item limits.
+Requests exceeding either budget return `422 invalid_input`; reduce the
+requested relationship depth or item limit.
+
 ### Publication channel checks
 
 A channel can require checks before an entity is published to it:
@@ -777,10 +789,16 @@ HTTP request.
 `GET /agent/runs/{run_id}/events` is an SSE stream of durable status, message,
 tool, approval, error, terminal, and schedule events. Each SSE `id` is the
 persisted event UUID. Reconnect with `Last-Event-ID` to replay only later
-ordered events. `GET /agent/approvals` lists pending tool calls (optionally by
-`conversation_id`), and the existing approve/reject routes enqueue the resumed
-run after atomically recording the decision. Decisions are accepted only while
-a call is pending; a repeated or contradictory decision returns the normal
+ordered events. Credentials, `agents.run`, and the conversation's entity-read
+access are rechecked before each event batch, including idle polls. Losing
+access ends an already-open stream with an error event.
+
+`GET /agent/approvals` lists pending tool calls from live runs
+(optionally by `conversation_id`). Approve/reject routes durably record each
+decision; one resume is queued after all calls in the current response have
+been decided. Decisions received during provider delivery are retained and
+queued when delivery finishes. Terminal runs cannot accept new decisions.
+A repeated or contradictory decision returns the normal
 `approval_already_decided` conflict and never executes the write again. Each
 pending call's `change_summary` names the entities, contexts and blueprints it
 targets by display label or code, alongside their IDs, when the initiating user

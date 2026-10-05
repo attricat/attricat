@@ -489,6 +489,25 @@ async fn released_files_are_held_and_explicit_holds_are_managed(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(listed["items"].as_array().unwrap().len(), 2);
+    // FileRead routes defer resource authorization to the handler. Merely
+    // having an active membership must not expose another record's holds.
+    let (unrelated, membership) = add_workspace_user(&pool).await;
+    grant_role(
+        &pool,
+        membership,
+        VIEWER_ROLE_ID,
+        GrantScope::Entity(Uuid::new_v4()),
+    )
+    .await;
+    expect_status(
+        client_for(unrelated)
+            .get(format!("{base}/files/{file_id}/retention-holds"))
+            .send()
+            .await
+            .unwrap(),
+        StatusCode::FORBIDDEN,
+    )
+    .await;
     server.abort();
 }
 

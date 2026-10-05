@@ -596,6 +596,10 @@ pub enum RepositoryError {
     },
     #[error("entity preview must be a JSON object organized by context")]
     InvalidPreview,
+    #[error(
+        "entity relationship preview exceeds the expansion limit; reduce relationship depth or item limit"
+    )]
+    PreviewExpansionLimit,
     #[error("hierarchy field must be a self-targeting relationship")]
     InvalidHierarchyRelationship,
     #[error("invalid blueprint definition: {0}")]
@@ -1030,8 +1034,8 @@ impl CatalogRepository {
         self
     }
 
-    /// Bounds subsequent extension host calls by this principal's current
-    /// grants. Used only for interactive, user-initiated extension runs.
+    /// Bounds subsequent user-initiated operations and related-entity reads
+    /// by this principal's current grants and personal-token permissions.
     pub fn with_authorization_actor(mut self, actor: AuthorizationActor) -> Self {
         self.authorization_actor = Some(actor);
         self
@@ -1039,6 +1043,27 @@ impl CatalogRepository {
 
     pub fn authorization_actor(&self) -> Option<AuthorizationActor> {
         self.authorization_actor
+    }
+
+    /// Filters related-entity hydration without changing unrestricted system
+    /// reads. The caller still authorizes the root entity separately.
+    pub(crate) async fn actor_readable_entity_ids(
+        &self,
+        entity_ids: &[Uuid],
+    ) -> Result<Option<HashSet<Uuid>>, RepositoryError> {
+        let Some(actor) = self.authorization_actor else {
+            return Ok(None);
+        };
+        let mut connection = self.pool.acquire().await?;
+        Self::principal_entity_ids_on(
+            &mut connection,
+            actor,
+            self.workspace_id.0,
+            "entities.read",
+            entity_ids,
+        )
+        .await
+        .map(Some)
     }
 
     /// Rechecks the interactive actor's live membership, grant scope and token
@@ -1498,7 +1523,7 @@ impl<S: RepositoryScope> CatalogRepository<S> {
         // Locking the current envelope makes this check a fence for every
         // subsequent domain write in this transaction. A reclaimer cannot
         // replace the token until this transaction commits or rolls back.
-        let valid: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM tasks t WHERE t.id = $1 AND t.status = 'leased' AND t.lease_owner = $2 AND t.lease_token = $3 AND t.lease_until > now() FOR KEY SHARE OF t)")
+        let valid: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM tasks t WHERE t.id = $1 AND t.status = 'leased' AND t.lease_owner = $2 AND t.lease_token = $3 AND t.lease_until > clock_timestamp() FOR KEY SHARE OF t)")
             .bind(fence.task_id).bind(&fence.lease_owner).bind(fence.lease_token)
             .fetch_one(&mut **transaction).await?;
         if valid {

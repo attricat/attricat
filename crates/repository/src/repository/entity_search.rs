@@ -492,6 +492,12 @@ impl CatalogRepository {
         } else {
             None
         };
+        // Advance the cursor over the fetched page, including hidden rows, so
+        // a scoped reader can continue past a page with no readable sources.
+        let ids = items.iter().map(|item| item.id).collect::<Vec<_>>();
+        if let Some(readable) = self.actor_readable_entity_ids(&ids).await? {
+            items.retain(|item| readable.contains(&item.id));
+        }
         Ok(IncomingRelationshipsPage {
             items: items
                 .into_iter()

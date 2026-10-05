@@ -86,8 +86,11 @@ pub async fn run_claimed(
     run_id: Uuid,
     conversation_id: Uuid,
 ) -> Result<(), RunError> {
+    let repository = repository
+        .clone()
+        .with_authorization_actor(repository.agent_run_actor(run_id).await?);
     drive(
-        repository,
+        &repository,
         provider,
         object_store,
         run_id,
@@ -541,6 +544,10 @@ pub async fn resume_claimed(
     object_store: &Arc<dyn ObjectStore>,
     run_id: Uuid,
 ) -> Result<(), RunError> {
+    let scoped = repository
+        .clone()
+        .with_authorization_actor(repository.agent_run_actor(run_id).await?);
+    let repository = &scoped;
     let agent_run = repository.get_agent_run(run_id).await?;
     let (actor, workspace) = repository.agent_run_initiator(run_id).await?;
     for call in repository.decided_agent_tool_calls(run_id).await? {
@@ -558,9 +565,12 @@ pub async fn resume_claimed(
                     json!({"code":"forbidden","message":"The initiating user is no longer authorized to make this change."}),
                 )
             } else {
-                let audited_repository = repository
-                    .clone()
-                    .with_audit_context(agent_audit_context(actor, &agent_run, &call));
+                let audited_repository =
+                    repository.clone().with_audit_context(agent_audit_context(
+                        agent_tools::tool_actor(repository, actor),
+                        &agent_run,
+                        &call,
+                    ));
                 agent_tools::execute_mutation(
                     &audited_repository,
                     actor,
@@ -581,9 +591,9 @@ pub async fn resume_claimed(
         repository.complete_agent_tool_call(call.id, result).await?;
         repository.append_conversation_message(agent_run.conversation_id, Some(run_id), "tool", json!({"tool_call_id":call.provider_call_id,"name":call.tool_name,"result":payload})).await?;
     }
-    // A decision queues the run, even when sibling calls from this response
-    // still need a human decision. Do not send a partial tool-result set back
-    // to the provider: wait until every call has been resolved.
+    // Normal resumes are queued only after every sibling decision. Keep this
+    // guard for legacy partial resumes as well: the provider must never see
+    // an incomplete tool-result set.
     if repository.has_pending_agent_tool_calls(run_id).await? {
         repository
             .transition_agent_run(run_id, "awaiting_approval", None, None)
@@ -663,7 +673,7 @@ fn mutation_authorization(name: &str, arguments: &Value) -> Option<(&'static str
     })
 }
 
-async fn mutation_authorized(
+pub async fn mutation_authorized(
     repository: &CatalogRepository,
     actor: Uuid,
     workspace: Uuid,
@@ -677,27 +687,38 @@ async fn mutation_authorized(
             return Ok(false);
         };
         return repository
-            .is_authorized_for_entity_batch(actor, workspace, None, &batch)
+            .is_authorized_for_entity_batch(
+                actor,
+                workspace,
+                agent_tools::tool_actor(repository, actor).token_id,
+                &batch,
+            )
             .await;
     }
     let Some((permission, target_id)) = mutation_authorization(name, arguments) else {
         return Ok(false);
     };
     repository
-        .is_authorized(actor, workspace, permission, target_id, None)
+        .principal_may(
+            agent_tools::tool_actor(repository, actor),
+            workspace,
+            permission,
+            target_id,
+            None,
+        )
         .await
 }
 
 fn agent_audit_context(
-    actor: Uuid,
+    actor: crate::repository::AuthorizationActor,
     run: &crate::repository::AgentRun,
     call: &crate::repository::AgentToolCall,
 ) -> AuditContext {
     let (permission, target_id) = mutation_authorization(&call.tool_name, &call.arguments)
         .expect("only known mutation tools are executed");
     AuditContext {
-        actor_user_id: Some(actor),
-        actor_token_id: None,
+        actor_user_id: Some(actor.user_id),
+        actor_token_id: actor.token_id,
         // Agent execution has no HTTP request. The durable call and run IDs
         // provide its request/correlation identity without retaining prompts.
         request_id: call.id,
