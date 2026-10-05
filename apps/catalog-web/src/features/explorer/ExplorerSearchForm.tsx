@@ -11,7 +11,7 @@ import {
   useMediaQuery,
   useTheme,
 } from '@mui/material';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode, type RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Blueprint, BlueprintWithAttributes } from '../entities/api';
 import {
@@ -57,6 +57,7 @@ type Props = {
   startActions?: ReactNode;
   /** Controls rendered after the search button, such as sharing. */
   endActions?: ReactNode;
+  queryInputRef?: RefObject<HTMLInputElement | null>;
 };
 
 const inlineActionSx = { alignSelf: 'center', display: 'flex' } as const;
@@ -74,6 +75,7 @@ export const ExplorerSearchForm = ({
   lockedBlueprint = false,
   startActions,
   endActions,
+  queryInputRef,
 }: Props) => {
   const { t } = useTranslation();
   const theme = useTheme();
@@ -215,6 +217,7 @@ export const ExplorerSearchForm = ({
               errorContainer={queryErrorContainer}
               onChange={field.handleChange}
               onShowSyntax={setSyntaxAnchor}
+              queryInputRef={queryInputRef}
               value={field.state.value}
             />
           )}

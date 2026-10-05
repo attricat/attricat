@@ -36,6 +36,7 @@ import {
   useState,
   type KeyboardEvent,
   type Ref,
+  type RefObject,
   type SyntheticEvent,
 } from 'react';
 import { createPortal } from 'react-dom';
@@ -192,6 +193,8 @@ type Props = {
    * neighbouring controls in a row from stretching to the helper text.
    */
   errorContainer?: HTMLElement | null;
+  /** Receives the input, so other controls can return focus to it. */
+  queryInputRef?: RefObject<HTMLInputElement | null>;
 };
 
 export const ExplorerQueryInput = ({
@@ -201,6 +204,7 @@ export const ExplorerQueryInput = ({
   blueprints,
   onShowSyntax,
   errorContainer,
+  queryInputRef,
 }: Props) => {
   const { t } = useTranslation();
   const listboxId = useId();
@@ -368,7 +372,10 @@ export const ExplorerQueryInput = ({
         error={Boolean(error)}
         fullWidth
         helperText={error && !errorContainer ? errorMessage(error) : undefined}
-        inputRef={inputRef}
+        inputRef={(element: HTMLInputElement | null) => {
+          inputRef.current = element;
+          if (queryInputRef) queryInputRef.current = element;
+        }}
         label={t('explorer.query')}
         onBlur={() => {
           setFocused(false);

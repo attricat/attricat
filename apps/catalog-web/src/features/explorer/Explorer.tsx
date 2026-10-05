@@ -1,5 +1,5 @@
 import { Box, Typography, useMediaQuery, useTheme } from '@mui/material';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useMobileExplorePanelTarget } from '../../components/mobileNavigationPanelContext';
@@ -39,6 +39,7 @@ type Props = {
 
 export const Explorer = ({ search: urlSearch, savedView }: Props) => {
   const { t } = useTranslation();
+  const queryInputRef = useRef<HTMLInputElement>(null);
   const theme = useTheme();
   const isWideDesktop = useMediaQuery(theme.breakpoints.up('lg'));
   const mobileExplorePanelTarget = useMobileExplorePanelTarget();
@@ -162,6 +163,7 @@ export const Explorer = ({ search: urlSearch, savedView }: Props) => {
             endActions={
               <ShareSearchButton actions={savedSearchActions} search={search} />
             }
+            queryInputRef={queryInputRef}
           />
           <ActiveExplorerFilters
             attributes={selectedBlueprint.data?.attributes}
@@ -177,6 +179,7 @@ export const Explorer = ({ search: urlSearch, savedView }: Props) => {
                 selectedCount: facet.selectedIds.length,
               })),
             ]}
+            emptyFocusTarget={queryInputRef}
             onRemoveAttribute={actions.removeAttributeFilter}
             onRemoveRelationship={(field) =>
               actions.updateFacet(field, { selectedIds: [] })
