@@ -333,6 +333,163 @@ async fn approved_entity_edits_apply_to_the_proposed_state_and_name_their_target
 }
 
 #[sqlx::test]
+async fn agent_reads_incoming_links_hierarchies_labels_and_reusable_attributes(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    create_blueprint(&client, &base_url,
+        "format_version = 1\ncode = \"linked_part\"\nname = \"Linked part\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"\n\n[[attributes]]\ncode = \"parent\"\nvalue_type = \"relationship\"\ntarget_blueprint = \"linked_part\"\ncardinality = \"one\"").await;
+    create_blueprint(&client, &base_url,
+        "format_version = 1\ncode = \"linked_order\"\nname = \"Linked order\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"\n\n[[attributes]]\ncode = \"parts\"\nvalue_type = \"relationship\"\ntarget_blueprint = \"linked_part\"").await;
+    let create = |blueprint: &'static str,
+                  title: &'static str,
+                  links: Vec<(&'static str, Value)>| {
+        let client = client.clone();
+        let base_url = base_url.clone();
+        async move {
+            let mut values = vec![
+                json!({"kind":"scalar","attribute_code":"title","context_id":null,"value":title}),
+            ];
+            values.extend(links.into_iter().map(|(field, target)| {
+                json!({"kind":"relationship","attribute_code":field,"context_id":null,"target_entity_id":target})
+            }));
+            let entity: Value = client
+                .post(format!("{base_url}/v1/entities"))
+                .json(&json!({"blueprint":{"code":blueprint},"values":values}))
+                .send()
+                .await
+                .unwrap()
+                .error_for_status()
+                .unwrap()
+                .json()
+                .await
+                .unwrap();
+            entity["id"].clone()
+        }
+    };
+    let root = create("linked_part", "Frame", vec![]).await;
+    let wheel = create("linked_part", "Wheel", vec![("parent", root.clone())]).await;
+    let spoke = create("linked_part", "Spoke", vec![("parent", wheel.clone())]).await;
+    create("linked_order", "Order 1", vec![("parts", root.clone())]).await;
+    let workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
+    let actor: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
+    let repository = CatalogRepository::system(pool)
+        .for_workspace(workspace)
+        .await
+        .unwrap();
+    let read = |name: &'static str, arguments: Value| {
+        execute_read(&repository, actor, workspace, name, arguments)
+    };
+
+    // Without selectors, every linking field is found and searched.
+    let incoming = read("get_incoming_relationships", json!({"entity_id": root}))
+        .await
+        .unwrap();
+    assert_eq!(
+        incoming["fields"],
+        json!([
+            {"source_blueprint":"linked_order","field":"parts","source_count":1},
+            {"source_blueprint":"linked_part","field":"parent","source_count":1},
+        ])
+    );
+    assert_eq!(incoming["items"].as_array().unwrap().len(), 2);
+    let paged = read(
+        "get_incoming_relationships",
+        json!({"entity_id": root, "relationships": [{"source_blueprint":"linked_part","field":"parent"}], "page": {"size": 1}}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(paged["items"][0]["id"], wheel);
+    assert_eq!(paged["items"][0]["display"]["default"], "Wheel");
+    assert!(paged["next_cursor"].is_null());
+    let unlinked = read("get_incoming_relationships", json!({"entity_id": spoke}))
+        .await
+        .unwrap();
+    assert_eq!(unlinked["fields"], json!([]));
+    assert_eq!(unlinked["items"], json!([]));
+    assert!(
+        read(
+            "get_incoming_relationships",
+            json!({"entity_id": root, "page": {"size": 51}})
+        )
+        .await
+        .is_err()
+    );
+
+    let hierarchy = read(
+        "get_entity_hierarchy",
+        json!({"entity_id": spoke, "field": "parent"}),
+    )
+    .await
+    .unwrap();
+    let path: Vec<_> = hierarchy["paths"][0]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["id"].clone())
+        .collect();
+    assert!(path.contains(&root) && path.contains(&wheel), "{hierarchy}");
+    assert_eq!(hierarchy["cycle_detected"], false);
+    assert!(
+        read(
+            "get_entity_hierarchy",
+            json!({"entity_id": spoke, "field": "title"})
+        )
+        .await
+        .is_err()
+    );
+
+    let labels = read(
+        "get_entity_labels",
+        json!({"entity_ids": [root, wheel, Uuid::new_v4()]}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(labels["items"].as_array().unwrap().len(), 2);
+    assert!(
+        read("get_entity_labels", json!({"entity_ids": []}))
+            .await
+            .is_err()
+    );
+
+    let draft: Value = client
+        .post(format!("{base_url}/reusable-attributes"))
+        .json(&json!({"definition": "code = \"weight\"\nname = \"Weight\"\nvalue_type = \"number\"\n"}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let listed = read("list_reusable_attributes", json!({})).await.unwrap();
+    assert_eq!(listed["attributes"], json!([]));
+    let drafts = read("list_reusable_attributes", json!({"include_drafts": true}))
+        .await
+        .unwrap();
+    assert_eq!(drafts["attributes"][0]["code"], "weight");
+    assert!(drafts["attributes"][0].get("definition").is_none());
+    let full = read(
+        "list_reusable_attributes",
+        json!({"code": format!("{}:weight", draft["namespace"].as_str().unwrap()), "include_drafts": true}),
+    )
+    .await
+    .unwrap();
+    assert!(
+        full["revisions"][0]["definition"]
+            .as_str()
+            .unwrap()
+            .contains("weight")
+    );
+    assert!(
+        read("list_reusable_attributes", json!({"code": "missing"}))
+            .await
+            .is_err()
+    );
+    server.abort();
+}
+
+#[sqlx::test]
 async fn agent_annotation_and_context_edits_use_catalog_validation(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
@@ -1583,6 +1740,15 @@ async fn agent_read_tools_enforce_initiator_permissions_and_scopes(pool: PgPool)
         ),
         ("get_entity", json!({"entity_id": entity["id"]})),
         (
+            "get_incoming_relationships",
+            json!({"entity_id": entity["id"]}),
+        ),
+        (
+            "get_entity_hierarchy",
+            json!({"entity_id": entity["id"], "field": "parent"}),
+        ),
+        ("list_reusable_attributes", json!({})),
+        (
             "get_entity_context_preview",
             json!({"entity_id": entity["id"], "context_id": context["id"]}),
         ),
@@ -1592,6 +1758,19 @@ async fn agent_read_tools_enforce_initiator_permissions_and_scopes(pool: PgPool)
             Err(ToolError::Forbidden)
         ));
     }
+    // Labels are filtered per entity, so an unreadable entity is omitted.
+    assert_eq!(
+        execute_read(
+            &repository,
+            actor,
+            workspace,
+            "get_entity_labels",
+            json!({"entity_ids": [entity["id"]]}),
+        )
+        .await
+        .unwrap()["items"],
+        json!([])
+    );
 
     let scoped_reader = repository
         .create_workspace_role(

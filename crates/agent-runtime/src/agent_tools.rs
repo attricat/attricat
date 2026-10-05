@@ -15,7 +15,8 @@ use crate::{
     catalog_read_service::CatalogReadService,
     catalog_service::CatalogMutationService,
     constants::{
-        DEFAULT_ENTITY_PAGE_SIZE, DEFAULT_PAGE_SIZE, DEFAULT_STALE_AFTER_DAYS, MAX_STALE_AFTER_DAYS,
+        DEFAULT_ENTITY_PAGE_SIZE, DEFAULT_INCOMING_RELATIONSHIP_PAGE_SIZE, DEFAULT_PAGE_SIZE,
+        DEFAULT_PREVIEW_RELATIONSHIP_DEPTH, DEFAULT_STALE_AFTER_DAYS, MAX_STALE_AFTER_DAYS,
     },
     file_access::{AllowFileAccess, FileAccessOperation, authorize_file_read},
     repository::{AuthorizationActor, CatalogRepository, EntitySearchSort, RepositoryError},
@@ -34,6 +35,8 @@ const AUTHORING_GUIDE_TOPICS: [(&str, &str); 4] = [
     ("status_control", STATUS_CONTROL_GUIDE),
 ];
 const MAX_SEARCH_FILTERS: usize = 20;
+/// Matches the HTTP entity label route.
+const MAX_ENTITY_LABEL_IDS: usize = 100;
 /// Single-entity mutations whose approved write must apply to the entity
 /// state the proposal was made against; see [`pin_entity_versions`].
 const VERSION_PINNED_TOOLS: [&str; 9] = [
@@ -282,6 +285,26 @@ pub fn definitions() -> Vec<ToolDefinition> {
             json!({"type":"object","required":["entity_id"],"properties":{"entity_id":{"type":"string","format":"uuid"}},"additionalProperties":false}),
         ),
         definition(
+            "get_entity_labels",
+            "Get display labels for up to 100 entity IDs in one call, as {id, blueprint_code, display} with display per context code. Use it to name entities referenced by relationship targets, findings, history or error details instead of calling get_entity for each. Entities the user cannot read and deleted entities are omitted.",
+            json!({"type":"object","required":["entity_ids"],"properties":{"entity_ids":{"type":"array","minItems":1,"maxItems":MAX_ENTITY_LABEL_IDS,"items":{"type":"string","format":"uuid"}}},"additionalProperties":false}),
+        ),
+        definition(
+            "get_incoming_relationships",
+            "Find the entities that link to an entity through their relationship fields: what uses, contains or references it. Returns fields (each source_blueprint and field with a source_count) and a page of linking entities with display labels. Without relationships, every field that links to the entity is searched; pass relationships ({source_blueprint, field}) from fields to page through one field. Call it before deleting an entity or changing what it means.",
+            json!({"type":"object","required":["entity_id"],"properties":{"entity_id":{"type":"string","format":"uuid"},"relationships":{"type":"array","minItems":1,"maxItems":MAX_SEARCH_FILTERS,"items":{"type":"object","required":["source_blueprint","field"],"properties":{"source_blueprint":{"type":"string"},"field":{"type":"string"}},"additionalProperties":false}},"page":{"type":"object","properties":{"size":{"type":"integer","minimum":1,"maximum":DEFAULT_INCOMING_RELATIONSHIP_PAGE_SIZE},"cursor":{"type":"string"}},"additionalProperties":false}},"additionalProperties":false}),
+        ),
+        definition(
+            "get_entity_hierarchy",
+            "Read an entity's place in a self-referencing relationship hierarchy (a field whose target blueprint is the entity's own, such as parent): its ancestor paths with display labels, and whether the walk was truncated, found several parents, or detected a cycle. context_id defaults to the default context. Use it to explain relationship_cycle errors and tree positions.",
+            json!({"type":"object","required":["entity_id","field"],"properties":{"entity_id":{"type":"string","format":"uuid"},"field":{"type":"string"},"context_id":{"type":"string","format":"uuid"}},"additionalProperties":false}),
+        ),
+        definition(
+            "list_reusable_attributes",
+            "List the workspace's reusable attribute definitions (referenced as namespace:code) and reusable attribute groups. Without code, returns summaries of each published revision (and drafts with include_drafts); with code (or namespace:code), returns the full revisions of that definition, including its TOML definition and value_schema.",
+            json!({"type":"object","properties":{"code":{"type":"string"},"include_drafts":{"type":"boolean"}},"additionalProperties":false}),
+        ),
+        definition(
             "view_image",
             "View an image file linked to an entity. Use get_entity first to find its file ID. The image is supplied to the model as a bounded display image.",
             json!({"type":"object","required":["file_id"],"properties":{"file_id":{"type":"string","format":"uuid"}},"additionalProperties":false}),
@@ -334,7 +357,7 @@ pub fn definitions() -> Vec<ToolDefinition> {
         definition(
             "delete_entity",
             concat!(
-                "Delete an entity. This change requires approval.",
+                "Delete an entity. Call get_incoming_relationships first and tell the user which records link to it. This change requires approval.",
                 pinned_note!()
             ),
             json!({"type":"object","required":["entity_id"],"properties":{"entity_id":{"type":"string","format":"uuid"},"expected_updated_at":expected_updated_at_parameter()},"additionalProperties":false}),
@@ -595,6 +618,10 @@ pub fn kind(name: &str) -> Result<ToolKind, ToolError> {
         | "get_extension_operation_run"
         | "list_blueprint_connector_jobs"
         | "get_entity_preview_link"
+        | "get_entity_labels"
+        | "get_incoming_relationships"
+        | "get_entity_hierarchy"
+        | "list_reusable_attributes"
         | "view_image"
         | "read_file"
         | "search_entities"
@@ -1234,6 +1261,117 @@ pub async fn execute_read(
                 .await?
                 .ok_or(RepositoryError::NotFound("entity"))?;
             json!({"entity_id": id, "url": format!("/entities/{id}"), "label": "Entity preview"})
+        }
+        "get_entity_labels" => {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct Input { entity_ids: Vec<Uuid> }
+            let mut entity_ids = decode::<Input>(arguments)?.entity_ids;
+            entity_ids.sort_unstable();
+            entity_ids.dedup();
+            if entity_ids.is_empty() || entity_ids.len() > MAX_ENTITY_LABEL_IDS {
+                return Err(ToolError::InvalidArguments(format!(
+                    "entity_ids must contain between 1 and {MAX_ENTITY_LABEL_IDS} distinct IDs"
+                )));
+            }
+            let readable = repository
+                .authorized_entity_ids(actor, workspace, "entities.read", &entity_ids)
+                .await?;
+            entity_ids.retain(|id| readable.contains(id));
+            json!({"items": repository.entity_labels(&entity_ids).await?})
+        }
+        "get_incoming_relationships" => {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct Input {
+                entity_id: Uuid,
+                relationships: Option<Vec<crate::model::IncomingRelationshipSelector>>,
+                #[serde(default)]
+                page: crate::model::SearchPage,
+            }
+            let input: Input = decode(arguments)?;
+            let limit = input.page.size.unwrap_or(DEFAULT_PAGE_SIZE);
+            if limit == 0 || limit > DEFAULT_INCOMING_RELATIONSHIP_PAGE_SIZE {
+                return Err(ToolError::InvalidArguments(format!(
+                    "page.size must be between 1 and {DEFAULT_INCOMING_RELATIONSHIP_PAGE_SIZE}"
+                )));
+            }
+            let cursor = input.page.cursor.as_deref().map(|cursor| {
+                super::repository::decode_search_cursor(cursor).ok_or_else(|| {
+                    ToolError::InvalidArguments("page.cursor is invalid".to_owned())
+                })
+            }).transpose()?;
+            let fields = repository.incoming_relationship_fields(input.entity_id).await?;
+            let selectors = match input.relationships {
+                Some(selectors) if selectors.is_empty() || selectors.len() > MAX_SEARCH_FILTERS => {
+                    return Err(ToolError::InvalidArguments(format!(
+                        "relationships must contain 1 to {MAX_SEARCH_FILTERS} selectors"
+                    )));
+                }
+                Some(selectors) => selectors,
+                None => fields.iter().map(|field| crate::model::IncomingRelationshipSelector {
+                    source_blueprint: field.source_blueprint.clone(),
+                    field: field.field.clone(),
+                }).collect(),
+            };
+            let page = if selectors.is_empty() {
+                crate::model::IncomingRelationshipsPage { items: Vec::new(), next_cursor: None }
+            } else {
+                repository
+                    .incoming_relationships(input.entity_id, selectors, limit.into(), cursor)
+                    .await?
+            };
+            json!({"fields": fields, "items": page.items, "next_cursor": page.next_cursor})
+        }
+        "get_entity_hierarchy" => {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct Input { entity_id: Uuid, field: String, context_id: Option<Uuid> }
+            let input: Input = decode(arguments)?;
+            let context_id = match input.context_id {
+                Some(context_id) => context_id,
+                None => repository.get_context_by_code("default").await?
+                    .ok_or(RepositoryError::NotFound("context"))?.id,
+            };
+            serde_json::to_value(repository
+                .hierarchy(input.entity_id, context_id, &input.field, DEFAULT_PREVIEW_RELATIONSHIP_DEPTH)
+                .await?
+                .ok_or(RepositoryError::NotFound("entity"))?)
+                .expect("hierarchy serializes")
+        }
+        "list_reusable_attributes" => {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct Input { code: Option<String>, #[serde(default)] include_drafts: bool }
+            let input: Input = decode(arguments)?;
+            let attributes = repository.list_reusable_attributes(input.include_drafts).await?;
+            match input.code.as_deref().map(str::trim) {
+                Some(code) => {
+                    let (namespace, code) = match code.split_once(':') {
+                        Some((namespace, code)) => (Some(namespace), code),
+                        None => (None, code),
+                    };
+                    let revisions: Vec<_> = attributes.into_iter()
+                        .filter(|attribute| attribute.code == code
+                            && namespace.is_none_or(|namespace| attribute.namespace == namespace))
+                        .collect();
+                    if revisions.is_empty() {
+                        return Err(RepositoryError::NotFound("reusable attribute").into());
+                    }
+                    json!({"revisions": revisions})
+                }
+                None => json!({
+                    "attributes": attributes.into_iter().map(|attribute| json!({
+                        "id": attribute.id, "definition_id": attribute.definition_id,
+                        "namespace": attribute.namespace, "code": attribute.code,
+                        "name": attribute.name, "version": attribute.version,
+                        "status": attribute.status, "value_type": attribute.value_type,
+                        "target_blueprint_code": attribute.target_blueprint_code,
+                        "cardinality": attribute.cardinality,
+                    })).collect::<Vec<_>>(),
+                    "groups": repository.list_reusable_attribute_groups().await?,
+                }),
+            }
         }
         "get_entity_context_preview" => {
             let entity_id = parse_uuid(&arguments, "entity_id")?;
@@ -2496,9 +2634,13 @@ async fn read_authorized(
     let (permission, target_id, target_code) = match name {
         // This is static product documentation, not workspace catalog data.
         "blueprint_authoring_guide" => return Ok(true),
-        "list_blueprints" | "get_blueprint" | "get_blueprint_revision" => {
-            ("blueprints.read", None, None)
-        }
+        "list_blueprints"
+        | "get_blueprint"
+        | "get_blueprint_revision"
+        | "list_reusable_attributes" => ("blueprints.read", None, None),
+        // Like the HTTP label route, each ID is authorized when the tool runs
+        // and unreadable entities are omitted.
+        "get_entity_labels" => return Ok(true),
         "data_health_summary" => ("data_health.read", None, None),
         "list_rule_findings" | "get_rule_definition" | "list_rule_runs" => {
             ("rules.read", None, None)
@@ -2523,7 +2665,9 @@ async fn read_authorized(
         | "get_entity_preview_link"
         | "get_entity_publications"
         | "get_entity_publication_readiness"
-        | "get_entity_record_controls" => (
+        | "get_entity_record_controls"
+        | "get_incoming_relationships"
+        | "get_entity_hierarchy" => (
             "entities.read",
             Some(parse_uuid(arguments, "entity_id")?),
             None,
@@ -3134,6 +3278,25 @@ mod tests {
             .unwrap(),
             "Apply 2 changes together; all succeed or none do: 1. delete entity product 'Desk' (e1); 2. update entity e2."
         );
+    }
+
+    #[test]
+    fn every_defined_tool_has_a_kind_and_a_unique_name() {
+        let definitions = definitions();
+        let mut names = std::collections::HashSet::new();
+        for tool in &definitions {
+            assert!(kind(tool.function.name).is_ok(), "{}", tool.function.name);
+            assert!(names.insert(tool.function.name), "{}", tool.function.name);
+        }
+        for name in [
+            "get_entity_labels",
+            "get_incoming_relationships",
+            "get_entity_hierarchy",
+            "list_reusable_attributes",
+        ] {
+            assert!(names.contains(name));
+            assert_eq!(kind(name).unwrap(), ToolKind::Read);
+        }
     }
 
     #[test]

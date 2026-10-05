@@ -386,6 +386,46 @@ impl CatalogRepository {
             .collect())
     }
 
+    /// The relationship fields whose active values on live entities target
+    /// `entity_id`, with the number of distinct source entities per field,
+    /// so a caller can find every incoming edge without naming selectors.
+    pub async fn incoming_relationship_fields(
+        &self,
+        entity_id: Uuid,
+    ) -> Result<Vec<IncomingRelationshipField>, RepositoryError> {
+        self.get_entity(entity_id)
+            .await?
+            .ok_or(RepositoryError::NotFound("entity"))?;
+        Ok(sqlx::query_as::<_, (String, String, i64)>(
+            r#"SELECT b.code, a.code, COUNT(DISTINCT source.id)
+               FROM attribute_values av
+               JOIN attributes a ON a.id = av.attribute_id
+                AND a.workspace_id = $2 AND a.deleted_at IS NULL
+                AND a.value_type = 'relationship'
+               JOIN entities source ON source.id = av.entity_id
+                AND source.workspace_id = $2 AND source.deleted_at IS NULL
+               JOIN blueprints b ON b.id = source.blueprint_id
+                AND b.version = source.blueprint_version AND b.workspace_id = $2
+               WHERE av.workspace_id = $2 AND av.active
+                 AND av.relationship_target_entity_id = $1
+               GROUP BY b.code, a.code
+               ORDER BY b.code, a.code"#,
+        )
+        .bind(entity_id)
+        .bind(self.workspace_id.0)
+        .fetch_all(&self.pool)
+        .await?
+        .into_iter()
+        .map(
+            |(source_blueprint, field, source_count)| IncomingRelationshipField {
+                source_blueprint,
+                field,
+                source_count,
+            },
+        )
+        .collect())
+    }
+
     pub async fn incoming_relationships(
         &self,
         entity_id: Uuid,

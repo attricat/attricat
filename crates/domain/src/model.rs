@@ -421,6 +421,15 @@ pub struct IncomingRelationshipsRequest {
     pub page: SearchPage,
 }
 
+/// A relationship field that currently links some live entities to a target,
+/// with how many distinct source entities it links.
+#[derive(Clone, Debug, Serialize)]
+pub struct IncomingRelationshipField {
+    pub source_blueprint: String,
+    pub field: String,
+    pub source_count: i64,
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct IncomingRelationshipItem {
     pub id: Uuid,

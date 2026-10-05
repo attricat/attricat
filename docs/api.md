@@ -807,7 +807,12 @@ reaches a repository write. `list_blueprints` returns blueprint summaries
 without definitions; `get_blueprint` reads one blueprint's definition and
 attributes by code, and `blueprint_authoring_guide` serves the authoring
 documentation one topic per call so every result stays within the tool result
-bound. Built-in tools include exact blueprint-revision
+bound. `get_incoming_relationships` lists the relationship fields that link to
+an entity with a count per field, then pages through the linking entities;
+`get_entity_hierarchy` reads a self-referencing hierarchy; `get_entity_labels`
+names up to 100 entities, omitting those the initiating user cannot read; and
+`list_reusable_attributes` lists reusable attribute definitions and groups.
+Built-in tools include exact blueprint-revision
 inspection and read-only entity migration assessment, plus approved replacement
 or removal of relationship targets. Replacement sets the complete target list
 for each specified attribute/context (an empty list clears it); removal unlinks
