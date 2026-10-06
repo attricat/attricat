@@ -35,7 +35,9 @@ export const AuthFormShell = ({
         }}
         sx={{ p: 4, width: authFormWidth }}
       >
-        <Stack spacing={2}>{children}</Stack>
+        <Stack spacing={2} useFlexGap>
+          {children}
+        </Stack>
       </Paper>
     </Stack>
   );

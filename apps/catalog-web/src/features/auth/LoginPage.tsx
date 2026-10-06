@@ -197,7 +197,9 @@ const PasswordLoginForm = ({
     <LoginShell onSubmit={() => form.handleSubmit()}>
       <Typography variant="h5">{t('auth.signInTo', { identifier })}</Typography>
       {samples?.demo ? (
-        <Alert severity="info">{t('auth.demoNotice')}</Alert>
+        <Alert severity="info" sx={{ mb: 2 }}>
+          {t('auth.demoNotice')}
+        </Alert>
       ) : (
         <Button component={Link} to="/login" variant="text">
           {t('auth.changeWorkspace')}
