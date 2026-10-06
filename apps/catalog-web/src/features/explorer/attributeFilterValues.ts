@@ -1,4 +1,5 @@
 import type { Attribute } from '../entities/api';
+import { PRESENCE_FILTER_OPERATOR } from '../entities/constants';
 import type { AttributeFilterOperator } from './attributeFilters';
 import { defaultAttributeFilterOperator } from './constants';
 import {
@@ -47,7 +48,10 @@ export const parseAttributeFilterValue = (
   valueType: ValueType,
   value: string,
   timeZone: string,
+  operator?: AttributeFilterOperator,
 ): AttributeFilter['value'] => {
+  if (operator === PRESENCE_FILTER_OPERATOR)
+    return value === booleanFilterValues.true;
   if (valueType === 'number') return Number(value);
   if (valueType === 'integer') return Number.parseInt(value, 10);
   if (valueType === 'boolean') return value === booleanFilterValues.true;
@@ -58,7 +62,13 @@ export const parseAttributeFilterValue = (
 export const isAttributeFilterValueValid = (
   valueType: ValueType,
   value: string,
+  operator?: AttributeFilterOperator,
 ) => {
+  if (operator === PRESENCE_FILTER_OPERATOR) {
+    return (
+      value === booleanFilterValues.true || value === booleanFilterValues.false
+    );
+  }
   const numericValue = Number(value);
   return (
     value !== '' &&
@@ -90,7 +100,8 @@ export const attributeFilterInputValue = (
   timeZone: string,
 ) => {
   const inputValue = String(filter.value);
-  return valueType === 'datetime'
+  return valueType === 'datetime' &&
+    filter.operator !== PRESENCE_FILTER_OPERATOR
     ? isoToZonedDateTime(inputValue, timeZone)
     : inputValue;
 };

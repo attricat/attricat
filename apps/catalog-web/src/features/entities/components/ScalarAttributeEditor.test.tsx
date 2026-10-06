@@ -22,12 +22,13 @@ const status: Attribute = {
 const renderEditor = (
   attribute: Attribute,
   component?: typeof urlEdit | null,
+  value = '',
 ) =>
   render(
     <ScalarAttributeEditor
       attribute={attribute}
       component={component}
-      value=""
+      value={value}
       disabled={false}
       onChange={vi.fn()}
     />,
@@ -49,6 +50,30 @@ describe('ScalarAttributeEditor', () => {
   it('falls back to the built-in input for unsupported components', () => {
     renderEditor({ code: 'count', value_type: 'integer' }, urlEdit);
     expect(screen.getByRole('spinbutton', { name: 'count' })).toBeTruthy();
+  });
+
+  it.each(['', '2026-09-30'])(
+    'keeps native date labels floated for value %j',
+    (value) => {
+      renderEditor({ code: 'recorded_on', value_type: 'date' }, null, value);
+      expect(screen.getByLabelText('recorded on').getAttribute('type')).toBe(
+        'date',
+      );
+      expect(
+        screen
+          .getByText('recorded on', { selector: 'label' })
+          .getAttribute('data-shrink'),
+      ).toBe('true');
+    },
+  );
+
+  it('preserves normal floating-label behavior for an empty text field', () => {
+    renderEditor({ code: 'name', value_type: 'string' });
+    expect(
+      screen
+        .getByText('name', { selector: 'label' })
+        .getAttribute('data-shrink'),
+    ).toBe('false');
   });
 
   it.each([

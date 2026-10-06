@@ -56,6 +56,7 @@ const BuiltInEditor = ({
       </TextField>
     );
   const json = attribute.value_type === attributeValueTypes.json;
+  const date = attribute.value_type === attributeValueTypes.date;
   return (
     <TextField
       {...common}
@@ -63,15 +64,11 @@ const BuiltInEditor = ({
       minRows={json ? JSON_EDITOR_MIN_ROWS : undefined}
       placeholder={scalarValuePlaceholders[attribute.value_type]}
       slotProps={{
+        // Native date inputs show date segments even while empty.
+        inputLabel: date ? { shrink: true } : undefined,
         htmlInput: { inputMode: numeric(attribute) ? 'decimal' : undefined },
       }}
-      type={
-        attribute.value_type === attributeValueTypes.date
-          ? 'date'
-          : numeric(attribute)
-            ? 'number'
-            : undefined
-      }
+      type={date ? 'date' : numeric(attribute) ? 'number' : undefined}
     />
   );
 };

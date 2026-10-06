@@ -124,12 +124,15 @@ pub(crate) async fn resolve_agent_filter(
             value,
         });
     }
+    let presence = filter.operator == catalog_validation::saved_search::FILTER_OPERATOR_IS_SET;
     let valid_operator = match value_type.as_str() {
-        "string" => matches!(filter.operator.as_str(), "eq" | "contains" | "starts_with"),
-        "number" | "integer" | "date" | "datetime" | "time" => {
-            matches!(filter.operator.as_str(), "eq" | "gt" | "gte" | "lt" | "lte")
+        "string" => {
+            presence || matches!(filter.operator.as_str(), "eq" | "contains" | "starts_with")
         }
-        "boolean" => filter.operator == "eq",
+        "number" | "integer" | "date" | "datetime" | "time" => {
+            presence || matches!(filter.operator.as_str(), "eq" | "gt" | "gte" | "lt" | "lte")
+        }
+        "boolean" => presence || filter.operator == "eq",
         _ => false,
     };
     if !valid_operator {
@@ -138,28 +141,32 @@ pub(crate) async fn resolve_agent_filter(
             filter.operator, value_type, filter.field
         )));
     }
-    let value = match value_type.as_str() {
-        "string" => filter.value.as_str().map(str::to_owned),
-        "number" => filter.value.as_number().map(ToString::to_string),
-        "integer" => filter.value.as_i64().map(|value| value.to_string()),
-        "boolean" => filter.value.as_bool().map(|value| value.to_string()),
-        "date" => filter.value.as_str().and_then(|value| {
-            chrono::NaiveDate::parse_from_str(value, "%Y-%m-%d")
-                .ok()
-                .map(|_| value.to_owned())
-        }),
-        "datetime" => filter.value.as_str().and_then(|value| {
-            chrono::DateTime::parse_from_rfc3339(value)
-                .ok()
-                .map(|_| value.to_owned())
-        }),
-        "time" => filter.value.as_str().and_then(|value| {
-            ["%H:%M", "%H:%M:%S", "%H:%M:%S%.f"]
-                .iter()
-                .any(|format| chrono::NaiveTime::parse_from_str(value, format).is_ok())
-                .then(|| value.to_owned())
-        }),
-        _ => None,
+    let value = if presence {
+        filter.value.as_bool().map(|value| value.to_string())
+    } else {
+        match value_type.as_str() {
+            "string" => filter.value.as_str().map(str::to_owned),
+            "number" => filter.value.as_number().map(ToString::to_string),
+            "integer" => filter.value.as_i64().map(|value| value.to_string()),
+            "boolean" => filter.value.as_bool().map(|value| value.to_string()),
+            "date" => filter.value.as_str().and_then(|value| {
+                chrono::NaiveDate::parse_from_str(value, "%Y-%m-%d")
+                    .ok()
+                    .map(|_| value.to_owned())
+            }),
+            "datetime" => filter.value.as_str().and_then(|value| {
+                chrono::DateTime::parse_from_rfc3339(value)
+                    .ok()
+                    .map(|_| value.to_owned())
+            }),
+            "time" => filter.value.as_str().and_then(|value| {
+                ["%H:%M", "%H:%M:%S", "%H:%M:%S%.f"]
+                    .iter()
+                    .any(|format| chrono::NaiveTime::parse_from_str(value, format).is_ok())
+                    .then(|| value.to_owned())
+            }),
+            _ => None,
+        }
     }
     .ok_or_else(|| {
         invalid(format!(
