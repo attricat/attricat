@@ -211,6 +211,8 @@ const lifecycleSchema = z.object({
   new_state: z.string().nullable(),
   outcome: z.string(),
   actor_user_id: z.uuid().nullable(),
+  actor_display_name: z.string().nullable(),
+  actor_email: z.string().nullable(),
   actor_token_id: z.uuid().nullable(),
   source: z.string().nullable(),
   diagnostics: jsonValue,

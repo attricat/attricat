@@ -16,6 +16,7 @@ export const commentSchema = z.object({
   id: z.uuid(),
   author_user_id: z.uuid(),
   author_display_name: z.string().nullable(),
+  author_email: z.string(),
   body: z.string(),
   revision: z.number().int().positive(),
   created_at: z.string().datetime(),

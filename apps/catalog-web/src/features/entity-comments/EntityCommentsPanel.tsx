@@ -61,9 +61,12 @@ const CommentItem = ({
         spacing={1}
         sx={{ alignItems: 'baseline', flexWrap: 'wrap', mb: 1 }}
       >
-        <UserAvatar name={comment.author_display_name} size={32} />
+        <UserAvatar
+          name={comment.author_display_name || comment.author_email}
+          size={32}
+        />
         <Typography variant="subtitle2">
-          {comment.author_display_name || t('comments.unknownAuthor')}
+          {comment.author_display_name || comment.author_email}
         </Typography>
         <Typography component="span" variant="caption" color="text.secondary">
           <Timestamp value={comment.created_at} />

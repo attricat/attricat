@@ -68,6 +68,10 @@ async fn readers_can_comment_but_only_authors_can_edit(pool: PgPool) {
         .unwrap();
     assert_eq!(page["items"][0]["author_user_id"], user.to_string());
     assert_eq!(page["items"][0]["author_display_name"], "Reader");
+    assert_eq!(
+        page["items"][0]["author_email"],
+        "comment-viewer@example.test"
+    );
     assert_eq!(page["items"][0]["body"], "**Hello** 🦀");
     let comment = page["items"][0]["id"].as_str().unwrap();
     let edit = format!("{path}/{comment}");

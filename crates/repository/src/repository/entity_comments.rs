@@ -12,6 +12,7 @@ pub struct EntityComment {
     pub id: Uuid,
     pub author_user_id: Uuid,
     pub author_display_name: Option<String>,
+    pub author_email: String,
     pub body: String,
     pub revision: i64,
     pub created_at: DateTime<Utc>,
@@ -35,7 +36,7 @@ impl CatalogRepository {
         self.lock_entity(&mut transaction, entity).await?;
         let (time, id) = before.map_or((None, None), |(time, id)| (Some(time), Some(id)));
         let rows = sqlx::query_as(
-            "SELECT c.id,c.author_user_id,u.display_name AS author_display_name,c.body,c.revision,c.created_at,c.updated_at FROM entity_comments c JOIN users u ON u.id=c.author_user_id WHERE c.workspace_id=$1 AND c.entity_id=$2 AND ($3::timestamptz IS NULL OR (c.created_at,c.id)<($3,$4::uuid)) ORDER BY c.created_at DESC,c.id DESC LIMIT $5",
+            "SELECT c.id,c.author_user_id,u.display_name AS author_display_name,u.email AS author_email,c.body,c.revision,c.created_at,c.updated_at FROM entity_comments c JOIN users u ON u.id=c.author_user_id WHERE c.workspace_id=$1 AND c.entity_id=$2 AND ($3::timestamptz IS NULL OR (c.created_at,c.id)<($3,$4::uuid)) ORDER BY c.created_at DESC,c.id DESC LIMIT $5",
         )
         .bind(self.workspace_id_for_runtime()).bind(entity).bind(time).bind(id)
         .bind(COMMENT_PAGE_SIZE + 1).fetch_all(&mut *transaction).await?;

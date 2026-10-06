@@ -224,6 +224,8 @@ pub struct ExtensionLifecycleRecord {
     pub new_state: Option<String>,
     pub outcome: String,
     pub actor_user_id: Option<Uuid>,
+    pub actor_display_name: Option<String>,
+    pub actor_email: Option<String>,
     pub actor_token_id: Option<Uuid>,
     pub source: Option<String>,
     pub diagnostics: Value,
@@ -1469,7 +1471,7 @@ impl CatalogRepository {
         &self,
         extension_id: &str,
     ) -> Result<Vec<ExtensionLifecycleRecord>, RepositoryError> {
-        Ok(sqlx::query_as("SELECT id, workspace_id, installation_id, extension_id, installed_release_id, operation, prior_state, new_state, outcome, actor_user_id, actor_token_id, source, diagnostics, created_at FROM extension_lifecycle_records WHERE workspace_id = $1 AND extension_id = $2 ORDER BY created_at, id")
+        Ok(sqlx::query_as("SELECT r.id, r.workspace_id, r.installation_id, r.extension_id, r.installed_release_id, r.operation, r.prior_state, r.new_state, r.outcome, r.actor_user_id, u.display_name AS actor_display_name, u.email AS actor_email, r.actor_token_id, r.source, r.diagnostics, r.created_at FROM extension_lifecycle_records r LEFT JOIN users u ON u.id = r.actor_user_id WHERE r.workspace_id = $1 AND r.extension_id = $2 ORDER BY r.created_at, r.id")
             .bind(self.extension_workspace()).bind(extension_id).fetch_all(&self.pool).await?)
     }
 

@@ -20,7 +20,12 @@ const ExtensionLifecycleRecord = ({ record }: { record: LifecycleRecord }) => {
     state === null ? t('extensions.noState') : lifecycleStateLabel(state, t);
   const details = [
     record.actor_user_id
-      ? t('extensions.lifecycleActor', { actor: record.actor_user_id })
+      ? t('extensions.lifecycleActor', {
+          actor:
+            record.actor_display_name ||
+            record.actor_email ||
+            record.actor_user_id,
+        })
       : undefined,
     hasDiagnostics(record.diagnostics)
       ? t('extensions.lifecycleDiagnostics', {

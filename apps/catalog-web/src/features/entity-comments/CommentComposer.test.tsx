@@ -91,6 +91,7 @@ describe('comment composer', () => {
         id: 'comment',
         author_user_id: 'user',
         author_display_name: 'Reader',
+        author_email: 'reader@example.com',
         body: 'Original',
         revision: 2,
         created_at: '2026-01-01T00:00:00Z',
