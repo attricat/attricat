@@ -23,8 +23,13 @@ export const filterableValueTypes = [
   'time',
 ] as const;
 
+/** File values can only be filtered by whether any file is attached. */
+export const presenceOnlyValueTypes = ['file'] as const;
+
 export const isFilterableAttribute = (attribute: Attribute) =>
-  filterableValueTypes.some((valueType) => valueType === attribute.value_type);
+  [...filterableValueTypes, ...presenceOnlyValueTypes].some(
+    (valueType) => valueType === attribute.value_type,
+  );
 
 export const operatorsForValueType = (
   valueType: Attribute['value_type'],
@@ -32,6 +37,7 @@ export const operatorsForValueType = (
   if (valueType === 'string')
     return ['eq', 'contains', 'starts_with', PRESENCE_FILTER_OPERATOR];
   if (valueType === 'boolean') return ['eq', PRESENCE_FILTER_OPERATOR];
+  if (valueType === 'file') return [PRESENCE_FILTER_OPERATOR];
   if (
     valueType === 'number' ||
     valueType === 'integer' ||

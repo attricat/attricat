@@ -227,6 +227,9 @@ const SCALAR_FILTER_SQL: &str = r#"WITH RECURSIVE reached(root_id, current_id, d
                       AND av.active AND av.relationship_target_entity_id IS NULL
                       AND av.context_id = (SELECT id FROM attribute_contexts WHERE workspace_id = $8 AND code = 'default')
                     WHERE reached.depth = cardinality($3)
+                      AND (a.value_type <> 'file' OR EXISTS (
+                          SELECT 1 FROM attribute_file_references r
+                           WHERE r.attribute_value_id = av.id AND r.workspace_id = $8))
                       AND CASE
                           WHEN $6 = 'is_set' THEN TRUE
                           WHEN $5 = 'string' AND $6 = 'eq' THEN av.value_text = $7
@@ -265,7 +268,8 @@ const SCALAR_FILTER_SQL: &str = r#"WITH RECURSIVE reached(root_id, current_id, d
 /// Absence is the complement of presence within the same live root family and
 /// version scope. This also includes roots with no reached relationship leaf,
 /// older revisions without the field, or no attached reusable attribute.
-/// An active scalar row counts as present even for empty text, zero or false.
+/// An active scalar row counts as present even for empty text, zero or false;
+/// a file value is present only while it references at least one file.
 fn presence_filter_query(
     sql: &str,
     filter: &EntitySearchFilter,
@@ -688,6 +692,9 @@ impl CatalogRepository {
                   AND a.workspace_id = $7 AND a.deleted_at IS NULL AND r.searchable
                   AND av.workspace_id = $7 AND av.active AND av.relationship_target_entity_id IS NULL
                   AND av.context_id = (SELECT id FROM attribute_contexts WHERE workspace_id = $7 AND code = 'default')
+                  AND (a.value_type <> 'file' OR EXISTS (
+                      SELECT 1 FROM attribute_file_references fr
+                       WHERE fr.attribute_value_id = av.id AND fr.workspace_id = $7))
                   AND CASE
                     WHEN $5 = 'is_set' THEN TRUE
                     WHEN $4 = 'string' AND $5 = 'eq' THEN av.value_text = $6

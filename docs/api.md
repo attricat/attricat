@@ -362,8 +362,10 @@ values, not truthiness. `true` means at least one reachable value exists; `false
 means none exists. Empty text, zero and boolean false are present values. A missing
 relationship path or a missing leaf therefore matches `is_set: false`. Supported
 leaf types are string, number, integer, boolean, date, datetime and time, including
-assignment/status strings and searchable attached reusable scalars. Relationship,
-file and JSON presence and nondefault-context presence are not supported. Archived
+assignment/status strings and searchable attached reusable scalars. File leaves
+support only `is_set`: a file value is present while it references at least one
+file, so a value whose files were all removed matches `is_set: false`. Relationship
+and JSON presence and nondefault-context presence are not supported. Archived
 values and deleted entities do not count. All-version searches consider the leaf's
 scalar type in each entity's pinned revision, even after a change between supported
 scalar types.

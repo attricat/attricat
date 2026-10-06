@@ -37,7 +37,7 @@ const describeDraft = (
   const availableOperators = operatorsForAttribute(attribute);
   const effectiveOperator = availableOperators.includes(draft.operator)
     ? draft.operator
-    : defaultAttributeFilterOperator;
+    : (availableOperators[0] ?? defaultAttributeFilterOperator);
   return {
     attribute,
     availableOperators,
@@ -196,7 +196,11 @@ export const AttributeFilterDialog = ({
                   return;
                 }
                 field.handleChange(nextField);
-                form.setFieldValue('operator', defaultAttributeFilterOperator);
+                form.setFieldValue(
+                  'operator',
+                  operatorsForAttribute(nextAttribute)[0] ??
+                    defaultAttributeFilterOperator,
+                );
                 form.setFieldValue('value', '');
               }}
               select
