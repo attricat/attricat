@@ -11,6 +11,7 @@ import {
 import type { StoredLexiconEntry } from './schemas';
 import { useLexiconMutations } from './useLexiconMutations';
 import { LEXICON_MANAGEMENT_NAMESPACES } from './constants';
+import { pluralCategoryLabel } from './languages';
 
 export const DeleteLexiconEntryDialog = ({
   entry,
@@ -34,7 +35,7 @@ export const DeleteLexiconEntryDialog = ({
         <DialogContentText>
           {t('lexicon.deleteTranslationDescription', {
             key: entry.key,
-            category: entry.plural_category,
+            category: pluralCategoryLabel(t, entry.plural_category),
           })}
         </DialogContentText>
         {remove.error && (

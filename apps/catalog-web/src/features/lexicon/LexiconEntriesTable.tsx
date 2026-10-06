@@ -15,6 +15,7 @@ import {
 import { PencilIcon, Trash2Icon } from 'lucide-react';
 import { LEXICON_SOURCES, LEXICON_MANAGEMENT_NAMESPACES } from './constants';
 import { lexiconEntryId, lexiconReferenceId } from './entries';
+import { pluralCategoryLabel } from './languages';
 import type { StoredLexiconEntry } from './schemas';
 
 export const LexiconEntriesTable = ({
@@ -77,7 +78,7 @@ export const LexiconEntriesTable = ({
               </TableCell>
               <TableCell>
                 <Chip
-                  label={entry.plural_category}
+                  label={pluralCategoryLabel(t, entry.plural_category)}
                   size="small"
                   variant="outlined"
                 />

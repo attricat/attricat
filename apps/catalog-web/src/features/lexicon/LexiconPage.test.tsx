@@ -144,7 +144,7 @@ describe('LexiconPage', () => {
   it('adds a missing plural form with the category preselected', async () => {
     renderPage();
     await userEvent.click(
-      await screen.findByRole('button', { name: 'Add few' }),
+      await screen.findByRole('button', { name: 'Add “few” form' }),
     );
     const dialog = await screen.findByRole('dialog');
     await userEvent.type(
@@ -160,6 +160,25 @@ describe('LexiconPage', () => {
         plural_category: 'few',
       }),
     );
+  });
+
+  it('names plural forms in the interface language', async () => {
+    await i18n.changeLanguage('pl');
+    try {
+      await i18n.loadNamespaces(LEXICON_MANAGEMENT_NAMESPACE);
+      renderPage();
+      expect(
+        await screen.findByRole('button', { name: 'Dodaj formę „kilka”' }),
+      ).toBeTruthy();
+      expect(
+        screen.getByText(/Brakujące formy liczbowe: kilka, wiele\./),
+      ).toBeTruthy();
+      expect(
+        within(screen.getByRole('table')).getAllByText('inne'),
+      ).toHaveLength(3);
+    } finally {
+      await i18n.changeLanguage('en');
+    }
   });
 
   it('deletes an entry after confirmation', async () => {
@@ -190,7 +209,7 @@ describe('LexiconPage', () => {
       'Add translation',
       'Import',
       'Translate',
-      'Add few',
+      'Add “few” form',
       'Delete translation of Name',
     ])
       expect(screen.queryByRole('button', { name })).toBeNull();

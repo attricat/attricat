@@ -15,6 +15,7 @@ import {
   TextField,
 } from '@mui/material';
 import {
+  DEFAULT_PLURAL_CATEGORY,
   LEXICON_RESERVED_CHARACTERS,
   MAX_LEXICON_CONTEXT_LENGTH,
   MAX_LEXICON_KEY_LENGTH,
@@ -22,7 +23,12 @@ import {
   LEXICON_MANAGEMENT_NAMESPACES,
 } from './constants';
 import type { LexiconEntryDraft } from './entries';
-import { languageLabel, pluralCategories, pluralExamples } from './languages';
+import {
+  languageLabel,
+  pluralCategories,
+  pluralCategoryLabel,
+  pluralExamples,
+} from './languages';
 import { normalizeLexiconTerm } from './references';
 import { useLexiconMutations } from './useLexiconMutations';
 
@@ -170,7 +176,9 @@ export const LexiconEntryDialog = ({
                 <TextField
                   disabled={editing}
                   fullWidth
-                  helperText={t('lexicon.pluralCategoryHelp')}
+                  helperText={t('lexicon.pluralCategoryHelp', {
+                    category: pluralCategoryLabel(t, DEFAULT_PLURAL_CATEGORY),
+                  })}
                   label={t('lexicon.pluralCategory')}
                   onChange={(event) => field.handleChange(event.target.value)}
                   select
@@ -179,7 +187,7 @@ export const LexiconEntryDialog = ({
                   {categories.map((category) => (
                     <MenuItem key={category} value={category}>
                       {t('lexicon.pluralCategoryOption', {
-                        category,
+                        category: pluralCategoryLabel(t, category),
                         examples: pluralExamples(language, category).join(', '),
                       })}
                     </MenuItem>

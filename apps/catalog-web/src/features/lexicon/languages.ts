@@ -1,3 +1,4 @@
+import type { TFunction } from 'i18next';
 import {
   PLURAL_CATEGORIES,
   PLURAL_EXAMPLE_COUNT,
@@ -33,6 +34,10 @@ export const pluralCategories = (language: string): string[] => {
   );
   return PLURAL_CATEGORIES.filter((category) => used.has(category));
 };
+
+/** The translated name of a CLDR plural category; unknown categories show as-is. */
+export const pluralCategoryLabel = (t: TFunction, category: string) =>
+  t(`lexicon.pluralCategories.${category}`, { defaultValue: category });
 
 /** Sample counts that select `category` in `language`, such as 2, 3, 4 for Polish `few`. */
 export const pluralExamples = (language: string, category: string) => {

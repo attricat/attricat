@@ -14,6 +14,7 @@ import {
   LEXICON_MANAGEMENT_NAMESPACES,
 } from './constants';
 import type { LexiconEntryDraft } from './entries';
+import { pluralCategoryLabel } from './languages';
 import type { LexiconReport } from './schemas';
 
 type LanguageCoverage = LexiconReport['languages'][number];
@@ -95,7 +96,9 @@ export const LexiconCoverageSection = ({
               <ListItemText
                 primary={referenceLabel(gap.key, gap.context)}
                 secondary={t('lexicon.missingPluralCategories', {
-                  categories: gap.missing.join(', '),
+                  categories: gap.missing
+                    .map((category) => pluralCategoryLabel(t, category))
+                    .join(', '),
                 })}
               />
               {canEdit && (
@@ -108,7 +111,9 @@ export const LexiconCoverageSection = ({
                       }
                       size="small"
                     >
-                      {t('lexicon.addPluralForm', { category })}
+                      {t('lexicon.addPluralForm', {
+                        category: pluralCategoryLabel(t, category),
+                      })}
                     </Button>
                   ))}
                 </Stack>
