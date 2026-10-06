@@ -87,15 +87,16 @@ struct SavedSearchRelationshipFacet {
 
 fn valid_saved_filter(filter: &crate::model::SearchFilter) -> bool {
     !filter.field.is_empty()
-        && matches!(
-            filter.operator.as_str(),
-            "eq" | "contains" | "starts_with" | "gt" | "gte" | "lt" | "lte"
-        )
-        && (filter.value.is_string() || filter.value.is_number() || filter.value.is_boolean())
+        && catalog_validation::saved_search::FILTER_OPERATORS.contains(&filter.operator.as_str())
+        && if filter.operator == catalog_validation::saved_search::FILTER_OPERATOR_IS_SET {
+            filter.value.is_boolean()
+        } else {
+            filter.value.is_string() || filter.value.is_number() || filter.value.is_boolean()
+        }
 }
 
 fn attribute_filter_parameters() -> Value {
-    json!({"type":"array","maxItems":20,"items":{"type":"object","required":["field","operator","value"],"properties":{"field":{"type":"string"},"operator":{"type":"string","enum":["eq","contains","starts_with","gt","gte","lt","lte"]},"value":{"type":["string","number","boolean"]}},"additionalProperties":false}})
+    json!({"type":"array","maxItems":20,"items":{"type":"object","required":["field","operator","value"],"properties":{"field":{"type":"string"},"operator":{"type":"string","enum":catalog_validation::saved_search::FILTER_OPERATORS},"value":{"type":["string","number","boolean"],"description":"For is_set, use a boolean: true means a present scalar value, false means absent. Empty text, zero and false are present values."}},"additionalProperties":false}})
 }
 
 /// One `values` entry for entity creation, batches and migrations.
@@ -3235,6 +3236,23 @@ mod tests {
             vec![second]
         );
         assert!(crate::search_filters::intersect_ids(Some(vec![first]), vec![second]).is_empty());
+    }
+
+    #[test]
+    fn presence_filters_advertise_and_require_boolean_operands() {
+        assert!(
+            super::attribute_filter_parameters()["items"]["properties"]["operator"]["enum"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("is_set"))
+        );
+        for value in [json!(false), json!(true), json!("false"), json!(0)] {
+            let filter: crate::model::SearchFilter = serde_json::from_value(json!({
+                "field":"responsible", "operator":"is_set", "value":value
+            }))
+            .unwrap();
+            assert_eq!(super::valid_saved_filter(&filter), value.is_boolean());
+        }
     }
 
     #[test]

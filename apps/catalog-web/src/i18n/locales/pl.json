@@ -725,7 +725,12 @@
     "maximumAttributeFilters": "Można zastosować maksymalnie {{count}} filtrów atrybutów.",
     "true": "Prawda",
     "false": "Fałsz",
+    "valueIsSet": "Ma wartość",
+    "valueIsNotSet": "Brak wartości",
+    "attributeFilterIsSet": "{{field}} ma wartość",
+    "attributeFilterIsNotSet": "{{field}} nie ma wartości",
     "filterOperators": {
+      "is_set": "Obecność wartości",
       "eq": "Równa się",
       "contains": "Zawiera",
       "starts_with": "Zaczyna się od",
@@ -735,6 +740,7 @@
       "lte": "Mniejsze lub równe"
     },
     "filterOperatorSymbols": {
+      "is_set": "ma wartość",
       "eq": "=",
       "contains": "zawiera",
       "starts_with": "zaczyna się od",

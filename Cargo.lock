@@ -883,6 +883,7 @@ dependencies = [
  "catalog-repository",
  "catalog-rules",
  "catalog-storage",
+ "catalog-validation",
  "catalog-workers",
  "catalog-workflow",
  "chrono",

@@ -713,7 +713,12 @@
     "maximumAttributeFilters": "A maximum of {{count}} attribute filters can be applied.",
     "true": "True",
     "false": "False",
+    "valueIsSet": "Has a value",
+    "valueIsNotSet": "Not set",
+    "attributeFilterIsSet": "{{field}} is set",
+    "attributeFilterIsNotSet": "{{field}} is not set",
     "filterOperators": {
+      "is_set": "Presence",
       "eq": "Equals",
       "contains": "Contains",
       "starts_with": "Starts with",
@@ -723,6 +728,7 @@
       "lte": "Less than or equal"
     },
     "filterOperatorSymbols": {
+      "is_set": "is set",
       "eq": "=",
       "contains": "contains",
       "starts_with": "starts with",

@@ -24,7 +24,17 @@ pub const STATE_KEYS: &[&str] = &[
     "relationshipFacets",
     "attributeFilters",
 ];
-pub const FILTER_OPERATORS: &[&str] = &["eq", "contains", "starts_with", "gt", "gte", "lt", "lte"];
+pub const FILTER_OPERATOR_IS_SET: &str = "is_set";
+pub const FILTER_OPERATORS: &[&str] = &[
+    "eq",
+    "contains",
+    "starts_with",
+    "gt",
+    "gte",
+    "lt",
+    "lte",
+    FILTER_OPERATOR_IS_SET,
+];
 /// Explorer sort fields that are not attribute paths.
 pub const SYSTEM_SORT_FIELDS: &[&str] = &["blueprint_version", "publication_status"];
 
@@ -44,9 +54,13 @@ fn valid_attribute_filter(filter: &Value) -> bool {
                 .get("operator")
                 .and_then(Value::as_str)
                 .is_some_and(|operator| FILTER_OPERATORS.contains(&operator))
-            && filter
-                .get("value")
-                .is_some_and(|value| value.is_string() || value.is_number() || value.is_boolean())
+            && filter.get("value").is_some_and(|value| {
+                if filter.get("operator").and_then(Value::as_str) == Some(FILTER_OPERATOR_IS_SET) {
+                    value.is_boolean()
+                } else {
+                    value.is_string() || value.is_number() || value.is_boolean()
+                }
+            })
     })
 }
 
@@ -207,6 +221,30 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn presence_filters_require_boolean_values_and_preserve_false() {
+        for value in [json!(true), json!(false)] {
+            let state = json!({"blueprint":"task","attributeFilters":[{
+                "field":"assignee","operator":"is_set","value":value
+            }]});
+            validate_state(EXPLORER_SEARCH_KIND, &state).unwrap();
+            assert_eq!(normalize_state(&state), state);
+        }
+        for value in [json!("false"), json!(0), Value::Null, json!([])] {
+            assert!(
+                validate_state(
+                    EXPLORER_SEARCH_KIND,
+                    &json!({
+                        "blueprint":"task","attributeFilters":[{
+                            "field":"assignee","operator":"is_set","value":value
+                        }]
+                    })
+                )
+                .is_err()
+            );
+        }
     }
 
     #[test]

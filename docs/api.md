@@ -342,8 +342,24 @@ not capped.
 Structured `filters.field` values may name a local scalar or a scalar leaf
 through up to three relationship hops, for example
 `family.product_type.name`. Operators are validated against the resolved leaf
-type. A many-valued path matches when any reachable scalar satisfies the
-criterion. Each hop uses the linked entity's pinned blueprint revision.
+type. Value comparisons on a many-valued path match when any reachable scalar
+satisfies the criterion. Each hop uses the linked entity's pinned blueprint revision.
+
+`is_set` takes a strict boolean operand and tests active default-context scalar
+values, not truthiness. `true` means at least one reachable value exists; `false`
+means none exists. Empty text, zero and boolean false are present values. A missing
+relationship path or a missing leaf therefore matches `is_set: false`. Supported
+leaf types are string, number, integer, boolean, date, datetime and time, including
+assignment/status strings and searchable attached reusable scalars. Relationship,
+file and JSON presence and nondefault-context presence are not supported. Archived
+values and deleted entities do not count. All-version searches consider the leaf's
+scalar type in each entity's pinned revision, even after a change between supported
+scalar types.
+
+For example, `{"field":"responsible","operator":"is_set","value":false}` finds
+records without a recorded assignee; it does not check continuing membership or
+assignment validity. The native Explorer, saved views/share links and agent
+`search_entities` tool preserve the boolean operand.
 
 For a [user or team assignment](blueprints.md#user-or-team-assignments)
 attribute, `{"operator":"eq","value":"@me"}` matches entities assigned to the

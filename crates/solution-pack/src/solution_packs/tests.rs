@@ -4706,6 +4706,59 @@ fn publication_channel_required_rules_compare_as_a_set() {
 }
 
 #[test]
+fn saved_search_presence_is_validated_in_the_contract_and_archive() {
+    let contract: Value = serde_json::from_str(include_str!(
+        "../../../../contracts/solution-pack-saved-search-v1.schema.json"
+    ))
+    .unwrap();
+    catalog_validation::validate_json_schema_definition(&contract).unwrap();
+    for (field, value) in [
+        ("name", json!(false)),
+        ("name", json!(true)),
+        ("name", json!("false")),
+        ("name", json!(0)),
+        ("categories", json!(false)),
+    ] {
+        let mut search: Value = serde_json::from_slice(UNNAMED_SEARCH).unwrap();
+        search["state"]["attributeFilters"][0] = json!({
+            "field":field, "operator":"is_set", "value":value
+        });
+        assert_eq!(
+            catalog_validation::validate_json_schema(&contract, &search)
+                .unwrap()
+                .is_empty(),
+            value.is_boolean()
+        );
+        let bytes = serde_json::to_vec(&search).unwrap();
+        let path = "saved-searches/unnamed.json";
+        let (mut manifest, files) = seed_manifest();
+        manifest["resources"]["saved_searches"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|resource| resource["path"] == path)
+            .unwrap()["sha256"] = json!(digest(&bytes));
+        let files = files
+            .into_iter()
+            .map(|(candidate, content)| {
+                (
+                    candidate,
+                    if candidate == path {
+                        bytes.as_slice()
+                    } else {
+                        content
+                    },
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            ValidatedSolutionPack::from_tar_zst(&archive(&manifest, &files)).is_ok(),
+            value.is_boolean() && field == "name"
+        );
+    }
+}
+
+#[test]
 fn saved_search_state_is_validated_with_physical_codes_while_planning() {
     // A state just under the size limit with logical keys grows past it once
     // its context is mapped to an existing context with a long code.
