@@ -34,7 +34,7 @@ const assigneeAttribute: Attribute = {
 
 describe('attribute filters', () => {
   it('match assignments exactly and show names or "assigned to me"', () => {
-    expect(operatorsForAttribute(assigneeAttribute)).toEqual(['eq']);
+    expect(operatorsForAttribute(assigneeAttribute)).toEqual(['eq', 'is_set']);
     const teamId = '8c3f9a54-2d0c-4f3a-9a7e-1c2b3d4e5f62';
     const directory = {
       users: [],
@@ -58,10 +58,10 @@ describe('attribute filters', () => {
   });
 
   it('match status codes exactly and show their labels', () => {
-    expect(operatorsForAttribute(statusAttribute)).toEqual(['eq']);
+    expect(operatorsForAttribute(statusAttribute)).toEqual(['eq', 'is_set']);
     expect(
       operatorsForAttribute({ code: 'title', value_type: 'string' }),
-    ).toEqual(['eq', 'contains', 'starts_with']);
+    ).toEqual(['eq', 'contains', 'starts_with', 'is_set']);
     const filter = { field: 'status', operator: 'eq' as const, value: 'live' };
     expect(attributeFilterLabel(i18n.t, filter, statusAttribute)).toContain(
       '"Live"',

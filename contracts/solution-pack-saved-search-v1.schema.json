@@ -90,6 +90,24 @@
               "operator",
               "value"
             ],
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "operator": {
+                      "const": "is_set"
+                    }
+                  }
+                },
+                "then": {
+                  "properties": {
+                    "value": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            ],
             "properties": {
               "field": {
                 "type": "string",
@@ -105,7 +123,8 @@
                   "gt",
                   "gte",
                   "lt",
-                  "lte"
+                  "lte",
+                  "is_set"
                 ]
               },
               "value": {

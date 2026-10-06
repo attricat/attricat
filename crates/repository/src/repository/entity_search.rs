@@ -219,13 +219,16 @@ const SCALAR_FILTER_SQL: &str = r#"WITH RECURSIVE reached(root_id, current_id, d
                      JOIN attributes a ON a.blueprint_id = leaf.blueprint_id
                       AND a.blueprint_version = leaf.blueprint_version
                       AND a.workspace_id = $8
-                      AND a.code = $4 AND a.value_type = $5 AND a.deleted_at IS NULL
+                      AND a.code = $4 AND a.deleted_at IS NULL
+                      AND (a.value_type = $5 OR ($6 = 'is_set' AND a.value_type IN
+                          ('string','number','integer','boolean','date','datetime','time')))
                      JOIN attribute_values av ON av.entity_id = leaf.id AND av.attribute_id = a.id
                       AND av.workspace_id = $8
                       AND av.active AND av.relationship_target_entity_id IS NULL
                       AND av.context_id = (SELECT id FROM attribute_contexts WHERE workspace_id = $8 AND code = 'default')
                     WHERE reached.depth = cardinality($3)
                       AND CASE
+                          WHEN $6 = 'is_set' THEN TRUE
                           WHEN $5 = 'string' AND $6 = 'eq' THEN av.value_text = $7
                           WHEN $5 = 'string' AND $6 = 'eq_any' THEN $7::jsonb ? av.value_text
                           WHEN $5 = 'string' AND $6 = 'contains' THEN strpos(lower(av.value_text), lower($7)) > 0
@@ -258,6 +261,29 @@ const SCALAR_FILTER_SQL: &str = r#"WITH RECURSIVE reached(root_id, current_id, d
                           WHEN $5 = 'time' AND $6 = 'lte' THEN av.value_time <= $7::time
                           ELSE FALSE
                       END"#;
+
+/// Absence is the complement of presence within the same live root family and
+/// version scope. This also includes roots with no reached relationship leaf,
+/// older revisions without the field, or no attached reusable attribute.
+/// An active scalar row counts as present even for empty text, zero or false.
+fn presence_filter_query(
+    sql: &str,
+    filter: &EntitySearchFilter,
+    workspace_parameter: usize,
+) -> String {
+    if filter.operator == catalog_validation::saved_search::FILTER_OPERATOR_IS_SET
+        && filter.value == "false"
+    {
+        format!(
+            "SELECT e.id FROM entities e WHERE e.blueprint_id = $1
+             AND ($2::bigint IS NULL OR e.blueprint_version = $2)
+             AND e.workspace_id = ${workspace_parameter} AND e.deleted_at IS NULL
+             EXCEPT ({sql})"
+        )
+    } else {
+        sql.to_owned()
+    }
+}
 
 /// Rewrites each `$n` placeholder of `sql` to `$map(n)`.
 fn renumber_parameters(sql: &str, map: impl Fn(usize) -> usize) -> String {
@@ -593,17 +619,20 @@ impl CatalogRepository {
             let sql = scalar
                 .iter()
                 .enumerate()
-                .map(|(index, _)| {
+                .map(|(index, filter)| {
                     let base = 4 + index * 5;
                     format!(
                         "({})",
-                        renumber_parameters(SCALAR_FILTER_SQL, |parameter| match parameter {
-                            1 => 1,
-                            2 => 2,
-                            8 => 3,
-                            3..=7 => base + parameter - 3,
-                            _ => unreachable!("the filter statement has eight parameters"),
-                        })
+                        renumber_parameters(
+                            &presence_filter_query(SCALAR_FILTER_SQL, filter, 8),
+                            |parameter| match parameter {
+                                1 => 1,
+                                2 => 2,
+                                8 => 3,
+                                3..=7 => base + parameter - 3,
+                                _ => unreachable!("the filter statement has eight parameters"),
+                            }
+                        )
                     )
                 })
                 .collect::<Vec<_>>()
@@ -639,10 +668,12 @@ impl CatalogRepository {
         blueprint_version: Option<i64>,
         filter: &EntitySearchFilter,
     ) -> Result<HashSet<Uuid>, RepositoryError> {
-        Ok(sqlx::query_scalar::<_, Uuid>(
+        let sql = presence_filter_query(
             r#"SELECT DISTINCT e.id
                  FROM entities e
-                 JOIN attributes a ON a.entity_id = e.id AND a.code = $3 AND a.value_type = $4
+                 JOIN attributes a ON a.entity_id = e.id AND a.code = $3
+                  AND (a.value_type = $4 OR ($5 = 'is_set' AND a.value_type IN
+                      ('string','number','integer','boolean','date','datetime','time')))
                  JOIN reusable_attribute_revisions r ON r.id = a.reusable_attribute_revision_id
                  JOIN attribute_values av ON av.entity_id = e.id AND av.attribute_id = a.id
                 WHERE e.blueprint_id = $1
@@ -652,6 +683,7 @@ impl CatalogRepository {
                   AND av.workspace_id = $7 AND av.active AND av.relationship_target_entity_id IS NULL
                   AND av.context_id = (SELECT id FROM attribute_contexts WHERE workspace_id = $7 AND code = 'default')
                   AND CASE
+                    WHEN $5 = 'is_set' THEN TRUE
                     WHEN $4 = 'string' AND $5 = 'eq' THEN av.value_text = $6
                     WHEN $4 = 'string' AND $5 = 'eq_any' THEN $6::jsonb ? av.value_text
                     WHEN $4 = 'string' AND $5 = 'contains' THEN strpos(lower(av.value_text), lower($6)) > 0
@@ -683,11 +715,21 @@ impl CatalogRepository {
                     WHEN $4 = 'time' AND $5 = 'lt' THEN av.value_time < $6::time
                     WHEN $4 = 'time' AND $5 = 'lte' THEN av.value_time <= $6::time
                     ELSE FALSE END"#,
-        )
-        .bind(blueprint_id).bind(blueprint_version).bind(&filter.leaf_field)
-        .bind(&filter.value_type).bind(&filter.operator).bind(&filter.value)
-        .bind(self.workspace_id.0)
-        .fetch_all(&self.pool).await?.into_iter().collect())
+            filter,
+            7,
+        );
+        Ok(sqlx::query_scalar::<_, Uuid>(&sql)
+            .bind(blueprint_id)
+            .bind(blueprint_version)
+            .bind(&filter.leaf_field)
+            .bind(&filter.value_type)
+            .bind(&filter.operator)
+            .bind(&filter.value)
+            .bind(self.workspace_id.0)
+            .fetch_all(&self.pool)
+            .await?
+            .into_iter()
+            .collect())
     }
 
     #[allow(clippy::too_many_arguments)]

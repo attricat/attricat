@@ -5,6 +5,7 @@ import { fileMetadataSchema } from '../files/schemas';
 import { attributeValueKinds, attributeValueTypes } from './valueTypes';
 import {
   MAX_COMPONENT_PROTOCOL_VERSION,
+  PRESENCE_FILTER_OPERATOR,
   SMART_FILL_MAX_ATTACHMENTS,
   SMART_FILL_MAX_CONTENT_LENGTH,
   statusTransitionDenialCodes,
@@ -565,12 +566,23 @@ export const attributeFilterOperatorSchema = z.enum([
   'gte',
   'lt',
   'lte',
+  PRESENCE_FILTER_OPERATOR,
 ]);
-export const entitySearchFilterSchema = z.object({
-  field: z.string().min(1),
-  operator: attributeFilterOperatorSchema,
-  value: z.union([z.string(), z.number().finite(), z.boolean()]),
-});
+export const entitySearchFilterSchema = z
+  .object({
+    field: z.string().min(1),
+    operator: attributeFilterOperatorSchema,
+    value: z.union([z.string(), z.number().finite(), z.boolean()]),
+  })
+  .refine(
+    (filter) =>
+      filter.operator !== PRESENCE_FILTER_OPERATOR ||
+      typeof filter.value === 'boolean',
+    {
+      message: 'Presence filters require a boolean value',
+      path: ['value'],
+    },
+  );
 export const searchEntitiesRequestSchema = z.object({
   blueprint: z.object({
     code: z.string().min(1),

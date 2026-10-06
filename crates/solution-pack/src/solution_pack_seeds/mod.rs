@@ -750,8 +750,18 @@ fn validate_saved_search(
         .flatten()
     {
         let field = filter["field"].as_str().expect("validated filter field");
-        validate_attribute_path(target, field, &by_code, &mut referenced_blueprints)
+        let attribute = walk_attribute_path(target, field, &by_code, &mut referenced_blueprints)
             .map_err(|reason| invalid_state(&reason))?;
+        if filter["operator"] == saved_search::FILTER_OPERATOR_IS_SET
+            && !matches!(
+                attribute.value_type.as_str(),
+                "string" | "number" | "integer" | "boolean" | "date" | "datetime" | "time"
+            )
+        {
+            return Err(invalid_state(&format!(
+                "presence filter '{field}' must select a scalar attribute"
+            )));
+        }
     }
     for facet in state
         .get("relationshipFacets")

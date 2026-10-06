@@ -1,5 +1,6 @@
 import type { TFunction } from 'i18next';
 import type { Attribute } from '../entities/api';
+import { PRESENCE_FILTER_OPERATOR } from '../entities/constants';
 import { attributeLabel } from '../entities/entityDisplay';
 import { statusConfiguration, statusLabel } from '../entities/status';
 import { CURRENT_USER_FILTER_VALUE } from '../principals/constants';
@@ -28,8 +29,9 @@ export const isFilterableAttribute = (attribute: Attribute) =>
 export const operatorsForValueType = (
   valueType: Attribute['value_type'],
 ): AttributeFilterOperator[] => {
-  if (valueType === 'string') return ['eq', 'contains', 'starts_with'];
-  if (valueType === 'boolean') return ['eq'];
+  if (valueType === 'string')
+    return ['eq', 'contains', 'starts_with', PRESENCE_FILTER_OPERATOR];
+  if (valueType === 'boolean') return ['eq', PRESENCE_FILTER_OPERATOR];
   if (
     valueType === 'number' ||
     valueType === 'integer' ||
@@ -37,20 +39,20 @@ export const operatorsForValueType = (
     valueType === 'datetime' ||
     valueType === 'time'
   )
-    return ['eq', 'gt', 'gte', 'lt', 'lte'];
+    return ['eq', 'gt', 'gte', 'lt', 'lte', PRESENCE_FILTER_OPERATOR];
   return [];
 };
 
 /**
  * Status codes and user-or-team references are matched exactly, so they offer
- * equality only.
+ * equality and presence, not text matching.
  */
 export const operatorsForAttribute = (
   attribute: Attribute | undefined,
 ): AttributeFilterOperator[] =>
   attribute &&
   (statusConfiguration(attribute) || principalConfiguration(attribute))
-    ? ['eq']
+    ? ['eq', PRESENCE_FILTER_OPERATOR]
     : operatorsForValueType(attribute?.value_type ?? 'string');
 
 /**
@@ -95,10 +97,19 @@ export const attributeFilterLabel = (
   attribute?: Attribute,
   directory?: Directory,
 ) =>
-  t('explorer.attributeFilterPill', {
-    field: attributeLabel(attribute ?? { code: filter.field }),
-    operator: t(`explorer.filterOperatorSymbols.${filter.operator}`),
-    value: JSON.stringify(
-      attributeFilterValueLabel(t, filter, attribute, directory),
-    ),
-  });
+  filter.operator === PRESENCE_FILTER_OPERATOR
+    ? t(
+        filter.value
+          ? 'explorer.attributeFilterIsSet'
+          : 'explorer.attributeFilterIsNotSet',
+        {
+          field: attributeLabel(attribute ?? { code: filter.field }),
+        },
+      )
+    : t('explorer.attributeFilterPill', {
+        field: attributeLabel(attribute ?? { code: filter.field }),
+        operator: t(`explorer.filterOperatorSymbols.${filter.operator}`),
+        value: JSON.stringify(
+          attributeFilterValueLabel(t, filter, attribute, directory),
+        ),
+      });

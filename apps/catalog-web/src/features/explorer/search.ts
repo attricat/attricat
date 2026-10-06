@@ -3,7 +3,7 @@ import { entitySearchFilterSchema } from '../entities/schemas';
 import { maximumAttributeFilters, sortDirections } from './constants';
 import { entityIdsQuery } from './queryLanguage';
 
-const attributeFilterSearchSchema = entitySearchFilterSchema.extend({
+const attributeFilterSearchSchema = entitySearchFilterSchema.safeExtend({
   field: z.string().trim().min(1),
 });
 

@@ -14,6 +14,7 @@ catalog-domain = { path = "../domain" }
 catalog-repository = { path = "../repository" }
 catalog-rules = { path = "../rules" }
 catalog-storage = { path = "../storage" }
+catalog-validation = { path = "../validation" }
 catalog-workers = { path = "../workers" }
 catalog-workflow = { path = "../workflow" }
 futures-util.workspace = true

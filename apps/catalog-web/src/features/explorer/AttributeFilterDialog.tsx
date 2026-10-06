@@ -4,6 +4,7 @@ import type { KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RelationshipSelectorDialog } from '../../components/RelationshipSelectorDialog';
 import type { Attribute } from '../entities/api';
+import { PRESENCE_FILTER_OPERATOR } from '../entities/constants';
 import { attributeLabel } from '../entities/entityDisplay';
 import { statusConfiguration, statusOptionLabel } from '../entities/status';
 import { CURRENT_USER_FILTER_VALUE } from '../principals/constants';
@@ -34,16 +35,18 @@ const describeDraft = (
 ) => {
   const attribute = attributes.find((item) => item.code === draft.field);
   const availableOperators = operatorsForAttribute(attribute);
+  const effectiveOperator = availableOperators.includes(draft.operator)
+    ? draft.operator
+    : defaultAttributeFilterOperator;
   return {
     attribute,
     availableOperators,
-    effectiveOperator: availableOperators.includes(draft.operator)
-      ? draft.operator
-      : defaultAttributeFilterOperator,
+    effectiveOperator,
     relationship: attribute && isRelationshipFilterAttribute(attribute),
     valueIsValid: isAttributeFilterValueValid(
       attribute?.value_type,
       draft.value,
+      effectiveOperator,
     ),
   };
 };
@@ -93,6 +96,7 @@ export const AttributeFilterDialog = ({
           draft.attribute.value_type,
           value.value,
           timeZone,
+          draft.effectiveOperator,
         ),
       });
     },
@@ -107,11 +111,19 @@ export const AttributeFilterDialog = ({
   } = describeDraft(values, attributes);
   const status = attribute && statusConfiguration(attribute);
   const principal = attribute && principalConfiguration(attribute);
-  const directory = usePrincipalDirectory(Boolean(principal));
+  const presence = effectiveOperator === PRESENCE_FILTER_OPERATOR;
+  const directory = usePrincipalDirectory(Boolean(principal) && !presence);
   // Filters may target former members and deleted teams, unlike assignment.
   // Attributes with a closed set of values are filtered by choosing one.
-  const valueChoices: { value: string; label: string }[] | undefined =
-    attribute?.value_type === 'boolean'
+  const valueChoices: { value: string; label: string }[] | undefined = presence
+    ? [
+        { value: booleanFilterValues.true, label: t('explorer.valueIsSet') },
+        {
+          value: booleanFilterValues.false,
+          label: t('explorer.valueIsNotSet'),
+        },
+      ]
+    : attribute?.value_type === 'boolean'
       ? [
           { value: booleanFilterValues.true, label: t('explorer.true') },
           { value: booleanFilterValues.false, label: t('explorer.false') },
@@ -228,7 +240,15 @@ export const AttributeFilterDialog = ({
                     const validOperator = availableOperators.find(
                       (item) => item === event.target.value,
                     );
-                    if (validOperator) field.handleChange(validOperator);
+                    if (validOperator) {
+                      if (
+                        (validOperator === PRESENCE_FILTER_OPERATOR) !==
+                        presence
+                      ) {
+                        form.setFieldValue('value', '');
+                      }
+                      field.handleChange(validOperator);
+                    }
                   }}
                   select
                   value={effectiveOperator}
