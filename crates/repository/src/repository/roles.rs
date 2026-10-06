@@ -44,8 +44,29 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
         }
     }
 
-    async fn validate_role_input(
-        &self,
+    /// Serialize authority changes before taking role, membership or credential
+    /// locks, then authorize against the committed state after any lock wait.
+    /// NO KEY UPDATE preserves this ordering without blocking unrelated FK checks.
+    pub(super) async fn lock_workspace_permission_on(
+        connection: &mut sqlx::PgConnection,
+        actor_id: Uuid,
+        workspace_id: Uuid,
+        permission: &str,
+    ) -> Result<(), RepositoryError> {
+        sqlx::query("SELECT id FROM workspaces WHERE id = $1 FOR NO KEY UPDATE")
+            .bind(workspace_id)
+            .execute(&mut *connection)
+            .await?;
+        if !Self::is_authorized_on(connection, actor_id, workspace_id, permission, None, None)
+            .await?
+        {
+            return Err(RepositoryError::NotFound("permission"));
+        }
+        Ok(())
+    }
+
+    async fn validate_role_input_on(
+        connection: &mut sqlx::PgConnection,
         actor_id: Uuid,
         workspace_id: Uuid,
         code: &str,
@@ -61,7 +82,7 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
         let known: i64 =
             sqlx::query_scalar("SELECT count(*) FROM permissions WHERE code = ANY($1)")
                 .bind(permissions)
-                .fetch_one(&self.pool)
+                .fetch_one(&mut *connection)
                 .await?;
         if known != permissions.len() as i64 {
             return Err(RepositoryError::NotFound("permission"));
@@ -69,9 +90,8 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
         // An actor may only delegate permissions it holds workspace-wide;
         // one query covers every requested permission.
         let requested: Vec<&str> = permissions.iter().map(String::as_str).collect();
-        let held = self
-            .workspace_permissions(actor_id, workspace_id, &requested)
-            .await?;
+        let held =
+            Self::workspace_permissions_on(connection, actor_id, workspace_id, &requested).await?;
         if requested
             .iter()
             .any(|permission| !held.contains(*permission))
@@ -79,16 +99,6 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
             return Err(RepositoryError::NotFound("permission"));
         }
         Ok(())
-    }
-
-    pub(super) async fn roles_delegable(
-        &self,
-        actor_id: Uuid,
-        workspace_id: Uuid,
-        role_id: Uuid,
-    ) -> Result<bool, RepositoryError> {
-        let mut connection = self.pool.acquire().await?;
-        Self::roles_delegable_on(&mut connection, actor_id, workspace_id, role_id).await
     }
 
     pub(super) async fn roles_delegable_on(
@@ -189,10 +199,10 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
     ) -> Result<Uuid, RepositoryError> {
         self.require_permission(actor_id, workspace_id, "roles.manage")
             .await?;
-        self.validate_role_input(actor_id, workspace_id, code, permissions)
-            .await?;
         let id = Uuid::new_v4();
         let mut tx = self.pool.begin().await?;
+        Self::lock_workspace_permission_on(&mut tx, actor_id, workspace_id, "roles.manage").await?;
+        Self::validate_role_input_on(&mut tx, actor_id, workspace_id, code, permissions).await?;
         self.ensure_token_can_delegate_on(&mut tx, actor_id, workspace_id, permissions)
             .await?;
         sqlx::query(
@@ -224,9 +234,9 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
     ) -> Result<(), RepositoryError> {
         self.require_permission(actor_id, workspace_id, "roles.manage")
             .await?;
-        self.validate_role_input(actor_id, workspace_id, code, permissions)
-            .await?;
         let mut tx = self.pool.begin().await?;
+        Self::lock_workspace_permission_on(&mut tx, actor_id, workspace_id, "roles.manage").await?;
+        Self::validate_role_input_on(&mut tx, actor_id, workspace_id, code, permissions).await?;
         self.ensure_token_can_delegate_on(&mut tx, actor_id, workspace_id, permissions)
             .await?;
         if sqlx::query(
@@ -285,6 +295,7 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
             return Err(RepositoryError::NotFound("workspace-local role"));
         }
         let mut tx = self.pool.begin().await?;
+        Self::lock_workspace_permission_on(&mut tx, actor_id, workspace_id, "roles.manage").await?;
         let exists: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM roles WHERE id = $1 AND workspace_id = $2 AND NOT is_system FOR UPDATE)").bind(role_id).bind(workspace_id).fetch_one(&mut *tx).await?;
         if !exists {
             return Err(RepositoryError::NotFound("workspace role"));

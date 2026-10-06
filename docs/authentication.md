@@ -103,10 +103,12 @@ passkeys, and switching workspaces after login are explicitly deferred.
 `POST /auth/login` verifies a local password and sets an opaque `catalog_session`
 HttpOnly cookie plus a separate `catalog_csrf` synchronizer-token cookie. The API
 stores SHA-256 digests only. `POST /auth/renew` atomically revokes the old identifier
-and replaces both values; login also revokes older workspace sessions. `POST
+and replaces both values; login issues fresh session and CSRF credentials. `POST
 /auth/logout` revokes the current session and clears both cookies. Sessions expire
 after eight hours and are revoked on account/password changes, membership changes,
-and role-grant changes.
+and role-grant changes. Renewal shares the workspace lock used by membership
+and role revocation, so a replacement session cannot escape a concurrent
+revocation or become valid again when a disabled member is reactivated.
 
 Deactivating a member or revoking a role grant also revokes that user's pending
 invitations and onboarding links in the affected workspace. Acceptance is
@@ -196,6 +198,11 @@ once per minute rather than on every request.
 
 Role creation, editing, duplication, replacement, invitations, grants, and
 ownership transfer cannot delegate permissions omitted from the request token.
+For both browser sessions and tokens, role and membership changes serialize on
+the workspace. Management authority, ownership and delegated permissions are
+checked inside the mutation transaction, after lock waits, against the current
+role definitions and grants.
+
 Agent runs retain their initiating token and recheck its live permissions for
 reads and approved mutations, including after a worker restart. Approving an
 agent mutation also requires the approver's own permission for that operation;

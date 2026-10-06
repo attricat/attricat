@@ -1614,13 +1614,23 @@ impl<S: RepositoryScope> CatalogRepository<S> {
         workspace_id: Uuid,
         permissions: &[&str],
     ) -> Result<HashSet<String>, RepositoryError> {
+        let mut connection = self.pool.acquire().await?;
+        Self::workspace_permissions_on(&mut connection, user_id, workspace_id, permissions).await
+    }
+
+    async fn workspace_permissions_on(
+        connection: &mut sqlx::PgConnection,
+        user_id: Uuid,
+        workspace_id: Uuid,
+        permissions: &[&str],
+    ) -> Result<HashSet<String>, RepositoryError> {
         let rows: Vec<String> = sqlx::query_scalar(
             "SELECT DISTINCT rp.permission_code FROM workspace_memberships m JOIN users u ON u.id = m.user_id JOIN workspaces w ON w.id = m.workspace_id JOIN role_grants g ON g.membership_id = m.id AND g.workspace_id = m.workspace_id JOIN role_permissions rp ON rp.role_id = g.role_id WHERE m.user_id = $1 AND m.workspace_id = $2 AND m.state = 'active' AND u.state = 'active' AND w.deleted_at IS NULL AND g.scope_type = 'workspace' AND g.scope_target_id = $2 AND rp.permission_code = ANY($3)",
         )
         .bind(user_id)
         .bind(workspace_id)
         .bind(permissions)
-        .fetch_all(&self.pool)
+        .fetch_all(connection)
         .await?;
         Ok(rows.into_iter().collect())
     }

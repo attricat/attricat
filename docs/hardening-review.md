@@ -74,9 +74,25 @@ an exhaustive audit of every source file.
   locks. New administrator-issued invitations and other workspaces' invitations
   remain usable.
 
+- **Stale role and owner delegation:** grants and invitations could use a role
+  that gained permissions during a lock wait, or owner authority lost to a
+  concurrent transfer. Role creation, editing, retirement and member mutations
+  now share workspace-level serialization and recheck authority inside the
+  transaction. Grant and invitation checks use the locked role's current
+  permissions. Role edits cannot restore authority removed while they waited,
+  and retirement cannot use a former owner's authority to create owner grants.
+
+- **Session renewal escaping revocation:** a revocation waiting on a renewing
+  session could miss its newly inserted replacement because the revocation's SQL
+  statement used an earlier snapshot. The replacement survived a role revocation
+  or became usable after a disabled member was reactivated. Renewal now takes
+  the workspace lock before the session row, serializing replacement creation
+  with membership and role revocation.
+
 Regression coverage is in `apps/api/tests/security_hardening.rs`,
 `apps/api/tests/worker_hardening.rs`, `apps/api/tests/agent_stream_security.rs`,
-`apps/api/tests/membership_revocation.rs`, existing agent, personal-token,
+`apps/api/tests/membership_revocation.rs`, `apps/api/tests/role_delegation_races.rs`,
+`apps/api/tests/session_revocation_races.rs`, existing agent, personal-token,
 lifecycle and controlled-record tests, and HTTP/archive
 unit tests. Worker lock contention and cancellation are covered in
 `crates/workers/src/file_worker.rs` and `crates/workers/src/heartbeat.rs`.
@@ -97,23 +113,29 @@ See [API read safety](api.md#relationship-read-safety) for preview budgets.
 For access revoked before this upgrade, review and revoke the affected users'
 remaining pending invitations. The invitation fix invalidates links during
 subsequent access revocations; it does not rewrite historical invitation records.
+If a browser session may already have escaped an earlier concurrent revocation,
+reset that account's password to invalidate its browser sessions across workspaces.
 
 ## Verification scope
 
 Verification uses the Rust workspace tests, focused security regressions,
 frontend unit tests, Clippy, formatting, dependency-policy checks and the
 worktree's readiness endpoint. The clean, non-overlapping workspace run passed
-856 Rust tests (3 opt-in tests ignored); all 815 frontend unit tests passed.
+864 Rust tests (3 opt-in tests ignored); all 815 frontend unit tests passed.
 Workspace Clippy, formatting, dependency-policy checks and readiness passed.
 This verification ran after rebasing onto `main` at `77ccaf1`, including its
 demo-mode changes.
 An earlier follow-up reviewed entity-batch authorization and atomicity, context
 mutation locking, controlled-record protections, and file download/cache handling
-without finding an additional confirmed major issue. The latest credential
-lifecycle review reproduced the invitation restoration gap in three failing
-regressions before fixing it. Coverage includes sequential HTTP acceptance,
-concurrent deactivation/acceptance, fresh reauthorization, and unaffected
-cross-workspace onboarding. Passing tests are not a security guarantee.
+without finding an additional confirmed major issue. A credential lifecycle
+review reproduced the invitation restoration gap in three failing regressions
+before fixing it, including concurrent acceptance. A subsequent review reproduced
+stale role and ownership delegation in four failing regressions; six lock-controlled
+tests cover grants, invitations, role editing and retirement. The latest round
+reviewed file cleanup/retention, workflow action retries and browser-session
+lifecycle boundaries. Two new failing regressions reproduced renewal escaping
+role revocation and member deactivation; they pass after the fix and also verify
+that fresh login remains supported. Passing tests are not a security guarantee.
 
 The sibling `../../attricat-extension-example` checkout was unavailable, so its
 specific package/side-load/enable/event workflow could not be exercised.

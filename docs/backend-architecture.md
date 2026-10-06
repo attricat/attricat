@@ -69,6 +69,20 @@ request deadline plus one hour. Cleanup claims fence late finalization, retry
 failed S3 deletions, and survive cancellation and process restarts. Do not delete
 objects on an ambiguous database-commit error.
 
+## Authorization mutation locking
+
+Role and membership mutations take the workspace's `FOR NO KEY UPDATE` lock
+before locking roles, memberships or credentials. Invitation acceptance,
+onboarding and browser-session renewal use the same outer lock. In particular,
+renewal must acquire it before the old session row; otherwise a concurrent
+revocation can miss the replacement inserted after its SQL statement snapshot.
+Recheck management permission, ownership and
+delegated permissions on the transaction's connection after acquiring the locks;
+preflight checks alone cannot authorize a mutation after a concurrent role edit
+or ownership transfer. Keep this ordering when adding authority-changing paths.
+The workspace lock serializes these mutations without blocking unrelated
+foreign-key checks.
+
 ## Stable assets
 
 - SQL migrations remain under `apps/api/migrations`; `api::MIGRATOR` embeds that directory and SQLx CLI commands keep the same source path.
