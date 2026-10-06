@@ -47,6 +47,9 @@ Open **Search info** on a result to see why it matched, for example *red via 1 r
 | Boolean | Equals |
 | Status | Equals, chosen from the status labels |
 | User or team | Equals a person or team, or **Assigned to me (or my teams)** |
+| File | Presence only |
+
+Every type also offers **Presence**: choose **Has a value** or **Not set**. For a file attribute, **Has a value** finds entities with at least one attached file, and **Not set** finds entities without one.
 
 You can filter on an attribute of a related entity too, such as `brand.name`, through up to three relationships.
 

@@ -677,6 +677,8 @@ async fn resolve_search_filter(
             presence || matches!(filter.operator.as_str(), "eq" | "gt" | "gte" | "lt" | "lte")
         }
         "boolean" => presence || filter.operator == "eq",
+        // A file value has no comparable scalar, only attached files.
+        "file" => presence,
         _ => false,
     };
     if !valid_operator {

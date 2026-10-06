@@ -47,6 +47,9 @@ Otwórz **Informacje o wyszukiwaniu** przy wyniku, aby zobaczyć, dlaczego zosta
 | Wartość logiczna | Równa się |
 | Status | Równa się, z wyborem spośród etykiet statusu |
 | Użytkownik lub zespół | Równa się osobie lub zespołowi albo **Przypisane do mnie (lub moich zespołów)** |
+| Plik | Tylko Obecność wartości |
+
+Każdy typ ma też operator **Obecność wartości**: wybierz **Ma wartość** lub **Brak wartości**. Dla atrybutu plikowego **Ma wartość** znajduje encje z co najmniej jednym załączonym plikiem, a **Brak wartości** encje bez żadnego pliku.
 
 Możesz też filtrować według atrybutu powiązanej encji, na przykład `brand.name`, przez maksymalnie trzy relacje.
 

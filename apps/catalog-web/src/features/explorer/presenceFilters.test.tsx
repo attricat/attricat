@@ -11,6 +11,8 @@ import { AttributeFilterDialog } from './AttributeFilterDialog';
 import {
   attributeFilterLabel,
   filterableValueTypes,
+  isFilterableAttribute,
+  operatorsForAttribute,
   operatorsForValueType,
 } from './attributeFilters';
 import {
@@ -81,6 +83,51 @@ describe('presence filters', () => {
     expect(attributeFilterLabel(i18n.getFixedT('pl'), filter, owner)).toBe(
       'Owner nie ma wartości',
     );
+  });
+
+  it('offers only presence for file attributes and defaults to it', async () => {
+    const photo: Attribute = {
+      code: 'photo',
+      name: 'Photo',
+      value_type: 'file',
+    };
+    expect(isFilterableAttribute(photo)).toBe(true);
+    expect(operatorsForAttribute(photo)).toEqual(['is_set']);
+    expect(filterableValueTypes).not.toContain('file');
+    const onSubmit = vi.fn();
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <AttributeFilterDialog
+          attributes={[photo]}
+          blueprintName="Product"
+          editing={false}
+          initialDraft={{ field: 'photo', operator: 'eq', value: '' }}
+          maximumReached={false}
+          onClose={vi.fn()}
+          onSelectRelationship={vi.fn()}
+          onSubmit={onSubmit}
+          open
+          relationshipPathsLoading={false}
+        />
+      </QueryClientProvider>,
+    );
+    const user = userEvent.setup();
+    expect(screen.getByRole('combobox', { name: 'Operator' }).textContent).toBe(
+      'Presence',
+    );
+    await user.click(screen.getByRole('combobox', { name: 'Operator' }));
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
+      'Presence',
+    ]);
+    await user.keyboard('{Escape}');
+    await user.click(screen.getByRole('combobox', { name: 'Value' }));
+    await user.click(screen.getByRole('option', { name: 'Not set' }));
+    await user.click(screen.getByRole('button', { name: 'Add filter' }));
+    expect(onSubmit).toHaveBeenCalledWith({
+      field: 'photo',
+      operator: 'is_set',
+      value: false,
+    });
   });
 
   it.each([

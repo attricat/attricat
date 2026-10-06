@@ -96,7 +96,7 @@ fn valid_saved_filter(filter: &crate::model::SearchFilter) -> bool {
 }
 
 fn attribute_filter_parameters() -> Value {
-    json!({"type":"array","maxItems":20,"items":{"type":"object","required":["field","operator","value"],"properties":{"field":{"type":"string"},"operator":{"type":"string","enum":catalog_validation::saved_search::FILTER_OPERATORS},"value":{"type":["string","number","boolean"],"description":"For is_set, use a boolean: true means a present scalar value, false means absent. Empty text, zero and false are present values."}},"additionalProperties":false}})
+    json!({"type":"array","maxItems":20,"items":{"type":"object","required":["field","operator","value"],"properties":{"field":{"type":"string"},"operator":{"type":"string","enum":catalog_validation::saved_search::FILTER_OPERATORS},"value":{"type":["string","number","boolean"],"description":"For is_set, use a boolean: true means a present value, false means absent. Empty text, zero and false are present values; a file attribute is present while it has at least one attached file."}},"additionalProperties":false}})
 }
 
 /// One `values` entry for entity creation, batches and migrations.

@@ -181,7 +181,7 @@ async fn scalar_presence_distinguishes_absence_from_false_zero_empty_and_restore
         ("assignee", json!(0)),
         ("text", Value::Null),
         ("parent", json!(false)),
-        ("files", json!(true)),
+        ("files", json!("true")),
         ("payload", json!(false)),
         ("unknown", json!(false)),
     ] {
@@ -284,6 +284,97 @@ async fn scalar_presence_distinguishes_absence_from_false_zero_empty_and_restore
         &search(&client, &base, presence("assignee", true), None).await,
         &[],
     );
+    server.abort();
+}
+
+#[sqlx::test]
+async fn file_presence_requires_an_attached_file(pool: PgPool) {
+    let (base, server) = start_server_with_object_store(
+        pool,
+        std::sync::Arc::new(api::storage::FakeObjectStore::available()),
+    )
+    .await;
+    let client = authenticated_client();
+    create_blueprint(&client, &base, ITEM).await;
+    let named = |name: &str| json!([scalar("name", name)]);
+    let absent = create_entity_with(&client, &base, "presence_item", named("Absent")).await;
+    let attached = create_entity_with(&client, &base, "presence_item", named("Attached")).await;
+    let cleared = create_entity_with(&client, &base, "presence_item", named("Cleared")).await;
+    let mut file_ids = Vec::new();
+    for entity in [&attached, &cleared] {
+        let uploaded = expect_status(
+            client
+                .post(format!(
+                    "{base}/entities/{}/file-attributes/files/uploads",
+                    entity["id"].as_str().unwrap()
+                ))
+                .multipart(
+                    reqwest::multipart::Form::new().part(
+                        "file",
+                        reqwest::multipart::Part::bytes(b"notes".to_vec())
+                            .file_name("notes.txt")
+                            .mime_str("text/plain")
+                            .unwrap(),
+                    ),
+                )
+                .send()
+                .await
+                .unwrap(),
+            StatusCode::CREATED,
+        )
+        .await;
+        file_ids.push(uploaded["files"][0]["id"].clone());
+    }
+    // Clearing every file leaves an active file value with no references.
+    expect_status(
+        client
+            .put(format!(
+                "{base}/entities/{}/file-attributes/files/references",
+                cleared["id"].as_str().unwrap()
+            ))
+            .json(&json!({"expected_file_ids":[file_ids[1]],"file_ids":[]}))
+            .send()
+            .await
+            .unwrap(),
+        StatusCode::OK,
+    )
+    .await;
+    assert_ids(
+        &search(&client, &base, presence("files", true), None).await,
+        &[&attached],
+    );
+    assert_ids(
+        &search(&client, &base, presence("files", false), None).await,
+        &[&absent, &cleared],
+    );
+    let child = create_entity_with(
+        &client,
+        &base,
+        "presence_item",
+        json!([scalar("name", "Child"), relationship("parent", &attached)]),
+    )
+    .await;
+    assert_ids(
+        &search(
+            &client,
+            &base,
+            json!([
+                {"field":"parent.files","operator":"is_set","value":true}
+            ]),
+            None,
+        )
+        .await,
+        &[&child],
+    );
+    for operator in ["eq", "contains"] {
+        let response = client
+            .post(format!("{base}/v1/entities/search"))
+            .json(&json!({"blueprint":{"code":"presence_item"},"filters":[{"field":"files","operator":operator,"value":"notes.txt"}]}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    }
     server.abort();
 }
 
