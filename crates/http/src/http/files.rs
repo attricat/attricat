@@ -612,7 +612,7 @@ async fn authorize(state: &AppState, operation: FileAccessOperation) -> Result<(
     }
 }
 
-async fn authorize_read<F>(
+pub(super) async fn authorize_read<F>(
     state: &AppState,
     repository: &CatalogRepository,
     principal: Uuid,

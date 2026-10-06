@@ -113,7 +113,7 @@ impl CatalogRepository {
                 },
             )
             .await?;
-        tx.commit().await?;
+        self.commit_mutation(tx).await?;
         Ok(view)
     }
 
@@ -155,7 +155,8 @@ impl CatalogRepository {
         let query = format!(
             "UPDATE saved_views SET name=$4,description=$5,visibility=$6,state=$7,state_hash=$8,updated_at=now() WHERE workspace_id=$1 AND id=$2 AND owner_user_id=$3 AND visibility<>'link' AND deleted_at IS NULL RETURNING {FIELDS}"
         );
-        Ok(sqlx::query_as(&query)
+        let mut tx = self.pool.begin().await?;
+        let view = sqlx::query_as(&query)
             .bind(self.workspace_id_for_runtime())
             .bind(id)
             .bind(actor)
@@ -164,19 +165,28 @@ impl CatalogRepository {
             .bind(visibility)
             .bind(state)
             .bind(hash)
-            .fetch_optional(&self.pool)
-            .await?)
+            .fetch_optional(&mut *tx)
+            .await?;
+        if view.is_some() {
+            self.commit_mutation(tx).await?;
+        }
+        Ok(view)
     }
 
     pub async fn delete_saved_view(&self, actor: Uuid, id: Uuid) -> Result<bool, RepositoryError> {
+        let mut tx = self.pool.begin().await?;
         let result = sqlx::query(
             "UPDATE saved_views SET deleted_at=now() WHERE workspace_id=$1 AND id=$2 AND owner_user_id=$3 AND visibility<>'link' AND deleted_at IS NULL",
         )
         .bind(self.workspace_id_for_runtime())
         .bind(id)
         .bind(actor)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await?;
-        Ok(result.rows_affected() > 0)
+        let deleted = result.rows_affected() > 0;
+        if deleted {
+            self.commit_mutation(tx).await?;
+        }
+        Ok(deleted)
     }
 }

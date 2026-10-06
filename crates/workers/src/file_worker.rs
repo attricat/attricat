@@ -153,6 +153,14 @@ impl FileWorker {
     }
 
     pub async fn run_once(&self) -> Result<bool, RepositoryError> {
+        self.run_once_with_heartbeat(Duration::from_secs(LEASE_HEARTBEAT_SECONDS))
+            .await
+    }
+
+    async fn run_once_with_heartbeat(
+        &self,
+        heartbeat_every: Duration,
+    ) -> Result<bool, RepositoryError> {
         // Reconciliation is maintenance, not part of every job claim. Avoid
         // rescanning the file population before each item in a busy queue.
         let should_reconcile = {
@@ -196,19 +204,21 @@ impl FileWorker {
             Ok::<(), RepositoryError>(())
         }
         .instrument(span);
-        tokio::pin!(operation);
-        let mut heartbeat = tokio::time::interval(Duration::from_secs(LEASE_HEARTBEAT_SECONDS));
-        heartbeat.tick().await;
-        loop {
-            tokio::select! {
-                biased;
-                _ = heartbeat.tick() => {
-                    if !self.renew_lease(&job).await? {
-                        tracing::warn!(job_id = %job.id, "file job lease lost; cancelling processing");
-                        break;
-                    }
+        let renewals = async {
+            let mut heartbeat = tokio::time::interval(heartbeat_every);
+            heartbeat.tick().await;
+            loop {
+                heartbeat.tick().await;
+                if !self.renew_lease(&job).await? {
+                    return Ok::<(), sqlx::Error>(());
                 }
-                result = &mut operation => { result?; break; }
+            }
+        };
+        match crate::heartbeat::with_heartbeat(operation, renewals).await {
+            Ok(result) => result?,
+            Err(renewal) => {
+                renewal?;
+                tracing::warn!(job_id = %job.id, "file job lease lost; cancelling processing");
             }
         }
         self.record_metrics_if_due().await?;
@@ -525,6 +535,79 @@ fn decode_and_orient(bytes: &[u8], max_pixels: u64) -> Result<DynamicImage, Work
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[sqlx::test(migrations = "../../apps/api/migrations")]
+    async fn blocked_file_processing_can_finish_while_its_heartbeat_waits(pool: PgPool) {
+        let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
+        let file = Uuid::new_v4();
+        let job = Uuid::new_v4();
+        sqlx::query("INSERT INTO files (id,workspace_id,original_filename,display_filename,mime_type,byte_size,sha256,original_key,status,attachment_expires_at) VALUES ($1,$2,'test.txt','test.txt','text/plain',1,$3,$4,'queued',now()+interval '1 hour')")
+            .bind(file).bind(workspace).bind("0".repeat(64)).bind(format!("files/{file}/original")).execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO file_processing_jobs (id,workspace_id,file_id,kind,status) VALUES ($1,$2,$3,'metadata','queued')")
+            .bind(job).bind(workspace).bind(file).execute(&pool).await.unwrap();
+        let worker = FileWorker::new(
+            pool.clone(),
+            Arc::new(crate::storage::FakeObjectStore::available()),
+            WorkerConfig {
+                worker_id: "heartbeat-lock-test".into(),
+                max_pixels: DEFAULT_MAX_PIXELS,
+                max_attempts: 3,
+                delete_grace: Duration::from_secs(60),
+            },
+        );
+        let mut blocker = pool.begin().await.unwrap();
+        let blocker_pid: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
+            .fetch_one(&mut *blocker)
+            .await
+            .unwrap();
+        sqlx::query("SELECT id FROM files WHERE id=$1 FOR UPDATE")
+            .bind(file)
+            .execute(&mut *blocker)
+            .await
+            .unwrap();
+        let mut processing = tokio::spawn(async move {
+            worker
+                .run_once_with_heartbeat(Duration::from_millis(20))
+                .await
+        });
+        // Wait for the actual lock chain: the job holds its lease row and
+        // waits for our file lock; renewal in turn waits for that job row.
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                let blocked: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM pg_stat_activity job JOIN pg_stat_activity renewal ON job.pid=ANY(pg_blocking_pids(renewal.pid)) WHERE job.datname=current_database() AND $1=ANY(pg_blocking_pids(job.pid)))")
+                    .bind(blocker_pid).fetch_one(&pool).await.unwrap();
+                if blocked { break; }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        }).await.unwrap();
+        blocker.rollback().await.unwrap();
+        let result = tokio::time::timeout(Duration::from_secs(3), &mut processing).await;
+        if result.is_err() {
+            processing.abort();
+        }
+        assert!(
+            result
+                .expect("heartbeat stopped polling the job that must release its lock")
+                .unwrap()
+                .unwrap()
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, String>("SELECT status FROM file_processing_jobs WHERE id=$1")
+                .bind(job)
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+            "completed"
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, String>("SELECT status FROM files WHERE id=$1")
+                .bind(file)
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+            "ready"
+        );
+    }
 
     #[test]
     fn rejects_limits_that_would_wrap_during_database_conversion() {

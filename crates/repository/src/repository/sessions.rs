@@ -272,6 +272,16 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
         expires_at: DateTime<Utc>,
     ) -> Result<(), RepositoryError> {
         let mut tx = self.pool.begin().await?;
+        // Serialize with membership and role revocation before locking the
+        // session. Otherwise a revoker waiting on the old row can miss the
+        // replacement inserted after its UPDATE statement took its snapshot.
+        sqlx::query(
+            "SELECT id FROM workspaces WHERE id = $1 AND deleted_at IS NULL FOR NO KEY UPDATE",
+        )
+        .bind(workspace_id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or(RepositoryError::NotFound("browser session"))?;
         let previous_row = sqlx::query("SELECT user_id, issued_security_version, issued_credential_version FROM browser_sessions WHERE session_digest = $1 AND workspace_id = $2 AND revoked_at IS NULL AND expires_at > clock_timestamp() FOR UPDATE")
             .bind(previous.as_ref()).bind(workspace_id).fetch_optional(&mut *tx).await?;
         let Some(previous_row) = previous_row else {

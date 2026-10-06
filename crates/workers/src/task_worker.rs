@@ -303,23 +303,32 @@ async fn execute(repository: SystemRepository, handler: Arc<dyn TaskHandler>, ta
     let heartbeat_every = lease_duration
         .checked_div(3)
         .unwrap_or(Duration::from_millis(1));
-    let mut heartbeat = time::interval(heartbeat_every);
-    heartbeat.tick().await;
     let handled = measure(format!("task:{kind}"), handler.handle(task.clone()));
-    tokio::pin!(handled);
-    let outcome = loop {
-        tokio::select! {
-            outcome = &mut handled => break outcome,
-            _ = heartbeat.tick() => {
-                if let Err(error) = repository.heartbeat_task(task.id, &task.lease_owner, task.lease_token, lease_duration).await {
-                    counter!("catalog_tasks_total", "kind" => kind.as_str(), "outcome" => "lease_lost").increment(1);
-                    tracing::warn!(task_id = %task.id, kind = %kind, error = %error, "task heartbeat lost its lease");
-                    handler.on_lease_lost(task.clone()).await;
-                    histogram!("catalog_task_worker_task_duration_seconds", "kind" => kind.as_str(), "outcome" => "lease_lost").record(started.elapsed().as_secs_f64());
-                    gauge!("catalog_task_worker_tasks_in_flight", "kind" => kind.as_str()).decrement(1.0);
-                    return;
-                }
+    let renewals = async {
+        let mut heartbeat = time::interval(heartbeat_every);
+        heartbeat.tick().await;
+        loop {
+            heartbeat.tick().await;
+            if let Err(error) = repository
+                .heartbeat_task(task.id, &task.lease_owner, task.lease_token, lease_duration)
+                .await
+            {
+                return error;
             }
+        }
+    };
+    let outcome = match crate::heartbeat::with_heartbeat(handled, renewals).await {
+        Ok(outcome) => outcome,
+        Err(error) => {
+            counter!("catalog_tasks_total", "kind" => kind.as_str(), "outcome" => "lease_lost")
+                .increment(1);
+            tracing::warn!(task_id = %task.id, kind = %kind, error = %error, "task heartbeat lost its lease");
+            // The execution future has already dropped its transactions and
+            // other resources before lease-loss cleanup starts.
+            handler.on_lease_lost(task.clone()).await;
+            histogram!("catalog_task_worker_task_duration_seconds", "kind" => kind.as_str(), "outcome" => "lease_lost").record(started.elapsed().as_secs_f64());
+            gauge!("catalog_task_worker_tasks_in_flight", "kind" => kind.as_str()).decrement(1.0);
+            return;
         }
     };
     let result = match outcome {

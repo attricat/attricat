@@ -55,8 +55,7 @@ impl CatalogRepository {
         sqlx::query("INSERT INTO entity_comments (id,workspace_id,entity_id,author_user_id,body) VALUES ($1,$2,$3,$4,$5)")
             .bind(Uuid::new_v4()).bind(self.workspace_id_for_runtime()).bind(entity).bind(actor).bind(body)
             .execute(&mut *transaction).await?;
-        self.write_audit_event(&mut transaction).await?;
-        transaction.commit().await?;
+        self.commit_mutation(transaction).await?;
         Ok(())
     }
 
@@ -85,8 +84,7 @@ impl CatalogRepository {
         .bind(body)
         .execute(&mut *transaction)
         .await?;
-        self.write_audit_event(&mut transaction).await?;
-        transaction.commit().await?;
+        self.commit_mutation(transaction).await?;
         Ok(())
     }
 }

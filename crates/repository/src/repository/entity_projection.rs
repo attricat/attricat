@@ -7,6 +7,10 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use uuid::Uuid;
 
+// Per-field limits do not bound a branching graph. Cap both fetched edges
+// and path expansions across the entire preview, including depth-zero probes.
+const MAX_PREVIEW_RELATIONSHIP_ROWS: usize = 4096;
+
 /// The value of one value source resolved for the context `path` with the
 /// shared rule, reported with the context it came from.
 fn resolved_value(
@@ -348,11 +352,17 @@ impl CatalogRepository {
         let mut rows: HashMap<(Uuid, u8), Vec<PreviewRelationship>> = HashMap::new();
         let mut frontier = vec![(entity_id, path.iter().copied().collect::<Vec<_>>())];
         let mut depth = relationship_depth;
+        let mut remaining_rows = MAX_PREVIEW_RELATIONSHIP_ROWS;
+        let mut expansions = 0usize;
         while !frontier.is_empty() {
             let expanding: Vec<(Uuid, Vec<Uuid>)> = frontier
                 .into_iter()
                 .filter(|(id, ancestors)| !ancestors.contains(id))
                 .collect();
+            expansions += expanding.len();
+            if expansions > MAX_PREVIEW_RELATIONSHIP_ROWS {
+                return Err(RepositoryError::PreviewExpansionLimit);
+            }
             let ids: Vec<Uuid> = expanding
                 .iter()
                 .map(|(id, _)| *id)
@@ -372,7 +382,25 @@ impl CatalogRepository {
                 for id in &ids {
                     rows.entry((*id, depth)).or_default();
                 }
-                for row in self.preview_relationships(&ids, fetch_limit).await? {
+                let related = self
+                    .preview_relationships(&ids, fetch_limit, remaining_rows + 1)
+                    .await?;
+                if related.len() > remaining_rows {
+                    return Err(RepositoryError::PreviewExpansionLimit);
+                }
+                remaining_rows -= related.len();
+                let targets = related.iter().map(|row| row.target_id).collect::<Vec<_>>();
+                let readable = self.actor_readable_entity_ids(&targets).await?;
+                for mut row in related {
+                    if readable
+                        .as_ref()
+                        .is_some_and(|ids| !ids.contains(&row.target_id))
+                    {
+                        // Keep only a truncation marker. Never traverse or
+                        // serialize this target, and do not claim the visible
+                        // relationship set is complete after hiding a row.
+                        row.relationship_position = relationship_limit + 1;
+                    }
                     rows.get_mut(&(row.source_id, depth))
                         .expect("every fetched source was requested")
                         .push(row);
@@ -394,7 +422,11 @@ impl CatalogRepository {
                         })
                         .collect::<Vec<_>>()
                 })
+                .take(MAX_PREVIEW_RELATIONSHIP_ROWS + 1)
                 .collect();
+            if frontier.len() > MAX_PREVIEW_RELATIONSHIP_ROWS {
+                return Err(RepositoryError::PreviewExpansionLimit);
+            }
             depth -= 1;
         }
         assemble_preview(
@@ -408,11 +440,12 @@ impl CatalogRepository {
     }
 
     /// Relationship edges of every source in `entity_ids`, at most `limit`
-    /// per source, attribute and context.
+    /// per source, attribute and context, with a global row budget.
     async fn preview_relationships(
         &self,
         entity_ids: &[Uuid],
         limit: i64,
+        row_budget: usize,
     ) -> Result<Vec<PreviewRelationship>, RepositoryError> {
         Ok(sqlx::query_as::<_, PreviewRelationship>(
             r#"WITH relationships AS (
@@ -456,10 +489,12 @@ impl CatalogRepository {
                JOIN fallbacks ON fallbacks.blueprint_id = selected.target_blueprint_id
                 AND fallbacks.blueprint_version = selected.target_blueprint_version
                ORDER BY selected.source_id, selected.attribute_code,
-                        selected.context_code NULLS FIRST, selected.relationship_position"#,
+                        selected.context_code NULLS FIRST, selected.relationship_position
+               LIMIT $3"#,
         )
         .bind(entity_ids)
         .bind(limit)
+        .bind(row_budget as i64)
         .fetch_all(&self.pool)
         .await?)
     }

@@ -57,6 +57,10 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
     } else {
         "blueprints.write"
     };
+    // This POST carries read selectors in its body; it is not an entity edit.
+    if method == Method::POST && path == "/v1/entities/{entity_id}/incoming-relationships" {
+        return Some(read(TargetKind::EntityId));
+    }
     // Commenting is available to every entity reader, including viewers.
     // Editing additionally enforces authorship in the repository transaction.
     if path == "/v1/entities/{entity_id}/comments"
@@ -483,6 +487,17 @@ pub(super) fn target(path: &str, kind: TargetKind) -> (Option<Uuid>, Option<Stri
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn incoming_relationship_queries_are_entity_reads() {
+        let policy = policy(
+            &Method::POST,
+            "/v1/entities/{entity_id}/incoming-relationships",
+        )
+        .unwrap();
+        assert_eq!(policy.permission, "entities.read");
+        assert!(matches!(policy.target, TargetKind::EntityId));
+    }
 
     #[test]
     fn entity_labels_are_reads_filtered_by_the_handler() {

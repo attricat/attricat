@@ -43,7 +43,7 @@ impl AuthenticatedPrincipal {
 #[derive(Clone, Copy, Debug)]
 pub(super) struct ActiveWorkspace(pub Uuid);
 
-/// The session digest is retained only to revoke the current browser session;
+/// Retained for session revocation, renewal and live stream validation;
 /// raw cookie credentials never reach a handler.
 #[derive(Clone)]
 pub(super) struct AuthenticatedSession(pub SessionDigest);
@@ -292,18 +292,23 @@ pub(super) async fn authorize(
         return Err(ApiError::forbidden());
     }
 
+    let user_scoped_agent = matched.starts_with("/agent/");
     let principal = AuthenticatedPrincipal(principal, token_id);
     let audit_context = audit::request_context(&request, principal);
     request.extensions_mut().insert(principal);
     request.extensions_mut().insert(ActiveWorkspace(workspace));
-    request.extensions_mut().insert(ScopedRepository(
-        state
-            .repository
-            .for_workspace(workspace)
-            .await?
-            .with_generations(generations)
-            .with_audit_context(audit_context),
-    ));
+    let mut repository = state
+        .repository
+        .for_workspace(workspace)
+        .await?
+        .with_generations(generations)
+        .with_audit_context(audit_context);
+    if user_scoped_agent {
+        repository = repository.with_authorization_actor(principal.actor());
+    }
+    request
+        .extensions_mut()
+        .insert(ScopedRepository(repository));
     if let Some(session_digest) = session_digest {
         request
             .extensions_mut()

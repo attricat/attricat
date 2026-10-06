@@ -70,6 +70,8 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
             return Err(RepositoryError::InvitationInvalid);
         }
         let mut tx = self.pool.begin().await?;
+        Self::lock_workspace_permission_on(&mut tx, actor_id, workspace_id, "members.manage")
+            .await?;
         let user = sqlx::query("INSERT INTO users (id, email, display_name, email_verified_at) VALUES ($1, $2, NULLIF(btrim($3), ''), clock_timestamp()) ON CONFLICT (email) DO UPDATE SET display_name = COALESCE(users.display_name, EXCLUDED.display_name) RETURNING id, state, email_verified_at, security_version")
             .bind(Uuid::new_v4()).bind(email).bind(display_name).fetch_one(&mut *tx).await?;
         let user_id: Uuid = user.try_get("id")?;
@@ -100,6 +102,8 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
                 needs_password_setup: !credential_exists,
             });
         };
+        self.ensure_token_can_delegate_role_on(&mut tx, actor_id, workspace_id, role_id)
+            .await?;
         if invitation_digest.len() != 32
             || expires_at <= Utc::now()
             || !Self::scope_is_valid_on(
@@ -154,6 +158,7 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
             return Err(RepositoryError::InvitationInvalid);
         }
         let mut tx: Transaction<'_, Postgres> = self.pool.begin().await?;
+        Self::lock_invitation_acceptance_on(&mut tx, invitation_digest).await?;
         let row = sqlx::query("SELECT i.id invitation_id, i.workspace_id, i.role_id, i.scope_type, i.scope_target_id, o.user_id, u.security_version FROM workspace_invitations i JOIN workspace_invitation_onboarding o ON o.invitation_id = i.id AND o.workspace_id = i.workspace_id JOIN user_lifecycle_action_tokens a ON a.token_digest = o.action_token_digest AND a.user_id = o.user_id AND a.purpose = 'password_setup' JOIN users u ON u.id = o.user_id LEFT JOIN local_password_credentials c ON c.user_id = o.user_id WHERE i.token_digest = $1 AND o.action_token_digest = $2 AND i.accepted_at IS NULL AND i.revoked_at IS NULL AND i.expires_at > clock_timestamp() AND a.consumed_at IS NULL AND a.revoked_at IS NULL AND a.expires_at > clock_timestamp() AND a.issued_security_version = u.security_version AND a.issued_credential_version = coalesce(c.credential_version, 0) AND u.state = 'active' AND u.email_verified_at IS NOT NULL FOR UPDATE OF i, o, a, u")
             .bind(invitation_digest).bind(action_digest).fetch_optional(&mut *tx).await?.ok_or(RepositoryError::InvitationInvalid)?;
         let user_id: Uuid = row.try_get("user_id")?;
@@ -182,6 +187,41 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
             user_id,
             workspace_id,
         })
+    }
+
+    // Access revocation locks the workspace before the membership. Invitation
+    // creation/acceptance/revocation must use the same outer lock, before any
+    // user, token or invitation row, to avoid restoring access or inverting
+    // the membership/invitation lock order. NO KEY UPDATE still permits FK
+    // checks from unrelated workspace writes.
+    async fn lock_invitation_changes_on(
+        tx: &mut Transaction<'_, Postgres>,
+        workspace_id: Uuid,
+    ) -> Result<(), RepositoryError> {
+        sqlx::query(
+            "SELECT id FROM workspaces WHERE id = $1 AND deleted_at IS NULL FOR NO KEY UPDATE",
+        )
+        .bind(workspace_id)
+        .fetch_optional(&mut **tx)
+        .await?
+        .ok_or(RepositoryError::InvitationInvalid)?;
+        Ok(())
+    }
+
+    async fn lock_invitation_acceptance_on(
+        tx: &mut Transaction<'_, Postgres>,
+        digest: &[u8],
+    ) -> Result<(), RepositoryError> {
+        // Discover the destination without locking the invitation first. The
+        // caller must reread and validate it after acquiring the workspace lock.
+        let workspace_id = sqlx::query_scalar(
+            "SELECT workspace_id FROM workspace_invitations WHERE token_digest = $1",
+        )
+        .bind(digest)
+        .fetch_optional(&mut **tx)
+        .await?
+        .ok_or(RepositoryError::InvitationInvalid)?;
+        Self::lock_invitation_changes_on(tx, workspace_id).await
     }
 
     async fn require_member_permission(
@@ -214,16 +254,6 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
     ) -> Result<bool, RepositoryError> {
         Ok(sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM workspace_memberships m JOIN role_grants g ON g.membership_id = m.id AND g.workspace_id = m.workspace_id WHERE m.user_id = $1 AND m.workspace_id = $2 AND m.state = 'active' AND g.role_id = $3 AND g.scope_type = 'workspace' AND g.scope_target_id = $2)").bind(actor_id).bind(workspace_id).bind(OWNER_ROLE_ID).fetch_one(connection).await?)
     }
-    async fn scope_is_valid(
-        &self,
-        workspace_id: Uuid,
-        role_id: Uuid,
-        scope_type: &str,
-        target: Uuid,
-    ) -> Result<bool, RepositoryError> {
-        let mut connection = self.pool.acquire().await?;
-        Self::scope_is_valid_on(&mut connection, workspace_id, role_id, scope_type, target).await
-    }
     async fn scope_is_valid_on(
         connection: &mut sqlx::PgConnection,
         workspace_id: Uuid,
@@ -245,14 +275,6 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
         Ok(target_ok
             && (role_id != OWNER_ROLE_ID || scope_type == "workspace" && target == workspace_id))
     }
-    async fn role_is_delegable(
-        &self,
-        actor_id: Uuid,
-        workspace_id: Uuid,
-        role_id: Uuid,
-    ) -> Result<bool, RepositoryError> {
-        self.roles_delegable(actor_id, workspace_id, role_id).await
-    }
     async fn revoke_user_access(
         &self,
         tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
@@ -260,6 +282,11 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
         workspace_id: Uuid,
     ) -> Result<(), sqlx::Error> {
         sqlx::query("UPDATE browser_sessions SET revoked_at = clock_timestamp() WHERE user_id = $1 AND workspace_id = $2 AND revoked_at IS NULL").bind(user_id).bind(workspace_id).execute(&mut **tx).await?;
+        // Older invitations must not reactivate a disabled membership or
+        // restore a revoked grant. A subsequent administrator-issued invitation
+        // can authorize access again; other workspaces' invitations survive.
+        sqlx::query("UPDATE workspace_invitations SET revoked_at = clock_timestamp() WHERE workspace_id = $2 AND invitee_email = (SELECT email FROM users WHERE id = $1) AND accepted_at IS NULL AND revoked_at IS NULL")
+            .bind(user_id).bind(workspace_id).execute(&mut **tx).await?;
         // Lifecycle tokens are account-wide; only this workspace's pending
         // onboarding link belongs to the access being revoked. Password reset,
         // email verification and other workspaces' onboarding are untouched.
@@ -289,9 +316,7 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
         self.require_member_permission(actor_id, workspace_id, "members.manage")
             .await?;
         let mut tx = self.pool.begin().await?;
-        sqlx::query("SELECT id FROM workspaces WHERE id = $1 FOR UPDATE")
-            .bind(workspace_id)
-            .execute(&mut *tx)
+        Self::lock_workspace_permission_on(&mut tx, actor_id, workspace_id, "members.manage")
             .await?;
         sqlx::query(
             "SELECT id FROM workspace_memberships WHERE id = $1 AND workspace_id = $2 FOR UPDATE",
@@ -345,20 +370,21 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
     ) -> Result<Uuid, RepositoryError> {
         self.require_member_permission(actor_id, workspace_id, "roles.grant")
             .await?;
-        let member_ok: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM workspace_memberships WHERE id = $1 AND workspace_id = $2 AND state = 'active')").bind(membership_id).bind(workspace_id).fetch_one(&self.pool).await?;
+        let id = Uuid::new_v4();
+        let mut tx = self.pool.begin().await?;
+        Self::lock_workspace_permission_on(&mut tx, actor_id, workspace_id, "roles.grant").await?;
+        self.ensure_token_can_delegate_role_on(&mut tx, actor_id, workspace_id, role_id)
+            .await?;
+        let member_ok: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM workspace_memberships WHERE id = $1 AND workspace_id = $2 AND state = 'active')").bind(membership_id).bind(workspace_id).fetch_one(&mut *tx).await?;
         if !member_ok
-            || !self
-                .scope_is_valid(workspace_id, role_id, scope_type, scope_target_id)
+            || !Self::scope_is_valid_on(&mut tx, workspace_id, role_id, scope_type, scope_target_id)
                 .await?
-            || !self
-                .role_is_delegable(actor_id, workspace_id, role_id)
-                .await?
-            || role_id == OWNER_ROLE_ID && !self.active_owner(actor_id, workspace_id).await?
+            || !Self::roles_delegable_on(&mut tx, actor_id, workspace_id, role_id).await?
+            || role_id == OWNER_ROLE_ID
+                && !Self::active_owner_on(&mut tx, actor_id, workspace_id).await?
         {
             return Err(RepositoryError::NotFound("role grant"));
         }
-        let id = Uuid::new_v4();
-        let mut tx = self.pool.begin().await?;
         sqlx::query("INSERT INTO role_grants (id, workspace_id, membership_id, role_id, scope_type, scope_target_id) VALUES ($1, $2, $3, $4, $5, $6)").bind(id).bind(workspace_id).bind(membership_id).bind(role_id).bind(scope_type).bind(scope_target_id).execute(&mut *tx).await?;
         self.commit_mutation(tx).await?;
         Ok(id)
@@ -386,10 +412,7 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
             return Err(RepositoryError::NotFound("owner authority"));
         }
         let mut tx = self.pool.begin().await?;
-        sqlx::query("SELECT id FROM workspaces WHERE id = $1 FOR UPDATE")
-            .bind(workspace_id)
-            .execute(&mut *tx)
-            .await?;
+        Self::lock_workspace_permission_on(&mut tx, actor_id, workspace_id, "roles.grant").await?;
         let grant = sqlx::query("SELECT membership_id, role_id FROM role_grants WHERE id = $1 AND workspace_id = $2 AND membership_id = $3 FOR UPDATE")
             .bind(grant_id)
             .bind(workspace_id)
@@ -398,6 +421,13 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
             .await?
             .ok_or(RepositoryError::NotFound("role grant"))?;
         let membership_id: Uuid = grant.try_get("membership_id")?;
+        // Retirement can replace a grant's role while this request waits.
+        let role_id: Uuid = grant.try_get("role_id")?;
+        if role_id == OWNER_ROLE_ID
+            && !Self::active_owner_on(&mut tx, actor_id, workspace_id).await?
+        {
+            return Err(RepositoryError::NotFound("owner authority"));
+        }
         sqlx::query(
             "SELECT id FROM workspace_memberships WHERE id = $1 AND workspace_id = $2 FOR UPDATE",
         )
@@ -434,13 +464,16 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
         workspace_id: Uuid,
         target_membership_id: Uuid,
     ) -> Result<(), RepositoryError> {
-        if !self.active_owner(actor_id, workspace_id).await? {
-            return Err(RepositoryError::NotFound("owner authority"));
-        }
         let mut tx = self.pool.begin().await?;
-        sqlx::query("SELECT id FROM workspaces WHERE id = $1 FOR UPDATE")
+        sqlx::query("SELECT id FROM workspaces WHERE id = $1 FOR NO KEY UPDATE")
             .bind(workspace_id)
             .execute(&mut *tx)
+            .await?;
+        // Ownership may have changed while waiting for the workspace lock.
+        if !Self::active_owner_on(&mut tx, actor_id, workspace_id).await? {
+            return Err(RepositoryError::NotFound("owner authority"));
+        }
+        self.ensure_token_can_delegate_role_on(&mut tx, actor_id, workspace_id, OWNER_ROLE_ID)
             .await?;
         let target_user: Uuid = sqlx::query_scalar("SELECT user_id FROM workspace_memberships WHERE id = $1 AND workspace_id = $2 AND state = 'active'").bind(target_membership_id).bind(workspace_id).fetch_optional(&mut *tx).await?.ok_or(RepositoryError::NotFound("ownership target"))?;
         if target_user != actor_id {
@@ -470,17 +503,22 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
             || !email.contains('@')
             || digest.len() != 32
             || expires_at <= Utc::now()
-            || !self
-                .scope_is_valid(workspace_id, role_id, scope_type, scope_target_id)
-                .await?
-            || !self
-                .role_is_delegable(actor_id, workspace_id, role_id)
-                .await?
-            || role_id == OWNER_ROLE_ID && !self.active_owner(actor_id, workspace_id).await?
         {
             return Err(RepositoryError::InvitationInvalid);
         }
         let mut tx = self.pool.begin().await?;
+        Self::lock_workspace_permission_on(&mut tx, actor_id, workspace_id, "members.manage")
+            .await?;
+        self.ensure_token_can_delegate_role_on(&mut tx, actor_id, workspace_id, role_id)
+            .await?;
+        if !Self::scope_is_valid_on(&mut tx, workspace_id, role_id, scope_type, scope_target_id)
+            .await?
+            || !Self::roles_delegable_on(&mut tx, actor_id, workspace_id, role_id).await?
+            || role_id == OWNER_ROLE_ID
+                && !Self::active_owner_on(&mut tx, actor_id, workspace_id).await?
+        {
+            return Err(RepositoryError::InvitationInvalid);
+        }
         sqlx::query("INSERT INTO workspace_invitations (id, workspace_id, invitee_email, inviter_user_id, role_id, scope_type, scope_target_id, token_digest, expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)").bind(id).bind(workspace_id).bind(email).bind(actor_id).bind(role_id).bind(scope_type).bind(scope_target_id).bind(digest).bind(expires_at).execute(&mut *tx).await?;
         self.commit_mutation(tx).await?;
         Ok(())
@@ -518,6 +556,8 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
         self.require_member_permission(actor_id, workspace_id, "members.manage")
             .await?;
         let mut tx = self.pool.begin().await?;
+        Self::lock_workspace_permission_on(&mut tx, actor_id, workspace_id, "members.manage")
+            .await?;
         let revoked = sqlx::query("UPDATE workspace_invitations SET revoked_at = clock_timestamp() WHERE id = $1 AND workspace_id = $2 AND accepted_at IS NULL AND revoked_at IS NULL").bind(id).bind(workspace_id).execute(&mut *tx).await?.rows_affected() == 1;
         if revoked {
             sqlx::query("UPDATE user_lifecycle_action_tokens action SET revoked_at = clock_timestamp() FROM workspace_invitation_onboarding onboarding WHERE onboarding.invitation_id = $1 AND action.token_digest = onboarding.action_token_digest AND action.consumed_at IS NULL AND action.revoked_at IS NULL")
@@ -535,6 +575,7 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
             return Err(RepositoryError::InvitationInvalid);
         }
         let mut tx = self.pool.begin().await?;
+        Self::lock_invitation_acceptance_on(&mut tx, digest).await?;
         let invitation = sqlx::query("SELECT id, workspace_id, invitee_email, role_id, scope_type, scope_target_id FROM workspace_invitations WHERE token_digest = $1 AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > clock_timestamp() FOR UPDATE").bind(digest).fetch_optional(&mut *tx).await?.ok_or(RepositoryError::InvitationInvalid)?;
         let email: String = invitation.try_get("invitee_email")?;
         let user_ok: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM users WHERE id = $1 AND state = 'active' AND email = $2 AND email_verified_at IS NOT NULL)").bind(user_id).bind(&email).fetch_one(&mut *tx).await?;

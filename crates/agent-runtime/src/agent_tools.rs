@@ -998,6 +998,12 @@ pub async fn change_names(
     let readable = repository
         .authorized_entity_ids(actor, workspace, "entities.read", &entity_ids)
         .await?;
+    if !repository
+        .principal_token_permits(tool_actor(repository, actor), workspace, "entities.read")
+        .await?
+    {
+        entity_ids.clear();
+    }
     entity_ids.retain(|id| readable.contains(id));
     for label in repository.entity_labels(&entity_ids).await? {
         let display = label
@@ -1014,6 +1020,9 @@ pub async fn change_names(
         );
     }
     if let Some(context_id) = uuid_at(arguments, "context_id")
+        && repository
+            .principal_token_permits(tool_actor(repository, actor), workspace, "contexts.read")
+            .await?
         && let Some(context) = repository
             .list_authorized_contexts(actor, workspace)
             .await?
@@ -1024,7 +1033,13 @@ pub async fn change_names(
     }
     if let Some(blueprint_id) = uuid_at(arguments, "blueprint_id")
         && repository
-            .is_authorized(actor, workspace, "blueprints.read", None, None)
+            .principal_may(
+                tool_actor(repository, actor),
+                workspace,
+                "blueprints.read",
+                None,
+                None,
+            )
             .await?
         && let Some(blueprint) = repository
             .list_blueprints()
@@ -1093,6 +1108,12 @@ pub async fn execute_read(
     name: &str,
     arguments: Value,
 ) -> Result<Value, ToolError> {
+    let principal = tool_actor(repository, actor);
+    if principal.user_id != actor {
+        return Err(ToolError::Forbidden);
+    }
+    let scoped = repository.clone().with_authorization_actor(principal);
+    let repository = &scoped;
     if !read_authorized(repository, actor, workspace, name, &arguments).await? {
         return Err(ToolError::Forbidden);
     }
@@ -1181,7 +1202,7 @@ pub async fn execute_read(
                 .status_transition_access(
                     entity_id,
                     context_id,
-                    AuthorizationActor { user_id: actor, token_id: None },
+                    tool_actor(repository, actor),
                 )
                 .await?;
             json!({
@@ -2812,6 +2833,15 @@ async fn resolve_agent_search_sort(
     }))
 }
 
+pub(crate) fn tool_actor(repository: &CatalogRepository, user_id: Uuid) -> AuthorizationActor {
+    repository
+        .authorization_actor()
+        .unwrap_or(AuthorizationActor {
+            user_id,
+            token_id: None,
+        })
+}
+
 async fn read_authorized(
     repository: &CatalogRepository,
     actor: Uuid,
@@ -2828,7 +2858,11 @@ async fn read_authorized(
         | "list_reusable_attributes" => ("blueprints.read", None, None),
         // Like the HTTP label route, each ID is authorized when the tool runs
         // and unreadable entities are omitted.
-        "get_entity_labels" => return Ok(true),
+        "get_entity_labels" => {
+            return Ok(repository
+                .principal_token_permits(tool_actor(repository, actor), workspace, "entities.read")
+                .await?);
+        }
         "data_health_summary" | "data_health_details" => ("data_health.read", None, None),
         // Compiling a draft reads no workspace data; it needs the same access
         // as reading the definitions it imitates.
@@ -2874,6 +2908,12 @@ async fn read_authorized(
             None,
         ),
         "view_image" | "read_file" => {
+            if !repository
+                .principal_token_permits(tool_actor(repository, actor), workspace, "entities.read")
+                .await?
+            {
+                return Ok(false);
+            }
             let file_id = parse_uuid(arguments, "file_id")?;
             return Ok(authorize_file_read(
                 repository,
@@ -2898,7 +2938,13 @@ async fn read_authorized(
         _ => return Err(ToolError::UnknownTool(name.to_owned())),
     };
     Ok(repository
-        .is_authorized(actor, workspace, permission, target_id, target_code)
+        .principal_may(
+            tool_actor(repository, actor),
+            workspace,
+            permission,
+            target_id,
+            target_code,
+        )
         .await?)
 }
 

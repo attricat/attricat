@@ -2,7 +2,7 @@ use std::convert::Infallible;
 
 use async_stream::stream;
 use axum::{
-    Json,
+    Extension, Json,
     extract::State,
     http::{HeaderMap, StatusCode},
     response::sse::{Event, KeepAlive, Sse},
@@ -14,7 +14,7 @@ use uuid::Uuid;
 
 use super::{
     AppState,
-    auth::{ActiveWorkspace, AuthenticatedPrincipal, ScopedRepository},
+    auth::{ActiveWorkspace, AuthenticatedPrincipal, AuthenticatedSession, ScopedRepository},
     error::ApiError,
     extractors::{ApiJson, ApiPath, ApiQuery},
 };
@@ -87,7 +87,13 @@ pub(super) async fn create_conversation(
     }
     let conversation = if let Some(entity_id) = input.entity_id {
         if !repository
-            .is_authorized(user, workspace, "entities.read", Some(entity_id), None)
+            .principal_may(
+                request_actor(&repository, user),
+                workspace,
+                "entities.read",
+                Some(entity_id),
+                None,
+            )
             .await?
         {
             return Err(ApiError::forbidden());
@@ -119,6 +125,18 @@ pub(super) async fn create_conversation(
     ))
 }
 
+fn request_actor(
+    repository: &crate::repository::CatalogRepository,
+    user_id: Uuid,
+) -> crate::repository::AuthorizationActor {
+    repository
+        .authorization_actor()
+        .unwrap_or(crate::repository::AuthorizationActor {
+            user_id,
+            token_id: None,
+        })
+}
+
 pub(super) async fn readable_conversation(
     repository: &crate::repository::CatalogRepository,
     user: Uuid,
@@ -128,7 +146,13 @@ pub(super) async fn readable_conversation(
     let conversation = repository.get_conversation(id).await?;
     if let Some(entity_id) = conversation.entity_id
         && !repository
-            .is_authorized(user, workspace, "entities.read", Some(entity_id), None)
+            .principal_may(
+                request_actor(repository, user),
+                workspace,
+                "entities.read",
+                Some(entity_id),
+                None,
+            )
             .await?
     {
         return Err(ApiError::forbidden());
@@ -148,9 +172,16 @@ async fn retain_readable<T>(
     let mut entity_ids = items.iter().filter_map(&entity_of).collect::<Vec<_>>();
     entity_ids.sort_unstable();
     entity_ids.dedup();
-    let readable = repository
-        .authorized_entity_ids(user, workspace, "entities.read", &entity_ids)
-        .await?;
+    let readable = if repository
+        .principal_token_permits(request_actor(repository, user), workspace, "entities.read")
+        .await?
+    {
+        repository
+            .authorized_entity_ids(user, workspace, "entities.read", &entity_ids)
+            .await?
+    } else {
+        Default::default()
+    };
     Ok(items
         .into_iter()
         .filter(|item| entity_of(item).is_none_or(|entity_id| readable.contains(&entity_id)))
@@ -301,7 +332,7 @@ pub(super) async fn list_runs(
 
 pub(super) async fn send_message(
     State(state): State<AppState>,
-    AuthenticatedPrincipal(user, _): AuthenticatedPrincipal,
+    principal @ AuthenticatedPrincipal(user, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace_id): ActiveWorkspace,
     ScopedRepository(repository): ScopedRepository,
     ApiPath(conversation_id): ApiPath<Uuid>,
@@ -333,6 +364,7 @@ pub(super) async fn send_message(
     readable_conversation(&repository, user, workspace_id, conversation_id).await?;
     let config = configured(&state)?;
     let run = repository
+        .with_authorization_actor(principal.actor())
         .submit_agent_message(
             conversation_id,
             user,
@@ -382,14 +414,14 @@ pub(super) async fn list_pending_approvals(
 
 pub(super) async fn approve(
     State(state): State<AppState>,
-    AuthenticatedPrincipal(user, _): AuthenticatedPrincipal,
+    principal @ AuthenticatedPrincipal(user, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace_id): ActiveWorkspace,
     ScopedRepository(repository): ScopedRepository,
     ApiPath(tool_call_id): ApiPath<Uuid>,
 ) -> Result<Json<Value>, ApiError> {
     decide_and_enqueue(
         &state,
-        repository,
+        repository.with_authorization_actor(principal.actor()),
         tool_call_id,
         user,
         workspace_id,
@@ -425,6 +457,18 @@ async fn decide_and_enqueue(
     let call = repository.get_agent_tool_call(tool_call_id).await?;
     let run = repository.get_agent_run(call.run_id).await?;
     readable_conversation(&repository, user, workspace_id, run.conversation_id).await?;
+    if matches!(decision, ApprovalDecision::Approve)
+        && !catalog_agent_runtime::agent_runner::mutation_authorized(
+            &repository,
+            user,
+            workspace_id,
+            &call.tool_name,
+            &call.arguments,
+        )
+        .await?
+    {
+        return Err(ApiError::forbidden());
+    }
     let _ = configured(state)?;
     let call = repository
         .decide_tool_call(tool_call_id, user, decision)
@@ -456,18 +500,58 @@ fn stream_failed() -> Event {
 const STREAM_POLL_MIN: std::time::Duration = std::time::Duration::from_millis(250);
 const STREAM_POLL_MAX: std::time::Duration = std::time::Duration::from_secs(2);
 
+async fn authorize_event_stream(
+    repository: &crate::repository::CatalogRepository,
+    principal: AuthenticatedPrincipal,
+    session: Option<&AuthenticatedSession>,
+    workspace: Uuid,
+    conversation: Uuid,
+) -> Result<(), ApiError> {
+    if let Some(session) = session
+        && !repository
+            .validate_browser_session(&session.0)
+            .await?
+            .is_some_and(|active| {
+                active.user_id == principal.0
+                    && active.workspace_id == workspace
+                    && active.workspace_active
+            })
+    {
+        return Err(ApiError::unauthenticated());
+    }
+    // Unlike request middleware, a response body can outlive its credential
+    // and grants. principal_may also checks live PAT revocation and expiry.
+    if !repository
+        .principal_may(principal.actor(), workspace, "agents.run", None, None)
+        .await?
+    {
+        return Err(ApiError::forbidden());
+    }
+    readable_conversation(repository, principal.0, workspace, conversation).await?;
+    Ok(())
+}
+
 /// Streams durable events in sequence order. Event ids are database UUIDs, so a
 /// reconnecting client can use Last-Event-ID without relying on process memory.
 pub(super) async fn stream_events(
     State(state): State<AppState>,
-    AuthenticatedPrincipal(user, _): AuthenticatedPrincipal,
+    principal @ AuthenticatedPrincipal(user, _): AuthenticatedPrincipal,
+    session: Option<Extension<AuthenticatedSession>>,
     ActiveWorkspace(workspace): ActiveWorkspace,
     ScopedRepository(repository): ScopedRepository,
     ApiPath(run_id): ApiPath<Uuid>,
     headers: HeaderMap,
 ) -> Result<Sse<impl tokio_stream::Stream<Item = Result<Event, Infallible>>>, ApiError> {
     let run = repository.get_agent_run(run_id).await?;
-    readable_conversation(&repository, user, workspace, run.conversation_id).await?;
+    let session = session.map(|Extension(session)| session);
+    authorize_event_stream(
+        &repository,
+        principal,
+        session.as_ref(),
+        workspace,
+        run.conversation_id,
+    )
+    .await?;
     let after = match headers
         .get("last-event-id")
         .and_then(|value| value.to_str().ok())
@@ -497,7 +581,16 @@ pub(super) async fn stream_events(
         // An idle run is polled progressively less often; new events reset it.
         let mut idle_delay = STREAM_POLL_MIN;
         loop {
-            match repository.agent_run_events_after(run_id, sequence).await {
+            let batch = repository.agent_run_events_after(run_id, sequence).await;
+            // Authorize after fetching, before exposing any new batch. An
+            // idle stream must also close when access is withdrawn rather
+            // than retaining its admission permit until the lifetime limit.
+            if let Err(error) = authorize_event_stream(&repository, principal, session.as_ref(), workspace, run.conversation_id).await {
+                tracing::debug!(?error, %run_id, "agent run event stream authorization ended");
+                yield Ok(stream_failed());
+                break;
+            }
+            match batch {
                 Ok(events) if events.is_empty() => {
                     if draining { break; }
                     match repository.get_agent_run(run_id).await {

@@ -55,12 +55,33 @@ contexts explicitly with `initialize_workspace`; startup repairs existing active
 workspaces once, rather than attempting writes during every request. Transaction-owning
 helpers must reuse the caller's connection instead of acquiring another pool slot.
 
+Workers poll execution and lease renewal concurrently through
+`catalog-workers`' `heartbeat::with_heartbeat`. Do not await database renewal
+inside a selected timer branch: that stops polling the job, which may hold the
+lock or pool connection renewal needs. Lease loss drops the execution future
+before cleanup runs. This does not replace transactional task fencing at each
+mutation's commit boundary.
+
 History retention runs periodically in bounded transactions. File uploads commit
 durable object-key intents before S3 writes and consume them in the same
 transaction as file persistence. Unfinished intents become cleanup work after the
 request deadline plus one hour. Cleanup claims fence late finalization, retry
 failed S3 deletions, and survive cancellation and process restarts. Do not delete
 objects on an ambiguous database-commit error.
+
+## Authorization mutation locking
+
+Role and membership mutations take the workspace's `FOR NO KEY UPDATE` lock
+before locking roles, memberships or credentials. Invitation acceptance,
+onboarding and browser-session renewal use the same outer lock. In particular,
+renewal must acquire it before the old session row; otherwise a concurrent
+revocation can miss the replacement inserted after its SQL statement snapshot.
+Recheck management permission, ownership and
+delegated permissions on the transaction's connection after acquiring the locks;
+preflight checks alone cannot authorize a mutation after a concurrent role edit
+or ownership transfer. Keep this ordering when adding authority-changing paths.
+The workspace lock serializes these mutations without blocking unrelated
+foreign-key checks.
 
 ## Stable assets
 

@@ -218,7 +218,10 @@ pub(super) async fn login(
         .await?
         .ok_or_else(ApiError::invalid_credentials)?;
     let email = request.email.trim().to_lowercase();
-    let rate_key = digest_login_key(&format!("{}\0{}", workspace.id, email));
+    // Password credentials are global to the account. Including the selected
+    // workspace lets an attacker multiply guesses by cycling public workspaces,
+    // even workspaces the victim has never joined.
+    let rate_key = digest_login_key(&email);
     if !state.repository.reserve_login_attempt(&rate_key).await? {
         return Err(ApiError::rate_limited());
     }

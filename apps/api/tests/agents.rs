@@ -1701,7 +1701,7 @@ async fn entity_conversation_mutations_uploads_and_events_require_entity_read(po
         .unwrap();
     let workspace = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
     let run_id = Uuid::new_v4();
-    sqlx::query("INSERT INTO agent_runs (id, workspace_id, conversation_id, origin, status, provider_base_url, model, finished_at) VALUES ($1, $2, $3, 'manual', 'skipped', 'https://provider.test/v1', 'test', now())")
+    sqlx::query("INSERT INTO agent_runs (id, workspace_id, conversation_id, origin, status, provider_base_url, model) VALUES ($1, $2, $3, 'interactive', 'awaiting_approval', 'https://provider.test/v1', 'test')")
         .bind(run_id).bind(workspace).bind(conversation_id).execute(&pool).await.unwrap();
     let call_id = Uuid::new_v4();
     sqlx::query("INSERT INTO agent_tool_calls (id, run_id, sequence, tool_name, arguments, state) VALUES ($1, $2, 0, 'test', '{}', 'pending_approval')")

@@ -215,13 +215,33 @@ impl RequestTiming {
     }
 }
 
-/// Runs CPU-bound work (archive decompression, validation, hashing) on the
-/// blocking pool so it cannot stall the async workers serving other requests.
+// Each archive can expand to hundreds of MiB. Request admission alone cannot
+// bound this work: timed-out requests leave spawn_blocking threads running.
+static ARCHIVE_WORK: Semaphore = Semaphore::const_new(2);
+
+/// Runs archive decompression and validation off the async workers, retaining
+/// its memory/CPU admission permit until the blocking work actually finishes.
 /// A panic in `work` is re-raised here, exactly as if it had run inline.
 pub(crate) async fn run_blocking<T: Send + 'static>(
     work: impl FnOnce() -> T + Send + 'static,
 ) -> T {
-    match tokio::task::spawn_blocking(work).await {
+    let permit = ARCHIVE_WORK
+        .acquire()
+        .await
+        .expect("archive semaphore is never closed");
+    run_blocking_with_permit(permit, work).await
+}
+
+async fn run_blocking_with_permit<T: Send + 'static>(
+    permit: tokio::sync::SemaphorePermit<'static>,
+    work: impl FnOnce() -> T + Send + 'static,
+) -> T {
+    match tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        work()
+    })
+    .await
+    {
         Ok(value) => value,
         Err(error) => std::panic::resume_unwind(error.into_panic()),
     }
@@ -1128,6 +1148,27 @@ mod timing_tests {
             );
             assert_eq!(response.headers()["content-type"], "application/json");
         }
+    }
+
+    #[tokio::test]
+    async fn cancelled_archive_requests_keep_blocking_work_bounded() {
+        static PERMITS: Semaphore = Semaphore::const_new(1);
+        let permit = PERMITS.acquire().await.unwrap();
+        let (started, waiting) = tokio::sync::oneshot::channel();
+        let (release, blocked) = std::sync::mpsc::channel();
+        let task = tokio::spawn(run_blocking_with_permit(permit, move || {
+            started.send(()).unwrap();
+            blocked.recv().unwrap();
+        }));
+        waiting.await.unwrap();
+        task.abort();
+        assert!(task.await.unwrap_err().is_cancelled());
+        assert!(PERMITS.try_acquire().is_err());
+        release.send(()).unwrap();
+        let _permit = tokio::time::timeout(Duration::from_secs(2), PERMITS.acquire())
+            .await
+            .unwrap()
+            .unwrap();
     }
 
     #[test]

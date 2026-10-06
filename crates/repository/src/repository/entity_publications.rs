@@ -229,8 +229,7 @@ impl CatalogRepository {
         let channel = self
             .upsert_publication_channel_in_transaction(&mut tx, context_id, input)
             .await?;
-        self.write_audit_event(&mut tx).await?;
-        tx.commit().await?;
+        self.commit_mutation(tx).await?;
         Ok(channel)
     }
 
@@ -416,7 +415,6 @@ impl CatalogRepository {
                     .await?,
             );
         }
-        self.write_audit_event(&mut tx).await?;
         for status in &statuses {
             self.enqueue_event(
                 &mut tx,
@@ -431,7 +429,7 @@ impl CatalogRepository {
             )
             .await?;
         }
-        tx.commit().await?;
+        self.commit_mutation(tx).await?;
         Ok(statuses)
     }
 
@@ -525,8 +523,7 @@ impl CatalogRepository {
             })
             .collect();
         self.enqueue_events(&mut tx, events).await?;
-        self.write_audit_event(&mut tx).await?;
-        tx.commit().await?;
+        self.commit_mutation(tx).await?;
         Ok(BlueprintEntityPublicationSummary {
             entity_count: entity_ids.len() as i64,
             channel_count: channel_ids.len() as i64,
@@ -870,12 +867,11 @@ impl CatalogRepository {
 
     async fn commit_publication_mutation(
         &self,
-        mut tx: Transaction<'_, Postgres>,
+        tx: Transaction<'_, Postgres>,
         mutation: PublicationMutation<'_>,
     ) -> Result<(), RepositoryError> {
-        self.write_audit_event(&mut tx).await?;
-        self.enqueue_event(
-            &mut tx,
+        self.commit_mutation_with_event(
+            tx,
             self.publication_event(
                 mutation.event_type,
                 mutation.entity_id,
@@ -885,9 +881,7 @@ impl CatalogRepository {
                 mutation.reason,
             ),
         )
-        .await?;
-        tx.commit().await?;
-        Ok(())
+        .await
     }
 
     fn publication_event(

@@ -1,9 +1,11 @@
 # Field-level read restrictions
 
 Status: investigation and design for
-[#346](https://github.com/attricat/attricat/issues/346). Nothing in this note
-is implemented yet. It records what Core does today and what restricted
-attributes would need.
+[#346](https://github.com/attricat/attricat/issues/346). The attribute-restriction
+proposal is not implemented yet. It records what Core
+does today and what restricted attributes would need. Entity-level relationship
+hydration now checks related entities' read authority; this does not add
+attribute-level restrictions.
 
 ## Findings
 
@@ -35,10 +37,10 @@ filters by attribute.
     values by context. `apps/docs/.../operate/workspaces.md` describes an
     editor grant on a context subtree as letting the person edit values
     there. Current code does not do that.
-- After the middleware, handlers get a workspace-scoped repository that does
-  not know who the caller is. The only exception is
-  `authorization_actor`, which interactive extension runs use, and it is
-  entity-level.
+- Most handlers receive a workspace-scoped repository. Relationship preview,
+  hierarchy, incoming-relationship and agent reads additionally carry an
+  `authorization_actor`, as do interactive extension runs. This actor checks
+  entity-level permissions, including personal-token restrictions.
 - No attribute-level permission concept exists. `reusable_attribute_groups`
   only groups attributes for attaching them; it has no permission meaning.
   The reusable-attribute `searchable` flag only controls whether search
@@ -54,8 +56,8 @@ return.
 | Entity form | `GET /v1/entities/{id}` (`http/entities.rs`, `CatalogReadService::entity_with_values`, `values.rs` `form_values`/`reusable_form_values`) | `entities.read`, entity target | All values, plus the full `projections.preview` (every scalar in every context). |
 | Raw entity | `GET /entities/{id}` (`entity_reads.rs`, `entity_commands.rs` `get_entity`) | same | `projections` (all scalars in all contexts). |
 | Current values | `GET /entities/{id}/values/current` (`values.rs` `current_values`) | same | Every value row. |
-| Previews | `GET /entities/{id}/preview`, `/resolved-preview`, `/hierarchy` (`entity_projection.rs`) | same | All values, plus related entities' previews and display labels. **Related entities are not authorized.** |
-| Related and incoming lists | `GET /entities?related_from=`, `POST /v1/entities/{id}/incoming-relationships` (`entity_search.rs`) | workspace grant / entity target | Previews of the target or source entities. Incoming sources are not authorized. |
+| Previews | `GET /entities/{id}/preview`, `/resolved-preview`, `/hierarchy` (`entity_projection.rs`) | same | All values of the root, plus previews and display labels of readable related entities. |
+| Related and incoming lists | `GET /entities?related_from=`, `POST /v1/entities/{id}/incoming-relationships` (`entity_search.rs`) | workspace grant / entity target | Previews of the target or source entities. Incoming sources are filtered by entity read authority; a page may be empty while still carrying a continuation cursor. |
 | Display labels | `entity_projection.rs` `display_label` | wherever a label is returned | Built at read time from `views.dropdown_option.fields` over the stored preview projection. A sensitive field listed there appears in pickers, facets, related columns, hierarchy and incoming lists. |
 | Write responses | update, append, duplicate, restore, migration preview | `entities.write` | The full entity or values. |
 | Search | `POST /v1/entities/search` (`entity_reads.rs`, `entity_search.rs`) | `entities.read`, workspace grant | Preview, display, table values, related values, and `match_explanations[].matching_attribute_code`. |
@@ -68,7 +70,7 @@ return.
 | Audit log | `GET /audit-events` | `audit.read` | No values (it does not join `audit_event_changes`). |
 | Domain events | `crates/events` `AffectedFactV1` | extension capability `catalog.read`, workflows | Before and after values for every changed fact. Delivered verbatim to extensions and the extension changes feed, and snapshotted in workflow runs. HTTP workflow-run reads and the agent omit the snapshot. |
 | Extension reads | `extension_runtime.rs` read, page, changes, lookup and connector `schema`/`page` calls (`extension_catalog_data.rs`, `values.rs` `extension_catalog_values_at`) | installation capability grants, workspace-wide, not tied to a user | Full entities, values at a point in time, event payloads. Lookup finds an entity by attribute value. |
-| Interactive extension runs | `extension_interactive_operations.rs` `interactive_selection_page` | `entities.read` per selected entity, for the person who started the run | The only read path that knows the caller, and it is entity-level. |
+| Interactive extension runs | `extension_interactive_operations.rs` `interactive_selection_page` | `entities.read` per selected entity, for the person who started the run | Checks the caller at entity level. |
 | Connector exports | `blueprint_connector_jobs.rs` | `extensions.manage` | Through the extension reads above. `schema` lists every attribute. |
 | Publication channels | `entity_publications.rs` | `entities.publish`, `contexts.*` | Flags only. Channel consumers read values through extensions. |
 | Agent tools | `crates/agent-runtime/src/agent_tools.rs` (`get_entity`, `get_entity_context_preview`, `get_entity_changes`, `get_value_history`, `search_entities`; display labels from `get_entity_labels`, `get_incoming_relationships` and `get_entity_hierarchy`) | the person who started the conversation, checked on each call | Same as HTTP. Tool results are stored in conversations, which the workspace shares (filtered only by whether the anchor entity is readable), and are sent to the model provider. Smart-fill sends the editable values to the provider. |
@@ -107,9 +109,9 @@ remain:
 - People with only blueprint-family grants cannot use search, facets or
   saved searches. Those need a workspace grant.
 - A workspace grant reads everything.
-- Relationship previews and incoming-relationship lists on a readable entity
-  do not check the linked entity. Do not show the sensitive blueprint's
-  fields in the readable blueprint's views or `dropdown_option`.
+- Relationship previews, hierarchy and incoming-relationship lists omit
+  unreadable related entities. Attribute values on a readable related entity
+  are still fully visible, including fields used in its `dropdown_option`.
 - Extensions, workflows and connector exports see everything.
 
 ## Design proposal: restricted attributes

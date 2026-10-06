@@ -1,12 +1,13 @@
 //! Controlled-record reads and file retention holds: which status transitions
 //! the caller may take, approval history, and retention holds.
 use super::{
-    auth::{AuthenticatedPrincipal, ScopedRepository},
+    AppState,
+    auth::{ActiveWorkspace, AuthenticatedPrincipal, ScopedRepository},
     error::ApiError,
     extractors::{ApiJson, ApiPath, ApiQuery},
 };
 use crate::repository::{EntityApproval, FileRetentionHold, StatusTransitionAccess};
-use axum::{Json, http::StatusCode};
+use axum::{Json, extract::State, http::StatusCode};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -67,9 +68,25 @@ pub(super) async fn entity_holds(
 }
 
 pub(super) async fn file_holds(
+    State(state): State<AppState>,
     ScopedRepository(repository): ScopedRepository,
+    AuthenticatedPrincipal(user_id, _): AuthenticatedPrincipal,
+    ActiveWorkspace(workspace_id): ActiveWorkspace,
     ApiPath(file_id): ApiPath<Uuid>,
 ) -> Result<Json<Items<FileRetentionHold>>, ApiError> {
+    super::files::authorize_read(
+        &state,
+        &repository,
+        user_id,
+        workspace_id,
+        file_id,
+        |file_id, entity_id, blueprint_id| crate::file_access::FileAccessOperation::ReadMetadata {
+            file_id,
+            entity_id,
+            blueprint_id,
+        },
+    )
+    .await?;
     Ok(Json(Items {
         items: repository.file_retention_holds(file_id).await?,
     }))

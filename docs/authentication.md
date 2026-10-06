@@ -103,16 +103,25 @@ passkeys, and switching workspaces after login are explicitly deferred.
 `POST /auth/login` verifies a local password and sets an opaque `catalog_session`
 HttpOnly cookie plus a separate `catalog_csrf` synchronizer-token cookie. The API
 stores SHA-256 digests only. `POST /auth/renew` atomically revokes the old identifier
-and replaces both values; login also revokes older workspace sessions. `POST
+and replaces both values; login issues fresh session and CSRF credentials. `POST
 /auth/logout` revokes the current session and clears both cookies. Sessions expire
 after eight hours and are revoked on account/password changes, membership changes,
-and role-grant changes.
+and role-grant changes. Renewal shares the workspace lock used by membership
+and role revocation, so a replacement session cannot escape a concurrent
+revocation or become valid again when a disabled member is reactivated.
+
+Deactivating a member or revoking a role grant also revokes that user's pending
+invitations and onboarding links in the affected workspace. Acceptance is
+serialized with revocation, so an older invitation cannot restore that access.
+Invitations for other workspaces are untouched. A new administrator-issued
+invitation can authorize access again.
 
 Production cookies are `Secure`, `HttpOnly` (session only), `SameSite=Lax`, and
 path-scoped to `/`. `SESSION_COOKIE_SECURE=false` is exclusively for local HTTP
 development and test servers. Every cookie-authenticated unsafe request must send
 `X-Catalog-Csrf` equal to the current CSRF cookie. Login attempts are durably limited
-to five failures per normalized workspace/email pair in fifteen minutes.
+to five failures per normalized account email in fifteen minutes, shared across
+workspaces.
 
 ## User preferences
 
@@ -186,6 +195,21 @@ remains per-token; revoke separately issued tokens individually. User state is
 checked during credential validation, and authenticated session/profile routes
 also require an active workspace membership. `last_used_at` is updated at most
 once per minute rather than on every request.
+
+Role creation, editing, duplication, replacement, invitations, grants, and
+ownership transfer cannot delegate permissions omitted from the request token.
+For both browser sessions and tokens, role and membership changes serialize on
+the workspace. Management authority, ownership and delegated permissions are
+checked inside the mutation transaction, after lock waits, against the current
+role definitions and grants.
+
+Agent runs retain their initiating token and recheck its live permissions for
+reads and approved mutations, including after a worker restart. Approving an
+agent mutation also requires the approver's own permission for that operation;
+`agents.run` alone is not approval authority. Queued or approval-waiting runs
+created before credential binding was introduced fail closed when next executed;
+resubmit those requests after upgrading. Their missing token provenance cannot
+safely be treated as browser-session authority.
 
 The CLI reads the bearer secret from `CATALOG_TOKEN` (or `--token`).
 
