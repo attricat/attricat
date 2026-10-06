@@ -52,6 +52,8 @@ type ExplorerColumnDef = LegacyColumnDef<EntityItem, unknown>;
 type ColumnOptions = {
   blueprint: BlueprintWithAttributes;
   tableColumns: ExplorerTableColumn[];
+  /** The selected context followed by its ancestors. */
+  contextCodes: readonly string[];
   publicationContextCode: string;
   publicationSortAvailable: boolean;
   publicationsByEntityId: Map<string, EntityPublicationStatus | undefined>;
@@ -87,6 +89,7 @@ const findTableCellExtension = (
 export const buildExplorerColumnDefinitions = ({
   blueprint,
   tableColumns,
+  contextCodes,
   publicationContextCode,
   publicationSortAvailable,
   publicationsByEntityId,
@@ -164,7 +167,12 @@ export const buildExplorerColumnDefinitions = ({
     columnHelper.display({
       id: explorerColumnIds.display,
       header: t('explorer.display'),
-      cell: (info) => <EntityDisplayCell entity={info.row.original} />,
+      cell: (info) => (
+        <EntityDisplayCell
+          contextCodes={contextCodes}
+          entity={info.row.original}
+        />
+      ),
     }) as ExplorerColumnDef,
     columnHelper.display({
       id: explorerColumnIds.publication,

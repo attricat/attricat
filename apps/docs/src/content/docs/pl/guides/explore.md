@@ -38,7 +38,7 @@ Otwórz **Informacje o wyszukiwaniu** przy wyniku, aby zobaczyć, dlaczego zosta
 
 ## Filtry
 
-**Dodaj filtr** zawęża wyniki według wartości atrybutu w kontekście domyślnym. Dostępne operatory zależą od typu:
+**Dodaj filtr** zawęża wyniki według wartości atrybutu w wybranym [kontekście](#kontekst). Dostępne operatory zależą od typu:
 
 | Typ | Operatory |
 | --- | --- |
@@ -73,6 +73,8 @@ Gdy schemat docelowy ma relację do samego siebie, na przykład `category.parent
 ## Kontekst
 
 Selektor **Kontekst** pokazuje wartości rozstrzygnięte w danym kontekście: własną wartość kontekstu, jeśli ją ma, a w przeciwnym razie wartość dziedziczoną. Zobacz [Konteksty](/pl/guides/contexts/).
+
+Kolumny tabeli, etykieta encji, filtry i sortowanie korzystają z wybranego kontekstu. Na przykład po wybraniu kontekstu `pl` przetłumaczona nazwa jest wyświetlana, filtrowana i sortowana po polsku, a encja bez polskiej nazwy pokazuje nazwę dziedziczoną. Wyszukiwanie tekstowe dopasowuje wartości we wszystkich kontekstach.
 
 Jeśli wybrany kontekst jest [kanałem publikacji](/pl/guides/publishing/), tabela zyskuje kolumnę **Publikacja**, która pokazuje, czy każda encja jest w nim opublikowana. Można ją posortować, aby nieopublikowane encje znalazły się na początku.
 

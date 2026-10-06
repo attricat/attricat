@@ -71,6 +71,8 @@ const entityPath = (id: string) =>
 
 export type SearchEntitiesOptions = {
   blueprint: string;
+  /** Context whose values filters, sorting and table values resolve. */
+  contextCode?: string;
   cursor?: string | null;
   filters?: import('./schemas').EntitySearchFilter[];
   includeTotal?: boolean;
@@ -86,6 +88,7 @@ export type SearchEntitiesOptions = {
 
 export const searchEntities = ({
   blueprint,
+  contextCode,
   cursor = null,
   filters = [],
   includeTotal = false,
@@ -106,6 +109,7 @@ export const searchEntities = ({
       ? { relationship_filters: relationshipFilters }
       : {}),
     sort,
+    ...(contextCode === undefined ? {} : { context_code: contextCode }),
     ...(includeTotal ? { include_total: true } : {}),
     page: { size: ENTITY_SEARCH_PAGE_SIZE, cursor },
   });

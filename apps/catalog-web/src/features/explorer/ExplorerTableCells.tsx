@@ -3,18 +3,24 @@ import { Link } from '@tanstack/react-router';
 import { EllipsisVerticalIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { EntityItem, EntityPublicationStatus } from '../entities/api';
-import { displayLabel } from '../entities/entityDisplay';
+import { contextDisplayLabel } from '../entities/entityDisplay';
 import { emptyValuePlaceholder, publicationStatuses } from './constants';
 import { compactIconSize } from '../../components/iconSizes';
 
 export type ActionMenuPosition = { left: number; top: number };
 
-export const EntityDisplayCell = ({ entity }: { entity: EntityItem }) => {
+export const EntityDisplayCell = ({
+  contextCodes,
+  entity,
+}: {
+  contextCodes: readonly string[];
+  entity: EntityItem;
+}) => {
   const { t } = useTranslation();
   return (
     <Box sx={{ alignItems: 'center', display: 'flex', gap: 1 }}>
       <Link params={{ entityId: entity.id }} to="/entities/$entityId">
-        {displayLabel(entity.display, entity.id)}
+        {contextDisplayLabel(entity.display, entity.id, contextCodes)}
       </Link>
       {entity.is_sample && (
         <Chip color="info" label={t('entities.sample')} size="small" />

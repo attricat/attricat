@@ -514,6 +514,10 @@ pub struct SearchEntitiesRequest {
     pub relationship_tree_facets: Vec<RelationshipTreeFacetRequest>,
     #[serde(default)]
     pub sort: Option<SearchSort>,
+    /// Context whose values filters, sorting and table values resolve, with each
+    /// attribute's context fallback. Defaults to `default`.
+    #[serde(default)]
+    pub context_code: Option<String>,
     /// Include a bounded result count. Clients should request this only for the first page.
     #[serde(default)]
     pub include_total: bool,

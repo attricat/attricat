@@ -58,8 +58,9 @@ relationships. Values are resolved through the selected context's ancestor
 chain, respecting each attribute's `context_fallback` policy. This ensures the
 displayed tree and the filter use the same effective relationships.
 
-The main result table does not otherwise become a context-specific explorer;
-the context is scoped to this facet.
+The facet's context is chosen separately from the search's `context_code`,
+which resolves the result table, filters, and sorting (see
+[View Configuration](views.md#table-context)).
 
 ## Counts And Selection
 

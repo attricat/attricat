@@ -119,10 +119,12 @@ export const explorerResultsQueryKey = (
   relationshipFilters: RelationshipFilter[],
   version: number | undefined,
   sort: ReturnType<typeof requestSort>,
+  contextCode: string,
 ) =>
   entityQueryKeys.search({
     allVersions: Boolean(search.allVersions),
     blueprint: search.blueprint,
+    contextCode,
     filters: search.attributeFilters,
     query: search.query,
     relationshipFilters,

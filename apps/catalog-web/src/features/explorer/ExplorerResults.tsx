@@ -26,6 +26,7 @@ export const ExplorerResults = ({
 }: Props) => {
   const {
     contextCode,
+    contextCodes,
     contextId,
     currentBlueprint,
     effectiveVersion,
@@ -87,6 +88,7 @@ export const ExplorerResults = ({
               isFetching={results.isFetching}
               isFetchingNextPage={results.isFetchingNextPage}
               items={items}
+              contextCodes={contextCodes}
               publicationContextCode={contextCode}
               publicationContextId={contextId}
               publicationSortAvailable={publicationSortAvailable}

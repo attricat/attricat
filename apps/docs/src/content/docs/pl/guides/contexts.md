@@ -48,7 +48,7 @@ Nie można usunąć kontekstu, który jest w użyciu.
 
 ## Praca w kontekście
 
-- W **Przeglądarce** selektor **Kontekst** pokazuje wartości rozstrzygnięte w danym kontekście.
+- W **Przeglądarce** selektor **Kontekst** pokazuje, filtruje i sortuje wartości rozstrzygnięte w danym kontekście.
 - Na stronie encji selektor **Kontekst** przełącza zarówno podgląd, jak i formularz edycji.
 - W fasetach relacji **Opcje drzewa** określają kontekst używany do rozwiązywania powiązań.
 

@@ -381,6 +381,17 @@ caller or to any team the caller belongs to (`@me` is resolved per request, so
 saved searches keep it literally). Other values match the stored
 `user:<uuid>` / `team:<uuid>` reference exactly.
 
+### Search context
+
+`context_code` (default `default`) names the context in which a search resolves
+values. Scalar and relationship filters, relationship-path hops, column sorts,
+`table_values`, and `related` table previews use the nearest context on that
+context's ancestor path with an active value; an attribute with
+`context_fallback = "none"` reads only the requested context. An unknown code
+returns `422`. Free-text `query` terms match values in every context, and a
+relationship tree facet uses its own `context_id`. Sorted cursors bind to the
+context. The agent `search_entities` tool accepts the same field.
+
 ### Search table sorting
 
 A search request may include `sort` when its `field` is a scalar column

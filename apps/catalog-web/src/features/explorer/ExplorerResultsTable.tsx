@@ -51,6 +51,8 @@ type Props = {
   onSortChange: (field: string) => void;
   onFilterCell?: (draft: AttributeFilterDraft) => void;
   onSaveSelectionAsSearch: (entities: EntityItem[]) => void;
+  /** The selected context followed by its ancestors. */
+  contextCodes: readonly string[];
   publicationContextCode: string;
   publicationContextId: string | undefined;
   publicationSortAvailable: boolean;
@@ -74,6 +76,7 @@ export const ExplorerResultsTable = ({
   onSortChange,
   onFilterCell,
   onSaveSelectionAsSearch,
+  contextCodes,
   publicationContextCode,
   publicationContextId,
   publicationSortAvailable,
@@ -157,6 +160,7 @@ export const ExplorerResultsTable = ({
   const columnDefinitions = buildExplorerColumnDefinitions({
     blueprint,
     tableColumns,
+    contextCodes,
     publicationContextCode,
     publicationSortAvailable,
     publicationsByEntityId,

@@ -13,7 +13,7 @@ use crate::{
     },
     repository::{
         EntityRelationshipFilter, EntitySearchFilter, EntitySearchSort, RepositoryError,
-        decode_search_cursor,
+        SearchContext, decode_search_cursor,
     },
 };
 use axum::{
@@ -240,6 +240,10 @@ pub(super) async fn search_entity_previews(
         .as_deref()
         .map(str::trim)
         .filter(|v| !v.is_empty());
+    let context = repository
+        .search_context(input.context_code.as_deref().unwrap_or("default"))
+        .await?
+        .ok_or_else(|| ApiError::invalid_input("context_code is not a context".to_owned()))?;
     let mut filters = Vec::with_capacity(input.filters.len());
     for filter in &input.filters {
         filters.push(resolve_search_filter(&repository, &search_blueprint, filter, caller).await?);
@@ -277,7 +281,7 @@ pub(super) async fn search_entity_previews(
     });
     if !filters.is_empty() {
         let filtered = repository
-            .filter_entity_ids(current.blueprint.id, selected, &filters)
+            .filter_entity_ids(current.blueprint.id, selected, &filters, &context)
             .instrument(tracing::info_span!(
                 "sql.operation",
                 label = "attribute-filter"
@@ -287,7 +291,12 @@ pub(super) async fn search_entity_previews(
     }
     if !relationship_filters.is_empty() {
         let filtered = repository
-            .filter_relationship_entity_ids(current.blueprint.id, selected, &relationship_filters)
+            .filter_relationship_entity_ids(
+                current.blueprint.id,
+                selected,
+                &relationship_filters,
+                &context,
+            )
             .instrument(tracing::info_span!(
                 "sql.operation",
                 label = "relationship-filter"
@@ -421,6 +430,7 @@ pub(super) async fn search_entity_previews(
         sort_uses_relationship
             .then_some(effective_source_version)
             .flatten(),
+        &context,
     )
     .instrument(tracing::info_span!(
         "sql.operation",
@@ -523,14 +533,18 @@ pub(super) async fn search_entity_previews(
     let related_started = Instant::now();
     let table_paths = table_paths(&result_blueprint);
     repository
-        .hydrate_table_path_values(&mut items, &table_paths)
+        .hydrate_table_path_values(&mut items, &table_paths, &context)
         .instrument(tracing::info_span!(
             "sql.operation",
             label = "table-path-hydrate"
         ))
         .await?;
     repository
-        .hydrate_related_table_previews(&mut items, &table_relationships(&result_blueprint))
+        .hydrate_related_table_previews(
+            &mut items,
+            &table_relationships(&result_blueprint),
+            &context,
+        )
         .instrument(tracing::info_span!(
             "sql.operation",
             label = "related-hydrate"
@@ -848,6 +862,7 @@ async fn resolve_table_sort(
     blueprint: &crate::model::BlueprintWithAttributes,
     sort: Option<&crate::model::SearchSort>,
     effective_source_version: Option<i64>,
+    context: &SearchContext,
 ) -> Result<Option<EntitySearchSort>, ApiError> {
     let Some(sort) = sort else { return Ok(None) };
     let descending = match sort.direction.as_str() {
@@ -884,6 +899,7 @@ async fn resolve_table_sort(
             descending,
             effective_source_version,
             publication_context_id: Some(channel.context_id),
+            context: context.clone(),
         }));
     }
     if sort.context_code.is_some() {
@@ -901,6 +917,7 @@ async fn resolve_table_sort(
             descending,
             effective_source_version,
             publication_context_id: None,
+            context: context.clone(),
         }));
     }
     let configured = blueprint
@@ -980,6 +997,7 @@ async fn resolve_table_sort(
         descending,
         effective_source_version,
         publication_context_id: None,
+        context: context.clone(),
     }))
 }
 

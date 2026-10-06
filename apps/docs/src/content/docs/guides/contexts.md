@@ -48,7 +48,7 @@ A context that is in use cannot be deleted.
 
 ## Work in a context
 
-- In the **Explorer**, the **Context** selector shows values as they resolve in that context.
+- In the **Explorer**, the **Context** selector shows, filters, and sorts values as they resolve in that context.
 - On an entity, the **Context** selector switches both the preview and the edit form.
 - In relationship facets, **Tree options** chooses the context used to resolve links.
 

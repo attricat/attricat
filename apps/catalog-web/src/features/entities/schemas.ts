@@ -606,6 +606,7 @@ export const searchEntitiesRequestSchema = z.object({
       context_code: z.string().min(1).optional(),
     })
     .optional(),
+  context_code: z.string().min(1).optional(),
   include_total: z.boolean().optional(),
   page: z.object({
     size: z.number().int().positive(),

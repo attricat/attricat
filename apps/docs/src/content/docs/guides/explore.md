@@ -38,7 +38,7 @@ Open **Search info** on a result to see why it matched, for example *red via 1 r
 
 ## Filters
 
-**Add filter** narrows results by an attribute's value in the default context. Operators depend on the type:
+**Add filter** narrows results by an attribute's value in the selected [context](#context). Operators depend on the type:
 
 | Type | Operators |
 | --- | --- |
@@ -73,6 +73,8 @@ When the target blueprint has a relationship to itself, such as `category.parent
 ## Context
 
 The **Context** selector shows values as they resolve in a context: the context's own value if it has one, otherwise the value it inherits. See [Contexts](/guides/contexts/).
+
+The table columns, the entity label, filters, and sorting all use the selected context. For example, with a `pl` context selected, a translated name is shown, filtered, and sorted in Polish, and an entity without a Polish name shows the inherited one. Text search matches values in every context.
 
 If the selected context is a [publication channel](/guides/publishing/), the table gains a **Publication** column showing whether each entity is published there. It can be sorted to put unpublished entities first.
 

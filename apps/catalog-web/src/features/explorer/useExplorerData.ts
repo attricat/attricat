@@ -18,6 +18,7 @@ import {
   searchEntities,
 } from '../entities/api';
 import { isHiddenByDefault } from '../entities/attributeVisibility';
+import { contextAncestorCodes } from '../entities/previewContext';
 import { entityQueryKeys } from '../entities/queryKeys';
 import { listPublicationChannels } from '../exports/api';
 import { exportQueryKeys } from '../exports/queryKeys';
@@ -117,6 +118,7 @@ export const useExplorerData = (search: ExplorerSearch) => {
   const contextId = contexts.data?.find(
     (context) => context.code === contextCode,
   )?.id;
+  const contextCodes = contextAncestorCodes(contexts.data ?? [], contextCode);
   const publicationSortAvailable =
     channels.data?.some(
       (channel) => channel.context_code === contextCode && channel.enabled,
@@ -129,10 +131,12 @@ export const useExplorerData = (search: ExplorerSearch) => {
       relationshipFilters,
       effectiveVersion,
       sort,
+      contextCode,
     ),
     queryFn: ({ pageParam, signal }) =>
       searchEntities({
         blueprint: search.blueprint ?? '',
+        contextCode,
         cursor: pageParam,
         filters: search.attributeFilters,
         includeTotal: pageParam === null,
@@ -168,6 +172,7 @@ export const useExplorerData = (search: ExplorerSearch) => {
     blueprints,
     canSearch,
     contextCode,
+    contextCodes,
     contextId,
     contexts,
     currentBlueprint,

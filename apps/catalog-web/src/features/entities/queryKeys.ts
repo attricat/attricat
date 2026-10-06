@@ -3,6 +3,7 @@ import type { EntitySearchFilter } from './schemas';
 type EntitySearchKeyOptions = {
   allVersions?: boolean;
   blueprint?: string;
+  contextCode?: string;
   filters?: EntitySearchFilter[];
   query?: string;
   relationshipFilters?: { field: string; selected_target_ids: string[] }[];
@@ -69,6 +70,7 @@ export const entityQueryKeys = {
   search: ({
     allVersions = false,
     blueprint,
+    contextCode,
     filters,
     query,
     relationshipFilters,
@@ -80,6 +82,7 @@ export const entityQueryKeys = {
       {
         allVersions,
         blueprint,
+        contextCode,
         filters,
         query,
         relationshipFilters,

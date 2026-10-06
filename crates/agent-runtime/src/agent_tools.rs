@@ -19,7 +19,9 @@ use crate::{
         DEFAULT_PREVIEW_RELATIONSHIP_DEPTH, DEFAULT_STALE_AFTER_DAYS, MAX_STALE_AFTER_DAYS,
     },
     file_access::{AllowFileAccess, FileAccessOperation, authorize_file_read},
-    repository::{AuthorizationActor, CatalogRepository, EntitySearchSort, RepositoryError},
+    repository::{
+        AuthorizationActor, CatalogRepository, EntitySearchSort, RepositoryError, SearchContext,
+    },
     search_filters::{intersect_ids, resolve_agent_filter, resolve_agent_relationship_filter},
 };
 const BLUEPRINT_AUTHORING_GUIDE: &str = include_str!("../../../docs/blueprints.md");
@@ -357,8 +359,8 @@ pub fn definitions() -> Vec<ToolDefinition> {
         ),
         definition(
             "search_entities",
-            "Search entities of a blueprint by scalar values, attribute filters, relationship filters, and system tags. filters use {field, operator, value} with a scalar leaf; relationship_filters use {field, selected_target_ids} with a relationship path and target entity UUIDs. All filters combine with AND. Query terms are whitespace-separated AND terms. Bare free text searches scalar values on the selected blueprint only. Use *:value for global relationship-aware discovery through up to three incoming edges. Use attribute:value for a selected-blueprint attribute; use relationship:value or an explicit path with up to three relationship hops and a scalar leaf; and use blueprint:value or blueprint.attribute:value for the selected blueprint (code or name). Use @id:uuid1,uuid2 for selected-blueprint entity IDs or relationship.@id:uuid1,uuid2 for entities linked to those IDs (at most 100 IDs per term). A trailing * means prefix matching. Results include match_explanations with deterministic match witnesses and relationship paths. Omit blueprint.version to include every published revision; set outdated to true to return only entities that are not on the latest published revision. Use sort with a configured scalar table-column field, blueprint_version, or publication_status and asc or desc direction; ascending blueprint_version puts older schemas first, ascending publication_status puts unpublished entities first and requires sort.context_code for an enabled channel. Relationship table columns use paths of up to three hops. A relationship-path sort without blueprint.version is accepted only when the complete matching result uses one source version. Without sort, results are paginated in ascending creation order.",
-            json!({"type":"object","required":["blueprint"],"properties":{"blueprint":{"type":"object","required":["code"],"properties":{"code":{"type":"string"},"version":{"type":"integer","minimum":1}},"additionalProperties":false},"query":{"type":"string"},"filters":attribute_filter_parameters(),"relationship_filters":relationship_filter_parameters(),"system_tags":{"type":"array","items":{"type":"string"}},"outdated":{"type":"boolean"},"sort":{"type":"object","required":["field","direction"],"properties":{"field":{"type":"string"},"direction":{"type":"string","enum":["asc","desc"]},"context_code":{"type":"string"}},"additionalProperties":false},"page":{"type":"object","properties":{"size":{"type":"integer","minimum":1,"maximum":100},"cursor":{"type":"string"}},"additionalProperties":false}},"additionalProperties":false}),
+            "Search entities of a blueprint by scalar values, attribute filters, relationship filters, and system tags. filters use {field, operator, value} with a scalar leaf; relationship_filters use {field, selected_target_ids} with a relationship path and target entity UUIDs. All filters combine with AND. Filters, sorting and table values read the context_code context (default: default), falling back through its parent contexts per attribute; free text matches values in every context. Query terms are whitespace-separated AND terms. Bare free text searches scalar values on the selected blueprint only. Use *:value for global relationship-aware discovery through up to three incoming edges. Use attribute:value for a selected-blueprint attribute; use relationship:value or an explicit path with up to three relationship hops and a scalar leaf; and use blueprint:value or blueprint.attribute:value for the selected blueprint (code or name). Use @id:uuid1,uuid2 for selected-blueprint entity IDs or relationship.@id:uuid1,uuid2 for entities linked to those IDs (at most 100 IDs per term). A trailing * means prefix matching. Results include match_explanations with deterministic match witnesses and relationship paths. Omit blueprint.version to include every published revision; set outdated to true to return only entities that are not on the latest published revision. Use sort with a configured scalar table-column field, blueprint_version, or publication_status and asc or desc direction; ascending blueprint_version puts older schemas first, ascending publication_status puts unpublished entities first and requires sort.context_code for an enabled channel. Relationship table columns use paths of up to three hops. A relationship-path sort without blueprint.version is accepted only when the complete matching result uses one source version. Without sort, results are paginated in ascending creation order.",
+            json!({"type":"object","required":["blueprint"],"properties":{"blueprint":{"type":"object","required":["code"],"properties":{"code":{"type":"string"},"version":{"type":"integer","minimum":1}},"additionalProperties":false},"query":{"type":"string"},"filters":attribute_filter_parameters(),"relationship_filters":relationship_filter_parameters(),"system_tags":{"type":"array","items":{"type":"string"}},"outdated":{"type":"boolean"},"context_code":{"type":"string"},"sort":{"type":"object","required":["field","direction"],"properties":{"field":{"type":"string"},"direction":{"type":"string","enum":["asc","desc"]},"context_code":{"type":"string"}},"additionalProperties":false},"page":{"type":"object","properties":{"size":{"type":"integer","minimum":1,"maximum":100},"cursor":{"type":"string"}},"additionalProperties":false}},"additionalProperties":false}),
         ),
         definition(
             "create_blueprint",
@@ -1629,6 +1631,8 @@ pub async fn execute_read(
                 #[serde(default)]
                 sort: Option<crate::model::SearchSort>,
                 #[serde(default)]
+                context_code: Option<String>,
+                #[serde(default)]
                 page: crate::model::SearchPage,
             }
 
@@ -1674,6 +1678,12 @@ pub async fn execute_read(
                 .as_deref()
                 .map(str::trim)
                 .filter(|value| !value.is_empty());
+            let context = repository
+                .search_context(input.context_code.as_deref().unwrap_or("default"))
+                .await?
+                .ok_or_else(|| {
+                    ToolError::InvalidArguments("context_code is not a context".to_owned())
+                })?;
             let resolved = if query.is_some() {
                 Some(
                     repository
@@ -1693,7 +1703,7 @@ pub async fn execute_read(
             }
             if !filters.is_empty() {
                 let ids = repository
-                    .filter_entity_ids(current.blueprint.id, selected, &filters)
+                    .filter_entity_ids(current.blueprint.id, selected, &filters, &context)
                     .await?;
                 matching = Some(intersect_ids(matching, ids));
             }
@@ -1710,6 +1720,7 @@ pub async fn execute_read(
                         current.blueprint.id,
                         selected,
                         &relationship_filters,
+                        &context,
                     )
                     .await?;
                 matching = Some(intersect_ids(matching, ids));
@@ -1756,6 +1767,7 @@ pub async fn execute_read(
                 relationship_sort
                     .then_some(effective_source_version)
                     .flatten(),
+                &context,
             )
             .await?;
             let cursor = match (sort.is_some(), input.page.cursor.as_deref()) {
@@ -1813,12 +1825,13 @@ pub async fn execute_read(
             }
             let table_paths = agent_table_paths(&sort_blueprint);
             repository
-                .hydrate_table_path_values(&mut items, &table_paths)
+                .hydrate_table_path_values(&mut items, &table_paths, &context)
                 .await?;
             repository
                 .hydrate_related_table_previews(
                     &mut items,
                     &agent_table_relationships(&sort_blueprint),
+                    &context,
                 )
                 .await?;
             let result_version_scope = match versions.as_slice() {
@@ -2696,6 +2709,7 @@ async fn resolve_agent_search_sort(
     blueprint: &crate::model::BlueprintWithAttributes,
     sort: Option<&crate::model::SearchSort>,
     effective_source_version: Option<i64>,
+    context: &SearchContext,
 ) -> Result<Option<EntitySearchSort>, ToolError> {
     let Some(sort) = sort else { return Ok(None) };
     let descending = match sort.direction.as_str() {
@@ -2732,6 +2746,7 @@ async fn resolve_agent_search_sort(
             descending,
             effective_source_version,
             publication_context_id: Some(channel.context_id),
+            context: context.clone(),
         }));
     }
     if sort.context_code.is_some() {
@@ -2749,6 +2764,7 @@ async fn resolve_agent_search_sort(
             descending,
             effective_source_version,
             publication_context_id: None,
+            context: context.clone(),
         }));
     }
     let configured = blueprint
@@ -2830,6 +2846,7 @@ async fn resolve_agent_search_sort(
         descending,
         effective_source_version,
         publication_context_id: None,
+        context: context.clone(),
     }))
 }
 

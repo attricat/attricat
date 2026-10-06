@@ -156,7 +156,7 @@ pub use domain_events::{
 };
 pub use entity_search::{
     EntityRelationshipFilter, EntitySearchFilter, EntitySearchSort, SEARCH_FILTER_EQ_ANY,
-    decode_search_cursor,
+    SearchContext, decode_search_cursor,
 };
 pub use extension_annotations::{
     ExtensionAnnotationNamespace, ExtensionAnnotationPatch, ExtensionAnnotations,

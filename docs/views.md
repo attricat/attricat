@@ -102,6 +102,16 @@ again for published entities first. Changing the selected context sorts by
 that channel instead; the agent `search_entities` tool can request the same
 order with `sort.field = "publication_status"` and `sort.context_code`.
 
+### Table context
+
+Explorer sends its selected context as the search `context_code` (default
+`default`). Table cells, relationship-path hops, scalar and relationship
+filters, and column sorts read the value of the nearest context on the selected
+context's ancestor path, so an untranslated value shows the inherited one. An
+attribute with `context_fallback = "none"` reads only the selected context. The
+**Display** column uses the nearest context's `display` label. Free-text query
+terms still match values in every context.
+
 The table uses the API's version-bound keyset cursor for the selected field.
 Relationship-path sorting requires `cardinality = "one"` on every hop and uses
 fixed-depth, leaf-first traversal for paths of up to three hops. Many-valued

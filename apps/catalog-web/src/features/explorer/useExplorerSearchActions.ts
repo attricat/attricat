@@ -95,6 +95,7 @@ export const useExplorerSearchActions = (
             nextSearch.sort,
             nextSearch.context ?? defaultContextCode,
           ),
+          nextSearch.context ?? defaultContextCode,
         ),
       });
       go(nextSearch);

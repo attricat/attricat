@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   attributeLabel,
+  contextDisplayLabel,
   displayLabel,
   dropdownOptionLabel,
 } from './entityDisplay';
@@ -33,5 +34,16 @@ describe('displayLabel', () => {
         },
       ),
     ).toBe('Navy / #1c2d4a');
+  });
+});
+
+describe('contextDisplayLabel', () => {
+  it('uses the nearest context on the path that has a label', () => {
+    const display = { default: 'Shoes', pl: 'Buty' };
+    expect(
+      contextDisplayLabel(display, 'id', ['pl-web', 'pl', 'default']),
+    ).toBe('Buty');
+    expect(contextDisplayLabel(display, 'id', ['de', 'default'])).toBe('Shoes');
+    expect(contextDisplayLabel({}, 'id', ['pl'])).toBe('id');
   });
 });

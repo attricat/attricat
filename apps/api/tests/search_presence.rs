@@ -671,6 +671,7 @@ async fn absence_is_scoped_and_paginated_and_requires_no_reachable_value(pool: P
     let system = api::repository::CatalogRepository::system(pool);
     system.initialize_workspace(other_workspace).await.unwrap();
     let other = system.for_workspace(other_workspace).await.unwrap();
+    let context = other.search_context("default").await.unwrap().unwrap();
     for value in ["true", "false"] {
         let filter = api::repository::EntitySearchFilter {
             field: "amount".into(),
@@ -686,6 +687,7 @@ async fn absence_is_scoped_and_paginated_and_requires_no_reachable_value(pool: P
                 Uuid::parse_str(blueprint["blueprint"]["id"].as_str().unwrap()).unwrap(),
                 None,
                 &[filter],
+                &context,
             )
             .await
             .unwrap();

@@ -40,6 +40,59 @@ pub struct EntitySearchSort {
     pub descending: bool,
     pub effective_source_version: Option<i64>,
     pub publication_context_id: Option<Uuid>,
+    /// Values are resolved for this context path; see [`SearchContext`].
+    pub context: SearchContext,
+}
+
+/// The context whose values search filters, sorts and table cells read: the
+/// requested context first, then its ancestors up to the default context.
+/// An attribute resolves to the nearest context on the path with an active
+/// value; one with `context_fallback = "none"` only reads the first.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SearchContext {
+    pub ids: Vec<Uuid>,
+    pub codes: Vec<String>,
+}
+
+impl SearchContext {
+    pub fn requested_id(&self) -> Uuid {
+        self.ids[0]
+    }
+
+    /// The nearest non-null value of `code` in a preview projection.
+    fn resolve_preview<'a>(
+        &self,
+        preview: &'a Value,
+        code: &str,
+        inherit: bool,
+    ) -> Option<&'a Value> {
+        let codes = if inherit {
+            &self.codes[..]
+        } else {
+            &self.codes[..1]
+        };
+        codes.iter().find_map(|context| {
+            preview
+                .get(context)
+                .and_then(|values| values.get(code))
+                .filter(|value| !value.is_null())
+        })
+    }
+}
+
+/// SQL condition selecting the attribute value rows `value` that resolve for
+/// the context path bound at `path`: rows of the nearest context on the path
+/// with an active value of the same entity attribute. `attribute` supplies
+/// `context_fallback`.
+fn resolved_context(value: &str, attribute: &str, path: &str) -> String {
+    format!(
+        "{value}.context_id = ANY({path}::uuid[]) AND ({value}.context_id = ({path}::uuid[])[1] \
+         OR ({attribute}.context_fallback <> 'none' AND NOT EXISTS (\
+             SELECT 1 FROM attribute_values nearer \
+              WHERE nearer.workspace_id = {value}.workspace_id AND nearer.entity_id = {value}.entity_id \
+                AND nearer.attribute_id = {value}.attribute_id AND nearer.active \
+                AND nearer.context_id = ANY(({path}::uuid[])[1:array_position({path}::uuid[], {value}.context_id) - 1]))))"
+    )
 }
 
 #[derive(Clone, Debug, serde::Serialize)]
@@ -73,6 +126,8 @@ struct SortedSearchCursor {
     effective_source_version: Option<i64>,
     #[serde(default)]
     publication_context_id: Option<Uuid>,
+    #[serde(default)]
+    context_id: Option<Uuid>,
     is_null: bool,
     value: Option<String>,
     target_id: Uuid,
@@ -106,7 +161,8 @@ struct TablePathEdgeRow {
 #[derive(sqlx::FromRow)]
 struct TablePathLeafRow {
     id: Uuid,
-    value: Value,
+    inherit: bool,
+    preview: Option<Value>,
 }
 
 #[derive(sqlx::FromRow)]
@@ -145,9 +201,10 @@ struct IncomingRelationshipRow {
     blueprint_context_fallback: Value,
 }
 
-/// Root entities whose active default-context relationships reach one of
-/// `$4` at exactly the path `$3`. `$1` blueprint, `$2` optional version,
-/// `$5` workspace.
+/// Root entities whose active relationships, resolved for the context path
+/// `$6`, reach one of `$4` at exactly the path `$3`. `$1` blueprint, `$2`
+/// optional version, `$5` workspace. `{edge_context}` is replaced with
+/// [`resolved_context`].
 const RELATIONSHIP_FILTER_SQL: &str = r#"WITH RECURSIVE reached(root_id, current_id, depth) AS (
                        SELECT e.id, e.id, 0
                          FROM entities e
@@ -167,7 +224,7 @@ const RELATIONSHIP_FILTER_SQL: &str = r#"WITH RECURSIVE reached(root_id, current
                          JOIN attribute_values av ON av.entity_id = source.id
                           AND av.workspace_id = $5
                           AND av.attribute_id = relationship.id AND av.active
-                          AND av.context_id = (SELECT id FROM attribute_contexts WHERE workspace_id = $5 AND code = 'default')
+                          AND {edge_context}
                           AND av.relationship_target_entity_id IS NOT NULL
                          JOIN entities target ON target.id = av.relationship_target_entity_id
                           AND target.workspace_id = $5 AND target.deleted_at IS NULL
@@ -180,10 +237,11 @@ const RELATIONSHIP_FILTER_SQL: &str = r#"WITH RECURSIVE reached(root_id, current
                      FROM reached
                     WHERE depth = cardinality($3) AND current_id = ANY($4)"#;
 
-/// Root entities whose default-context value of a (possibly dotted) field
-/// satisfies one typed filter. `$1` blueprint, `$2` optional version, `$3`
-/// relationship path, `$4` leaf field, `$5` value type, `$6` operator, `$7`
-/// value, `$8` workspace.
+/// Root entities whose value of a (possibly dotted) field, resolved for the
+/// context path `$9`, satisfies one typed filter. `$1` blueprint, `$2`
+/// optional version, `$3` relationship path, `$4` leaf field, `$5` value type,
+/// `$6` operator, `$7` value, `$8` workspace. `{edge_context}` and
+/// `{value_context}` are replaced with [`resolved_context`].
 const SCALAR_FILTER_SQL: &str = r#"WITH RECURSIVE reached(root_id, current_id, depth) AS (
                        SELECT e.id, e.id, 0
                          FROM entities e
@@ -203,7 +261,7 @@ const SCALAR_FILTER_SQL: &str = r#"WITH RECURSIVE reached(root_id, current_id, d
                          JOIN attribute_values av ON av.entity_id = source.id
                           AND av.workspace_id = $8
                           AND av.attribute_id = relationship.id AND av.active
-                          AND av.context_id = (SELECT id FROM attribute_contexts WHERE workspace_id = $8 AND code = 'default')
+                          AND {edge_context}
                           AND av.relationship_target_entity_id IS NOT NULL
                          JOIN entities target ON target.id = av.relationship_target_entity_id
                           AND target.workspace_id = $8 AND target.deleted_at IS NULL
@@ -225,7 +283,7 @@ const SCALAR_FILTER_SQL: &str = r#"WITH RECURSIVE reached(root_id, current_id, d
                      JOIN attribute_values av ON av.entity_id = leaf.id AND av.attribute_id = a.id
                       AND av.workspace_id = $8
                       AND av.active AND av.relationship_target_entity_id IS NULL
-                      AND av.context_id = (SELECT id FROM attribute_contexts WHERE workspace_id = $8 AND code = 'default')
+                      AND {value_context}
                     WHERE reached.depth = cardinality($3)
                       AND (a.value_type <> 'file' OR EXISTS (
                           SELECT 1 FROM attribute_file_references r
@@ -318,6 +376,36 @@ fn renumber_parameters(sql: &str, map: impl Fn(usize) -> usize) -> String {
 }
 
 impl CatalogRepository {
+    /// The [`SearchContext`] of the context `code`, or `None` when it does not exist.
+    pub async fn search_context(
+        &self,
+        code: &str,
+    ) -> Result<Option<SearchContext>, RepositoryError> {
+        let Some(requested) = self.get_context_by_code(code).await? else {
+            return Ok(None);
+        };
+        let tree = match self.cached_context_tree().await? {
+            Some(tree) => tree,
+            None => {
+                let mut connection = self.pool.acquire().await?;
+                std::sync::Arc::new(
+                    super::record_values::ContextTree::load(&mut connection, self.workspace_id.0)
+                        .await?,
+                )
+            }
+        };
+        let ids = tree.path(requested.id, true)?;
+        let codes = ids
+            .iter()
+            .map(|id| {
+                tree.get(*id)
+                    .map(|context| context.code.clone())
+                    .ok_or(RepositoryError::InvalidContext)
+            })
+            .collect::<Result<_, _>>()?;
+        Ok(Some(SearchContext { ids, codes }))
+    }
+
     pub async fn list_previews(
         &self,
         blueprint_code: &str,
@@ -543,13 +631,14 @@ impl CatalogRepository {
         })
     }
 
-    /// Resolves roots whose active default-context relationship values reach a selected
-    /// target at the exact requested relationship path depth.
+    /// Resolves roots whose active relationship values, resolved for `context`, reach a
+    /// selected target at the exact requested relationship path depth.
     pub async fn filter_relationship_entity_ids(
         &self,
         blueprint_id: Uuid,
         blueprint_version: Option<i64>,
         filters: &[EntityRelationshipFilter],
+        context: &SearchContext,
     ) -> Result<Vec<Uuid>, RepositoryError> {
         let filters: Vec<&EntityRelationshipFilter> = filters
             .iter()
@@ -559,20 +648,26 @@ impl CatalogRepository {
             return Ok(Vec::new());
         }
         // One INTERSECT branch per filter. Shared parameters: $1 blueprint,
-        // $2 version, $3 workspace; each filter binds a path and targets.
+        // $2 version, $3 workspace, $4 context path; each filter binds a path
+        // and targets.
+        let statement = RELATIONSHIP_FILTER_SQL.replace(
+            "{edge_context}",
+            &resolved_context("av", "relationship", "$6"),
+        );
         let sql = filters
             .iter()
             .enumerate()
             .map(|(index, _)| {
-                let base = 4 + index * 2;
+                let base = 5 + index * 2;
                 format!(
                     "({})",
-                    renumber_parameters(RELATIONSHIP_FILTER_SQL, |parameter| match parameter {
+                    renumber_parameters(&statement, |parameter| match parameter {
                         1 => 1,
                         2 => 2,
                         5 => 3,
+                        6 => 4,
                         3 | 4 => base + parameter - 3,
-                        _ => unreachable!("the filter statement has five parameters"),
+                        _ => unreachable!("the filter statement has six parameters"),
                     })
                 )
             })
@@ -581,7 +676,8 @@ impl CatalogRepository {
         let mut query = sqlx::query_scalar::<_, Uuid>(&sql)
             .bind(blueprint_id)
             .bind(blueprint_version)
-            .bind(self.workspace_id.0);
+            .bind(self.workspace_id.0)
+            .bind(&context.ids);
         for filter in &filters {
             query = query
                 .bind(&filter.relationship_path)
@@ -596,19 +692,20 @@ impl CatalogRepository {
             .collect())
     }
 
-    /// Resolves entities which satisfy every typed scalar filter in the default context.
-    /// Dotted fields traverse at most three relationship hops using each source
-    /// entity's pinned blueprint revision.
+    /// Resolves entities which satisfy every typed scalar filter with values resolved for
+    /// `context`. Dotted fields traverse at most three relationship hops using each
+    /// source entity's pinned blueprint revision.
     pub async fn filter_entity_ids(
         &self,
         blueprint_id: Uuid,
         blueprint_version: Option<i64>,
         filters: &[EntitySearchFilter],
+        context: &SearchContext,
     ) -> Result<Vec<Uuid>, RepositoryError> {
         let mut matching: Option<HashSet<Uuid>> = None;
         for filter in filters.iter().filter(|filter| filter.reusable) {
             let ids = self
-                .filter_reusable_attribute_ids(blueprint_id, blueprint_version, filter)
+                .filter_reusable_attribute_ids(blueprint_id, blueprint_version, filter, context)
                 .await?;
             let current = match matching {
                 Some(current) => current.intersection(&ids).copied().collect(),
@@ -625,22 +722,29 @@ impl CatalogRepository {
         if !scalar.is_empty() {
             // Every scalar filter becomes one INTERSECT branch of a single
             // statement. Shared parameters: $1 blueprint, $2 version,
-            // $3 workspace; each filter binds five more.
+            // $3 workspace, $4 context path; each filter binds five more.
+            let statement = SCALAR_FILTER_SQL
+                .replace(
+                    "{edge_context}",
+                    &resolved_context("av", "relationship", "$9"),
+                )
+                .replace("{value_context}", &resolved_context("av", "a", "$9"));
             let sql = scalar
                 .iter()
                 .enumerate()
                 .map(|(index, filter)| {
-                    let base = 4 + index * 5;
+                    let base = 5 + index * 5;
                     format!(
                         "({})",
                         renumber_parameters(
-                            &presence_filter_query(SCALAR_FILTER_SQL, filter, 8),
+                            &presence_filter_query(&statement, filter, 8),
                             |parameter| match parameter {
                                 1 => 1,
                                 2 => 2,
                                 8 => 3,
+                                9 => 4,
                                 3..=7 => base + parameter - 3,
-                                _ => unreachable!("the filter statement has eight parameters"),
+                                _ => unreachable!("the filter statement has nine parameters"),
                             }
                         )
                     )
@@ -650,7 +754,8 @@ impl CatalogRepository {
             let mut query = sqlx::query_scalar::<_, Uuid>(&sql)
                 .bind(blueprint_id)
                 .bind(blueprint_version)
-                .bind(self.workspace_id.0);
+                .bind(self.workspace_id.0)
+                .bind(&context.ids);
             for filter in &scalar {
                 query = query
                     .bind(&filter.relationship_path)
@@ -677,9 +782,10 @@ impl CatalogRepository {
         blueprint_id: Uuid,
         blueprint_version: Option<i64>,
         filter: &EntitySearchFilter,
+        context: &SearchContext,
     ) -> Result<HashSet<Uuid>, RepositoryError> {
         let sql = presence_filter_query(
-            r#"SELECT DISTINCT e.id
+            &r#"SELECT DISTINCT e.id
                  FROM entities e
                  JOIN attributes a ON a.entity_id = e.id AND a.code = $3
                   AND (a.value_type = $4 OR ($5 = 'is_set' AND a.value_type IN
@@ -691,7 +797,7 @@ impl CatalogRepository {
                   AND e.workspace_id = $7 AND e.deleted_at IS NULL
                   AND a.workspace_id = $7 AND a.deleted_at IS NULL AND r.searchable
                   AND av.workspace_id = $7 AND av.active AND av.relationship_target_entity_id IS NULL
-                  AND av.context_id = (SELECT id FROM attribute_contexts WHERE workspace_id = $7 AND code = 'default')
+                  AND {value_context}
                   AND (a.value_type <> 'file' OR EXISTS (
                       SELECT 1 FROM attribute_file_references fr
                        WHERE fr.attribute_value_id = av.id AND fr.workspace_id = $7))
@@ -727,7 +833,8 @@ impl CatalogRepository {
                     WHEN $4 = 'time' AND $5 = 'gte' THEN av.value_time >= $6::time
                     WHEN $4 = 'time' AND $5 = 'lt' THEN av.value_time < $6::time
                     WHEN $4 = 'time' AND $5 = 'lte' THEN av.value_time <= $6::time
-                    ELSE FALSE END"#,
+                    ELSE FALSE END"#
+                .replace("{value_context}", &resolved_context("av", "a", "$8")),
             filter,
             7,
         );
@@ -739,6 +846,7 @@ impl CatalogRepository {
             .bind(&filter.operator)
             .bind(&filter.value)
             .bind(self.workspace_id.0)
+            .bind(&context.ids)
             .fetch_all(&self.pool)
             .await?
             .into_iter()
@@ -984,6 +1092,7 @@ impl CatalogRepository {
                 || cursor.descending != sort.descending
                 || cursor.effective_source_version != sort.effective_source_version
                 || cursor.publication_context_id != sort.publication_context_id
+                || cursor.context_id != Some(sort.context.requested_id())
                 || cursor.version != 4)
         {
             return Err(RepositoryError::InvalidBlueprintDefinition(
@@ -1046,7 +1155,7 @@ impl CatalogRepository {
                  LEFT JOIN attribute_values sort_value ON sort_value.entity_id = e.id
                     AND sort_value.workspace_id = $14
                     AND sort_value.attribute_id = sort_attribute.id
-                    AND sort_value.context_id = (SELECT id FROM attribute_contexts WHERE workspace_id = $14 AND code = 'default')
+                    AND {value_context}
                     AND sort_value.relationship_target_entity_id IS NULL AND sort_value.active"
                 .to_owned()
         } else {
@@ -1067,7 +1176,7 @@ impl CatalogRepository {
                         JOIN attribute_values edge ON edge.entity_id = path_source.id
                          AND edge.workspace_id = $14
                          AND edge.attribute_id = path_attribute.id AND edge.active
-                         AND edge.context_id = (SELECT id FROM attribute_contexts WHERE workspace_id = $14 AND code = 'default')
+                         AND {edge_context}
                          AND edge.relationship_target_entity_id IS NOT NULL
                         WHERE reached.depth < cardinality($10)
                     )
@@ -1082,10 +1191,15 @@ impl CatalogRepository {
                  LEFT JOIN attribute_values sort_value ON sort_value.entity_id = target.id
                     AND sort_value.workspace_id = $14
                     AND sort_value.attribute_id = sort_attribute.id
-                    AND sort_value.context_id = (SELECT id FROM attribute_contexts WHERE workspace_id = $14 AND code = 'default')
+                    AND {value_context}
                     AND sort_value.relationship_target_entity_id IS NULL AND sort_value.active"
                 .to_owned()
-        };
+        }
+        .replace(
+            "{value_context}",
+            &resolved_context("sort_value", "sort_attribute", "$15"),
+        )
+        .replace("{edge_context}", &resolved_context("edge", "path_attribute", "$15"));
         let sql = format!(
             r#"SELECT e.id, e.blueprint_version, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.created_at, e.projections -> 'preview' AS preview,
                       b.views AS blueprint_views,
@@ -1137,6 +1251,7 @@ impl CatalogRepository {
             .bind(sort.value_type.as_str())
             .bind(limit + 1)
             .bind(self.workspace_id.0)
+            .bind(&sort.context.ids)
             .fetch_all(&self.pool)
             .await?;
         let mut rows = rows;
@@ -1272,12 +1387,6 @@ impl CatalogRepository {
         let comparison = if sort.descending { "<" } else { ">" };
         let direction = if sort.descending { "DESC" } else { "ASC" };
         let workspace_id = self.workspace_id.0;
-        let default_context_id = sqlx::query_scalar::<_, Uuid>(
-            "SELECT id FROM attribute_contexts WHERE workspace_id = $1 AND code = 'default'",
-        )
-        .bind(workspace_id)
-        .fetch_one(&self.pool)
-        .await?;
         let leaf_attribute_ids = sqlx::query_scalar::<_, Uuid>(
             "SELECT id FROM attributes WHERE workspace_id = $1 AND blueprint_id = $2 AND code = $3 AND value_type = $4 AND deleted_at IS NULL",
         )
@@ -1291,6 +1400,7 @@ impl CatalogRepository {
 
         if !cursor_is_null {
             let reverse_joins = relationship_sort_reverse_joins(sort.relationship_path.len())?;
+            let leaf_context = resolved_context("leaf", "leaf_attribute", "$15");
             let sql = format!(
                 r#"SELECT e.id, e.blueprint_version, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.created_at, e.projections -> 'preview' AS preview,
                           b.views AS blueprint_views,
@@ -1303,7 +1413,8 @@ impl CatalogRepository {
                      FROM (
                          SELECT leaf.entity_id, leaf.{column}
                            FROM attribute_values leaf
-                          WHERE leaf.workspace_id = $14 AND leaf.context_id = $15
+                           JOIN attributes leaf_attribute ON leaf_attribute.id = leaf.attribute_id
+                          WHERE leaf.workspace_id = $14 AND {leaf_context}
                             AND leaf.active AND leaf.relationship_target_entity_id IS NULL
                             AND leaf.attribute_id = ANY($17) AND leaf.{column} IS NOT NULL
                             AND ($9::uuid IS NULL OR leaf.{column} {comparison} $7::{column_type}
@@ -1341,7 +1452,7 @@ impl CatalogRepository {
                 .bind(sort.value_type.as_str())
                 .bind(limit + 1)
                 .bind(workspace_id)
-                .bind(default_context_id)
+                .bind(&sort.context.ids)
                 .bind(cursor_target_id)
                 .bind(&leaf_attribute_ids)
                 .fetch_all(&self.pool)
@@ -1390,7 +1501,7 @@ impl CatalogRepository {
                 .bind(sort.value_type.as_str())
                 .bind(remaining)
                 .bind(workspace_id)
-                .bind(default_context_id)
+                .bind(&sort.context.ids)
                 .fetch_all(&self.pool)
                 .await?;
             rows.append(&mut null_rows);
@@ -1411,11 +1522,12 @@ impl CatalogRepository {
 
     /// Resolves configured table paths in bounded, page-level batches. Relationship
     /// metadata is selected from every entity's pinned blueprint revision and scalar
-    /// leaves come from preview projections.
+    /// leaves come from preview projections. Every hop and leaf is resolved for `context`.
     pub async fn hydrate_table_path_values(
         &self,
         items: &mut [EntityPreview],
         paths: &HashMap<String, String>,
+        context: &SearchContext,
     ) -> Result<(), RepositoryError> {
         if items.is_empty() {
             return Ok(());
@@ -1436,7 +1548,7 @@ impl CatalogRepository {
             .unzip();
         if !direct_files.is_empty() {
             let files = sqlx::query_as::<_, (Uuid, String, Value)>(
-                r#"SELECT av.entity_id, a.code,
+                &r#"SELECT av.entity_id, a.code,
                           jsonb_build_object(
                             'id', f.id,
                             'filename', f.display_filename,
@@ -1466,14 +1578,16 @@ impl CatalogRepository {
                     AND f.workspace_id = $3 AND f.deleted_at IS NULL
                    LEFT JOIN file_variants fv ON fv.file_id = f.id AND fv.workspace_id = $3
                   WHERE av.entity_id = ANY($1) AND av.workspace_id = $3 AND av.active
-                    AND av.context_id = (SELECT id FROM attribute_contexts WHERE workspace_id = $3 AND code = 'default')
+                    AND {value_context}
                   GROUP BY av.entity_id, a.code, f.id, f.display_filename, f.mime_type, f.byte_size,
                            f.sha256, f.status, r.position
-                  ORDER BY av.entity_id, a.code, r.position"#,
+                  ORDER BY av.entity_id, a.code, r.position"#
+                    .replace("{value_context}", &resolved_context("av", "a", "$4")),
             )
             .bind(&roots)
             .bind(&direct_files)
             .bind(self.workspace_id.0)
+            .bind(&context.ids)
             .fetch_all(&self.pool)
             .await?;
             for (entity_id, code, file) in files {
@@ -1486,8 +1600,9 @@ impl CatalogRepository {
             }
         }
         if !direct_codes.is_empty() {
-            let compatible: HashSet<(Uuid, String)> = sqlx::query_as::<_, (Uuid, String)>(
-                r#"SELECT e.id, a.code
+            let compatible: HashMap<(Uuid, String), bool> =
+                sqlx::query_as::<_, (Uuid, String, bool)>(
+                    r#"SELECT e.id, a.code, a.context_fallback <> 'none'
                      FROM entities e
                      JOIN attributes a ON a.blueprint_id = e.blueprint_id
                       AND a.blueprint_version = e.blueprint_version
@@ -1495,26 +1610,22 @@ impl CatalogRepository {
                      JOIN UNNEST($2::text[], $4::text[]) AS column_(code, value_type)
                        ON column_.code = a.code AND column_.value_type = a.value_type
                     WHERE e.id = ANY($1) AND e.workspace_id = $3 AND e.deleted_at IS NULL"#,
-            )
-            .bind(&roots)
-            .bind(&direct_codes)
-            .bind(self.workspace_id.0)
-            .bind(&direct_types)
-            .fetch_all(&self.pool)
-            .await?
-            .into_iter()
-            .collect();
+                )
+                .bind(&roots)
+                .bind(&direct_codes)
+                .bind(self.workspace_id.0)
+                .bind(&direct_types)
+                .fetch_all(&self.pool)
+                .await?
+                .into_iter()
+                .map(|(id, code, inherit)| ((id, code), inherit))
+                .collect();
             for item in items.iter() {
                 for code in &direct_codes {
-                    if !compatible.contains(&(item.id, (*code).to_owned())) {
+                    let Some(inherit) = compatible.get(&(item.id, (*code).to_owned())) else {
                         continue;
-                    }
-                    if let Some(value) = item
-                        .preview
-                        .get("default")
-                        .and_then(|preview| preview.get(*code))
-                        .filter(|value| !value.is_null())
-                    {
+                    };
+                    if let Some(value) = context.resolve_preview(&item.preview, code, *inherit) {
                         values_by_root
                             .entry(item.id)
                             .or_default()
@@ -1540,7 +1651,7 @@ impl CatalogRepository {
                     break;
                 }
                 let edges = sqlx::query_as::<_, TablePathEdgeRow>(
-                    r#"SELECT av.entity_id AS source_id, target.id AS target_id
+                    &r#"SELECT av.entity_id AS source_id, target.id AS target_id
                        FROM attribute_values av
                        JOIN entities source ON source.id = av.entity_id
                         AND source.workspace_id = $3 AND source.deleted_at IS NULL
@@ -1555,12 +1666,14 @@ impl CatalogRepository {
                         AND target_blueprint.version = target.blueprint_version
                         AND target_blueprint.code = a.target_blueprint_code
                       WHERE av.entity_id = ANY($1) AND av.workspace_id = $3
-                        AND av.context_id = (SELECT id FROM attribute_contexts WHERE workspace_id = $3 AND code = 'default')
-                        AND av.active AND av.relationship_target_entity_id IS NOT NULL"#,
+                        AND {edge_context}
+                        AND av.active AND av.relationship_target_entity_id IS NOT NULL"#
+                        .replace("{edge_context}", &resolved_context("av", "a", "$4")),
                 )
                 .bind(current_ids)
                 .bind(relationship)
                 .bind(self.workspace_id.0)
+                .bind(&context.ids)
                 .fetch_all(&self.pool)
                 .await?;
                 let mut targets: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
@@ -1591,15 +1704,18 @@ impl CatalogRepository {
                 .collect::<HashSet<_>>()
                 .into_iter()
                 .collect();
+            // Only the leaf attribute of each context's preview is selected.
             let leaves = sqlx::query_as::<_, TablePathLeafRow>(
-                r#"SELECT e.id, e.projections -> 'preview' -> 'default' -> $2 AS value
+                r#"SELECT e.id, a.context_fallback <> 'none' AS inherit,
+                          (SELECT jsonb_object_agg(context.key, jsonb_build_object($2, context.value -> $2))
+                             FROM jsonb_each(e.projections -> 'preview') context
+                            WHERE context.value ? $2) AS preview
                    FROM entities e
                    JOIN attributes a ON a.blueprint_id = e.blueprint_id
                     AND a.blueprint_version = e.blueprint_version
                     AND a.code = $2 AND a.value_type = $3
                     AND a.workspace_id = $4 AND a.deleted_at IS NULL
-                  WHERE e.id = ANY($1) AND e.workspace_id = $4 AND e.deleted_at IS NULL
-                    AND e.projections -> 'preview' -> 'default' ? $2"#,
+                  WHERE e.id = ANY($1) AND e.workspace_id = $4 AND e.deleted_at IS NULL"#,
             )
             .bind(leaf_ids)
             .bind(leaf)
@@ -1609,8 +1725,13 @@ impl CatalogRepository {
             .await?;
             let leaves: HashMap<_, _> = leaves
                 .into_iter()
-                .filter(|leaf| !leaf.value.is_null())
-                .map(|leaf| (leaf.id, leaf.value))
+                .filter_map(|row| {
+                    let preview = row.preview?;
+                    context
+                        .resolve_preview(&preview, leaf, row.inherit)
+                        .cloned()
+                        .map(|value| (row.id, value))
+                })
                 .collect();
             for (root, id) in reached {
                 if let Some(value) = leaves.get(&id) {
@@ -1634,10 +1755,12 @@ impl CatalogRepository {
     /// Adds direct relationship targets used by table columns in one query for the entire page.
     /// The requested target code is matched against the pinned source attribute, so an older
     /// source revision with removed or incompatible relationship metadata gets an empty cell.
+    /// Relationship values are resolved for `context`.
     pub async fn hydrate_related_table_previews(
         &self,
         items: &mut [EntityPreview],
         relationships: &HashMap<String, String>,
+        context: &SearchContext,
     ) -> Result<(), RepositoryError> {
         if items.is_empty() || relationships.is_empty() {
             return Ok(());
@@ -1662,7 +1785,7 @@ impl CatalogRepository {
         )
         .map_err(|error| RepositoryError::InvalidBlueprintDefinition(error.to_string()))?;
         let rows = sqlx::query_as::<_, RelatedTablePreviewRow>(
-            r#"SELECT source.id AS source_id, a.code AS attribute_code,
+            &r#"SELECT source.id AS source_id, a.code AS attribute_code,
                       context.id AS relationship_context_id,
                       context.code AS relationship_context_code,
                       target.id, target.blueprint_id, target.blueprint_version, ('attricat.sample'=ANY(target.system_tags)) AS is_sample,
@@ -1681,6 +1804,7 @@ impl CatalogRepository {
                   AND a.blueprint_id = source.blueprint_id
                   AND a.blueprint_version = source.blueprint_version
                   AND a.deleted_at IS NULL
+                  AND {edge_context}
                  JOIN LATERAL jsonb_to_recordset($2::jsonb)
                     AS requested(attribute_code text, target_blueprint_code text)
                     ON requested.attribute_code = a.code
@@ -1692,10 +1816,12 @@ impl CatalogRepository {
                   AND target_blueprint.version = target.blueprint_version
                 WHERE source.id = ANY($1)
                   AND source.deleted_at IS NULL
-                ORDER BY source.id, a.code, context.code, av.id"#,
+                ORDER BY source.id, a.code, context.code, av.id"#
+                .replace("{edge_context}", &resolved_context("av", "a", "$3")),
         )
         .bind(items.iter().map(|item| item.id).collect::<Vec<_>>())
         .bind(requested)
+        .bind(&context.ids)
         .fetch_all(&self.pool)
         .await?;
         let mut by_id: HashMap<_, _> = items.iter_mut().map(|item| (item.id, item)).collect();
@@ -2936,11 +3062,17 @@ fn relationship_sort_reverse_joins(depth: usize) -> Result<String, RepositoryErr
     for level in (1..=depth).rev() {
         sql.push_str(&format!(
             " JOIN attribute_values edge_{level} ON edge_{level}.relationship_target_entity_id = target_{level}.id \
-             AND edge_{level}.workspace_id = $14 AND edge_{level}.context_id = $15 AND edge_{level}.active \
+             AND edge_{level}.workspace_id = $14 AND edge_{level}.active \
              JOIN attributes path_attribute_{level} ON path_attribute_{level}.id = edge_{level}.attribute_id \
              AND path_attribute_{level}.workspace_id = $14 AND path_attribute_{level}.code = $10[{level}] \
              AND path_attribute_{level}.value_type = 'relationship' \
-             AND path_attribute_{level}.cardinality = 'one' AND path_attribute_{level}.deleted_at IS NULL"
+             AND path_attribute_{level}.cardinality = 'one' AND path_attribute_{level}.deleted_at IS NULL \
+             AND {context}",
+            context = resolved_context(
+                &format!("edge_{level}"),
+                &format!("path_attribute_{level}"),
+                "$15"
+            ),
         ));
         if level == 1 {
             sql.push_str(
@@ -2965,108 +3097,47 @@ fn relationship_sort_reverse_joins(depth: usize) -> Result<String, RepositoryErr
     Ok(sql)
 }
 
-fn relationship_sort_forward_joins(depth: usize) -> Result<&'static str, RepositoryError> {
-    match depth {
-        1 => Ok(
-            r#"LEFT JOIN attributes path_attribute_1 ON path_attribute_1.blueprint_id = e.blueprint_id
-                    AND path_attribute_1.blueprint_version = e.blueprint_version
-                    AND path_attribute_1.workspace_id = $14 AND path_attribute_1.code = $10[1]
-                    AND path_attribute_1.value_type = 'relationship'
-                    AND path_attribute_1.cardinality = 'one' AND path_attribute_1.deleted_at IS NULL
-                 LEFT JOIN attribute_values edge_1 ON edge_1.entity_id = e.id
-                    AND edge_1.workspace_id = $14 AND edge_1.attribute_id = path_attribute_1.id
-                    AND edge_1.context_id = $15 AND edge_1.active
-                    AND edge_1.relationship_target_entity_id IS NOT NULL
-                 LEFT JOIN entities target_1 ON target_1.id = edge_1.relationship_target_entity_id
-                    AND target_1.workspace_id = $14 AND target_1.deleted_at IS NULL
-                 LEFT JOIN attributes sort_attribute ON sort_attribute.blueprint_id = target_1.blueprint_id
-                    AND sort_attribute.blueprint_version = target_1.blueprint_version
-                    AND sort_attribute.workspace_id = $14 AND sort_attribute.code = $11
-                    AND sort_attribute.value_type = $12 AND sort_attribute.deleted_at IS NULL
-                 LEFT JOIN attribute_values sort_value ON sort_value.entity_id = target_1.id
-                    AND sort_value.workspace_id = $14 AND sort_value.attribute_id = sort_attribute.id
-                    AND sort_value.context_id = $15 AND sort_value.active
-                    AND sort_value.relationship_target_entity_id IS NULL"#,
-        ),
-        2 => Ok(
-            r#"LEFT JOIN attributes path_attribute_1 ON path_attribute_1.blueprint_id = e.blueprint_id
-                    AND path_attribute_1.blueprint_version = e.blueprint_version
-                    AND path_attribute_1.workspace_id = $14 AND path_attribute_1.code = $10[1]
-                    AND path_attribute_1.value_type = 'relationship'
-                    AND path_attribute_1.cardinality = 'one' AND path_attribute_1.deleted_at IS NULL
-                 LEFT JOIN attribute_values edge_1 ON edge_1.entity_id = e.id
-                    AND edge_1.workspace_id = $14 AND edge_1.attribute_id = path_attribute_1.id
-                    AND edge_1.context_id = $15 AND edge_1.active
-                    AND edge_1.relationship_target_entity_id IS NOT NULL
-                 LEFT JOIN entities target_1 ON target_1.id = edge_1.relationship_target_entity_id
-                    AND target_1.workspace_id = $14 AND target_1.deleted_at IS NULL
-                 LEFT JOIN attributes path_attribute_2 ON path_attribute_2.blueprint_id = target_1.blueprint_id
-                    AND path_attribute_2.blueprint_version = target_1.blueprint_version
-                    AND path_attribute_2.workspace_id = $14 AND path_attribute_2.code = $10[2]
-                    AND path_attribute_2.value_type = 'relationship'
-                    AND path_attribute_2.cardinality = 'one' AND path_attribute_2.deleted_at IS NULL
-                 LEFT JOIN attribute_values edge_2 ON edge_2.entity_id = target_1.id
-                    AND edge_2.workspace_id = $14 AND edge_2.attribute_id = path_attribute_2.id
-                    AND edge_2.context_id = $15 AND edge_2.active
-                    AND edge_2.relationship_target_entity_id IS NOT NULL
-                 LEFT JOIN entities target_2 ON target_2.id = edge_2.relationship_target_entity_id
-                    AND target_2.workspace_id = $14 AND target_2.deleted_at IS NULL
-                 LEFT JOIN attributes sort_attribute ON sort_attribute.blueprint_id = target_2.blueprint_id
-                    AND sort_attribute.blueprint_version = target_2.blueprint_version
-                    AND sort_attribute.workspace_id = $14 AND sort_attribute.code = $11
-                    AND sort_attribute.value_type = $12 AND sort_attribute.deleted_at IS NULL
-                 LEFT JOIN attribute_values sort_value ON sort_value.entity_id = target_2.id
-                    AND sort_value.workspace_id = $14 AND sort_value.attribute_id = sort_attribute.id
-                    AND sort_value.context_id = $15 AND sort_value.active
-                    AND sort_value.relationship_target_entity_id IS NULL"#,
-        ),
-        3 => Ok(
-            r#"LEFT JOIN attributes path_attribute_1 ON path_attribute_1.blueprint_id = e.blueprint_id
-                    AND path_attribute_1.blueprint_version = e.blueprint_version
-                    AND path_attribute_1.workspace_id = $14 AND path_attribute_1.code = $10[1]
-                    AND path_attribute_1.value_type = 'relationship'
-                    AND path_attribute_1.cardinality = 'one' AND path_attribute_1.deleted_at IS NULL
-                 LEFT JOIN attribute_values edge_1 ON edge_1.entity_id = e.id
-                    AND edge_1.workspace_id = $14 AND edge_1.attribute_id = path_attribute_1.id
-                    AND edge_1.context_id = $15 AND edge_1.active
-                    AND edge_1.relationship_target_entity_id IS NOT NULL
-                 LEFT JOIN entities target_1 ON target_1.id = edge_1.relationship_target_entity_id
-                    AND target_1.workspace_id = $14 AND target_1.deleted_at IS NULL
-                 LEFT JOIN attributes path_attribute_2 ON path_attribute_2.blueprint_id = target_1.blueprint_id
-                    AND path_attribute_2.blueprint_version = target_1.blueprint_version
-                    AND path_attribute_2.workspace_id = $14 AND path_attribute_2.code = $10[2]
-                    AND path_attribute_2.value_type = 'relationship'
-                    AND path_attribute_2.cardinality = 'one' AND path_attribute_2.deleted_at IS NULL
-                 LEFT JOIN attribute_values edge_2 ON edge_2.entity_id = target_1.id
-                    AND edge_2.workspace_id = $14 AND edge_2.attribute_id = path_attribute_2.id
-                    AND edge_2.context_id = $15 AND edge_2.active
-                    AND edge_2.relationship_target_entity_id IS NOT NULL
-                 LEFT JOIN entities target_2 ON target_2.id = edge_2.relationship_target_entity_id
-                    AND target_2.workspace_id = $14 AND target_2.deleted_at IS NULL
-                 LEFT JOIN attributes path_attribute_3 ON path_attribute_3.blueprint_id = target_2.blueprint_id
-                    AND path_attribute_3.blueprint_version = target_2.blueprint_version
-                    AND path_attribute_3.workspace_id = $14 AND path_attribute_3.code = $10[3]
-                    AND path_attribute_3.value_type = 'relationship'
-                    AND path_attribute_3.cardinality = 'one' AND path_attribute_3.deleted_at IS NULL
-                 LEFT JOIN attribute_values edge_3 ON edge_3.entity_id = target_2.id
-                    AND edge_3.workspace_id = $14 AND edge_3.attribute_id = path_attribute_3.id
-                    AND edge_3.context_id = $15 AND edge_3.active
-                    AND edge_3.relationship_target_entity_id IS NOT NULL
-                 LEFT JOIN entities target_3 ON target_3.id = edge_3.relationship_target_entity_id
-                    AND target_3.workspace_id = $14 AND target_3.deleted_at IS NULL
-                 LEFT JOIN attributes sort_attribute ON sort_attribute.blueprint_id = target_3.blueprint_id
-                    AND sort_attribute.blueprint_version = target_3.blueprint_version
-                    AND sort_attribute.workspace_id = $14 AND sort_attribute.code = $11
-                    AND sort_attribute.value_type = $12 AND sort_attribute.deleted_at IS NULL
-                 LEFT JOIN attribute_values sort_value ON sort_value.entity_id = target_3.id
-                    AND sort_value.workspace_id = $14 AND sort_value.attribute_id = sort_attribute.id
-                    AND sort_value.context_id = $15 AND sort_value.active
-                    AND sort_value.relationship_target_entity_id IS NULL"#,
-        ),
-        _ => Err(RepositoryError::InvalidBlueprintDefinition(
+fn relationship_sort_forward_joins(depth: usize) -> Result<String, RepositoryError> {
+    if !(1..=3).contains(&depth) {
+        return Err(RepositoryError::InvalidBlueprintDefinition(
             "relationship sort path must contain one to three hops".to_owned(),
-        )),
+        ));
     }
+    let mut sql = String::new();
+    let mut source = String::from("e");
+    for level in 1..=depth {
+        sql.push_str(&format!(
+            " LEFT JOIN attributes path_attribute_{level} ON path_attribute_{level}.blueprint_id = {source}.blueprint_id \
+             AND path_attribute_{level}.blueprint_version = {source}.blueprint_version \
+             AND path_attribute_{level}.workspace_id = $14 AND path_attribute_{level}.code = $10[{level}] \
+             AND path_attribute_{level}.value_type = 'relationship' \
+             AND path_attribute_{level}.cardinality = 'one' AND path_attribute_{level}.deleted_at IS NULL \
+             LEFT JOIN attribute_values edge_{level} ON edge_{level}.entity_id = {source}.id \
+             AND edge_{level}.workspace_id = $14 AND edge_{level}.attribute_id = path_attribute_{level}.id \
+             AND edge_{level}.active AND edge_{level}.relationship_target_entity_id IS NOT NULL \
+             AND {context} \
+             LEFT JOIN entities target_{level} ON target_{level}.id = edge_{level}.relationship_target_entity_id \
+             AND target_{level}.workspace_id = $14 AND target_{level}.deleted_at IS NULL",
+            context = resolved_context(
+                &format!("edge_{level}"),
+                &format!("path_attribute_{level}"),
+                "$15"
+            ),
+        ));
+        source = format!("target_{level}");
+    }
+    sql.push_str(&format!(
+        " LEFT JOIN attributes sort_attribute ON sort_attribute.blueprint_id = {source}.blueprint_id \
+         AND sort_attribute.blueprint_version = {source}.blueprint_version \
+         AND sort_attribute.workspace_id = $14 AND sort_attribute.code = $11 \
+         AND sort_attribute.value_type = $12 AND sort_attribute.deleted_at IS NULL \
+         LEFT JOIN attribute_values sort_value ON sort_value.entity_id = {source}.id \
+         AND sort_value.workspace_id = $14 AND sort_value.attribute_id = sort_attribute.id \
+         AND sort_value.active AND sort_value.relationship_target_entity_id IS NULL \
+         AND {context}",
+        context = resolved_context("sort_value", "sort_attribute", "$15"),
+    ));
+    Ok(sql)
 }
 
 fn native_sort_column(value_type: &str) -> Result<&'static str, RepositoryError> {
@@ -3113,6 +3184,7 @@ fn encode_sorted_search_cursor(sort: &EntitySearchSort, row: &SortedEntityPrevie
         descending: sort.descending,
         effective_source_version: sort.effective_source_version,
         publication_context_id: sort.publication_context_id,
+        context_id: Some(sort.context.requested_id()),
         is_null: row.sort_is_null,
         value: row.sort_value.clone(),
         target_id: row.sort_target_id,

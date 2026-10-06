@@ -148,6 +148,7 @@ const renderTable = (
           onSaveSelectionAsSearch={onSaveSelectionAsSearch}
           onSortChange={onSortChange}
           sort={sort}
+          contextCodes={['default']}
           publicationContextCode="default"
           publicationContextId={publicationContextId}
           publicationSortAvailable={publicationSortAvailable}

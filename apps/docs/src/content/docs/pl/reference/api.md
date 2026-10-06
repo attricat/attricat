@@ -194,6 +194,7 @@ POST /api/v1/entities/search
     "selected_target_ids": ["e8b7a8d3-c954-4c0f-b658-0f686ba466a3"]
   }],
   "system_tags": ["needs-review"],
+  "context_code": "PL",
   "sort": { "field": "title", "direction": "asc" },
   "page": { "size": 50, "cursor": null }
 }
@@ -202,7 +203,8 @@ POST /api/v1/entities/search
 - Pomiń `blueprint.version`, aby przeszukać wszystkie opublikowane wersje.
 - `query` używa [składni wyszukiwania](/pl/guides/search-syntax/).
 - Operatory filtrów to `eq`, `contains`, `starts_with`, `gt`, `gte`, `lt` i `lte`. `field` może być ścieżką relacji o maksymalnie trzech krokach.
-- `sort.field` musi być kolumną skalarną w widoku tabeli schematu, `blueprint_version` lub `publication_status` (z `context_code` wskazującym kanał).
+- `context_code` (domyślnie `default`) to kontekst, w którym rozstrzygane są filtry, sortowanie i `table_values`, z dziedziczeniem z kontekstów nadrzędnych zależnie od atrybutu. `query` dopasowuje wartości we wszystkich kontekstach.
+- `sort.field` musi być kolumną skalarną w widoku tabeli schematu, `blueprint_version` lub `publication_status` (z `sort.context_code` wskazującym kanał).
 - Odpowiedzi zawierają `items`, `next_cursor`, `result_version_scope`, a dla każdego elementu `table_values` i `match_explanations`. Przekaż `next_cursor` z powrotem jako `page.cursor` przy tym samym sortowaniu.
 - `include_total` zwraca łączną liczbę wyników dla pierwszej strony, ograniczoną do 500.
 

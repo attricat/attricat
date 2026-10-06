@@ -14,6 +14,18 @@ export const displayLabel = (
   return display?.default || entityId;
 };
 
+/**
+ * The label of the first context in `contextCodes` (a context followed by
+ * its ancestors) that has one.
+ */
+export const contextDisplayLabel = (
+  display: Record<string, string> | undefined,
+  entityId: string,
+  contextCodes: readonly string[],
+): string =>
+  contextCodes.map((code) => display?.[code]).find(Boolean) ||
+  displayLabel(display, entityId);
+
 export const dropdownOptionLabel = (
   preview: Record<string, unknown>,
   views: Record<string, unknown>,

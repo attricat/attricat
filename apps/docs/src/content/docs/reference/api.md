@@ -194,6 +194,7 @@ POST /api/v1/entities/search
     "selected_target_ids": ["e8b7a8d3-c954-4c0f-b658-0f686ba466a3"]
   }],
   "system_tags": ["needs-review"],
+  "context_code": "PL",
   "sort": { "field": "title", "direction": "asc" },
   "page": { "size": 50, "cursor": null }
 }
@@ -202,7 +203,8 @@ POST /api/v1/entities/search
 - Omit `blueprint.version` to search all published revisions.
 - `query` uses the [search syntax](/guides/search-syntax/).
 - Filter operators are `eq`, `contains`, `starts_with`, `gt`, `gte`, `lt`, and `lte`. `field` can be a relationship path of up to three hops.
-- `sort.field` must be a scalar column in the blueprint's table view, `blueprint_version`, or `publication_status` (with `context_code` naming a channel).
+- `context_code` (default `default`) is the context in which filters, sorting, and `table_values` are resolved, inheriting from parent contexts per attribute. `query` matches values in every context.
+- `sort.field` must be a scalar column in the blueprint's table view, `blueprint_version`, or `publication_status` (with `sort.context_code` naming a channel).
 - Responses contain `items`, `next_cursor`, `result_version_scope`, and, for each item, `table_values` and `match_explanations`. Pass `next_cursor` back as `page.cursor` with the same sort.
 - `include_total` returns a first-page total, capped at 500.
 
