@@ -52,34 +52,6 @@ const storage = () => {
   }
 };
 
-/**
- * Resources (by their first identity part) that have a stored draft for this
- * user and editor. Used to warn before an action reads saved data only.
- */
-export const draftResourceIds = ({
-  workspaceId,
-  userId,
-  editor,
-}: Omit<DraftScope, 'resource'>) => {
-  const target = storage();
-  if (!target) return new Set<string>();
-  const prefix = draftStorageKey({ workspaceId, userId, editor, resource: [] });
-  const ids = new Set<string>();
-  try {
-    for (let index = 0; index < target.length; index += 1) {
-      const key = target.key(index);
-      if (!key?.startsWith(`${prefix}${draftKeySeparator}`)) continue;
-      const [resourceId] = key
-        .slice(prefix.length + draftKeySeparator.length)
-        .split(draftKeySeparator);
-      if (resourceId) ids.add(decodeURIComponent(resourceId));
-    }
-  } catch {
-    // Storage failures must never block an action.
-  }
-  return ids;
-};
-
 export const removeDraft = (key: string) => {
   try {
     storage()?.removeItem(key);

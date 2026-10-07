@@ -34,7 +34,6 @@ import { Route as PasswordResetConfirmRouteImport } from './routes/password-rese
 import { Route as ProfileIndexRouteImport } from './routes/profile/index'
 import { Route as EntitiesEntityIdIndexRouteImport } from './routes/entities/$entityId/index'
 import { Route as EntitiesEntityIdChangesRouteImport } from './routes/entities/$entityId/changes'
-import { Route as EntitiesEntityIdEditRouteImport } from './routes/entities/$entityId/edit'
 import { Route as EntitiesEntityIdMigrateRouteImport } from './routes/entities/$entityId/migrate'
 import { Route as ExtensionsExtensionIdContributionIdRouteImport } from './routes/extensions/$extensionId/$contributionId'
 import { Route as ManageBlueprintsIndexRouteImport } from './routes/manage/blueprints/index'
@@ -197,11 +196,6 @@ const EntitiesEntityIdIndexRoute = EntitiesEntityIdIndexRouteImport.update({
 const EntitiesEntityIdChangesRoute = EntitiesEntityIdChangesRouteImport.update({
   id: '/changes',
   path: '/changes',
-  getParentRoute: () => EntitiesEntityIdRoute,
-} as any)
-const EntitiesEntityIdEditRoute = EntitiesEntityIdEditRouteImport.update({
-  id: '/edit',
-  path: '/edit',
   getParentRoute: () => EntitiesEntityIdRoute,
 } as any)
 const EntitiesEntityIdMigrateRoute = EntitiesEntityIdMigrateRouteImport.update({
@@ -436,7 +430,6 @@ export interface FileRoutesByFullPath {
   '/password-reset/': typeof PasswordResetIndexRoute
   '/profile/': typeof ProfileIndexRoute
   '/entities/$entityId/changes': typeof EntitiesEntityIdChangesRoute
-  '/entities/$entityId/edit': typeof EntitiesEntityIdEditRoute
   '/entities/$entityId/migrate': typeof EntitiesEntityIdMigrateRoute
   '/extensions/$extensionId/$contributionId': typeof ExtensionsExtensionIdContributionIdRoute
   '/manage/blueprints/$blueprintId': typeof ManageBlueprintsBlueprintIdRouteWithChildren
@@ -498,7 +491,6 @@ export interface FileRoutesByTo {
   '/password-reset': typeof PasswordResetIndexRoute
   '/profile': typeof ProfileIndexRoute
   '/entities/$entityId/changes': typeof EntitiesEntityIdChangesRoute
-  '/entities/$entityId/edit': typeof EntitiesEntityIdEditRoute
   '/entities/$entityId/migrate': typeof EntitiesEntityIdMigrateRoute
   '/extensions/$extensionId/$contributionId': typeof ExtensionsExtensionIdContributionIdRoute
   '/manage/blueprints/new': typeof ManageBlueprintsNewRoute
@@ -562,7 +554,6 @@ export interface FileRoutesById {
   '/password-reset/': typeof PasswordResetIndexRoute
   '/profile/': typeof ProfileIndexRoute
   '/entities/$entityId/changes': typeof EntitiesEntityIdChangesRoute
-  '/entities/$entityId/edit': typeof EntitiesEntityIdEditRoute
   '/entities/$entityId/migrate': typeof EntitiesEntityIdMigrateRoute
   '/extensions/$extensionId/$contributionId': typeof ExtensionsExtensionIdContributionIdRoute
   '/manage/blueprints/$blueprintId': typeof ManageBlueprintsBlueprintIdRouteWithChildren
@@ -629,7 +620,6 @@ export interface FileRouteTypes {
     | '/password-reset/'
     | '/profile/'
     | '/entities/$entityId/changes'
-    | '/entities/$entityId/edit'
     | '/entities/$entityId/migrate'
     | '/extensions/$extensionId/$contributionId'
     | '/manage/blueprints/$blueprintId'
@@ -691,7 +681,6 @@ export interface FileRouteTypes {
     | '/password-reset'
     | '/profile'
     | '/entities/$entityId/changes'
-    | '/entities/$entityId/edit'
     | '/entities/$entityId/migrate'
     | '/extensions/$extensionId/$contributionId'
     | '/manage/blueprints/new'
@@ -754,7 +743,6 @@ export interface FileRouteTypes {
     | '/password-reset/'
     | '/profile/'
     | '/entities/$entityId/changes'
-    | '/entities/$entityId/edit'
     | '/entities/$entityId/migrate'
     | '/extensions/$extensionId/$contributionId'
     | '/manage/blueprints/$blueprintId'
@@ -1021,13 +1009,6 @@ declare module '@tanstack/react-router' {
       path: '/changes'
       fullPath: '/entities/$entityId/changes'
       preLoaderRoute: typeof EntitiesEntityIdChangesRouteImport
-      parentRoute: typeof EntitiesEntityIdRoute
-    }
-    '/entities/$entityId/edit': {
-      id: '/entities/$entityId/edit'
-      path: '/edit'
-      fullPath: '/entities/$entityId/edit'
-      preLoaderRoute: typeof EntitiesEntityIdEditRouteImport
       parentRoute: typeof EntitiesEntityIdRoute
     }
     '/entities/$entityId/migrate': {
@@ -1325,14 +1306,12 @@ const ProfileRouteWithChildren =
 
 interface EntitiesEntityIdRouteChildren {
   EntitiesEntityIdChangesRoute: typeof EntitiesEntityIdChangesRoute
-  EntitiesEntityIdEditRoute: typeof EntitiesEntityIdEditRoute
   EntitiesEntityIdMigrateRoute: typeof EntitiesEntityIdMigrateRoute
   EntitiesEntityIdIndexRoute: typeof EntitiesEntityIdIndexRoute
 }
 
 const EntitiesEntityIdRouteChildren: EntitiesEntityIdRouteChildren = {
   EntitiesEntityIdChangesRoute: EntitiesEntityIdChangesRoute,
-  EntitiesEntityIdEditRoute: EntitiesEntityIdEditRoute,
   EntitiesEntityIdMigrateRoute: EntitiesEntityIdMigrateRoute,
   EntitiesEntityIdIndexRoute: EntitiesEntityIdIndexRoute,
 }

@@ -93,7 +93,7 @@ const entityId = '123e4567-e89b-12d3-a456-426614174010';
 const marketContextId = '123e4567-e89b-12d3-a456-426614174002';
 const draftKey = (contextId: string) =>
   draftStorageKey({
-    editor: draftEditors.entityEdit,
+    editor: draftEditors.entityCreate,
     resource: [entityId, contextId],
     userId: session.user_id,
     workspaceId: session.workspace_id,
@@ -101,7 +101,7 @@ const draftKey = (contextId: string) =>
 const draftProps = (contextId: string) => ({
   contextId,
   draft: {
-    editor: draftEditors.entityEdit,
+    editor: draftEditors.entityCreate,
     resource: [entityId, contextId],
     source: '1',
   },
@@ -151,7 +151,7 @@ describe('EntityForm', () => {
   );
 
   it('selects URL editors, blocks invalid programmatic values, saves and clears URLs', async () => {
-    const { onSubmit, ref } = renderForm({
+    const { onSubmit } = renderForm({
       blueprint: withDisplayComponent('website', 'catalog.url_display'),
     });
     const input = screen.getByRole('textbox', { name: 'website' });
@@ -172,9 +172,6 @@ describe('EntityForm', () => {
           ],
         }),
       ),
-    );
-    expect(ref.current?.getDraftValues().website).toBe(
-      'https://example.com/a?b=1',
     );
     onSubmit.mockClear();
     fireEvent.change(input, { target: { value: '' } });
@@ -383,37 +380,7 @@ describe('EntityForm', () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
-  it('clears an optional local color through the existing removal path', async () => {
-    const { onSubmit } = renderForm({
-      blueprint: colorBlueprint(),
-      contextId: marketContextId,
-      initialValues: { hex: '#ffffff' },
-      existingValues: [
-        {
-          kind: 'scalar',
-          attribute_code: 'hex',
-          value: '#ffffff',
-          context_id: marketContextId,
-        },
-      ],
-    });
-    fireEvent.change(screen.getByRole('textbox', { name: 'hex' }), {
-      target: { value: '' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-    await waitFor(() =>
-      expect(onSubmit).toHaveBeenCalledWith(
-        expect.objectContaining({
-          values: [],
-          remove_values: [
-            { attribute_code: 'hex', context_id: marketContextId },
-          ],
-        }),
-      ),
-    );
-  });
-
-  it('restores color drafts and keeps inherited context feedback', async () => {
+  it('restores color drafts', async () => {
     writeDraft(draftKey(marketContextId), {
       savedAt: new Date().toISOString(),
       source: JSON.stringify(['1', JSON.stringify({ hex: '' })]),
@@ -423,12 +390,6 @@ describe('EntityForm', () => {
       blueprint: colorBlueprint(),
       ...draftProps(marketContextId),
       initialValues: { hex: '' },
-      resolvedValues: {
-        hex: {
-          value: '#ffffff',
-          source_context: { id: 'default', code: 'default' },
-        },
-      },
     });
     await screen.findByRole('dialog', { name: 'Restore unsaved draft?' });
     expect(
@@ -443,7 +404,6 @@ describe('EntityForm', () => {
       'value',
       '#abcdef',
     );
-    expect(screen.getByText(/Inherited.*#ffffff/)).toBeTruthy();
   });
 
   it('does not interpret ordinary strings as configured colors', async () => {
@@ -565,53 +525,6 @@ describe('EntityForm', () => {
     );
   });
 
-  it('does not inject Smart Fill data into fields hidden by the default edit view', async () => {
-    const { ref, onSubmit } = renderForm({
-      blueprint: blueprint([
-        attribute('title'),
-        attribute('secret', { tags: ['hidden:form'] }),
-        attribute('readonly', { readonly: true }),
-      ]),
-    });
-    ref.current?.applySmartFillValues({
-      title: 'New title',
-      secret: 'Surprise',
-      readonly: 'No',
-    });
-    await waitFor(() =>
-      expect(screen.getByRole('textbox', { name: 'title' })).toHaveProperty(
-        'value',
-        'New title',
-      ),
-    );
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(onSubmit).toHaveBeenCalledOnce());
-    expect(onSubmit.mock.calls[0][0].values).toEqual([
-      expect.objectContaining({ attribute_code: 'title', value: 'New title' }),
-    ]);
-  });
-
-  it('uses the same managed and inherited feedback for reusable attributes', () => {
-    renderForm({
-      blueprint: blueprint([]),
-      contextId: '123e4567-e89b-12d3-a456-426614174002',
-      reusableAttributes: [
-        attribute('namespace:managed', { readonly: true }),
-        attribute('namespace:inherited'),
-      ],
-      resolvedValues: {
-        'namespace:inherited': {
-          value: 'Original',
-          source_context: {
-            id: '123e4567-e89b-12d3-a456-426614174001',
-            code: 'default',
-          },
-        },
-      },
-    });
-    expect(screen.getByText('Managed by system actions')).toBeTruthy();
-    expect(screen.getByText(/Original/)).toBeTruthy();
-  });
   it('shows declarative check violations on their fields and summarizes the rest', () => {
     const error = new ApiRequestError(
       422,

@@ -30,9 +30,6 @@ value_schema = '{"type":"string","format":"email"}'
 [views.detail]
 type = "stack"
 children = [{ type = "field", field = "contact", component = { id = "catalog.email_display", version = 1 } }]
-[views.edit]
-type = "stack"
-children = [{ type = "field", field = "contact", component = { id = "catalog.email_edit", version = 1 } }]
 [views.table]
 type = "table"
 columns = [{ field = "title" }, { field = "contact", renderer = { id = "catalog.email_display", version = 1 } }]

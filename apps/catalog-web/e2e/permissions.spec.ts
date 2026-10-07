@@ -82,10 +82,6 @@ test('a viewer can browse the catalog but every write is refused', async ({
       name: 'Add custom attribute or attribute group',
     }),
   ).toHaveCount(0);
-  await page.goto(`/entities/${entity.id}/edit`);
-  await expect(page).toHaveURL(new RegExp(`/entities/${entity.id}$`));
-  await expect(page.getByText('Readable product')).toBeVisible();
-  await expect(page.getByRole('textbox', { name: 'title' })).toHaveCount(0);
 
   await page.goto('/entities/new');
   await page.getByLabel('Blueprint').click();

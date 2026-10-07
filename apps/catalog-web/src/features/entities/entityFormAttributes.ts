@@ -22,11 +22,6 @@ export type ResolvedFormValues = Record<
   { value: unknown; source_context: { id: string; code: string } }
 >;
 
-export type RemovedAttributeValue = {
-  attribute_code: string;
-  context_id: string | null;
-};
-
 const inContext = (
   value: { context_id?: string | null },
   contextId: string | null,
@@ -130,28 +125,6 @@ export const headingEditableAttributes = (
   componentPlacedFields(view, entityHeadingComponentId).flatMap((code) =>
     attributes.filter((attribute) => attribute.code === code),
   );
-
-/** Local scalar values that were cleared and must be removed on save. */
-export const removedFormValues = (
-  existingValues: readonly FormAttributeValue[],
-  editableAttributes: readonly Attribute[],
-  fields: Record<string, string>,
-  contextId: string | null,
-): RemovedAttributeValue[] =>
-  existingValues
-    .filter(
-      (item) =>
-        item.kind === attributeValueKinds.scalar &&
-        inContext(item, contextId) &&
-        editableAttributes.some(
-          (attribute) => attribute.code === item.attribute_code,
-        ) &&
-        !fields[item.attribute_code]?.trim(),
-    )
-    .map((item) => ({
-      attribute_code: item.attribute_code,
-      context_id: contextId,
-    }));
 
 /** Keeps only smart fill suggestions for editable scalar attributes. */
 export const smartFillFormFields = (
