@@ -39,10 +39,14 @@ import {
 import { schemaMismatchField } from '../entityFieldSaves';
 import { entityFormOptions } from '../queryOptions';
 import { statusConfiguration, statusLocks } from '../status';
-import { useEntityFieldSaves } from '../useEntityFieldSaves';
+import {
+  useEntityFieldSaves,
+  type ConflictResolution,
+} from '../useEntityFieldSaves';
 import { attributeValueTypes } from '../valueTypes';
 import { EntityFormAttributeEditor } from './EntityFormAttributeEditor';
 import { InlineFieldEditor } from './InlineFieldEditor';
+import { ReusableAttributeAttachControl } from './ReusableAttributeAttachControl';
 import { UnsavedFieldChangesGuard } from './UnsavedFieldChangesGuard';
 
 type Props = {
@@ -61,7 +65,6 @@ type Props = {
   renderFilePanel?: (attribute: Attribute, fileId: string) => ReactNode;
   /** Reports whether changes are waiting to be saved in this context. */
   onPendingChange?: (pending: boolean) => void;
-  footerActions?: ReactNode;
   /** Lays the view out in one column, as in a narrow panel. */
   singleColumn?: boolean;
 };
@@ -102,7 +105,6 @@ export const EntityInlineFields = forwardRef<EntityInlineFieldsHandle, Props>(
       renderAttributePanel,
       renderFilePanel,
       onPendingChange,
-      footerActions,
       singleColumn,
     },
     ref,
@@ -116,7 +118,6 @@ export const EntityInlineFields = forwardRef<EntityInlineFieldsHandle, Props>(
       ? editableFormAttributes(allAttributes, {
           contextId,
           defaultContextId,
-          usesDefaultEditView: false,
         })
       : [];
     const locks = statusLocks(
@@ -190,7 +191,7 @@ export const EntityInlineFields = forwardRef<EntityInlineFieldsHandle, Props>(
         ? saves.error
         : undefined;
 
-    const resolveConflict = async (resolution: 'keepMine' | 'useTheirs') => {
+    const resolveConflict = async (resolution: ConflictResolution) => {
       const latest = await client.fetchQuery({
         ...entityFormOptions(entityId),
         staleTime: 0,
@@ -368,7 +369,15 @@ export const EntityInlineFields = forwardRef<EntityInlineFieldsHandle, Props>(
             />
           </EditableEntitySection>
         )}
-        {footerActions && <Box sx={{ mt: 3 }}>{footerActions}</Box>}
+        {form.can_write && (
+          <Box sx={{ mt: 3 }}>
+            {/* Attaching changes the entity; wait for field saves first. */}
+            <ReusableAttributeAttachControl
+              disabled={hasPending}
+              entityId={entityId}
+            />
+          </Box>
+        )}
       </>
     );
   },

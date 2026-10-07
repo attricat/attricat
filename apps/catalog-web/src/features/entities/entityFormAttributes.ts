@@ -42,11 +42,15 @@ export const editableFormAttributes = (
   {
     contextId,
     defaultContextId,
-    usesDefaultEditView,
+    usesFormLayout = false,
   }: {
     contextId: string | null;
     defaultContextId: string | null;
-    usesDefaultEditView: boolean;
+    /**
+     * Fields are laid out by default for forms, which leaves out attributes
+     * hidden from forms, rather than by a view.
+     */
+    usesFormLayout?: boolean;
   },
 ) =>
   attributes.filter(
@@ -54,7 +58,7 @@ export const editableFormAttributes = (
       !attribute.readonly &&
       attribute.extension_type?.available !== false &&
       !isDefaultContextOnly(attribute, contextId, defaultContextId) &&
-      (!usesDefaultEditView ||
+      (!usesFormLayout ||
         attribute.code.includes(REUSABLE_ATTRIBUTE_NAMESPACE_SEPARATOR) ||
         !isHiddenByDefault(attribute, 'form')),
   );
@@ -68,6 +72,13 @@ export const entitySchemaRequiredAttributes = (schema: unknown): string[] =>
     ? schema.required.filter((code): code is string => typeof code === 'string')
     : [];
 
+/** Views that do not place fields and render the default layout instead. */
+const usesDefaultLayout = (view: ViewDefinition | undefined) =>
+  !view ||
+  view.type === viewBlockTypes.table ||
+  view.type === viewBlockTypes.dropdownOption ||
+  view.type === viewBlockTypes.extensionLayout;
+
 /**
  * Required attributes the view does not render. A form shows them after the
  * view so Save is never blocked by a field the user cannot see.
@@ -78,10 +89,7 @@ export const unplacedRequiredAttributes = (
   requiredCodes: readonly string[],
 ) => {
   // Non-layout views render the default form; see EntityView.
-  const usesFallback =
-    view.type === viewBlockTypes.table ||
-    view.type === viewBlockTypes.dropdownOption ||
-    view.type === viewBlockTypes.extensionLayout;
+  const usesFallback = usesDefaultLayout(view);
   const placed = viewPlacedFields(view);
   return attributes.filter(
     (attribute) =>
@@ -100,11 +108,7 @@ export const unplacedEditableAttributes = (
   attributes: readonly Attribute[],
   view: ViewDefinition | undefined,
 ) => {
-  const usesFallback =
-    !view ||
-    view.type === viewBlockTypes.table ||
-    view.type === viewBlockTypes.dropdownOption ||
-    view.type === viewBlockTypes.extensionLayout;
+  const usesFallback = usesDefaultLayout(view);
   const placed = viewPlacedFields(view);
   return attributes.filter((attribute) =>
     usesFallback

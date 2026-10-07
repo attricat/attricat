@@ -1,5 +1,5 @@
 import { Box, Paper, Typography } from '@mui/material';
-import { useState, type ReactNode, type Ref } from 'react';
+import { useState, type Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AttributeContext } from '../../contexts/api';
 import {
@@ -31,16 +31,10 @@ type Props = {
   blueprint: Awaited<ReturnType<typeof getBlueprintRevision>>;
   contextId?: string;
   contexts: readonly AttributeContext[];
-  contextsPending: boolean;
   defaultContextId: string | null;
   entityId: string;
   /** The editable form; values are shown read-only until it is loaded. */
   form?: EntityFormResponse;
-  /**
-   * Shown after the fields when the form is editable. Actions that change the
-   * entity elsewhere should wait until pending field changes are saved.
-   */
-  renderFooterActions?: (hasPendingChanges: boolean) => ReactNode;
   inlineFieldsRef?: Ref<EntityInlineFieldsHandle>;
   statusParentContextIds: readonly string[];
   statusTransitions?: readonly StatusTransitionAccess[];
@@ -55,11 +49,9 @@ export const EntityPreviewContent = ({
   blueprint,
   contextId,
   contexts,
-  contextsPending,
   defaultContextId,
   entityId,
   form,
-  renderFooterActions,
   inlineFieldsRef,
   statusParentContextIds,
   statusTransitions,
@@ -131,92 +123,78 @@ export const EntityPreviewContent = ({
       )
     : undefined;
   return (
-    <Box
-      sx={{
-        display: 'grid',
-        gap: 3,
-        gridTemplateColumns: 'minmax(0, 1fr)',
-        mt: 3,
-      }}
-    >
-      <Box>
-        <Paper component="section" sx={{ p: { xs: 2, md: 3 } }}>
-          <EntityContextPicker
-            contexts={contexts}
-            disabled={contextsPending || hasPendingChanges}
-            onChange={onContextChange}
-            value={contextId ?? ''}
+    <Box sx={{ mt: 3 }}>
+      <Paper component="section" sx={{ p: { xs: 2, md: 3 } }}>
+        <EntityContextPicker
+          contexts={contexts}
+          disabled={hasPendingChanges}
+          onChange={onContextChange}
+          value={contextId ?? ''}
+        />
+        {form ? (
+          <EntityInlineFields
+            key={`${entityId}:${contextId ?? ''}`}
+            attributes={blueprint.attributes}
+            contextId={contextId ?? null}
+            defaultContextId={defaultContextId}
+            entityId={entityId}
+            form={form}
+            ref={inlineFieldsRef}
+            onPendingChange={setHasPendingChanges}
+            renderAttributeDecoration={renderAttributeDecoration}
+            renderAttributePanel={renderAttributePanel}
+            renderFilePanel={renderFilePanel}
+            resolvedValues={resolved.values}
+            reusableResolvedValues={resolved.reusable_values ?? {}}
+            singleColumn={singleColumn}
+            statusParentContextIds={statusParentContextIds}
+            statusTransitions={statusTransitions}
+            view={blueprint.blueprint.views.detail}
           />
-          {form ? (
-            <EntityInlineFields
-              key={`${entityId}:${contextId ?? ''}`}
+        ) : (
+          <>
+            <EntityView
               attributes={blueprint.attributes}
-              contextId={contextId ?? null}
-              defaultContextId={defaultContextId}
+              fallbackVisibilityScope="detail"
+              contextId={contextId}
               entityId={entityId}
-              footerActions={
-                form.can_write
-                  ? renderFooterActions?.(hasPendingChanges)
-                  : undefined
-              }
-              form={form}
-              ref={inlineFieldsRef}
-              onPendingChange={setHasPendingChanges}
               renderAttributeDecoration={renderAttributeDecoration}
               renderAttributePanel={renderAttributePanel}
               renderFilePanel={renderFilePanel}
-              resolvedValues={resolved.values}
-              reusableResolvedValues={resolved.reusable_values ?? {}}
-              singleColumn={singleColumn}
-              statusParentContextIds={statusParentContextIds}
-              statusTransitions={statusTransitions}
+              values={resolved.values}
               view={blueprint.blueprint.views.detail}
+              singleColumn={singleColumn}
+              skipComponentId={entityHeadingComponentId}
             />
-          ) : (
-            <>
-              <EntityView
-                attributes={blueprint.attributes}
-                fallbackVisibilityScope="detail"
-                contextId={contextId}
-                entityId={entityId}
-                renderAttributeDecoration={renderAttributeDecoration}
-                renderAttributePanel={renderAttributePanel}
-                renderFilePanel={renderFilePanel}
-                values={resolved.values}
-                view={blueprint.blueprint.views.detail}
-                singleColumn={singleColumn}
-                skipComponentId={entityHeadingComponentId}
-              />
-              {(resolved.reusable_attributes?.length ?? 0) > 0 && (
-                <Box component="section" sx={{ mt: 4 }}>
-                  <Typography component="h2" variant="h6">
-                    {t('entities.additionalAttributes')}
-                  </Typography>
-                  <EntityView
-                    attributes={resolved.reusable_attributes}
-                    contextId={contextId}
-                    entityId={entityId}
-                    singleColumn={singleColumn}
-                    values={resolved.reusable_values ?? {}}
-                  />
-                </Box>
-              )}
-            </>
-          )}
-        </Paper>
-        <ExtensionOutlet
-          context={{ entity_id: entityId, context_id: contextId }}
-          outlet="entity_action"
-          runtimeScope={runtimeScope}
-          selection={{
-            source: selectionSources.entityPreview,
-            blueprintId: blueprint.blueprint.id,
-            blueprintVersion: blueprint.blueprint.version,
-            contextId: contextId ?? null,
-            entityIds: [entityId],
-          }}
-        />
-      </Box>
+            {(resolved.reusable_attributes?.length ?? 0) > 0 && (
+              <Box component="section" sx={{ mt: 4 }}>
+                <Typography component="h2" variant="h6">
+                  {t('entities.additionalAttributes')}
+                </Typography>
+                <EntityView
+                  attributes={resolved.reusable_attributes}
+                  contextId={contextId}
+                  entityId={entityId}
+                  singleColumn={singleColumn}
+                  values={resolved.reusable_values ?? {}}
+                />
+              </Box>
+            )}
+          </>
+        )}
+      </Paper>
+      <ExtensionOutlet
+        context={{ entity_id: entityId, context_id: contextId }}
+        outlet="entity_action"
+        runtimeScope={runtimeScope}
+        selection={{
+          source: selectionSources.entityPreview,
+          blueprintId: blueprint.blueprint.id,
+          blueprintVersion: blueprint.blueprint.version,
+          contextId: contextId ?? null,
+          entityIds: [entityId],
+        }}
+      />
     </Box>
   );
 };
