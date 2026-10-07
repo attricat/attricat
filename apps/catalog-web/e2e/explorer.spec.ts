@@ -80,6 +80,66 @@ test('shows explorer empty states and configured table fields', async ({
   await repeatedKeyboardSearch;
 });
 
+test('reorders Explorer columns by dragging their handles', async ({
+  page,
+}) => {
+  const code = `explorer_columns_${suffix()}`;
+  const blueprint = await createEntityBlueprint(
+    code,
+    'Explorer column order',
+    '[[attributes]]\ncode = "title"\nvalue_type = "string"\n\n[[attributes]]\ncode = "stock"\nvalue_type = "integer"',
+    { views: '[views.table]\ntype = "table"\nfields = ["title", "stock"]' },
+  );
+  await createEntity(blueprint, [
+    scalar('title', 'Column product'),
+    scalar('stock', 3),
+  ]);
+  await page.goto(`/?blueprint=${code}`);
+  const headers = async () =>
+    (await page.getByRole('columnheader').allInnerTexts()).map((text) =>
+      text.trim(),
+    );
+  await expect(page.getByRole('columnheader', { name: 'stock' })).toBeVisible();
+  const before = await headers();
+  expect(before.indexOf('title')).toBeLessThan(before.indexOf('stock'));
+
+  await page.getByRole('button', { name: 'Columns' }).click();
+  const list = page
+    .getByRole('dialog', { name: 'Columns' })
+    .getByRole('list', { name: 'Columns' });
+  const handle = await list
+    .getByRole('button', { name: 'Drag to reorder title' })
+    .boundingBox();
+  const target = await list
+    .getByRole('listitem')
+    .filter({ hasText: 'stock' })
+    .boundingBox();
+  if (!handle || !target) throw new Error('column rows are not visible');
+  const x = handle.x + handle.width / 2;
+  await page.mouse.move(x, handle.y + handle.height / 2);
+  await page.mouse.down();
+  // Move in steps so the pointer sensor activates and sorting follows.
+  await page.mouse.move(x, handle.y + handle.height, { steps: 5 });
+  await page.mouse.move(x, target.y + target.height * 0.75, { steps: 20 });
+  await page.mouse.up();
+
+  await expect
+    .poll(async () => {
+      const rows = (await list.getByRole('listitem').allInnerTexts()).map(
+        (text) => text.trim(),
+      );
+      return rows.indexOf('stock') < rows.indexOf('title');
+    })
+    .toBe(true);
+  await page.getByRole('button', { name: 'Done' }).click();
+  await expect
+    .poll(async () => {
+      const after = await headers();
+      return after.indexOf('stock') < after.indexOf('title');
+    })
+    .toBe(true);
+});
+
 test('saves an Explorer search and restores it through a short URL', async ({
   page,
 }) => {

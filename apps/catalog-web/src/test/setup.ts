@@ -5,6 +5,16 @@ import i18n from 'i18next';
 // Monaco's browser/worker runtime is covered by Playwright, not jsdom.
 vi.mock('../components/monacoRuntime', () => ({}));
 
+// jsdom has no ResizeObserver, which dnd-kit needs at import time. Pointer
+// dragging has no layout in jsdom either and is covered by Playwright.
+if (!('ResizeObserver' in globalThis)) {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver;
+}
+
 beforeAll(async () => {
   // Only tests that import the app's i18n module initialize translations.
   if (i18n.isInitializing) {

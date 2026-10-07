@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getCoreRowModel, useLegacyTable } from '@tanstack/react-table/legacy';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Paper, Typography } from '@mui/material';
-import { useRef, useState } from 'react';
+import { lazy, Suspense, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { BlueprintWithAttributes, EntityItem } from '../entities/api';
 import { DeleteEntityDialog } from '../entities/components/DeleteEntityDialog';
@@ -16,7 +16,6 @@ import {
   resultRowOverscan,
 } from './constants';
 import { EntityActionsMenu } from './EntityActionsMenu';
-import { ExplorerColumnPreferencesDialog } from './ExplorerColumnPreferencesDialog';
 import { ExplorerExtensionActions } from './ExplorerExtensionActions';
 import {
   arrangeExplorerColumns,
@@ -40,6 +39,16 @@ import type { ExplorerSelection } from './useExplorerSelection';
 import { VirtualizedExplorerTable } from './VirtualizedExplorerTable';
 import { useTimeZone } from '../../time/useInstantFormat';
 import { lexiconText } from '../lexicon/lexicon';
+
+// The column dialog carries drag-and-drop; load it when first opened so it
+// stays out of the Explorer's startup bundle.
+const ExplorerColumnPreferencesDialog = lazy(() =>
+  import('./ExplorerColumnPreferencesDialog').then(
+    ({ ExplorerColumnPreferencesDialog }) => ({
+      default: ExplorerColumnPreferencesDialog,
+    }),
+  ),
+);
 
 type Props = {
   blueprint: BlueprintWithAttributes;
@@ -102,6 +111,8 @@ export const ExplorerResultsTable = ({
     position: ActionMenuPosition;
   } | null>(null);
   const [columnPreferencesOpen, setColumnPreferencesOpen] = useState(false);
+  // Stays mounted after the first open so closing keeps its transition.
+  const [columnPreferencesLoaded, setColumnPreferencesLoaded] = useState(false);
   const tableContainerRef = useRef<HTMLDivElement>(null);
   // Virtualize data subscriptions as well as DOM rows. The core row model is
   // one-to-one with items; server-side sorting already determines their order.
@@ -210,7 +221,10 @@ export const ExplorerResultsTable = ({
         }
         onSendSelection={() => setAgentSelection([...selection.selectedItems])}
         onToggleSelection={selection.toggleSelectionMode}
-        onOpenColumnPreferences={() => setColumnPreferencesOpen(true)}
+        onOpenColumnPreferences={() => {
+          setColumnPreferencesLoaded(true);
+          setColumnPreferencesOpen(true);
+        }}
       />
       {showExplorerActions && (
         <ExplorerExtensionActions
@@ -282,14 +296,18 @@ export const ExplorerResultsTable = ({
           }}
         />
       )}
-      <ExplorerColumnPreferencesDialog
-        columns={preferenceColumns}
-        onChange={columnPreferences.update}
-        onClear={columnPreferences.clear}
-        onClose={() => setColumnPreferencesOpen(false)}
-        open={columnPreferencesOpen}
-        preferences={columnPreferences.preferences}
-      />
+      {columnPreferencesLoaded && (
+        <Suspense fallback={null}>
+          <ExplorerColumnPreferencesDialog
+            columns={preferenceColumns}
+            onChange={columnPreferences.update}
+            onClear={columnPreferences.clear}
+            onClose={() => setColumnPreferencesOpen(false)}
+            open={columnPreferencesOpen}
+            preferences={columnPreferences.preferences}
+          />
+        </Suspense>
+      )}
       <SearchInfoDialog
         entity={searchInfoEntity}
         onClose={() => setSearchInfoEntity(null)}
