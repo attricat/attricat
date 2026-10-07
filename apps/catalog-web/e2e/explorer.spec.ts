@@ -186,7 +186,7 @@ value_type = "string"`,
   await expect(filterButton).toHaveCSS('opacity', '1');
   await filterButton.click();
   const dialog = page.getByRole('dialog', { name: 'Add filter' });
-  await expect(dialog.getByRole('combobox', { name: 'Field' })).toHaveText(
+  await expect(dialog.getByRole('combobox', { name: 'Field' })).toHaveValue(
     /color/,
   );
   await expect(dialog.getByRole('textbox', { name: 'Value' })).toHaveValue(

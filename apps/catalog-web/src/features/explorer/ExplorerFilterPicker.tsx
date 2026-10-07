@@ -176,7 +176,7 @@ export const ExplorerFilterPicker = ({
     <Stack spacing={1} sx={{ mt: 1 }}>
       <Stack
         direction="row"
-        spacing={0.5}
+        spacing={2}
         sx={{ alignItems: 'center', flexWrap: 'wrap' }}
         useFlexGap
       >

@@ -713,6 +713,7 @@
     "noFilterableAttributes": "Ten schemat nie ma atrybutów, które można filtrować.",
     "attribute": "Atrybut",
     "filterField": "Pole",
+    "noMatchingFilterFields": "Brak pasujących pól",
     "relationship": "Relacja",
     "loadingRelationshipFields": "Ładowanie pól relacji…",
     "operator": "Operator",

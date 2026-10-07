@@ -18,7 +18,7 @@ export const RelationshipSelectionPills = ({
       sx={{
         display: 'flex',
         flexWrap: 'wrap',
-        gap: 0.5,
+        gap: 2,
         minWidth: 0,
       }}
     >

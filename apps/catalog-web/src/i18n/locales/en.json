@@ -701,6 +701,7 @@
     "noFilterableAttributes": "This blueprint has no filterable attributes.",
     "attribute": "Attribute",
     "filterField": "Field",
+    "noMatchingFilterFields": "No matching fields",
     "relationship": "Relationship",
     "loadingRelationshipFields": "Loading related fields…",
     "operator": "Operator",
