@@ -60,6 +60,8 @@ type Props = {
   /** Reports whether changes are waiting to be saved in this context. */
   onPendingChange?: (pending: boolean) => void;
   footerActions?: ReactNode;
+  /** Lays the view out in one column, as in a narrow panel. */
+  singleColumn?: boolean;
 };
 
 export type EntityInlineFieldsHandle = {
@@ -99,6 +101,7 @@ export const EntityInlineFields = forwardRef<EntityInlineFieldsHandle, Props>(
       renderFilePanel,
       onPendingChange,
       footerActions,
+      singleColumn,
     },
     ref,
   ) => {
@@ -271,6 +274,7 @@ export const EntityInlineFields = forwardRef<EntityInlineFieldsHandle, Props>(
       renderAttributePanel,
       renderFilePanel,
       renderEditor,
+      singleColumn,
     };
     const blueprintChangeable = changeable.filter((attribute) =>
       attributes.some((placed) => placed.code === attribute.code),

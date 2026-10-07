@@ -10,17 +10,22 @@ vi.mock('@tanstack/react-router', () => ({
   createLink:
     () =>
     ({
+      'aria-label': ariaLabel,
       children,
       hash,
       params,
       to,
     }: {
+      'aria-label'?: string;
       children: ReactNode;
       hash: string;
       params: { entityId: string };
       to: string;
     }) => (
-      <a href={`${to.replace('$entityId', params.entityId)}#${hash}`}>
+      <a
+        aria-label={ariaLabel}
+        href={`${to.replace('$entityId', params.entityId)}#${hash}`}
+      >
         {children}
       </a>
     ),
@@ -46,6 +51,7 @@ describe('EntityCommentsLink', () => {
     );
 
     const link = await screen.findByRole('link', { name: '3 comments' });
+    expect(link.textContent).toBe('3');
     expect(link.getAttribute('href')).toBe(`/entities/${entityId}#comments`);
   });
 });

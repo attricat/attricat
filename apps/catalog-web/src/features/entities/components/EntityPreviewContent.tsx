@@ -46,6 +46,8 @@ type Props = {
   statusTransitions?: readonly StatusTransitionAccess[];
   onContextChange: (contextId: string) => void;
   resolved: Awaited<ReturnType<typeof getResolvedEntityPreview>>;
+  /** Lays the view out in one column, as in a narrow panel. */
+  singleColumn?: boolean;
 };
 
 /** Resolved attribute values of an entity for the selected context. */
@@ -63,6 +65,7 @@ export const EntityPreviewContent = ({
   statusTransitions,
   onContextChange,
   resolved,
+  singleColumn,
 }: Props) => {
   const { t } = useTranslation();
   // Switching context would drop changes that are not saved yet.
@@ -164,6 +167,7 @@ export const EntityPreviewContent = ({
               renderFilePanel={renderFilePanel}
               resolvedValues={resolved.values}
               reusableResolvedValues={resolved.reusable_values ?? {}}
+              singleColumn={singleColumn}
               statusParentContextIds={statusParentContextIds}
               statusTransitions={statusTransitions}
               view={blueprint.blueprint.views.detail}
@@ -180,6 +184,7 @@ export const EntityPreviewContent = ({
                 renderFilePanel={renderFilePanel}
                 values={resolved.values}
                 view={blueprint.blueprint.views.detail}
+                singleColumn={singleColumn}
                 skipComponentId={entityHeadingComponentId}
               />
               {(resolved.reusable_attributes?.length ?? 0) > 0 && (
@@ -191,6 +196,7 @@ export const EntityPreviewContent = ({
                     attributes={resolved.reusable_attributes}
                     contextId={contextId}
                     entityId={entityId}
+                    singleColumn={singleColumn}
                     values={resolved.reusable_values ?? {}}
                   />
                 </Box>

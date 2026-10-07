@@ -9,9 +9,12 @@ import { compactIconSize } from '../../../components/iconSizes';
 
 export const EntityIdPopover = ({
   alignWithText = false,
+  edge,
   entityId,
 }: {
   alignWithText?: boolean;
+  /** Offsets the button's padding where it starts a line of content. */
+  edge?: 'start';
   entityId: string;
 }) => {
   const { t } = useTranslation();
@@ -31,6 +34,7 @@ export const EntityIdPopover = ({
       <Tooltip title={t('entities.viewEntityId')}>
         <IconButton
           aria-label={label}
+          edge={edge}
           onClick={(event) => setAnchor(event.currentTarget)}
           size="small"
           sx={alignWithText ? { transform: 'translateY(-2px)' } : undefined}

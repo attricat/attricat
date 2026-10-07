@@ -19,8 +19,7 @@
     "count_one": "{{count}} komentarz",
     "count_few": "{{count}} komentarze",
     "count_many": "{{count}} komentarzy",
-    "count_other": "{{count}} komentarza",
-    "openComments": "Otwórz komentarze na stronie encji"
+    "count_other": "{{count}} komentarza"
   },
   "markdown": {
     "write": "Edytuj",

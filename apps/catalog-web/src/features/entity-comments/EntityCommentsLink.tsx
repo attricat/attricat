@@ -10,7 +10,7 @@ import { getCommentCount } from './api';
 import { commentsSectionId } from './constants';
 import { commentQueryKeys } from './queryKeys';
 
-/** Comment count linking to the comments on the entity page. */
+/** Comment count linking to the comments on the entity page; the label is in its tooltip. */
 export const EntityCommentsLink = ({ entityId }: { entityId: string }) => {
   const { t } = useTranslation();
   const session = useQuery({
@@ -28,9 +28,11 @@ export const EntityCommentsLink = ({ entityId }: { entityId: string }) => {
     select: (data) => data.count,
   });
   if (count.data === undefined) return null;
+  const label = t('comments.count', { count: count.data });
   return (
-    <Tooltip describeChild title={t('comments.openComments')}>
+    <Tooltip title={label}>
       <RouterButton
+        aria-label={label}
         hash={commentsSectionId}
         params={{ entityId }}
         size="small"
@@ -38,7 +40,7 @@ export const EntityCommentsLink = ({ entityId }: { entityId: string }) => {
         to="/entities/$entityId"
         variant="text"
       >
-        {t('comments.count', { count: count.data })}
+        {count.data}
       </RouterButton>
     </Tooltip>
   );

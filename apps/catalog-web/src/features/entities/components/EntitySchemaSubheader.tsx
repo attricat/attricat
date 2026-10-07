@@ -15,11 +15,11 @@ export const EntitySchemaSubheader = ({
   name,
 }: Props) => (
   <Stack direction="row" spacing={0.5} sx={{ alignItems: 'baseline', mt: 3 }}>
+    <EntityIdPopover alignWithText edge="start" entityId={entityId} />
     {name && (
       <Typography component={compact ? 'h3' : 'h2'} variant="h6">
         {name}
       </Typography>
     )}
-    <EntityIdPopover alignWithText entityId={entityId} />
   </Stack>
 );

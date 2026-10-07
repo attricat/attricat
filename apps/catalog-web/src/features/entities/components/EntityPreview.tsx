@@ -49,7 +49,7 @@ export type EntityPreviewFrame = {
 
 type Props = {
   entityId: string;
-  /** Renders smaller headings for a panel beside another page. */
+  /** Renders smaller headings and one column of fields for a panel beside another page. */
   compact?: boolean;
   /** The context shown until another is chosen. */
   initialContextId?: string;
@@ -123,6 +123,7 @@ export const EntityPreview = ({
         headerActions: (
           <EntityBlueprintHeaderActions
             blueprint={blueprint.data?.blueprint}
+            hideBlueprintLink={compact}
             schemaOutdated={schemaOutdated}
             isSample={resolvedEntity?.is_sample}
           >
@@ -265,6 +266,7 @@ export const EntityPreview = ({
                     )}
                     onContextChange={setSelectedContext}
                     resolved={resolved.data}
+                    singleColumn={compact}
                   />
                 )}
               </>

@@ -85,7 +85,7 @@ export const resultRowOverscan = 10;
 // Layout dimensions.
 export const facetSidebarWidth = 300;
 /** The entity panel floats over the results; keep most of them visible. */
-export const entityPanelWidth = 'clamp(360px, 30vw, 560px)';
+export const entityPanelWidth = 'clamp(420px, 36vw, 680px)';
 export const facetSidebarStickyTop = 88;
 export const facetSidebarMaxHeight = 'calc(100dvh - 104px)';
 export const facetHeadingIconSize = 15;

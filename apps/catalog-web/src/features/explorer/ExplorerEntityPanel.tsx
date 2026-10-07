@@ -1,6 +1,6 @@
-import { Box, IconButton, Paper, Tooltip, Typography } from '@mui/material';
+import { Box, IconButton, Paper, Tooltip } from '@mui/material';
 import { Maximize2Icon, XIcon } from 'lucide-react';
-import { useEffect, useId, useRef, type KeyboardEvent } from 'react';
+import { useEffect, useRef, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RouterButton } from '../../components/RouterLink';
 import { compactIconSize } from '../../components/iconSizes';
@@ -39,7 +39,6 @@ export const ExplorerEntityPanel = ({
   onOpenEntity,
 }: Props) => {
   const { t } = useTranslation();
-  const titleId = useId();
   const panelRef = useRef<HTMLElement>(null);
 
   // Moves keyboard and screen reader users to the entity they opened.
@@ -57,7 +56,15 @@ export const ExplorerEntityPanel = ({
       onDuplicated={(copy) => onOpenEntity(copy.id)}
       renderFrame={({ blueprint, children, headerActions }) => (
         <Paper
-          aria-labelledby={titleId}
+          // Named for assistive technology only; the entity heading inside
+          // already identifies it visually.
+          aria-label={
+            blueprint
+              ? t('explorer.entityPanelTitle', {
+                  blueprint: lexiconText(blueprint.name),
+                })
+              : t('entities.entityPreview')
+          }
           component="aside"
           // Overlay elevation; the panel floats over the results without a
           // backdrop so other rows stay clickable.
@@ -83,24 +90,22 @@ export const ExplorerEntityPanel = ({
           }}
           tabIndex={-1}
         >
-          <Box sx={{ alignItems: 'center', display: 'flex', gap: 1, mb: 2 }}>
-            <Typography
-              color="text.secondary"
-              id={titleId}
-              noWrap
-              sx={{ flexGrow: 1 }}
-              variant="body2"
-            >
-              {blueprint
-                ? t('explorer.entityPanelTitle', {
-                    blueprint: lexiconText(blueprint.name),
-                  })
-                : t('entities.entityPreview')}
-            </Typography>
+          <Box
+            sx={{
+              alignItems: 'center',
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 1,
+              mb: 2,
+            }}
+          >
+            {headerActions}
+            <EntityCommentsLink entityId={entityId} />
             <RouterButton
               params={{ entityId }}
               size="small"
               startIcon={<Maximize2Icon size={compactIconSize} />}
+              sx={{ ml: 'auto' }}
               to="/entities/$entityId"
             >
               {t('explorer.openFullPage')}
@@ -114,18 +119,6 @@ export const ExplorerEntityPanel = ({
                 <XIcon size={compactIconSize} />
               </IconButton>
             </Tooltip>
-          </Box>
-          <Box
-            sx={{
-              alignItems: 'center',
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: 1,
-              mb: 2,
-            }}
-          >
-            {headerActions}
-            <EntityCommentsLink entityId={entityId} />
           </Box>
           {children}
         </Paper>

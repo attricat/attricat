@@ -9,6 +9,8 @@ import { EntitySchemaStatus } from './EntitySchemaStatus';
 type Props = {
   blueprint?: { id: string; name: string };
   children?: ReactNode;
+  /** Omits the link to the blueprint, such as where a panel already names it. */
+  hideBlueprintLink?: boolean;
   isSample?: boolean;
   /** Shows whether the entity matches the blueprint's current schema. */
   schemaOutdated?: boolean;
@@ -18,6 +20,7 @@ type Props = {
 export const EntityBlueprintHeaderActions = ({
   blueprint,
   children,
+  hideBlueprintLink = false,
   isSample = false,
   schemaOutdated,
 }: Props) => {
@@ -30,7 +33,7 @@ export const EntityBlueprintHeaderActions = ({
       {isSample && (
         <Chip color="info" label={t('entities.sample')} size="small" />
       )}
-      {blueprint && (
+      {blueprint && !hideBlueprintLink && (
         <Tooltip title={lexiconText(blueprint.name)}>
           <RouterButton
             params={{ blueprintId: blueprint.id }}

@@ -55,6 +55,8 @@ type Props = {
   contextId?: string;
   entityId?: string;
   fallbackVisibilityScope?: AttributeVisibilityScope;
+  /** Lays grids out in one column regardless of the viewport, as in a narrow panel. */
+  singleColumn?: boolean;
 };
 
 export const EntityView = ({
@@ -69,6 +71,7 @@ export const EntityView = ({
   contextId,
   entityId,
   fallbackVisibilityScope,
+  singleColumn = false,
 }: Props) => {
   const { t } = useTranslation();
   const spacing = renderEditor ? VIEW_EDIT_LAYOUT_SPACING : VIEW_LAYOUT_SPACING;
@@ -123,7 +126,7 @@ export const EntityView = ({
           sx={{
             display: 'grid',
             gap: spacing,
-            gridTemplateColumns: VIEW_GRID_COLUMNS,
+            gridTemplateColumns: singleColumn ? '1fr' : VIEW_GRID_COLUMNS,
           }}
         >
           {node.children.map((child, index) =>
