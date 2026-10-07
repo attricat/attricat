@@ -32,7 +32,6 @@ type Props = {
   /** Check readiness of the publication channel; publishing waits for it. */
   readiness?: EntityPublicationReadiness;
   duplicate: () => void;
-  duplicating: boolean;
   unpublish: () => void;
   unpublishing: boolean;
 };
@@ -52,7 +51,6 @@ export const EntityActionsMenu = ({
   publishing,
   readiness,
   duplicate,
-  duplicating,
   unpublish,
   unpublishing,
 }: Props) => {
@@ -82,7 +80,6 @@ export const EntityActionsMenu = ({
         {t('explorer.searchInfo')}
       </MenuItem>
       <MenuItem
-        disabled={duplicating}
         onClick={() => {
           onClose();
           duplicate();

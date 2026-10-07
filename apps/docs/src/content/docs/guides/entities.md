@@ -13,7 +13,7 @@ The create form keeps your unsaved values for the browser tab. If you reload or 
 
 Values you enter when creating an entity are stored in the default context. Attributes with a `default_value` start filled in.
 
-**Duplicate entity** on an existing entity creates a copy with its values, relationships, and files, then opens the copy for editing. Values of the blueprint's [unique keys](/reference/blueprint/#unique-keys) are left out, because the copy cannot share them with the original: for a key unique in the whole workspace, the default-context value; for a key unique per context, the values in every context. Fill them in on the copy. If a key attribute is required, duplication fails with a validation error instead.
+**Duplicate entity**, in an entity's **Actions** menu or the Explorer row menu, asks for confirmation, then creates a copy with its values, relationships, and files and opens the copy. Values of the blueprint's [unique keys](/reference/blueprint/#unique-keys) are left out, because the copy cannot share them with the original: for a key unique in the whole workspace, the default-context value; for a key unique per context, the values in every context. Fill them in on the copy. If a key attribute is required, duplication fails with a validation error instead.
 
 ## Edit values
 
@@ -98,7 +98,7 @@ When agents are enabled and you can edit the entity, open **Ask about this entit
 
 ## History
 
-**Changes** lists every change to the entity: what changed, in which context, when, and by whom. Changes made by an agent show the agent and the person who approved them.
+**Changes**, in the entity's **Actions** menu, lists every change to the entity: what changed, in which context, when, and by whom. Changes made by an agent show the agent and the person who approved them.
 
 Previous attribute values are kept for 90 days by default. From the value history you can restore an earlier value; the restore is recorded as a new change.
 
@@ -108,7 +108,7 @@ If [data quality rules](/builders/rules/) flag the entity, its page shows the nu
 
 ## Upgrade to a newer revision
 
-When the blueprint has a newer published revision, the entity shows **Schema is outdated** and offers **Upgrade entity**. The upgrade page compares the entity's values with the new revision and asks for anything missing. See [Revisions and migration](/builders/revisions/).
+When the blueprint has a newer published revision, a warning icon next to the blueprint link at the top of the entity page says **Schema is outdated**, and the **Actions** menu offers **Upgrade blueprint**. The upgrade page compares the entity's values with the new revision and asks for anything missing. See [Revisions and migration](/builders/revisions/).
 
 ## Publish
 
@@ -120,7 +120,7 @@ If your workspace uses publication channels, the entity page shows its status pe
 
 ## Delete an entity
 
-**Delete entity** is available with the `entities.delete` permission, from the entity toolbar or the Explorer row menu. A deleted entity disappears from search, previews, and relationship pickers. Its history is kept. A record in a locked status cannot be deleted.
+**Delete entity** is available with the `entities.delete` permission, from the entity's **Actions** menu or the Explorer row menu, and asks for confirmation. A deleted entity disappears from search, previews, and relationship pickers. Its history is kept. A record in a locked status cannot be deleted.
 
 ## From the command line
 

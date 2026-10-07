@@ -226,7 +226,12 @@ describe('EntityPreviewPage', () => {
         blueprintVersion: 1,
       },
     });
-    expect(screen.queryByRole('button', { name: 'Delete entity' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Actions' }));
+    expect(
+      within(screen.getByRole('menu')).queryByRole('menuitem', {
+        name: 'Delete entity',
+      }),
+    ).toBeNull();
     unmount();
 
     vi.mocked(currentSession).mockResolvedValueOnce({
@@ -234,8 +239,11 @@ describe('EntityPreviewPage', () => {
     } as never);
     vi.mocked(api.deleteEntity).mockResolvedValue(undefined);
     renderPage();
+    await user.click(screen.getByRole('button', { name: 'Actions' }));
     await user.click(
-      await screen.findByRole('button', { name: 'Delete entity' }),
+      await within(screen.getByRole('menu')).findByRole('menuitem', {
+        name: 'Delete entity',
+      }),
     );
     expect(api.deleteEntity).not.toHaveBeenCalled();
     await user.click(
@@ -249,6 +257,42 @@ describe('EntityPreviewPage', () => {
       ),
     );
     await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/' }));
+  });
+
+  it('duplicates only after confirmation and opens the copy', async () => {
+    const api = await import('./api');
+    const user = userEvent.setup();
+    vi.mocked(listContexts).mockResolvedValue([]);
+    vi.mocked(api.duplicateEntity).mockResolvedValue({
+      id: '99999999-9999-4999-8999-999999999999',
+    } as never);
+    navigate.mockClear();
+    renderPage();
+
+    await user.click(screen.getByRole('button', { name: 'Actions' }));
+    await user.click(
+      within(screen.getByRole('menu')).getByRole('menuitem', {
+        name: 'Duplicate entity',
+      }),
+    );
+    const dialog = screen.getByRole('dialog');
+    expect(
+      within(dialog).getByText(/Create a copy of this entity/),
+    ).toBeTruthy();
+    expect(api.duplicateEntity).not.toHaveBeenCalled();
+
+    await user.click(
+      within(dialog).getByRole('button', { name: 'Duplicate entity' }),
+    );
+    await waitFor(() =>
+      expect(navigate).toHaveBeenCalledWith({
+        params: { entityId: '99999999-9999-4999-8999-999999999999' },
+        to: '/entities/$entityId',
+      }),
+    );
+    expect(api.duplicateEntity).toHaveBeenCalledWith(
+      '00000000-0000-4000-8000-000000000001',
+    );
   });
 
   it('returns a picker selection to its opener and closes the preview', () => {

@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { Alert, Box, CircularProgress } from '@mui/material';
 import { lazy, Suspense, useRef, useState } from 'react';
@@ -16,6 +16,7 @@ import { EntityExtensionDrawer } from './components/EntityExtensionDrawer';
 import { EntityAgentDrawer } from './components/EntityAgentDrawer';
 import { EntityPreviewToolbar } from './components/EntityPreviewToolbar';
 import { DeleteEntityDialog } from './components/DeleteEntityDialog';
+import { DuplicateEntityDialog } from './components/DuplicateEntityDialog';
 import { RelationshipPickerActionBar } from './components/RelationshipPickerActionBar';
 import { RecordControlsPanel } from './components/RecordControlsPanel';
 import { ReusableAttributeAttachControl } from './components/ReusableAttributeAttachControl';
@@ -24,7 +25,6 @@ import { useEntityPublications } from './components/useEntityPublications';
 import { ApiErrorAlert } from '../../components/CheckViolationsAlert';
 import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
 import {
-  duplicateEntity,
   getBlueprintRevision,
   getCurrentBlueprint,
   getEntityForm,
@@ -34,7 +34,6 @@ import {
   FALLBACK_BLUEPRINT_VERSION,
 } from './constants';
 import { entityQueryKeys } from './queryKeys';
-import { invalidateEntitySearches } from './invalidateEntity';
 import { entityStatusTransitionsOptions } from './queryOptions';
 import { statusParentContexts } from './status';
 import {
@@ -59,9 +58,9 @@ export const EntityPreviewPage = ({
   relationshipPickerToken?: string;
 }) => {
   const { t } = useTranslation();
-  const client = useQueryClient();
   const navigate = useNavigate();
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [duplicateOpen, setDuplicateOpen] = useState(false);
   const [extensionPanelOpen, setExtensionPanelOpen] = useState(false);
   const [agentPanelOpen, setAgentPanelOpen] = useState(false);
   const inlineFieldsRef = useRef<EntityInlineFieldsHandle>(null);
@@ -74,16 +73,6 @@ export const EntityPreviewPage = ({
   });
   const canPublish = session.data?.capabilities?.entities_publish === true;
   const publications = useEntityPublications(entityId, contextId, canPublish);
-  const duplicate = useMutation({
-    mutationFn: () => duplicateEntity(entityId),
-    onSuccess: (entity) => {
-      void invalidateEntitySearches(client);
-      void navigate({
-        params: { entityId: entity.id },
-        to: '/entities/$entityId',
-      });
-    },
-  });
   const resolved = useResolvedEntityPreview(entityId, contextId);
   const entityForm = useQuery({
     queryKey: entityQueryKeys.form(entityId),
@@ -129,7 +118,7 @@ export const EntityPreviewPage = ({
       ? currentBlueprint.data.blueprint.version >
         resolvedEntity.blueprint_version
       : undefined;
-  const actionError = publications.error ?? duplicate.error;
+  const actionError = publications.error;
   const loaded = resolved.data && blueprint.data;
 
   return (
@@ -138,6 +127,7 @@ export const EntityPreviewPage = ({
         actions={
           <EntityBlueprintHeaderActions
             blueprint={blueprint.data?.blueprint}
+            schemaOutdated={schemaOutdated}
             isSample={resolvedEntity?.is_sample}
           >
             <DataQualityFindingsChip entityId={entityId} />
@@ -194,8 +184,7 @@ export const EntityPreviewPage = ({
         }}
         schemaOutdated={schemaOutdated}
         showExtensions={Boolean(loaded)}
-        onDuplicate={() => duplicate.mutate()}
-        duplicatePending={duplicate.isPending}
+        onDuplicate={() => setDuplicateOpen(true)}
         canDelete={
           session.data?.capabilities?.entities_delete === true &&
           Boolean(resolved.data)
@@ -210,6 +199,19 @@ export const EntityPreviewPage = ({
         onUnpublish={publications.unpublish}
         publicationPending={publications.isPending}
       />
+      {duplicateOpen && (
+        <DuplicateEntityDialog
+          entityId={entityId}
+          onClose={() => setDuplicateOpen(false)}
+          onDuplicated={(copy) => {
+            setDuplicateOpen(false);
+            void navigate({
+              params: { entityId: copy.id },
+              to: '/entities/$entityId',
+            });
+          }}
+        />
+      )}
       {deleteOpen && (
         <DeleteEntityDialog
           entityId={entityId}

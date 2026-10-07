@@ -13,7 +13,7 @@ Formularz tworzenia przechowuje niezapisane wartości na czas trwania karty prze
 
 Wartości wpisane podczas tworzenia encji są zapisywane w kontekście domyślnym. Atrybuty z `default_value` są od początku wypełnione.
 
-**Duplikuj encję** przy istniejącej encji tworzy kopię z jej wartościami, relacjami i plikami, a następnie otwiera kopię do edycji. Wartości [kluczy unikalnych](/pl/reference/blueprint/#klucze-unikalne) schematu nie są kopiowane, ponieważ kopia nie może ich współdzielić z oryginałem: dla klucza unikalnego w całym obszarze roboczym pomijana jest wartość z kontekstu domyślnego, a dla klucza unikalnego w kontekście – wartości ze wszystkich kontekstów. Uzupełnij je w kopii. Jeśli atrybut klucza jest wymagany, duplikowanie kończy się błędem walidacji.
+**Duplikuj encję**, w menu **Akcje** encji lub w menu wiersza w Przeglądarce, prosi o potwierdzenie, a następnie tworzy kopię z wartościami, relacjami i plikami encji i otwiera kopię. Wartości [kluczy unikalnych](/pl/reference/blueprint/#klucze-unikalne) schematu nie są kopiowane, ponieważ kopia nie może ich współdzielić z oryginałem: dla klucza unikalnego w całym obszarze roboczym pomijana jest wartość z kontekstu domyślnego, a dla klucza unikalnego w kontekście – wartości ze wszystkich kontekstów. Uzupełnij je w kopii. Jeśli atrybut klucza jest wymagany, duplikowanie kończy się błędem walidacji.
 
 ## Edycja wartości
 
@@ -98,7 +98,7 @@ Gdy agenci są włączeni i możesz edytować encję, otwórz **Zapytaj o tę en
 
 ## Historia
 
-**Zmiany** zawierają listę wszystkich zmian encji: co się zmieniło, w którym kontekście, kiedy i kto to zrobił. Zmiany wprowadzone przez agenta pokazują agenta i osobę, która je zatwierdziła.
+**Zmiany**, w menu **Akcje** encji, zawierają listę wszystkich zmian encji: co się zmieniło, w którym kontekście, kiedy i kto to zrobił. Zmiany wprowadzone przez agenta pokazują agenta i osobę, która je zatwierdziła.
 
 Poprzednie wartości atrybutów są domyślnie przechowywane przez 90 dni. Z historii wartości możesz przywrócić wcześniejszą wartość; przywrócenie jest zapisywane jako nowa zmiana.
 
@@ -108,7 +108,7 @@ Jeśli [reguły jakości danych](/pl/builders/rules/) oznaczą encję, jej stron
 
 ## Aktualizacja do nowszej wersji
 
-Gdy schemat ma nowszą opublikowaną wersję, encja pokazuje komunikat **Schemat jest nieaktualny** i oferuje **Zaktualizuj encję**. Strona aktualizacji porównuje wartości encji z nową wersją i prosi o uzupełnienie brakujących danych. Zobacz [Wersje i migracja](/pl/builders/revisions/).
+Gdy schemat ma nowszą opublikowaną wersję, ikona ostrzeżenia obok odnośnika do schematu u góry strony encji informuje, że **Schemat jest nieaktualny**, a menu **Akcje** oferuje **Zaktualizuj schemat**. Strona aktualizacji porównuje wartości encji z nową wersją i prosi o uzupełnienie brakujących danych. Zobacz [Wersje i migracja](/pl/builders/revisions/).
 
 ## Publikowanie
 
@@ -120,7 +120,7 @@ Jeśli obszar roboczy korzysta z kanałów publikacji, strona encji pokazuje jej
 
 ## Usuwanie encji
 
-**Usuń encję** jest dostępne z uprawnieniem `entities.delete` na pasku narzędzi encji lub w menu wiersza w Przeglądarce. Usunięta encja znika z wyszukiwania, podglądów i okien wyboru relacji. Jej historia zostaje zachowana. Rekordu w zablokowanym statusie nie można usunąć.
+**Usuń encję** jest dostępne z uprawnieniem `entities.delete` w menu **Akcje** encji lub w menu wiersza w Przeglądarce i wymaga potwierdzenia. Usunięta encja znika z wyszukiwania, podglądów i okien wyboru relacji. Jej historia zostaje zachowana. Rekordu w zablokowanym statusie nie można usunąć.
 
 ## Z wiersza poleceń
 

@@ -47,7 +47,6 @@ const renderToolbar = (
         agentPanelOpen={false}
         canDelete={false}
         canPublish
-        duplicatePending={false}
         entityId="123e4567-e89b-12d3-a456-426614174001"
         extensionPanelOpen={false}
         notReadyChannels={readiness.ready ? [] : [readiness]}
@@ -117,5 +116,66 @@ describe('EntityPreviewToolbar readiness', () => {
     const menu = openPublicationMenu();
     fireEvent.click(within(menu).getByRole('menuitem', { name: 'Publish' }));
     expect(onPublish).toHaveBeenCalledOnce();
+  });
+});
+
+describe('entity actions menu', () => {
+  const renderActions = (
+    props: Partial<Parameters<typeof EntityPreviewToolbar>[0]>,
+  ) =>
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <EntityPreviewToolbar
+          agentPanelOpen={false}
+          canDelete={false}
+          canPublish={false}
+          entityId="123e4567-e89b-12d3-a456-426614174001"
+          extensionPanelOpen={false}
+          onDelete={vi.fn()}
+          onDuplicate={vi.fn()}
+          onOpenAgent={vi.fn()}
+          onOpenExtensions={vi.fn()}
+          onPublish={vi.fn()}
+          onPublishAll={vi.fn()}
+          onUnpublish={vi.fn()}
+          publicationPending={false}
+          showExtensions={false}
+          {...props}
+        />
+      </QueryClientProvider>,
+    );
+  const openActions = async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Actions' }));
+    return within(screen.getByRole('menu'));
+  };
+
+  it('lists entity actions with icons and closes after one is chosen', async () => {
+    const onDuplicate = vi.fn();
+    const onDelete = vi.fn();
+    renderActions({ canDelete: true, onDelete, onDuplicate });
+    let menu = await openActions();
+    expect(
+      menu.getAllByRole('menuitem').map((item) => item.textContent),
+    ).toEqual(['Changes', 'Duplicate entity', 'Delete entity']);
+    for (const item of menu.getAllByRole('menuitem'))
+      expect(item.querySelector('svg')).toBeTruthy();
+
+    await userEvent.click(
+      menu.getByRole('menuitem', { name: 'Duplicate entity' }),
+    );
+    expect(onDuplicate).toHaveBeenCalledOnce();
+    menu = await openActions();
+    await userEvent.click(
+      menu.getByRole('menuitem', { name: 'Delete entity' }),
+    );
+    expect(onDelete).toHaveBeenCalledOnce();
+  });
+
+  it('offers the schema upgrade only for outdated entities', async () => {
+    renderActions({ schemaOutdated: true });
+    const menu = await openActions();
+    expect(
+      menu.getByRole('menuitem', { name: 'Upgrade blueprint' }),
+    ).toBeTruthy();
   });
 });

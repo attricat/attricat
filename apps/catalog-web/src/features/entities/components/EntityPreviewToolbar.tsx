@@ -1,5 +1,6 @@
 import {
   ChevronDownIcon,
+  CircleArrowUpIcon,
   CopyIcon,
   GlobeIcon,
   InfoIcon,
@@ -15,6 +16,7 @@ import {
   Box,
   Button,
   Chip,
+  Divider,
   IconButton,
   ListItemIcon,
   ListItemText,
@@ -24,9 +26,8 @@ import {
 } from '@mui/material';
 import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { RouterIconButton } from '../../../components/RouterLink';
+import { RouterMenuItem } from '../../../components/RouterLink';
 import { EntityToolbar } from './EntityToolbar';
-import { EntitySchemaStatus } from './EntitySchemaStatus';
 import type {
   EntityPublicationReadiness,
   EntityPublicationStatus,
@@ -45,7 +46,6 @@ type Props = {
   schemaOutdated?: boolean;
   showExtensions: boolean;
   onDuplicate: () => void;
-  duplicatePending: boolean;
   canDelete: boolean;
   onDelete: () => void;
   publication?: EntityPublicationStatus;
@@ -69,7 +69,6 @@ export const EntityPreviewToolbar = ({
   schemaOutdated,
   showExtensions,
   onDuplicate,
-  duplicatePending,
   canDelete,
   onDelete,
   publication,
@@ -84,6 +83,10 @@ export const EntityPreviewToolbar = ({
   const { t } = useTranslation();
   // A tooltip cannot host another tooltip, so the UTC value is inline.
   const { formatWithUtc } = useInstantFormat();
+  const actionsMenuId = useId();
+  const [actionsMenuAnchor, setActionsMenuAnchor] =
+    useState<HTMLElement | null>(null);
+  const closeActionsMenu = () => setActionsMenuAnchor(null);
   const publishMenuId = useId();
   const [publishMenuAnchor, setPublishMenuAnchor] =
     useState<HTMLElement | null>(null);
@@ -92,43 +95,72 @@ export const EntityPreviewToolbar = ({
   const readinessText = readiness && publicationReadinessText(readiness);
   return (
     <EntityToolbar label={t('entities.entityPreview')}>
-      <Tooltip title={t('entities.changes')}>
-        <RouterIconButton
-          aria-label={t('entities.changes')}
+      <Button
+        aria-controls={actionsMenuAnchor ? actionsMenuId : undefined}
+        aria-expanded={Boolean(actionsMenuAnchor)}
+        aria-haspopup="menu"
+        color="inherit"
+        endIcon={<ChevronDownIcon />}
+        onClick={(event) => setActionsMenuAnchor(event.currentTarget)}
+        size="small"
+      >
+        {t('entities.entityActions')}
+      </Button>
+      <Menu
+        anchorEl={actionsMenuAnchor}
+        id={actionsMenuId}
+        onClose={closeActionsMenu}
+        open={Boolean(actionsMenuAnchor)}
+      >
+        <RouterMenuItem
+          onClick={closeActionsMenu}
           params={{ entityId }}
           to="/entities/$entityId/changes"
         >
-          <RotateCcwClockIcon />
-        </RouterIconButton>
-      </Tooltip>
-      <Tooltip title={t('entities.duplicateEntity')}>
-        <span>
-          <IconButton
-            aria-label={t('entities.duplicateEntity')}
-            disabled={duplicatePending}
-            onClick={onDuplicate}
+          <ListItemIcon>
+            <RotateCcwClockIcon size={compactIconSize} />
+          </ListItemIcon>
+          <ListItemText>{t('entities.changes')}</ListItemText>
+        </RouterMenuItem>
+        <MenuItem
+          onClick={() => {
+            closeActionsMenu();
+            onDuplicate();
+          }}
+        >
+          <ListItemIcon>
+            <CopyIcon size={compactIconSize} />
+          </ListItemIcon>
+          <ListItemText>{t('entities.duplicateEntity')}</ListItemText>
+        </MenuItem>
+        {schemaOutdated && (
+          <RouterMenuItem
+            onClick={closeActionsMenu}
+            params={{ entityId }}
+            to="/entities/$entityId/migrate"
           >
-            <CopyIcon />
-          </IconButton>
-        </span>
-      </Tooltip>
-      {schemaOutdated !== undefined && (
-        <EntitySchemaStatus
-          entityId={entityId}
-          schemaOutdated={schemaOutdated}
-        />
-      )}
-      {canDelete && (
-        <Tooltip title={t('entities.deleteEntity')}>
-          <IconButton
-            aria-label={t('entities.deleteEntity')}
-            color="error"
-            onClick={onDelete}
+            <ListItemIcon>
+              <CircleArrowUpIcon size={compactIconSize} />
+            </ListItemIcon>
+            <ListItemText>{t('entities.upgradeBlueprint')}</ListItemText>
+          </RouterMenuItem>
+        )}
+        {canDelete && <Divider />}
+        {canDelete && (
+          <MenuItem
+            onClick={() => {
+              closeActionsMenu();
+              onDelete();
+            }}
+            sx={{ color: 'error.main' }}
           >
-            <TrashIcon />
-          </IconButton>
-        </Tooltip>
-      )}
+            <ListItemIcon sx={{ color: 'inherit' }}>
+              <TrashIcon size={compactIconSize} />
+            </ListItemIcon>
+            <ListItemText>{t('entities.deleteEntity')}</ListItemText>
+          </MenuItem>
+        )}
+      </Menu>
       <Box sx={{ flexGrow: 1 }} />
       {!publication && (
         <Tooltip title={t('entities.publication.channelDisabledDescription')}>

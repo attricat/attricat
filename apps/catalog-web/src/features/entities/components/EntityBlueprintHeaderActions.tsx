@@ -4,11 +4,14 @@ import { useTranslation } from 'react-i18next';
 import { RouterButton } from '../../../components/RouterLink';
 import { BlueprintIcon } from '../../../components/systemIcons';
 import { lexiconText } from '../../lexicon/lexicon';
+import { EntitySchemaStatus } from './EntitySchemaStatus';
 
 type Props = {
   blueprint?: { id: string; name: string };
   children?: ReactNode;
   isSample?: boolean;
+  /** Shows whether the entity matches the blueprint's current schema. */
+  schemaOutdated?: boolean;
 };
 
 /** Page header actions identifying an entity's blueprint and sample state. */
@@ -16,6 +19,7 @@ export const EntityBlueprintHeaderActions = ({
   blueprint,
   children,
   isSample = false,
+  schemaOutdated,
 }: Props) => {
   const { t } = useTranslation();
   return (
@@ -38,6 +42,9 @@ export const EntityBlueprintHeaderActions = ({
             })}
           </RouterButton>
         </Tooltip>
+      )}
+      {blueprint && schemaOutdated !== undefined && (
+        <EntitySchemaStatus schemaOutdated={schemaOutdated} />
       )}
     </Box>
   );

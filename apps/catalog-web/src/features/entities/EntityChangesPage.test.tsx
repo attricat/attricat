@@ -8,6 +8,7 @@ import { getEntityChanges, getEntityForm } from './api';
 import { EntityChangesPage } from './EntityChangesPage';
 
 vi.mock('@tanstack/react-router', () => ({
+  createLink: <T,>(component: T) => component,
   Link: ({ children }: { children: React.ReactNode }) => (
     <span>{children}</span>
   ),
@@ -63,6 +64,7 @@ it('loads successive pages of entity changes without discarding prior changes', 
     </QueryClientProvider>,
   );
   expect(await screen.findByText('title', { selector: 'strong' })).toBeTruthy();
+  expect(screen.getByText('Back to entity')).toBeTruthy();
   await userEvent.click(screen.getByRole('button', { name: 'Load more' }));
   await waitFor(() =>
     expect(getEntityChanges).toHaveBeenCalledWith(entityId, 25),
