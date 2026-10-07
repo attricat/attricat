@@ -25,6 +25,7 @@ pub struct OpenAiCompatibleClient {
     api_key: String,
     model: String,
     reasoning_effort: Option<String>,
+    read_only: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -102,7 +103,12 @@ impl OpenAiCompatibleClient {
             api_key: config.api_key().to_owned(),
             model: config.model.clone(),
             reasoning_effort: config.reasoning_effort.clone(),
+            read_only: config.read_only,
         })
+    }
+    /// Whether runs on this client may only use read tools.
+    pub fn read_only(&self) -> bool {
+        self.read_only
     }
     pub async fn complete(
         &self,

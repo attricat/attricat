@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { request } from '../../api/request';
 import {
   conversationCreateResponseSchema,
+  conversationDetailSchema,
   conversationSchema,
   conversationSearchPageSchema,
   messageSchema,
@@ -31,7 +32,7 @@ export const searchConversations = (query: string, cursor?: string) => {
 export const getConversation = (id: string, signal?: AbortSignal) =>
   request(
     `/api/agent/conversations/${uuidPathParam(id)}`,
-    conversationSchema,
+    conversationDetailSchema,
     signal === undefined ? undefined : { signal },
   );
 export const updateConversationTitle = (id: string, title: string) =>

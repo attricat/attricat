@@ -147,6 +147,7 @@
     "newConversationDescription": "Utwórz osobny wątek dla zadania agenta.",
     "conversationTitle": "Tytuł rozmowy",
     "renameConversation": "Zmień tytuł rozmowy",
+    "readOnlyNotice": "Tylko odczyt: w tym demo agent może wyszukiwać dane i objaśniać zmiany, ale nie może ich wprowadzać.",
     "saveTitle": "Zapisz tytuł",
     "titleRequired": "Wpisz tytuł rozmowy.",
     "titleTooLong": "Tytuł może mieć maksymalnie 512 bajtów.",

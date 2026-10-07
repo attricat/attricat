@@ -14,6 +14,17 @@ vi.mock('./api', () => ({
 vi.mock('./ConversationPanel', () => ({ ConversationPanel: () => null }));
 const conversationId = '123e4567-e89b-12d3-a456-426614174000';
 
+const renderPage = () =>
+  render(
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
+      <ConversationDetailPage conversationId={conversationId} />
+    </QueryClientProvider>,
+  );
+
 describe('ConversationDetailPage', () => {
   it('offers a rename action for the loaded conversation', async () => {
     vi.mocked(getConversation).mockResolvedValue({
@@ -23,15 +34,7 @@ describe('ConversationDetailPage', () => {
       updated_at: '2026-09-28T00:00:00Z',
     } as never);
     const user = userEvent.setup();
-    render(
-      <QueryClientProvider
-        client={
-          new QueryClient({ defaultOptions: { queries: { retry: false } } })
-        }
-      >
-        <ConversationDetailPage conversationId={conversationId} />
-      </QueryClientProvider>,
-    );
+    renderPage();
     await user.click(
       await screen.findByRole('button', { name: 'Change conversation title' }),
     );
@@ -44,5 +47,32 @@ describe('ConversationDetailPage', () => {
     expect(
       screen.getByRole('textbox', { name: 'Conversation title' }),
     ).toHaveProperty('value', 'Original title');
+  });
+
+  it('says when the agent is read only', async () => {
+    vi.mocked(getConversation).mockResolvedValue({
+      id: conversationId,
+      title: 'Demo',
+      title_source: 'manual',
+      updated_at: '2026-09-28T00:00:00Z',
+      read_only: true,
+    } as never);
+    renderPage();
+    expect(
+      await screen.findByText(/^Read only: in this demo the agent/),
+    ).toBeTruthy();
+  });
+
+  it('shows no read-only notice for a writable agent', async () => {
+    vi.mocked(getConversation).mockResolvedValue({
+      id: conversationId,
+      title: 'Writable',
+      title_source: 'manual',
+      updated_at: '2026-09-28T00:00:00Z',
+      read_only: false,
+    } as never);
+    renderPage();
+    await screen.findByRole('button', { name: 'Change conversation title' });
+    expect(screen.queryByText(/^Read only/)).toBeNull();
   });
 });

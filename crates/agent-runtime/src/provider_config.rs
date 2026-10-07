@@ -25,6 +25,9 @@ pub struct AgentProviderConfig {
     pub reasoning_effort: Option<String>,
     pub request_timeout: Duration,
     pub run_timeout: Duration,
+    /// Offers the model read tools only, so it can never propose a change.
+    /// Public demo deployments set it; it is not read from `LLM_*` settings.
+    pub read_only: bool,
 }
 
 impl AgentProviderConfig {
@@ -77,6 +80,7 @@ impl AgentProviderConfig {
                 "LLM_RUN_TIMEOUT_SECONDS",
                 DEFAULT_RUN_TIMEOUT_SECONDS,
             )?,
+            read_only: false,
         }))
     }
 

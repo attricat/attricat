@@ -262,15 +262,28 @@ pub(super) async fn search_conversations(
     Ok(Json(ConversationSearchPage { items, next_cursor }))
 }
 
+#[derive(Serialize)]
+pub(super) struct ConversationDetail {
+    #[serde(flatten)]
+    conversation: crate::repository::Conversation,
+    /// The agent can only read in this deployment, so the client can say so.
+    read_only: bool,
+}
+
 pub(super) async fn get_conversation(
+    State(state): State<AppState>,
     AuthenticatedPrincipal(user, _): AuthenticatedPrincipal,
     ActiveWorkspace(workspace): ActiveWorkspace,
     ScopedRepository(repository): ScopedRepository,
     ApiPath(conversation_id): ApiPath<Uuid>,
-) -> Result<Json<crate::repository::Conversation>, ApiError> {
-    Ok(Json(
-        readable_conversation(&repository, user, workspace, conversation_id).await?,
-    ))
+) -> Result<Json<ConversationDetail>, ApiError> {
+    Ok(Json(ConversationDetail {
+        conversation: readable_conversation(&repository, user, workspace, conversation_id).await?,
+        read_only: state
+            .agent_provider
+            .as_ref()
+            .is_some_and(|config| config.read_only),
+    }))
 }
 
 pub(super) async fn update_conversation(

@@ -7,6 +7,8 @@ Agent Attricat to asystent konwersacyjny, który może odczytywać katalog i pro
 
 Agenci są opcjonalni. Zanim się pojawią, administrator musi [skonfigurować dostawcę AI](/pl/reference/configuration/#agenci).
 
+W publicznym demo agent działa tylko w trybie odczytu. Może robić wszystko, co opisano w części *Bez zatwierdzenia*, a gdy poprosisz o zmianę, objaśnia, co by zrobił, zamiast ją proponować. Rozmowa pokazuje komunikat **Tylko odczyt**.
+
 ## Rozpocznij rozmowę
 
 Otwórz **Agenci** na pasku bocznym i wybierz **Nowa rozmowa**. Nadaj wątkowi tytuł opisujący zadanie, na przykład *Clean up inactive suppliers*, i opisz, czego potrzebujesz.

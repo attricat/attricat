@@ -2591,3 +2591,136 @@ async fn startup_recovery_only_interrupts_expired_agent_tasks(pool: PgPool) {
     .unwrap();
     assert_eq!(recovered, 1);
 }
+
+#[sqlx::test]
+async fn read_only_runs_offer_no_mutations_and_refuse_one_named_anyway(pool: PgPool) {
+    let (_, api_server) = start_server(pool.clone()).await;
+    let offered = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+    let provider_offered = offered.clone();
+    let provider_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let provider_address = provider_listener.local_addr().unwrap();
+    let provider = tokio::spawn(async move {
+        axum::serve(
+            provider_listener,
+            Router::new().route(
+                "/v1/chat/completions",
+                post(move |axum::Json(request): axum::Json<Value>| {
+                    let offered = provider_offered.clone();
+                    async move {
+                        *offered.lock().unwrap() = request["tools"]
+                            .as_array()
+                            .unwrap()
+                            .iter()
+                            .map(|tool| tool["function"]["name"].as_str().unwrap().to_owned())
+                            .collect();
+                        axum::response::Response::builder()
+                            .header("content-type", "text/event-stream")
+                            .body(axum::body::Body::from(format!(
+                                "data: {{\"choices\":[{{\"delta\":{{\"tool_calls\":[{{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{{\"name\":\"delete_entity\",\"arguments\":\"{{\\\"entity_id\\\":\\\"{}\\\"}}\"}}}}]}}}}]}}\n\ndata: [DONE]\n\n",
+                                Uuid::new_v4()
+                            )))
+                            .unwrap()
+                    }
+                }),
+            ),
+        )
+        .await
+        .unwrap();
+    });
+    let mut config = AgentProviderConfig::from_values(|name| match name {
+        "LLM_API_KEY" => Some("test-key".to_owned()),
+        "LLM_BASE_URL" => Some(format!("http://{provider_address}/v1")),
+        _ => None,
+    })
+    .unwrap()
+    .unwrap();
+    config.read_only = true;
+    let repository = CatalogRepository::system(pool.clone())
+        .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
+        .await
+        .unwrap();
+    let conversation = repository
+        .create_conversation(Some(BOOTSTRAP_OWNER_ID.parse().unwrap()), "demo")
+        .await
+        .unwrap();
+    let run = repository
+        .create_agent_run_for_user(
+            conversation.id,
+            BOOTSTRAP_OWNER_ID.parse().unwrap(),
+            config.base_url.as_str(),
+            &config.model,
+        )
+        .await
+        .unwrap();
+    let client = api::agent_provider::OpenAiCompatibleClient::new(&config).unwrap();
+    let store: Arc<dyn api::storage::ObjectStore> = Arc::new(FakeObjectStore::available());
+    api::agent_runner::run(&repository, &client, &store, run.id, conversation.id)
+        .await
+        .unwrap();
+
+    let offered = offered.lock().unwrap().clone();
+    assert!(offered.iter().any(|name| name == "get_entity"));
+    for name in &offered {
+        assert!(
+            matches!(
+                api::agent_tools::kind(name),
+                Ok(api::agent_tools::ToolKind::Read)
+            ),
+            "{name} was offered to a read-only run"
+        );
+    }
+    let run = repository.get_agent_run(run.id).await.unwrap();
+    assert_eq!(run.status, "failed");
+    assert_eq!(run.error_code.as_deref(), Some("unknown_tool"));
+    assert!(
+        repository
+            .pending_agent_tool_calls(Some(conversation.id))
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    api_server.abort();
+    provider.abort();
+}
+
+#[sqlx::test]
+async fn conversation_detail_reports_a_read_only_agent(pool: PgPool) {
+    let (base_url, server) = start_server_with_config(pool, |state| {
+        let mut config = AgentProviderConfig::from_values(|name| {
+            (name == "LLM_API_KEY").then(|| "test-key".to_owned())
+        })
+        .unwrap()
+        .unwrap();
+        config.read_only = true;
+        state.agent_provider = Some(config);
+    })
+    .await;
+    let client = authenticated_client();
+    let conversation: Value = client
+        .post(format!("{base_url}/agent/conversations"))
+        .json(&json!({"title": "demo"}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let detail: Value = client
+        .get(format!(
+            "{base_url}/agent/conversations/{}",
+            conversation["id"].as_str().unwrap()
+        ))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(detail["read_only"], json!(true));
+    assert_eq!(detail["title"], json!("demo"));
+    server.abort();
+}

@@ -147,6 +147,7 @@
     "newConversationDescription": "Create a focused thread for an agent task.",
     "conversationTitle": "Conversation title",
     "renameConversation": "Change conversation title",
+    "readOnlyNotice": "Read only: in this demo the agent can look things up and explain changes, but it cannot make them.",
     "saveTitle": "Save title",
     "titleRequired": "Enter a conversation title.",
     "titleTooLong": "The title must be at most 512 bytes.",
