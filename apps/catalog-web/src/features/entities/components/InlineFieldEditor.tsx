@@ -59,6 +59,17 @@ export const InlineFieldEditor = ({
 }: Props) => {
   const [draft, setDraft] = useState<string | null>(null);
   const [error, setError] = useState<string>();
+  const [focused, setFocused] = useState(false);
+  const [baseline, setBaseline] = useState(value);
+  // A value set from outside (Smart Fill, a resolved conflict) replaces an
+  // edit left behind in the field, but never text the user is typing.
+  if (value !== baseline) {
+    setBaseline(value);
+    if (!focused) {
+      setDraft(null);
+      setError(undefined);
+    }
+  }
   const shown = draft ?? value;
 
   const commit = (next: string) => {
@@ -74,11 +85,12 @@ export const InlineFieldEditor = ({
 
   return (
     <Box
+      onFocus={() => setFocused(true)}
       onBlur={(event: FocusEvent<HTMLDivElement>) => {
-        if (draft === null) return;
         if (event.currentTarget.contains(event.relatedTarget as Node | null))
           return;
-        commit(draft);
+        setFocused(false);
+        if (draft !== null) commit(draft);
       }}
       onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
         if (!isTextEntry(event.target as Element)) return;

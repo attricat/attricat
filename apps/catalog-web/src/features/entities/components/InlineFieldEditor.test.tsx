@@ -10,13 +10,13 @@ const renderText = (
 ) => {
   const onCommit = vi.fn();
   const onRevert = vi.fn();
-  render(
+  const field = (value: string) => (
     <>
       <InlineFieldEditor
         onCommit={onCommit}
         onRevert={onRevert}
         validate={options.validate}
-        value="Saved"
+        value={value}
       >
         {({ value, error, onChange }) => (
           <TextField
@@ -29,10 +29,18 @@ const renderText = (
         )}
       </InlineFieldEditor>
       <button type="button">Elsewhere</button>
-    </>,
+    </>
   );
-  return { onCommit, onRevert };
+  const { rerender } = render(field('Saved'));
+  return {
+    onCommit,
+    onRevert,
+    setValue: (value: string) => rerender(field(value)),
+  };
 };
+
+const noExclamations = (value: string) =>
+  value.includes('!') ? 'No exclamations' : undefined;
 
 describe('InlineFieldEditor', () => {
   it('commits typed text when focus leaves the field', async () => {
@@ -71,10 +79,7 @@ describe('InlineFieldEditor', () => {
 
   it('keeps an invalid value local and shows why', async () => {
     const user = userEvent.setup();
-    const { onCommit } = renderText({
-      validate: (value) =>
-        value.includes('!') ? 'No exclamations' : undefined,
-    });
+    const { onCommit } = renderText({ validate: noExclamations });
 
     await user.type(screen.getByLabelText('Title'), '!');
     await user.click(screen.getByRole('button', { name: 'Elsewhere' }));
@@ -84,6 +89,33 @@ describe('InlineFieldEditor', () => {
     expect((screen.getByLabelText('Title') as HTMLInputElement).value).toBe(
       'Saved!',
     );
+  });
+
+  it('replaces an edit left in the field when the value is set from outside', async () => {
+    const user = userEvent.setup();
+    const { onCommit, setValue } = renderText({ validate: noExclamations });
+    const input = screen.getByLabelText('Title') as HTMLInputElement;
+
+    await user.type(input, '!');
+    await user.click(screen.getByRole('button', { name: 'Elsewhere' }));
+    setValue('Filled');
+
+    expect(input.value).toBe('Filled');
+    expect(screen.queryByText('No exclamations')).toBeNull();
+    await user.click(input);
+    await user.click(screen.getByRole('button', { name: 'Elsewhere' }));
+    expect(onCommit).not.toHaveBeenCalled();
+  });
+
+  it('keeps text being typed when the value changes from outside', async () => {
+    const user = userEvent.setup();
+    const { setValue } = renderText();
+    const input = screen.getByLabelText('Title') as HTMLInputElement;
+
+    await user.type(input, ' typing');
+    setValue('Changed elsewhere');
+
+    expect(input.value).toBe('Saved typing');
   });
 
   it('commits a choice made without typing at once', async () => {

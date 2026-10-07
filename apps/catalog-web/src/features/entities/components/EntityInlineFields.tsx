@@ -42,6 +42,7 @@ import { useEntityFieldSaves } from '../useEntityFieldSaves';
 import { attributeValueTypes } from '../valueTypes';
 import { EntityFormAttributeEditor } from './EntityFormAttributeEditor';
 import { InlineFieldEditor } from './InlineFieldEditor';
+import { UnsavedFieldChangesGuard } from './UnsavedFieldChangesGuard';
 
 type Props = {
   entityId: string;
@@ -139,6 +140,9 @@ export const EntityInlineFields = forwardRef<EntityInlineFieldsHandle, Props>(
       onPendingChange,
     });
     const hasPending = Object.keys(saves.pending).length > 0;
+    // Pending changes left after a failed or conflicting save; leaving the
+    // entity drops them. Changes still being saved finish on their own.
+    const unsaved = hasPending && !saves.saving;
     useImperativeHandle(ref, () => ({
       getDraftValues: () => ({ ...saves.fields }),
       applySmartFillValues: (values) => {
@@ -284,6 +288,7 @@ export const EntityInlineFields = forwardRef<EntityInlineFieldsHandle, Props>(
 
     return (
       <>
+        {unsaved && <UnsavedFieldChangesGuard />}
         {saves.conflict && (
           <Alert
             action={
@@ -312,6 +317,13 @@ export const EntityInlineFields = forwardRef<EntityInlineFieldsHandle, Props>(
         )}
         {generalError && (
           <ApiErrorAlert
+            action={
+              unsaved && (
+                <Button color="inherit" onClick={saves.retry} size="small">
+                  {t('errors.retry')}
+                </Button>
+              )
+            }
             error={generalError}
             violations={placedViolations?.unplaced}
             sx={{ mb: 2 }}

@@ -95,15 +95,17 @@ export const useExplorerData = (search: ExplorerSearch) => {
       revisions.data &&
       !revisions.data.some((revision) => revision.version === search.version)
     ) {
+      // Corrections keep the entity panel open, like other search changes.
       void navigate({
         to: '/',
-        search: {
+        search: ({ entity }) => ({
           ...search,
           version: undefined,
           relationshipFacets: undefined,
           attributeFilters: undefined,
           sort: undefined,
-        },
+          entity,
+        }),
         replace: true,
       });
     }
@@ -161,7 +163,7 @@ export const useExplorerData = (search: ExplorerSearch) => {
     ) {
       void navigate({
         to: '/',
-        search: { ...search, sort: undefined },
+        search: ({ entity }) => ({ ...search, sort: undefined, entity }),
         replace: true,
       });
     }

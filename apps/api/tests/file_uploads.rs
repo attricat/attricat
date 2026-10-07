@@ -195,8 +195,8 @@ async fn uploads_files_to_the_fake_store_and_persists_derived_metadata(pool: PgP
     let (base_url, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
     let client = authenticated_client();
     let blueprint = upload_blueprint(&client, &base_url).await;
-    let entity = create_entity(&client, &base_url, &blueprint).await;
-    let entity_id = entity["id"].as_str().unwrap();
+    let entity_before = create_entity(&client, &base_url, &blueprint).await;
+    let entity_id = entity_before["id"].as_str().unwrap();
 
     let response: Value = client
         .post(format!(
@@ -252,6 +252,13 @@ async fn uploads_files_to_the_fake_store_and_persists_derived_metadata(pool: PgP
                 .as_array()
                 .is_some_and(|files| files.len() == 1)
     }));
+    // An open edit form adopts this version so its next field save is not stale.
+    assert!(entity_before["updated_at"].is_string());
+    assert_ne!(response["entity_updated_at"], entity_before["updated_at"]);
+    assert_eq!(
+        response["entity_updated_at"],
+        entity["entity"]["updated_at"]
+    );
 
     let context_id: Uuid =
         sqlx::query_scalar("SELECT id FROM attribute_contexts WHERE code = 'default'")

@@ -23,6 +23,7 @@ describe('file schemas', () => {
       fileUploadResultSchema.parse({
         attribute_code: 'images',
         context_id: id,
+        entity_updated_at: '2026-10-07T10:00:00Z',
         files: [
           {
             id,

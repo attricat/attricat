@@ -1,5 +1,6 @@
 import { Alert, AlertTitle, Box, Typography } from '@mui/material';
 import type { SxProps, Theme } from '@mui/material';
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   checkViolationError,
@@ -41,17 +42,20 @@ export const CheckViolationsAlert = ({ title, violations, sx }: Props) => {
 export const ApiErrorAlert = ({
   error,
   violations,
+  action,
   sx,
 }: {
   error: Error;
   violations?: readonly CheckViolation[];
+  /** Offered for errors other than check violations, such as a retry. */
+  action?: ReactNode;
   sx?: SxProps<Theme>;
 }) => {
   const { t } = useTranslation();
   const checks = checkViolationError(error);
   if (!checks)
     return (
-      <Alert severity="error" sx={sx}>
+      <Alert action={action} severity="error" sx={sx}>
         {error.message}
       </Alert>
     );
