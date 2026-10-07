@@ -38,6 +38,8 @@ import { compactIconSize } from '../../../components/iconSizes';
 import { useInstantFormat } from '../../../time/useInstantFormat';
 
 type Props = {
+  /** Moves the agent and extension buttons into the actions menu. */
+  compact?: boolean;
   entityId: string;
   extensionPanelOpen: boolean;
   onOpenExtensions: () => void;
@@ -61,6 +63,7 @@ type Props = {
 };
 
 export const EntityPreviewToolbar = ({
+  compact = false,
   entityId,
   extensionPanelOpen,
   onOpenExtensions,
@@ -144,6 +147,34 @@ export const EntityPreviewToolbar = ({
             </ListItemIcon>
             <ListItemText>{t('entities.upgradeBlueprint')}</ListItemText>
           </RouterMenuItem>
+        )}
+        {compact && showExtensions && <Divider />}
+        {compact && showExtensions && (
+          <MenuItem
+            onClick={() => {
+              closeActionsMenu();
+              onOpenAgent();
+            }}
+          >
+            <ListItemIcon>
+              <AgentIcon size={compactIconSize} />
+            </ListItemIcon>
+            <ListItemText>{t('entities.askAboutEntity')}</ListItemText>
+          </MenuItem>
+        )}
+        {compact && showExtensions && (
+          <MenuItem
+            aria-controls={ENTITY_EXTENSION_DRAWER_ID}
+            onClick={() => {
+              closeActionsMenu();
+              onOpenExtensions();
+            }}
+          >
+            <ListItemIcon>
+              <PanelRightIcon size={compactIconSize} />
+            </ListItemIcon>
+            <ListItemText>{t('entities.extensionContributions')}</ListItemText>
+          </MenuItem>
         )}
         {canDelete && <Divider />}
         {canDelete && (
@@ -300,7 +331,7 @@ export const EntityPreviewToolbar = ({
           </Menu>
         </>
       )}
-      {showExtensions && (
+      {!compact && showExtensions && (
         <Tooltip title={t('entities.askAboutEntity')}>
           <IconButton
             aria-label={t('entities.askAboutEntity')}
@@ -311,7 +342,7 @@ export const EntityPreviewToolbar = ({
           </IconButton>
         </Tooltip>
       )}
-      {showExtensions && (
+      {!compact && showExtensions && (
         <Tooltip title={t('entities.extensionContributions')}>
           <IconButton
             aria-controls={ENTITY_EXTENSION_DRAWER_ID}

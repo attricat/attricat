@@ -233,6 +233,7 @@ export const Explorer = ({
           entityId={panelEntityId}
           key={panelEntityId}
           onClose={closePanel}
+          onOpenEntity={showInPanel}
         />
       )}
       {mobileExplorePanelTarget &&

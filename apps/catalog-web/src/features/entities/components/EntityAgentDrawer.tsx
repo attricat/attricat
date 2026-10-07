@@ -28,12 +28,15 @@ import {
 export const EntityAgentDrawer = ({
   entityId,
   contextId,
+  offset,
   onClose,
   open,
   draft,
 }: {
   entityId: string;
   contextId?: string;
+  /** Right edge of the drawer, to open it beside another panel. */
+  offset?: string;
   onClose: () => void;
   open: boolean;
   draft?: DraftContext;
@@ -81,6 +84,7 @@ export const EntityAgentDrawer = ({
       anchor="right"
       onClose={closePanel}
       open={open}
+      slotProps={{ paper: { sx: { right: offset } } }}
       variant="persistent"
     >
       <Box

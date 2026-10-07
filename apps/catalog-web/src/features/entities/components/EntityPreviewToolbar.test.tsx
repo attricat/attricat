@@ -178,4 +178,32 @@ describe('entity actions menu', () => {
       menu.getByRole('menuitem', { name: 'Upgrade blueprint' }),
     ).toBeTruthy();
   });
+
+  it('moves the agent and extensions into the menu when compact', async () => {
+    const onOpenAgent = vi.fn();
+    const onOpenExtensions = vi.fn();
+    renderActions({
+      compact: true,
+      onOpenAgent,
+      onOpenExtensions,
+      showExtensions: true,
+    });
+    expect(
+      screen.queryByRole('button', { name: 'Ask about this entity' }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole('button', { name: 'Extension contributions' }),
+    ).toBeNull();
+
+    let menu = await openActions();
+    await userEvent.click(
+      menu.getByRole('menuitem', { name: 'Ask about this entity' }),
+    );
+    expect(onOpenAgent).toHaveBeenCalledOnce();
+    menu = await openActions();
+    await userEvent.click(
+      menu.getByRole('menuitem', { name: 'Extension contributions' }),
+    );
+    expect(onOpenExtensions).toHaveBeenCalledOnce();
+  });
 });

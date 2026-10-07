@@ -9,6 +9,7 @@ export const EntityExtensionDrawer = ({
   blueprintVersion,
   contextId,
   entityId,
+  offset,
   onClose,
   open,
   showContent,
@@ -17,13 +18,21 @@ export const EntityExtensionDrawer = ({
   blueprintVersion: number;
   contextId?: string;
   entityId: string;
+  /** Right edge of the drawer, to open it beside another panel. */
+  offset?: string;
   onClose: () => void;
   open: boolean;
   showContent: boolean;
 }) => {
   const { t } = useTranslation();
   return (
-    <Drawer anchor="right" onClose={onClose} open={open} variant="persistent">
+    <Drawer
+      anchor="right"
+      onClose={onClose}
+      open={open}
+      slotProps={{ paper: { sx: { right: offset } } }}
+      variant="persistent"
+    >
       <Box
         id={ENTITY_EXTENSION_DRAWER_ID}
         sx={{ p: 3, width: { xs: '100vw', sm: ENTITY_DRAWER_WIDTH } }}
