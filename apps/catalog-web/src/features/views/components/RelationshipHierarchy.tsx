@@ -102,4 +102,5 @@ export const relationshipHierarchyComponent = {
   value_types: ['relationship'],
   allowed_props: [HIERARCHY_PARENT_FIELD_PROP],
   valueRenderer: RelationshipHierarchy,
+  showsWhileEditing: true,
 } satisfies ViewComponentDefinition;

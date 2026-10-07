@@ -36,6 +36,7 @@ export const RelationshipField = ({
   disabled = false,
   error,
   helperText,
+  linkToEntities = false,
   onChange,
   value,
 }: {
@@ -43,6 +44,8 @@ export const RelationshipField = ({
   disabled?: boolean;
   error?: string;
   helperText?: string;
+  /** Lets each selected entity be opened from its pill. */
+  linkToEntities?: boolean;
   onChange: (value: string) => void;
   value: string;
 }) => {
@@ -143,6 +146,7 @@ export const RelationshipField = ({
             }
             ids={selectedIds}
             labels={selectionLabels}
+            linkToEntities={linkToEntities}
             onRemove={
               disabled
                 ? undefined

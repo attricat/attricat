@@ -1310,6 +1310,7 @@
     "colorPickerFor": "Wybierz kolor dla {{attribute}}",
     "urlOpenNewTab": "{{url}} (otwiera się w nowej karcie)",
     "callPhone": "Zadzwoń pod {{number}}",
+    "emailTo": "Napisz do {{address}}",
     "availableOnPreviews": "{{label}} jest dostępne w podglądach encji.",
     "notSet": "Nie ustawiono",
     "yes": "Tak",

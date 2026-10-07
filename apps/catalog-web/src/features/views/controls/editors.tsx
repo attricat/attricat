@@ -13,9 +13,12 @@ import { MarkdownEditor } from '../../markdown/MarkdownEditor';
 import type { ValueEditorProps } from '../components/componentTypes';
 import type { StatusTransitionAccess } from '../../entities/api';
 import { COLOR_PICKER_SEED, parseColor, validateColor } from './color';
-import { validateEmail } from './email';
+import { emailHref, validateEmail } from './email';
+import { phoneHref } from './phone';
 import { TextControlEditor } from './TextControl';
-import { validateUrl } from './url';
+import { safeUrl, validateUrl } from './url';
+import { ExternalLinkIcon, MailIcon, PhoneIcon } from 'lucide-react';
+import { smallIconSize } from '../../../components/iconSizes';
 
 export const ColorEditor = ({
   attribute,
@@ -67,13 +70,38 @@ export const ColorEditor = ({
   );
 };
 
-export const EmailEditor = (props: ValueEditorProps) => (
-  <TextControlEditor {...props} type="email" validate={validateEmail} />
-);
+export const EmailEditor = (props: ValueEditorProps) => {
+  const { t } = useTranslation();
+  return (
+    <TextControlEditor
+      {...props}
+      type="email"
+      validate={validateEmail}
+      link={{
+        href: emailHref,
+        label: (address) => t('views.emailTo', { address }),
+        icon: <MailIcon size={smallIconSize} />,
+      }}
+    />
+  );
+};
 
-export const UrlEditor = (props: ValueEditorProps) => (
-  <TextControlEditor {...props} type="url" validate={validateUrl} />
-);
+export const UrlEditor = (props: ValueEditorProps) => {
+  const { t } = useTranslation();
+  return (
+    <TextControlEditor
+      {...props}
+      type="url"
+      validate={validateUrl}
+      link={{
+        href: safeUrl,
+        label: (url) => t('views.urlOpenNewTab', { url }),
+        icon: <ExternalLinkIcon size={smallIconSize} />,
+        newTab: true,
+      }}
+    />
+  );
+};
 
 export const PhoneEditor = (props: ValueEditorProps) => {
   const { t } = useTranslation();
@@ -83,6 +111,11 @@ export const PhoneEditor = (props: ValueEditorProps) => {
       type="tel"
       leftToRight
       defaultHelperText={t('views.phoneHelp')}
+      link={{
+        href: phoneHref,
+        label: (number) => t('views.callPhone', { number }),
+        icon: <PhoneIcon size={smallIconSize} />,
+      }}
     />
   );
 };

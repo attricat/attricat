@@ -61,6 +61,8 @@ export const EntityAttributeEditor = ({
         disabled={effectiveDisabled}
         error={error}
         helperText={helperText}
+        // Linked entities can be opened once this entity exists.
+        linkToEntities={Boolean(entityId)}
         onChange={onChange}
         value={value}
       />

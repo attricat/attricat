@@ -69,7 +69,8 @@ columns = [{ field = "title" }, { field = "contact", renderer = { id = "catalog.
     await expect(input).toHaveValue('invalid');
     expect(saves).toEqual([]);
     await input.fill('Other+tag@Example.com');
-    await commitField(page, entity.id, input);
+    // Tab would move to the field's mail button; Enter commits in place.
+    await commitField(page, entity.id, input, 'Enter');
     await expect(input).not.toHaveAttribute('aria-invalid', 'true');
     await page.reload();
     await expect(input).toHaveValue('Other+tag@Example.com');
@@ -79,7 +80,7 @@ columns = [{ field = "title" }, { field = "contact", renderer = { id = "catalog.
     ).toBeVisible();
     await page.goto(`/entities/${entity.id}`);
     await input.clear();
-    await commitField(page, entity.id, input);
+    await commitField(page, entity.id, input, 'Enter');
     await page.reload();
     await expect(input).toHaveValue('');
     await page.goto(`/?blueprint=${code}`);

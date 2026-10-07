@@ -32,6 +32,7 @@ import {
   ROOT_NODE_KEY,
   VIEW_COMPONENT_LOG_LABEL,
   VIEW_GRID_COLUMNS,
+  VIEW_EDIT_LAYOUT_SPACING,
   VIEW_LAYOUT_SPACING,
   VIEW_SECTION_PADDING,
 } from '../constants';
@@ -70,6 +71,7 @@ export const EntityView = ({
   fallbackVisibilityScope,
 }: Props) => {
   const { t } = useTranslation();
+  const spacing = renderEditor ? VIEW_EDIT_LAYOUT_SPACING : VIEW_LAYOUT_SPACING;
   const byCode = new Map(
     attributes.map((attribute) => [attribute.code, attribute]),
   );
@@ -84,7 +86,7 @@ export const EntityView = ({
       field: attribute.code,
     }));
   const renderNodes = (nodes: ViewNode[]): ReactNode => (
-    <Stack spacing={VIEW_LAYOUT_SPACING}>
+    <Stack spacing={spacing}>
       {nodes.map((node, index) => renderNode(node, `${node.type}-${index}`))}
     </Stack>
   );
@@ -120,7 +122,7 @@ export const EntityView = ({
           key={key}
           sx={{
             display: 'grid',
-            gap: VIEW_LAYOUT_SPACING,
+            gap: spacing,
             gridTemplateColumns: VIEW_GRID_COLUMNS,
           }}
         >
@@ -158,7 +160,7 @@ export const EntityView = ({
       );
     if (node.type === viewBlockTypes.stack)
       return (
-        <Stack key={key} spacing={VIEW_LAYOUT_SPACING}>
+        <Stack key={key} spacing={spacing}>
           {node.children.map((child, index) =>
             renderNode(child, `${key}-${index}`),
           )}

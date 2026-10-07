@@ -1,3 +1,4 @@
+import { VIEW_EDIT_LAYOUT_SPACING } from '../views/constants';
 import { Box, Paper, Tab, Tabs, Typography } from '@mui/material';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -97,7 +98,7 @@ export const BlueprintViewsPreview = ({
         {activeViewName === sandboxEditTab ? (
           <>
             {headingFields.length > 0 && (
-              <Box sx={{ mb: 2 }}>
+              <Box sx={{ mb: VIEW_EDIT_LAYOUT_SPACING }}>
                 <EntityView
                   attributes={headingFields}
                   renderEditor={renderEditor}

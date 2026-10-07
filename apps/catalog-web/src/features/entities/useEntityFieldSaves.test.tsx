@@ -225,21 +225,54 @@ describe('useEntityFieldSaves', () => {
           updatedAt,
         }),
       {
-        initialProps: { updatedAt: 'v1', title: 'Old' },
+        initialProps: { updatedAt: '2026-10-07T10:00:00Z', title: 'Old' },
         wrapper: ({ children }: { children: ReactNode }) => (
           <QueryClientProvider client={client}>{children}</QueryClientProvider>
         ),
       },
     );
 
-    rerender({ updatedAt: 'v2', title: 'Attached elsewhere' });
+    // An older refetch never replaces what this editor saved.
+    rerender({ updatedAt: '2026-10-07T09:00:00Z', title: 'Stale' });
+    expect(result.current.fields).toEqual({ title: 'Old' });
+
+    rerender({
+      updatedAt: '2026-10-07T10:05:00Z',
+      title: 'Attached elsewhere',
+    });
     expect(result.current.fields).toEqual({ title: 'Attached elsewhere' });
 
     act(() => result.current.commit('summary', 'B'));
     await waitFor(() => expect(result.current.pending).toEqual({}));
     expect(vi.mocked(updateEntity).mock.calls[0]![1]).toMatchObject({
-      expected_updated_at: 'v2',
+      expected_updated_at: '2026-10-07T10:05:00Z',
     });
+  });
+
+  it('reports when changes start and stop waiting to be saved', async () => {
+    vi.mocked(updateEntity).mockResolvedValue(savedEntity('v2') as never);
+    const onPendingChange = vi.fn();
+    const client = new QueryClient();
+    const { result } = renderHook(
+      () =>
+        useEntityFieldSaves({
+          entityId,
+          contextId: null,
+          attributes,
+          savedFields: {},
+          updatedAt: 'v1',
+          onPendingChange,
+        }),
+      {
+        wrapper: ({ children }: { children: ReactNode }) => (
+          <QueryClientProvider client={client}>{children}</QueryClientProvider>
+        ),
+      },
+    );
+
+    act(() => result.current.commit('title', 'A'));
+    await waitFor(() => expect(result.current.pending).toEqual({}));
+    expect(onPendingChange.mock.calls).toEqual([[true], [false]]);
   });
 
   it('does not save a value that returns to the saved one', () => {

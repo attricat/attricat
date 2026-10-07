@@ -1,10 +1,29 @@
-import { Link, TextField, Typography } from '@mui/material';
-import type { ComponentProps } from 'react';
+import {
+  IconButton,
+  InputAdornment,
+  Link,
+  TextField,
+  Tooltip,
+  Typography,
+} from '@mui/material';
+import type { ComponentProps, ReactNode } from 'react';
 import { attributeLabel } from '../../entities/entityDisplay';
 import type { ValueEditorProps } from '../components/componentTypes';
 import { EachValue } from './EachValue';
 
-/** Single-line string editor for controls that only change the input mode. */
+/** Opens a field's value, such as a website, mail client or phone call. */
+export type TextControlLink = {
+  href: (value: string) => string | undefined;
+  label: (value: string) => string;
+  icon: ReactNode;
+  newTab?: boolean;
+};
+
+/**
+ * Single-line string editor for controls that only change the input mode.
+ * With `link`, a valid value can be opened from a button inside the field, so
+ * an always-editable field keeps the action its display would offer.
+ */
 export const TextControlEditor = ({
   attribute,
   value,
@@ -17,14 +36,18 @@ export const TextControlEditor = ({
   validate,
   defaultHelperText,
   leftToRight = false,
+  link,
 }: ValueEditorProps & {
   type: 'email' | 'tel' | 'url';
   /** Shows the form's validation message while typing, before Save. */
   validate?: (value: string) => string | undefined;
   defaultHelperText?: string;
   leftToRight?: boolean;
+  link?: TextControlLink;
 }) => {
   const message = error ?? validate?.(value);
+  const target = link && !message ? link.href(value.trim()) : undefined;
+  const linkLabel = target && link ? link.label(value.trim()) : undefined;
   return (
     <TextField
       fullWidth
@@ -39,6 +62,25 @@ export const TextControlEditor = ({
         if (!disabled) onChange(event.target.value);
       }}
       slotProps={{
+        input: {
+          endAdornment: target && link && (
+            <InputAdornment position="end">
+              <Tooltip title={linkLabel}>
+                <IconButton
+                  aria-label={linkLabel}
+                  component="a"
+                  edge="end"
+                  href={target}
+                  {...(link.newTab
+                    ? { target: '_blank', rel: 'noopener noreferrer' }
+                    : {})}
+                >
+                  {link.icon}
+                </IconButton>
+              </Tooltip>
+            </InputAdornment>
+          ),
+        },
         htmlInput: {
           inputMode: type,
           autoCapitalize: 'none',

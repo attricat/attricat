@@ -29,6 +29,8 @@ export const FILE_THUMBNAIL_SIZE = 64;
 export const TABLE_IMAGE_SIZE = 48;
 export const VIEW_SECTION_PADDING = 2.5;
 export const VIEW_LAYOUT_SPACING = 2;
+/** Rows of editable fields need room for their floating labels and help text. */
+export const VIEW_EDIT_LAYOUT_SPACING = 8;
 export const VIEW_GRID_COLUMNS = {
   xs: '1fr',
   md: 'repeat(2, minmax(0, 1fr))',
