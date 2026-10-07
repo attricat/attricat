@@ -80,17 +80,17 @@ REDIS_URL=rediss://:password@redis.example.com:6380/0
 3. Replace the API and file-worker replicas with the new digest.
 4. Wait for `/health/ready` and run your smoke tests.
 
-`scripts/operations.sh` in the repository wraps these steps around your platform's deploy command:
+With `./platform` standing in for your platform's deploy and smoke-test commands:
 
 ```sh
 export APP_IMAGE=ghcr.io/attricat/attricat@sha256:…
 export DATABASE_URL='postgres://…'
-scripts/operations.sh migrate
+docker run --rm --env DATABASE_URL "$APP_IMAGE" migrate
 
-export DEPLOY_COMMAND='./platform deploy --image "$APP_IMAGE"'
-export READINESS_URL='https://catalog.example.com/health/ready'
-export SMOKE_COMMAND='./platform smoke catalog'
-scripts/operations.sh rollout
+./platform deploy --image "$APP_IMAGE"
+curl --fail --silent --retry 60 --retry-delay 2 --retry-all-errors \
+  https://catalog.example.com/health/ready
+./platform smoke catalog
 ```
 
 ## Roll back
@@ -98,8 +98,9 @@ scripts/operations.sh rollout
 Migrations only go forward. Rolling back means redeploying the previous digest:
 
 ```sh
-export ROLLBACK_COMMAND='./platform deploy --image ghcr.io/attricat/attricat@sha256:previous'
-scripts/operations.sh rollback
+./platform deploy --image ghcr.io/attricat/attricat@sha256:previous
+curl --fail --silent --retry 60 --retry-delay 2 --retry-all-errors \
+  https://catalog.example.com/health/ready
 ```
 
 If the previous version cannot run against the migrated database, restore the database and bucket from the backup taken before the rollout. See [Backup and restore](/operate/backup/).
@@ -109,12 +110,6 @@ If the previous version cannot run against the migrated database, restore the da
 Inject database, bucket, SMTP, metrics, and bootstrap credentials from a secret manager, never from the image, a Compose file, a command-line argument, or a log.
 
 To rotate: create the new credential, give it to a new revision of the deployment, roll out the migrate, API, and worker roles, wait for readiness and smoke tests, then revoke the old credential.
-
-```sh
-export ROTATE_SECRETS_COMMAND='./platform rotate-and-roll catalog-secrets'
-export READINESS_URL='https://catalog.example.com/health/ready'
-scripts/operations.sh rotate-secrets
-```
 
 ## Production checklist
 

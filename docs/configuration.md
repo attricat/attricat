@@ -233,7 +233,7 @@ configuration. Source `.worktree` after `just dev`, open
 `$MAILPIT_UI_URL` for manual inspection, and use its REST API
 for E2E mailbox retrieval. Production SMTP requires `SMTP_TLS_MODE=starttls`
 or `implicit`; `disabled` is restricted to an unauthenticated trusted local relay. Startup rejects credentials with `disabled` and also rejects partial username/password configuration. See
-[Production operations](operations.md) for rollout, rotation, and recovery.
+[Deployment](../apps/docs/src/content/docs/operate/deployment.md) for rollout, rotation, and recovery.
 
 A failed durable job can be returned to the queue by an operator with
 `cargo run -p api --bin file-worker -- --retry <job-uuid>`. The command resets

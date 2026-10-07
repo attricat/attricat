@@ -154,7 +154,7 @@ content:
   that Redis database (`FLUSHDB`) or change `CACHE_KEY_PREFIX` before starting
   the API.
 
-See [Production operations](operations.md).
+See [Deployment](../apps/docs/src/content/docs/operate/deployment.md).
 
 Extension network rate limits use the same sliding window in Redis (a sorted
 set updated atomically by a Lua script, using the Redis server clock) as in

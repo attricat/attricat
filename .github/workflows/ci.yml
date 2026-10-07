@@ -117,7 +117,7 @@ jobs:
           ATTRICAT_IMAGE: attricat:ci
           ATTRICAT_ENV_FILE: .env.production.example
         run: |
-          bash -n scripts/docker-entrypoint.sh scripts/operations.sh scripts/verify-deployment.sh
+          bash -n scripts/docker-entrypoint.sh scripts/verify-deployment.sh
           docker compose -f deploy/compose.yml config >/dev/null
           docker compose -f deploy/compose.ci.yml config >/dev/null
       - name: Build and exercise release image and rollback

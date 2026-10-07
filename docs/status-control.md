@@ -277,7 +277,7 @@ Entering an option with `retention_days` creates `file_retention_holds` rows for
 every file referenced by the locked attributes in that context, held until the
 transaction time plus the period, and audits each as
 `file.retention_hold.place`. Reclamation skips held files; see
-[Production operations](operations.md#file-retention-holds).
+[Retention holds](../apps/docs/src/content/docs/operate/workspaces.md#retention-holds).
 
 ### Agent
 

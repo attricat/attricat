@@ -80,17 +80,17 @@ REDIS_URL=rediss://:haslo@redis.example.com:6380/0
 3. Zastąp repliki API i procesu roboczego plików nowym skrótem.
 4. Poczekaj na `/health/ready` i uruchom testy dymne.
 
-Skrypt `scripts/operations.sh` z repozytorium opakowuje te kroki wokół polecenia wdrożenia Twojej platformy:
+Przykład, w którym `./platform` zastępuje polecenia wdrożenia i testów dymnych Twojej platformy:
 
 ```sh
 export APP_IMAGE=ghcr.io/attricat/attricat@sha256:…
 export DATABASE_URL='postgres://…'
-scripts/operations.sh migrate
+docker run --rm --env DATABASE_URL "$APP_IMAGE" migrate
 
-export DEPLOY_COMMAND='./platform deploy --image "$APP_IMAGE"'
-export READINESS_URL='https://catalog.example.com/health/ready'
-export SMOKE_COMMAND='./platform smoke catalog'
-scripts/operations.sh rollout
+./platform deploy --image "$APP_IMAGE"
+curl --fail --silent --retry 60 --retry-delay 2 --retry-all-errors \
+  https://catalog.example.com/health/ready
+./platform smoke catalog
 ```
 
 ## Wycofaj wdrożenie
@@ -98,8 +98,9 @@ scripts/operations.sh rollout
 Migracje działają tylko do przodu. Wycofanie oznacza ponowne wdrożenie poprzedniego skrótu:
 
 ```sh
-export ROLLBACK_COMMAND='./platform deploy --image ghcr.io/attricat/attricat@sha256:previous'
-scripts/operations.sh rollback
+./platform deploy --image ghcr.io/attricat/attricat@sha256:previous
+curl --fail --silent --retry 60 --retry-delay 2 --retry-all-errors \
+  https://catalog.example.com/health/ready
 ```
 
 Jeśli poprzednia wersja nie może działać na zmigrowanej bazie danych, przywróć bazę danych i zasobnik z kopii zapasowej wykonanej przed wdrożeniem. Zobacz [Kopia zapasowa i przywracanie](/pl/operate/backup/).
@@ -109,12 +110,6 @@ Jeśli poprzednia wersja nie może działać na zmigrowanej bazie danych, przywr
 Wstrzykuj dane uwierzytelniające bazy danych, zasobnika, SMTP, metryk i inicjalizacji z menedżera sekretów, nigdy z obrazu, pliku Compose, argumentu wiersza poleceń ani logu.
 
 Aby przeprowadzić rotację: utwórz nowe dane uwierzytelniające, przekaż je nowej wersji wdrożenia, wdróż role migrate, API i procesu roboczego, poczekaj na gotowość i testy dymne, a następnie unieważnij stare dane uwierzytelniające.
-
-```sh
-export ROTATE_SECRETS_COMMAND='./platform rotate-and-roll catalog-secrets'
-export READINESS_URL='https://catalog.example.com/health/ready'
-scripts/operations.sh rotate-secrets
-```
 
 ## Lista kontrolna dla produkcji
 
