@@ -39,9 +39,13 @@ test('searches an entity and opens its preview', async ({ page }) => {
     'red in title',
   );
   await page.keyboard.press('Escape');
+  // On desktop a result opens in the entity panel beside the results.
   await page.getByRole('link', { name: title }).click();
+  await expect(page).toHaveURL(new RegExp(`entity=${entity.id}`));
+  await expect(page.getByLabel('title')).toHaveValue(title);
+  await page.getByRole('link', { name: 'Open full page' }).click();
   await expect(page).toHaveURL(new RegExp(`/entities/${entity.id}$`));
-  await expect(page.getByText(title)).toBeVisible();
+  await expect(page.getByLabel('title')).toHaveValue(title);
 });
 
 test('restores the last selected blueprint and prioritizes the URL', async ({

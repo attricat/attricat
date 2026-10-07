@@ -103,6 +103,7 @@ export const useEntityFieldSaves = ({
       return;
     const batch = { ...pending };
     inFlight.current = batch;
+    const sentVersion = version;
     publish({ saving: true });
     try {
       const entity = await updateEntity(entityId, {
@@ -122,8 +123,12 @@ export const useEntityFieldSaves = ({
         ),
       );
       inFlight.current = null;
+      // A file change noted while this save ran may be newer than its result.
+      const noted = current.current.version;
       publish({
-        version: entity.updated_at ?? current.current.version,
+        version: isNewer(noted, entity.updated_at)
+          ? noted
+          : (entity.updated_at ?? noted),
         saved: { ...current.current.saved, ...batch },
         pending: remaining,
         saving: false,
@@ -133,6 +138,12 @@ export const useEntityFieldSaves = ({
       return flush();
     } catch (error) {
       inFlight.current = null;
+      // This editor's own file change moved the version while the save ran;
+      // resend against it instead of reporting another editor's change.
+      if (isStaleEntity(error) && current.current.version !== sentVersion) {
+        publish({ saving: false });
+        return flush();
+      }
       publish({
         saving: false,
         error: error instanceof Error ? error : new Error(String(error)),
@@ -172,7 +183,10 @@ export const useEntityFieldSaves = ({
     revert: (code: string) => {
       const pending = { ...current.current.pending };
       delete pending[code];
-      publish({ pending });
+      // With nothing left to save, the failure no longer applies.
+      const settled =
+        Object.keys(pending).length === 0 && !current.current.conflict;
+      publish({ pending, ...(settled && { error: null }) });
     },
     /** Resends pending changes, for example after a network failure. */
     retry: () => {
@@ -182,7 +196,9 @@ export const useEntityFieldSaves = ({
     },
     /** Moves the version forward after a change saved elsewhere (files). */
     noteEntityUpdated: (nextUpdatedAt: string) => {
-      publish({ version: nextUpdatedAt });
+      // Uploads finish in any order; an older result never moves it back.
+      if (isNewer(nextUpdatedAt, current.current.version))
+        publish({ version: nextUpdatedAt });
     },
     /**
      * Continues after another editor's change: rebases on the latest saved

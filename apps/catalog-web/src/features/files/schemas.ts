@@ -30,6 +30,7 @@ export const fileUploadResultSchema = z.object({
   attribute_code: z.string(),
   context_id: z.uuid(),
   files: uploadedFilesSchema,
+  entity_updated_at: z.string(),
 });
 export const conversationUploadResultSchema = z.object({
   files: uploadedFilesSchema,

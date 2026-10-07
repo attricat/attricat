@@ -37,7 +37,10 @@ const deferred = <T,>() => {
   return { promise, resolve, reject };
 };
 
-const renderSaves = (savedFields: Record<string, string> = {}) => {
+const renderSaves = (
+  savedFields: Record<string, string> = {},
+  updatedAt = 'v1',
+) => {
   const client = new QueryClient();
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
@@ -49,7 +52,7 @@ const renderSaves = (savedFields: Record<string, string> = {}) => {
         contextId: null,
         attributes,
         savedFields,
-        updatedAt: 'v1',
+        updatedAt,
       }),
     { wrapper },
   );
@@ -273,6 +276,57 @@ describe('useEntityFieldSaves', () => {
     act(() => result.current.commit('title', 'A'));
     await waitFor(() => expect(result.current.pending).toEqual({}));
     expect(onPendingChange.mock.calls).toEqual([[true], [false]]);
+  });
+
+  it('resends a save made stale by this editor’s own file change', async () => {
+    const first = deferred<never>();
+    vi.mocked(updateEntity)
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValueOnce(savedEntity('2026-10-07T10:02:00Z') as never);
+    const { result } = renderSaves({ title: 'Old' }, '2026-10-07T10:00:00Z');
+
+    act(() => result.current.commit('title', 'A'));
+    act(() => result.current.noteEntityUpdated('2026-10-07T10:01:00Z'));
+    await act(async () =>
+      first.reject(new ApiRequestError(409, 'Stale', 'stale_entity')),
+    );
+    await waitFor(() => expect(result.current.pending).toEqual({}));
+
+    expect(result.current.conflict).toBe(false);
+    expect(vi.mocked(updateEntity).mock.calls[1]![1]).toMatchObject({
+      expected_updated_at: '2026-10-07T10:01:00Z',
+    });
+  });
+
+  it('never moves the version back for a late or older result', async () => {
+    const first = deferred<ReturnType<typeof savedEntity>>();
+    vi.mocked(updateEntity)
+      .mockReturnValueOnce(first.promise as never)
+      .mockResolvedValueOnce(savedEntity('2026-10-07T10:05:00Z') as never);
+    const { result } = renderSaves({ title: 'Old' }, '2026-10-07T10:00:00Z');
+
+    act(() => result.current.commit('title', 'A'));
+    act(() => result.current.noteEntityUpdated('2026-10-07T10:03:00Z'));
+    await act(async () => first.resolve(savedEntity('2026-10-07T10:02:00Z')));
+    act(() => result.current.noteEntityUpdated('2026-10-07T10:01:00Z'));
+
+    act(() => result.current.commit('summary', 'B'));
+    await waitFor(() => expect(result.current.pending).toEqual({}));
+    expect(vi.mocked(updateEntity).mock.calls[1]![1]).toMatchObject({
+      expected_updated_at: '2026-10-07T10:03:00Z',
+    });
+  });
+
+  it('clears the failure once its change is discarded', async () => {
+    vi.mocked(updateEntity).mockRejectedValueOnce(new Error('Offline'));
+    const { result } = renderSaves({ title: 'Old' });
+
+    act(() => result.current.commit('title', 'A'));
+    await waitFor(() => expect(result.current.error).not.toBeNull());
+    act(() => result.current.revert('title'));
+
+    expect(result.current.error).toBeNull();
+    expect(result.current.fields).toEqual({ title: 'Old' });
   });
 
   it('does not save a value that returns to the saved one', () => {

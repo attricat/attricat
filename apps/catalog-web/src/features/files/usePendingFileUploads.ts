@@ -104,6 +104,7 @@ export const usePendingFileUploads = (options: Options) => {
             onProgress: (progress) => updatePending(item.id, { progress }),
           });
           next = [...next, ...result.files];
+          current.current.onEntityUpdated?.(result.entity_updated_at);
           if (active.current) {
             setSaved({ source: current.current.files, value: next });
             setPending((queue) =>

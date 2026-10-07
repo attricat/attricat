@@ -64,6 +64,8 @@ pub struct FileUploadResult {
     pub attribute_code: String,
     pub context_id: Uuid,
     pub files: Vec<UploadedFile>,
+    /// The entity's new `updated_at`, so an open edit form can adopt it.
+    pub entity_updated_at: chrono::DateTime<chrono::Utc>,
 }
 
 #[derive(Clone, Debug, sqlx::FromRow)]
@@ -160,22 +162,24 @@ impl CatalogRepository {
                 status,
             });
         }
-        self.replace_file_value(
-            transaction,
-            &entity,
-            FileValueChange {
-                attribute_id,
-                attribute_code,
-                context_id,
-                before: current,
-                after: file_ids,
-            },
-        )
-        .await?;
+        let updated = self
+            .replace_file_value(
+                transaction,
+                &entity,
+                FileValueChange {
+                    attribute_id,
+                    attribute_code,
+                    context_id,
+                    before: current,
+                    after: file_ids,
+                },
+            )
+            .await?;
         Ok(FileUploadResult {
             attribute_code: attribute_code.to_owned(),
             context_id,
             files: result,
+            entity_updated_at: updated.updated_at,
         })
     }
 
