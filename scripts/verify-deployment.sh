@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Disposable release-path exercise used by CI and available to operators.
 # Database/object backup and restore are deployment-platform responsibilities;
-# their required rehearsal is documented in docs/operations.md.
+# see the Operate section of the docs site for restore rehearsal.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -106,9 +106,8 @@ image_id="$(docker image inspect --format '{{.Id}}' "$image")"
 rollback_image_id="$(docker image inspect --format '{{.Id}}' "$rollback_image")"
 [[ "$image_id" != "$rollback_image_id" ]]
 [[ "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}}' "$rollback_image")" == "$rollback_version" ]]
-READINESS_URL=http://127.0.0.1:3000/health/ready \
-ROLLBACK_COMMAND="ATTRICAT_IMAGE='$rollback_image' docker compose -f deploy/compose.ci.yml up -d --force-recreate api file-worker" \
-  scripts/operations.sh rollback
+ATTRICAT_IMAGE="$rollback_image" docker compose -f deploy/compose.ci.yml up -d --force-recreate api file-worker
+wait_url http://127.0.0.1:3000/health/ready
 wait_url http://127.0.0.1:3001/health/ready
 api_container="$(ATTRICAT_IMAGE="$rollback_image" "${compose[@]}" ps -q api)"
 [[ "$(docker inspect --format '{{.Image}}' "$api_container")" == "$rollback_image_id" ]]

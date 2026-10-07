@@ -62,7 +62,7 @@ It builds reset links from `PASSWORD_RESET_URL` and must not record opaque
 secrets in logs, telemetry, database rows, or API responses. Mailpit's web UI
 is for local inspection; E2E retrieves captured messages and URLs through its
 REST API. Production uses a separately operated SMTP service with TLS; see
-[production operations](operations.md#smtp-and-secret-rotation).
+[Rotate secrets](../apps/docs/src/content/docs/operate/deployment.md#rotate-secrets).
 
 ## Workspace sign-in routing
 
