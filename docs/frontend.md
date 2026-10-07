@@ -91,6 +91,43 @@ light and dark modes.
 - Keep generic action and status icons, such as add, edit, delete, close, expand, and warnings, local to the component using them.
 - Add a semantic export to the registry before introducing an icon for another system concept.
 
+## Drag and drop
+
+`ExplorerColumnPreferencesDialog.tsx` (Explorer column order) is the reference
+implementation. Follow it for any new drag interaction.
+
+- Use dnd-kit's React package: `DragDropProvider` from `@dnd-kit/react`,
+  `useSortable` from `@dnd-kit/react/sortable` and `move` from
+  `@dnd-kit/helpers`. Do not hand-roll HTML5 drag events or add another drag
+  library. The `@dnd-kit/*` packages are pre-1.0 and pinned to one exact
+  version; upgrade them together.
+- Start drags from a dedicated handle: a small `IconButton` with
+  `GripVerticalIcon`, wired to `handleRef`, with `touchAction: 'none'` and an
+  accessible name that includes the item (for example "Drag to reorder
+  Title"). The rest of the row, such as checkboxes and buttons, stays usable.
+- Dragging must never be the only way to make a change. Keep an explicit
+  alternative, such as move up/down buttons, so people who cannot drag can
+  still reorder (WCAG 2.5.7).
+- dnd-kit's built-in keyboard support works on the handle: Space or Enter picks
+  up, the arrow keys move, Space or Enter drops, and Escape cancels. Its
+  default screen reader instructions and announcements are English and name
+  raw item IDs. Replace them by configuring the `Accessibility` plugin with
+  translated text that uses item labels and positions.
+- Update state once, in `onDragEnd`. Ignore cancelled drags and apply
+  `move(items, event)`. Let dnd-kit's optimistic sorting move items during the
+  drag, and do not persist on `dragover`.
+- Constrain list drags to one axis (`RestrictToVerticalAxis` from
+  `@dnd-kit/abstract/modifiers`). Lift the dragged item with theme tokens: a
+  `boxShadow` plus a `divider` outline, because shadows barely show in dark
+  mode.
+- dnd-kit adds about 40 KiB gzip. Keep drag UIs out of the startup bundle by
+  loading their component with `lazy()` when it sits on an initial route (see
+  [Bundle size](#bundle-size)).
+- jsdom has no layout, so unit tests cover labels, instructions and the
+  non-drag controls (the test setup stubs `ResizeObserver`). Cover real
+  pointer drags in Playwright, moving the mouse in steps so the pointer sensor
+  activates.
+
 ## Bundle size
 
 - Run `pnpm --dir apps/catalog-web inspect:bundle` when changing dependencies
