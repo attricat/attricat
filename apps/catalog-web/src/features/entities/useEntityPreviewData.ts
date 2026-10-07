@@ -1,8 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { getBlueprintRevision, getEntityForm } from './api';
+import { getBlueprintRevision } from './api';
 import { entityQueryKeys } from './queryKeys';
-import { entityStatusTransitionsOptions } from './queryOptions';
+import {
+  entityFormOptions,
+  entityStatusTransitionsOptions,
+} from './queryOptions';
 import { useResolvedEntityPreview } from './useEntityContexts';
 
 /**
@@ -16,8 +19,7 @@ export const useEntityPreviewData = (
   const { t } = useTranslation();
   const resolved = useResolvedEntityPreview(entityId, contextId);
   const entityForm = useQuery({
-    queryKey: entityQueryKeys.form(entityId),
-    queryFn: ({ signal }) => getEntityForm(entityId, signal),
+    ...entityFormOptions(entityId),
     refetchOnMount: 'always',
   });
   // Explains which transitions this user may take; the server still decides.

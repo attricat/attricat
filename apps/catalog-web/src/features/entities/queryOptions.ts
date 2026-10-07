@@ -1,6 +1,7 @@
 import { queryOptions } from '@tanstack/react-query';
 import {
   getEntityApprovals,
+  getEntityForm,
   getEntityPublicationReadiness,
   getEntityPublications,
   getEntityRetentionHolds,
@@ -10,6 +11,13 @@ import { entityQueryKeys } from './queryKeys';
 
 // Revisited virtual rows reuse their result; mutations explicitly invalidate it.
 const publicationStaleTimeMs = 60_000;
+
+/** The entity's values and blueprint as an editor needs them. */
+export const entityFormOptions = (entityId: string) =>
+  queryOptions({
+    queryKey: entityQueryKeys.form(entityId),
+    queryFn: ({ signal }) => getEntityForm(entityId, signal),
+  });
 
 export const entityPublicationOptions = (entityId: string) =>
   queryOptions({
