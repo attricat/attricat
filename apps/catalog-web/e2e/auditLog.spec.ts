@@ -1,5 +1,11 @@
 import { expect, test } from '@playwright/test';
-import { createEntity, createEntityBlueprint, scalar, suffix } from './helpers';
+import {
+  commitField,
+  createEntity,
+  createEntityBlueprint,
+  scalar,
+  suffix,
+} from './helpers';
 
 test('records a browser edit and filters the audit log', async ({ page }) => {
   const blueprint = await createEntityBlueprint(
@@ -9,10 +15,10 @@ test('records a browser edit and filters the audit log', async ({ page }) => {
   );
   const entity = await createEntity(blueprint, [scalar('title', 'Before')]);
 
-  await page.goto(`/entities/${entity.id}/edit`);
-  await page.getByLabel('title').fill('After audit');
-  await page.getByRole('button', { name: 'Save changes' }).click();
-  await expect(page).toHaveURL(new RegExp(`/entities/${entity.id}$`));
+  await page.goto(`/entities/${entity.id}`);
+  const title = page.getByLabel('title');
+  await title.fill('After audit');
+  await commitField(page, entity.id, title);
 
   await page.goto('/manage/audit-log');
   const update = page

@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import {
+  commitField,
   createContext,
   createEntity,
   createEntityBlueprint,
@@ -33,19 +34,19 @@ test('resolves inherited values and saves a context-specific override', async ({
   ).toBeVisible();
   await expect(page.getByText('Default title')).toBeVisible();
 
-  await page.getByRole('link', { name: 'Edit entity' }).click();
-  await expect(page).toHaveURL(new RegExp(`/entities/${entity.id}/edit$`));
-  await expect(page.getByRole('tab', { name: 'Default' })).toHaveAttribute(
+  await expect(page.getByRole('tab', { name: context.code })).toHaveAttribute(
     'aria-selected',
     'true',
   );
-  const editContextTab = page.getByRole('tab', { name: context.code });
-  await editContextTab.click();
-  await expect(editContextTab).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByLabel('stock')).toBeDisabled();
-  await page.getByLabel('title').fill('UK title');
-  await page.getByRole('button', { name: 'Save changes' }).click();
-  await expect(page).toHaveURL(new RegExp(`/entities/${entity.id}$`));
+  // Only the default context may change stock, so it is shown read-only.
+  await expect(page.getByRole('textbox', { name: 'stock' })).toHaveCount(0);
+  const title = page.getByLabel('title');
+  await title.fill('UK title');
+  await commitField(page, entity.id, title);
+
+  await page.reload();
   await page.getByRole('tab', { name: context.code }).click();
-  await expect(page.getByText('UK title')).toBeVisible();
+  await expect(page.getByLabel('title')).toHaveValue('UK title');
+  await page.getByRole('tab', { name: 'Default' }).click();
+  await expect(page.getByLabel('title')).toHaveValue('Default title');
 });

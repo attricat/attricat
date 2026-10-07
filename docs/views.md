@@ -7,18 +7,26 @@ that do not define them.
 
 ## View Types
 
-- `detail`: read-only entity preview.
-- `edit`: create and edit form layout.
+- `detail`: the entity page layout, used for both display and editing, and
+  the layout of the create and migration forms.
+- `edit`: deprecated. The UI ignores it. The compiler still accepts it and
+  still requires edit-capable components inside it, but no longer requires it
+  to place required attributes.
 - `table`: configured columns in the entity explorer.
 
-`detail` and `edit` use recursive layout roots. A table column may reference a
+`detail` uses a recursive layout root. A table column may reference a
 local scalar field or a scalar leaf through at most three relationship hops.
 
-A custom `edit` layout must place (as `field` or `relationship_list`) every
-non-readonly attribute in `entity_schema.required`; the compiler rejects it
-otherwise. For blueprints stored before that check, `EntityForm` renders
-required attributes the view omits after the layout so Save is never blocked
-by a hidden field.
+On the entity page (`EntityInlineFields`), every field the user may change is
+an always-editable control in its `detail` position; readonly, status-locked
+and default-context-only attributes, and every field for users without write
+permission, render as values. Editable fields placed in the
+`catalog.entity_heading` block are offered as editors before the layout,
+because the heading only displays values. Editable attributes the layout does
+not place render after it under **Other attributes**, and reusable attributes
+under **Additional attributes**, so a required attribute is never out of
+reach. The create and migration forms (`EntityForm`) use the same order:
+heading fields, the layout, then **Other attributes**.
 
 ## Extension layout
 
@@ -150,7 +158,7 @@ field = "price"
 Every referenced field must be an effective attribute. `field` accepts scalar
 attributes; `relationship_list` accepts relationships only.
 
-In `edit`, a relationship field opens the entity picker for its allowed target
+When editable, a relationship field opens the entity picker for its allowed target
 blueprints. When the attribute lists several `target_blueprints`, the picker
 shows a **Target blueprint** selector and searches one of them at a time;
 selected entities are labelled with their own blueprint's `dropdown_option`
@@ -188,11 +196,17 @@ field and later children may be text or scalar fields.
 Data blocks select registered components with a versioned reference:
 
 ```toml
-[[views.edit.children]]
+[[views.detail.children]]
 type = "field"
-field = "price"
-component = { id = "catalog.field_edit", version = 1 }
+field = "website"
+component = { id = "catalog.url_display", version = 1 }
 ```
+
+Where a `detail` field is editable, `viewFieldEditComponents` resolves the
+display component's paired edit component (`editComponentId` in the
+TypeScript definition, for example `catalog.url_display` →
+`catalog.url_edit`). Fields without a paired editor use the built-in editor
+for their value type.
 
 Component IDs use dot-delimited lowercase, underscore-separated segments. The frontend registry lives at
 `apps/catalog-web/src/features/views/components/registry.ts`. Layout and
@@ -210,11 +224,11 @@ definition. `registry.test.ts` verifies that their metadata is identical.
 ### String field controls
 
 These controls change how a `string` attribute is shown and edited. They are
-opt-in per view: unconfigured string fields keep the standard text input and
+opt-in per detail field or table column: unconfigured string fields keep the standard text input and
 plain-text display. None of them accepts props, and none changes what is
 stored.
 
-| Control | Display (detail field, table column) | Edit (edit field) |
+| Control | Display (detail field, table column) | Paired editor |
 | --- | --- | --- |
 | Color | `catalog.color_display@1` | `catalog.color_edit@1` |
 | Email | `catalog.email_display@1` | `catalog.email_edit@1` |
@@ -227,10 +241,6 @@ stored.
 type = "stack"
 children = [{ type = "field", field = "website", component = { id = "catalog.url_display", version = 1 } }]
 
-[views.edit]
-type = "stack"
-children = [{ type = "field", field = "website", component = { id = "catalog.url_edit", version = 1 } }]
-
 [views.table]
 type = "table"
 columns = [{ field = "website", renderer = { id = "catalog.url_display", version = 1 } }]
@@ -238,10 +248,10 @@ columns = [{ field = "website", renderer = { id = "catalog.url_display", version
 
 Shared behavior:
 
-- The color, email and URL editors validate in the web form only, as the user
-  types and again on Save. Choosing a component does not constrain API, CLI or
-  agent writes; add an attribute `value_schema` or the blueprint
-  `entity_schema` for that.
+- The color, email and URL editors validate in the web app only, as the user
+  types and again before the field is saved (on Save in the create form).
+  Choosing a component does not constrain API, CLI or agent writes; add an
+  attribute `value_schema` or the blueprint `entity_schema` for that.
 - Values are trimmed before saving, except Markdown, which is stored verbatim.
   Clearing an optional value unsets it; required, readonly, context and draft
   behavior is the same as for other fields.

@@ -1,23 +1,35 @@
-import { Paper, Tab, Tabs, Typography } from '@mui/material';
+import { Box, Paper, Tab, Tabs, Typography } from '@mui/material';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useTabAccessibility } from '../../components/useTabAccessibility';
-import type { Attribute, Blueprint, ViewDefinition } from '../entities/api';
+import type {
+  Attribute,
+  Blueprint,
+  ComponentReference,
+  ViewDefinition,
+} from '../entities/api';
 import { EntityView } from '../views/components/EntityView';
-import { editViewName } from './constants';
+import { entityHeadingComponentId } from '../views/components/blocks/EntityHeadingDefinition';
+import { resolveEditComponent } from '../views/components/registry';
+import {
+  headingEditableAttributes,
+  unplacedEditableAttributes,
+} from '../entities/entityFormAttributes';
+import { legacyEditViewName, sandboxEditTab } from './constants';
 import { RenderedBlueprintView } from './RenderedBlueprintView';
 import { SandboxAttributeEditor } from './SandboxAttributeEditor';
 import { sandboxValuesForFields } from './sandboxValues';
 
 type ViewTab = readonly [name: string, view: ViewDefinition | undefined];
 
-/** The edit view always comes first, even when the blueprint omits it. */
-const viewTabs = (views: Blueprint['views']): ViewTab[] => {
-  const entries = Object.entries(views);
-  const editEntry = entries.find(([name]) => name === editViewName);
-  const previewEntries = entries.filter(([name]) => name !== editViewName);
-  return [editEntry ?? [editViewName, undefined], ...previewEntries];
-};
+/**
+ * The sandbox editor, using the detail layout, always comes first. A
+ * deprecated `edit` view is not shown.
+ */
+const viewTabs = (views: Blueprint['views']): ViewTab[] => [
+  [sandboxEditTab, views.detail],
+  ...Object.entries(views).filter(([name]) => name !== legacyEditViewName),
+];
 
 export const BlueprintViewsPreview = ({
   attributes,
@@ -39,6 +51,21 @@ export const BlueprintViewsPreview = ({
   const values = sandboxValuesForFields(attributes, fields);
   const updateField = (code: string, value: string) =>
     setFields((current) => ({ ...current, [code]: value }));
+  // Display components on the detail layout edit with their paired editor.
+  const renderEditor = (
+    attribute: Attribute,
+    component?: ComponentReference | null,
+  ) => (
+    <SandboxAttributeEditor
+      attribute={attribute}
+      component={resolveEditComponent(component) ?? component}
+      onChange={(value) => updateField(attribute.code, value)}
+      value={fields[attribute.code] ?? ''}
+    />
+  );
+  const editable = attributes.filter((attribute) => !attribute.readonly);
+  const headingFields = headingEditableAttributes(editable, views.detail);
+  const unplaced = unplacedEditableAttributes(editable, views.detail);
 
   return (
     <>
@@ -54,7 +81,12 @@ export const BlueprintViewsPreview = ({
         variant="scrollable"
       >
         {tabs.map(([name], index) => (
-          <Tab {...tabId.tab(index)} key={name} label={name} value={name} />
+          <Tab
+            {...tabId.tab(index)}
+            key={name}
+            label={name === sandboxEditTab ? t('blueprints.sandboxEdit') : name}
+            value={name}
+          />
         ))}
       </Tabs>
       <Paper
@@ -62,21 +94,38 @@ export const BlueprintViewsPreview = ({
         sx={{ mt: 2, p: 2.5 }}
         variant="outlined"
       >
-        {activeViewName === editViewName ? (
-          <EntityView
-            attributes={attributes}
-            fallbackVisibilityScope="form"
-            renderEditor={(attribute, component) => (
-              <SandboxAttributeEditor
-                attribute={attribute}
-                component={component}
-                onChange={(value) => updateField(attribute.code, value)}
-                value={fields[attribute.code] ?? ''}
-              />
+        {activeViewName === sandboxEditTab ? (
+          <>
+            {headingFields.length > 0 && (
+              <Box sx={{ mb: 2 }}>
+                <EntityView
+                  attributes={headingFields}
+                  renderEditor={renderEditor}
+                  values={values}
+                />
+              </Box>
             )}
-            values={values}
-            view={activeView}
-          />
+            <EntityView
+              attributes={attributes}
+              fallbackVisibilityScope="detail"
+              renderEditor={renderEditor}
+              skipComponentId={entityHeadingComponentId}
+              values={values}
+              view={activeView}
+            />
+            {unplaced.length > 0 && (
+              <>
+                <Typography component="h3" sx={{ mb: 2, mt: 3 }} variant="h6">
+                  {t('entities.otherAttributes')}
+                </Typography>
+                <EntityView
+                  attributes={unplaced}
+                  renderEditor={renderEditor}
+                  values={values}
+                />
+              </>
+            )}
+          </>
         ) : (
           activeView && (
             <RenderedBlueprintView

@@ -1,6 +1,6 @@
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { EyeIcon, PencilIcon } from 'lucide-react';
+import { EyeIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Alert, Box, IconButton, Tooltip, Typography } from '@mui/material';
 import { PageContainer } from '../../components/PageContainer';
@@ -48,13 +48,6 @@ export const EntityChangesPage = ({ entityId }: { entityId: string }) => {
           <Link params={{ entityId }} to="/entities/$entityId">
             <IconButton aria-label={t('entities.backToEntity')}>
               <EyeIcon />
-            </IconButton>
-          </Link>
-        </Tooltip>
-        <Tooltip title={t('entities.editEntity')}>
-          <Link params={{ entityId }} to="/entities/$entityId/edit">
-            <IconButton aria-label={t('entities.editEntity')}>
-              <PencilIcon />
             </IconButton>
           </Link>
         </Tooltip>

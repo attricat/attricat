@@ -1,13 +1,20 @@
 import { expect, test } from '@playwright/test';
-import { createEntity, createEntityBlueprint, scalar, suffix } from './helpers';
+import {
+  commitField,
+  createEntity,
+  createEntityBlueprint,
+  scalar,
+  suffix,
+} from './helpers';
 
 for (const colorScheme of ['light', 'dark'] as const) {
   test(`email display and editing in ${colorScheme} mode`, async ({ page }) => {
     await page.emulateMedia({ colorScheme });
+    const code = `email_${suffix()}`;
     if (colorScheme === 'dark')
       await page.setViewportSize({ width: 390, height: 844 });
     const blueprint = await createEntityBlueprint(
-      `email_${suffix()}`,
+      code,
       'Email contact',
       `
 [[attributes]]
@@ -26,6 +33,9 @@ children = [{ type = "field", field = "contact", component = { id = "catalog.ema
 [views.edit]
 type = "stack"
 children = [{ type = "field", field = "contact", component = { id = "catalog.email_edit", version = 1 } }]
+[views.table]
+type = "table"
+columns = [{ field = "title" }, { field = "contact", renderer = { id = "catalog.email_display", version = 1 } }]
 `,
       },
     );
@@ -39,28 +49,41 @@ children = [{ type = "field", field = "contact", component = { id = "catalog.ema
       scalar('title', 'Contact'),
       scalar('contact', 'Name+tag@Example.com'),
     ]);
-    await page.goto(`/entities/${entity.id}`);
+    // The entity page edits the value in place; the table displays it.
+    await page.goto(`/?blueprint=${code}`);
     await expect(
       page.getByRole('link', { name: 'Name+tag@Example.com' }),
     ).toHaveAttribute('href', 'mailto:Name%2Btag@Example.com');
-    await page.goto(`/entities/${entity.id}/edit`);
+    await page.goto(`/entities/${entity.id}`);
     const input = page.getByRole('textbox', { name: 'contact' });
     await expect(input).toHaveAttribute('type', 'email');
+    await expect(input).toHaveValue('Name+tag@Example.com');
+    const saves: string[] = [];
+    page.on('request', (request) => {
+      if (request.method() === 'PUT') saves.push(request.url());
+    });
+    // An invalid address stays a local edit with its error and is not sent.
     await input.fill('invalid');
-    await page.getByRole('button', { name: 'Save changes' }).click();
+    await input.press('Tab');
     await expect(input).toHaveAttribute('aria-invalid', 'true');
-    await expect(page).toHaveURL(new RegExp(`/entities/${entity.id}/edit$`));
+    await expect(input).toHaveValue('invalid');
+    expect(saves).toEqual([]);
     await input.fill('Other+tag@Example.com');
-    await page.getByRole('button', { name: 'Save changes' }).click();
-    await expect(page).toHaveURL(new RegExp(`/entities/${entity.id}$`));
+    await commitField(page, entity.id, input);
+    await expect(input).not.toHaveAttribute('aria-invalid', 'true');
     await page.reload();
+    await expect(input).toHaveValue('Other+tag@Example.com');
+    await page.goto(`/?blueprint=${code}`);
     await expect(
       page.getByRole('link', { name: 'Other+tag@Example.com' }),
     ).toBeVisible();
-    await page.goto(`/entities/${entity.id}/edit`);
+    await page.goto(`/entities/${entity.id}`);
     await input.clear();
-    await page.getByRole('button', { name: 'Save changes' }).click();
-    await expect(page).toHaveURL(new RegExp(`/entities/${entity.id}$`));
-    await expect(page.getByText('Not set', { exact: true })).toBeVisible();
+    await commitField(page, entity.id, input);
+    await page.reload();
+    await expect(input).toHaveValue('');
+    await page.goto(`/?blueprint=${code}`);
+    await expect(page.getByRole('link', { name: 'Contact' })).toBeVisible();
+    await expect(page.locator('a[href^="mailto:"]')).toHaveCount(0);
   });
 }

@@ -23,7 +23,8 @@ Markdown) share `apps/catalog-web/src/features/views/controls`:
 | `definitions.ts` | The registered display/edit definitions, built with `stringDisplay` and `stringEdit`. |
 
 A new string control usually needs a policy function, a few lines in
-`editors.tsx` and `values.tsx`, and two `definitions.ts` entries.
+`editors.tsx` and `values.tsx`, and two `definitions.ts` entries. The display
+entry names its edit counterpart (`stringDisplay(id, editComponentId, …)`).
 
 The Rust blueprint compiler uses `contracts/view-components.json` to validate
 blueprint references before they reach the client. The TypeScript registry is
@@ -70,7 +71,11 @@ implementation, so increment the version when making an incompatible change.
 
 ## Metadata
 
-`capabilities` limits a component to display or edit views. `placements`
+`capabilities` limits a component to display views (`detail`, `table`) or
+to the deprecated `edit` view, which the UI ignores. Blueprints place display
+components; an editable field on the entity page or create form uses the
+display component's `editComponentId` counterpart, so a display component that
+should edit with a custom control must name one. `placements`
 selects the supported view block type: `field`, `relationship_list`,
 `incoming_relationship_list`, `table`, or `stack`. `value_types` limits the attribute types for data placements.
 
@@ -111,21 +116,24 @@ detail view.
 
 ## Editors
 
-`EntityForm` owns form state. An edit component may supply a `valueEditor`
-that receives `ValueEditorProps` (attribute, string value, disabled, required,
-error, helper text and `onChange`).
+On the entity page, `EntityInlineFields` hosts each editor in an
+`InlineFieldEditor` and saves it through `useEntityFieldSaves`; the create and
+migration forms keep their state in `EntityForm`. An edit component may supply
+a `valueEditor` that receives `ValueEditorProps` (attribute, string value,
+disabled, required, error, helper text and `onChange`).
 
 `ScalarAttributeEditor` (`features/entities/components`) picks the editor for
-a scalar attribute in both the entity form and the blueprint preview sandbox:
-a status annotation first, then the view's configured `valueEditor` when it
+a scalar attribute on the entity page, in the entity form and in the blueprint
+preview sandbox: a status annotation first, then the paired `valueEditor` when it
 supports the attribute's value type (`resolveValueEditor`), then the built-in
 input for the type, as for `catalog.field_edit`.
 
 Two optional fields add form behavior:
 
-- `validateValue(value)` returns a message for an invalid string. The form runs
-  it on Save after the required check; editors can show the same message while
-  typing. It is a web-form check only, never a persisted constraint.
+- `validateValue(value)` returns a message for an invalid string. The entity
+  page runs it before saving the field, and the create form on Save after the
+  required check; editors can show the same message while typing. It is a
+  web-app check only, never a persisted constraint.
 - `preservesWhitespace: true` saves the edited string verbatim instead of
   trimming it (used by Markdown).
 

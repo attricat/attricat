@@ -14,13 +14,6 @@ entity_schema = '{"type":"object","required":["name"]}'
 type = "dropdown_option"
 fields = ["name"]
 
-[views.edit]
-type = "stack"
-children = [
-  { type = "field", field = "name" },
-  { type = "field", field = "notes", component = { id = "catalog.markdown_edit", version = 1 } },
-]
-
 [views.detail]
 type = "stack"
 children = [

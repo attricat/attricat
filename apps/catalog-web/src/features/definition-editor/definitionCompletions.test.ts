@@ -78,7 +78,7 @@ describe('definitionCompletions', () => {
       suggestions.find((suggestion) => suggestion.label === '[views.…]')
         ?.insertText,
     ).toBe(
-      '[views.${1|dropdown_option,detail,edit,table,extension_layout|}]\ntype = "${2|dropdown_option,table,stack,grid,section,tabs,accordion,extension_layout|}"',
+      '[views.${1|dropdown_option,detail,table,extension_layout|}]\ntype = "${2|dropdown_option,table,stack,grid,section,tabs,accordion,extension_layout|}"',
     );
   });
 
@@ -203,12 +203,12 @@ describe('definitionCompletions', () => {
 
   it('suggests components that fit the block, view, and field', async () => {
     const attributes = `\n[[attributes]]\ncode = "price"\nvalue_type = "number"\n`;
-    const edit = await complete(
-      `${header}[[views.edit.children]]\ntype = "field"\nfield = "price"\ncomponent = |\n${attributes}`,
+    const detail = await complete(
+      `${header}[[views.detail.children]]\ntype = "field"\nfield = "price"\ncomponent = |\n${attributes}`,
     );
-    expect(edit.suggestions.map((suggestion) => suggestion.insertText)).toEqual(
-      ['{ id = "catalog.field_edit", version = 1 }'],
-    );
+    expect(
+      detail.suggestions.map((suggestion) => suggestion.insertText),
+    ).toEqual(['{ id = "catalog.field_display", version = 1 }']);
     const renderer = await complete(
       `${header}[[views.table.columns]]\nfield = "photo"\nrenderer = { id = "|" }\n${attributes}\n[[attributes]]\ncode = "photo"\nvalue_type = "file"\n`,
     );
@@ -218,11 +218,11 @@ describe('definitionCompletions', () => {
   it('suggests URL controls only for matching string placements', async () => {
     const attributes =
       '\n[[attributes]]\ncode = "website"\nvalue_type = "string"\n';
-    const edit = await complete(
-      `${header}[[views.edit.children]]\ntype = "field"\nfield = "website"\ncomponent = { id = "|" }\n${attributes}`,
+    const detail = await complete(
+      `${header}[[views.detail.children]]\ntype = "field"\nfield = "website"\ncomponent = { id = "|" }\n${attributes}`,
     );
-    expect(edit.labels).toContain('catalog.url_edit');
-    expect(edit.labels).not.toContain('catalog.url_display');
+    expect(detail.labels).toContain('catalog.url_display');
+    expect(detail.labels).not.toContain('catalog.url_edit');
     const table = await complete(
       `${header}[[views.table.columns]]\nfield = "website"\nrenderer = { id = "|" }\n${attributes}`,
     );

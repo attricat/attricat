@@ -15,16 +15,20 @@ import {
 import {
   editableFormAttributes,
   entitySchemaRequiredAttributes,
+  headingEditableAttributes,
   removedFormValues,
   smartFillFormFields,
   type RemovedAttributeValue,
   type ResolvedFormValues,
+  unplacedEditableAttributes,
   unplacedRequiredAttributes,
 } from '../entityFormAttributes';
 import {
-  viewFieldComponents,
+  viewFieldEditComponents,
   viewFieldEditors,
 } from '../../views/viewFieldComponents';
+import { entityHeadingComponentId } from '../../views/components/blocks/EntityHeadingDefinition';
+import { resolveEditComponent } from '../../views/components/registry';
 import { EntityView } from '../../views/components/EntityView';
 import { draftEditors, type DraftEditor } from '../../drafts/constants';
 import { DraftRestoreDialog } from '../../drafts/DraftRestoreDialog';
@@ -168,15 +172,17 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
     const savedValues = baseline.values;
     const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
     const [formError, setFormError] = useState<string>();
-    const editView = blueprint?.blueprint.views.edit;
-    const fieldComponents = viewFieldComponents(editView);
+    // Entities are entered with the detail layout; each display component
+    // edits with its paired edit component.
+    const detailView = blueprint?.blueprint.views.detail;
+    const fieldComponents = viewFieldEditComponents(detailView);
     const editableAttributes = editableFormAttributes(
       blueprint ? [...blueprint.attributes, ...reusableAttributes] : [],
       {
         contextId,
         defaultContextId,
         usesDefaultEditView: Boolean(
-          blueprint && !showAllAttributes && !editView,
+          blueprint && !showAllAttributes && !detailView,
         ),
       },
     );
@@ -218,22 +224,30 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
     const submittedAttributes = editableAttributes.filter(
       (attribute) => lockedAttributes[attribute.code] === undefined,
     );
-    const unplacedRequired =
-      blueprint && editView && !showAllAttributes
-        ? unplacedRequiredAttributes(
-            editableAttributes.filter((attribute) =>
-              blueprint.attributes.includes(attribute),
-            ),
-            editView,
-            [
-              ...requiredAttributes,
-              ...(contextId === defaultContextId
-                ? entitySchemaRequiredAttributes(
-                    blueprint.blueprint.entity_schema,
-                  )
-                : []),
-            ],
-          )
+    const blueprintEditable = editableAttributes.filter(
+      (attribute) => blueprint?.attributes.includes(attribute) ?? false,
+    );
+    // The heading only displays values, so its fields are edited first.
+    const headingFields =
+      detailView && !showAllAttributes
+        ? headingEditableAttributes(blueprintEditable, detailView)
+        : [];
+    // Editable fields the layout leaves out.
+    const otherAttributes =
+      blueprint && detailView && !showAllAttributes
+        ? [
+            ...new Set([
+              ...unplacedEditableAttributes(blueprintEditable, detailView),
+              ...unplacedRequiredAttributes(blueprintEditable, detailView, [
+                ...requiredAttributes,
+                ...(contextId === defaultContextId
+                  ? entitySchemaRequiredAttributes(
+                      blueprint.blueprint.entity_schema,
+                    )
+                  : []),
+              ]),
+            ]),
+          ]
         : [];
     const validateFields = (fields: Record<string, string>) => {
       if (!blueprint) return { fieldErrors: {} };
@@ -421,7 +435,10 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
                   <EntityFormAttributeEditor
                     {...editorContext}
                     attribute={attribute}
-                    component={component ?? fieldComponents.get(attribute.code)}
+                    component={
+                      resolveEditComponent(component) ??
+                      fieldComponents.get(attribute.code)
+                    }
                     required={requiredAttributes.includes(attribute.code)}
                     onChange={(nextValue) => {
                       const nextFields = {
@@ -437,22 +454,34 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
                 );
                 return (
                   <>
+                    {headingFields.length > 0 && (
+                      <EntityView
+                        attributes={headingFields}
+                        values={resolvedValues}
+                        renderEditor={renderEditor}
+                      />
+                    )}
                     <EntityView
                       attributes={blueprint.attributes}
                       values={resolvedValues}
                       fallbackVisibilityScope={
-                        showAllAttributes ? undefined : 'form'
+                        showAllAttributes
+                          ? undefined
+                          : detailView
+                            ? 'detail'
+                            : 'form'
                       }
-                      view={showAllAttributes ? undefined : editView}
+                      skipComponentId={entityHeadingComponentId}
+                      view={showAllAttributes ? undefined : detailView}
                       renderEditor={renderEditor}
                     />
-                    {unplacedRequired.length > 0 && (
+                    {otherAttributes.length > 0 && (
                       <>
                         <Typography sx={{ mt: 3 }} variant="h6">
-                          {t('entities.otherRequiredAttributes')}
+                          {t('entities.otherAttributes')}
                         </Typography>
                         <EntityView
-                          attributes={unplacedRequired}
+                          attributes={otherAttributes}
                           values={resolvedValues}
                           renderEditor={renderEditor}
                         />

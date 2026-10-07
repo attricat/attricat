@@ -10,6 +10,7 @@ import { draftStorageKey, writeDraft } from '../../drafts/draftStorage';
 import { ApiRequestError } from '../../../api/request';
 import type { BlueprintWithAttributes, Attribute } from '../api';
 import { EntityForm, type EntityFormHandle } from './EntityForm';
+import { entityHeadingComponentId } from '../../views/components/blocks/EntityHeadingDefinition';
 
 const attribute = (
   code: string,
@@ -20,14 +21,17 @@ const attribute = (
   ...overrides,
 });
 
-/** A blueprint whose edit view shows one field with a configured component. */
-const withEditComponent = (
+/**
+ * A blueprint whose detail view shows one field with a display component; the
+ * form edits it with the paired edit component.
+ */
+const withDisplayComponent = (
   code: string,
   componentId: string,
   overrides: Partial<Attribute> = {},
 ) => {
   const result = blueprint([attribute(code, overrides)]);
-  result.blueprint.views.edit = {
+  result.blueprint.views.detail = {
     type: 'stack',
     children: [
       {
@@ -148,7 +152,7 @@ describe('EntityForm', () => {
 
   it('selects URL editors, blocks invalid programmatic values, saves and clears URLs', async () => {
     const { onSubmit, ref } = renderForm({
-      blueprint: withEditComponent('website', 'catalog.url_edit'),
+      blueprint: withDisplayComponent('website', 'catalog.url_display'),
     });
     const input = screen.getByRole('textbox', { name: 'website' });
     expect(input.getAttribute('type')).toBe('url');
@@ -184,7 +188,10 @@ describe('EntityForm', () => {
 
   it('dispatches the configured Markdown editor and submits unchanged source', async () => {
     const { onSubmit } = renderForm({
-      blueprint: withEditComponent('description', 'catalog.markdown_edit'),
+      blueprint: withDisplayComponent(
+        'description',
+        'catalog.markdown_display',
+      ),
     });
     const source = '    code\n\n**Hello**  \nworld\n';
     fireEvent.change(screen.getByRole('textbox', { name: 'description' }), {
@@ -200,7 +207,7 @@ describe('EntityForm', () => {
   });
 
   const emailBlueprint = (overrides: Partial<Attribute> = {}) =>
-    withEditComponent('contact', 'catalog.email_edit', overrides);
+    withDisplayComponent('contact', 'catalog.email_display', overrides);
 
   it('validates configured email input and preserves case and plus tags on save', async () => {
     const { onSubmit } = renderForm({ blueprint: emailBlueprint() });
@@ -275,7 +282,7 @@ describe('EntityForm', () => {
 
   const colorBlueprint = (overrides: Partial<Attribute> = {}) => {
     const result = blueprint([attribute('hex', overrides)]);
-    result.blueprint.views.edit = {
+    result.blueprint.views.detail = {
       type: 'tabs',
       tabs: [
         {
@@ -500,23 +507,37 @@ describe('EntityForm', () => {
     expect(await screen.findByText(/source has changed/)).toBeTruthy();
   });
 
-  it('renders required attributes the edit view omits so they can be saved', async () => {
+  it('renders editable attributes the detail view omits so they can be saved', async () => {
     const result = blueprint([
       attribute('title'),
       attribute('sku'),
       attribute('notes'),
+      attribute('internal', { tags: ['hidden:form'] }),
     ]);
     result.blueprint.entity_schema = {
       type: 'object',
       required: ['title', 'sku'],
     };
-    result.blueprint.views.edit = {
+    result.blueprint.views.detail = {
       type: 'stack',
-      children: [{ type: 'field', field: 'title' }],
+      children: [
+        {
+          type: 'stack',
+          // The heading only displays values, so its fields are edited first.
+          component: { id: entityHeadingComponentId, version: 1, props: {} },
+          children: [{ type: 'field', field: 'title' }],
+        },
+        { type: 'field', field: 'notes' },
+      ],
     };
     const { onSubmit } = renderForm({ blueprint: result });
-    expect(screen.getByText('Other required attributes')).toBeTruthy();
-    expect(screen.queryByRole('textbox', { name: 'notes' })).toBeNull();
+    expect(screen.getByText('Other attributes')).toBeTruthy();
+    const notes = screen.getByRole('textbox', { name: 'notes' });
+    expect(
+      titleBox().compareDocumentPosition(notes) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.queryByRole('textbox', { name: 'internal' })).toBeNull();
     fireEvent.change(titleBox(), { target: { value: 'Shirt' } });
     fireEvent.change(screen.getByRole('textbox', { name: 'sku' }), {
       target: { value: 'SKU-1' },

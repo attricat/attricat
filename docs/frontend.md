@@ -26,9 +26,9 @@ light and dark modes.
 ## Client State
 
 - Use Zustand for client-only state shared across independent components or updated outside React (for example, toast notifications and Inspector timings). Keep stores feature-local unless the state is truly app-wide, and subscribe to the smallest slice needed.
-- Keep server state in TanStack Query, navigable search/filter state in the router URL, submitted fields in TanStack Form, and component-scoped UI state in React. Do not move these into a global store just to avoid passing a prop or using a small context.
+- Keep server state in TanStack Query, navigable search/filter state in the router URL, fields submitted with an explicit Save button in TanStack Form, and component-scoped UI state in React. Do not move these into a global store just to avoid passing a prop or using a small context.
 - Bound and sanitize data before writing it to a shared store; do not store sensitive API responses in diagnostic state.
-- Keep unsaved editor values across refreshes with `src/features/drafts/useEditorDraft` and its `DraftRestoreDialog`. Drafts live in tab-scoped session storage keyed by workspace, user, editor, and resource/version/context; they are only applied when the user chooses **Restore draft**, and are cleared after a confirmed save or discard. Never pass passwords, tokens, secrets, or file inputs to a draft.
+- Keep unsaved values of editors with an explicit Save button across refreshes with `src/features/drafts/useEditorDraft` and its `DraftRestoreDialog`. Drafts live in tab-scoped session storage keyed by workspace, user, editor, and resource/version/context; they are only applied when the user chooses **Restore draft**, and are cleared after a confirmed save or discard. Never pass passwords, tokens, secrets, or file inputs to a draft. The entity page saves each field as it is committed and does not use drafts.
 
 ## Components
 
@@ -37,7 +37,7 @@ light and dark modes.
 - Keep one route-level page component per feature module. Extract independent
   pages and substantial page sections into descriptive sibling modules rather
   than growing a multi-route page file.
-- Use TanStack Form for submitted field values, validation, reset behavior, and submission handling; reserve React state for non-form UI state such as dialogs, notices, and upload progress. Use Material UI for interface components.
+- Use TanStack Form for forms with an explicit Save button (for example, entity create and migration): submitted field values, validation, reset behavior, and submission handling. The entity page instead saves fields individually: `InlineFieldEditor` (`src/features/entities/components`) keeps a field's typing local and commits it on blur, Enter, or an immediate choice, and `useEntityFieldSaves` (`src/features/entities`) queues each committed field as its own save, keeps rejected changes to resend with the next one, and detects concurrent edits. Reserve React state for non-form UI state such as dialogs, notices, and upload progress. Use Material UI for interface components.
 - Validate API payloads with Zod before using them in the UI.
 - Do not scatter magic values through components or feature clients. Name domain values, repeated UI values, limits, storage keys, query parameters, and API literals as feature-local constants; keep a one-off literal inline only when its meaning is obvious at the use site. Promote cross-feature concepts to a shared, descriptive module rather than duplicating them.
 - For imperative integrations that retain a callback (for example Monaco commands or browser event listeners), do not capture render-time values that can change. Re-register and dispose the callback when dependencies change, or read current values through refs.

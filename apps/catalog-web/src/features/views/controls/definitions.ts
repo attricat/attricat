@@ -30,10 +30,12 @@ import {
 
 const stringDisplay = (
   id: string,
+  editComponentId: string,
   valueRenderer: ValueRenderer,
   placements: ViewComponentDefinition['placements'] = ['field', 'table'],
 ): ViewComponentDefinition => ({
   id,
+  editComponentId,
   version: VIEW_COMPONENT_VERSION,
   capabilities: ['display'],
   placements,
@@ -62,6 +64,7 @@ const stringEdit = (
 
 export const colorDisplayComponent = stringDisplay(
   VIEW_COMPONENT_IDS.colorDisplay,
+  VIEW_COMPONENT_IDS.colorEdit,
   ColorValue,
 );
 export const colorEditComponent = stringEdit(
@@ -72,6 +75,7 @@ export const colorEditComponent = stringEdit(
 
 export const emailDisplayComponent = stringDisplay(
   VIEW_COMPONENT_IDS.emailDisplay,
+  VIEW_COMPONENT_IDS.emailEdit,
   EmailValue,
 );
 export const emailEditComponent = stringEdit(
@@ -82,6 +86,7 @@ export const emailEditComponent = stringEdit(
 
 export const urlDisplayComponent = stringDisplay(
   VIEW_COMPONENT_IDS.urlDisplay,
+  VIEW_COMPONENT_IDS.urlEdit,
   UrlValue,
 );
 export const urlEditComponent = stringEdit(
@@ -92,6 +97,7 @@ export const urlEditComponent = stringEdit(
 
 export const phoneDisplayComponent = stringDisplay(
   VIEW_COMPONENT_IDS.phoneDisplay,
+  VIEW_COMPONENT_IDS.phoneEdit,
   PhoneValue,
 );
 export const phoneEditComponent = stringEdit(
@@ -101,6 +107,7 @@ export const phoneEditComponent = stringEdit(
 
 export const markdownDisplayComponent = stringDisplay(
   VIEW_COMPONENT_IDS.markdownDisplay,
+  VIEW_COMPONENT_IDS.markdownEdit,
   MarkdownValue,
   ['field'],
 );

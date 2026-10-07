@@ -9,7 +9,7 @@ A blueprint is a TOML document that describes one kind of catalog record: its at
 
 You can write blueprints in two places:
 
-- **Manage → Blueprints → New blueprint** in the web app. The editor validates as you type and shows a preview of the resulting form.
+- **Manage → Blueprints → New blueprint** in the web app. The editor validates as you type and shows a preview of the resulting entity page, where you can try editing sample values.
 - Any text editor, then upload with the CLI:
 
   ```sh

@@ -1,10 +1,12 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { EditEntityPage } from '../../../features/entities/EditEntityPage';
+import { createFileRoute, redirect } from '@tanstack/react-router';
 
-const EditEntityRouteComponent = () => (
-  <EditEntityPage entityId={Route.useParams().entityId} />
-);
-
+// Fields are edited in place on the entity page; keep old links working.
 export const Route = createFileRoute('/entities/$entityId/edit')({
-  component: EditEntityRouteComponent,
+  beforeLoad: ({ params }) => {
+    throw redirect({
+      params: { entityId: params.entityId },
+      replace: true,
+      to: '/entities/$entityId',
+    });
+  },
 });

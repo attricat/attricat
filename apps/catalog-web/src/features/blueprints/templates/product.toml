@@ -12,28 +12,6 @@ type = "dropdown_option"
 fields = ["name", "sku"]
 separator = " / "
 
-# Group related controls without hiding fields behind edit tabs.
-[views.edit]
-type = "stack"
-children = [
-  { type = "heading", text = "Identity and pricing" },
-  { type = "grid", children = [
-    { type = "field", field = "name" },
-    { type = "field", field = "sku" },
-    { type = "field", field = "price" },
-    { type = "field", field = "status" },
-  ] },
-  { type = "heading", text = "Product content" },
-  { type = "field", field = "description", component = { id = "catalog.markdown_edit", version = 1 } },
-  { type = "grid", children = [
-    { type = "field", field = "color", component = { id = "catalog.color_edit", version = 1 } },
-    { type = "field", field = "website", component = { id = "catalog.url_edit", version = 1 } },
-  ] },
-  { type = "heading", text = "Images" },
-  { type = "field", field = "main_photo" },
-  { type = "field", field = "product_images" },
-]
-
 [views.detail]
 type = "stack"
 children = [

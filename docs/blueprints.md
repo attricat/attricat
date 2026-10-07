@@ -48,7 +48,7 @@ Set `readonly = true` to make an attribute preview-only in the Catalog web app.
 It is intended for values managed through authorized API or CLI operations,
 including agent and extension actions; `readonly` does not restrict those
 server-side writes. Rules evaluate findings and do not write attribute values.
-The default is `false`. Read-only attributes remain visible in entity forms but
+The default is `false`. Read-only attributes remain visible on the entity page and in entity forms but
 cannot be changed, cleared, linked, or uploaded through the web UI.
 
 ```toml
@@ -82,7 +82,7 @@ hints:
 | Tag | Default omission surface |
 | --- | --- |
 | `hidden` | Every native default surface listed below |
-| `hidden:form` | Fallback create and edit forms |
+| `hidden:form` | Editors added outside the layout (**Other attributes**) and the fallback create form |
 | `hidden:detail` | Fallback entity preview/detail views |
 | `hidden:explorer` | Explorer facet and filter candidates |
 | `hidden:metadata` | The blueprint Attributes metadata table |
@@ -184,7 +184,7 @@ allowed set as `target_blueprint_codes` (empty means any blueprint);
 `target_blueprint_code` is set only when exactly one target is allowed, so
 single-target consumers such as table column paths, Explorer relationship
 filters, and tree facets treat a multi-target relationship like an unrestricted
-one. The entity form picker searches one allowed blueprint at a time with a
+one. The entity relationship picker searches one allowed blueprint at a time with a
 **Target blueprint** selector, and an `incoming_relationship_list` on any
 allowed target can list the field. A migration preview reports
 `relationship_target_changed` when the allowed set differs between revisions.
@@ -568,15 +568,20 @@ source entity matched by multiple selectors appears once. Selecting an item
 opens that source entity. A field with several `target_blueprints` can be
 listed on every allowed target blueprint.
 
-`views.edit` uses the same layout blocks to order entity create/edit controls.
+`views.detail` lays out both display and editing: the entity page renders
+every field the user may change as an editor in its place, and the create and
+migration forms use the same layout. `views.edit` is deprecated; the UI ignores
+it, and the compiler still accepts it (checking its components' `edit`
+capability) without requiring it to place required attributes.
+
 Field, relationship-list, and table blocks may optionally reference a
 platform-registered component:
 
 ```toml
-[[views.edit.children]]
+[[views.detail.children]]
 type = "field"
-field = "price"
-component = { id = "catalog.field_edit", version = 1 }
+field = "website"
+component = { id = "catalog.url_display", version = 1 }
 ```
 
 Component IDs use lowercase, underscore-separated dotted namespaces. React

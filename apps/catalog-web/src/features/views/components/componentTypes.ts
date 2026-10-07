@@ -65,6 +65,8 @@ export type ViewComponentDefinition = {
   allowed_props: readonly string[];
   valueRenderer?: ValueRenderer;
   valueEditor?: ComponentType<ValueEditorProps>;
+  /** The edit component that replaces this display component while editing. */
+  editComponentId?: string;
   validateValue?: (value: string) => string | undefined;
   /** Submit the edited string verbatim instead of trimming it. */
   preservesWhitespace?: boolean;

@@ -46,7 +46,7 @@ A [status](/builders/validation/#statuses) stores a stable code, such as `live`,
 ]
 ```
 
-Status chips, the status select in the entity form, the Explorer's filter value list and filter pills, and plain-text values all show the translated label, with the same fallback as other labels. Searches, filters, saved searches, the API, and exports keep using the code, so translating or rewording a label never changes stored data. A context such as `{{Draft|status}}` keeps a status called "Draft" apart from other uses of the word.
+Status chips, the status select on the entity page and create form, the Explorer's filter value list and filter pills, and plain-text values all show the translated label, with the same fallback as other labels. Searches, filters, saved searches, the API, and exports keep using the code, so translating or rewording a label never changes stored data. A context such as `{{Draft|status}}` keeps a status called "Draft" apart from other uses of the word.
 
 ## Reference syntax
 

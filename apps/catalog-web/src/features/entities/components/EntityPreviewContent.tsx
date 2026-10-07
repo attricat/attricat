@@ -1,4 +1,5 @@
 import { Box, Paper, Typography } from '@mui/material';
+import { useState, type ReactNode, type Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AttributeContext } from '../../contexts/api';
 import {
@@ -12,16 +13,37 @@ import {
 import { useExtensionRuntime } from '../../extensions/useExtensionRuntime';
 import { EntityView } from '../../views/components/EntityView';
 import { entityHeadingComponentId } from '../../views/components/blocks/EntityHeadingDefinition';
-import type { getBlueprintRevision, getResolvedEntityPreview } from '../api';
+import type {
+  Attribute,
+  EntityFormResponse,
+  getBlueprintRevision,
+  getResolvedEntityPreview,
+  StatusTransitionAccess,
+} from '../api';
 import { attributeLabel } from '../entityDisplay';
 import { EntityContextPicker } from './EntityContextPicker';
+import {
+  EntityInlineFields,
+  type EntityInlineFieldsHandle,
+} from './EntityInlineFields';
 
 type Props = {
   blueprint: Awaited<ReturnType<typeof getBlueprintRevision>>;
   contextId?: string;
   contexts: readonly AttributeContext[];
   contextsPending: boolean;
+  defaultContextId: string | null;
   entityId: string;
+  /** The editable form; values are shown read-only until it is loaded. */
+  form?: EntityFormResponse;
+  /**
+   * Shown after the fields when the form is editable. Actions that change the
+   * entity elsewhere should wait until pending field changes are saved.
+   */
+  renderFooterActions?: (hasPendingChanges: boolean) => ReactNode;
+  inlineFieldsRef?: Ref<EntityInlineFieldsHandle>;
+  statusParentContextIds: readonly string[];
+  statusTransitions?: readonly StatusTransitionAccess[];
   onContextChange: (contextId: string) => void;
   resolved: Awaited<ReturnType<typeof getResolvedEntityPreview>>;
 };
@@ -32,11 +54,19 @@ export const EntityPreviewContent = ({
   contextId,
   contexts,
   contextsPending,
+  defaultContextId,
   entityId,
+  form,
+  renderFooterActions,
+  inlineFieldsRef,
+  statusParentContextIds,
+  statusTransitions,
   onContextChange,
   resolved,
 }: Props) => {
   const { t } = useTranslation();
+  // Switching context would drop changes that are not saved yet.
+  const [hasPendingChanges, setHasPendingChanges] = useState(false);
   const runtimeScope = {
     blueprintId: blueprint.blueprint.id,
     blueprintVersion: blueprint.blueprint.version,
@@ -48,6 +78,55 @@ export const EntityPreviewContent = ({
   const hasFilePanels = runtime.data?.some(
     (item) => item.outlet === 'file_panel' && item.kind === 'panel',
   );
+  const renderAttributeDecoration = (attribute: Attribute) => (
+    <ExtensionPopoverOutlet
+      context={{
+        attribute_id: attribute.id,
+        blueprint_id: blueprint.blueprint.id,
+        blueprint_version: blueprint.blueprint.version,
+        context_id: contextId,
+        entity_id: entityId,
+      }}
+      key={String(attribute.id)}
+      label={t('entities.viewExtensionContent', {
+        attribute: attributeLabel(attribute),
+      })}
+      outlet="entity_attribute_decoration"
+      runtimeScope={runtimeScope}
+    />
+  );
+  const renderAttributePanel = hasAttributePanels
+    ? (attribute: Attribute) => (
+        <ExtensionOutlet
+          context={{
+            context_version: supportedOutletContextVersion,
+            entity_id: entityId,
+            attribute_id: attribute.id,
+            blueprint_id: blueprint.blueprint.id,
+            blueprint_version: blueprint.blueprint.version,
+            context_id: contextId ?? null,
+          }}
+          outlet="entity_attribute_panel"
+          runtimeScope={runtimeScope}
+        />
+      )
+    : undefined;
+  const renderFilePanel = hasFilePanels
+    ? (attribute: Attribute, fileId: string) => (
+        <ExtensionOutlet
+          context={{
+            context_version: supportedOutletContextVersion,
+            file_id: fileId,
+            entity_id: entityId,
+            attribute_id: attribute.id,
+            blueprint_id: blueprint.blueprint.id,
+            blueprint_version: blueprint.blueprint.version,
+          }}
+          outlet="file_panel"
+          runtimeScope={runtimeScope}
+        />
+      )
+    : undefined;
   return (
     <Box
       sx={{
@@ -61,84 +140,62 @@ export const EntityPreviewContent = ({
         <Paper component="section" sx={{ p: { xs: 2, md: 3 } }}>
           <EntityContextPicker
             contexts={contexts}
-            disabled={contextsPending}
+            disabled={contextsPending || hasPendingChanges}
             onChange={onContextChange}
             value={contextId ?? ''}
           />
-          <EntityView
-            attributes={blueprint.attributes}
-            fallbackVisibilityScope="detail"
-            contextId={contextId}
-            entityId={entityId}
-            renderAttributeDecoration={(attribute) => (
-              <ExtensionPopoverOutlet
-                context={{
-                  attribute_id: attribute.id,
-                  blueprint_id: blueprint.blueprint.id,
-                  blueprint_version: blueprint.blueprint.version,
-                  context_id: contextId,
-                  entity_id: entityId,
-                }}
-                key={String(attribute.id)}
-                label={t('entities.viewExtensionContent', {
-                  attribute: attributeLabel(attribute),
-                })}
-                outlet="entity_attribute_decoration"
-                runtimeScope={runtimeScope}
-              />
-            )}
-            renderAttributePanel={
-              hasAttributePanels
-                ? (attribute) => (
-                    <ExtensionOutlet
-                      context={{
-                        context_version: supportedOutletContextVersion,
-                        entity_id: entityId,
-                        attribute_id: attribute.id,
-                        blueprint_id: blueprint.blueprint.id,
-                        blueprint_version: blueprint.blueprint.version,
-                        context_id: contextId ?? null,
-                      }}
-                      outlet="entity_attribute_panel"
-                      runtimeScope={runtimeScope}
-                    />
-                  )
-                : undefined
-            }
-            renderFilePanel={
-              hasFilePanels
-                ? (attribute, fileId) => (
-                    <ExtensionOutlet
-                      context={{
-                        context_version: supportedOutletContextVersion,
-                        file_id: fileId,
-                        entity_id: entityId,
-                        attribute_id: attribute.id,
-                        blueprint_id: blueprint.blueprint.id,
-                        blueprint_version: blueprint.blueprint.version,
-                      }}
-                      outlet="file_panel"
-                      runtimeScope={runtimeScope}
-                    />
-                  )
-                : undefined
-            }
-            values={resolved.values}
-            view={blueprint.blueprint.views.detail}
-            skipComponentId={entityHeadingComponentId}
-          />
-          {(resolved.reusable_attributes?.length ?? 0) > 0 && (
-            <Box component="section" sx={{ mt: 4 }}>
-              <Typography component="h2" variant="h6">
-                {t('entities.additionalAttributes')}
-              </Typography>
+          {form ? (
+            <EntityInlineFields
+              key={`${entityId}:${contextId ?? ''}`}
+              attributes={blueprint.attributes}
+              contextId={contextId ?? null}
+              defaultContextId={defaultContextId}
+              entityId={entityId}
+              footerActions={
+                form.can_write
+                  ? renderFooterActions?.(hasPendingChanges)
+                  : undefined
+              }
+              form={form}
+              ref={inlineFieldsRef}
+              onPendingChange={setHasPendingChanges}
+              renderAttributeDecoration={renderAttributeDecoration}
+              renderAttributePanel={renderAttributePanel}
+              renderFilePanel={renderFilePanel}
+              resolvedValues={resolved.values}
+              reusableResolvedValues={resolved.reusable_values ?? {}}
+              statusParentContextIds={statusParentContextIds}
+              statusTransitions={statusTransitions}
+              view={blueprint.blueprint.views.detail}
+            />
+          ) : (
+            <>
               <EntityView
-                attributes={resolved.reusable_attributes}
+                attributes={blueprint.attributes}
+                fallbackVisibilityScope="detail"
                 contextId={contextId}
                 entityId={entityId}
-                values={resolved.reusable_values ?? {}}
+                renderAttributeDecoration={renderAttributeDecoration}
+                renderAttributePanel={renderAttributePanel}
+                renderFilePanel={renderFilePanel}
+                values={resolved.values}
+                view={blueprint.blueprint.views.detail}
+                skipComponentId={entityHeadingComponentId}
               />
-            </Box>
+              {(resolved.reusable_attributes?.length ?? 0) > 0 && (
+                <Box component="section" sx={{ mt: 4 }}>
+                  <Typography component="h2" variant="h6">
+                    {t('entities.additionalAttributes')}
+                  </Typography>
+                  <EntityView
+                    attributes={resolved.reusable_attributes}
+                    contextId={contextId}
+                    entityId={entityId}
+                    values={resolved.reusable_values ?? {}}
+                  />
+                </Box>
+              )}
+            </>
           )}
         </Paper>
         <ExtensionOutlet

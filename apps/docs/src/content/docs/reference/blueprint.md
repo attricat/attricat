@@ -244,7 +244,7 @@ Some tags change where the web app shows an attribute when it builds a layout au
 | Tag | Hides the attribute from |
 | --- | --- |
 | `hidden` | Every surface below |
-| `hidden:form` | Automatically generated create and edit forms |
+| `hidden:form` | Editors added outside the layout, such as **Other attributes**, and the automatically generated create form |
 | `hidden:detail` | Automatically generated entity detail views |
 | `hidden:explorer` | Explorer filter and facet choices |
 | `hidden:metadata` | The Attributes table on the blueprint page |
@@ -294,12 +294,12 @@ A selected attribute keeps all of the mixin's settings. To pick up changes in th
 | View | Purpose | Allowed `type` |
 | --- | --- | --- |
 | `dropdown_option` | Label for the entity in relationship pickers, filter pills, and search results. Required on entity blueprints. | `dropdown_option` |
-| `detail` | Read-only entity page. | A layout block |
-| `edit` | Create and edit form. | A layout block |
+| `detail` | Entity page and create form. Fields the user may change are edited in place. | A layout block |
+| `edit` | Deprecated and ignored by the web app. Still accepted, and edit components in it are still validated. | A layout block |
 | `table` | Explorer columns. | `table` |
 | `extension_layout` | Order and visibility of extension contributions on this blueprint's entity pages. | `extension_layout` |
 
-When `detail`, `edit`, or `table` is missing, the web app lists attributes in declaration order.
+When `detail` or `table` is missing, the web app lists attributes in declaration order.
 
 ### `dropdown_option`
 
@@ -371,7 +371,7 @@ Every block accepts an optional `component` reference. Every `field` and `relati
 ### Component references
 
 ```toml
-component = { id = "catalog.field_edit", version = 1 }
+component = { id = "catalog.url_display", version = 1 }
 renderer = { id = "example.currency", version = 1, props = { currency = "USD" } }
 ```
 
@@ -406,7 +406,7 @@ Built-in components:
 | `catalog.markdown_display` | 1 | `field` (detail) | `string` | |
 | `catalog.markdown_edit` | 1 | `field` (edit) | `string` | |
 
-See [Field controls](/builders/views/#field-controls) for how these behave.
+Components marked *(edit)* are accepted only in the deprecated `edit` view. Where a `detail` field is editable, the web app uses the display component's paired edit component, or the standard editor for the value type. See [Field controls](/builders/views/#field-controls) for how these behave.
 
 An extension cell renderer's ID and version must match a renderer declared by an enabled extension for the column's value type.
 

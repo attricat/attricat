@@ -4,7 +4,6 @@ import {
   GlobeIcon,
   InfoIcon,
   PanelRightIcon,
-  PencilIcon,
   RefreshCwIcon,
   RotateCcwClockIcon,
   TrashIcon,
@@ -93,15 +92,6 @@ export const EntityPreviewToolbar = ({
   const readinessText = readiness && publicationReadinessText(readiness);
   return (
     <EntityToolbar label={t('entities.entityPreview')}>
-      <Tooltip title={t('entities.editEntity')}>
-        <RouterIconButton
-          aria-label={t('entities.editEntity')}
-          params={{ entityId }}
-          to="/entities/$entityId/edit"
-        >
-          <PencilIcon />
-        </RouterIconButton>
-      </Tooltip>
       <Tooltip title={t('entities.changes')}>
         <RouterIconButton
           aria-label={t('entities.changes')}

@@ -56,7 +56,7 @@ Sekcja **Publikacja** na stronie encji oznacza etykietą **Niegotowe** kanały, 
 
 ## Co cofa publikację
 
-Domyślnie każda zmiana encji cofa wszystkie jej publikacje w kanałach: zmiany wartości, relacji, plików, metadanych systemowych i aktualizacje schematu.
+Domyślnie każda zmiana encji cofa wszystkie jej publikacje w kanałach: zmiany wartości, relacji, plików, metadanych systemowych i aktualizacje schematu. Na stronie encji każde pole jest zapisywane jako osobna zmiana, więc publikacje cofa już zapisanie pierwszego pola.
 
 Zmiana lub usunięcie kontekstu cofa publikacje w tym kanale, ponieważ może zmienić wynikowe wartości każdej encji w tym kontekście.
 

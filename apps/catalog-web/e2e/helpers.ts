@@ -1,4 +1,9 @@
-import { expect, type Browser, type Page } from '@playwright/test';
+import {
+  expect,
+  type Browser,
+  type Locator,
+  type Page,
+} from '@playwright/test';
 import { e2eApiUrl, e2eMailpitUrl } from './ports.ts';
 
 const fixtureEmail = 'fixture@example.test';
@@ -235,4 +240,27 @@ export const signInAsMember = async (browser: Browser, roleCode: string) => {
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page).toHaveURL(/\/$/);
   return page;
+};
+
+/** Resolves with the entity page's next inline field save of `entityId`. */
+export const entitySave = (page: Page, entityId: string) =>
+  page.waitForResponse(
+    (response) =>
+      response.request().method() === 'PUT' &&
+      new URL(response.url()).pathname === `/api/v1/entities/${entityId}`,
+  );
+
+/**
+ * Commits an inline entity field by pressing `key` in it (Tab leaves the
+ * field, Enter commits a single-line input) and waits for the save to succeed.
+ */
+export const commitField = async (
+  page: Page,
+  entityId: string,
+  field: Locator,
+  key: 'Tab' | 'Enter' = 'Tab',
+) => {
+  const saved = entitySave(page, entityId);
+  await field.press(key);
+  expect((await saved).ok()).toBe(true);
 };

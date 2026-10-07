@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { createEntityBlueprint, suffix } from './helpers';
+import { createEntityBlueprint, entitySave, suffix } from './helpers';
 
 const statusSchema = JSON.stringify({
   type: 'string',
@@ -20,7 +20,7 @@ const statusSchema = JSON.stringify({
 });
 
 for (const colorScheme of ['light', 'dark'] as const) {
-  test(`creates, displays and edits status in ${colorScheme} mode; rejects stale saves`, async ({
+  test(`creates, displays and edits status in ${colorScheme} mode; flags conflicting saves`, async ({
     page,
     context,
   }) => {
@@ -44,38 +44,53 @@ for (const colorScheme of ['light', 'dark'] as const) {
     await page.getByRole('button', { name: 'Create entity' }).click();
     await expect(page).toHaveURL(/\/entities\/[0-9a-f-]{36}$/);
     await expect(page.getByText('Draft', { exact: true })).toBeVisible();
-    const editUrl = `${page.url()}/edit`;
-    await page.goto(editUrl);
+    const entityUrl = page.url();
+    const entityId = entityUrl.split('/').at(-1)!;
     const stalePage = await context.newPage();
-    await stalePage.goto(editUrl);
+    await stalePage.goto(entityUrl);
     await expect(
       stalePage.getByRole('combobox', { name: 'status', exact: true }),
     ).toBeVisible();
-    await page.getByRole('combobox', { name: 'status', exact: true }).click();
+    const status = page.getByRole('combobox', { name: 'status', exact: true });
+    await status.click();
     await expect(
       page.getByRole('option', { name: 'Done', exact: true }),
     ).toBeDisabled();
+    // A status choice saves at once and becomes the next starting state.
+    const saved = entitySave(page, entityId);
     await page.getByRole('option', { name: 'Live', exact: true }).click();
-    // A second unsaved selection must not use Live as the starting state.
-    await page.getByRole('combobox', { name: 'status', exact: true }).click();
+    expect((await saved).ok()).toBe(true);
+    await expect(status).toContainText('Live');
+    await status.click();
     await expect(
       page.getByRole('option', { name: 'Done', exact: true }),
+    ).toBeEnabled();
+    await expect(
+      page.getByRole('option', { name: 'Draft', exact: true }),
     ).toBeDisabled();
     await page.keyboard.press('Escape');
-    await page.getByRole('button', { name: 'Save changes' }).click();
-    await expect(page).not.toHaveURL(/\/edit$/);
-    await expect(page.getByText('Live', { exact: true })).toBeVisible();
-    await stalePage
-      .getByRole('combobox', { name: 'status', exact: true })
-      .click();
+    await page.reload();
+    await expect(status).toContainText('Live');
+
+    // The other page still edits the version it loaded.
+    const staleStatus = stalePage.getByRole('combobox', {
+      name: 'status',
+      exact: true,
+    });
+    const staleSave = entitySave(stalePage, entityId);
+    await staleStatus.click();
     await stalePage.getByRole('option', { name: 'Live', exact: true }).click();
-    await stalePage.getByRole('button', { name: 'Save changes' }).click();
-    await expect(stalePage.getByRole('alert')).toContainText(
-      'entity changed since it was loaded',
-    );
+    expect((await staleSave).status()).toBe(409);
+    const conflict = stalePage
+      .getByRole('alert')
+      .filter({ hasText: 'Someone else changed this entity' });
+    await expect(conflict).toBeVisible();
     await expect(
-      stalePage.getByRole('combobox', { name: 'status', exact: true }),
-    ).toContainText('Live');
+      conflict.getByRole('button', { name: 'Keep my changes' }),
+    ).toBeVisible();
+    await conflict.getByRole('button', { name: 'Use latest values' }).click();
+    await expect(conflict).toBeHidden();
+    await expect(staleStatus).toContainText('Live');
     await stalePage.close();
   });
 }

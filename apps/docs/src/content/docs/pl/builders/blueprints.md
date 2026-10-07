@@ -9,7 +9,7 @@ Schemat to dokument TOML opisujący jeden rodzaj rekordu katalogu: jego atrybuty
 
 Schematy możesz pisać w dwóch miejscach:
 
-- W aplikacji internetowej, w **Zarządzanie → Schematy → Nowy schemat**. Edytor waliduje treść podczas pisania i pokazuje podgląd powstałego formularza.
+- W aplikacji internetowej, w **Zarządzanie → Schematy → Nowy schemat**. Edytor waliduje treść podczas pisania i pokazuje podgląd powstałej strony encji, na którym możesz wypróbować edycję przykładowych wartości.
 - W dowolnym edytorze tekstu, a następnie przesłać je przez CLI:
 
   ```sh

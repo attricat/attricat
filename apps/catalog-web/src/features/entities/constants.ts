@@ -20,7 +20,6 @@ export const ENTITY_PREVIEW_QUERY = {
   relationshipLimit: 1,
 } as const;
 
-export const EDIT_ENTITY_FORM_ID = 'edit-entity-form';
 export const ENTITY_EXTENSION_DRAWER_ID = 'entity-extension-contributions';
 export const ENTITY_DRAWER_WIDTH = 480;
 
@@ -87,9 +86,6 @@ export const CONTEXT_MENU_WIDTH = 180;
 
 export const RELATIONSHIP_PICKER_ACTION_MIN_WIDTH = 300;
 
-/** Distance of the floating smart fill button from the viewport edges. */
-export const SMART_FILL_BUTTON_OFFSET = 24;
-
 export const CONVERSATION_TITLE_POLL_INTERVAL = 3_000;
 /** Number of entity ID characters included in a new conversation title. */
 export const CONVERSATION_ENTITY_ID_PREFIX_LENGTH = 8;
@@ -108,3 +104,7 @@ export const statusTransitionDenialCodes = {
 } as const;
 export type StatusTransitionDenialCode =
   (typeof statusTransitionDenialCodes)[keyof typeof statusTransitionDenialCodes];
+/** API error code for a write based on an outdated entity version. */
+export const STALE_ENTITY_ERROR_CODE = 'stale_entity';
+/** API error code for a write that leaves the entity outside its JSON Schema. */
+export const ENTITY_SCHEMA_MISMATCH_ERROR_CODE = 'entity_schema_mismatch';

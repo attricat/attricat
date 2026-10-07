@@ -96,8 +96,8 @@ export const MigrateEntityPage = ({ entityId }: { entityId: string }) => {
   return (
     <EntityPage title={t('entities.upgradeEntity')}>
       <Box sx={{ mt: 1 }}>
-        <Link params={{ entityId }} to="/entities/$entityId/edit">
-          {t('entities.backToEdit')}
+        <Link params={{ entityId }} to="/entities/$entityId">
+          {t('entities.backToEntity')}
         </Link>
       </Box>
       {preview.isPending && (

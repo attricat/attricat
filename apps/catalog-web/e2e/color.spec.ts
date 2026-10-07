@@ -1,5 +1,10 @@
 import { expect, test } from '@playwright/test';
-import { createEntityBlueprint, suffix } from './helpers';
+import {
+  commitField,
+  createEntityBlueprint,
+  entitySave,
+  suffix,
+} from './helpers';
 
 for (const mode of ['light', 'dark'] as const) {
   test(`creates, edits, and clears a configured color in ${mode} mode`, async ({
@@ -64,6 +69,11 @@ columns = [{ field = "title" }, { field = "hex", renderer = { id = "catalog.colo
       .click();
     await expect(page).toHaveURL(/\/entities\/[0-9a-f-]{36}$/);
     const entityUrl = page.url();
+    const entityId = entityUrl.split('/').at(-1)!;
+    // The entity page edits the value in place; the table displays it.
+    const hex = page.getByRole('textbox', { name: 'hex', exact: true });
+    await expect(hex).toHaveValue('#aBcDeF');
+    await page.goto(`/?blueprint=${code}`);
     const displayedColor = page.getByText('#aBcDeF', { exact: true });
     await expect(displayedColor).toBeVisible();
     await expect(
@@ -72,22 +82,37 @@ columns = [{ field = "title" }, { field = "hex", renderer = { id = "catalog.colo
     await page.screenshot({
       path: testInfo.outputPath(`color-display-${mode}.png`),
     });
-    await page.reload();
-    await expect(page.getByText('#aBcDeF', { exact: true })).toBeVisible();
-    await page.getByRole('link', { name: 'Edit entity' }).click();
+    await page.goto(entityUrl);
+    await expect(hex).toHaveValue('#aBcDeF');
+    // Picking a color is a final choice and saves at once.
+    const picked = entitySave(page, entityId);
     await page.getByLabel('Pick color for hex').fill('#ffffff');
-    await expect(
-      page.getByRole('textbox', { name: 'hex', exact: true }),
-    ).toHaveValue('#ffffff');
-    await page.getByRole('button', { name: 'Save changes' }).click();
-    await expect(page.getByText('#ffffff', { exact: true })).toBeVisible();
+    expect((await picked).ok()).toBe(true);
+    await expect(hex).toHaveValue('#ffffff');
     await page.goto(`/?blueprint=${code}`);
     await expect(page.getByText('#ffffff', { exact: true })).toBeVisible();
     await page.goto(entityUrl);
-    await page.getByRole('link', { name: 'Edit entity' }).click();
-    await page.getByRole('textbox', { name: 'hex', exact: true }).fill('');
-    await page.getByRole('button', { name: 'Save changes' }).click();
-    await expect(page.getByText('Not set', { exact: true })).toBeVisible();
+    const saves: string[] = [];
+    page.on('request', (request) => {
+      if (request.method() === 'PUT') saves.push(request.url());
+    });
+    // An invalid color stays a local edit with its error and is not sent.
+    await hex.fill('#fff');
+    await hex.press('Enter');
+    await expect(
+      page.getByText('Enter a six-digit hex color, such as #1a2b3c.'),
+    ).toBeVisible();
+    await expect(hex).toHaveValue('#fff');
+    expect(saves).toEqual([]);
+    await hex.fill('');
+    // Tab would move to the picker inside the same field, so commit with Enter.
+    await commitField(page, entityId, hex, 'Enter');
+    await page.reload();
+    await expect(hex).toHaveValue('');
+    await page.goto(`/?blueprint=${code}`);
+    await expect(
+      page.getByRole('link', { name: 'Color sample' }),
+    ).toBeVisible();
     await expect(page.getByText('#ffffff', { exact: true })).toHaveCount(0);
   });
 }
