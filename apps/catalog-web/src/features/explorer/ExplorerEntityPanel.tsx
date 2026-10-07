@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { RouterButton } from '../../components/RouterLink';
 import { compactIconSize } from '../../components/iconSizes';
 import { EntityPreview } from '../entities/components/EntityPreview';
+import { EntityCommentsLink } from '../entity-comments/EntityCommentsLink';
 import { lexiconText } from '../lexicon/lexicon';
 import { entityPanelWidth } from './constants';
 
@@ -114,7 +115,18 @@ export const ExplorerEntityPanel = ({
               </IconButton>
             </Tooltip>
           </Box>
-          <Box sx={{ mb: 2 }}>{headerActions}</Box>
+          <Box
+            sx={{
+              alignItems: 'center',
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 1,
+              mb: 2,
+            }}
+          >
+            {headerActions}
+            <EntityCommentsLink entityId={entityId} />
+          </Box>
           {children}
         </Paper>
       )}

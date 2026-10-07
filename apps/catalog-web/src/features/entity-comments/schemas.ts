@@ -26,5 +26,8 @@ export const commentPageSchema = z.object({
   items: z.array(commentSchema),
   has_more: z.boolean(),
 });
+export const commentCountSchema = z.object({
+  count: z.number().int().nonnegative(),
+});
 export type EntityComment = z.infer<typeof commentSchema>;
 export type CommentCursor = { before_time: string; before_id: string };

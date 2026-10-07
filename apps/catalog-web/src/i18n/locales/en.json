@@ -15,7 +15,10 @@
     "validation": "Enter a comment of 1–{{max}} characters, without null characters.",
     "markdownHint": "Markdown supported. {{count}} / {{max}} characters. Images and HTML are not rendered.",
     "reload": "Reload comments and keep draft",
-    "conflict": "This comment changed elsewhere. Reload comments, then choose Edit and Restore draft to reconcile your text with the latest version."
+    "conflict": "This comment changed elsewhere. Reload comments, then choose Edit and Restore draft to reconcile your text with the latest version.",
+    "count_one": "{{count}} comment",
+    "count_other": "{{count}} comments",
+    "openComments": "Open comments on the entity page"
   },
   "markdown": {
     "write": "Write",
