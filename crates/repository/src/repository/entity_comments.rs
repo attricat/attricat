@@ -44,6 +44,20 @@ impl CatalogRepository {
         Ok(rows)
     }
 
+    pub async fn count_entity_comments(&self, entity: Uuid) -> Result<i64, RepositoryError> {
+        let mut transaction = self.pool.begin().await?;
+        self.lock_entity(&mut transaction, entity).await?;
+        let count = sqlx::query_scalar(
+            "SELECT count(*) FROM entity_comments WHERE workspace_id=$1 AND entity_id=$2",
+        )
+        .bind(self.workspace_id_for_runtime())
+        .bind(entity)
+        .fetch_one(&mut *transaction)
+        .await?;
+        transaction.commit().await?;
+        Ok(count)
+    }
+
     pub async fn create_entity_comment(
         &self,
         entity: Uuid,

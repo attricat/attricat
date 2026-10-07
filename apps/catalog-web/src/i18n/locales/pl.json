@@ -15,7 +15,12 @@
     "validation": "Wpisz komentarz o długości od 1 do {{max}} znaków, bez znaków null.",
     "markdownHint": "Obsługiwany jest Markdown. {{count}} / {{max}} znaków. Obrazy i HTML nie są wyświetlane.",
     "reload": "Odśwież komentarze i zachowaj szkic",
-    "conflict": "Ten komentarz został zmieniony. Odśwież komentarze, wybierz Edytuj i przywróć szkic, aby uzgodnić swój tekst z najnowszą wersją."
+    "conflict": "Ten komentarz został zmieniony. Odśwież komentarze, wybierz Edytuj i przywróć szkic, aby uzgodnić swój tekst z najnowszą wersją.",
+    "count_one": "{{count}} komentarz",
+    "count_few": "{{count}} komentarze",
+    "count_many": "{{count}} komentarzy",
+    "count_other": "{{count}} komentarza",
+    "openComments": "Otwórz komentarze na stronie encji"
   },
   "markdown": {
     "write": "Edytuj",

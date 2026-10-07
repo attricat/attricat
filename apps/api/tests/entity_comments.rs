@@ -210,6 +210,17 @@ async fn comments_have_stable_bounded_pagination(pool: PgPool) {
         .unwrap();
     assert_eq!(first["items"].as_array().unwrap().len(), 30);
     assert_eq!(first["has_more"], true);
+    let count: Value = client
+        .get(format!("{path}/count"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(count["count"], 31);
     let last = &first["items"][29];
     let second: Value = client
         .get(&path)

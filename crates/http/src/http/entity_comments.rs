@@ -22,6 +22,11 @@ pub(super) struct CommentPage {
     has_more: bool,
 }
 
+#[derive(Serialize)]
+pub(super) struct CommentCount {
+    count: i64,
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct CreateComment {
@@ -53,6 +58,14 @@ pub(super) async fn list(
     let has_more = items.len() > COMMENT_PAGE_SIZE as usize;
     items.truncate(COMMENT_PAGE_SIZE as usize);
     Ok(Json(CommentPage { items, has_more }))
+}
+
+pub(super) async fn count(
+    ScopedRepository(repository): ScopedRepository,
+    ApiPath(entity): ApiPath<Uuid>,
+) -> Result<Json<CommentCount>, ApiError> {
+    let count = repository.count_entity_comments(entity).await?;
+    Ok(Json(CommentCount { count }))
 }
 
 pub(super) async fn create(

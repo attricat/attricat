@@ -19,6 +19,7 @@ import { Timestamp } from '../../time/Timestamp';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
 import { listComments } from './api';
+import { commentsSectionId } from './constants';
 import { CommentComposer } from './CommentComposer';
 import { MarkdownContent } from '../markdown/MarkdownContent';
 import { commentQueryKeys } from './queryKeys';
@@ -140,10 +141,19 @@ export const EntityCommentsPanel = ({ entityId }: { entityId: string }) => {
     void client.invalidateQueries({ queryKey: key });
   };
   const items = comments.data?.pages.flatMap((page) => page.items) ?? [];
+  const sectionRef = useRef<HTMLElement>(null);
+  // The section loads after the entity, too late for the router's own
+  // scroll to a link's #comments target.
+  useEffect(() => {
+    if (window.location.hash === `#${commentsSectionId}`)
+      sectionRef.current?.scrollIntoView();
+  }, []);
   return (
     <Paper
       component="section"
       aria-labelledby={headingId}
+      id={commentsSectionId}
+      ref={sectionRef}
       sx={{ mt: 3, p: { xs: 2, md: 3 } }}
     >
       <Typography id={headingId} component="h2" variant="h6" sx={{ mb: 2 }}>

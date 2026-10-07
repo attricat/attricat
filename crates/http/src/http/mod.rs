@@ -1001,6 +1001,10 @@ pub fn router(state: AppState) -> Router {
             get(entity_comments::list).post(entity_comments::create),
         )
         .route(
+            "/v1/entities/{entity_id}/comments/count",
+            get(entity_comments::count),
+        )
+        .route(
             "/v1/entities/{entity_id}/comments/{comment_id}",
             axum::routing::patch(entity_comments::update),
         )

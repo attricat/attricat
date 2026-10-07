@@ -1,5 +1,6 @@
 import { request, requestNoContent } from '../../api/request';
 import {
+  commentCountSchema,
   commentInputSchema,
   commentPageSchema,
   type CommentCursor,
@@ -12,6 +13,9 @@ export const listComments = (entityId: string, cursor?: CommentCursor) => {
   const query = cursor ? `?${new URLSearchParams(cursor)}` : '';
   return request(`${commentsPath(entityId)}${query}`, commentPageSchema);
 };
+
+export const getCommentCount = (entityId: string, signal?: AbortSignal) =>
+  request(`${commentsPath(entityId)}/count`, commentCountSchema, { signal });
 
 export const createComment = (entityId: string, body: string) =>
   requestNoContent(commentsPath(entityId), {
