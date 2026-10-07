@@ -8,12 +8,13 @@ type Props = ComponentProps<HeadingRenderer>;
 /** Renders the heading component configured in an entity's detail view. */
 export const EntityHeading = ({
   attributes,
+  compact,
   entityId,
   values,
   view,
 }: Props) => {
   const renderer = resolveHeadingRenderer(findEntityHeading(view)?.component);
   return renderer
-    ? createElement(renderer, { attributes, entityId, values, view })
+    ? createElement(renderer, { attributes, compact, entityId, values, view })
     : null;
 };

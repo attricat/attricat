@@ -9,17 +9,41 @@ import { compactIconSize } from '../../components/iconSizes';
 
 export type ActionMenuPosition = { left: number; top: number };
 
+export type OpenEntityPanel = (entityId: string, opener: HTMLElement) => void;
+
+/**
+ * Links to the entity page. With `onOpenPanel`, a plain click opens the
+ * entity in a panel over the results instead; modified clicks still open the page.
+ */
 export const EntityDisplayCell = ({
   contextCodes,
   entity,
+  onOpenPanel,
 }: {
   contextCodes: readonly string[];
   entity: EntityItem;
+  onOpenPanel?: OpenEntityPanel;
 }) => {
   const { t } = useTranslation();
   return (
     <Box sx={{ alignItems: 'center', display: 'flex', gap: 1 }}>
-      <Link params={{ entityId: entity.id }} to="/entities/$entityId">
+      <Link
+        onClick={(event) => {
+          if (
+            !onOpenPanel ||
+            event.button !== 0 ||
+            event.altKey ||
+            event.ctrlKey ||
+            event.metaKey ||
+            event.shiftKey
+          )
+            return;
+          event.preventDefault();
+          onOpenPanel(entity.id, event.currentTarget);
+        }}
+        params={{ entityId: entity.id }}
+        to="/entities/$entityId"
+      >
         {contextDisplayLabel(entity.display, entity.id, contextCodes)}
       </Link>
       {entity.is_sample && (

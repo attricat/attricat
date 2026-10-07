@@ -812,7 +812,10 @@
       "entityReference": "- {{label}} — entity_id: {{entityId}}",
       "getEntityInstruction": "Use get_entity for each entity_id before making recommendations or changes."
     },
-    "assignedToMe": "Assigned to me (or my teams)"
+    "assignedToMe": "Assigned to me (or my teams)",
+    "entityPanelTitle": "{{blueprint}} entity",
+    "openFullPage": "Open full page",
+    "closeEntityPanel": "Close entity panel"
   },
   "audit": {
     "title": "Activity / Audit log",

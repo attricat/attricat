@@ -61,6 +61,7 @@ type Props = {
   isFetching: boolean;
   isFetchingNextPage: boolean;
   onLoadMore: () => void;
+  panelEntityId?: string;
 };
 
 export const VirtualizedExplorerTable = ({
@@ -76,6 +77,7 @@ export const VirtualizedExplorerTable = ({
   isFetching,
   isFetchingNextPage,
   onLoadMore,
+  panelEntityId,
 }: Props) => {
   const { t } = useTranslation();
   const rows = table.getRowModel().rows;
@@ -184,9 +186,11 @@ export const VirtualizedExplorerTable = ({
             const row = rows[virtualRow.index];
             return (
               <TableRow
+                aria-current={row.id === panelEntityId || undefined}
                 data-index={virtualRow.index}
                 key={row.id}
                 ref={measureElement}
+                selected={row.id === panelEntityId}
               >
                 {row.getVisibleCells().map((cell) => (
                   <TableCell

@@ -15,11 +15,13 @@ type ResolvedValue = { value: unknown };
 
 export const EntityHeading = ({
   attributes,
+  compact = false,
   entityId,
   values,
   view,
 }: {
   attributes: readonly Attribute[];
+  compact?: boolean;
   entityId: string;
   values: Record<string, ResolvedValue>;
   view?: ViewDefinition;
@@ -33,7 +35,14 @@ export const EntityHeading = ({
   const titleValue = titleAttribute
     ? values[titleAttribute.code]?.value
     : undefined;
-  const fallback = <PageTitle icon={EntityIcon}>{entityId}</PageTitle>;
+  const titleProps = compact
+    ? ({ component: 'h2', variant: 'h4' } as const)
+    : {};
+  const fallback = (
+    <PageTitle icon={EntityIcon} {...titleProps}>
+      {entityId}
+    </PageTitle>
+  );
   if (!titleAttribute || titleValue === null || titleValue === undefined)
     return fallback;
   return (
@@ -42,7 +51,7 @@ export const EntityHeading = ({
         fallbackMessage={i18n.t('views.unableToRenderEntityHeading')}
         logLabel="entity heading"
       >
-        <PageTitle icon={EntityIcon}>
+        <PageTitle icon={EntityIcon} {...titleProps}>
           <AttributeValueText attribute={titleAttribute} value={titleValue} />
         </PageTitle>
       </FieldErrorBoundary>

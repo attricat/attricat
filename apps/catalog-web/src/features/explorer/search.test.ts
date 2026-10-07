@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   entitySelectionSearch,
   inlineExplorerSearchParams,
+  parseExplorerRouteSearch,
   parseExplorerSearch,
 } from './search';
 
@@ -148,5 +149,22 @@ describe('entitySelectionSearch', () => {
         '@id:123e4567-e89b-12d3-a456-426614174001,123e4567-e89b-12d3-a456-426614174002',
       sort: { field: 'name', direction: 'asc' },
     });
+  });
+});
+
+describe('parseExplorerRouteSearch', () => {
+  it('keeps the panel entity outside the Explorer search', () => {
+    const entity = 'b67f5d16-d2be-4669-9870-b5a73282a26e';
+    expect(parseExplorerRouteSearch({ blueprint: 'product', entity })).toEqual({
+      blueprint: 'product',
+      entity,
+    });
+    expect(parseExplorerSearch({ blueprint: 'product', entity })).toEqual({
+      blueprint: 'product',
+    });
+  });
+
+  it('drops a malformed panel entity', () => {
+    expect(parseExplorerRouteSearch({ entity: 'invalid' })).toEqual({});
   });
 });

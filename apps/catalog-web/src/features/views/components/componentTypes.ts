@@ -35,6 +35,8 @@ export type ValueEditorProps = {
 
 export type HeadingRenderer = ComponentType<{
   attributes: readonly Attribute[];
+  /** Renders a smaller section heading for a panel beside another page. */
+  compact?: boolean;
   entityId: string;
   values: Record<string, { value: unknown }>;
   view?: ViewDefinition;
