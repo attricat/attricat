@@ -167,12 +167,16 @@ export const EntityInlineFields = forwardRef<EntityInlineFieldsHandle, Props>(
           : t('entities.schemaValidationFailed'),
       }),
     };
-    const fieldErrors = Object.fromEntries(
-      Object.keys(saves.pending).map((code) => [
-        code,
-        serverErrors[code] ?? t('entities.changeNotSaved'),
-      ]),
-    );
+    // A change only reads as not saved once a save failed; marking fields
+    // while a save is in flight would shift the layout under the pointer.
+    const fieldErrors = saves.error
+      ? Object.fromEntries(
+          Object.keys(saves.pending).map((code) => [
+            code,
+            serverErrors[code] ?? t('entities.changeNotSaved'),
+          ]),
+        )
+      : {};
     // Errors no field can show, and violations of fields not on the page.
     const generalError =
       saves.error &&

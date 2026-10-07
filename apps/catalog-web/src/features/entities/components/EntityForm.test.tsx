@@ -21,8 +21,11 @@ const attribute = (
   ...overrides,
 });
 
-/** A blueprint whose edit view shows one field with a configured component. */
-const withEditComponent = (
+/**
+ * A blueprint whose detail view shows one field with a display component; the
+ * form edits it with the paired edit component.
+ */
+const withDisplayComponent = (
   code: string,
   componentId: string,
   overrides: Partial<Attribute> = {},
@@ -149,7 +152,7 @@ describe('EntityForm', () => {
 
   it('selects URL editors, blocks invalid programmatic values, saves and clears URLs', async () => {
     const { onSubmit, ref } = renderForm({
-      blueprint: withEditComponent('website', 'catalog.url_edit'),
+      blueprint: withDisplayComponent('website', 'catalog.url_display'),
     });
     const input = screen.getByRole('textbox', { name: 'website' });
     expect(input.getAttribute('type')).toBe('url');
@@ -185,7 +188,10 @@ describe('EntityForm', () => {
 
   it('dispatches the configured Markdown editor and submits unchanged source', async () => {
     const { onSubmit } = renderForm({
-      blueprint: withEditComponent('description', 'catalog.markdown_edit'),
+      blueprint: withDisplayComponent(
+        'description',
+        'catalog.markdown_display',
+      ),
     });
     const source = '    code\n\n**Hello**  \nworld\n';
     fireEvent.change(screen.getByRole('textbox', { name: 'description' }), {
@@ -201,7 +207,7 @@ describe('EntityForm', () => {
   });
 
   const emailBlueprint = (overrides: Partial<Attribute> = {}) =>
-    withEditComponent('contact', 'catalog.email_edit', overrides);
+    withDisplayComponent('contact', 'catalog.email_display', overrides);
 
   it('validates configured email input and preserves case and plus tags on save', async () => {
     const { onSubmit } = renderForm({ blueprint: emailBlueprint() });

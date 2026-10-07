@@ -148,6 +148,18 @@ describe('EntityInlineFields', () => {
     expect(screen.getByRole('tab', { name: 'Write' })).toBeTruthy();
   });
 
+  it('does not mark a field while its save is in flight', async () => {
+    const user = userEvent.setup();
+    vi.mocked(updateEntity).mockReturnValue(new Promise(() => {}));
+    renderFields();
+
+    await user.type(screen.getByRole('textbox', { name: 'name' }), '!');
+    await user.click(screen.getByRole('button', { name: 'Elsewhere' }));
+
+    await waitFor(() => expect(screen.getByText('Saving…')).toBeTruthy());
+    expect(screen.queryByText('This change is not saved yet.')).toBeNull();
+  });
+
   it('shows values read-only to users who cannot edit', () => {
     renderFields(false);
     expect(screen.queryByRole('textbox')).toBeNull();

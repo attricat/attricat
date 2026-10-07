@@ -28,6 +28,7 @@ import {
   viewFieldEditors,
 } from '../../views/viewFieldComponents';
 import { entityHeadingComponentId } from '../../views/components/blocks/EntityHeadingDefinition';
+import { resolveEditComponent } from '../../views/components/registry';
 import { EntityView } from '../../views/components/EntityView';
 import { draftEditors, type DraftEditor } from '../../drafts/constants';
 import { DraftRestoreDialog } from '../../drafts/DraftRestoreDialog';
@@ -434,7 +435,10 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
                   <EntityFormAttributeEditor
                     {...editorContext}
                     attribute={attribute}
-                    component={component ?? fieldComponents.get(attribute.code)}
+                    component={
+                      resolveEditComponent(component) ??
+                      fieldComponents.get(attribute.code)
+                    }
                     required={requiredAttributes.includes(attribute.code)}
                     onChange={(nextValue) => {
                       const nextFields = {
