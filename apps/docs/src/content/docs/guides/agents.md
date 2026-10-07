@@ -7,6 +7,8 @@ The Attricat agent is a conversational assistant that can read your catalog and 
 
 Agents are optional. An administrator has to [configure an AI provider](/reference/configuration/#agents) before they appear.
 
+In the public demo the agent is read-only. It can do everything listed under *Without approval*, and when you ask for a change it explains what it would do instead of proposing it. The conversation shows a **Read only** notice.
+
 ## Start a conversation
 
 Open **Agents** in the sidebar and choose **New conversation**. Give the thread a title that describes the task, such as *Clean up inactive suppliers*, and describe what you want.

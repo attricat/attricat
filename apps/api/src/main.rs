@@ -103,6 +103,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // with seeded per-role accounts, which the web app offers to pre-fill.
     let demo_mode = boolean_env("CATALOG_DEMO_MODE", false)?;
     let sample_accounts = demo_mode || boolean_env("CATALOG_SAMPLE_ACCOUNTS", false)?;
+    // Demo visitors share accounts, so the agent may only read there.
+    let agent_provider = agent_provider.map(|mut config| {
+        config.read_only = demo_mode;
+        config
+    });
     let bootstrap_workspace_name = std::env::var("CATALOG_BOOTSTRAP_WORKSPACE_NAME")
         .unwrap_or_else(|_| {
             if demo_mode {

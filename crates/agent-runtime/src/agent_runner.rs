@@ -52,8 +52,30 @@ const SYSTEM_PROMPT_SECTIONS: [&str; 6] = [
     APPROVAL_PROMPT,
 ];
 
+/// Appended when the client is read-only, which leaves every mutation tool
+/// out of the request.
+const READ_ONLY_PROMPT: &str = "This deployment is a read-only demo: you have no tools that change the catalogue, and no approval can be requested. When the user asks for a change, inspect what it would affect and explain the change you would propose and which approval it would need, then tell them they can make it themselves in the app. Do not claim or imply that you changed anything.";
+
 fn system_prompt() -> String {
     SYSTEM_PROMPT_SECTIONS.join(" ")
+}
+
+fn run_system_prompt(read_only: bool) -> String {
+    let prompt = system_prompt();
+    if read_only {
+        format!("{prompt} {READ_ONLY_PROMPT}")
+    } else {
+        prompt
+    }
+}
+
+/// The tools offered to the provider: all of them, or reads only.
+fn offered_tools(read_only: bool) -> Vec<agent_tools::ToolDefinition> {
+    let mut tools = agent_tools::definitions();
+    if read_only {
+        tools.retain(|tool| matches!(agent_tools::kind(tool.function.name), Ok(ToolKind::Read)));
+    }
+    tools
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -140,7 +162,10 @@ async fn drive(
     };
     let mut request = vec![ChatMessage {
         role: "system".into(),
-        content: Value::String(format!("{}{context_prompt}", system_prompt())),
+        content: Value::String(format!(
+            "{}{context_prompt}",
+            run_system_prompt(provider.read_only())
+        )),
         tool_call_id: None,
         tool_calls: None,
     }];
@@ -158,14 +183,15 @@ async fn drive(
     }
     let pending = Arc::new(Mutex::new(String::new()));
     let stream_pending = pending.clone();
-    let mut stream = Box::pin(
-        provider.stream(request, agent_tools::definitions(), move |delta| {
-            stream_pending
-                .lock()
-                .expect("agent delta buffer poisoned")
-                .push_str(delta);
-        }),
-    );
+    let mut stream =
+        Box::pin(
+            provider.stream(request, offered_tools(provider.read_only()), move |delta| {
+                stream_pending
+                    .lock()
+                    .expect("agent delta buffer poisoned")
+                    .push_str(delta);
+            }),
+        );
     // The provider callback is synchronous. Flush while its future waits for
     // network frames so subscribers see text before generation completes,
     // without a database write for every token.
@@ -233,6 +259,18 @@ async fn drive(
             }
         };
         let kind = match agent_tools::kind(&call.function.name) {
+            // A read-only run never offers mutations, so one is never queued
+            // for approval even if the provider names it anyway.
+            Ok(ToolKind::Mutation) if provider.read_only() => {
+                fail_run(
+                    repository,
+                    run_id,
+                    "unknown_tool",
+                    "provider requested a tool that was not offered",
+                )
+                .await?;
+                return Ok(());
+            }
             Ok(kind) => kind,
             Err(_) => {
                 fail_run(
@@ -551,7 +589,12 @@ pub async fn resume_claimed(
     let agent_run = repository.get_agent_run(run_id).await?;
     let (actor, workspace) = repository.agent_run_initiator(run_id).await?;
     for call in repository.decided_agent_tool_calls(run_id).await? {
-        let result = if call.state == "approved" {
+        let result = if call.state == "approved" && provider.read_only() {
+            // Approved before the deployment became read-only.
+            Err(
+                json!({"code":"disabled_in_demo","message":"Agent changes are turned off in this deployment."}),
+            )
+        } else if call.state == "approved" {
             if !mutation_authorized(
                 repository,
                 actor,
@@ -810,6 +853,28 @@ mod tests {
         ] {
             assert!(prompt.contains(text), "{text}");
         }
+    }
+
+    #[test]
+    fn read_only_runs_offer_reads_and_say_so() {
+        let tools = super::offered_tools(true);
+        assert!(!tools.is_empty());
+        for tool in &tools {
+            assert!(
+                matches!(
+                    crate::agent_tools::kind(tool.function.name),
+                    Ok(crate::agent_tools::ToolKind::Read)
+                ),
+                "{}",
+                tool.function.name
+            );
+        }
+        assert!(
+            super::offered_tools(false).len() > tools.len(),
+            "writable runs offer mutations too"
+        );
+        assert!(super::run_system_prompt(true).ends_with(super::READ_ONLY_PROMPT));
+        assert_eq!(super::run_system_prompt(false), system_prompt());
     }
 
     #[test]

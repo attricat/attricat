@@ -56,6 +56,11 @@ export const ConversationDetailPage = ({
           title={conversation.data?.title ?? t('agents.conversation')}
           titleVariant="h3"
         />
+        {conversation.data?.read_only && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            {t('agents.readOnlyNotice')}
+          </Alert>
+        )}
         {conversation.error && (
           <Alert severity="error">{conversation.error.message}</Alert>
         )}

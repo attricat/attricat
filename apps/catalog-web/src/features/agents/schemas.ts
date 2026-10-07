@@ -15,6 +15,9 @@ export const conversationSchema = z.object({
   updated_at: dateTime,
   archived_at: dateTime.nullable(),
 });
+export const conversationDetailSchema = conversationSchema.extend({
+  read_only: z.boolean(),
+});
 export const messageAttachmentSchema = z.object({
   id,
   filename: z.string(),

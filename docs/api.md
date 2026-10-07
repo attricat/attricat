@@ -811,8 +811,9 @@ Agent routes require `agents.run`. `GET`/`POST /agent/conversations` lists or
 creates conversations. `GET`/`PATCH`/`DELETE /agent/conversations/{id}` reads,
 renames, or archives a thread; it exposes ordered messages at
 `/agent/conversations/{id}/messages` and run history at
-`/agent/conversations/{id}/runs`. Posting a message creates a durable queued
-run and returns `202`. The API worker executes the run independently of the
+`/agent/conversations/{id}/runs`. The single-conversation `GET` also returns
+`read_only`, which is `true` when `CATALOG_DEMO_MODE` limits the agent to read
+tools. Posting a message creates a durable queued run and returns `202`. The API worker executes the run independently of the
 HTTP request.
 
 `GET /agent/runs/{run_id}/events` is an SSE stream of durable status, message,
