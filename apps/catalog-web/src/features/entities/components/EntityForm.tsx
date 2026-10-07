@@ -154,9 +154,7 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
       {
         contextId,
         defaultContextId,
-        usesDefaultEditView: Boolean(
-          blueprint && !showAllAttributes && !detailView,
-        ),
+        usesFormLayout: Boolean(blueprint && !showAllAttributes && !detailView),
       },
     );
     const fieldEditors = viewFieldEditors(fieldComponents, editableAttributes);

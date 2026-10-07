@@ -71,13 +71,7 @@ export const componentPlacedFields = (
 
 /** Attribute codes the view places as fields or relationship lists. */
 export const viewPlacedFields = (view?: ViewDefinition) =>
-  new Set(
-    viewNodes(view).flatMap((node) =>
-      node.type === 'field' || node.type === 'relationship_list'
-        ? [node.field]
-        : [],
-    ),
-  );
+  new Set(placedFields(view));
 
 /** Edit components that apply to these attributes, keyed by attribute code. */
 export const viewFieldEditors = (

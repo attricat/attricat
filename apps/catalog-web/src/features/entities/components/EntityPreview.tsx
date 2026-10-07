@@ -30,7 +30,6 @@ import { EntityPreviewToolbar } from './EntityPreviewToolbar';
 import { EntitySchemaSubheader } from './EntitySchemaSubheader';
 import { RecordControlsPanel } from './RecordControlsPanel';
 import { RelationshipPickerActionBar } from './RelationshipPickerActionBar';
-import { ReusableAttributeAttachControl } from './ReusableAttributeAttachControl';
 import { useEntityPublications } from './useEntityPublications';
 
 const EntityCommentsPanel = lazy(() =>
@@ -242,7 +241,6 @@ export const EntityPreview = ({
                     blueprint={blueprint.data}
                     contextId={selectedContextId}
                     contexts={contexts.data}
-                    contextsPending={contexts.isPending}
                     defaultContextId={defaultContextId}
                     entityId={entityId}
                     // A cached form must not become the save baseline before
@@ -258,12 +256,6 @@ export const EntityPreview = ({
                     )}
                     statusTransitions={statusTransitions.data}
                     inlineFieldsRef={inlineFieldsRef}
-                    renderFooterActions={(hasPendingChanges) => (
-                      <ReusableAttributeAttachControl
-                        disabled={hasPendingChanges}
-                        entityId={entityId}
-                      />
-                    )}
                     onContextChange={setSelectedContext}
                     resolved={resolved.data}
                     singleColumn={compact}

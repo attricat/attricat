@@ -28,6 +28,9 @@ export const useEntityPreviewData = (
     enabled: contextId !== null && entityForm.data?.can_write === true,
   });
   const resolvedEntity = resolved.data?.entity;
+  // The form carries the same revision, but it is refetched on every opening;
+  // this cached revision is shared by every entity of the blueprint, so the
+  // values render without waiting for the form.
   const blueprint = useQuery({
     queryKey: entityQueryKeys.blueprintRevision(
       resolvedEntity?.blueprint_id,
