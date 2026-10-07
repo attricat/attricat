@@ -38,14 +38,16 @@ export const ValueField = ({
 }) => {
   const { t } = useTranslation();
   const label = attributeLabel(attribute);
+  // An editor host returns nothing for a value it does not let the user edit.
+  const editor = renderEditor?.(attribute, component) ?? null;
   return (
     <FieldErrorBoundary
       fallbackMessage={t('views.unableToRenderAttribute', { attribute: label })}
       logLabel={label}
     >
       <Stack spacing={0.5}>
-        {renderEditor ? (
-          renderEditor(attribute, component)
+        {editor !== null ? (
+          editor
         ) : (
           <>
             <Box sx={{ alignItems: 'center', display: 'flex', gap: 0.5 }}>
@@ -83,7 +85,7 @@ export const ValueField = ({
               )}
           </>
         )}
-        {renderEditor && renderAttributeDecoration?.(attribute)}
+        {editor !== null && renderAttributeDecoration?.(attribute)}
         {renderAttributePanel?.(attribute)}
       </Stack>
     </FieldErrorBoundary>

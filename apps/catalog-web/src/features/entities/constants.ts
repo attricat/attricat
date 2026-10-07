@@ -110,3 +110,5 @@ export type StatusTransitionDenialCode =
   (typeof statusTransitionDenialCodes)[keyof typeof statusTransitionDenialCodes];
 /** API error code for a write based on an outdated entity version. */
 export const STALE_ENTITY_ERROR_CODE = 'stale_entity';
+/** API error code for a write that leaves the entity outside its JSON Schema. */
+export const ENTITY_SCHEMA_MISMATCH_ERROR_CODE = 'entity_schema_mismatch';

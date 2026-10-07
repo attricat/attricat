@@ -93,6 +93,29 @@ export const unplacedRequiredAttributes = (
   );
 };
 
+/**
+ * Editable attributes the detail view does not render, so an inline editor
+ * can still offer them. `skipComponentId` names a block shown elsewhere.
+ */
+export const unplacedEditableAttributes = (
+  attributes: readonly Attribute[],
+  view: ViewDefinition | undefined,
+  skipComponentId?: string,
+) => {
+  const usesFallback =
+    !view ||
+    view.type === viewBlockTypes.table ||
+    view.type === viewBlockTypes.dropdownOption ||
+    view.type === viewBlockTypes.extensionLayout;
+  const placed = viewPlacedFields(view, skipComponentId);
+  return attributes.filter((attribute) =>
+    usesFallback
+      ? isHiddenByDefault(attribute, 'detail') &&
+        !isHiddenByDefault(attribute, 'form')
+      : !placed.has(attribute.code) && !isHiddenByDefault(attribute, 'form'),
+  );
+};
+
 /** Local scalar values that were cleared and must be removed on save. */
 export const removedFormValues = (
   existingValues: readonly FormAttributeValue[],

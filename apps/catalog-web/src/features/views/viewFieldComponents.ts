@@ -6,9 +6,15 @@ import type {
 } from '../entities/api';
 import { resolveValueEditor } from './components/registry';
 
-const viewNodes = (view?: ViewDefinition) => {
+const viewNodes = (view?: ViewDefinition, skipComponentId?: string) => {
   const nodes: (ViewNode | ViewDefinition)[] = [];
   const visit = (node: ViewNode | ViewDefinition) => {
+    if (
+      skipComponentId &&
+      'component' in node &&
+      node.component?.id === skipComponentId
+    )
+      return;
     nodes.push(node);
     if ('children' in node) node.children.forEach(visit);
     if (node.type === 'tabs')
@@ -29,10 +35,16 @@ export const viewFieldComponents = (view?: ViewDefinition) => {
   return result;
 };
 
-/** Attribute codes the view places as fields or relationship lists. */
-export const viewPlacedFields = (view?: ViewDefinition) =>
+/**
+ * Attribute codes the view places as fields or relationship lists, ignoring
+ * the subtree of a component the caller renders elsewhere.
+ */
+export const viewPlacedFields = (
+  view?: ViewDefinition,
+  skipComponentId?: string,
+) =>
   new Set(
-    viewNodes(view).flatMap((node) =>
+    viewNodes(view, skipComponentId).flatMap((node) =>
       node.type === 'field' || node.type === 'relationship_list'
         ? [node.field]
         : [],

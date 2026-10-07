@@ -67,6 +67,26 @@ export const resolveValueEditor = (
     : undefined;
 };
 
+/**
+ * The component that edits a field placed with `component`: an edit component
+ * as is, or the edit counterpart of a display component.
+ */
+export const resolveEditComponent = (
+  component: ComponentSelector,
+): ComponentReference | undefined => {
+  const definition = resolveViewComponent(component);
+  if (!component || !definition) return undefined;
+  if (definition.valueEditor) return { props: {}, ...component };
+  const editor = definition.editComponentId
+    ? viewComponentRegistry.get(
+        componentKey(definition.editComponentId, definition.version),
+      )
+    : undefined;
+  return editor
+    ? { id: editor.id, version: editor.version, props: {} }
+    : undefined;
+};
+
 export const resolveHeadingRenderer = (
   component: ComponentSelector,
 ): HeadingRenderer | undefined =>

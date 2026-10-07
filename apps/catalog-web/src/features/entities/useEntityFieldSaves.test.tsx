@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiRequestError } from '../../api/request';
 import { updateEntity, type Attribute } from './api';
-import { fieldSaveRequest } from './entityFieldSaves';
+import { fieldSaveRequest, schemaMismatchField } from './entityFieldSaves';
 import { useEntityFieldSaves } from './useEntityFieldSaves';
 
 vi.mock('./api', async (importOriginal) => ({
@@ -79,6 +79,35 @@ describe('fieldSaveRequest', () => {
     expect(
       fieldSaveRequest(attributes, { summary: '', manual: 'x' }, {}, null),
     ).toEqual({ values: [], relationships: [], remove_values: [] });
+  });
+});
+
+describe('schemaMismatchField', () => {
+  const mismatch = (details: unknown, message = 'Bad') =>
+    new ApiRequestError(422, message, 'entity_schema_mismatch', details);
+
+  it('finds a missing required property in the server message', () => {
+    expect(
+      schemaMismatchField(
+        mismatch(
+          { context: 'default', instance_path: '' },
+          "resolved entity values for context 'default' do not match the entity schema at '': \"name\" is a required property",
+        ),
+        ['name'],
+      ),
+    ).toEqual({ code: 'name', missing: true });
+  });
+
+  it('uses the instance path and ignores fields not on the page', () => {
+    expect(
+      schemaMismatchField(mismatch({ instance_path: '/price' }, 'too small'), [
+        'price',
+      ]),
+    ).toEqual({ code: 'price', missing: false });
+    expect(
+      schemaMismatchField(mismatch({ instance_path: '/hidden' }), ['price']),
+    ).toBeUndefined();
+    expect(schemaMismatchField(new Error('x'), ['price'])).toBeUndefined();
   });
 });
 

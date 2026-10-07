@@ -1,9 +1,12 @@
+import { z } from 'zod';
+import { ApiRequestError } from '../../api/request';
 import type { Attribute, updateEntity } from './api';
 import {
   relationshipTargetsForForm,
   serializeAttributeValues,
   type FieldEditRules,
 } from './entityForm';
+import { ENTITY_SCHEMA_MISMATCH_ERROR_CODE } from './constants';
 import { attributeValueTypes } from './valueTypes';
 
 export type FieldSaveRequest = Omit<
@@ -44,4 +47,34 @@ export const fieldSaveRequest = (
         context_id: contextId,
       })),
   };
+};
+
+const schemaMismatchDetailsSchema = z.object({
+  instance_path: z.string().default(''),
+});
+const requiredPropertyPattern = /"([^"]+)" is a required property/;
+
+/**
+ * The field an `entity_schema_mismatch` rejection is about: the first segment
+ * of its instance path, or the missing property of a `required` failure.
+ */
+export const schemaMismatchField = (
+  error: unknown,
+  fieldCodes: readonly string[],
+): { code: string; missing: boolean } | undefined => {
+  if (
+    !(error instanceof ApiRequestError) ||
+    error.code !== ENTITY_SCHEMA_MISMATCH_ERROR_CODE
+  )
+    return undefined;
+  const details = schemaMismatchDetailsSchema.safeParse(error.details);
+  if (!details.success) return undefined;
+  const [segment] = details.data.instance_path.split('/').filter(Boolean);
+  const missing = segment
+    ? undefined
+    : requiredPropertyPattern.exec(error.message)?.[1];
+  const code = segment?.replaceAll('~1', '/').replaceAll('~0', '~') ?? missing;
+  return code && fieldCodes.includes(code)
+    ? { code, missing: missing !== undefined }
+    : undefined;
 };

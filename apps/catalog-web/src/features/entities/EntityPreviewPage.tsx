@@ -25,6 +25,7 @@ import {
   duplicateEntity,
   getBlueprintRevision,
   getCurrentBlueprint,
+  getEntityForm,
 } from './api';
 import {
   ENTITY_HEADER_CONTEXT_VERSION,
@@ -32,6 +33,8 @@ import {
 } from './constants';
 import { entityQueryKeys } from './queryKeys';
 import { invalidateEntitySearches } from './invalidateEntity';
+import { entityStatusTransitionsOptions } from './queryOptions';
+import { statusParentContexts } from './status';
 import {
   useEntityContextSelection,
   useResolvedEntityPreview,
@@ -59,7 +62,7 @@ export const EntityPreviewPage = ({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [extensionPanelOpen, setExtensionPanelOpen] = useState(false);
   const [agentPanelOpen, setAgentPanelOpen] = useState(false);
-  const { contextId, contexts, setSelectedContext } =
+  const { contextId, contexts, defaultContextId, setSelectedContext } =
     useEntityContextSelection();
   const selectedContextId = contextId ?? undefined;
   const session = useQuery({
@@ -79,6 +82,16 @@ export const EntityPreviewPage = ({
     },
   });
   const resolved = useResolvedEntityPreview(entityId, contextId);
+  const entityForm = useQuery({
+    queryKey: entityQueryKeys.form(entityId),
+    queryFn: ({ signal }) => getEntityForm(entityId, signal),
+    refetchOnMount: 'always',
+  });
+  // Explains which transitions this user may take; the server still decides.
+  const statusTransitions = useQuery({
+    ...entityStatusTransitionsOptions(entityId, contextId),
+    enabled: contextId !== null && entityForm.data?.can_write === true,
+  });
   const resolvedEntity = resolved.data?.entity;
   const blueprint = useQuery({
     queryKey: entityQueryKeys.blueprintRevision(
@@ -247,7 +260,18 @@ export const EntityPreviewPage = ({
               contextId={selectedContextId}
               contexts={contexts.data}
               contextsPending={contexts.isPending}
+              defaultContextId={defaultContextId}
               entityId={entityId}
+              // A cached form must not become the save baseline before the
+              // opening refresh has completed.
+              form={
+                entityForm.isFetchedAfterMount ? entityForm.data : undefined
+              }
+              statusParentContextIds={statusParentContexts(
+                contexts.data,
+                contextId,
+              )}
+              statusTransitions={statusTransitions.data}
               onContextChange={setSelectedContext}
               resolved={resolved.data}
             />
