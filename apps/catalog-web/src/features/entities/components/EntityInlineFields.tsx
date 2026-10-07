@@ -28,9 +28,14 @@ import {
   type StatusTransitionAccess,
 } from '../api';
 import { violationFieldErrors } from '../checkViolations';
-import { validateEntityForm, valuesForForm } from '../entityForm';
+import {
+  entityFormValidationMessages,
+  validateEntityForm,
+  valuesForForm,
+} from '../entityForm';
 import {
   editableFormAttributes,
+  entitySchemaRequiredAttributes,
   headingEditableAttributes,
   smartFillFormFields,
   unplacedEditableAttributes,
@@ -132,6 +137,11 @@ export const EntityInlineFields = forwardRef<EntityInlineFieldsHandle, Props>(
     const changeableCodes = changeable.map((attribute) => attribute.code);
     const editComponents = viewFieldEditComponents(view);
     const fieldRules = viewFieldEditors(editComponents, changeable);
+    // The entity schema only applies to values in the default context.
+    const requiredAttributes =
+      contextId === defaultContextId
+        ? entitySchemaRequiredAttributes(form.blueprint.blueprint.entity_schema)
+        : [];
     const saves = useEntityFieldSaves({
       entityId,
       contextId,
@@ -227,9 +237,13 @@ export const EntityInlineFields = forwardRef<EntityInlineFieldsHandle, Props>(
             validateEntityForm(
               [attribute],
               { [attribute.code]: value },
-              [],
+              requiredAttributes,
               undefined,
-              undefined,
+              {
+                ...entityFormValidationMessages(),
+                // Matches a required value the server rejects.
+                required: t('entities.valueRequired'),
+              },
               rules ? new Map([[attribute.code, rules]]) : undefined,
             ).fieldErrors[attribute.code]
           }

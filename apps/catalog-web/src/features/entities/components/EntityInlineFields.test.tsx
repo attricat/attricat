@@ -45,7 +45,7 @@ const view = {
     { type: 'field' as const, field: 'sku' },
   ],
 };
-const form = (canWrite: boolean) =>
+const form = (canWrite: boolean, entitySchema?: unknown) =>
   ({
     can_write: canWrite,
     entity: {
@@ -62,6 +62,7 @@ const form = (canWrite: boolean) =>
         status: 'published',
         version: 1,
         views: { detail: view },
+        entity_schema: entitySchema,
       },
       attributes,
       table_path_attributes: [],
@@ -89,16 +90,25 @@ const resolved = {
   sku: { value: 'L-1', source_context: { id: contextId, code: 'default' } },
 };
 
-const renderFields = (canWrite = true) => {
+const renderFields = (
+  canWrite = true,
+  {
+    entitySchema,
+    viewContextId = contextId,
+  }: {
+    entitySchema?: unknown;
+    viewContextId?: string;
+  } = {},
+) => {
   const ref = createRef<EntityInlineFieldsHandle>();
   render(
     <QueryClientProvider client={new QueryClient()}>
       <EntityInlineFields
         attributes={attributes}
-        contextId={contextId}
+        contextId={viewContextId}
         defaultContextId={contextId}
         entityId={entityId}
-        form={form(canWrite)}
+        form={form(canWrite, entitySchema)}
         ref={ref}
         resolvedValues={resolved}
         reusableResolvedValues={{}}
@@ -158,6 +168,39 @@ describe('EntityInlineFields', () => {
 
     await waitFor(() => expect(screen.getByText('Saving…')).toBeTruthy());
     expect(screen.queryByText('This change is not saved yet.')).toBeNull();
+  });
+
+  it('keeps a required field that was cleared unsaved', async () => {
+    const user = userEvent.setup();
+    renderFields(true, { entitySchema: { required: ['name'] } });
+
+    await user.clear(screen.getByRole('textbox', { name: 'name' }));
+    await user.click(screen.getByRole('button', { name: 'Elsewhere' }));
+
+    expect(await screen.findByText('A value is required.')).toBeTruthy();
+    expect(updateEntity).not.toHaveBeenCalled();
+  });
+
+  it('saves a cleared required field outside the default context', async () => {
+    const user = userEvent.setup();
+    const otherContextId = '123e4567-e89b-12d3-a456-426614174002';
+    renderFields(true, {
+      entitySchema: { required: ['name'] },
+      viewContextId: otherContextId,
+    });
+    const name = screen.getByRole('textbox', { name: 'name' });
+
+    await user.type(name, 'Lamp');
+    await user.click(screen.getByRole('button', { name: 'Elsewhere' }));
+    await waitFor(() => expect(updateEntity).toHaveBeenCalledOnce());
+    await user.clear(name);
+    await user.click(screen.getByRole('button', { name: 'Elsewhere' }));
+
+    await waitFor(() => expect(updateEntity).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(updateEntity).mock.calls[1]![1].remove_values).toEqual([
+      { attribute_code: 'name', context_id: otherContextId },
+    ]);
+    expect(screen.queryByText('A value is required.')).toBeNull();
   });
 
   it('shows values read-only to users who cannot edit', () => {
