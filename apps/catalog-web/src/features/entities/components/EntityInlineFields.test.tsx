@@ -45,7 +45,7 @@ const view = {
     { type: 'field' as const, field: 'sku' },
   ],
 };
-const form = (canWrite: boolean) =>
+const form = (canWrite: boolean, notes?: string) =>
   ({
     can_write: canWrite,
     entity: {
@@ -79,6 +79,16 @@ const form = (canWrite: boolean) =>
         context_id: contextId,
         value: 'L-1',
       },
+      ...(notes === undefined
+        ? []
+        : [
+            {
+              kind: 'scalar',
+              attribute_code: 'notes',
+              context_id: contextId,
+              value: notes,
+            },
+          ]),
     ],
     reusable_attributes: [],
     reusable_values: [],
@@ -89,7 +99,7 @@ const resolved = {
   sku: { value: 'L-1', source_context: { id: contextId, code: 'default' } },
 };
 
-const renderFields = (canWrite = true) => {
+const renderFields = (canWrite = true, notes?: string) => {
   const ref = createRef<EntityInlineFieldsHandle>();
   render(
     <QueryClientProvider client={new QueryClient()}>
@@ -98,9 +108,19 @@ const renderFields = (canWrite = true) => {
         contextId={contextId}
         defaultContextId={contextId}
         entityId={entityId}
-        form={form(canWrite)}
+        form={form(canWrite, notes)}
         ref={ref}
-        resolvedValues={resolved}
+        resolvedValues={
+          notes === undefined
+            ? resolved
+            : {
+                ...resolved,
+                notes: {
+                  value: notes,
+                  source_context: { id: contextId, code: 'default' },
+                },
+              }
+        }
         reusableResolvedValues={{}}
         statusParentContextIds={[]}
         view={view}
@@ -146,6 +166,63 @@ describe('EntityInlineFields', () => {
     });
     // The markdown display component edits with its markdown editor.
     expect(screen.getByRole('tab', { name: 'Write' })).toBeTruthy();
+  });
+
+  it('shows set Markdown rendered until the user asks to edit it', async () => {
+    const user = userEvent.setup();
+    renderFields(true, '**Bright** light');
+
+    expect(screen.getByText('Bright').tagName).toBe('STRONG');
+    expect(screen.queryByRole('tab', { name: 'Write' })).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Edit notes' }));
+    const notes = screen.getByRole('textbox', { name: 'notes' });
+    expect(document.activeElement).toBe(notes);
+    expect((notes as HTMLTextAreaElement).selectionStart).toBe(
+      '**Bright** light'.length,
+    );
+    await user.type(notes, ' and *warm*');
+    await user.click(screen.getByRole('button', { name: 'Elsewhere' }));
+
+    await waitFor(() => expect(updateEntity).toHaveBeenCalledOnce());
+    expect(vi.mocked(updateEntity).mock.calls[0]![1].values).toEqual([
+      {
+        kind: 'scalar',
+        attribute_code: 'notes',
+        context_id: contextId,
+        value: '**Bright** light and *warm*',
+      },
+    ]);
+    expect(screen.getByText('warm').tagName).toBe('EM');
+    expect(screen.queryByRole('textbox', { name: 'notes' })).toBeNull();
+  });
+
+  it('keeps the Markdown editor open while switching to its preview', async () => {
+    const user = userEvent.setup();
+    renderFields(true, 'Bright');
+
+    await user.click(screen.getByRole('button', { name: 'Edit notes' }));
+    await user.type(screen.getByRole('textbox', { name: 'notes' }), '!');
+    await user.click(screen.getByRole('tab', { name: 'Preview' }));
+
+    expect(screen.getByRole('tab', { name: 'Write' })).toBeTruthy();
+    expect(updateEntity).not.toHaveBeenCalled();
+  });
+
+  it('closes the Markdown editor on Escape without saving', async () => {
+    const user = userEvent.setup();
+    renderFields(true, 'Bright');
+
+    await user.click(screen.getByRole('button', { name: 'Edit notes' }));
+    await user.type(screen.getByRole('textbox', { name: 'notes' }), '!');
+    await user.keyboard('{Escape}');
+
+    expect(screen.queryByRole('textbox', { name: 'notes' })).toBeNull();
+    expect(screen.getByText('Bright')).toBeTruthy();
+    expect(document.activeElement).toBe(
+      screen.getByRole('button', { name: 'Edit notes' }),
+    );
+    expect(updateEntity).not.toHaveBeenCalled();
   });
 
   it('does not mark a field while its save is in flight', async () => {

@@ -49,7 +49,7 @@ const stringEdit = (
   valueEditor: ComponentType<ValueEditorProps>,
   behavior: Pick<
     ViewComponentDefinition,
-    'validateValue' | 'preservesWhitespace'
+    'validateValue' | 'preservesWhitespace' | 'editsOnRequest'
   > = {},
 ): ViewComponentDefinition => ({
   id,
@@ -114,7 +114,7 @@ export const markdownDisplayComponent = stringDisplay(
 export const markdownEditComponent = stringEdit(
   VIEW_COMPONENT_IDS.markdownEdit,
   MarkdownFieldEditor,
-  { preservesWhitespace: true },
+  { preservesWhitespace: true, editsOnRequest: true },
 );
 
 /** Registered in this order; `contracts/view-components.json` must match. */

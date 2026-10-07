@@ -24,6 +24,7 @@ Każde pole zapisuje się osobno:
 - Pola tekstowe, liczbowe i daty zapisują się, gdy opuścisz pole. Pola jednowierszowe zapisują się też po naciśnięciu Enter.
 - Listy wyboru, pola wyboru, statusy, pola użytkowników i zespołów, relacje i pliki zapisują się od razu po zmianie.
 - Escape przywraca zapisaną wartość.
+- Pola Markdown pokazują sformatowany tekst. Aby go zmienić, wybierz ikonę ołówka obok etykiety pola; po opuszczeniu pola znów widać sformatowany tekst.
 
 Każde zapisane pole to osobna zmiana z własnym wpisem w historii i dzienniku audytu. Jeśli encja jest opublikowana, pierwsze zapisane pole cofa jej publikacje, chyba że Twoja rola je zachowuje; zobacz [Publikowanie](/pl/guides/publishing/#co-cofa-publikację).
 

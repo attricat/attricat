@@ -298,6 +298,7 @@
     "savingChanges": "Saving…",
     "unsavedChangeCount_one": "{{count}} change not saved",
     "unsavedChangeCount_other": "{{count}} changes not saved",
+    "editField": "Edit {{field}}",
     "changeNotSaved": "This change is not saved yet.",
     "valueRequired": "A value is required.",
     "changedByAnotherEditor": "Someone else changed this entity. Choose whether to keep your unsaved changes or use the latest values.",
