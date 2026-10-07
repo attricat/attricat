@@ -108,3 +108,5 @@ export const statusTransitionDenialCodes = {
 } as const;
 export type StatusTransitionDenialCode =
   (typeof statusTransitionDenialCodes)[keyof typeof statusTransitionDenialCodes];
+/** API error code for a write based on an outdated entity version. */
+export const STALE_ENTITY_ERROR_CODE = 'stale_entity';
