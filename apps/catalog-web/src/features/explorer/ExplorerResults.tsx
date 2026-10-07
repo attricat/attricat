@@ -5,6 +5,7 @@ import { SaveSelectionAsSearchDialog } from '../saved-views/SaveSelectionAsSearc
 import { ExplorerResultsTable } from './ExplorerResultsTable';
 import { HiddenOutdatedNotice } from './HiddenOutdatedNotice';
 import type { AttributeFilterDraft } from './attributeFilterValues';
+import type { OpenEntityPanel } from './ExplorerTableCells';
 import type { ExplorerSearch } from './search';
 import type { ExplorerData } from './useExplorerData';
 import { useExplorerSelection } from './useExplorerSelection';
@@ -12,16 +13,20 @@ import { useExplorerSelection } from './useExplorerSelection';
 type Props = {
   data: ExplorerData;
   onFilterCell: (draft: AttributeFilterDraft) => void;
+  onOpenPanel?: OpenEntityPanel;
   onShowAllVersions: () => void;
   onSortChange: (field: string) => void;
+  panelEntityId?: string;
   search: ExplorerSearch;
 };
 
 export const ExplorerResults = ({
   data,
   onFilterCell,
+  onOpenPanel,
   onShowAllVersions,
   onSortChange,
+  panelEntityId,
   search,
 }: Props) => {
   const {
@@ -104,6 +109,8 @@ export const ExplorerResults = ({
                 resultBlueprint.blueprint.version
               }
               onFilterCell={onFilterCell}
+              onOpenPanel={onOpenPanel}
+              panelEntityId={panelEntityId}
               onSaveSelectionAsSearch={setSavedSearchSelection}
               onSortChange={onSortChange}
               sort={search.sort}

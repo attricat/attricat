@@ -24,22 +24,15 @@ import type { EntityInlineFieldsHandle } from './components/EntityInlineFields';
 import { useEntityPublications } from './components/useEntityPublications';
 import { ApiErrorAlert } from '../../components/CheckViolationsAlert';
 import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
-import {
-  getBlueprintRevision,
-  getCurrentBlueprint,
-  getEntityForm,
-} from './api';
+import { getCurrentBlueprint } from './api';
 import {
   ENTITY_HEADER_CONTEXT_VERSION,
   FALLBACK_BLUEPRINT_VERSION,
 } from './constants';
 import { entityQueryKeys } from './queryKeys';
-import { entityStatusTransitionsOptions } from './queryOptions';
 import { statusParentContexts } from './status';
-import {
-  useEntityContextSelection,
-  useResolvedEntityPreview,
-} from './useEntityContexts';
+import { useEntityContextSelection } from './useEntityContexts';
+import { useEntityPreviewData } from './useEntityPreviewData';
 import { currentSession } from '../auth/api';
 import { authQueryKeys } from '../auth/queryKeys';
 import { lexiconText } from '../lexicon/lexicon';
@@ -73,35 +66,9 @@ export const EntityPreviewPage = ({
   });
   const canPublish = session.data?.capabilities?.entities_publish === true;
   const publications = useEntityPublications(entityId, contextId, canPublish);
-  const resolved = useResolvedEntityPreview(entityId, contextId);
-  const entityForm = useQuery({
-    queryKey: entityQueryKeys.form(entityId),
-    queryFn: ({ signal }) => getEntityForm(entityId, signal),
-    refetchOnMount: 'always',
-  });
-  // Explains which transitions this user may take; the server still decides.
-  const statusTransitions = useQuery({
-    ...entityStatusTransitionsOptions(entityId, contextId),
-    enabled: contextId !== null && entityForm.data?.can_write === true,
-  });
+  const { blueprint, entityForm, resolved, statusTransitions } =
+    useEntityPreviewData(entityId, contextId);
   const resolvedEntity = resolved.data?.entity;
-  const blueprint = useQuery({
-    queryKey: entityQueryKeys.blueprintRevision(
-      resolvedEntity?.blueprint_id,
-      resolvedEntity?.blueprint_version,
-    ),
-    queryFn: () => {
-      if (!resolvedEntity)
-        throw new Error(t('entities.entityPreviewUnavailable'));
-      return getBlueprintRevision(
-        resolvedEntity.blueprint_id,
-        resolvedEntity.blueprint_version,
-      );
-    },
-    enabled: Boolean(
-      resolvedEntity?.blueprint_id && resolvedEntity.blueprint_version,
-    ),
-  });
   const currentBlueprint = useQuery({
     queryKey: entityQueryKeys.currentBlueprint(
       resolvedEntity?.blueprint_id ?? '',

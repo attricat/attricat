@@ -24,7 +24,7 @@ import {
   buildExplorerColumnDefinitions,
 } from './ExplorerResultColumns';
 import { ExplorerResultsToolbar } from './ExplorerResultsToolbar';
-import type { ActionMenuPosition } from './ExplorerTableCells';
+import type { ActionMenuPosition, OpenEntityPanel } from './ExplorerTableCells';
 import {
   buildExplorerTableColumns,
   configurableColumnIds,
@@ -62,6 +62,10 @@ type Props = {
   onSortChange: (field: string) => void;
   onFilterCell?: (draft: AttributeFilterDraft) => void;
   onSaveSelectionAsSearch: (entities: EntityItem[]) => void;
+  /** Opens a result in the entity panel instead of navigating to its page. */
+  onOpenPanel?: OpenEntityPanel;
+  /** The result open in the entity panel. */
+  panelEntityId?: string;
   /** The selected context followed by its ancestors. */
   contextCodes: readonly string[];
   publicationContextCode: string;
@@ -87,6 +91,8 @@ export const ExplorerResultsTable = ({
   onSortChange,
   onFilterCell,
   onSaveSelectionAsSearch,
+  onOpenPanel,
+  panelEntityId,
   contextCodes,
   publicationContextCode,
   publicationContextId,
@@ -181,6 +187,7 @@ export const ExplorerResultsTable = ({
     onFilterCell,
     onOpenActions: (entityId, position) =>
       setActionMenu({ entityId, position }),
+    onOpenPanel,
     takeCellFrame,
     t,
     timeZone,
@@ -248,6 +255,7 @@ export const ExplorerResultsTable = ({
         isFetching={isFetching}
         isFetchingNextPage={isFetchingNextPage}
         onLoadMore={onLoadMore}
+        panelEntityId={panelEntityId}
       />
       {items.length === 0 && (
         <Typography sx={{ p: 2 }}>

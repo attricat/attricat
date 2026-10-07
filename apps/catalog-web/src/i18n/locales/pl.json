@@ -834,7 +834,10 @@
       "entityReference": "- {{label}} — entity_id: {{entityId}}",
       "getEntityInstruction": "Przed przedstawieniem rekomendacji lub wprowadzeniem zmian użyj get_entity dla każdego entity_id."
     },
-    "assignedToMe": "Przypisane do mnie (lub moich zespołów)"
+    "assignedToMe": "Przypisane do mnie (lub moich zespołów)",
+    "entityPanelTitle": "Encja: {{blueprint}}",
+    "openFullPage": "Otwórz pełną stronę",
+    "closeEntityPanel": "Zamknij panel encji"
   },
   "audit": {
     "title": "Aktywność / dziennik audytu",

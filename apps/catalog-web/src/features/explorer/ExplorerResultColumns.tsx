@@ -37,6 +37,7 @@ import {
   PublicationStatusCell,
   SchemaVersionCell,
   type ActionMenuPosition,
+  type OpenEntityPanel,
 } from './ExplorerTableCells';
 import {
   configuredColumnLabel,
@@ -62,6 +63,7 @@ type ColumnOptions = {
   onSortChange: (field: string) => void;
   onFilterCell?: (draft: AttributeFilterDraft) => void;
   onOpenActions: (entityId: string, position: ActionMenuPosition) => void;
+  onOpenPanel?: OpenEntityPanel;
   takeCellFrame: () => boolean;
   t: TFunction;
   /** The user's effective zone, used to edit datetime cell filters. */
@@ -98,6 +100,7 @@ export const buildExplorerColumnDefinitions = ({
   onSortChange,
   onFilterCell,
   onOpenActions,
+  onOpenPanel,
   takeCellFrame,
   t,
   timeZone,
@@ -171,6 +174,7 @@ export const buildExplorerColumnDefinitions = ({
         <EntityDisplayCell
           contextCodes={contextCodes}
           entity={info.row.original}
+          onOpenPanel={onOpenPanel}
         />
       ),
     }) as ExplorerColumnDef,

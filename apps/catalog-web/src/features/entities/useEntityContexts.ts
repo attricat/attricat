@@ -7,8 +7,11 @@ import { contextQueryKeys } from '../contexts/queryKeys';
 import { getResolvedEntityPreview } from './api';
 import { entityQueryKeys } from './queryKeys';
 
-/** Loads attribute contexts and tracks the selected one, defaulting to Default. */
-export const useEntityContextSelection = () => {
+/**
+ * Loads attribute contexts and tracks the selected one. Until a context is
+ * chosen, it follows `initialContextId` and then the Default context.
+ */
+export const useEntityContextSelection = (initialContextId?: string) => {
   const [selectedContext, setSelectedContext] = useState('');
   const contexts = useQuery({
     queryKey: contextQueryKeys.all(),
@@ -18,7 +21,7 @@ export const useEntityContextSelection = () => {
     contexts.data?.find((context) => context.code === defaultContextCode)?.id ??
     null;
   return {
-    contextId: selectedContext || defaultContextId,
+    contextId: selectedContext || initialContextId || defaultContextId,
     contexts,
     defaultContextId,
     setSelectedContext,

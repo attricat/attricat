@@ -71,6 +71,20 @@ export const parseExplorerSearch = (
   input: Record<string, unknown>,
 ): ExplorerSearch => explorerSearchSchema.parse(input);
 
+/**
+ * The Explorer route's URL: the search plus the entity open in the side
+ * panel. The panel is not part of the search, so saved views never store it.
+ */
+const explorerRouteSearchSchema = explorerSearchSchema.extend({
+  entity: z.uuid().optional().catch(undefined),
+});
+
+export type ExplorerRouteSearch = z.infer<typeof explorerRouteSearchSchema>;
+
+export const parseExplorerRouteSearch = (
+  input: Record<string, unknown>,
+): ExplorerRouteSearch => explorerRouteSearchSchema.parse(input);
+
 export type ExplorerSort = NonNullable<ExplorerSearch['sort']>;
 
 /**
