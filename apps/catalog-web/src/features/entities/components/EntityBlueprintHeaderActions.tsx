@@ -23,7 +23,9 @@ export const EntityBlueprintHeaderActions = ({
 }: Props) => {
   const { t } = useTranslation();
   return (
-    <Box sx={{ alignItems: 'center', display: 'flex', gap: 1 }}>
+    <Box
+      sx={{ alignItems: 'center', display: 'flex', flexWrap: 'wrap', gap: 1 }}
+    >
       {children}
       {isSample && (
         <Chip color="info" label={t('entities.sample')} size="small" />
