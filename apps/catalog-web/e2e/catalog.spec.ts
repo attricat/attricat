@@ -1,9 +1,12 @@
 import { expect, test } from '@playwright/test';
 import {
+  commitField,
   createEntity,
   createEntityBlueprint,
+  entitySave,
   relationship,
   scalar,
+  signInAsMember,
   suffix,
 } from './helpers';
 
@@ -82,7 +85,8 @@ test('creates an entity from a blueprint', async ({ page }) => {
   await page.getByRole('button', { name: 'Create entity' }).click();
 
   await expect(page).toHaveURL(/\/entities\/[0-9a-f-]{36}$/);
-  await expect(page.getByText(title)).toBeVisible();
+  // The entity page shows each saved value in its inline editor.
+  await expect(page.getByLabel('title')).toHaveValue(title);
 });
 
 test('creates an entity with typed scalar values', async ({ page }) => {
@@ -107,10 +111,12 @@ test('creates an entity with typed scalar values', async ({ page }) => {
   await page.getByRole('button', { name: 'Create entity' }).click();
 
   await expect(page).toHaveURL(/\/entities\/[0-9a-f-]{36}$/);
-  await expect(page.getByText('Typed product', { exact: true })).toBeVisible();
-  await expect(page.getByText('19.95')).toBeVisible();
-  await expect(page.getByText('4', { exact: true })).toBeVisible();
-  await expect(page.getByText('Yes')).toBeVisible();
+  // The entity page shows each saved value in its inline editor.
+  await expect(page.getByLabel('title')).toHaveValue('Typed product');
+  await expect(page.getByLabel('price')).toHaveValue('19.95');
+  await expect(page.getByLabel('quantity')).toHaveValue('4');
+  await expect(page.getByLabel('available')).toHaveText('True');
+  await expect(page.getByLabel('Launch date')).toHaveValue('2026-08-20');
 });
 
 test('renders an entity heading component from its detail view', async ({
@@ -196,7 +202,7 @@ test('creates a context from context management', async ({ page }) => {
 });
 
 test('navigates outgoing, hierarchical, and incoming relationships', async ({
-  page,
+  browser,
 }) => {
   const categoryCode = `category_views_${suffix()}`;
   const productCode = `product_views_${suffix()}`;
@@ -245,6 +251,8 @@ target_blueprint = "${categoryCode}"`,
     relationship('category', child.id),
   ]);
 
+  // Writers edit relationships in place; a viewer sees the display links.
+  const page = await signInAsMember(browser, 'viewer');
   await page.goto(`/entities/${item.id}`);
   const hierarchy = page.getByLabel('Hierarchy');
   await expect(
@@ -261,6 +269,7 @@ target_blueprint = "${categoryCode}"`,
   ).toBeVisible();
   await dialog.getByRole('link', { name: 'Running shoe' }).click();
   await expect(page).toHaveURL(new RegExp(`/entities/${item.id}$`));
+  await page.context().close();
 });
 
 test('edits scalar values and replaces a typed relationship', async ({
@@ -282,18 +291,21 @@ test('edits scalar values and replaces a typed relationship', async ({
   const entity = await createEntity(product, [scalar('title', 'Before edit')]);
 
   await page.goto(`/entities/${entity.id}`);
-  await page.getByRole('link', { name: 'Edit entity' }).click();
   await expect(page.getByRole('tab', { name: 'Default' })).toHaveAttribute(
     'aria-selected',
     'true',
   );
-  await page.getByLabel('title').fill('After edit');
+  const title = page.getByLabel('title');
+  await title.fill('After edit');
+  await commitField(page, entity.id, title, 'Enter');
+  // A relationship choice saves as soon as it is applied.
+  const relationshipSaved = entitySave(page, entity.id);
   await page.getByLabel('categories').click();
   await page.getByRole('button', { name: 'Select Sale' }).click();
   await page.getByRole('button', { name: 'Apply' }).click();
-  await page.getByRole('button', { name: 'Save changes' }).click();
+  expect((await relationshipSaved).ok()).toBe(true);
 
-  await expect(page).toHaveURL(new RegExp(`/entities/${entity.id}$`));
-  await expect(page.getByText('After edit')).toBeVisible();
+  await page.reload();
+  await expect(page.getByLabel('title')).toHaveValue('After edit');
   await expect(page.getByText('Sale')).toBeVisible();
 });

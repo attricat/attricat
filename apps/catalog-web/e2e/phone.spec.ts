@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { createEntityBlueprint, suffix } from './helpers';
+import { commitField, createEntityBlueprint, suffix } from './helpers';
 
 for (const colorScheme of ['light', 'dark'] as const) {
   test(`creates, displays and edits phone values (${colorScheme})`, async ({
@@ -56,32 +56,35 @@ columns = [{ field = "phone", renderer = { id = "catalog.phone_display", version
       .click();
     await expect(page).toHaveURL(/\/entities\/[0-9a-f-]{36}$/);
     const entityUrl = page.url();
-    await expect(
-      page.getByRole('link', { name: `Call ${number}` }),
-    ).toHaveAttribute('href', 'tel:+12025550123;ext=0042');
+    const entityId = entityUrl.split('/').at(-1)!;
+    // The entity page edits the value in place; the table displays it.
+    await expect(input).toHaveValue(number);
     await page.reload();
-    await expect(
-      page.getByRole('link', { name: `Call ${number}` }),
-    ).toBeVisible();
+    await expect(input).toHaveValue(number);
     await page.goto(`/?blueprint=${code}`);
     await expect(
       page.getByRole('link', { name: `Call ${number}` }),
     ).toHaveAttribute('href', 'tel:+12025550123;ext=0042');
-    await page.goto(`${entityUrl}/edit`);
+    await page.goto(entityUrl);
     await expect(input).toHaveValue(number);
     await input.fill('020 7946 0958');
-    await page.getByRole('button', { name: 'Save changes' }).click();
-    await expect(page).toHaveURL(entityUrl);
+    await commitField(page, entityId, input, 'Enter');
+    await page.reload();
+    await expect(input).toHaveValue('020 7946 0958');
+    await page.goto(`/?blueprint=${code}`);
     await expect(
       page.getByText('020 7946 0958', { exact: true }),
     ).toBeVisible();
     await expect(page.locator('a[href^="tel:"]')).toHaveCount(0);
-    await page.goto(`${entityUrl}/edit`);
+    await page.goto(entityUrl);
     await input.clear();
-    await page.getByRole('button', { name: 'Save changes' }).click();
-    await expect(page).toHaveURL(entityUrl);
+    await commitField(page, entityId, input);
     await page.reload();
-    await expect(page.getByText('Not set', { exact: true })).toBeVisible();
+    await expect(input).toHaveValue('');
+    await page.goto(`/?blueprint=${code}`);
+    await expect(page.getByText('020 7946 0958', { exact: true })).toHaveCount(
+      0,
+    );
     await expect(page.locator('a[href^="tel:"]')).toHaveCount(0);
   });
 }

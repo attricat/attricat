@@ -1,5 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
-import { createEntity, createEntityBlueprint, scalar, suffix } from './helpers';
+import {
+  commitField,
+  createEntity,
+  createEntityBlueprint,
+  scalar,
+  suffix,
+} from './helpers';
 
 // Run history is listed newest first.
 const expectLatestRun = async (page: Page, ruleName: string, run: string) => {
@@ -106,11 +112,10 @@ attribute_code = "${attribute}"`,
 
   await page.goto(`/entities/${missing.id}`);
   await expect(page.getByText('1 data quality finding')).toBeVisible();
-  await page.goto(`/entities/${missing.id}/edit`);
-  // Form labels show attribute codes with spaces in place of underscores.
-  await page.getByLabel(attribute.replace('_', ' ')).fill('Fixed summary');
-  await page.getByRole('button', { name: 'Save changes' }).click();
-  await expect(page).toHaveURL(new RegExp(`/entities/${missing.id}$`));
+  // Field labels show attribute codes with spaces in place of underscores.
+  const summary = page.getByLabel(attribute.replace('_', ' '));
+  await summary.fill('Fixed summary');
+  await commitField(page, missing.id, summary);
 
   await page.goto('/manage/rules');
   await ruleRow.getByRole('button', { name: 'Run now' }).click();
@@ -118,7 +123,9 @@ attribute_code = "${attribute}"`,
   await openFindings(page);
   await expect(findingRow).toBeHidden();
   await page.goto(`/entities/${missing.id}`);
-  await expect(page.getByText('Fixed summary')).toBeVisible();
+  await expect(page.getByLabel(attribute.replace('_', ' '))).toHaveValue(
+    'Fixed summary',
+  );
   await expect(page.getByText('1 data quality finding')).toBeHidden();
 
   await page.goto('/manage/rules');

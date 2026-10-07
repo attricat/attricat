@@ -51,6 +51,11 @@ value_type = "string"`,
   await page.getByRole('button', { name: 'Upgrade entity' }).click();
   await expect(page).toHaveURL(new RegExp(`/entities/${entity.id}$`));
   await expect(page.getByLabel('Matches current schema')).toBeVisible();
-  await expect(page.getByText('Existing product')).toBeVisible();
-  await expect(page.getByText('Added during migration')).toBeVisible();
+  // Writers see the values in the entity page's editors.
+  await expect(page.getByRole('textbox', { name: 'title' })).toHaveValue(
+    'Existing product',
+  );
+  await expect(page.getByRole('textbox', { name: 'description' })).toHaveValue(
+    'Added during migration',
+  );
 });

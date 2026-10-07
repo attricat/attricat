@@ -18,7 +18,7 @@ test('previews blueprint views and inspects revision metadata', async ({
       entitySchema:
         '{"type":"object","required":["title"],"properties":{"title":{"type":"string"}}}',
       views:
-        '[views.edit]\ntype = "stack"\nchildren = [{ type = "field", field = "title" }]\n\n[views.detail]\ntype = "stack"\nchildren = [{ type = "heading", text = "Preview detail" }, { type = "field", field = "title" }]\n\n[views.table]\ntype = "table"\nfields = ["title"]',
+        '[views.detail]\ntype = "stack"\nchildren = [{ type = "heading", text = "Preview detail" }, { type = "field", field = "title" }]\n\n[views.table]\ntype = "table"\nfields = ["title"]',
     },
   );
 
@@ -27,7 +27,7 @@ test('previews blueprint views and inspects revision metadata', async ({
   await expect(
     page.getByText('Sandbox values stay in this page and are never saved.'),
   ).toBeVisible();
-  await page.getByRole('tab', { name: 'edit', exact: true }).click();
+  await page.getByRole('tab', { name: 'Edit', exact: true }).click();
   await page.getByLabel('title').fill('Sandbox title');
   await page.getByRole('tab', { name: 'detail', exact: true }).click();
   await expect(

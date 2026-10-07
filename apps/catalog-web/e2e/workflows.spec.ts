@@ -68,7 +68,9 @@ fixed = "reviewed"
   }).toPass();
 
   await page.goto(`/entities/${entity.id}`);
-  await expect(page.getByText('reviewed', { exact: true })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'review state' })).toHaveValue(
+    'reviewed',
+  );
 
   await page.goto('/manage/workflows');
   await page.getByRole('link', { name: workflowName }).click();

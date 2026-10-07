@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import {
+  commitField,
   createBlueprint,
   createEntity,
   createEntityBlueprint,
@@ -74,8 +75,17 @@ test('a viewer can browse the catalog but every write is refused', async ({
 
   await page.goto(`/entities/${entity.id}`);
   await expect(page.getByText('Readable product')).toBeVisible();
+  // Without write access the entity page shows values, not editable fields.
+  await expect(page.getByRole('textbox', { name: 'title' })).toHaveCount(0);
+  await expect(
+    page.getByRole('button', {
+      name: 'Add custom attribute or attribute group',
+    }),
+  ).toHaveCount(0);
   await page.goto(`/entities/${entity.id}/edit`);
-  await expect(page.getByLabel('title')).toBeDisabled();
+  await expect(page).toHaveURL(new RegExp(`/entities/${entity.id}$`));
+  await expect(page.getByText('Readable product')).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'title' })).toHaveCount(0);
 
   await page.goto('/entities/new');
   await page.getByLabel('Blueprint').click();
@@ -116,11 +126,12 @@ test('an editor saves blueprint drafts and entities but cannot publish', async (
   ]);
   const page = await signInAsMember(browser, 'editor');
 
-  await page.goto(`/entities/${entity.id}/edit`);
-  await page.getByLabel('title').fill('Edited by editor');
-  await page.getByRole('button', { name: 'Save changes' }).click();
-  await expect(page).toHaveURL(new RegExp(`/entities/${entity.id}$`));
-  await expect(page.getByText('Edited by editor')).toBeVisible();
+  await page.goto(`/entities/${entity.id}`);
+  const title = page.getByLabel('title');
+  await title.fill('Edited by editor');
+  await commitField(page, entity.id, title);
+  await page.reload();
+  await expect(page.getByLabel('title')).toHaveValue('Edited by editor');
 
   await page.goto('/manage/blueprints/new');
   await page.getByRole('button', { name: 'Dismiss', exact: true }).click();
