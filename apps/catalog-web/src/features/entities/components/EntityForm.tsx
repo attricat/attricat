@@ -1,6 +1,6 @@
 import { VIEW_EDIT_LAYOUT_SPACING } from '../../views/constants';
 import { useForm, useStore } from '@tanstack/react-form';
-import { Alert, Button, Paper, Stack, Typography } from '@mui/material';
+import { Alert, Box, Button, Paper, Stack, Typography } from '@mui/material';
 import type {
   Attribute,
   BlueprintWithAttributes,
@@ -24,9 +24,8 @@ import {
   viewFieldEditComponents,
   viewFieldEditors,
 } from '../../views/viewFieldComponents';
-import { entityHeadingComponentId } from '../../views/components/blocks/EntityHeadingDefinition';
 import { resolveEditComponent } from '../../views/components/registry';
-import { EntityView } from '../../views/components/EntityView';
+import { EditableEntityLayout } from '../../views/components/EditableEntityLayout';
 import { draftEditors, type DraftEditor } from '../../drafts/constants';
 import { DraftRestoreDialog } from '../../drafts/DraftRestoreDialog';
 import { formFieldsDraftSchema } from '../../drafts/schemas';
@@ -404,17 +403,9 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
                   />
                 );
                 return (
-                  <>
-                    {headingFields.length > 0 && (
-                      <EntityView
-                        attributes={headingFields}
-                        values={noResolvedValues}
-                        renderEditor={renderEditor}
-                      />
-                    )}
-                    <EntityView
+                  <Box>
+                    <EditableEntityLayout
                       attributes={blueprint.attributes}
-                      values={noResolvedValues}
                       fallbackVisibilityScope={
                         showAllAttributes
                           ? undefined
@@ -422,23 +413,13 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
                             ? 'detail'
                             : 'form'
                       }
-                      skipComponentId={entityHeadingComponentId}
-                      view={showAllAttributes ? undefined : detailView}
+                      headingAttributes={headingFields}
+                      otherAttributes={otherAttributes}
                       renderEditor={renderEditor}
+                      values={noResolvedValues}
+                      view={showAllAttributes ? undefined : detailView}
                     />
-                    {otherAttributes.length > 0 && (
-                      <>
-                        <Typography sx={{ mt: 3 }} variant="h6">
-                          {t('entities.otherAttributes')}
-                        </Typography>
-                        <EntityView
-                          attributes={otherAttributes}
-                          values={noResolvedValues}
-                          renderEditor={renderEditor}
-                        />
-                      </>
-                    )}
-                  </>
+                  </Box>
                 );
               }}
             </form.Field>

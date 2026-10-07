@@ -1,5 +1,4 @@
-import { VIEW_EDIT_LAYOUT_SPACING } from '../views/constants';
-import { Box, Paper, Tab, Tabs, Typography } from '@mui/material';
+import { Paper, Tab, Tabs, Typography } from '@mui/material';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useTabAccessibility } from '../../components/useTabAccessibility';
@@ -9,8 +8,7 @@ import type {
   ComponentReference,
   ViewDefinition,
 } from '../entities/api';
-import { EntityView } from '../views/components/EntityView';
-import { entityHeadingComponentId } from '../views/components/blocks/EntityHeadingDefinition';
+import { EditableEntityLayout } from '../views/components/EditableEntityLayout';
 import { resolveEditComponent } from '../views/components/registry';
 import {
   headingEditableAttributes,
@@ -65,8 +63,6 @@ export const BlueprintViewsPreview = ({
     />
   );
   const editable = attributes.filter((attribute) => !attribute.readonly);
-  const headingFields = headingEditableAttributes(editable, views.detail);
-  const unplaced = unplacedEditableAttributes(editable, views.detail);
 
   return (
     <>
@@ -96,37 +92,19 @@ export const BlueprintViewsPreview = ({
         variant="outlined"
       >
         {activeViewName === sandboxEditTab ? (
-          <>
-            {headingFields.length > 0 && (
-              <Box sx={{ mb: VIEW_EDIT_LAYOUT_SPACING }}>
-                <EntityView
-                  attributes={headingFields}
-                  renderEditor={renderEditor}
-                  values={values}
-                />
-              </Box>
+          <EditableEntityLayout
+            attributes={attributes}
+            fallbackVisibilityScope="detail"
+            headingAttributes={headingEditableAttributes(
+              editable,
+              views.detail,
             )}
-            <EntityView
-              attributes={attributes}
-              fallbackVisibilityScope="detail"
-              renderEditor={renderEditor}
-              skipComponentId={entityHeadingComponentId}
-              values={values}
-              view={activeView}
-            />
-            {unplaced.length > 0 && (
-              <>
-                <Typography component="h3" sx={{ mb: 2, mt: 3 }} variant="h6">
-                  {t('entities.otherAttributes')}
-                </Typography>
-                <EntityView
-                  attributes={unplaced}
-                  renderEditor={renderEditor}
-                  values={values}
-                />
-              </>
-            )}
-          </>
+            headingLevel="h3"
+            otherAttributes={unplacedEditableAttributes(editable, views.detail)}
+            renderEditor={renderEditor}
+            values={values}
+            view={activeView}
+          />
         ) : (
           activeView && (
             <RenderedBlueprintView

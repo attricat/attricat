@@ -9,7 +9,8 @@ import { LoadMoreButton } from '../../components/LoadMoreButton';
 import { EntitySchemaSubheader } from './components/EntitySchemaSubheader';
 import { EntityChangeEvent } from './components/EntityChangeEvent';
 import { EntityToolbar } from './components/EntityToolbar';
-import { getEntityChanges, getEntityForm } from './api';
+import { getEntityChanges } from './api';
+import { entityFormOptions } from './queryOptions';
 import type { EntityAuditChange } from './api';
 import { entityQueryKeys } from './queryKeys';
 import { lexiconText } from '../lexicon/lexicon';
@@ -36,10 +37,7 @@ export const EntityChangesPage = ({ entityId }: { entityId: string }) => {
     getNextPageParam: (page) => page.next_offset,
   });
   const changeItems = changes.data?.pages.flatMap((page) => page.items) ?? [];
-  const entityForm = useQuery({
-    queryKey: entityQueryKeys.form(entityId),
-    queryFn: () => getEntityForm(entityId),
-  });
+  const entityForm = useQuery(entityFormOptions(entityId));
   return (
     <PageContainer maxWidth="lg">
       <PageHeader eyebrow={t('entities.entityChanges')} />

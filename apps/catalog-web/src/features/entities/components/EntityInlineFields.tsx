@@ -1,4 +1,3 @@
-import { VIEW_EDIT_LAYOUT_SPACING } from '../../views/constants';
 import { useQueryClient } from '@tanstack/react-query';
 import { Alert, Box, Button, Stack, Typography } from '@mui/material';
 import { forwardRef, useImperativeHandle, type ReactNode } from 'react';
@@ -8,9 +7,12 @@ import { ApiErrorAlert } from '../../../components/CheckViolationsAlert';
 import { useViolationText } from '../../../components/useViolationText';
 import { useBeforeUnloadWarning } from '../../drafts/useBeforeUnloadWarning';
 import { principalConfiguration } from '../../principals/principal';
+import {
+  EditableEntityLayout,
+  EditableEntitySection,
+} from '../../views/components/EditableEntityLayout';
 import { EntityView } from '../../views/components/EntityView';
 import type { ResolvedValue } from '../../views/components/ValueField';
-import { entityHeadingComponentId } from '../../views/components/blocks/EntityHeadingDefinition';
 import {
   resolveEditComponent,
   resolveViewComponent,
@@ -20,7 +22,6 @@ import {
   viewFieldEditors,
 } from '../../views/viewFieldComponents';
 import {
-  getEntityForm,
   type Attribute,
   type ComponentReference,
   type EntityFormResponse,
@@ -36,7 +37,7 @@ import {
   type ResolvedFormValues,
 } from '../entityFormAttributes';
 import { schemaMismatchField } from '../entityFieldSaves';
-import { entityQueryKeys } from '../queryKeys';
+import { entityFormOptions } from '../queryOptions';
 import { statusConfiguration, statusLocks } from '../status';
 import { useEntityFieldSaves } from '../useEntityFieldSaves';
 import { attributeValueTypes } from '../valueTypes';
@@ -191,8 +192,7 @@ export const EntityInlineFields = forwardRef<EntityInlineFieldsHandle, Props>(
 
     const resolveConflict = async (resolution: 'keepMine' | 'useTheirs') => {
       const latest = await client.fetchQuery({
-        queryKey: entityQueryKeys.form(entityId),
-        queryFn: ({ signal }) => getEntityForm(entityId, signal),
+        ...entityFormOptions(entityId),
         staleTime: 0,
       });
       saves.resolveConflict(resolution, {
@@ -283,8 +283,6 @@ export const EntityInlineFields = forwardRef<EntityInlineFieldsHandle, Props>(
     const blueprintChangeable = changeable.filter((attribute) =>
       attributes.some((placed) => placed.code === attribute.code),
     );
-    const headingFields = headingEditableAttributes(blueprintChangeable, view);
-    const unplaced = unplacedEditableAttributes(blueprintChangeable, view);
 
     return (
       <>
@@ -343,46 +341,32 @@ export const EntityInlineFields = forwardRef<EntityInlineFieldsHandle, Props>(
                 })
               : null}
         </Typography>
-        {headingFields.length > 0 && (
-          <Box sx={{ mb: VIEW_EDIT_LAYOUT_SPACING }}>
-            <EntityView
-              {...viewProps}
-              attributes={headingFields}
-              values={resolvedValues}
-            />
-          </Box>
-        )}
-        <EntityView
+        <EditableEntityLayout
           {...viewProps}
           attributes={attributes}
           fallbackVisibilityScope="detail"
-          skipComponentId={entityHeadingComponentId}
+          headingAttributes={headingEditableAttributes(
+            blueprintChangeable,
+            view,
+          )}
+          otherAttributes={unplacedEditableAttributes(
+            blueprintChangeable,
+            view,
+          )}
           values={resolvedValues}
           view={view}
         />
-        {unplaced.length > 0 && (
-          <Box component="section" sx={{ mt: 4 }}>
-            <Typography component="h2" sx={{ mb: 2 }} variant="h6">
-              {t('entities.otherAttributes')}
-            </Typography>
-            <EntityView
-              {...viewProps}
-              attributes={unplaced}
-              values={resolvedValues}
-            />
-          </Box>
-        )}
         {form.reusable_attributes.length > 0 && (
-          <Box component="section" sx={{ mt: 4 }}>
-            <Typography component="h2" sx={{ mb: 2 }} variant="h6">
-              {t('entities.additionalAttributes')}
-            </Typography>
+          <EditableEntitySection
+            headingLevel="h2"
+            title={t('entities.additionalAttributes')}
+          >
             <EntityView
               {...viewProps}
               attributes={form.reusable_attributes}
               values={reusableResolvedValues}
             />
-          </Box>
+          </EditableEntitySection>
         )}
         {footerActions && <Box sx={{ mt: 3 }}>{footerActions}</Box>}
       </>

@@ -40,7 +40,7 @@ import { ValueField, type ResolvedValue } from './ValueField';
 import { ViewTabs } from './ViewTabs';
 import { lexiconText } from '../../lexicon/lexicon';
 
-type Props = {
+export type EntityViewProps = {
   view?: ViewDefinition;
   attributes: readonly Attribute[];
   values: Record<string, ResolvedValue>;
@@ -72,7 +72,7 @@ export const EntityView = ({
   entityId,
   fallbackVisibilityScope,
   singleColumn = false,
-}: Props) => {
+}: EntityViewProps) => {
   const { t } = useTranslation();
   const spacing = renderEditor ? VIEW_EDIT_LAYOUT_SPACING : VIEW_LAYOUT_SPACING;
   const byCode = new Map(
