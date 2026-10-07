@@ -20,80 +20,9 @@ The project has three parts:
 | CLI | `apps/catalog-cli` | Command-line client for the API, with JSON output |
 | Web app | `apps/catalog-web` | React and Vite interface |
 
-## Run it locally
+## Self-hosting
 
-You need:
-
-- Docker or another compatible container runtime
-- Rust
-- Node.js 24 and `pnpm` 11
-- `just`, `process-compose`, and `watchexec`
-
-From the repository root:
-
-```sh
-just setup   # once per checkout
-just dev     # starts everything
-```
-
-`just setup` creates `.env` from `.env.example` and picks ports for this
-checkout, so several worktrees can run side by side. It writes those ports and
-the URLs below to `.worktree`. Run it before any other `just` command.
-
-`just dev` starts PostgreSQL, Mailpit, Jaeger and RustFS in containers, then
-the API, the file worker, the web app and the docs site. Press `Ctrl-C` to stop
-it. That also stops and removes the containers.
-
-To find the URLs:
-
-```sh
-source .worktree
-echo $WEB_URL
-```
-
-| Variable | Opens |
-| --- | --- |
-| `WEB_URL` | The web app |
-| `DOCS_URL` | The documentation site |
-| `MAILPIT_UI_URL` | Email sent by the local server |
-| `JAEGER_UI_URL` | Traces from the API and file worker |
-| `RUSTFS_UI_URL` | The local S3-compatible file store |
-
-To open `psql` in this checkout's database, run `just sql`.
-
-[Getting Started](docs/index.md#getting-started) covers migrations and tests.
-
-## Sign in
-
-1. Open `/login` in the web app.
-2. Enter the workspace identifier `default.local` and select **Continue**.
-3. Sign in with `CATALOG_BOOTSTRAP_OWNER_EMAIL` and its password from `.env`.
-
-## Conversational agents (optional)
-
-Users can ask an LLM to read and change the catalog.
-
-To turn it on, set `LLM_API_KEY` for the API process, and `LLM_BASE_URL` or
-`LLM_MODEL` if you need them. Restart the API, then open **Conversations** in
-the web app. Without a key, agents are off and everything else works as usual.
-
-Before you turn it on:
-
-- Conversation text and tool results go to the configured provider. The
-  browser never sees the provider key.
-- Read-only tools run on their own. Every change to the catalog, including
-  changes from scheduled runs, waits for a person to approve it. Review the
-  proposed arguments and change summary before you approve.
-- An approved scheduled run writes with the permissions of the user who started
-  it.
-- Use a provider account with no more access than it needs.
-- Give the `agents.run` permission only to people who are allowed to request
-  catalog changes.
-
-See [agent configuration](docs/configuration.md#agent-provider) and the
-[agent API](docs/api.md#agents) for limits and details.
-
-## Run the published image
+### Try the published image
 
 To try Attricat without building it, use
 [`deploy/compose.quickstart.yml`](deploy/compose.quickstart.yml). It runs
@@ -119,9 +48,10 @@ built for amd64 only, so Apple Silicon and other arm64 machines run it under
 emulation.
 
 This setup is for local evaluation. It binds to localhost, uses plain HTTP and
-has fixed internal credentials. To deploy for real, see [Deploy](#deploy).
+has fixed internal credentials. To deploy for real, see
+[Deploy to production](#deploy-to-production).
 
-## Deploy
+### Deploy to production
 
 Attricat ships as one container image with three commands:
 
@@ -129,41 +59,54 @@ Attricat ships as one container image with three commands:
 - `api` runs the API and serves the web app
 - `file-worker` generates file variants and deletes stored files
 
+Every push to `main` publishes `ghcr.io/attricat/attricat:<commit-sha>`. Pin
+deployments to a digest, not `:latest`.
+
 You provide PostgreSQL, private S3-compatible storage, SMTP and monitoring.
-Start from [`deploy/compose.yml`](deploy/compose.yml) and read
-[Production operations](docs/operations.md) for rollout, backup, restore and
-rollback.
+Start from [`deploy/compose.yml`](deploy/compose.yml). It binds the API to
+`127.0.0.1:3000`, so put a TLS-terminating reverse proxy in front of it.
+[Configuration](docs/configuration.md) lists every setting.
+
+## Conversational agents (optional)
+
+Users can ask an LLM to read and change the catalog.
+
+To turn it on, set `LLM_API_KEY` in the API's environment, and `LLM_BASE_URL`
+or `LLM_MODEL` if you need them. Restart the API, then open **Conversations**
+in the web app. Without a key, agents are off and everything else works as
+usual.
+
+Before you turn it on:
+
+- Conversation text and tool results go to the configured provider. The
+  browser never sees the provider key.
+- Read-only tools run on their own. Every change to the catalog, including
+  changes from scheduled runs, waits for a person to approve it. Review the
+  proposed arguments and change summary before you approve.
+- An approved scheduled run writes with the permissions of the user who started
+  it.
+- Use a provider account with no more access than it needs.
+- Give the `agents.run` permission only to people who are allowed to request
+  catalog changes.
+
+See [agent configuration](docs/configuration.md#agent-provider) and the
+[agent API](docs/api.md#agents) for limits and details.
 
 ## Documentation
-
-The documentation site lives in `apps/docs`. Run it alone with
-`pnpm --dir apps/docs dev`.
 
 - [Documentation index](docs/index.md)
 - [Writing blueprints](docs/blueprints.md)
 - [Relationships walkthrough](examples/relationships/README.md)
-- [Demo catalog generator](examples/generate.md)
 - [CLI](docs/cli.md)
 - [API reference](docs/api.md)
 - [Configuration](docs/configuration.md)
 - [File storage and retention](docs/configuration.md#file-storage-operations)
 - [Accounts](docs/authentication.md)
-- [Database model](docs/database.md)
-- [Building and side-loading extensions](docs/extensions.md#local-extension-integration-testing)
 
 ## Contributing
 
-**UI.** The web app uses a pinned copy of the
-[Attricat design system](apps/catalog-web/design/). Read the
-[style guide](https://github.com/attricat/design/blob/main/STYLE.md) before
-changing the interface, and check both light and dark mode.
-
-**Database.** Migrations only declare structure: tables, columns, indexes,
-foreign keys, `NOT NULL`, `UNIQUE` and `CHECK` constraints, and required types
-or extensions. Do not add SQL functions, procedures, triggers, views, RLS
-policies or `DO` blocks. Authorization, validation, state changes, rate
-limits, auditing and retention belong in the Rust code, inside repository
-transactions.
+[CONTRIBUTING.md](CONTRIBUTING.md) explains how to run Attricat from source
+and the rules for UI and database changes.
 
 ## License
 
