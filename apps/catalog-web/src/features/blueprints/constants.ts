@@ -47,8 +47,13 @@ export const blueprintVersionMetadataTabs = {
 export type BlueprintVersionMetadataTab =
   (typeof blueprintVersionMetadataTabs)[keyof typeof blueprintVersionMetadataTabs];
 
-/** Name of the blueprint view used for entity forms. */
-export const editViewName = 'edit';
+/**
+ * Deprecated view name: entities are edited in place on the detail view, so a
+ * blueprint's `views.edit` is ignored.
+ */
+export const legacyEditViewName = 'edit';
+/** Sandbox tab that edits sample values through the detail layout. */
+export const sandboxEditTab = 'sandbox';
 
 /** Displayed for values that are absent, such as an empty removal policy. */
 export const emptyValuePlaceholder = '—';

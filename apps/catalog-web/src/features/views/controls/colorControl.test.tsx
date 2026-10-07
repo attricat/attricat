@@ -14,7 +14,6 @@ import type { EntityItem } from '../../entities/api';
 
 const attribute = { code: 'hex', value_type: 'string' as const };
 const display = { id: 'catalog.color_display', version: 1, props: {} };
-const edit = { id: 'catalog.color_edit', version: 1, props: {} };
 
 describe('color components', () => {
   it.each(['light', 'dark'] as const)(
@@ -112,9 +111,9 @@ describe('color components', () => {
       <BlueprintViewsPreview
         attributes={[attribute]}
         views={{
-          edit: {
+          detail: {
             type: 'stack',
-            children: [{ type: 'field', field: 'hex', component: edit }],
+            children: [{ type: 'field', field: 'hex', component: display }],
           },
           table: {
             type: 'table',

@@ -4,17 +4,14 @@ import type {
   ViewDefinition,
   ViewNode,
 } from '../entities/api';
-import { resolveValueEditor } from './components/registry';
+import {
+  resolveEditComponent,
+  resolveValueEditor,
+} from './components/registry';
 
-const viewNodes = (view?: ViewDefinition, skipComponentId?: string) => {
+const viewNodes = (view?: ViewDefinition | ViewNode) => {
   const nodes: (ViewNode | ViewDefinition)[] = [];
   const visit = (node: ViewNode | ViewDefinition) => {
-    if (
-      skipComponentId &&
-      'component' in node &&
-      node.component?.id === skipComponentId
-    )
-      return;
     nodes.push(node);
     if ('children' in node) node.children.forEach(visit);
     if (node.type === 'tabs')
@@ -36,15 +33,46 @@ export const viewFieldComponents = (view?: ViewDefinition) => {
 };
 
 /**
- * Attribute codes the view places as fields or relationship lists, ignoring
- * the subtree of a component the caller renders elsewhere.
+ * The component that edits each field a display view places: its paired edit
+ * component, keyed by attribute code. Fields without one use the built-in
+ * editor for their value type.
  */
-export const viewPlacedFields = (
-  view?: ViewDefinition,
-  skipComponentId?: string,
-) =>
+export const viewFieldEditComponents = (view?: ViewDefinition) =>
+  new Map(
+    [...viewFieldComponents(view)].flatMap(([code, component]) => {
+      const editor = resolveEditComponent(component);
+      return editor ? [[code, editor] as const] : [];
+    }),
+  );
+
+const placedFields = (view?: ViewDefinition | ViewNode) =>
+  viewNodes(view).flatMap((node) =>
+    node.type === 'field' || node.type === 'relationship_list'
+      ? [node.field]
+      : [],
+  );
+
+/**
+ * Attribute codes placed inside blocks rendered by `componentId`, such as the
+ * entity heading, in layout order.
+ */
+export const componentPlacedFields = (
+  view: ViewDefinition | undefined,
+  componentId: string,
+) => [
+  ...new Set(
+    viewNodes(view)
+      .filter(
+        (node) => 'component' in node && node.component?.id === componentId,
+      )
+      .flatMap((node) => placedFields(node)),
+  ),
+];
+
+/** Attribute codes the view places as fields or relationship lists. */
+export const viewPlacedFields = (view?: ViewDefinition) =>
   new Set(
-    viewNodes(view, skipComponentId).flatMap((node) =>
+    viewNodes(view).flatMap((node) =>
       node.type === 'field' || node.type === 'relationship_list'
         ? [node.field]
         : [],

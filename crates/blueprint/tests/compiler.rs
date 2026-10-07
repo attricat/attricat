@@ -1188,53 +1188,34 @@ value_type = "json"
 }
 
 #[test]
-fn edit_view_must_place_required_editable_attributes() {
+fn deprecated_edit_view_has_no_placement_requirements() {
+    // Entities are edited in place on the detail view; a legacy `views.edit`
+    // is accepted for compatibility but no longer has to place required
+    // attributes.
     let source = r#"
 format_version = 1
 code = "product"
 name = "Product"
 kind = "entity"
-entity_schema = '{"type":"object","required":["title","sku","price"]}'
+entity_schema = '{"type":"object","required":["title","price"]}'
 
 [views.dropdown_option]
 type = "dropdown_option"
 fields = ["title"]
 
 [views.edit]
-type = "tabs"
-
-[[views.edit.tabs]]
-label = "Main"
-children = [{ type = "section", children = [{ type = "field", field = "title" }] }]
-
-__PRICE__
+type = "stack"
+children = [{ type = "field", field = "title" }]
 
 [[attributes]]
 code = "title"
 value_type = "string"
 
 [[attributes]]
-code = "sku"
-value_type = "string"
-readonly = true
-
-[[attributes]]
 code = "price"
 value_type = "number"
 "#;
-
-    let omitted = source.replace("__PRICE__", "");
-    let error = compile(parse(&omitted).unwrap(), &[], &omitted).unwrap_err();
-    assert!(matches!(
-        error,
-        BlueprintError::EditViewOmitsRequiredAttribute(attribute) if attribute == "price"
-    ));
-
-    let placed = source.replace(
-        "__PRICE__",
-        "[[views.edit.tabs]]\nlabel = \"Pricing\"\nchildren = [{ type = \"field\", field = \"price\" }]",
-    );
-    compile(parse(&placed).unwrap(), &[], &placed).unwrap();
+    compile(parse(source).unwrap(), &[], source).unwrap();
 }
 
 fn compile_source(source: &str) -> Result<catalog_blueprint::CompiledBlueprint, BlueprintError> {

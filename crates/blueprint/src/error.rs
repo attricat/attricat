@@ -64,8 +64,6 @@ pub enum BlueprintError {
     InvalidJsonSchema { field: String, message: String },
     #[error("only entity blueprints can define an entity schema")]
     EntitySchemaOnMixin,
-    #[error("views.edit must place required attribute '{0}' or mark it readonly")]
-    EditViewOmitsRequiredAttribute(String),
     #[error("entity schema {keyword} references unknown attribute '{attribute}'")]
     EntitySchemaUnknownAttribute {
         keyword: &'static str,

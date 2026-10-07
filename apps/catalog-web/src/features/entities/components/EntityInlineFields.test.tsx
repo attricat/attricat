@@ -124,7 +124,7 @@ describe('EntityInlineFields', () => {
     const user = userEvent.setup();
     renderFields();
 
-    // The heading's field is offered under Other attributes.
+    // The heading only displays values, so its field is edited first.
     const name = screen.getByRole('textbox', { name: 'name' });
     await user.clear(name);
     await user.type(name, 'Desk lamp');

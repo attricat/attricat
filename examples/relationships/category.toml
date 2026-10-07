@@ -21,13 +21,6 @@ children = [
   { type = "incoming_relationship_list", label = "Products in this category", page_size = 10, relationships = [{ source_blueprint = "product", field = "categories" }] },
 ]
 
-[views.edit]
-type = "stack"
-children = [
-  { type = "field", field = "name" },
-  { type = "field", field = "slug" },
-]
-
 [views.table]
 type = "table"
 fields = ["name", "slug"]

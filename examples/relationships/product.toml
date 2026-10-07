@@ -73,26 +73,6 @@ children = [
   { type = "relationship_list", field = "variants" },
 ]
 
-[views.edit]
-type = "stack"
-children = [
-  { type = "field", field = "title" },
-  {
-    type = "grid",
-    children = [
-      { type = "field", field = "price" },
-      { type = "field", field = "stock_on_hand" },
-    ],
-  },
-  { type = "field", field = "available" },
-  { type = "field", field = "available_on" },
-  { type = "field", field = "released_at" },
-  { type = "field", field = "order_cutoff" },
-  { type = "relationship_list", field = "categories" },
-  { type = "relationship_list", field = "colors" },
-  { type = "relationship_list", field = "variants" },
-]
-
 [views.table]
 type = "table"
 fields = ["title", "price", "stock_on_hand", "available"]

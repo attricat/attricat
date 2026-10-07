@@ -11,7 +11,11 @@ import {
   REUSABLE_ATTRIBUTE_NAMESPACE_SEPARATOR,
 } from './constants';
 import { attributeValueKinds, attributeValueTypes } from './valueTypes';
-import { viewPlacedFields } from '../views/viewFieldComponents';
+import {
+  componentPlacedFields,
+  viewPlacedFields,
+} from '../views/viewFieldComponents';
+import { entityHeadingComponentId } from '../views/components/blocks/EntityHeadingDefinition';
 
 export type ResolvedFormValues = Record<
   string,
@@ -70,8 +74,8 @@ export const entitySchemaRequiredAttributes = (schema: unknown): string[] =>
     : [];
 
 /**
- * Required attributes the edit view does not render. The form shows them after
- * the view so Save is never blocked by a field the user cannot see.
+ * Required attributes the view does not render. A form shows them after the
+ * view so Save is never blocked by a field the user cannot see.
  */
 export const unplacedRequiredAttributes = (
   attributes: readonly Attribute[],
@@ -94,20 +98,19 @@ export const unplacedRequiredAttributes = (
 };
 
 /**
- * Editable attributes the detail view does not render, so an inline editor
- * can still offer them. `skipComponentId` names a block shown elsewhere.
+ * Editable attributes the detail view does not render, so an editor can
+ * still offer them.
  */
 export const unplacedEditableAttributes = (
   attributes: readonly Attribute[],
   view: ViewDefinition | undefined,
-  skipComponentId?: string,
 ) => {
   const usesFallback =
     !view ||
     view.type === viewBlockTypes.table ||
     view.type === viewBlockTypes.dropdownOption ||
     view.type === viewBlockTypes.extensionLayout;
-  const placed = viewPlacedFields(view, skipComponentId);
+  const placed = viewPlacedFields(view);
   return attributes.filter((attribute) =>
     usesFallback
       ? isHiddenByDefault(attribute, 'detail') &&
@@ -115,6 +118,18 @@ export const unplacedEditableAttributes = (
       : !placed.has(attribute.code) && !isHiddenByDefault(attribute, 'form'),
   );
 };
+
+/**
+ * Editable attributes the entity heading displays. The heading shows values
+ * only, so editors offer these fields first, in heading order.
+ */
+export const headingEditableAttributes = (
+  attributes: readonly Attribute[],
+  view: ViewDefinition | undefined,
+) =>
+  componentPlacedFields(view, entityHeadingComponentId).flatMap((code) =>
+    attributes.filter((attribute) => attribute.code === code),
+  );
 
 /** Local scalar values that were cleared and must be removed on save. */
 export const removedFormValues = (

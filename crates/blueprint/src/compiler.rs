@@ -153,17 +153,6 @@ pub fn compile(
             &definition.kind,
         )?;
     }
-    if definition.kind == BlueprintKind::Entity
-        && let (Some(schema), Some(edit_view)) =
-            (&definition.entity_schema, definition.views.get("edit"))
-    {
-        crate::view_validation::validate_edit_view_required_attributes(
-            edit_view,
-            schema,
-            &attributes,
-        )?;
-    }
-
     Ok(CompiledBlueprint {
         code: definition.code,
         name: definition.name,

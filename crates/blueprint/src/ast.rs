@@ -93,13 +93,7 @@ pub const EXTENSION_LAYOUT_OUTLETS: &[&str] = &[
     "entity_action",
 ];
 /// View names with platform meaning, offered to editors as suggestions.
-pub const KNOWN_VIEW_NAMES: &[&str] = &[
-    "dropdown_option",
-    "detail",
-    "edit",
-    "table",
-    "extension_layout",
-];
+pub const KNOWN_VIEW_NAMES: &[&str] = &["dropdown_option", "detail", "table", "extension_layout"];
 
 pub const CONNECTOR_JOB_DIRECTIONS: &[&str] = &["import", "export"];
 

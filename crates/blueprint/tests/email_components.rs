@@ -11,9 +11,6 @@ fields = ["email"]
 [views.detail]
 type = "stack"
 children = [{ type = "field", field = "email", component = { id = "catalog.email_display", version = 1 } }]
-[views.edit]
-type = "stack"
-children = [{ type = "field", field = "email", component = { id = "catalog.email_edit", version = 1 } }]
 [[attributes]]
 code = "email"
 value_type = "string"
@@ -53,14 +50,14 @@ fn server_email_format_accepts_control_addresses_and_rejects_invalid_data() {
 }
 
 #[test]
-fn accepts_email_display_and_edit_components() {
+fn accepts_email_display_component() {
     assert!(compile(parse(SOURCE).unwrap(), &[], SOURCE).is_ok());
 }
 
 #[test]
 fn rejects_incompatible_email_components() {
     for invalid in [
-        SOURCE.replace("catalog.email_edit", "catalog.email_display"),
+        // A detail view displays values; edit components pair with it in the UI.
         SOURCE.replace("catalog.email_display", "catalog.email_edit"),
         SOURCE.replace("value_type = \"string\"", "value_type = \"number\""),
         SOURCE.replace("version = 1 }", "version = 2 }"),

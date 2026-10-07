@@ -16,7 +16,7 @@ import type { ResolvedValue } from '../../views/components/ValueField';
 import { entityHeadingComponentId } from '../../views/components/blocks/EntityHeadingDefinition';
 import { resolveEditComponent } from '../../views/components/registry';
 import {
-  viewFieldComponents,
+  viewFieldEditComponents,
   viewFieldEditors,
 } from '../../views/viewFieldComponents';
 import {
@@ -30,6 +30,7 @@ import { violationFieldErrors } from '../checkViolations';
 import { validateEntityForm, valuesForForm } from '../entityForm';
 import {
   editableFormAttributes,
+  headingEditableAttributes,
   smartFillFormFields,
   unplacedEditableAttributes,
   type ResolvedFormValues,
@@ -123,12 +124,7 @@ export const EntityInlineFields = forwardRef<EntityInlineFieldsHandle, Props>(
       (attribute) => locks[attribute.code] === undefined,
     );
     const changeableCodes = changeable.map((attribute) => attribute.code);
-    const editComponents = new Map(
-      [...viewFieldComponents(view)].flatMap(([code, component]) => {
-        const editor = resolveEditComponent(component);
-        return editor ? [[code, editor] as const] : [];
-      }),
-    );
+    const editComponents = viewFieldEditComponents(view);
     const fieldRules = viewFieldEditors(editComponents, changeable);
     const saves = useEntityFieldSaves({
       entityId,
@@ -255,13 +251,11 @@ export const EntityInlineFields = forwardRef<EntityInlineFieldsHandle, Props>(
       renderFilePanel,
       renderEditor,
     };
-    const unplaced = unplacedEditableAttributes(
-      changeable.filter((attribute) =>
-        attributes.some((placed) => placed.code === attribute.code),
-      ),
-      view,
-      entityHeadingComponentId,
+    const blueprintChangeable = changeable.filter((attribute) =>
+      attributes.some((placed) => placed.code === attribute.code),
     );
+    const headingFields = headingEditableAttributes(blueprintChangeable, view);
+    const unplaced = unplacedEditableAttributes(blueprintChangeable, view);
 
     return (
       <>
@@ -312,6 +306,15 @@ export const EntityInlineFields = forwardRef<EntityInlineFieldsHandle, Props>(
                 })
               : null}
         </Typography>
+        {headingFields.length > 0 && (
+          <Box sx={{ mb: 2 }}>
+            <EntityView
+              {...viewProps}
+              attributes={headingFields}
+              values={resolvedValues}
+            />
+          </Box>
+        )}
         <EntityView
           {...viewProps}
           attributes={attributes}

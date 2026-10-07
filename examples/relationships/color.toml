@@ -20,13 +20,6 @@ children = [
   { type = "field", field = "hex" },
 ]
 
-[views.edit]
-type = "stack"
-children = [
-  { type = "field", field = "name" },
-  { type = "field", field = "hex" },
-]
-
 [views.table]
 type = "table"
 fields = ["name", "hex"]

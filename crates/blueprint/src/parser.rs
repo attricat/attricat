@@ -49,7 +49,8 @@ struct RawBlueprintDefinition {
     /// Exact, version-pinned mixins whose attributes can be selected with `from`.
     #[serde(default)]
     includes: Vec<IncludeRef>,
-    /// Named views: `dropdown_option`, `table`, `detail`, `edit`, and `extension_layout`.
+    /// Named views: `dropdown_option`, `table`, `detail`, and `extension_layout`.
+    /// The `detail` layout also drives editing; a legacy `edit` view is ignored.
     #[serde(default)]
     #[schemars(extend("x-attricat-key-suggestions" = KNOWN_VIEW_NAMES))]
     views: HashMap<String, ViewDefinition>,
