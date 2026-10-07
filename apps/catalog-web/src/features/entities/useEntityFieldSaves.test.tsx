@@ -212,6 +212,36 @@ describe('useEntityFieldSaves', () => {
     expect(updateEntity).toHaveBeenCalledTimes(1);
   });
 
+  it('adopts a newer server version while nothing is pending', async () => {
+    vi.mocked(updateEntity).mockResolvedValue(savedEntity('v3') as never);
+    const client = new QueryClient();
+    const { result, rerender } = renderHook(
+      ({ updatedAt, title }: { updatedAt: string; title: string }) =>
+        useEntityFieldSaves({
+          entityId,
+          contextId: null,
+          attributes,
+          savedFields: { title },
+          updatedAt,
+        }),
+      {
+        initialProps: { updatedAt: 'v1', title: 'Old' },
+        wrapper: ({ children }: { children: ReactNode }) => (
+          <QueryClientProvider client={client}>{children}</QueryClientProvider>
+        ),
+      },
+    );
+
+    rerender({ updatedAt: 'v2', title: 'Attached elsewhere' });
+    expect(result.current.fields).toEqual({ title: 'Attached elsewhere' });
+
+    act(() => result.current.commit('summary', 'B'));
+    await waitFor(() => expect(result.current.pending).toEqual({}));
+    expect(vi.mocked(updateEntity).mock.calls[0]![1]).toMatchObject({
+      expected_updated_at: 'v2',
+    });
+  });
+
   it('does not save a value that returns to the saved one', () => {
     const { result } = renderSaves({ title: 'Old' });
     act(() => result.current.commit('title', 'Old'));

@@ -96,7 +96,7 @@ export const useEntityPublicationActions = (
       void invalidateEntitySearches(queryClient);
       void navigate({
         params: { entityId: entity.id },
-        to: '/entities/$entityId/edit',
+        to: '/entities/$entityId',
       });
     },
   });

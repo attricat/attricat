@@ -20,7 +20,6 @@ export const ENTITY_PREVIEW_QUERY = {
   relationshipLimit: 1,
 } as const;
 
-export const EDIT_ENTITY_FORM_ID = 'edit-entity-form';
 export const ENTITY_EXTENSION_DRAWER_ID = 'entity-extension-contributions';
 export const ENTITY_DRAWER_WIDTH = 480;
 
@@ -86,9 +85,6 @@ export const CONTEXT_TAB_MIN_HEIGHT = 32;
 export const CONTEXT_MENU_WIDTH = 180;
 
 export const RELATIONSHIP_PICKER_ACTION_MIN_WIDTH = 300;
-
-/** Distance of the floating smart fill button from the viewport edges. */
-export const SMART_FILL_BUTTON_OFFSET = 24;
 
 export const CONVERSATION_TITLE_POLL_INTERVAL = 3_000;
 /** Number of entity ID characters included in a new conversation title. */

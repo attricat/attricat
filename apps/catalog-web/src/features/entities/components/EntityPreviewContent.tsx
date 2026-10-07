@@ -1,5 +1,5 @@
 import { Box, Paper, Typography } from '@mui/material';
-import { useState } from 'react';
+import { useState, type ReactNode, type Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AttributeContext } from '../../contexts/api';
 import {
@@ -22,7 +22,10 @@ import type {
 } from '../api';
 import { attributeLabel } from '../entityDisplay';
 import { EntityContextPicker } from './EntityContextPicker';
-import { EntityInlineFields } from './EntityInlineFields';
+import {
+  EntityInlineFields,
+  type EntityInlineFieldsHandle,
+} from './EntityInlineFields';
 
 type Props = {
   blueprint: Awaited<ReturnType<typeof getBlueprintRevision>>;
@@ -33,6 +36,12 @@ type Props = {
   entityId: string;
   /** The editable form; values are shown read-only until it is loaded. */
   form?: EntityFormResponse;
+  /**
+   * Shown after the fields when the form is editable. Actions that change the
+   * entity elsewhere should wait until pending field changes are saved.
+   */
+  renderFooterActions?: (hasPendingChanges: boolean) => ReactNode;
+  inlineFieldsRef?: Ref<EntityInlineFieldsHandle>;
   statusParentContextIds: readonly string[];
   statusTransitions?: readonly StatusTransitionAccess[];
   onContextChange: (contextId: string) => void;
@@ -48,6 +57,8 @@ export const EntityPreviewContent = ({
   defaultContextId,
   entityId,
   form,
+  renderFooterActions,
+  inlineFieldsRef,
   statusParentContextIds,
   statusTransitions,
   onContextChange,
@@ -140,7 +151,13 @@ export const EntityPreviewContent = ({
               contextId={contextId ?? null}
               defaultContextId={defaultContextId}
               entityId={entityId}
+              footerActions={
+                form.can_write
+                  ? renderFooterActions?.(hasPendingChanges)
+                  : undefined
+              }
               form={form}
+              ref={inlineFieldsRef}
               onPendingChange={setHasPendingChanges}
               renderAttributeDecoration={renderAttributeDecoration}
               renderAttributePanel={renderAttributePanel}

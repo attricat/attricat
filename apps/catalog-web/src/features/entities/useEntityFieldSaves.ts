@@ -76,6 +76,19 @@ export const useEntityFieldSaves = ({
     if (active.current) setState(current.current);
   };
 
+  // While idle, a newer server version (another editor, an attachment, a
+  // file upload) becomes the baseline instead of surfacing as a conflict.
+  useEffect(() => {
+    const idle =
+      !inFlight.current &&
+      !current.current.conflict &&
+      Object.keys(current.current.pending).length === 0;
+    if (!idle || !updatedAt || updatedAt === version.current) return;
+    version.current = updatedAt;
+    publish({ saved: { ...savedFields } });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only a version change rebases
+  }, [updatedAt]);
+
   const flush = async (): Promise<void> => {
     const { pending, saved, conflict } = current.current;
     if (inFlight.current || conflict || Object.keys(pending).length === 0)

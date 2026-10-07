@@ -121,7 +121,7 @@ const ActionDialog = ({
                     onClick={onClose}
                     params={{ entityId: unsavedEntityIds[0] }}
                     size="small"
-                    to="/entities/$entityId/edit"
+                    to="/entities/$entityId"
                   >
                     {t('extensions.actionDialogOpenEditor')}
                   </RouterButton>

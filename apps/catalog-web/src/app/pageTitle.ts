@@ -20,7 +20,6 @@ const entitiesTitle = (t: TFunction, [entityId, subpage]: Segments) => {
   const entity = `${t('workspace.entity')} ${entityId ? shortId(entityId) : ''}`;
   const subpageKeys: Record<string, string> = {
     changes: 'entities.changes',
-    edit: 'entities.editEntity',
     migrate: 'entities.upgradeEntity',
   };
   const subpageKey = subpage ? subpageKeys[subpage] : undefined;

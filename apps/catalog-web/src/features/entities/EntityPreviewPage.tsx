@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { Alert, Box, CircularProgress } from '@mui/material';
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
@@ -18,6 +18,8 @@ import { EntityPreviewToolbar } from './components/EntityPreviewToolbar';
 import { DeleteEntityDialog } from './components/DeleteEntityDialog';
 import { RelationshipPickerActionBar } from './components/RelationshipPickerActionBar';
 import { RecordControlsPanel } from './components/RecordControlsPanel';
+import { ReusableAttributeAttachControl } from './components/ReusableAttributeAttachControl';
+import type { EntityInlineFieldsHandle } from './components/EntityInlineFields';
 import { useEntityPublications } from './components/useEntityPublications';
 import { ApiErrorAlert } from '../../components/CheckViolationsAlert';
 import { ExtensionOutlet } from '../extensions/ExtensionOutlet';
@@ -62,6 +64,7 @@ export const EntityPreviewPage = ({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [extensionPanelOpen, setExtensionPanelOpen] = useState(false);
   const [agentPanelOpen, setAgentPanelOpen] = useState(false);
+  const inlineFieldsRef = useRef<EntityInlineFieldsHandle>(null);
   const { contextId, contexts, defaultContextId, setSelectedContext } =
     useEntityContextSelection();
   const selectedContextId = contextId ?? undefined;
@@ -77,7 +80,7 @@ export const EntityPreviewPage = ({
       void invalidateEntitySearches(client);
       void navigate({
         params: { entityId: entity.id },
-        to: '/entities/$entityId/edit',
+        to: '/entities/$entityId',
       });
     },
   });
@@ -272,6 +275,13 @@ export const EntityPreviewPage = ({
                 contextId,
               )}
               statusTransitions={statusTransitions.data}
+              inlineFieldsRef={inlineFieldsRef}
+              renderFooterActions={(hasPendingChanges) => (
+                <ReusableAttributeAttachControl
+                  disabled={hasPendingChanges}
+                  entityId={entityId}
+                />
+              )}
               onContextChange={setSelectedContext}
               resolved={resolved.data}
             />
@@ -297,6 +307,20 @@ export const EntityPreviewPage = ({
         contextId={selectedContextId}
         onClose={() => setAgentPanelOpen(false)}
         open={agentPanelOpen}
+        // Suggestions apply to the fields only when this user can edit them.
+        draft={
+          entityForm.data?.can_write && contextId
+            ? {
+                entityId,
+                contextId,
+                defaultContextId,
+                getDraftValues: () =>
+                  inlineFieldsRef.current?.getDraftValues() ?? {},
+                onApply: (fields) =>
+                  inlineFieldsRef.current?.applySmartFillValues(fields),
+              }
+            : undefined
+        }
       />
       <EntityExtensionDrawer
         blueprintId={resolvedEntity?.blueprint_id ?? ''}
