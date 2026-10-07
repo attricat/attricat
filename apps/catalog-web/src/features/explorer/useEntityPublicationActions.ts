@@ -1,4 +1,3 @@
-import { useNavigate } from '@tanstack/react-router';
 import {
   useMutation,
   useQueries,
@@ -7,7 +6,6 @@ import {
 } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
-  duplicateEntity,
   publishEntity,
   unpublishEntity,
   type EntityItem,
@@ -19,10 +17,7 @@ import {
   entityPublicationOptions,
   entityPublicationReadinessOptions,
 } from '../entities/queryOptions';
-import {
-  invalidateEntityPublications,
-  invalidateEntitySearches,
-} from '../entities/invalidateEntity';
+import { invalidateEntityPublications } from '../entities/invalidateEntity';
 
 /**
  * Observe only visible rows (plus an open action menu), never all loaded pages.
@@ -35,7 +30,6 @@ export const useEntityPublicationActions = (
 ) => {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
   const publicationQueries = useQueries({
     queries: items.map((entity) => ({
       ...entityPublicationOptions(entity.id),
@@ -90,20 +84,9 @@ export const useEntityPublicationActions = (
       unpublishEntity(entityId, requirePublicationContext()),
     onSuccess: (_, entityId) => void invalidatePublication(entityId),
   });
-  const duplicate = useMutation({
-    mutationFn: (entityId: string) => duplicateEntity(entityId),
-    onSuccess: (entity) => {
-      void invalidateEntitySearches(queryClient);
-      void navigate({
-        params: { entityId: entity.id },
-        to: '/entities/$entityId',
-      });
-    },
-  });
 
   return {
-    duplicate,
-    error: publish.error ?? unpublish.error ?? duplicate.error,
+    error: publish.error ?? unpublish.error,
     publicationsByEntityId,
     publish,
     readiness,

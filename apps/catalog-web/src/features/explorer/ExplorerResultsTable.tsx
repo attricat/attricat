@@ -1,3 +1,4 @@
+import { useNavigate } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { getCoreRowModel, useLegacyTable } from '@tanstack/react-table/legacy';
 import { useVirtualizer } from '@tanstack/react-virtual';
@@ -6,6 +7,7 @@ import { lazy, Suspense, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { BlueprintWithAttributes, EntityItem } from '../entities/api';
 import { DeleteEntityDialog } from '../entities/components/DeleteEntityDialog';
+import { DuplicateEntityDialog } from '../entities/components/DuplicateEntityDialog';
 import { getExtensionRuntime } from '../extensions/api';
 import { extensionRuntimeRefetchInterval } from '../extensions/constants';
 import { extensionQueryKeys } from '../extensions/queryKeys';
@@ -99,7 +101,11 @@ export const ExplorerResultsTable = ({
   totalCountCapped,
 }: Props) => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [deleteEntityId, setDeleteEntityId] = useState<string | null>(null);
+  const [duplicateEntityId, setDuplicateEntityId] = useState<string | null>(
+    null,
+  );
   const [agentSelection, setAgentSelection] = useState<EntityItem[] | null>(
     null,
   );
@@ -136,18 +142,12 @@ export const ExplorerResultsTable = ({
     : undefined;
   if (activeActionEntity)
     publicationItems.set(activeActionEntity.id, activeActionEntity);
-  const {
-    duplicate,
-    error,
-    publicationsByEntityId,
-    publish,
-    readiness,
-    unpublish,
-  } = useEntityPublicationActions(
-    [...publicationItems.values()],
-    publicationContextId,
-    canPublish ? activeActionEntity?.id : undefined,
-  );
+  const { error, publicationsByEntityId, publish, readiness, unpublish } =
+    useEntityPublicationActions(
+      [...publicationItems.values()],
+      publicationContextId,
+      canPublish ? activeActionEntity?.id : undefined,
+    );
   const tableColumns = buildExplorerTableColumns(
     blueprint,
     relationshipSortAvailable,
@@ -269,10 +269,22 @@ export const ExplorerResultsTable = ({
           publish={() => publish.mutate(activeActionEntity.id)}
           publishing={publish.isPending}
           readiness={readiness}
-          duplicate={() => duplicate.mutate(activeActionEntity.id)}
-          duplicating={duplicate.isPending}
+          duplicate={() => setDuplicateEntityId(activeActionEntity.id)}
           unpublish={() => unpublish.mutate(activeActionEntity.id)}
           unpublishing={unpublish.isPending}
+        />
+      )}
+      {duplicateEntityId && (
+        <DuplicateEntityDialog
+          entityId={duplicateEntityId}
+          onClose={() => setDuplicateEntityId(null)}
+          onDuplicated={(copy) => {
+            setDuplicateEntityId(null);
+            void navigate({
+              params: { entityId: copy.id },
+              to: '/entities/$entityId',
+            });
+          }}
         />
       )}
       {deleteEntityId && (

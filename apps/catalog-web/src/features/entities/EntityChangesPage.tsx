@@ -1,9 +1,9 @@
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
-import { EyeIcon } from 'lucide-react';
+import { ArrowLeftIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Alert, Box, IconButton, Tooltip, Typography } from '@mui/material';
+import { Alert, Box, Typography } from '@mui/material';
 import { PageContainer } from '../../components/PageContainer';
+import { RouterButton } from '../../components/RouterLink';
 import { PageHeader } from '../../components/PageHeader';
 import { LoadMoreButton } from '../../components/LoadMoreButton';
 import { EntitySchemaSubheader } from './components/EntitySchemaSubheader';
@@ -44,13 +44,15 @@ export const EntityChangesPage = ({ entityId }: { entityId: string }) => {
     <PageContainer maxWidth="lg">
       <PageHeader eyebrow={t('entities.entityChanges')} />
       <EntityToolbar label={t('entities.entityChanges')}>
-        <Tooltip title={t('entities.backToEntity')}>
-          <Link params={{ entityId }} to="/entities/$entityId">
-            <IconButton aria-label={t('entities.backToEntity')}>
-              <EyeIcon />
-            </IconButton>
-          </Link>
-        </Tooltip>
+        <RouterButton
+          color="inherit"
+          params={{ entityId }}
+          size="small"
+          startIcon={<ArrowLeftIcon />}
+          to="/entities/$entityId"
+        >
+          {t('entities.backToEntity')}
+        </RouterButton>
       </EntityToolbar>
       <EntitySchemaSubheader
         entityId={entityId}

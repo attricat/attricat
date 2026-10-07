@@ -44,7 +44,8 @@ value_type = "string"`,
 
   await page.goto(`/entities/${entity.id}`);
   await expect(page.getByLabel('Schema is outdated')).toBeVisible();
-  await page.getByRole('link', { name: 'Upgrade blueprint' }).click();
+  await page.getByRole('button', { name: 'Actions' }).click();
+  await page.getByRole('menuitem', { name: 'Upgrade blueprint' }).click();
   await expect(page.getByText('Upgrade from v1 to v2')).toBeVisible();
   await expect(page.getByLabel('description')).toBeVisible();
   await page.getByLabel('description').fill('Added during migration');
