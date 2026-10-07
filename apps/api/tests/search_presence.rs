@@ -290,7 +290,7 @@ async fn scalar_presence_distinguishes_absence_from_false_zero_empty_and_restore
 #[sqlx::test]
 async fn file_presence_requires_an_attached_file(pool: PgPool) {
     let (base, server) = start_server_with_object_store(
-        pool,
+        pool.clone(),
         std::sync::Arc::new(api::storage::FakeObjectStore::available()),
     )
     .await;
@@ -346,6 +346,43 @@ async fn file_presence_requires_an_attached_file(pool: PgPool) {
     assert_ids(
         &search(&client, &base, presence("files", false), None).await,
         &[&absent, &cleared],
+    );
+    let workspace = bootstrap_workspace_id();
+    let actor: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
+    let repository = api::repository::CatalogRepository::system(pool)
+        .for_workspace(workspace)
+        .await
+        .unwrap();
+    let agent_search = |filters: Value| {
+        api::agent_tools::execute_read(
+            &repository,
+            actor,
+            workspace,
+            "search_entities",
+            json!({"blueprint":{"code":"presence_item"},"filters":filters}),
+        )
+    };
+    for (value, expected) in [(true, vec![&attached]), (false, vec![&absent, &cleared])] {
+        let result = agent_search(presence("files", value)).await.unwrap();
+        let mut ids: Vec<_> = result["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|e| &e["id"])
+            .collect();
+        let mut expected: Vec<_> = expected.iter().map(|e| &e["id"]).collect();
+        ids.sort_by_key(|id| id.as_str());
+        expected.sort_by_key(|id| id.as_str());
+        assert_eq!(ids, expected, "files is_set {value}");
+    }
+    let rejected =
+        agent_search(json!([{"field":"files","operator":"eq","value":"notes.txt"}])).await;
+    assert!(
+        matches!(
+            rejected,
+            Err(api::agent_tools::ToolError::InvalidArguments(_))
+        ),
+        "{rejected:?}"
     );
     let child = create_entity_with(
         &client,

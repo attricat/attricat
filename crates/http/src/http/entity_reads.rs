@@ -586,7 +586,7 @@ async fn resolve_search_filter(
     let parts: Vec<_> = filter.field.split('.').collect();
     if parts.is_empty() || parts.len() > 4 || parts.iter().any(|part| part.is_empty()) {
         return Err(ApiError::invalid_input(
-            "filters.field may contain at most three relationship hops and a scalar leaf"
+            "filters.field may contain at most three relationship hops and a scalar or file leaf"
                 .to_owned(),
         ));
     }

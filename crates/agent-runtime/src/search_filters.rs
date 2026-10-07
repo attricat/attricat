@@ -38,7 +38,7 @@ pub(crate) async fn resolve_agent_filter(
     let parts: Vec<_> = filter.field.split('.').collect();
     if parts.len() > 4 || parts.iter().any(|part| part.is_empty()) {
         return Err(invalid(
-            "filters.field may contain at most three relationship hops and a scalar leaf",
+            "filters.field may contain at most three relationship hops and a scalar or file leaf",
         ));
     }
     let mut current = blueprint.clone();
