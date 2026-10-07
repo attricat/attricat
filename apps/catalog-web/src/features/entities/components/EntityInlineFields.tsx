@@ -1,11 +1,7 @@
+import { VIEW_EDIT_LAYOUT_SPACING } from '../../views/constants';
 import { useQueryClient } from '@tanstack/react-query';
-import { Alert, Box, Button, Typography } from '@mui/material';
-import {
-  forwardRef,
-  useEffect,
-  useImperativeHandle,
-  type ReactNode,
-} from 'react';
+import { Alert, Box, Button, Stack, Typography } from '@mui/material';
+import { forwardRef, useImperativeHandle, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { checkViolationError } from '../../../api/checkViolations';
 import { ApiErrorAlert } from '../../../components/CheckViolationsAlert';
@@ -15,7 +11,10 @@ import { principalConfiguration } from '../../principals/principal';
 import { EntityView } from '../../views/components/EntityView';
 import type { ResolvedValue } from '../../views/components/ValueField';
 import { entityHeadingComponentId } from '../../views/components/blocks/EntityHeadingDefinition';
-import { resolveEditComponent } from '../../views/components/registry';
+import {
+  resolveEditComponent,
+  resolveViewComponent,
+} from '../../views/components/registry';
 import {
   viewFieldEditComponents,
   viewFieldEditors,
@@ -134,6 +133,7 @@ export const EntityInlineFields = forwardRef<EntityInlineFieldsHandle, Props>(
       savedFields: valuesForForm(allAttributes, existingValues, contextId),
       updatedAt: form.entity.updated_at,
       fieldRules,
+      onPendingChange,
     });
     const hasPending = Object.keys(saves.pending).length > 0;
     useImperativeHandle(ref, () => ({
@@ -145,10 +145,6 @@ export const EntityInlineFields = forwardRef<EntityInlineFieldsHandle, Props>(
     }));
     // Leaving would drop changes that are not saved yet.
     useBeforeUnloadWarning(hasPending || saves.saving);
-    useEffect(
-      () => onPendingChange?.(hasPending),
-      [hasPending, onPendingChange],
-    );
 
     const violations = checkViolationError(saves.error);
     const placedViolations = violations
@@ -210,7 +206,11 @@ export const EntityInlineFields = forwardRef<EntityInlineFieldsHandle, Props>(
       const editComponent =
         resolveEditComponent(component) ?? editComponents.get(attribute.code);
       const rules = fieldRules.get(attribute.code);
-      return (
+      const display = resolveViewComponent(component);
+      const KeptDisplay = display?.showsWhileEditing
+        ? display.valueRenderer
+        : undefined;
+      const editor = (
         <InlineFieldEditor
           immediate={commitsImmediately(attribute)}
           onCommit={(value) => saves.commit(attribute.code, value)}
@@ -248,6 +248,20 @@ export const EntityInlineFields = forwardRef<EntityInlineFieldsHandle, Props>(
             />
           )}
         </InlineFieldEditor>
+      );
+      return KeptDisplay ? (
+        <Stack spacing={1}>
+          <KeptDisplay
+            attribute={attribute}
+            component={component}
+            contextId={contextId ?? undefined}
+            entityId={entityId}
+            value={resolvedValues[attribute.code]?.value}
+          />
+          {editor}
+        </Stack>
+      ) : (
+        editor
       );
     };
     const viewProps = {
@@ -314,7 +328,7 @@ export const EntityInlineFields = forwardRef<EntityInlineFieldsHandle, Props>(
               : null}
         </Typography>
         {headingFields.length > 0 && (
-          <Box sx={{ mb: 2 }}>
+          <Box sx={{ mb: VIEW_EDIT_LAYOUT_SPACING }}>
             <EntityView
               {...viewProps}
               attributes={headingFields}

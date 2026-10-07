@@ -1274,6 +1274,7 @@
     "colorPickerFor": "Pick color for {{attribute}}",
     "urlOpenNewTab": "{{url}} (opens in a new tab)",
     "callPhone": "Call {{number}}",
+    "emailTo": "Email {{address}}",
     "availableOnPreviews": "{{label}} is available on entity previews.",
     "notSet": "Not set",
     "yes": "Yes",

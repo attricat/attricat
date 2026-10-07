@@ -67,6 +67,11 @@ export type ViewComponentDefinition = {
   valueEditor?: ComponentType<ValueEditorProps>;
   /** The edit component that replaces this display component while editing. */
   editComponentId?: string;
+  /**
+   * Keeps this display above the field's editor, for displays that show more
+   * than the editor does, such as a relationship's ancestors.
+   */
+  showsWhileEditing?: boolean;
   validateValue?: (value: string) => string | undefined;
   /** Submit the edited string verbatim instead of trimming it. */
   preservesWhitespace?: boolean;

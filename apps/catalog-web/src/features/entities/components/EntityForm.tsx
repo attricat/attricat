@@ -1,3 +1,4 @@
+import { VIEW_EDIT_LAYOUT_SPACING } from '../../views/constants';
 import { useForm, useStore } from '@tanstack/react-form';
 import { Alert, Button, Paper, Stack, Typography } from '@mui/material';
 import type {
@@ -405,7 +406,7 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
           onDiscard={draft.discard}
           onRestore={restoreDraft}
         />
-        <Stack spacing={2}>
+        <Stack spacing={VIEW_EDIT_LAYOUT_SPACING}>
           {contextPicker}
           {!blueprint && !lockedBlueprint && (
             <form.Field name="blueprintCode">

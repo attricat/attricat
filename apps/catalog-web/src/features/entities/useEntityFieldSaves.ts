@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { ApiRequestError } from '../../api/request';
-import { updateEntity, type Attribute, type Entity } from './api';
+import { updateEntity, type Attribute } from './api';
 import { STALE_ENTITY_ERROR_CODE } from './constants';
 import type { FieldEditRules } from './entityForm';
 import { fieldSaveRequest } from './entityFieldSaves';
@@ -12,16 +12,20 @@ type Options = {
   contextId: string | null;
   /** Attributes the user may change in this context. */
   attributes: readonly Attribute[];
-  /** Saved field values of this context when the editor opened. */
+  /** The server's saved field values of this context. */
   savedFields: Readonly<Record<string, string>>;
+  /** The server's version of the entity that `savedFields` belong to. */
   updatedAt?: string;
   fieldRules?: ReadonlyMap<string, FieldEditRules>;
-  onSaved?: (entity: Entity) => void;
+  /** Called when changes start or stop waiting to be saved. */
+  onPendingChange?: (pending: boolean) => void;
 };
 
 export type ConflictResolution = 'keepMine' | 'useTheirs';
 
 type State = {
+  /** The version `saved` belongs to; saves are made against it. */
+  version?: string;
   saved: Record<string, string>;
   pending: Record<string, string>;
   saving: boolean;
@@ -31,6 +35,10 @@ type State = {
 
 const isStaleEntity = (error: unknown) =>
   error instanceof ApiRequestError && error.code === STALE_ENTITY_ERROR_CODE;
+
+const isNewer = (candidate?: string, baseline?: string) =>
+  candidate !== undefined &&
+  (baseline === undefined || Date.parse(candidate) > Date.parse(baseline));
 
 /**
  * Saves committed field values one request at a time, each against the
@@ -45,52 +53,52 @@ export const useEntityFieldSaves = ({
   savedFields,
   updatedAt,
   fieldRules,
-  onSaved,
+  onPendingChange,
 }: Options) => {
   const client = useQueryClient();
   const [state, setState] = useState<State>(() => ({
+    version: updatedAt,
     saved: { ...savedFields },
     pending: {},
     saving: false,
     error: null,
     conflict: false,
   }));
-  // The queue reads and writes through refs; React state mirrors it for render.
+  // The queue runs outside render: event handlers and the save loop read and
+  // write these refs, and React state mirrors them for render.
   const current = useRef(state);
-  const version = useRef(updatedAt);
   const inFlight = useRef<Readonly<Record<string, string>> | null>(null);
-  const options = useRef({ attributes, fieldRules, onSaved });
-  const active = useRef(true);
-  useEffect(() => {
-    options.current = { attributes, fieldRules, onSaved };
-  });
-  useEffect(() => {
-    active.current = true;
-    return () => {
-      active.current = false;
-    };
-  }, []);
+  // What the latest commit knew about the editable attributes.
+  const request = useRef({ attributes, fieldRules });
 
   const publish = (next: Partial<State>) => {
+    const wasPending = Object.keys(current.current.pending).length > 0;
     current.current = { ...current.current, ...next };
-    if (active.current) setState(current.current);
+    setState(current.current);
+    const isPending = Object.keys(current.current.pending).length > 0;
+    if (wasPending !== isPending) onPendingChange?.(isPending);
   };
 
-  // While idle, a newer server version (another editor, an attachment, a
-  // file upload) becomes the baseline instead of surfacing as a conflict.
-  useEffect(() => {
-    const idle =
-      !inFlight.current &&
-      !current.current.conflict &&
-      Object.keys(current.current.pending).length === 0;
-    if (!idle || !updatedAt || updatedAt === version.current) return;
-    version.current = updatedAt;
-    publish({ saved: { ...savedFields } });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only a version change rebases
-  }, [updatedAt]);
+  // While idle, a newer server version (another editor, an attachment, a file
+  // upload) is the baseline instead of a conflict. Render shows it; the next
+  // commit adopts it.
+  const idle =
+    !state.saving && !state.conflict && Object.keys(state.pending).length === 0;
+  const serverIsNewer = idle && isNewer(updatedAt, state.version);
+  const adoptServerVersion = () => {
+    const { pending, conflict } = current.current;
+    if (
+      inFlight.current ||
+      conflict ||
+      Object.keys(pending).length > 0 ||
+      !isNewer(updatedAt, current.current.version)
+    )
+      return;
+    publish({ version: updatedAt, saved: { ...savedFields } });
+  };
 
   const flush = async (): Promise<void> => {
-    const { pending, saved, conflict } = current.current;
+    const { pending, saved, conflict, version } = current.current;
     if (inFlight.current || conflict || Object.keys(pending).length === 0)
       return;
     const batch = { ...pending };
@@ -98,16 +106,15 @@ export const useEntityFieldSaves = ({
     publish({ saving: true });
     try {
       const entity = await updateEntity(entityId, {
-        ...(version.current ? { expected_updated_at: version.current } : {}),
+        ...(version ? { expected_updated_at: version } : {}),
         ...fieldSaveRequest(
-          options.current.attributes,
+          request.current.attributes,
           batch,
           saved,
           contextId,
-          options.current.fieldRules,
+          request.current.fieldRules,
         ),
       });
-      version.current = entity.updated_at ?? version.current;
       // A value changed again while this save ran stays pending.
       const remaining = Object.fromEntries(
         Object.entries(current.current.pending).filter(
@@ -116,12 +123,12 @@ export const useEntityFieldSaves = ({
       );
       inFlight.current = null;
       publish({
+        version: entity.updated_at ?? current.current.version,
         saved: { ...current.current.saved, ...batch },
         pending: remaining,
         saving: false,
         error: null,
       });
-      options.current.onSaved?.(entity);
       void invalidateEntity(client, entityId);
       return flush();
     } catch (error) {
@@ -135,6 +142,8 @@ export const useEntityFieldSaves = ({
   };
 
   const commitMany = (values: Readonly<Record<string, string>>) => {
+    request.current = { attributes, fieldRules };
+    adoptServerVersion();
     const { saved, pending } = current.current;
     const next = { ...pending };
     for (const [code, value] of Object.entries(values)) {
@@ -149,7 +158,10 @@ export const useEntityFieldSaves = ({
 
   return {
     /** Saved values overlaid with changes that are not saved yet. */
-    fields: { ...state.saved, ...state.pending },
+    fields: {
+      ...(serverIsNewer ? savedFields : state.saved),
+      ...state.pending,
+    },
     pending: state.pending,
     saving: state.saving,
     error: state.error,
@@ -164,12 +176,13 @@ export const useEntityFieldSaves = ({
     },
     /** Resends pending changes, for example after a network failure. */
     retry: () => {
+      request.current = { attributes, fieldRules };
       publish({ error: null });
       void flush();
     },
     /** Moves the version forward after a change saved elsewhere (files). */
     noteEntityUpdated: (nextUpdatedAt: string) => {
-      version.current = nextUpdatedAt;
+      publish({ version: nextUpdatedAt });
     },
     /**
      * Continues after another editor's change: rebases on the latest saved
@@ -179,7 +192,7 @@ export const useEntityFieldSaves = ({
       resolution: ConflictResolution,
       latest: { savedFields: Record<string, string>; updatedAt?: string },
     ) => {
-      version.current = latest.updatedAt;
+      request.current = { attributes, fieldRules };
       const pending =
         resolution === 'useTheirs'
           ? {}
@@ -189,6 +202,7 @@ export const useEntityFieldSaves = ({
               ),
             );
       publish({
+        version: latest.updatedAt,
         saved: { ...latest.savedFields },
         pending,
         error: null,
