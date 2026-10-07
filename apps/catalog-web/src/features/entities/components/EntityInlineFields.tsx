@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next';
 import { checkViolationError } from '../../../api/checkViolations';
 import { ApiErrorAlert } from '../../../components/CheckViolationsAlert';
 import { useViolationText } from '../../../components/useViolationText';
+import { useBeforeUnloadWarning } from '../../drafts/useBeforeUnloadWarning';
 import { principalConfiguration } from '../../principals/principal';
 import { EntityView } from '../../views/components/EntityView';
 import type { ResolvedValue } from '../../views/components/ValueField';
@@ -142,6 +143,8 @@ export const EntityInlineFields = forwardRef<EntityInlineFieldsHandle, Props>(
         if (Object.keys(fields).length > 0) saves.commitMany(fields);
       },
     }));
+    // Leaving would drop changes that are not saved yet.
+    useBeforeUnloadWarning(hasPending || saves.saving);
     useEffect(
       () => onPendingChange?.(hasPending),
       [hasPending, onPendingChange],
