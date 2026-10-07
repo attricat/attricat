@@ -324,7 +324,7 @@ export default async () => {
     const context = await browser.newContext();
     const page = await context.newPage();
     await page.goto(`${e2eWebUrl}/login`);
-    await page.getByLabel('Workspace').fill('default.local');
+    await page.getByLabel('Workspace', { exact: true }).fill('default.local');
     await page.getByRole('button', { name: 'Continue' }).click();
     await page.waitForURL(`${e2eWebUrl}/login/default.local`);
     await page.getByLabel('Email').fill(bootstrapOwnerEmail);

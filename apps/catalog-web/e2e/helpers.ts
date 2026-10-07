@@ -233,7 +233,7 @@ export const signInAsMember = async (browser: Browser, roleCode: string) => {
   });
   const page = await context.newPage();
   await page.goto('/login');
-  await page.getByLabel('Workspace').fill('default.local');
+  await page.getByLabel('Workspace', { exact: true }).fill('default.local');
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByLabel('Email').fill(member.email);
   await page.getByLabel('Password').fill(member.password);
