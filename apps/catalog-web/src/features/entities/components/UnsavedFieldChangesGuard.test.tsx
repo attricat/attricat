@@ -39,7 +39,7 @@ describe('UnsavedFieldChangesGuard', () => {
     const router = renderGuarded();
     await waitFor(() => expect(router.state.status).toBe('idle'));
 
-    act(() => void router.navigate({ to: '/', search: { entity: 'b' } }));
+    act(() => router.history.push('/?entity=b'));
     await user.click(
       await screen.findByRole('button', { name: 'entities.keepEditing' }),
     );
@@ -52,25 +52,25 @@ describe('UnsavedFieldChangesGuard', () => {
     const router = renderGuarded();
     await waitFor(() => expect(router.state.status).toBe('idle'));
 
-    act(() => void router.navigate({ to: '/other' }));
+    act(() => router.history.push('/other'));
     await user.click(
       await screen.findByRole('button', { name: 'entities.discardAndLeave' }),
     );
 
-    await waitFor(() =>
-      expect(router.state.location.pathname).toBe('/other'),
-    );
+    await waitFor(() => expect(router.state.location.pathname).toBe('/other'));
   });
 
   it('lets search changes that keep the entity through', async () => {
     const router = renderGuarded();
     await waitFor(() => expect(router.state.status).toBe('idle'));
 
-    await act(() =>
-      router.navigate({ to: '/', search: { entity: 'a', q: 'shirts' } }),
+    act(() => router.history.push('/?entity=a&q=shirts'));
+    await waitFor(() =>
+      expect(router.state.location.search).toEqual({
+        entity: 'a',
+        q: 'shirts',
+      }),
     );
-
-    expect(router.state.location.search).toEqual({ entity: 'a', q: 'shirts' });
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 });

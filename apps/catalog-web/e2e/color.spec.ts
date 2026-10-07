@@ -31,9 +31,6 @@ value_type = "string"
 [views.detail]
 type = "stack"
 children = [{ type = "field", field = "title" }, { type = "field", field = "hex", component = { id = "catalog.color_display", version = 1 } }]
-[views.edit]
-type = "stack"
-children = [{ type = "field", field = "title" }, { type = "field", field = "hex", component = { id = "catalog.color_edit", version = 1 } }]
 [views.table]
 type = "table"
 columns = [{ field = "title" }, { field = "hex", renderer = { id = "catalog.color_display", version = 1 } }]

@@ -23,9 +23,6 @@ value_type = "string"
 [views.detail]
 type = "stack"
 children = [{ type = "field", field = "phone", component = { id = "catalog.phone_display", version = 1 } }]
-[views.edit]
-type = "stack"
-children = [{ type = "field", field = "title" }, { type = "field", field = "phone", component = { id = "catalog.phone_edit", version = 1 } }]
 [views.table]
 type = "table"
 columns = [{ field = "phone", renderer = { id = "catalog.phone_display", version = 1 } }]

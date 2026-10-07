@@ -15,7 +15,6 @@ export const draftEditors = {
   blueprintCreate: 'blueprint-create',
   blueprintRevision: 'blueprint-revision',
   entityCreate: 'entity-create',
-  entityEdit: 'entity-edit',
   entityComment: 'entity-comment',
   reusableAttributeCreate: 'reusable-attribute-create',
   reusableAttributeRevision: 'reusable-attribute-revision',

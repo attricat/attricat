@@ -17,10 +17,6 @@ import {
   editableFormAttributes,
   entitySchemaRequiredAttributes,
   headingEditableAttributes,
-  removedFormValues,
-  smartFillFormFields,
-  type RemovedAttributeValue,
-  type ResolvedFormValues,
   unplacedEditableAttributes,
   unplacedRequiredAttributes,
 } from '../entityFormAttributes';
@@ -35,13 +31,7 @@ import { draftEditors, type DraftEditor } from '../../drafts/constants';
 import { DraftRestoreDialog } from '../../drafts/DraftRestoreDialog';
 import { formFieldsDraftSchema } from '../../drafts/schemas';
 import { useEditorDraft } from '../../drafts/useEditorDraft';
-import {
-  forwardRef,
-  useImperativeHandle,
-  useMemo,
-  useState,
-  type ReactNode,
-} from 'react';
+import { forwardRef, useImperativeHandle, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { attributeValueTypes } from '../valueTypes';
 import { EntityBlueprintSelect } from './EntityBlueprintSelect';
@@ -56,14 +46,11 @@ import { checkViolationError } from '../../../api/checkViolations';
 import { violationFieldErrors } from '../checkViolations';
 import { useViolationText } from '../../../components/useViolationText';
 import { ApiErrorAlert } from '../../../components/CheckViolationsAlert';
-import type { StatusTransitionAccess } from '../api';
 import { EntityFormAttributeEditor } from './EntityFormAttributeEditor';
 
 export type EntityFormHandle = {
-  applySmartFillValues: (values: Record<string, string>) => void;
   /** Removes the persisted draft after a confirmed save. */
   clearDraft: () => void;
-  getDraftValues: () => Record<string, string>;
 };
 
 /** Identifies where unsaved field values are kept across refreshes. */
@@ -86,31 +73,25 @@ const pickDraftFields = (
     ),
   );
 
+// Creating and migrating an entity have no saved status edges, parent
+// contexts or resolved values to show.
+const noStatusParentContextIds: readonly string[] = [];
+const noStatusTransitions: readonly [] = [];
+const noResolvedValues = {};
+
 type EntityFormProps = {
   expectedUpdatedAt?: string;
-  statusParentContextIds?: readonly string[];
-  /** The caller's access to declared status edges from the saved status. */
-  statusTransitions?: readonly StatusTransitionAccess[];
   blueprint?: BlueprintWithAttributes;
   draft?: EntityFormDraft;
   initialValues?: ReturnType<typeof valuesForForm>;
   contextId?: string | null;
-  contextPicker?: ReactNode;
   defaultContextId?: string | null;
-  footerActions?: ReactNode;
   existingValues?: FormAttributeValue[];
-  reusableAttributes?: Attribute[];
-  resolvedValues?: ResolvedFormValues;
-  formId?: string;
   isLoadingBlueprint?: boolean;
-  disabled?: boolean;
-  showBlueprintMetadata?: boolean;
-  showSubmitButton?: boolean;
   showAllAttributes?: boolean;
   highlightedAttributes?: readonly string[];
   migrationReviewMessages?: Readonly<Record<string, string>>;
   requiredAttributes?: readonly string[];
-  entityId?: string;
   /** Load or save failure; check violations are placed on their fields. */
   error?: Error | null;
   onLoadBlueprint?: (code: string, version?: number) => void;
@@ -119,37 +100,29 @@ type EntityFormProps = {
     expected_updated_at?: string;
     values: ReturnType<typeof serializeAttributeValues>;
     relationships: ReturnType<typeof relationshipTargetsForForm>;
-    remove_values: RemovedAttributeValue[];
   }) => void;
   submitLabel: string;
 };
 
+/**
+ * Enters a new entity's values, or the values of an entity being migrated to
+ * another blueprint version. Existing entities are edited inline instead.
+ */
 export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
   (
     {
       blueprint,
       expectedUpdatedAt,
-      statusParentContextIds = [],
-      statusTransitions = [],
       draft: draftOptions,
       initialValues = {},
       contextId = null,
-      contextPicker,
       defaultContextId = null,
-      footerActions,
       existingValues = [],
-      reusableAttributes = [],
-      resolvedValues = {},
-      formId,
       isLoadingBlueprint = false,
-      disabled = false,
-      showBlueprintMetadata = true,
-      showSubmitButton = true,
       showAllAttributes = false,
       highlightedAttributes = [],
       migrationReviewMessages = {},
       requiredAttributes = [],
-      entityId,
       error,
       onLoadBlueprint,
       lockedBlueprint = false,
@@ -166,10 +139,10 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
     const [baseline] = useState({
       fields: initialValues,
       values: existingValues,
+      version: expectedUpdatedAt,
     });
     const initialFields =
       expectedUpdatedAt === undefined ? initialValues : baseline.fields;
-    const [savedVersion, setSavedVersion] = useState(expectedUpdatedAt);
     const savedValues = baseline.values;
     const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
     const [formError, setFormError] = useState<string>();
@@ -178,7 +151,7 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
     const detailView = blueprint?.blueprint.views.detail;
     const fieldComponents = viewFieldEditComponents(detailView);
     const editableAttributes = editableFormAttributes(
-      blueprint ? [...blueprint.attributes, ...reusableAttributes] : [],
+      blueprint?.attributes ?? [],
       {
         contextId,
         defaultContextId,
@@ -216,30 +189,27 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
       }));
     };
     const lockedAttributes = statusLocks(
-      blueprint ? [...blueprint.attributes, ...reusableAttributes] : [],
+      blueprint?.attributes ?? [],
       savedValues,
       contextId,
-      statusParentContextIds,
+      noStatusParentContextIds,
     );
     // Locked values are never resubmitted; the server rejects any change.
     const submittedAttributes = editableAttributes.filter(
       (attribute) => lockedAttributes[attribute.code] === undefined,
     );
-    const blueprintEditable = editableAttributes.filter(
-      (attribute) => blueprint?.attributes.includes(attribute) ?? false,
-    );
     // The heading only displays values, so its fields are edited first.
     const headingFields =
       detailView && !showAllAttributes
-        ? headingEditableAttributes(blueprintEditable, detailView)
+        ? headingEditableAttributes(editableAttributes, detailView)
         : [];
     // Editable fields the layout leaves out.
     const otherAttributes =
       blueprint && detailView && !showAllAttributes
         ? [
             ...new Set([
-              ...unplacedEditableAttributes(blueprintEditable, detailView),
-              ...unplacedRequiredAttributes(blueprintEditable, detailView, [
+              ...unplacedEditableAttributes(editableAttributes, detailView),
+              ...unplacedRequiredAttributes(editableAttributes, detailView, [
                 ...requiredAttributes,
                 ...(contextId === defaultContextId
                   ? entitySchemaRequiredAttributes(
@@ -269,14 +239,14 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
           attribute,
           savedValues,
           contextId,
-          statusParentContextIds,
+          noStatusParentContextIds,
         );
         const denial = statusTransitionDenial(config, {
           attributeCode: attribute.code,
           baseline: saved.current,
           inherited: saved.inherited,
           selected: fields[attribute.code] ?? '',
-          transitions: statusTransitions,
+          transitions: noStatusTransitions,
         });
         if (denial) validation.fieldErrors[attribute.code] = denialText(denial);
       }
@@ -290,7 +260,7 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
         fields: initialFields,
       },
       onSubmit: ({ value }) => {
-        if (disabled || isLoadingBlueprint) return;
+        if (isLoadingBlueprint) return;
         if (!blueprint) {
           onLoadBlueprint?.(value.blueprintCode);
           return;
@@ -302,7 +272,9 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
         )
           return;
         onSubmit({
-          ...(savedVersion ? { expected_updated_at: savedVersion } : {}),
+          ...(baseline.version
+            ? { expected_updated_at: baseline.version }
+            : {}),
           values: serializeAttributeValues(
             submittedAttributes,
             value.fields,
@@ -310,12 +282,6 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
             fieldEditors,
           ),
           relationships: relationshipTargetsForForm(
-            submittedAttributes,
-            value.fields,
-            contextId,
-          ),
-          remove_values: removedFormValues(
-            savedValues,
             submittedAttributes,
             value.fields,
             contextId,
@@ -339,7 +305,8 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
     );
     const draft = useEditorDraft({
       dirty: JSON.stringify(draftFields) !== initialDraftFields,
-      editor: draftOptions?.editor ?? draftEditors.entityEdit,
+      // Unused without draft options; `ready` keeps the draft off.
+      editor: draftOptions?.editor ?? draftEditors.entityCreate,
       ready: Boolean(draftOptions && blueprint),
       resource: draftOptions?.resource ?? [],
       schema: formFieldsDraftSchema,
@@ -358,43 +325,27 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
       form.setFieldValue('fields', nextFields);
     };
 
-    useImperativeHandle(ref, () => ({
-      clearDraft: draft.clear,
-      getDraftValues: () => ({ ...form.state.values.fields }),
-      applySmartFillValues: (values) => {
-        const fields = smartFillFormFields(editableAttributes, values);
-        if (Object.keys(fields).length === 0) return;
-        const nextFields = { ...form.state.values.fields, ...fields };
-        validateFields(nextFields);
-        form.setFieldValue('fields', nextFields);
-      },
-    }));
+    useImperativeHandle(ref, () => ({ clearDraft: draft.clear }));
 
     const editorContext = {
-      statusParentContextIds,
-      disabled: disabled || isLoadingBlueprint,
+      statusParentContextIds: noStatusParentContextIds,
+      disabled: isLoadingBlueprint,
       contextId,
       defaultContextId,
-      entityId,
       existingValues,
       statusSavedValues: savedValues,
       lockedAttributes,
-      statusTransitions,
+      statusTransitions: noStatusTransitions,
       fieldErrors: { ...serverFieldErrors, ...fieldErrors },
       highlightedAttributes,
       migrationReviewMessages,
-      resolvedValues,
-      // Gallery edits save immediately; adopt the version they produce so the
-      // stale-entity check on Save does not mistake them for someone else's.
-      onEntityUpdated: (updatedAt: string) =>
-        setSavedVersion((version) => (version ? updatedAt : version)),
+      resolvedValues: noResolvedValues,
     };
 
     return (
       <Paper
         component="form"
         noValidate
-        id={formId}
         onSubmit={(event) => {
           event.preventDefault();
           void form.handleSubmit();
@@ -407,7 +358,6 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
           onRestore={restoreDraft}
         />
         <Stack spacing={VIEW_EDIT_LAYOUT_SPACING}>
-          {contextPicker}
           {!blueprint && !lockedBlueprint && (
             <form.Field name="blueprintCode">
               {(field) => (
@@ -418,7 +368,7 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
               )}
             </form.Field>
           )}
-          {blueprint && showBlueprintMetadata && (
+          {blueprint && (
             <Typography color="text.secondary">
               {t('entities.versionedCode', {
                 code: blueprint.blueprint.code,
@@ -458,13 +408,13 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
                     {headingFields.length > 0 && (
                       <EntityView
                         attributes={headingFields}
-                        values={resolvedValues}
+                        values={noResolvedValues}
                         renderEditor={renderEditor}
                       />
                     )}
                     <EntityView
                       attributes={blueprint.attributes}
-                      values={resolvedValues}
+                      values={noResolvedValues}
                       fallbackVisibilityScope={
                         showAllAttributes
                           ? undefined
@@ -483,19 +433,7 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
                         </Typography>
                         <EntityView
                           attributes={otherAttributes}
-                          values={resolvedValues}
-                          renderEditor={renderEditor}
-                        />
-                      </>
-                    )}
-                    {reusableAttributes.length > 0 && (
-                      <>
-                        <Typography sx={{ mt: 3 }} variant="h6">
-                          {t('entities.additionalAttributes')}
-                        </Typography>
-                        <EntityView
-                          attributes={reusableAttributes}
-                          values={resolvedValues}
+                          values={noResolvedValues}
                           renderEditor={renderEditor}
                         />
                       </>
@@ -512,18 +450,13 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
             />
           )}
           {formError && <Alert severity="error">{formError}</Alert>}
-          {footerActions}
-          {showSubmitButton && (
-            <Button
-              disabled={disabled || isLoadingBlueprint}
-              type="submit"
-              variant="contained"
-            >
-              {isLoadingBlueprint
-                ? t('entities.loadingBlueprint')
-                : submitLabel}
-            </Button>
-          )}
+          <Button
+            disabled={isLoadingBlueprint}
+            type="submit"
+            variant="contained"
+          >
+            {isLoadingBlueprint ? t('entities.loadingBlueprint') : submitLabel}
+          </Button>
         </Stack>
       </Paper>
     );

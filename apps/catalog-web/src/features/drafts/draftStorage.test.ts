@@ -11,7 +11,7 @@ import {
 } from './draftStorage';
 
 const scope: DraftScope = {
-  editor: draftEditors.entityEdit,
+  editor: draftEditors.entityCreate,
   resource: ['entity-1', 'context-1'],
   userId: 'user-1',
   workspaceId: 'workspace-1',
@@ -69,7 +69,7 @@ describe('draft storage', () => {
       draftStorageKey(scope),
       draftStorageKey({ ...scope, workspaceId: 'workspace-2' }),
       draftStorageKey({ ...scope, userId: 'user-2' }),
-      draftStorageKey({ ...scope, editor: draftEditors.entityCreate }),
+      draftStorageKey({ ...scope, editor: draftEditors.entityComment }),
       draftStorageKey({ ...scope, resource: ['entity-1', 'context-2'] }),
       draftStorageKey({ ...scope, resource: ['entity-1:context-1'] }),
     ]);

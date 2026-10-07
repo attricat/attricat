@@ -32,9 +32,6 @@ value_type = "string"
 [views.detail]
 type = "stack"
 children = [{ type = "field", field = "website", component = { id = "catalog.url_display", version = 1 } }]
-[views.edit]
-type = "stack"
-children = [{ type = "field", field = "website", component = { id = "catalog.url_edit", version = 1 } }]
 [views.table]
 type = "table"
 columns = [{ field = "website", renderer = { id = "catalog.url_display", version = 1 } }]
