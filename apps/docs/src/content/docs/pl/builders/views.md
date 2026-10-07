@@ -193,7 +193,7 @@ renderer = { id = "catalog.url_display", version = 1 }
 | E-mail | `catalog.email_display`, `catalog.email_edit` | Jeden zwykły adres ASCII, np. `name+tag@example.com`. Wyświetlany jako link `mailto:`. |
 | URL | `catalog.url_display`, `catalog.url_edit` | Tylko bezwzględne adresy `http://` lub `https://`. Linki otwierają się w nowej karcie. |
 | Telefon | `catalog.phone_display`, `catalog.phone_edit` | Zapisywany tak, jak go wpisano. Numery zaczynające się od `+` i numeru kierunkowego kraju stają się linkami `tel:`; numer wewnętrzny można poprzedzić `ext.` lub `x`. |
-| Markdown | `catalog.markdown_display`, `catalog.markdown_edit` | CommonMark z kartami **Edytuj** i **Podgląd**. Surowy HTML jest pomijany, obrazy pokazują tekst alternatywny, a linki są ograniczone do HTTP(S), `mailto:`, ścieżek względnych i fragmentów. Tekst jest zapisywany dokładnie tak, jak go wpisano, łącznie z białymi znakami. Niedostępny w kolumnach tabeli. |
+| Markdown | `catalog.markdown_display`, `catalog.markdown_edit` | CommonMark z kartami **Edytuj** i **Podgląd**. Na stronie encji ustawiona wartość jest pokazywana sformatowana, dopóki nie zdecydujesz się jej edytować. Surowy HTML jest pomijany, obrazy pokazują tekst alternatywny, a linki są ograniczone do HTTP(S), `mailto:`, ścieżek względnych i fragmentów. Tekst jest zapisywany dokładnie tak, jak go wpisano, łącznie z białymi znakami. Niedostępny w kolumnach tabeli. |
 
 Wartości, które nie pasują do kontrolki, np. starsze dane, nadal są widoczne jako zwykły tekst bez linku i próbki. Pola bez komponentu korzystają ze standardowego edytora dla swojego typu wartości.
 

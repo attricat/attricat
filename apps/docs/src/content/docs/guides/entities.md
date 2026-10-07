@@ -24,6 +24,7 @@ Each field saves on its own:
 - Text, number, and date fields save when you leave the field. Single-line fields also save when you press Enter.
 - Selects, checkboxes, statuses, user and team fields, relationships, and files save as soon as you change them.
 - Escape puts back the saved value.
+- Markdown fields show their formatted text. To change it, select the pencil next to the field's label; the field shows formatted text again when you leave it.
 
 Every saved field is a separate change, with its own entry in the history and audit log. If the entity is published, the first saved field withdraws its publications, unless your role keeps them; see [Publishing](/guides/publishing/#what-withdraws-a-publication).
 

@@ -302,6 +302,7 @@
     "unsavedChangeCount_few": "{{count}} niezapisane zmiany",
     "unsavedChangeCount_many": "{{count}} niezapisanych zmian",
     "unsavedChangeCount_other": "{{count}} niezapisanej zmiany",
+    "editField": "Edytuj {{field}}",
     "changeNotSaved": "Ta zmiana nie jest jeszcze zapisana.",
     "valueRequired": "Wartość jest wymagana.",
     "changedByAnotherEditor": "Ktoś inny zmienił tę encję. Wybierz, czy zachować niezapisane zmiany, czy użyć najnowszych wartości.",

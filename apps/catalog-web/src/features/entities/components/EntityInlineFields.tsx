@@ -50,6 +50,7 @@ import {
 } from '../useEntityFieldSaves';
 import { attributeValueTypes } from '../valueTypes';
 import { EntityFormAttributeEditor } from './EntityFormAttributeEditor';
+import { FieldValueAtRest } from './FieldValueAtRest';
 import { InlineFieldEditor } from './InlineFieldEditor';
 import { ReusableAttributeAttachControl } from './ReusableAttributeAttachControl';
 import { UnsavedFieldChangesGuard } from './UnsavedFieldChangesGuard';
@@ -228,11 +229,31 @@ export const EntityInlineFields = forwardRef<EntityInlineFieldsHandle, Props>(
       const KeptDisplay = display?.showsWhileEditing
         ? display.valueRenderer
         : undefined;
+      // A field whose save failed keeps its editor open to show the error.
+      const AtRestDisplay =
+        resolveViewComponent(editComponent)?.editsOnRequest &&
+        fieldErrors[attribute.code] === undefined
+          ? display?.valueRenderer
+          : undefined;
       const editor = (
         <InlineFieldEditor
           immediate={commitsImmediately(attribute)}
           onCommit={(value) => saves.commit(attribute.code, value)}
           onRevert={() => saves.revert(attribute.code)}
+          renderAtRest={
+            AtRestDisplay &&
+            (({ value, onEdit }) => (
+              <FieldValueAtRest attribute={attribute} onEdit={onEdit}>
+                <AtRestDisplay
+                  attribute={attribute}
+                  component={component}
+                  contextId={contextId ?? undefined}
+                  entityId={entityId}
+                  value={value}
+                />
+              </FieldValueAtRest>
+            ))
+          }
           validate={(value) =>
             validateEntityForm(
               [attribute],
