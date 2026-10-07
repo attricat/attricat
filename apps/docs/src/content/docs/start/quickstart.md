@@ -106,7 +106,7 @@ Try saving without a title: the entity schema rejects it. Try a price of *-1*: t
 
 Open **Manage → Contexts → Create context**. Create `PL` under the root, with metadata `{"language": "pl"}`.
 
-Open the product, switch **Context** to `PL`, and choose **Edit entity**. Every field shows *Inherited from Default context*. Set `title` to *Lniana koszula* and save. `sku` is read-only here because it is managed in the default context.
+Open the product and switch **Context** to `PL`. Every field shows *Inherited from Default context*. Set `title` to *Lniana koszula* and leave the field to save it. `sku` is read-only here because it is managed in the default context.
 
 Switch the Explorer's **Context** selector between `default` and `PL` to see the title change.
 
@@ -116,7 +116,7 @@ Open **Manage → Exports** and turn on **Export channel** for `PL`.
 
 Back on the product, the **Publication** section shows `PL` as *Not published*. Choose **Publish**.
 
-Now edit the product's price and save. The publication is withdrawn: it shows *Not published* again, because the approved state is no longer the current one. **Republish** to approve the change.
+Now change the product's price and leave the field. The publication is withdrawn: it shows *Not published* again, because the approved state is no longer the current one. **Republish** to approve the change.
 
 ## 7. Try the Explorer
 

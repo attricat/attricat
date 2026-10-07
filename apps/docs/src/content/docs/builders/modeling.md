@@ -170,7 +170,7 @@ value_schema = '''{
 }'''
 ```
 
-- The form shows a picker of active workspace members and teams, and the record shows the chosen name. Use `"kinds": ["user"]` when the responsibility must belong to one person.
+- The field offers a picker of active workspace members and teams, and the record shows the chosen name. Use `"kinds": ["user"]` when the responsibility must belong to one person.
 - Saving checks that a new value is an active member or an existing team. A record assigned to someone who has since left keeps the assignment and shows it as no longer active until someone changes it.
 - In the Explorer, filter the attribute by a person or team, or choose **Assigned to me (or my teams)**. Saved searches with that filter work for whoever opens them.
 - [Teams](/operate/workspaces/#teams) are managed under **Manage → Workspace management → Teams**. An assignment stores the team, so changing who belongs to it never touches records.

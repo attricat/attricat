@@ -23,7 +23,7 @@ describe('DraftProposal', () => {
         onApply={onApply}
       />,
     );
-    await user.click(screen.getByRole('button', { name: 'Apply to form' }));
+    await user.click(screen.getByRole('button', { name: 'Apply values' }));
     expect(onApply).toHaveBeenCalledWith({ description: 'New description' });
     expect(screen.getByText(/Skipped fields changed/)).toBeTruthy();
   });

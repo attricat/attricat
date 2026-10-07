@@ -106,7 +106,7 @@ Spróbuj zapisać produkt bez tytułu: schemat encji go odrzuci. Spróbuj ustawi
 
 Otwórz **Zarządzanie → Konteksty → Utwórz kontekst**. Utwórz `PL` pod korzeniem, z metadanymi `{"language": "pl"}`.
 
-Otwórz produkt, przełącz **Kontekst** na `PL` i wybierz **Edytuj encję**. Każde pole pokazuje *Dziedziczone z kontekstu Domyślny*. Ustaw `title` na *Lniana koszula* i zapisz. `sku` jest tu tylko do odczytu, ponieważ jest zarządzane w kontekście domyślnym.
+Otwórz produkt i przełącz **Kontekst** na `PL`. Każde pole pokazuje *Dziedziczone z kontekstu Domyślny*. Ustaw `title` na *Lniana koszula* i opuść pole, aby je zapisać. `sku` jest tu tylko do odczytu, ponieważ jest zarządzane w kontekście domyślnym.
 
 Przełączaj selektor **Kontekst** w Przeglądarce między `default` a `PL`, aby zobaczyć zmianę tytułu.
 
@@ -116,7 +116,7 @@ Otwórz **Zarządzanie → Eksporty** i włącz **Kanał eksportu** dla `PL`.
 
 Po powrocie do produktu sekcja **Publikacja** pokazuje `PL` jako *Nieopublikowano*. Wybierz **Opublikuj**.
 
-Teraz zmień cenę produktu i zapisz. Publikacja zostaje wycofana: ponownie widać *Nieopublikowano*, ponieważ zatwierdzony stan nie jest już bieżący. Użyj **Opublikuj ponownie**, aby zatwierdzić zmianę.
+Teraz zmień cenę produktu i opuść pole. Publikacja zostaje wycofana: ponownie widać *Nieopublikowano*, ponieważ zatwierdzony stan nie jest już bieżący. Użyj **Opublikuj ponownie**, aby zatwierdzić zmianę.
 
 ## 7. Wypróbuj Przeglądarkę
 

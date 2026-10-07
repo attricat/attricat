@@ -170,7 +170,7 @@ value_schema = '''{
 }'''
 ```
 
-- Formularz pokazuje listę aktywnych członków obszaru roboczego i zespołów, a rekord wyświetla wybraną nazwę. Użyj `"kinds": ["user"]`, gdy odpowiedzialność musi należeć do jednej osoby.
+- Pole oferuje listę aktywnych członków obszaru roboczego i zespołów, a rekord wyświetla wybraną nazwę. Użyj `"kinds": ["user"]`, gdy odpowiedzialność musi należeć do jednej osoby.
 - Zapis sprawdza, czy nowa wartość to aktywny członek lub istniejący zespół. Rekord przypisany do osoby, która odeszła, zachowuje przypisanie i pokazuje je jako nieaktywne, dopóki ktoś go nie zmieni.
 - W Przeglądarce filtruj atrybut według osoby lub zespołu albo wybierz **Przypisane do mnie (lub moich zespołów)**. Zapisane wyszukiwania z takim filtrem działają dla każdego, kto je otworzy.
 - [Zespołami](/pl/operate/workspaces/#zespoły) zarządza się w **Zarządzanie → Zarządzanie obszarem roboczym → Zespoły**. Przypisanie zapisuje zespół, więc zmiana jego składu nigdy nie zmienia rekordów.

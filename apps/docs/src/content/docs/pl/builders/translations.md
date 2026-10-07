@@ -46,7 +46,7 @@ Pozostały tekst, na przykład bloki `heading` i `text`, separatory wyświetlani
 ]
 ```
 
-Przetłumaczoną etykietę, z takim samym zastępowaniem brakujących tłumaczeń jak w innych etykietach, pokazują znaczniki statusu, lista wyboru statusu w formularzu encji, lista wartości filtra i etykiety filtrów w Przeglądarce oraz wartości wyświetlane jako tekst. Wyszukiwanie, filtry, zapisane wyszukiwania, API i eksporty nadal używają kodu, więc przetłumaczenie lub zmiana etykiety nigdy nie zmienia zapisanych danych. Kontekst, na przykład `{{Draft|status}}`, oddziela status „Draft” od innych użyć tego słowa.
+Przetłumaczoną etykietę, z takim samym zastępowaniem brakujących tłumaczeń jak w innych etykietach, pokazują znaczniki statusu, lista wyboru statusu na stronie encji i w formularzu tworzenia, lista wartości filtra i etykiety filtrów w Przeglądarce oraz wartości wyświetlane jako tekst. Wyszukiwanie, filtry, zapisane wyszukiwania, API i eksporty nadal używają kodu, więc przetłumaczenie lub zmiana etykiety nigdy nie zmienia zapisanych danych. Kontekst, na przykład `{{Draft|status}}`, oddziela status „Draft” od innych użyć tego słowa.
 
 ## Składnia odwołań
 

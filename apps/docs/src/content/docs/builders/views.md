@@ -12,12 +12,13 @@ Views are optional. Without them, the web app shows attributes in declaration or
 | View | Where it appears |
 | --- | --- |
 | `dropdown_option` | The label of an entity in pickers, filter pills, and search. Required for entity blueprints. |
-| `detail` | The entity page and preview. |
-| `edit` | The create and edit forms. |
+| `detail` | The entity page, its preview, and the create form. Fields are shown and edited in this layout. |
 | `table` | The Explorer's result columns. |
 | `extension_layout` | Order and visibility of extension panels and actions on this blueprint's entity pages. |
 
-## Building a detail or edit layout
+`views.edit` is deprecated. The web app ignores it, and blueprints that still define it remain valid.
+
+## Building a detail layout
 
 A layout is a tree. Containers hold other blocks; leaves show a field or static content.
 
@@ -28,21 +29,21 @@ A layout is a tree. Containers hold other blocks; leaves show a field or static 
 TOML gives you two ways to write the same tree. Nested arrays of tables are verbose but easy to diff:
 
 ```toml
-[views.edit]
+[views.detail]
 type = "stack"
 
-[[views.edit.children]]
+[[views.detail.children]]
 type = "field"
 field = "title"
 
-[[views.edit.children]]
+[[views.detail.children]]
 type = "grid"
 
-[[views.edit.children.children]]
+[[views.detail.children.children]]
 type = "field"
 field = "price"
 
-[[views.edit.children.children]]
+[[views.detail.children.children]]
 type = "field"
 field = "stock_on_hand"
 ```
@@ -50,7 +51,7 @@ field = "stock_on_hand"
 Inline tables are compact:
 
 ```toml
-[views.edit]
+[views.detail]
 type = "stack"
 children = [
   { type = "field", field = "title" },
@@ -78,7 +79,7 @@ tabs = [
 
 `field` accepts scalar and file attributes. `relationship_list` accepts relationship attributes. Referencing an attribute the blueprint does not have, or the wrong kind, fails validation.
 
-An `edit` layout must place every attribute listed in `entity_schema.required`, except readonly ones. Otherwise the blueprint fails validation. Blueprints published before this check existed still work: the form shows any required field the layout leaves out under **Other required attributes**.
+The detail layout drives both display and editing. On the entity page, every field the user may change is an editable control in its place in the layout; readonly fields, fields locked by the record's status, and fields managed in the default context show their value. Editable attributes the layout leaves out appear after it under **Other attributes**, so a required attribute is always reachable. The create form uses the same layout.
 
 ## Entity heading
 
@@ -94,7 +95,7 @@ children = [
 ]
 ```
 
-If the title field is empty, the entity ID is shown. The heading is removed from the page body so it does not appear twice.
+If the title field is empty, the entity ID is shown. The heading is removed from the page body so it does not appear twice. The heading only displays values, so its editable fields are offered as editors first, above the rest of the layout.
 
 ## Showing what links here
 
@@ -171,7 +172,7 @@ The renderer must be declared by an enabled extension for the column's value typ
 
 ## Field controls
 
-A `string` attribute is plain text by default. To show it as a color, email address, URL, phone number, or Markdown, name a display component on its detail field (or table column) and an edit component on its edit field:
+A `string` attribute is plain text by default. To show it as a color, email address, URL, phone number, or Markdown, name a display component on its detail field (or table column). Where the field is editable, the web app uses the paired edit component, such as `catalog.url_edit` for `catalog.url_display`:
 
 ```toml
 [views.detail]
@@ -179,13 +180,6 @@ type = "stack"
 children = [
   { type = "field", field = "website", component = { id = "catalog.url_display", version = 1 } },
   { type = "field", field = "description", component = { id = "catalog.markdown_display", version = 1 } },
-]
-
-[views.edit]
-type = "stack"
-children = [
-  { type = "field", field = "website", component = { id = "catalog.url_edit", version = 1 } },
-  { type = "field", field = "description", component = { id = "catalog.markdown_edit", version = 1 } },
 ]
 
 [[views.table.columns]]
@@ -201,9 +195,9 @@ renderer = { id = "catalog.url_display", version = 1 }
 | Phone | `catalog.phone_display`, `catalog.phone_edit` | Stored as typed. Numbers starting with `+` and a country code become `tel:` links; extensions can use `ext.` or `x`. |
 | Markdown | `catalog.markdown_display`, `catalog.markdown_edit` | CommonMark with **Write** and **Preview** tabs. Raw HTML is ignored, images show their alt text, and links are limited to HTTP(S), `mailto:`, relative paths, and fragments. Text is stored exactly as typed, including whitespace. Not available for table columns. |
 
-Values that do not fit the control, such as older data, are still shown, as plain text without a link or swatch. Fields without a component keep the standard text box.
+Values that do not fit the control, such as older data, are still shown, as plain text without a link or swatch. Fields without a component use the standard editor for their value type.
 
-The edit controls validate only in the web form. To reject bad values from the API, CLI, and imports too, add a `value_schema` or `entity_schema`; see [Validation](/builders/validation/).
+The edit controls validate only in the web app. To reject bad values from the API, CLI, and imports too, add a `value_schema` or `entity_schema`; see [Validation](/builders/validation/).
 
 ## Components
 

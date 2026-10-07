@@ -12,12 +12,13 @@ Widoki są opcjonalne. Bez nich aplikacja internetowa pokazuje atrybuty w kolejn
 | Widok | Gdzie się pojawia |
 | --- | --- |
 | `dropdown_option` | Etykieta encji w selektorach, etykietach filtrów i wyszukiwaniu. Wymagany w schematach encji. |
-| `detail` | Strona encji i jej podgląd. |
-| `edit` | Formularze tworzenia i edycji. |
+| `detail` | Strona encji, jej podgląd i formularz tworzenia. W tym układzie pola są zarówno wyświetlane, jak i edytowane. |
 | `table` | Kolumny wyników w **Przeglądarce encji**. |
 | `extension_layout` | Kolejność i widoczność paneli i akcji rozszerzeń na stronach encji tego schematu. |
 
-## Budowanie układu szczegółów lub edycji
+Widok `views.edit` jest przestarzały. Aplikacja internetowa go ignoruje, a schematy, które nadal go definiują, pozostają poprawne.
+
+## Budowanie układu szczegółów
 
 Układ jest drzewem. Kontenery zawierają inne bloki; liście pokazują pole lub treść statyczną.
 
@@ -28,21 +29,21 @@ Układ jest drzewem. Kontenery zawierają inne bloki; liście pokazują pole lub
 TOML pozwala zapisać to samo drzewo na dwa sposoby. Zagnieżdżone tablice tabel są rozwlekłe, ale łatwo porównywać ich zmiany:
 
 ```toml
-[views.edit]
+[views.detail]
 type = "stack"
 
-[[views.edit.children]]
+[[views.detail.children]]
 type = "field"
 field = "title"
 
-[[views.edit.children]]
+[[views.detail.children]]
 type = "grid"
 
-[[views.edit.children.children]]
+[[views.detail.children.children]]
 type = "field"
 field = "price"
 
-[[views.edit.children.children]]
+[[views.detail.children.children]]
 type = "field"
 field = "stock_on_hand"
 ```
@@ -50,7 +51,7 @@ field = "stock_on_hand"
 Tabele wbudowane są zwięzłe:
 
 ```toml
-[views.edit]
+[views.detail]
 type = "stack"
 children = [
   { type = "field", field = "title" },
@@ -78,7 +79,7 @@ tabs = [
 
 `field` przyjmuje atrybuty skalarne i plikowe. `relationship_list` przyjmuje atrybuty relacji. Odwołanie do atrybutu, którego schemat nie ma, lub do atrybutu niewłaściwego rodzaju kończy się błędem walidacji.
 
-Układ `edit` musi zawierać każdy atrybut wymieniony w `entity_schema.required`, z wyjątkiem atrybutów tylko do odczytu. W przeciwnym razie schemat nie przejdzie walidacji. Schematy opublikowane przed wprowadzeniem tej reguły nadal działają: formularz pokazuje pominięte wymagane pola w sekcji **Pozostałe wymagane atrybuty**.
+Układ szczegółów steruje zarówno wyświetlaniem, jak i edycją. Na stronie encji każde pole, które użytkownik może zmienić, jest edytowalną kontrolką w swoim miejscu układu; pola tylko do odczytu, pola zablokowane przez status rekordu i pola zarządzane w kontekście domyślnym pokazują samą wartość. Edytowalne atrybuty pominięte w układzie pojawiają się pod nim w sekcji **Pozostałe atrybuty**, więc wymagany atrybut jest zawsze dostępny. Formularz tworzenia korzysta z tego samego układu.
 
 ## Nagłówek encji
 
@@ -94,7 +95,7 @@ children = [
 ]
 ```
 
-Jeśli pole tytułu jest puste, wyświetlany jest identyfikator encji. Nagłówek jest usuwany z treści strony, aby nie pojawiał się dwa razy.
+Jeśli pole tytułu jest puste, wyświetlany jest identyfikator encji. Nagłówek jest usuwany z treści strony, aby nie pojawiał się dwa razy. Nagłówek tylko wyświetla wartości, dlatego jego edytowalne pola są dostępne do edycji jako pierwsze, nad resztą układu.
 
 ## Pokazywanie powiązań przychodzących
 
@@ -171,7 +172,7 @@ Renderer musi być zadeklarowany przez włączone rozszerzenie dla typu wartośc
 
 ## Kontrolki pól
 
-Atrybut `string` jest domyślnie zwykłym tekstem. Aby pokazać go jako kolor, adres e-mail, URL, numer telefonu lub Markdown, wskaż komponent wyświetlania w jego polu szczegółów (lub kolumnie tabeli) i komponent edycji w polu edycji:
+Atrybut `string` jest domyślnie zwykłym tekstem. Aby pokazać go jako kolor, adres e-mail, URL, numer telefonu lub Markdown, wskaż komponent wyświetlania w jego polu szczegółów (lub kolumnie tabeli). Tam, gdzie pole jest edytowalne, aplikacja internetowa używa sparowanego komponentu edycji, na przykład `catalog.url_edit` dla `catalog.url_display`:
 
 ```toml
 [views.detail]
@@ -179,13 +180,6 @@ type = "stack"
 children = [
   { type = "field", field = "website", component = { id = "catalog.url_display", version = 1 } },
   { type = "field", field = "description", component = { id = "catalog.markdown_display", version = 1 } },
-]
-
-[views.edit]
-type = "stack"
-children = [
-  { type = "field", field = "website", component = { id = "catalog.url_edit", version = 1 } },
-  { type = "field", field = "description", component = { id = "catalog.markdown_edit", version = 1 } },
 ]
 
 [[views.table.columns]]
@@ -201,9 +195,9 @@ renderer = { id = "catalog.url_display", version = 1 }
 | Telefon | `catalog.phone_display`, `catalog.phone_edit` | Zapisywany tak, jak go wpisano. Numery zaczynające się od `+` i numeru kierunkowego kraju stają się linkami `tel:`; numer wewnętrzny można poprzedzić `ext.` lub `x`. |
 | Markdown | `catalog.markdown_display`, `catalog.markdown_edit` | CommonMark z kartami **Edytuj** i **Podgląd**. Surowy HTML jest pomijany, obrazy pokazują tekst alternatywny, a linki są ograniczone do HTTP(S), `mailto:`, ścieżek względnych i fragmentów. Tekst jest zapisywany dokładnie tak, jak go wpisano, łącznie z białymi znakami. Niedostępny w kolumnach tabeli. |
 
-Wartości, które nie pasują do kontrolki, np. starsze dane, nadal są widoczne jako zwykły tekst bez linku i próbki. Pola bez komponentu zachowują standardowe pole tekstowe.
+Wartości, które nie pasują do kontrolki, np. starsze dane, nadal są widoczne jako zwykły tekst bez linku i próbki. Pola bez komponentu korzystają ze standardowego edytora dla swojego typu wartości.
 
-Kontrolki edycji walidują wartości tylko w formularzu aplikacji. Aby odrzucać błędne wartości również z API, CLI i importów, dodaj `value_schema` lub `entity_schema`; zobacz [Walidacja](/pl/builders/validation/).
+Kontrolki edycji walidują wartości tylko w aplikacji internetowej. Aby odrzucać błędne wartości również z API, CLI i importów, dodaj `value_schema` lub `entity_schema`; zobacz [Walidacja](/pl/builders/validation/).
 
 ## Komponenty
 

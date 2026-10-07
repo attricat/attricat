@@ -126,7 +126,7 @@ Przejście może określać wymagania. Osoba zapisująca zmianę musi spełnić 
 - `roles`: musi mieć co najmniej jedną z tych ról (wbudowaną lub [niestandardową](/pl/operate/workspaces/#role)), przydzieloną w całym obszarze roboczym, dla schematu lub dla tej encji.
 - `separate_from`: rozdzielenie obowiązków. Nie może to być osoba, która jako ostatnia wykonała w tej encji i w tym kontekście przejście o jednym z podanych kodów `code`. Na przykład osoba, która przesłała dokument do przeglądu, nie może go też zatwierdzić.
 
-Nadaj przejściu `code`, aby wskazywać je w `separate_from` i w historii. Odrzucone przejście zwraca `403 status_transition_forbidden` lub `403 status_separation_of_duties` i nic nie zostaje zapisane. Formularz edycji wyłącza przejścia, których nie możesz wykonać, i wyjaśnia dlaczego.
+Nadaj przejściu `code`, aby wskazywać je w `separate_from` i w historii. Odrzucone przejście zwraca `403 status_transition_forbidden` lub `403 status_separation_of_duties` i nic nie zostaje zapisane. Lista wyboru statusu na stronie encji wyłącza przejścia, których nie możesz wykonać, i wyjaśnia dlaczego.
 
 Te same kontrole obowiązują każdego, kto zapisuje dane: API, CLI, przepływy pracy (jako osobę, której zmiana uruchomiła przepływ), rozszerzenia i agentów (jako osobę, która zatwierdziła zmianę). Zapis bez możliwej do ustalenia osoby, np. z zaplanowanego zadania, nie może wykonać ograniczonego przejścia.
 
@@ -141,7 +141,7 @@ Wymagania zawsze dotyczą osoby zapisującej zmianę. Nie mogą odwoływać się
 
 Rekordu nie można usunąć, dopóki którykolwiek z jego kontekstów ma status z blokadą, niezależnie od jej postaci.
 
-Blokady są egzekwowane na serwerze dla każdej drogi zapisu: formularza edycji, API, CLI, przepływów pracy, rozszerzeń, agentów, przywracania z historii wartości, przesyłania plików i zmiany ich kolejności oraz migracji. Odrzucony zapis zwraca `409 record_locked`. Formularz pokazuje zablokowane pola jako tylko do odczytu wraz z powodem.
+Blokady są egzekwowane na serwerze dla każdej drogi zapisu: strony encji, API, CLI, przepływów pracy, rozszerzeń, agentów, przywracania z historii wartości, przesyłania plików i zmiany ich kolejności oraz migracji. Odrzucony zapis zwraca `409 record_locked`. Strona encji pokazuje zablokowane pola jako tylko do odczytu wraz z powodem.
 
 Status, który deklaruje blokadę, wymaga jawnej listy `transitions`, więc wyjście z niego jest zawsze nazwanym, ograniczonym przejściem. Aby poprawić wydany rekord, najpierw wykonaj przejście korygujące, a dopiero potem edytuj. Korekta może zmienić wyłącznie status. Odblokowanie jest zapisywane w dzienniku audytu jako `entity.record.unlock`.
 
@@ -284,7 +284,7 @@ Aby wychwycić takie przypadki, dodaj [regułę](/pl/builders/rules/) z tym samy
 
 Przy zapisie kontrole, warunki i egzekwowane reguły działają w tej kolejności, po JSON Schema, a zgłaszana jest tylko pierwsza grupa, która nie przeszła. Cztery błędy `422` wymieniają do 50 naruszeń w `error.details.violations`, każde z kodem `code`, komunikatem `message`, kontekstami `contexts`, w których wystąpiło, i atrybutami `attributes`, których dotyczy. Wszystkie pola opisuje [dokumentacja API](/pl/reference/api/#szczegóły-błędu).
 
-W aplikacji internetowej formularz edycji wymienia kontrole, które nie przeszły, wraz z kontekstami, i pokazuje każdy komunikat przy polach wymienionych w `attributes`. Komunikat przy polu znika, gdy je edytujesz. Klienci API otrzymują te same informacje w `attributes`. Aby usunąć problem, zmień te atrybuty w wymienionych kontekstach albo popraw powiązane lub wskazujące rekordy, o których mówi komunikat, i zapisz ponownie. Przy zmianie statusu sprawdź niespełnione warunki przez [punkt końcowy status-transitions](#warunki-przejść).
+W aplikacji internetowej strona encji wymienia kontrole, które nie przeszły, wraz z kontekstami, i pokazuje każdy komunikat przy polach wymienionych w `attributes`. Komunikat przy polu znika, gdy je edytujesz. Klienci API otrzymują te same informacje w `attributes`. Aby usunąć problem, zmień te atrybuty w wymienionych kontekstach albo popraw powiązane lub wskazujące rekordy, o których mówi komunikat. Odrzucona zmiana pozostaje w swoim polu i jest wysyłana ponownie z następnym zapisywanym polem. Przy zmianie statusu sprawdź niespełnione warunki przez [punkt końcowy status-transitions](#warunki-przejść).
 
 ## Klucze unikalne
 

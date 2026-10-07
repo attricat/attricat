@@ -244,7 +244,7 @@ Niektóre tagi zmieniają miejsca, w których aplikacja webowa pokazuje atrybut,
 | Tag | Ukrywa atrybut w |
 | --- | --- |
 | `hidden` | Wszystkich miejscach wymienionych poniżej |
-| `hidden:form` | Automatycznie generowanych formularzach tworzenia i edycji |
+| `hidden:form` | Edytorach dodawanych poza układem, np. w sekcji **Pozostałe atrybuty**, oraz w automatycznie generowanym formularzu tworzenia |
 | `hidden:detail` | Automatycznie generowanych widokach szczegółów encji |
 | `hidden:explorer` | Opcjach filtrów i faset przeglądarki encji |
 | `hidden:metadata` | Tabeli atrybutów na stronie schematu |
@@ -294,12 +294,12 @@ Wybrany atrybut zachowuje wszystkie ustawienia z mixinu. Aby uwzględnić zmiany
 | Widok | Przeznaczenie | Dozwolony `type` |
 | --- | --- | --- |
 | `dropdown_option` | Etykieta encji w selektorach relacji, etykietach filtrów i wynikach wyszukiwania. Wymagany w schematach encji. | `dropdown_option` |
-| `detail` | Strona encji tylko do odczytu. | Blok układu |
-| `edit` | Formularz tworzenia i edycji. | Blok układu |
+| `detail` | Strona encji i formularz tworzenia. Pola, które użytkownik może zmienić, są edytowane w miejscu. | Blok układu |
+| `edit` | Przestarzały i ignorowany przez aplikację internetową. Nadal akceptowany, a komponenty edycji w nim nadal są walidowane. | Blok układu |
 | `table` | Kolumny przeglądarki encji. | `table` |
 | `extension_layout` | Kolejność i widoczność kontrybucji z rozszerzeń na stronach encji tego schematu. | `extension_layout` |
 
-Gdy brakuje `detail`, `edit` lub `table`, aplikacja webowa wyświetla atrybuty w kolejności deklaracji.
+Gdy brakuje `detail` lub `table`, aplikacja webowa wyświetla atrybuty w kolejności deklaracji.
 
 ### `dropdown_option`
 
@@ -371,7 +371,7 @@ Każdy blok przyjmuje opcjonalne odwołanie `component`. Każdy `field` i `relat
 ### Odwołania do komponentów
 
 ```toml
-component = { id = "catalog.field_edit", version = 1 }
+component = { id = "catalog.url_display", version = 1 }
 renderer = { id = "example.currency", version = 1, props = { currency = "USD" } }
 ```
 
@@ -406,7 +406,7 @@ Wbudowane komponenty:
 | `catalog.markdown_display` | 1 | `field` (detail) | `string` | |
 | `catalog.markdown_edit` | 1 | `field` (edit) | `string` | |
 
-Działanie tych komponentów opisano w sekcji [Kontrolki pól](/pl/builders/views/#kontrolki-pól).
+Komponenty oznaczone *(edit)* są akceptowane tylko w przestarzałym widoku `edit`. Tam, gdzie pole w `detail` jest edytowalne, aplikacja internetowa używa komponentu edycji sparowanego z komponentem wyświetlania albo standardowego edytora dla typu wartości. Działanie tych komponentów opisano w sekcji [Kontrolki pól](/pl/builders/views/#kontrolki-pól).
 
 Identyfikator i wersja renderera komórek z rozszerzenia muszą odpowiadać rendererowi zadeklarowanemu przez włączone rozszerzenie dla typu wartości kolumny.
 

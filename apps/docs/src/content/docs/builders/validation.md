@@ -126,7 +126,7 @@ A transition can name requirements. The person saving must meet all of them, in 
 - `roles`: they must hold at least one of these roles (built-in or [custom](/operate/workspaces/#roles)), granted for the whole workspace, the blueprint, or this entity.
 - `separate_from`: separation of duties. They must not be the person who most recently made a transition with one of these `code`s on this entity, in this context. For example, whoever submitted a document cannot also approve it.
 
-Give a transition a `code` to name it in `separate_from` and in history. A refused transition returns `403 status_transition_forbidden` or `403 status_separation_of_duties`, and nothing is saved. The edit form disables the transitions you may not make and says why.
+Give a transition a `code` to name it in `separate_from` and in history. A refused transition returns `403 status_transition_forbidden` or `403 status_separation_of_duties`, and nothing is saved. The status select on the entity page disables the transitions you may not make and says why.
 
 The same checks apply to every writer: the API, the CLI, workflows (as the person whose change started the workflow), extensions, and agents (as the person who approved the change). A write with no identifiable person, such as a scheduled job, cannot make a restricted transition.
 
@@ -141,7 +141,7 @@ Requirements always refer to the person saving. They cannot refer to a [user or 
 
 A record cannot be deleted while any of its contexts has a locking status, whichever form the lock takes.
 
-Locks are enforced on the server for every write path: the edit form, API, CLI, workflows, extensions, agents, value-history restores, file uploads and reorders, and migrations. A rejected write returns `409 record_locked`. The form shows locked fields as read-only with the reason.
+Locks are enforced on the server for every write path: the entity page, API, CLI, workflows, extensions, agents, value-history restores, file uploads and reorders, and migrations. A rejected write returns `409 record_locked`. The entity page shows locked fields as read-only with the reason.
 
 A status that declares a lock needs an explicit `transitions` list, so leaving it is always a named, restricted transition. To correct a released record, make the correction transition first, and then edit. A correction must change only the status. Unlocking is recorded in the audit log as `entity.record.unlock`.
 
@@ -285,7 +285,7 @@ A [data quality rule](/builders/rules/#enforce-a-rule) with an `enforcement` tab
 
 On a save, checks, conditions, and enforcing rules run in that order, after the JSON Schema, and only the first group that fails is reported. The four `422` errors list up to 50 violations in `error.details.violations`, each with the failing `code`, its `message`, the `contexts` it failed in, and the `attributes` involved. The [API reference](/reference/api/#error-details) describes every field.
 
-In the web app, the edit form lists the failed checks with the contexts they failed in, and shows each message on the fields named in `attributes`. A field's message clears once you edit that field. API clients get the same information from `attributes`. To fix the problem, change those attributes in the listed contexts, or fix the linked or referring records the message names, and save again. For a status change, check which conditions are unmet with the [status-transitions endpoint](#conditions-on-transitions).
+In the web app, the entity page lists the failed checks with the contexts they failed in, and shows each message on the fields named in `attributes`. A field's message clears once you edit that field. API clients get the same information from `attributes`. To fix the problem, change those attributes in the listed contexts, or fix the linked or referring records the message names. A rejected change stays on its field and is sent again with the next field you save. For a status change, check which conditions are unmet with the [status-transitions endpoint](#conditions-on-transitions).
 
 ## Unique keys
 

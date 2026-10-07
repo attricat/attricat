@@ -56,7 +56,7 @@ The entity page's **Publication** section marks channels the entity is **Not rea
 
 ## What withdraws a publication
 
-By default, any change to an entity withdraws all of its channel publications: values, relationships, files, system metadata, and blueprint upgrades.
+By default, any change to an entity withdraws all of its channel publications: values, relationships, files, system metadata, and blueprint upgrades. On the entity page each field is saved as its own change, so saving the first field withdraws the publications.
 
 Changing or deleting a context withdraws the publications in that channel, because it can change what every entity resolves to there.
 

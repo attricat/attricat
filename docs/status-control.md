@@ -116,9 +116,10 @@ and filter pills. Search requests, saved searches, API payloads, events and
 connector exports carry stable codes; consumers that render labels resolve
 them from the attribute's `value_schema` and `GET /lexicon/entries`. Missing values display “Not set”; unknown or
 retired values remain visible with an explanation, never silently coerced.
-The entity form uses a single-select control, with forbidden destinations
+Editors use a single-select control, with forbidden destinations
 disabled. The saved status—not another unsaved selection—is the starting
-state. The normal form Save action persists the selection.
+state. On the entity page, choosing a status saves it at once as its own
+change; in the create and migration forms, Save persists the selection.
 
 Readonly attributes, context restrictions and existing authorization still
 apply. Draft restoration and smart-fill are revalidated. Unknown retired codes
