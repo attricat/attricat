@@ -1,4 +1,12 @@
-import { Chip, MenuItem, Stack, TextField, Typography } from '@mui/material';
+import {
+  Autocomplete,
+  Chip,
+  createFilterOptions,
+  MenuItem,
+  Stack,
+  TextField,
+  Typography,
+} from '@mui/material';
 import { useForm, useStore } from '@tanstack/react-form';
 import type { KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -28,6 +36,12 @@ import {
 } from './relationshipFilterTypes';
 import type { AttributeFilter } from './search';
 import { useTimeZone } from '../../time/useInstantFormat';
+
+// Long blueprints offer many fields, so match typed text against the label
+// and the code, which also covers relationship paths such as family.name.
+const filterFieldOptions = createFilterOptions<Attribute>({
+  stringify: (attribute) => `${attributeLabel(attribute)} ${attribute.code}`,
+});
 
 const describeDraft = (
   draft: AttributeFilterDraft,
@@ -177,17 +191,19 @@ export const AttributeFilterDialog = ({
           : 'explorer.addAttributeFilterTitle',
       )}
     >
-      <Stack spacing={1.5}>
+      <Stack spacing={3}>
         <form.Field name="field">
           {(field) => (
-            <TextField
-              fullWidth
-              label={t('explorer.filterField')}
-              onChange={(event) => {
-                const nextField = event.target.value;
-                const nextAttribute = attributes.find(
-                  (item) => item.code === nextField,
-                );
+            <Autocomplete
+              autoHighlight
+              filterOptions={filterFieldOptions}
+              getOptionKey={(item) => item.code}
+              getOptionLabel={attributeLabel}
+              isOptionEqualToValue={(option, value) =>
+                option.code === value.code
+              }
+              noOptionsText={t('explorer.noMatchingFilterFields')}
+              onChange={(_, nextAttribute) => {
                 if (
                   nextAttribute &&
                   isRelationshipFilterAttribute(nextAttribute)
@@ -195,37 +211,38 @@ export const AttributeFilterDialog = ({
                   onSelectRelationship(nextAttribute);
                   return;
                 }
-                field.handleChange(nextField);
+                field.handleChange(nextAttribute?.code ?? '');
                 form.setFieldValue(
                   'operator',
-                  operatorsForAttribute(nextAttribute)[0] ??
+                  operatorsForAttribute(nextAttribute ?? undefined)[0] ??
                     defaultAttributeFilterOperator,
                 );
                 form.setFieldValue('value', '');
               }}
-              select
-              value={field.state.value}
-            >
-              {attributes
-                .filter(
-                  (item) => !editing || !isRelationshipFilterAttribute(item),
-                )
-                .map((item) => (
-                  <MenuItem key={item.code} value={item.code}>
-                    <Stack
-                      direction="row"
-                      spacing={1}
-                      sx={{ alignItems: 'center' }}
-                    >
-                      <Chip label={blueprintName} size="small" />
-                      {item.value_type === 'relationship' && (
-                        <Chip label={t('explorer.relationship')} size="small" />
-                      )}
-                      <Typography>{attributeLabel(item)}</Typography>
-                    </Stack>
-                  </MenuItem>
-                ))}
-            </TextField>
+              openOnFocus
+              options={attributes.filter(
+                (item) => !editing || !isRelationshipFilterAttribute(item),
+              )}
+              renderInput={(params) => (
+                <TextField {...params} label={t('explorer.filterField')} />
+              )}
+              renderOption={({ key, ...props }, item) => (
+                <li data-value={item.code} key={key} {...props}>
+                  <Stack
+                    direction="row"
+                    spacing={1}
+                    sx={{ alignItems: 'center' }}
+                  >
+                    <Chip label={blueprintName} size="small" />
+                    {item.value_type === 'relationship' && (
+                      <Chip label={t('explorer.relationship')} size="small" />
+                    )}
+                    <Typography>{attributeLabel(item)}</Typography>
+                  </Stack>
+                </li>
+              )}
+              value={attribute ?? null}
+            />
           )}
         </form.Field>
         {relationshipPathsLoading && (

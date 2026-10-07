@@ -98,39 +98,26 @@ export const ExplorerFacetSidebar = ({
         top: fullHeight ? 0 : { md: facetSidebarStickyTop },
       }}
     >
-      {onBlueprintChange && (
-        <TextField
-          fullWidth
-          label={t('explorer.selectBlueprint')}
-          onChange={(event) => onBlueprintChange(event.target.value)}
-          select
-          size="small"
-          value={blueprint}
-        >
-          {blueprints.map((item) => (
-            <MenuItem key={item.code} value={item.code}>
-              {t('explorer.blueprintOption', {
-                code: item.code,
-                name: lexiconText(item.name),
-              })}
-            </MenuItem>
-          ))}
-        </TextField>
-      )}
-      <Typography
-        color="text.secondary"
-        component="h2"
-        sx={{
-          display: 'block',
-          fontWeight: 700,
-          lineHeight: 1.5,
-          mt: onBlueprintChange ? 2.5 : 0,
-        }}
-        variant="overline"
-      >
-        {t('explorer.filters')}
-      </Typography>
-      <Stack spacing={1.5} sx={{ mt: 2 }}>
+      <Stack spacing={4}>
+        {onBlueprintChange && (
+          <TextField
+            fullWidth
+            label={t('explorer.selectBlueprint')}
+            onChange={(event) => onBlueprintChange(event.target.value)}
+            select
+            size="small"
+            value={blueprint}
+          >
+            {blueprints.map((item) => (
+              <MenuItem key={item.code} value={item.code}>
+                {t('explorer.blueprintOption', {
+                  code: item.code,
+                  name: lexiconText(item.name),
+                })}
+              </MenuItem>
+            ))}
+          </TextField>
+        )}
         <TextField
           fullWidth
           label={t('explorer.context')}
@@ -147,6 +134,21 @@ export const ExplorerFacetSidebar = ({
             </MenuItem>
           ))}
         </TextField>
+      </Stack>
+      <Typography
+        color="text.secondary"
+        component="h2"
+        sx={{
+          display: 'block',
+          fontWeight: 700,
+          lineHeight: 1.5,
+          mt: 5,
+        }}
+        variant="overline"
+      >
+        {t('explorer.filters')}
+      </Typography>
+      <Stack spacing={3} sx={{ mt: 1 }}>
         {withOpenFacet(facets, relationshipToOpen).map((facet) => (
           <RelationshipFacetFilter
             facet={facet}
