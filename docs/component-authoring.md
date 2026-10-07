@@ -136,6 +136,11 @@ Two optional fields add form behavior:
   web-app check only, never a persisted constraint.
 - `preservesWhitespace: true` saves the edited string verbatim instead of
   trimming it (used by Markdown).
+- `editsOnRequest: true` shows a set value on the entity page with the
+  paired display component's `valueRenderer` and an edit button, and opens
+  the editor only when asked (used by Markdown). The editor closes again when
+  focus leaves it or on Escape, and stays open while the value is blank,
+  invalid or not saved.
 
 Statuses are not components: `x-attricat-status` in the attribute's
 `value_schema` selects the status editor and display for that attribute

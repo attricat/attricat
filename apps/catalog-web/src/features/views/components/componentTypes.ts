@@ -77,6 +77,11 @@ export type ViewComponentDefinition = {
   validateValue?: (value: string) => string | undefined;
   /** Submit the edited string verbatim instead of trimming it. */
   preservesWhitespace?: boolean;
+  /**
+   * On the entity page, shows a set value with its display component until
+   * the user asks to edit it, for values whose source reads poorly.
+   */
+  editsOnRequest?: boolean;
   headingRenderer?: HeadingRenderer;
   incomingRelationshipRenderer?: IncomingRelationshipRenderer;
 };
