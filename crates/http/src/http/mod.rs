@@ -1088,10 +1088,20 @@ pub fn router(state: AppState) -> Router {
     if web_dist.is_empty() {
         return api;
     }
+    with_web_app(api, web_dist)
+}
+
+/// Mounts the API below `/api` and at the root, and the web app for every
+/// other path. Bare API routes share paths with client-side routes such as
+/// `/entities/{id}`, so a browser loading such a page receives the app, not
+/// the API's JSON.
+fn with_web_app(api: Router, web_dist: &str) -> Router {
+    let web = web_app(web_dist);
     Router::new()
         .nest("/api", api.clone())
         .merge(api)
-        .fallback_service(web_app(web_dist))
+        .fallback_service(web.clone())
+        .layer(middleware::from_fn_with_state(web, serve_page_loads))
 }
 
 /// Serves the compiled web app. Paths without a file are client-side routes,
@@ -1099,6 +1109,43 @@ pub fn router(state: AppState) -> Router {
 /// the same page as a 404, which monitors, proxies, and crawlers treat as broken.
 fn web_app(web_dist: &str) -> ServeDir<ServeFile> {
     ServeDir::new(web_dist).fallback(ServeFile::new(format!("{web_dist}/index.html")))
+}
+
+/// Paths the server answers itself even when a browser opens them.
+const SERVER_PATH_PREFIXES: [&str; 3] = ["/api", "/health", "/metrics"];
+
+/// A browser loading a page asks for HTML; API clients and `fetch` do not.
+fn is_page_load(request: &axum::extract::Request) -> bool {
+    use axum::http::{Method, header};
+
+    let path = request.uri().path();
+    let server_path = SERVER_PATH_PREFIXES.iter().any(|prefix| {
+        path.strip_prefix(prefix)
+            .is_some_and(|rest| rest.is_empty() || rest.starts_with('/'))
+    });
+    matches!(*request.method(), Method::GET | Method::HEAD)
+        && !server_path
+        && request
+            .headers()
+            .get(header::ACCEPT)
+            .and_then(|accept| accept.to_str().ok())
+            .is_some_and(|accept| accept.contains("text/html"))
+}
+
+async fn serve_page_loads(
+    State(web): State<ServeDir<ServeFile>>,
+    request: axum::extract::Request,
+    next: Next,
+) -> Response {
+    use tower::ServiceExt;
+
+    if !is_page_load(&request) {
+        return next.run(request).await;
+    }
+    match web.oneshot(request).await {
+        Ok(response) => response.map(axum::body::Body::new),
+        Err(never) => match never {},
+    }
 }
 
 /// A handler panic becomes a logged JSON 500 instead of an aborted connection,
@@ -1219,6 +1266,67 @@ mod timing_tests {
                 .await
                 .unwrap();
             assert_eq!(bytes, body.as_bytes(), "{path}");
+        }
+
+        std::fs::remove_dir_all(dist).unwrap();
+    }
+
+    #[tokio::test]
+    async fn page_loads_receive_the_web_app_where_api_routes_share_their_path() {
+        use axum::http::{Method, header};
+        use tower::ServiceExt;
+
+        let dist = std::env::temp_dir().join(format!("catalog-web-dist-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&dist).unwrap();
+        std::fs::write(dist.join("index.html"), "<!doctype html>index").unwrap();
+        let api = Router::new()
+            .route("/entities/{entity_id}", get(|| async { "entity json" }))
+            .route("/login", post(|| async { "session json" }))
+            .route("/health", get(|| async { "ok" }));
+        let app = with_web_app(api, dist.to_str().unwrap());
+        let html = "text/html,application/xhtml+xml,*/*;q=0.8";
+
+        for (method, path, accept, body) in [
+            // Reloading client-side routes that an API route also matches.
+            (
+                Method::GET,
+                "/entities/123",
+                Some(html),
+                "<!doctype html>index",
+            ),
+            (Method::GET, "/login", Some(html), "<!doctype html>index"),
+            // API clients keep the bare and prefixed routes.
+            (Method::GET, "/entities/123", None, "entity json"),
+            (
+                Method::GET,
+                "/entities/123",
+                Some("application/json"),
+                "entity json",
+            ),
+            (Method::GET, "/api/entities/123", Some(html), "entity json"),
+            (Method::POST, "/login", Some(html), "session json"),
+            (Method::GET, "/health", Some(html), "ok"),
+        ] {
+            let mut request = axum::http::Request::builder()
+                .method(method.clone())
+                .uri(path);
+            if let Some(accept) = accept {
+                request = request.header(header::ACCEPT, accept);
+            }
+            let response = app
+                .clone()
+                .oneshot(request.body(axum::body::Body::empty()).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(
+                response.status(),
+                axum::http::StatusCode::OK,
+                "{method} {path}"
+            );
+            let bytes = axum::body::to_bytes(response.into_body(), 1024)
+                .await
+                .unwrap();
+            assert_eq!(bytes, body.as_bytes(), "{method} {path} {accept:?}");
         }
 
         std::fs::remove_dir_all(dist).unwrap();
