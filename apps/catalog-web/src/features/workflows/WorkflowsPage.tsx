@@ -30,6 +30,7 @@ import {
   workflowStatus,
 } from './constants';
 import { Timestamp } from '../../time/Timestamp';
+import { EmptyState } from '../../components/EmptyState';
 import { WorkflowIcon } from '../../components/systemIcons';
 
 const WorkflowDetailLink = Link as unknown as ComponentType<{
@@ -241,7 +242,7 @@ export const WorkflowsPage = () => {
             </Table>
           </Box>
           {families.length === 0 && (
-            <Typography sx={{ p: 2 }}>{t('workflows.empty')}</Typography>
+            <EmptyState icon={WorkflowIcon} title={t('workflows.empty')} />
           )}
         </Paper>
       )}

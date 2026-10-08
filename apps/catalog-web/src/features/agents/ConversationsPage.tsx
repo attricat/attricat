@@ -27,6 +27,7 @@ import {
 } from './constants';
 import { agentQueryKeys } from './queryKeys';
 import { isTitlePending } from './titlePolling';
+import { EmptyState } from '../../components/EmptyState';
 import { AgentIcon } from '../../components/systemIcons';
 
 export const ConversationsPage = ({ search }: { search: { q?: string } }) => {
@@ -131,17 +132,18 @@ export const ConversationsPage = ({ search }: { search: { q?: string } }) => {
             !conversations.isError &&
             items.length === 0 &&
             !conversations.hasNextPage && (
-              <ListItem>
-                <ListItemText
-                  primary={t(
-                    query
-                      ? 'agents.noMatchingConversations'
-                      : 'agents.noConversations',
-                  )}
-                  secondary={t(
+              <ListItem sx={{ display: 'block' }}>
+                <EmptyState
+                  description={t(
                     query
                       ? 'agents.noMatchingConversationsDescription'
                       : 'agents.noConversationsDescription',
+                  )}
+                  icon={AgentIcon}
+                  title={t(
+                    query
+                      ? 'agents.noMatchingConversations'
+                      : 'agents.noConversations',
                   )}
                 />
               </ListItem>

@@ -2,7 +2,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { getCoreRowModel, useLegacyTable } from '@tanstack/react-table/legacy';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { Paper, Typography } from '@mui/material';
+import { Paper } from '@mui/material';
 import { lazy, Suspense, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { BlueprintWithAttributes, EntityItem } from '../entities/api';
@@ -42,6 +42,8 @@ import type { ExplorerSelection } from './useExplorerSelection';
 import { VirtualizedExplorerTable } from './VirtualizedExplorerTable';
 import { useTimeZone } from '../../time/useInstantFormat';
 import { lexiconText } from '../lexicon/lexicon';
+import { EmptyState } from '../../components/EmptyState';
+import { EntityIcon } from '../../components/systemIcons';
 
 // The column dialog carries drag-and-drop; load it when first opened so it
 // stays out of the Explorer's startup bundle.
@@ -260,9 +262,10 @@ export const ExplorerResultsTable = ({
         panelEntityId={panelEntityId}
       />
       {items.length === 0 && (
-        <Typography sx={{ p: 2 }}>
-          {t('explorer.noMatchingEntities')}
-        </Typography>
+        <EmptyState
+          icon={EntityIcon}
+          title={t('explorer.noMatchingEntities')}
+        />
       )}
       {actionMenu && activeActionEntity && (
         <EntityActionsMenu

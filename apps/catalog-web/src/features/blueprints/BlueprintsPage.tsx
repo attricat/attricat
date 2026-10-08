@@ -25,6 +25,7 @@ import { listBlueprints } from './api';
 import { blueprintFilterWidth, blueprintStatusChipColor } from './constants';
 import { Timestamp } from '../../time/Timestamp';
 import { blueprintQueryKeys } from './queryKeys';
+import { EmptyState } from '../../components/EmptyState';
 import { BlueprintIcon } from '../../components/systemIcons';
 import { lexiconText } from '../lexicon/lexicon';
 
@@ -169,9 +170,10 @@ export const BlueprintsPage = () => {
             </Table>
           </Box>
           {matchingBlueprints.length === 0 && (
-            <Typography sx={{ p: 2 }}>
-              {t('blueprints.noMatchingBlueprints')}
-            </Typography>
+            <EmptyState
+              icon={BlueprintIcon}
+              title={t('blueprints.noMatchingBlueprints')}
+            />
           )}
         </Paper>
       )}

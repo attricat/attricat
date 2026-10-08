@@ -22,6 +22,8 @@ import {
 } from './constants';
 import { lexiconText } from '../lexicon/lexicon';
 import { ValueTypeLabel } from '../entities/components/ValueTypeLabel';
+import { EmptyState } from '../../components/EmptyState';
+import { ReusableAttributeIcon } from '../../components/systemIcons';
 
 export const ReusableAttributesTable = ({
   attributes,
@@ -102,7 +104,10 @@ export const ReusableAttributesTable = ({
             {!attributes.length && (
               <TableRow>
                 <TableCell colSpan={ATTRIBUTES_TABLE_COLUMN_COUNT}>
-                  {t('reusableAttributes.empty')}
+                  <EmptyState
+                    icon={ReusableAttributeIcon}
+                    title={t('reusableAttributes.empty')}
+                  />
                 </TableCell>
               </TableRow>
             )}

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { RouterButton } from '../../components/RouterLink';
 import { smallIconSize } from '../../components/iconSizes';
+import { EmptyState } from '../../components/EmptyState';
 import { ExtensionRunIcon } from '../../components/systemIcons';
 import { runSkeletonCount, runSkeletonHeight } from './constants';
 import {
@@ -67,9 +68,7 @@ export const ExtensionRunsPage = () => {
         <Alert severity="error">{t('extensionRuns.loadFailed')}</Alert>
       )}
       {runs.data?.length === 0 && (
-        <Typography color="text.secondary">
-          {t('extensionRuns.empty')}
-        </Typography>
+        <EmptyState icon={ExtensionRunIcon} title={t('extensionRuns.empty')} />
       )}
       {runs.data && runs.data.length > 0 && (
         <Stack

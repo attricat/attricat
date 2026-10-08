@@ -5,7 +5,6 @@ import {
   Button,
   List,
   ListItem,
-  ListItemText,
   Paper,
   Tab,
   Tabs,
@@ -17,6 +16,7 @@ import { LoadMoreButton } from '../../components/LoadMoreButton';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { QueryErrorNotice } from '../../components/QueryErrorNotice';
+import { EmptyState } from '../../components/EmptyState';
 import { InboxIcon } from '../../components/systemIcons';
 import { useEntityLabels } from '../entities/useEntityLabels';
 import { listNotifications } from './api';
@@ -156,12 +156,13 @@ export const InboxPage = ({ filter }: { filter: InboxFilter }) => {
               </ListItem>
             )}
             {notifications.isSuccess && items.length === 0 && (
-              <ListItem>
-                <ListItemText
-                  primary={t(
+              <ListItem sx={{ display: 'block' }}>
+                <EmptyState
+                  description={t('inbox.emptyDescription')}
+                  icon={InboxIcon}
+                  title={t(
                     filter === 'unread' ? 'inbox.noUnread' : 'inbox.empty',
                   )}
-                  secondary={t('inbox.emptyDescription')}
                 />
               </ListItem>
             )}

@@ -132,6 +132,7 @@ light and dark modes.
 - Give every item of an action menu a `ListItemIcon`, using the same icon as the matching button. Colour destructive items with `error.main` and reversals such as unpublish with `warning.main`, and pass `color: 'inherit'` to their `ListItemIcon`.
 - Give page-level tabs an icon at `compactIconSize` (`icon={<HistoryIcon aria-hidden size={compactIconSize} />}`); the theme places it before the label with the 12px gap. Leave tabs nested inside a panel and tabs whose labels blueprint authors write without icons.
 - When select options name distinct kinds of things (a scope, a visibility, a human or an agent), lead each with `IconLabel` from `src/components/IconLabel.tsx`; it also lays out the selected value. Leave plain value lists, such as codes, numbers, versions, and yes/no, without icons.
+- When a list, table, or section has nothing to show, render `EmptyState` from `src/components/EmptyState.tsx` inside the surface that would hold the items, with the missing concept's registry icon, a short title, and, where it helps, a description of why it matters. Keep short inline notes, such as an empty relationship field or a run with no outputs, as plain text.
 - Add a semantic export to the registry before introducing an icon for another system concept.
 
 ## Drag and drop

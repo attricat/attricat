@@ -32,6 +32,8 @@ import { principalQueryKeys } from '../principals/queryKeys';
 import { teamListOptions } from '../principals/queryOptions';
 import type { DirectoryUser, Team } from '../principals/schemas';
 import { usePrincipalDirectory } from '../principals/usePrincipalDirectory';
+import { EmptyState } from '../../components/EmptyState';
+import { TeamIcon } from '../../components/systemIcons';
 
 type Editing = { team: Team | null } | null;
 /** The team keeps its name in the dialog while it fades out after closing. */
@@ -240,8 +242,8 @@ export const WorkspaceTeamsSection = ({
             </ListItem>
           ))}
           {teams.data?.length === 0 && (
-            <ListItem>
-              <ListItemText primary={t('workspace.noTeams')} />
+            <ListItem sx={{ display: 'block' }}>
+              <EmptyState icon={TeamIcon} title={t('workspace.noTeams')} />
             </ListItem>
           )}
         </List>

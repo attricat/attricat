@@ -15,6 +15,7 @@ import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { listContexts } from './api';
 import { contextQueryKeys } from './queryKeys';
+import { EmptyState } from '../../components/EmptyState';
 import { ContextIcon } from '../../components/systemIcons';
 
 export const ContextsPage = () => {
@@ -71,8 +72,11 @@ export const ContextsPage = () => {
               </ListItem>
             ))}
             {!contexts.data.length && (
-              <ListItem>
-                <ListItemText primary={t('contexts.noContexts')} />
+              <ListItem sx={{ display: 'block' }}>
+                <EmptyState
+                  icon={ContextIcon}
+                  title={t('contexts.noContexts')}
+                />
               </ListItem>
             )}
           </List>

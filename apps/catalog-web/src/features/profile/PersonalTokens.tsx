@@ -19,6 +19,7 @@ import { Fragment, type ReactNode, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { monoFontFamily } from '../../app/theme';
 import { smallIconSize } from '../../components/iconSizes';
+import { EmptyState } from '../../components/EmptyState';
 import { PersonalTokenIcon } from '../../components/systemIcons';
 import { Timestamp } from '../../time/Timestamp';
 import { listTokens, type PersonalToken } from './api';
@@ -220,16 +221,13 @@ export const PersonalTokens = ({ canManage }: { canManage: boolean }) => {
         </Box>
       )}
       {tokens.data?.length === 0 && (
-        <Card sx={{ p: 8, textAlign: 'center' }}>
-          <Box sx={{ color: 'text.secondary' }}>
-            <PersonalTokenIcon aria-hidden />
-          </Box>
-          <Typography component="h3" sx={{ mt: 2 }} variant="subtitle1">
-            {t('profile.noTokens')}
-          </Typography>
-          <Typography color="text.secondary" sx={{ mt: 1 }} variant="body2">
-            {t('profile.noTokensDescription')}
-          </Typography>
+        <Card>
+          <EmptyState
+            description={t('profile.noTokensDescription')}
+            icon={PersonalTokenIcon}
+            title={t('profile.noTokens')}
+            titleComponent="h3"
+          />
         </Card>
       )}
       {Boolean(tokens.data?.length) && (

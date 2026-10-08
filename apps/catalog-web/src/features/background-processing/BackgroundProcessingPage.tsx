@@ -3,6 +3,7 @@ import {
   Alert,
   Button,
   LinearProgress,
+  Paper,
   Stack,
   Typography,
 } from '@mui/material';
@@ -20,6 +21,7 @@ import {
   backgroundProcessingRefreshSeconds,
 } from './constants';
 import { backgroundProcessingQueryKeys } from './queryKeys';
+import { EmptyState } from '../../components/EmptyState';
 import { BackgroundProcessingIcon } from '../../components/systemIcons';
 
 export const BackgroundProcessingPage = () => {
@@ -125,7 +127,12 @@ export const BackgroundProcessingPage = () => {
               </Alert>
             )}
             {rows?.length === 0 && (
-              <Alert severity="info">{t('backgroundProcessing.empty')}</Alert>
+              <Paper>
+                <EmptyState
+                  icon={BackgroundProcessingIcon}
+                  title={t('backgroundProcessing.empty')}
+                />
+              </Paper>
             )}
             {!!rows?.length && <BackgroundProcessingTable rows={rows} />}
             <Typography variant="body2" color="text.secondary">

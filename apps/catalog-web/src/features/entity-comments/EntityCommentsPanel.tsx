@@ -24,6 +24,8 @@ import { CommentComposer } from './CommentComposer';
 import { MarkdownContent } from '../markdown/MarkdownContent';
 import { commentQueryKeys } from './queryKeys';
 import type { CommentCursor, EntityComment } from './schemas';
+import { EmptyState } from '../../components/EmptyState';
+import { CommentIcon } from '../../components/systemIcons';
 
 const CommentItem = ({
   entityId,
@@ -174,9 +176,7 @@ export const EntityCommentsPanel = ({ entityId }: { entityId: string }) => {
         }}
       />
       {comments.isSuccess && items.length === 0 && (
-        <Typography sx={{ mb: 2 }} color="text.secondary">
-          {t('comments.empty')}
-        </Typography>
+        <EmptyState icon={CommentIcon} title={t('comments.empty')} />
       )}
       {session.data && (
         <CommentComposer

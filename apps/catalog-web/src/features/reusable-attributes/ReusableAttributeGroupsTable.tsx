@@ -10,6 +10,8 @@ import {
 import { useTranslation } from 'react-i18next';
 import type { ReusableAttributeGroup } from './schemas';
 import { GROUPS_TABLE_COLUMN_COUNT } from './constants';
+import { EmptyState } from '../../components/EmptyState';
+import { ReusableAttributeIcon } from '../../components/systemIcons';
 
 export const ReusableAttributeGroupsTable = ({
   groups,
@@ -47,7 +49,10 @@ export const ReusableAttributeGroupsTable = ({
           {!groups.length && (
             <TableRow>
               <TableCell colSpan={GROUPS_TABLE_COLUMN_COUNT}>
-                {t('reusableAttributes.groupsEmpty')}
+                <EmptyState
+                  icon={ReusableAttributeIcon}
+                  title={t('reusableAttributes.groupsEmpty')}
+                />
               </TableCell>
             </TableRow>
           )}

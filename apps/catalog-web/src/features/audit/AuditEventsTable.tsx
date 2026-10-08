@@ -18,6 +18,8 @@ import {
   auditTableColumnCount,
   executorTypes,
 } from './constants';
+import { EmptyState } from '../../components/EmptyState';
+import { AuditLogIcon } from '../../components/systemIcons';
 
 export const AuditEventsTable = ({
   events,
@@ -98,7 +100,7 @@ export const AuditEventsTable = ({
           {!isLoading && events?.length === 0 && (
             <TableRow>
               <TableCell colSpan={auditTableColumnCount}>
-                {t('audit.noMatches')}
+                <EmptyState icon={AuditLogIcon} title={t('audit.noMatches')} />
               </TableCell>
             </TableRow>
           )}
