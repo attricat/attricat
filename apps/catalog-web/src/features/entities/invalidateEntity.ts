@@ -29,6 +29,11 @@ export const invalidateEntity = (client: QueryClient, id: string) =>
     ...entityProjections(id).map((queryKey) =>
       client.invalidateQueries({ queryKey }),
     ),
+    // Labels are looked up in batches that may include other entities.
+    client.invalidateQueries({
+      queryKey: entityQueryKeys.allLabels(),
+      predicate: (query) => query.queryKey.includes(id),
+    }),
     invalidateEntitySearches(client),
   ]);
 

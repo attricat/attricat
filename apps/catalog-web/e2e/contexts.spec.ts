@@ -32,7 +32,9 @@ test('resolves inherited values and saves a context-specific override', async ({
   await expect(
     page.getByText('Inherited from default context').first(),
   ).toBeVisible();
-  await expect(page.getByText('Default title')).toBeVisible();
+  await expect(
+    page.getByText('Inherited from default context: Default title'),
+  ).toBeVisible();
 
   await expect(page.getByRole('tab', { name: context.code })).toHaveAttribute(
     'aria-selected',

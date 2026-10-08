@@ -26,8 +26,9 @@ export const entityQueryKeys = {
     ['relationship-targets', blueprint, query] as const,
   form: (entityId: string) => ['entity-form', entityId] as const,
   preview: (entityId: string) => ['entity-preview', entityId] as const,
+  allLabels: () => ['entity-labels'] as const,
   labels: (entityIds: readonly string[]) =>
-    ['entity-labels', ...entityIds] as const,
+    [...entityQueryKeys.allLabels(), ...entityIds] as const,
   changes: (entityId: string) => ['entity-changes', entityId] as const,
   recordControls: (entityId: string) =>
     ['entity-record-controls', entityId] as const,
