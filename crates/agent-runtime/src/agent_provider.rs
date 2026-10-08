@@ -25,6 +25,7 @@ pub struct OpenAiCompatibleClient {
     api_key: String,
     model: String,
     reasoning_effort: Option<String>,
+    max_tool_rounds: u16,
     read_only: bool,
 }
 
@@ -103,8 +104,13 @@ impl OpenAiCompatibleClient {
             api_key: config.api_key().to_owned(),
             model: config.model.clone(),
             reasoning_effort: config.reasoning_effort.clone(),
+            max_tool_rounds: config.max_tool_rounds,
             read_only: config.read_only,
         })
+    }
+    /// Model and tool round trips a run may take between human approvals.
+    pub fn max_tool_rounds(&self) -> u16 {
+        self.max_tool_rounds
     }
     /// Whether runs on this client may only use read tools.
     pub fn read_only(&self) -> bool {

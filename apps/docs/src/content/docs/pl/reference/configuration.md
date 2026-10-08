@@ -190,6 +190,7 @@ Agenci są wyłączeni, dopóki nie ustawisz `LLM_API_KEY`. Reszta API uruchamia
 | `LLM_REASONING_EFFORT` | Nieustawiona | Opcjonalny `reasoning_effort` wysyłany z każdym żądaniem. Niektóre modele odrzucają narzędzia funkcyjne, chyba że ma on wartość `none`. |
 | `LLM_REQUEST_TIMEOUT_SECONDS` | `60` | Limit czasu jednego żądania do dostawcy, od 1 do 3600. |
 | `LLM_RUN_TIMEOUT_SECONDS` | `300` | Limit czasu całego uruchomienia agenta, od 1 do 3600. |
+| `LLM_MAX_TOOL_ROUNDS` | `25` | Ile razy agent może wywołać narzędzia i kontynuować, zanim się zatrzyma; licznik zaczyna się od nowa po każdym zatwierdzeniu. Od 1 do 100. |
 
 Te limity agentów są stałe: 32 KiB na wiadomość użytkownika, 16 załączników na wiadomość, 5 MiB na obraz osadzony w wiadomości, osiem rund wywołań narzędzi na uruchomienie, 64 KiB na zserializowany wynik narzędzia i 32 wywołania narzędzi na odpowiedź dostawcy.
 

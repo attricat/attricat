@@ -33,6 +33,7 @@ or inaccessible configured bucket.
 | `LLM_REASONING_EFFORT` | Unset | API only | Optional Chat Completions `reasoning_effort` value sent on every agent provider request when configured. Use a value supported by your provider/model (for example, `none` for models that reject function tools with reasoning enabled); omitted by default for providers that do not support it. This does not switch the adapter to the Responses API. |
 | `LLM_REQUEST_TIMEOUT_SECONDS` | `60` | API only | Per-provider-request timeout, 1–3600 seconds. |
 | `LLM_RUN_TIMEOUT_SECONDS` | `300` | API only | Total agent-run timeout, 1–3600 seconds. |
+| `LLM_MAX_TOOL_ROUNDS` | `25` | API only | Model and tool round trips one agent run may take between human approvals, 1–100. A run that exceeds it fails with `tool_limit`. |
 | `PREVIEW_MAX_RELATIONSHIP_DEPTH` | `3` | API | Maximum recursive relationship preview depth. |
 | `PREVIEW_MAX_RELATIONSHIP_ITEMS` | `10` | API | Maximum inline targets per relationship. |
 | `ENTITY_MAX_PAGE_SIZE` | `100` | API | Maximum page size for relationship browsing. |

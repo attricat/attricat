@@ -16,6 +16,8 @@ pub const DEFAULT_LLM_MODEL: &str = "gpt-4o-mini";
 const DEFAULT_REQUEST_TIMEOUT_SECONDS: u64 = 60;
 const DEFAULT_RUN_TIMEOUT_SECONDS: u64 = 300;
 const MAX_TIMEOUT_SECONDS: u64 = 3_600;
+const DEFAULT_MAX_TOOL_ROUNDS: u16 = 25;
+const MAX_TOOL_ROUNDS: u16 = 100;
 
 #[derive(Clone)]
 pub struct AgentProviderConfig {
@@ -25,6 +27,8 @@ pub struct AgentProviderConfig {
     pub reasoning_effort: Option<String>,
     pub request_timeout: Duration,
     pub run_timeout: Duration,
+    /// Model and tool round trips one run may take between human approvals.
+    pub max_tool_rounds: u16,
     /// Offers the model read tools only, so it can never propose a change.
     /// Public demo deployments set it; it is not read from `LLM_*` settings.
     pub read_only: bool,
@@ -80,6 +84,14 @@ impl AgentProviderConfig {
                 "LLM_RUN_TIMEOUT_SECONDS",
                 DEFAULT_RUN_TIMEOUT_SECONDS,
             )?,
+            max_tool_rounds: match value("LLM_MAX_TOOL_ROUNDS") {
+                Some(raw) => raw
+                    .parse::<u16>()
+                    .ok()
+                    .filter(|rounds| (1..=MAX_TOOL_ROUNDS).contains(rounds))
+                    .ok_or(AgentConfigError::InvalidToolRounds)?,
+                None => DEFAULT_MAX_TOOL_ROUNDS,
+            },
             read_only: false,
         }))
     }
@@ -118,6 +130,8 @@ pub enum AgentConfigError {
     InvalidReasoningEffort,
     #[error("{0} must be an integer between 1 and 3600 seconds")]
     InvalidDuration(&'static str),
+    #[error("LLM_MAX_TOOL_ROUNDS must be an integer between 1 and 100")]
+    InvalidToolRounds,
 }
 
 #[cfg(test)]
@@ -151,6 +165,7 @@ mod tests {
         assert_eq!(configured.base_url.as_str(), "https://api.openai.com/v1/");
         assert_eq!(configured.model, DEFAULT_LLM_MODEL);
         assert_eq!(configured.reasoning_effort, None);
+        assert_eq!(configured.max_tool_rounds, 25);
         let configured = AgentProviderConfig::from_values(|name| match name {
             "LLM_API_KEY" => Some("secret".to_owned()),
             "LLM_REASONING_EFFORT" => Some("none".to_owned()),
@@ -159,6 +174,14 @@ mod tests {
         .unwrap()
         .unwrap();
         assert_eq!(configured.reasoning_effort.as_deref(), Some("none"));
+        let configured = AgentProviderConfig::from_values(|name| match name {
+            "LLM_API_KEY" => Some("secret".to_owned()),
+            "LLM_MAX_TOOL_ROUNDS" => Some("40".to_owned()),
+            _ => None,
+        })
+        .unwrap()
+        .unwrap();
+        assert_eq!(configured.max_tool_rounds, 40);
         for (name, value, expected) in [
             (
                 "LLM_BASE_URL",
@@ -175,6 +198,21 @@ mod tests {
                 "LLM_REQUEST_TIMEOUT_SECONDS",
                 "0",
                 AgentConfigError::InvalidDuration("LLM_REQUEST_TIMEOUT_SECONDS"),
+            ),
+            (
+                "LLM_MAX_TOOL_ROUNDS",
+                "0",
+                AgentConfigError::InvalidToolRounds,
+            ),
+            (
+                "LLM_MAX_TOOL_ROUNDS",
+                "101",
+                AgentConfigError::InvalidToolRounds,
+            ),
+            (
+                "LLM_MAX_TOOL_ROUNDS",
+                "many",
+                AgentConfigError::InvalidToolRounds,
             ),
         ] {
             let result = AgentProviderConfig::from_values(|key| match key {

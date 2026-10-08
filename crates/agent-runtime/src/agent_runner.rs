@@ -10,7 +10,7 @@ use crate::{
         AssistantMessage, ChatMessage, OpenAiCompatibleClient, ProviderError, ToolCall,
     },
     agent_tools::{self, ToolKind},
-    agents::{MAX_INLINE_ATTACHMENT_BYTES, MAX_TOOL_CALL_ROUNDS},
+    agents::MAX_INLINE_ATTACHMENT_BYTES,
     repository::{AgentAuditAttribution, AuditContext, CatalogRepository, RepositoryError},
     storage::ObjectStore,
 };
@@ -142,10 +142,10 @@ async fn drive(
     object_store: &Arc<dyn ObjectStore>,
     run_id: Uuid,
     conversation_id: Uuid,
-    rounds: u8,
+    rounds: u16,
     memo: &mut RunMemo,
 ) -> Result<(), RunError> {
-    if rounds >= MAX_TOOL_CALL_ROUNDS {
+    if rounds >= provider.max_tool_rounds() {
         fail_run(
             repository,
             run_id,

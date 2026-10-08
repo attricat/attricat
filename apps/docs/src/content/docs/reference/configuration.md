@@ -190,6 +190,7 @@ Agents are off until `LLM_API_KEY` is set. The rest of the API starts normally w
 | `LLM_REASONING_EFFORT` | Unset | Optional `reasoning_effort` sent with every request. Some models reject function tools unless this is `none`. |
 | `LLM_REQUEST_TIMEOUT_SECONDS` | `60` | Timeout for one provider request, 1 to 3600. |
 | `LLM_RUN_TIMEOUT_SECONDS` | `300` | Timeout for a whole agent run, 1 to 3600. |
+| `LLM_MAX_TOOL_ROUNDS` | `25` | How many times an agent may call tools and continue before it stops, counted again after each approval, 1 to 100. |
 
 These agent limits are fixed: 32 KiB per user message, 16 attachments per message, 5 MiB per inline image, eight tool-call rounds per run, 64 KiB per serialized tool result, and 32 tool calls per provider response.
 

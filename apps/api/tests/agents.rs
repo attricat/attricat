@@ -2701,6 +2701,74 @@ async fn read_only_runs_offer_no_mutations_and_refuse_one_named_anyway(pool: PgP
 }
 
 #[sqlx::test]
+async fn runs_stop_after_the_configured_tool_round_limit(pool: PgPool) {
+    let (_, api_server) = start_server(pool.clone()).await;
+    let requests = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let provider_requests = requests.clone();
+    let provider_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let provider_address = provider_listener.local_addr().unwrap();
+    // A model that never stops asking for another read.
+    let provider = tokio::spawn(async move {
+        axum::serve(
+            provider_listener,
+            Router::new().route(
+                "/v1/chat/completions",
+                post(move || {
+                    let round = provider_requests.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    async move {
+                        axum::response::Response::builder()
+                            .header("content-type", "text/event-stream")
+                            .body(axum::body::Body::from(format!(
+                                "data: {{\"choices\":[{{\"delta\":{{\"tool_calls\":[{{\"index\":0,\"id\":\"call_{round}\",\"type\":\"function\",\"function\":{{\"name\":\"list_blueprints\",\"arguments\":\"{{}}\"}}}}]}}}}]}}\n\ndata: [DONE]\n\n"
+                            )))
+                            .unwrap()
+                    }
+                }),
+            ),
+        )
+        .await
+        .unwrap();
+    });
+    let config = AgentProviderConfig::from_values(|name| match name {
+        "LLM_API_KEY" => Some("test-key".to_owned()),
+        "LLM_BASE_URL" => Some(format!("http://{provider_address}/v1")),
+        "LLM_MAX_TOOL_ROUNDS" => Some("2".to_owned()),
+        _ => None,
+    })
+    .unwrap()
+    .unwrap();
+    let repository = CatalogRepository::system(pool.clone())
+        .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
+        .await
+        .unwrap();
+    let conversation = repository
+        .create_conversation(Some(BOOTSTRAP_OWNER_ID.parse().unwrap()), "rounds")
+        .await
+        .unwrap();
+    let run = repository
+        .create_agent_run_for_user(
+            conversation.id,
+            BOOTSTRAP_OWNER_ID.parse().unwrap(),
+            config.base_url.as_str(),
+            &config.model,
+        )
+        .await
+        .unwrap();
+    let client = api::agent_provider::OpenAiCompatibleClient::new(&config).unwrap();
+    let store: Arc<dyn api::storage::ObjectStore> = Arc::new(FakeObjectStore::available());
+    api::agent_runner::run(&repository, &client, &store, run.id, conversation.id)
+        .await
+        .unwrap();
+
+    let run = repository.get_agent_run(run.id).await.unwrap();
+    assert_eq!(run.status, "failed");
+    assert_eq!(run.error_code.as_deref(), Some("tool_limit"));
+    assert_eq!(requests.load(std::sync::atomic::Ordering::SeqCst), 2);
+    api_server.abort();
+    provider.abort();
+}
+
+#[sqlx::test]
 async fn conversation_detail_reports_a_read_only_agent(pool: PgPool) {
     let (base_url, server) = start_server_with_config(pool, |state| {
         let mut config = AgentProviderConfig::from_values(|name| {
