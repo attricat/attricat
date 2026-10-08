@@ -69,12 +69,14 @@ export const primaryNavigationItems = [
     labelKey: 'navigation.agents',
     to: navigationRoutes.agents,
   },
-  {
-    icon: InboxIcon,
-    labelKey: 'navigation.inbox',
-    to: navigationRoutes.inbox,
-  },
 ] as const;
+
+// Shown in the navigation footer, above the documentation link.
+export const inboxNavigationItem = {
+  icon: InboxIcon,
+  labelKey: 'navigation.inbox',
+  to: navigationRoutes.inbox,
+} as const;
 
 export const managementNavigationItems = [
   {

@@ -17,6 +17,7 @@ import { useSetMobileExplorePanelTarget } from './mobileNavigationPanelContext';
 import {
   getVisibleManagementNavigationItems,
   navigationRoutes,
+  inboxNavigationItem,
   primaryNavigationItems,
 } from './navigation';
 import { NavigationFlyout } from './NavigationFlyout';
@@ -187,21 +188,8 @@ export const SideNavigation = ({
             .filter((item) => compact || item.to !== navigationRoutes.explore)
             .map((item) => (
               <NavigationItem
-                accessibleLabel={
-                  item.to === navigationRoutes.inbox && unreadNotifications > 0
-                    ? t('navigation.inboxUnread', {
-                        count: unreadNotifications,
-                      })
-                    : undefined
-                }
                 compact={compact}
-                icon={
-                  item.to === navigationRoutes.inbox ? (
-                    <InboxNavigationIcon unread={unreadNotifications} />
-                  ) : (
-                    createElement(item.icon)
-                  )
-                }
+                icon={createElement(item.icon)}
                 key={item.to}
                 label={t(item.labelKey)}
                 onClick={
@@ -333,6 +321,21 @@ export const SideNavigation = ({
       {(compact || mobilePrimary) && (
         <NavigationFooter
           compact={compact}
+          leading={
+            <NavigationItem
+              accessibleLabel={
+                unreadNotifications > 0
+                  ? t('navigation.inboxUnread', { count: unreadNotifications })
+                  : undefined
+              }
+              compact={compact}
+              icon={<InboxNavigationIcon unread={unreadNotifications} />}
+              label={t(inboxNavigationItem.labelKey)}
+              onClick={navigateAway}
+              selected={pathname.startsWith(inboxNavigationItem.to)}
+              to={inboxNavigationItem.to}
+            />
+          }
           documentationHref={documentationUrl('home')}
           onDocumentationClick={compact ? undefined : onNavigate}
           onProfileClick={navigateAway}

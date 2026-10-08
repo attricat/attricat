@@ -1,6 +1,6 @@
 import { Divider, List, useTheme } from '@mui/material';
 import { LogOutIcon, MoonIcon, SunIcon } from 'lucide-react';
-import { createElement } from 'react';
+import { createElement, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useColorMode } from '../app/colorMode';
 import { CurrentUserAvatar } from './CurrentUserAvatar';
@@ -11,6 +11,8 @@ import { userAvatarSizes } from './userAvatars';
 
 type NavigationFooterProps = {
   compact: boolean;
+  /** Items shown above the documentation link. */
+  leading?: ReactNode;
   documentationHref: string;
   onDocumentationClick?: () => void;
   onProfileClick: () => void;
@@ -20,6 +22,7 @@ type NavigationFooterProps = {
 
 export const NavigationFooter = ({
   compact,
+  leading,
   documentationHref,
   onDocumentationClick,
   onProfileClick,
@@ -44,6 +47,7 @@ export const NavigationFooter = ({
           py: 1.5,
         }}
       >
+        {leading}
         <NavigationItem
           compact={compact}
           href={documentationHref}
