@@ -2,6 +2,13 @@ import { useQuery } from '@tanstack/react-query';
 import { Alert, Box, Tab, Tabs, Typography } from '@mui/material';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import {
+  CircleArrowUpIcon,
+  GitCompareArrowsIcon,
+  HistoryIcon,
+  InfoIcon,
+} from 'lucide-react';
+import { compactIconSize } from '../../components/iconSizes';
 import { useResourcePageTitle } from '../../app/useResourcePageTitle';
 import { PageContainer } from '../../components/PageContainer';
 import { useTabAccessibility } from '../../components/useTabAccessibility';
@@ -117,20 +124,24 @@ export const BlueprintDetailPage = ({
           >
             <Tab
               {...tabId.tab(blueprintDetailTabs.metadata)}
+              icon={<InfoIcon aria-hidden size={compactIconSize} />}
               label={t('blueprints.versionMetadata', {
                 version: comparison.leftVersion,
               })}
             />
             <Tab
               {...tabId.tab(blueprintDetailTabs.revisionHistory)}
+              icon={<HistoryIcon aria-hidden size={compactIconSize} />}
               label={t('blueprints.revisionHistory')}
             />
             <Tab
               {...tabId.tab(blueprintDetailTabs.compareDefinitions)}
+              icon={<GitCompareArrowsIcon aria-hidden size={compactIconSize} />}
               label={t('blueprints.compareDefinitions')}
             />
             <Tab
               {...tabId.tab(blueprintDetailTabs.migrations)}
+              icon={<CircleArrowUpIcon aria-hidden size={compactIconSize} />}
               label={t('blueprints.migrations')}
             />
           </Tabs>

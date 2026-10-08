@@ -15,7 +15,7 @@ type Props = {
 export const IconLabel = ({ children, icon: Icon }: Props) => (
   <Box
     component="span"
-    sx={{ alignItems: 'center', display: 'inline-flex', gap: 1.5 }}
+    sx={{ alignItems: 'center', display: 'inline-flex', gap: 3 }}
   >
     <Box
       component="span"

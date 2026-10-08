@@ -2,6 +2,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Box, Chip, Stack, Tab, Tabs, Typography } from '@mui/material';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import {
+  CodeIcon,
+  GitCompareArrowsIcon,
+  HistoryIcon,
+  StethoscopeIcon,
+} from 'lucide-react';
+import { compactIconSize } from '../../components/iconSizes';
 import { useResourcePageTitle } from '../../app/useResourcePageTitle';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
@@ -185,21 +192,25 @@ export const WorkflowDetailPage = ({ workflowId }: { workflowId: string }) => {
       >
         <Tab
           {...tabId.tab(workflowDetailTab.revisions)}
+          icon={<HistoryIcon aria-hidden size={compactIconSize} />}
           label={t('workflows.revisions')}
           value={workflowDetailTab.revisions}
         />
         <Tab
           {...tabId.tab(workflowDetailTab.source)}
+          icon={<CodeIcon aria-hidden size={compactIconSize} />}
           label={t('workflows.source')}
           value={workflowDetailTab.source}
         />
         <Tab
           {...tabId.tab(workflowDetailTab.compare)}
+          icon={<GitCompareArrowsIcon aria-hidden size={compactIconSize} />}
           label={t('workflows.compare')}
           value={workflowDetailTab.compare}
         />
         <Tab
           {...tabId.tab(workflowDetailTab.runDiagnostics)}
+          icon={<StethoscopeIcon aria-hidden size={compactIconSize} />}
           label={t('workflows.runDiagnostics')}
           value={workflowDetailTab.runDiagnostics}
         />

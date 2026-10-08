@@ -132,7 +132,7 @@ const SortableColumn = ({
         sx={{
           display: 'inline-flex',
           flexShrink: 0,
-          mr: 1.5,
+          mr: 3,
           width: compactIconSize,
         }}
       >

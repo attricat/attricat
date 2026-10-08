@@ -3,7 +3,14 @@ import { Link, type ToOptions } from '@tanstack/react-router';
 import { Alert, Box, Button, Tab, Tabs } from '@mui/material';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { UploadIcon } from 'lucide-react';
+import {
+  PackageCheckIcon,
+  PanelsTopLeftIcon,
+  StoreIcon,
+  UploadIcon,
+  type LucideIcon,
+} from 'lucide-react';
+import { compactIconSize } from '../../components/iconSizes';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { currentSession } from '../auth/api';
@@ -12,10 +19,26 @@ import { extensionManagementTabIds } from './constants';
 import { ExtensionIcon } from '../../components/systemIcons';
 
 const extensionTabs = [
-  { label: 'extensions.marketplace', to: '/manage/extensions/marketplace' },
-  { label: 'extensions.installed', to: '/manage/extensions/installed' },
-  { label: 'extensions.layout', to: '/manage/extensions/layout' },
-] as const satisfies ReadonlyArray<{ label: string; to: ToOptions['to'] }>;
+  {
+    icon: StoreIcon,
+    label: 'extensions.marketplace',
+    to: '/manage/extensions/marketplace',
+  },
+  {
+    icon: PackageCheckIcon,
+    label: 'extensions.installed',
+    to: '/manage/extensions/installed',
+  },
+  {
+    icon: PanelsTopLeftIcon,
+    label: 'extensions.layout',
+    to: '/manage/extensions/layout',
+  },
+] as const satisfies ReadonlyArray<{
+  icon: LucideIcon;
+  label: string;
+  to: ToOptions['to'];
+}>;
 
 type ExtensionManagementPageProps = {
   children: ReactNode;
@@ -63,6 +86,7 @@ export const ExtensionManagementPage = ({
           <Tab
             aria-controls={extensionManagementTabIds.panel(index)}
             component={Link}
+            icon={<item.icon aria-hidden size={compactIconSize} />}
             id={extensionManagementTabIds.tab(index)}
             key={item.to}
             label={t(item.label)}

@@ -102,7 +102,7 @@ export const ReusableAttributeAttachDialog = ({
                   sx={{
                     alignItems: 'center',
                     display: 'inline-flex',
-                    gap: 1.5,
+                    gap: 3,
                   }}
                 >
                   <ValueTypeIcon valueType={attribute.value_type} />

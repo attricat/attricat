@@ -255,6 +255,7 @@ export const makeTheme = (mode: DesignMode) => {
         },
       },
       MuiTab: {
+        defaultProps: { iconPosition: 'start' },
         styleOverrides: {
           root: {
             textTransform: 'none',
@@ -263,6 +264,8 @@ export const makeTheme = (mode: DesignMode) => {
             padding: '8px 16px',
             fontWeight: 600,
           },
+          // The 12px icon–label gap from the design system.
+          labelIcon: { '& .MuiTab-icon': { marginRight: 12 } },
         },
       },
       MuiAppBar: {

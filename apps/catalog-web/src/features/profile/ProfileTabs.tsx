@@ -51,12 +51,10 @@ export const ProfileTabs = ({ children, tab }: ProfileTabsProps) => {
             aria-controls={profileTabIds.panel(index)}
             component={Link}
             icon={<item.icon aria-hidden size={compactIconSize} />}
-            iconPosition="start"
             id={profileTabIds.tab(index)}
             key={item.to}
             label={t(item.label)}
             to={item.to}
-            sx={{ '& .MuiTab-icon': { mr: 2 } }}
             value={index}
           />
         ))}
