@@ -293,14 +293,19 @@ export const EntityInlineFields = forwardRef<EntityInlineFieldsHandle, Props>(
         </InlineFieldEditor>
       );
       return KeptDisplay ? (
-        <Stack spacing={1}>
-          <KeptDisplay
-            attribute={attribute}
-            component={component}
-            contextId={contextId ?? undefined}
-            entityId={entityId}
-            value={resolvedValues[attribute.code]?.value}
-          />
+        // Leaves room for the editor's label, which rises above its outline.
+        <Stack spacing={4} useFlexGap>
+          {/* Sits closer to the field above than the layout's gap so it
+              reads as part of its own editor. */}
+          <Box sx={{ mt: -4 }}>
+            <KeptDisplay
+              attribute={attribute}
+              component={component}
+              contextId={contextId ?? undefined}
+              entityId={entityId}
+              value={resolvedValues[attribute.code]?.value}
+            />
+          </Box>
           {editor}
         </Stack>
       ) : (
