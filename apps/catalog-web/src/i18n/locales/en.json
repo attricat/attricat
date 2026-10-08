@@ -456,7 +456,19 @@
       "violationInContexts": "{{message}} (contexts: {{contexts}})",
       "publicationBlocked": "Publication to {{context}} is blocked by failing checks."
     },
-    "statusConditionsUnmet": "Blocked: {{conditions}}"
+    "statusConditionsUnmet": "Blocked: {{conditions}}",
+    "valueTypes": {
+      "string": "Text",
+      "number": "Number",
+      "integer": "Integer",
+      "boolean": "Yes/No",
+      "date": "Date",
+      "datetime": "Date & time",
+      "time": "Time",
+      "json": "JSON",
+      "file": "File",
+      "relationship": "Relationship"
+    }
   },
   "exports": {
     "title": "Exports",
@@ -705,17 +717,6 @@
       "valueHint": "Type a value to find in {{field}}. End it with * to match the beginning.",
       "keyboardHint": "↑↓ to choose · Tab or Enter to insert · Esc to close · Ctrl+Space to reopen"
     },
-    "queryValueTypes": {
-      "string": "Text",
-      "number": "Number",
-      "integer": "Integer",
-      "boolean": "Yes/No",
-      "date": "Date",
-      "datetime": "Date & time",
-      "time": "Time",
-      "json": "JSON",
-      "file": "File"
-    },
     "queryErrors": {
       "malformedTerm": "“{{term}}” is incomplete. Use field:value.",
       "misplacedWildcard": "* can only end a term: “{{term}}”.",
@@ -747,7 +748,6 @@
     "attribute": "Attribute",
     "filterField": "Field",
     "noMatchingFilterFields": "No matching fields",
-    "relationship": "Relationship",
     "loadingRelationshipFields": "Loading related fields…",
     "operator": "Operator",
     "value": "Value",

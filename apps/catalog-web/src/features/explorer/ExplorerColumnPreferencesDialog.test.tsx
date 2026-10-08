@@ -7,9 +7,10 @@ import type { ExplorerColumnPreferences } from './columnPreferences';
 import { ExplorerColumnPreferencesDialog } from './ExplorerColumnPreferencesDialog';
 
 const columns = [
-  { id: 'title', label: 'Title' },
-  { id: 'stock', label: 'Stock' },
-  { id: 'price', label: 'Price' },
+  { id: 'title', label: 'Title', valueType: 'string' as const },
+  { id: 'stock', label: 'Stock', valueType: 'integer' as const },
+  { id: 'price', label: 'Price', valueType: 'number' as const },
+  { id: 'id', label: 'ID' },
 ];
 
 const renderDialog = (preferences: ExplorerColumnPreferences) => {
@@ -28,6 +29,16 @@ const renderDialog = (preferences: ExplorerColumnPreferences) => {
 };
 
 describe('ExplorerColumnPreferencesDialog', () => {
+  it("names each attribute column's value type", () => {
+    renderDialog({ hidden: [], order: ['title', 'stock', 'id'] });
+    const list = screen.getByRole('list', { name: 'Columns' });
+    expect(
+      within(list)
+        .getAllByRole('img')
+        .map((icon) => icon.getAttribute('aria-label')),
+    ).toEqual(['Text', 'Integer']);
+  });
+
   it('offers a labelled drag handle with keyboard instructions per column', async () => {
     renderDialog({ hidden: [], order: ['title', 'stock', 'price'] });
     const list = screen.getByRole('list', { name: 'Columns' });

@@ -21,6 +21,7 @@ import {
   STATUS_PUBLISHED,
 } from './constants';
 import { lexiconText } from '../lexicon/lexicon';
+import { ValueTypeLabel } from '../entities/components/ValueTypeLabel';
 
 export const ReusableAttributesTable = ({
   attributes,
@@ -62,7 +63,9 @@ export const ReusableAttributesTable = ({
                   </Link>
                 </TableCell>
                 <TableCell>v{attribute.version}</TableCell>
-                <TableCell>{attribute.value_type}</TableCell>
+                <TableCell>
+                  <ValueTypeLabel valueType={attribute.value_type} />
+                </TableCell>
                 <TableCell>
                   <Chip
                     color={

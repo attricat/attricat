@@ -29,6 +29,7 @@ import {
   buildExplorerTableColumns,
   configurableColumnIds,
   explorerColumnLabel,
+  explorerColumnValueType,
 } from './explorerTableColumns';
 import type { AttributeFilterDraft } from './attributeFilterValues';
 import type { ExplorerSort } from './search';
@@ -200,6 +201,7 @@ export const ExplorerResultsTable = ({
   const preferenceColumns = columnIds.map((id) => ({
     id,
     label: explorerColumnLabel(t, id, tableColumns, publicationContextCode),
+    valueType: explorerColumnValueType(blueprint, id),
   }));
   const table = useLegacyTable({
     data: items,

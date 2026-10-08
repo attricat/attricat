@@ -1,6 +1,7 @@
 import type { TFunction } from 'i18next';
 import type { BlueprintWithAttributes } from '../entities/api';
 import { attributeLabel } from '../entities/entityDisplay';
+import type { AttributeValueType } from '../entities/valueTypeIcons';
 import {
   builtInConfigurableColumnIds,
   catalogRendererPrefix,
@@ -77,6 +78,16 @@ export const buildExplorerTableColumns = (
     };
   });
 };
+
+/** The value type a column shows, or undefined for built-in columns. */
+export const explorerColumnValueType = (
+  blueprint: BlueprintWithAttributes,
+  id: string,
+): AttributeValueType | undefined =>
+  (
+    blueprint.attributes.find((attribute) => attribute.code === id) ??
+    blueprint.table_path_attributes.find((attribute) => attribute.code === id)
+  )?.value_type;
 
 export const configurableColumnIds = (tableColumns: ExplorerTableColumn[]) => [
   ...builtInConfigurableColumnIds,

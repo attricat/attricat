@@ -1,4 +1,5 @@
 import {
+  Box,
   Button,
   Dialog,
   DialogActions,
@@ -21,6 +22,7 @@ import {
   type ReusableSelectionType,
 } from '../constants';
 import { lexiconText } from '../../lexicon/lexicon';
+import { ValueTypeIcon } from './ValueTypeLabel';
 
 type Props = {
   attachAttributeDisabled: boolean;
@@ -94,11 +96,22 @@ export const ReusableAttributeAttachDialog = ({
             </MenuItem>
             {attributes.map((attribute) => (
               <MenuItem key={attribute.id} value={attribute.id}>
-                {t('entities.reusableAttributeOption', {
-                  qualifiedCode: `${attribute.namespace}${REUSABLE_ATTRIBUTE_NAMESPACE_SEPARATOR}${attribute.code}`,
-                  name: lexiconText(attribute.name),
-                  version: attribute.version,
-                })}
+                {/* Also rendered as the selected value, so keep the layout here. */}
+                <Box
+                  component="span"
+                  sx={{
+                    alignItems: 'center',
+                    display: 'inline-flex',
+                    gap: 1.5,
+                  }}
+                >
+                  <ValueTypeIcon valueType={attribute.value_type} />
+                  {t('entities.reusableAttributeOption', {
+                    qualifiedCode: `${attribute.namespace}${REUSABLE_ATTRIBUTE_NAMESPACE_SEPARATOR}${attribute.code}`,
+                    name: lexiconText(attribute.name),
+                    version: attribute.version,
+                  })}
+                </Box>
               </MenuItem>
             ))}
           </TextField>

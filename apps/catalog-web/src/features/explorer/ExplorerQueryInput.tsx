@@ -14,16 +14,9 @@ import {
 } from '@mui/material';
 import {
   AsteriskIcon,
-  BracesIcon,
-  CalendarIcon,
   CircleQuestionMarkIcon,
-  ClockIcon,
   CornerDownRightIcon,
-  FileIcon,
-  HashIcon,
   ListIcon,
-  ToggleLeftIcon,
-  TypeIcon,
   type LucideIcon,
 } from 'lucide-react';
 import {
@@ -45,7 +38,7 @@ import { compactIconSize, smallIconSize } from '../../components/iconSizes';
 import { EntityIcon, RelationshipIcon } from '../../components/systemIcons';
 import type { Blueprint, BlueprintWithAttributes } from '../entities/api';
 import { attributeLabel } from '../entities/entityDisplay';
-import { attributeValueTypes } from '../entities/valueTypes';
+import { valueTypeIcons, valueTypeLabelKey } from '../entities/valueTypeIcons';
 import { querySuggestionListMaxHeight } from './constants';
 import {
   firstQueryError,
@@ -60,22 +53,10 @@ import {
 } from './querySuggestions';
 import { useQuerySchema } from './useQuerySchema';
 
-const valueTypeIcons: Record<string, LucideIcon> = {
-  [attributeValueTypes.string]: TypeIcon,
-  [attributeValueTypes.number]: HashIcon,
-  [attributeValueTypes.integer]: HashIcon,
-  [attributeValueTypes.boolean]: ToggleLeftIcon,
-  [attributeValueTypes.date]: CalendarIcon,
-  [attributeValueTypes.datetime]: CalendarIcon,
-  [attributeValueTypes.time]: ClockIcon,
-  [attributeValueTypes.json]: BracesIcon,
-  [attributeValueTypes.file]: FileIcon,
-};
-
 const suggestionIcon = (suggestion: QuerySuggestion): LucideIcon => {
   switch (suggestion.kind) {
     case 'attribute':
-      return valueTypeIcons[suggestion.attribute.value_type] ?? TypeIcon;
+      return valueTypeIcons[suggestion.attribute.value_type];
     case 'relationship':
       return RelationshipIcon;
     case 'allFields':
@@ -357,9 +338,7 @@ export const ExplorerQueryInput = ({
   };
   const typeLabel = (suggestion: QuerySuggestion) =>
     suggestion.kind === 'attribute'
-      ? t(`explorer.queryValueTypes.${suggestion.attribute.value_type}`, {
-          defaultValue: suggestion.attribute.value_type,
-        })
+      ? t(valueTypeLabelKey(suggestion.attribute.value_type))
       : suggestion.kind === 'relationship'
         ? t('explorer.querySuggestions.linksTo', { target: suggestion.target })
         : undefined;

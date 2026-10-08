@@ -468,7 +468,19 @@
       "violationInContexts": "{{message}} (konteksty: {{contexts}})",
       "publicationBlocked": "Publikację w kanale {{context}} blokują niespełnione kontrole."
     },
-    "statusConditionsUnmet": "Zablokowane: {{conditions}}"
+    "statusConditionsUnmet": "Zablokowane: {{conditions}}",
+    "valueTypes": {
+      "string": "Tekst",
+      "number": "Liczba",
+      "integer": "Liczba całkowita",
+      "boolean": "Tak/Nie",
+      "date": "Data",
+      "datetime": "Data i godzina",
+      "time": "Godzina",
+      "json": "JSON",
+      "file": "Plik",
+      "relationship": "Relacja"
+    }
   },
   "exports": {
     "title": "Eksporty",
@@ -721,17 +733,6 @@
       "valueHint": "Wpisz wartość do znalezienia w {{field}}. Zakończ ją znakiem *, aby dopasować początek.",
       "keyboardHint": "↑↓ wybór · Tab lub Enter wstawia · Esc zamyka · Ctrl+Spacja otwiera ponownie"
     },
-    "queryValueTypes": {
-      "string": "Tekst",
-      "number": "Liczba",
-      "integer": "Liczba całkowita",
-      "boolean": "Tak/Nie",
-      "date": "Data",
-      "datetime": "Data i godzina",
-      "time": "Godzina",
-      "json": "JSON",
-      "file": "Plik"
-    },
     "queryErrors": {
       "malformedTerm": "„{{term}}” jest niepełne. Użyj pole:wartość.",
       "misplacedWildcard": "* może występować tylko na końcu: „{{term}}”.",
@@ -765,7 +766,6 @@
     "attribute": "Atrybut",
     "filterField": "Pole",
     "noMatchingFilterFields": "Brak pasujących pól",
-    "relationship": "Relacja",
     "loadingRelationshipFields": "Ładowanie pól relacji…",
     "operator": "Operator",
     "value": "Wartość",

@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next';
 import { RelationshipSelectorDialog } from '../../components/RelationshipSelectorDialog';
 import type { Attribute } from '../entities/api';
 import { PRESENCE_FILTER_OPERATOR } from '../entities/constants';
+import { ValueTypeIcon } from '../entities/components/ValueTypeLabel';
 import { attributeLabel } from '../entities/entityDisplay';
 import { statusConfiguration, statusOptionLabel } from '../entities/status';
 import { CURRENT_USER_FILTER_VALUE } from '../principals/constants';
@@ -233,10 +234,8 @@ export const AttributeFilterDialog = ({
                     spacing={1}
                     sx={{ alignItems: 'center' }}
                   >
+                    <ValueTypeIcon valueType={item.value_type} />
                     <Chip label={blueprintName} size="small" />
-                    {item.value_type === 'relationship' && (
-                      <Chip label={t('explorer.relationship')} size="small" />
-                    )}
                     <Typography>{attributeLabel(item)}</Typography>
                   </Stack>
                 </li>

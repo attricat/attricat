@@ -20,11 +20,14 @@ import {
 import { ArrowDownIcon, ArrowUpIcon, GripVerticalIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { compactIconSize } from '../../components/iconSizes';
+import { ValueTypeIcon } from '../entities/components/ValueTypeLabel';
+import type { AttributeValueType } from '../entities/valueTypeIcons';
 import type { ExplorerColumnPreferences } from './columnPreferences';
 import { columnPreferencesListMaxHeight } from './constants';
 
 type Props = {
-  columns: { id: string; label: string }[];
+  columns: { id: string; label: string; valueType?: AttributeValueType }[];
   onChange: (preferences: ExplorerColumnPreferences) => void;
   onClear: () => void;
   onClose: () => void;
@@ -45,6 +48,7 @@ type SortableColumnProps = {
   label: string;
   onMove: (direction: -1 | 1) => void;
   onToggle: () => void;
+  valueType?: AttributeValueType;
 };
 
 const SortableColumn = ({
@@ -55,6 +59,7 @@ const SortableColumn = ({
   label,
   onMove,
   onToggle,
+  valueType,
 }: SortableColumnProps) => {
   const { t } = useTranslation();
   const { handleRef, isDragSource, ref } = useSortable({ id, index });
@@ -122,6 +127,17 @@ const SortableColumn = ({
         }}
         onChange={onToggle}
       />
+      {/* Built-in columns have no value type; keep their labels aligned. */}
+      <Box
+        sx={{
+          display: 'inline-flex',
+          flexShrink: 0,
+          mr: 1.5,
+          width: compactIconSize,
+        }}
+      >
+        {valueType && <ValueTypeIcon valueType={valueType} />}
+      </Box>
       <ListItemText primary={label} />
     </ListItem>
   );
@@ -138,6 +154,10 @@ export const ExplorerColumnPreferencesDialog = ({
   const { t } = useTranslation();
   const labels = useMemo(
     () => new Map(columns.map((column) => [column.id, column.label])),
+    [columns],
+  );
+  const valueTypes = useMemo(
+    () => new Map(columns.map((column) => [column.id, column.valueType])),
     [columns],
   );
   const count = preferences.order.length;
@@ -219,6 +239,7 @@ export const ExplorerColumnPreferencesDialog = ({
                         : [...preferences.hidden, id],
                     })
                   }
+                  valueType={valueTypes.get(id)}
                 />
               ))}
             </List>

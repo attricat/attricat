@@ -22,6 +22,7 @@ import {
 } from './constants';
 import { JsonMetadata } from './BlueprintMetadata';
 import { isHiddenByDefault } from '../entities/attributeVisibility';
+import { ValueTypeLabel } from '../entities/components/ValueTypeLabel';
 
 export const BlueprintVersionMetadata = ({
   blueprint,
@@ -123,7 +124,9 @@ export const BlueprintVersionMetadata = ({
                 {metadataAttributes.map((attribute) => (
                   <TableRow key={attribute.id}>
                     <TableCell>{attribute.code}</TableCell>
-                    <TableCell>{attribute.value_type}</TableCell>
+                    <TableCell>
+                      <ValueTypeLabel valueType={attribute.value_type} />
+                    </TableCell>
                     <TableCell>
                       {attribute.target_blueprint_codes?.length
                         ? attribute.target_blueprint_codes.join(', ')
