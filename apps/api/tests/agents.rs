@@ -2791,6 +2791,34 @@ async fn agent_finds_a_named_record_and_counts_what_links_to_it(pool: PgPool) {
     assert_eq!(linked["total_count"], 3);
     assert_eq!(linked["total_count_capped"], false);
 
+    let count =
+        |arguments: Value| execute_read(&repository, actor, workspace, "count_records", arguments);
+    let counted = count(json!({
+        "blueprint": {"code": "product"},
+        "relationship_filters": [{"field": "category", "selected_target_ids": [basic["id"]]}],
+    }))
+    .await
+    .unwrap();
+    assert_eq!(counted, json!({"blueprint": "product", "total_count": 3}));
+    // A product without a category counts as ungrouped.
+    create(&product, json!([title("Loose part")])).await;
+    let grouped = count(json!({"blueprint": {"code": "product"}, "group_by": "category"}))
+        .await
+        .unwrap();
+    assert_eq!(grouped["total_count"], 5);
+    assert_eq!(grouped["ungrouped_count"], 1);
+    assert_eq!(grouped["groups_truncated"], false);
+    assert_eq!(grouped["groups"][0]["target_id"], basic["id"]);
+    assert_eq!(grouped["groups"][0]["display"]["default"], "Basic tools");
+    assert_eq!(grouped["groups"][0]["count"], 3);
+    assert_eq!(grouped["groups"][1]["target_id"], power["id"]);
+    assert_eq!(grouped["groups"][1]["count"], 1);
+    let error = count(json!({"blueprint": {"code": "product"}, "group_by": "title"}))
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("it has: category"), "{error}");
+
     // Every run's system prompt maps blueprints to the blueprints they link to.
     let system_prompt = Arc::new(std::sync::Mutex::new(String::new()));
     let provider_prompt = system_prompt.clone();

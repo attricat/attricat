@@ -65,6 +65,8 @@ const DEFAULT_FIND_RECORDS_LIMIT: usize = 10;
 const MAX_FIND_RECORDS_LIMIT: usize = 25;
 /// Matches considered before ranking, so a common word stays cheap to name.
 const MAX_FIND_RECORDS_CANDIDATES: usize = 100;
+const DEFAULT_COUNT_GROUP_LIMIT: usize = 20;
+const MAX_COUNT_GROUP_LIMIT: usize = 50;
 /// Single-entity mutations whose approved write must apply to the entity
 /// state the proposal was made against; see [`pin_entity_versions`].
 const VERSION_PINNED_TOOLS: [&str; 9] = [
@@ -386,6 +388,11 @@ pub fn definitions() -> Vec<ToolDefinition> {
             "find_records",
             "Find records by name across every blueprint when the user names a record (such as a category, brand or location) without saying which blueprint it belongs to. Matches the words of text in records' values, case-insensitively, and returns {id, blueprint_code, blueprint_name, display} items with exact display-label matches first, plus total_matches and truncated. Then use the record: get_incoming_relationships counts what links to it, and search_entities with relationship_filters lists those records.",
             json!({"type":"object","required":["text"],"properties":{"text":{"type":"string","minLength":1},"limit":{"type":"integer","minimum":1,"maximum":MAX_FIND_RECORDS_LIMIT}},"additionalProperties":false}),
+        ),
+        definition(
+            "count_records",
+            "Count the records of a blueprint that match an optional query, filters and relationship_filters (the same as search_entities), without listing them. group_by names a relationship field of the blueprint to count matching records per linked record instead, such as products per category; groups come largest first with each linked record's display label, up to group_limit, and ungrouped_count is the matching records that link to nothing. Use it for questions about how many records there are or which has the most.",
+            json!({"type":"object","required":["blueprint"],"properties":{"blueprint":{"type":"object","required":["code"],"properties":{"code":{"type":"string"},"version":{"type":"integer","minimum":1}},"additionalProperties":false},"query":{"type":"string"},"filters":attribute_filter_parameters(),"relationship_filters":relationship_filter_parameters(),"context_code":{"type":"string"},"group_by":{"type":"string","description":"A relationship field of the blueprint."},"group_limit":{"type":"integer","minimum":1,"maximum":MAX_COUNT_GROUP_LIMIT}},"additionalProperties":false}),
         ),
         definition(
             "create_blueprint",
@@ -730,6 +737,7 @@ pub fn kind(name: &str) -> Result<ToolKind, ToolError> {
         | "read_file"
         | "search_entities"
         | "find_records"
+        | "count_records"
         | "list_saved_searches"
         | "get_saved_search"
         | "get_entity_publications"
@@ -1717,6 +1725,151 @@ pub async fn execute_read(
                 "message": "The text file is attached to this tool result for reading.",
             })
         }
+        "count_records" => {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct Input {
+                blueprint: crate::model::SearchBlueprint,
+                #[serde(default)]
+                query: Option<String>,
+                #[serde(default)]
+                filters: Vec<crate::model::SearchFilter>,
+                #[serde(default)]
+                relationship_filters: Vec<crate::model::RelationshipFilter>,
+                #[serde(default)]
+                context_code: Option<String>,
+                #[serde(default)]
+                group_by: Option<String>,
+                #[serde(default)]
+                group_limit: Option<usize>,
+            }
+            let input: Input = decode(arguments)?;
+            let group_limit = input.group_limit.unwrap_or(DEFAULT_COUNT_GROUP_LIMIT);
+            if !(1..=MAX_COUNT_GROUP_LIMIT).contains(&group_limit) {
+                return Err(ToolError::InvalidArguments(format!(
+                    "group_limit must be between 1 and {MAX_COUNT_GROUP_LIMIT}"
+                )));
+            }
+            let AgentSearchScope {
+                current,
+                selected,
+                search_blueprint,
+                context,
+                matching,
+                ..
+            } = agent_search_scope(
+                repository,
+                actor,
+                &input.blueprint,
+                input.query.as_deref(),
+                &input.filters,
+                &input.relationship_filters,
+                input.context_code.as_deref(),
+            )
+            .await?;
+            // Grouping needs the matching entities, not only how many there are.
+            let matching = match matching {
+                Some(ids) => ids.into_iter().collect::<std::collections::HashSet<_>>(),
+                None => {
+                    repository
+                        .resolve_search(&search_blueprint, selected, None)
+                        .await?
+                        .ids
+                }
+            };
+            let total_count = matching.len();
+            let Some(field) = input.group_by else {
+                return Ok(json!({"blueprint": current.blueprint.code, "total_count": total_count}));
+            };
+            let relationship_fields = search_blueprint
+                .attributes
+                .iter()
+                .filter(|attribute| attribute.value_type == "relationship")
+                .collect::<Vec<_>>();
+            let Some(attribute) = relationship_fields
+                .iter()
+                .find(|attribute| attribute.code == field)
+            else {
+                let available = relationship_fields
+                    .iter()
+                    .map(|attribute| attribute.code.as_str())
+                    .collect::<Vec<_>>();
+                return Err(ToolError::InvalidArguments(format!(
+                    "group_by must be a relationship field of {}; it has: {}",
+                    current.blueprint.code,
+                    if available.is_empty() {
+                        "none".to_owned()
+                    } else {
+                        available.join(", ")
+                    }
+                )));
+            };
+            let target_codes = if attribute.target_blueprint_codes.is_empty() {
+                // Without declared targets, the field may link to any entity blueprint.
+                repository
+                    .list_blueprints()
+                    .await?
+                    .into_iter()
+                    .filter(|blueprint| blueprint.kind == "entity")
+                    .map(|blueprint| blueprint.code)
+                    .collect()
+            } else {
+                attribute.target_blueprint_codes.clone()
+            };
+            let mut target_blueprint_ids = Vec::new();
+            for code in &target_codes {
+                if let Some(target) = repository.get_blueprint_by_code(code).await? {
+                    target_blueprint_ids.push(target.blueprint.id);
+                }
+            }
+            let (counts, linked) = repository
+                .relationship_target_counts(
+                    current.blueprint.id,
+                    &field,
+                    &target_blueprint_ids,
+                    context.requested_id(),
+                    Some(&matching),
+                )
+                .await?;
+            let target_ids = counts.keys().copied().collect::<Vec<_>>();
+            let readable = repository
+                .authorized_entity_ids(actor, workspace, "entities.read", &target_ids)
+                .await?;
+            let mut groups = counts
+                .into_iter()
+                .filter(|(target, _)| readable.contains(target))
+                .collect::<Vec<_>>();
+            groups.sort_by(|(left_id, left), (right_id, right)| {
+                right.cmp(left).then(left_id.cmp(right_id))
+            });
+            let groups_truncated = groups.len() > group_limit;
+            groups.truncate(group_limit);
+            let labels = repository
+                .entity_labels(&groups.iter().map(|(id, _)| *id).collect::<Vec<_>>())
+                .await?
+                .into_iter()
+                .map(|label| (label.id, label))
+                .collect::<HashMap<_, _>>();
+            json!({
+                "blueprint": current.blueprint.code,
+                "total_count": total_count,
+                "group_by": field,
+                "groups": groups
+                    .into_iter()
+                    .map(|(id, count)| {
+                        let label = labels.get(&id);
+                        json!({
+                            "target_id": id,
+                            "blueprint_code": label.map(|label| label.blueprint_code.as_str()),
+                            "display": label.map(|label| &label.display),
+                            "count": count,
+                        })
+                    })
+                    .collect::<Vec<_>>(),
+                "groups_truncated": groups_truncated,
+                "ungrouped_count": total_count - linked.len(),
+            })
+        }
         "find_records" => {
             #[derive(Deserialize)]
             #[serde(deny_unknown_fields)]
@@ -1832,94 +1985,29 @@ pub async fn execute_read(
             }
 
             let input: Input = decode(arguments)?;
-            if input.blueprint.code.is_empty() {
-                return Err(ToolError::InvalidArguments(
-                    "blueprint.code must not be empty".to_owned(),
-                ));
-            }
-            if input.filters.len() > MAX_SEARCH_FILTERS
-                || input.relationship_filters.len() > MAX_SEARCH_FILTERS
-            {
-                return Err(ToolError::InvalidArguments(format!(
-                    "filters and relationship_filters must each contain at most {MAX_SEARCH_FILTERS} items"
-                )));
-            }
             let limit = input.page.size.unwrap_or(DEFAULT_PAGE_SIZE);
             if limit == 0 || limit > DEFAULT_ENTITY_PAGE_SIZE {
                 return Err(ToolError::InvalidArguments(format!(
                     "page.size must be between 1 and {DEFAULT_ENTITY_PAGE_SIZE}"
                 )));
             }
-            let current = repository
-                .get_blueprint_by_code(&input.blueprint.code)
-                .await?
-                .ok_or(RepositoryError::NotFound("blueprint"))?;
-            let (selected, search_blueprint) = match input.blueprint.version {
-                // The latest published revision is the requested one.
-                Some(version) if version == current.blueprint.version => {
-                    (Some(version), current.clone())
-                }
-                Some(version) => {
-                    let published = repository
-                        .get_published_blueprint_by_code_and_version(&input.blueprint.code, version)
-                        .await?
-                        .ok_or(RepositoryError::NotFound("blueprint"))?;
-                    (Some(published.blueprint.version), published)
-                }
-                None => (None, current.clone()),
-            };
-            let query = input
-                .query
-                .as_deref()
-                .map(str::trim)
-                .filter(|value| !value.is_empty());
-            let context = repository
-                .search_context(input.context_code.as_deref().unwrap_or("default"))
-                .await?
-                .ok_or_else(|| {
-                    ToolError::InvalidArguments("context_code is not a context".to_owned())
-                })?;
-            let resolved = if query.is_some() {
-                Some(
-                    repository
-                        .resolve_search(&search_blueprint, selected, query)
-                        .await
-                        .map_err(|error| ToolError::InvalidArguments(error.to_string()))?,
-                )
-            } else {
-                None
-            };
-            let mut matching = resolved
-                .as_ref()
-                .map(|resolved| resolved.ids.iter().copied().collect::<Vec<_>>());
-            let mut filters = Vec::with_capacity(input.filters.len());
-            for filter in &input.filters {
-                filters.push(resolve_agent_filter(repository, &search_blueprint, filter, actor).await?);
-            }
-            if !filters.is_empty() {
-                let ids = repository
-                    .filter_entity_ids(current.blueprint.id, selected, &filters, &context)
-                    .await?;
-                matching = Some(intersect_ids(matching, ids));
-            }
-            let mut relationship_filters = Vec::with_capacity(input.relationship_filters.len());
-            for filter in &input.relationship_filters {
-                relationship_filters.push(
-                    resolve_agent_relationship_filter(repository, &search_blueprint, filter)
-                        .await?,
-                );
-            }
-            if !relationship_filters.is_empty() {
-                let ids = repository
-                    .filter_relationship_entity_ids(
-                        current.blueprint.id,
-                        selected,
-                        &relationship_filters,
-                        &context,
-                    )
-                    .await?;
-                matching = Some(intersect_ids(matching, ids));
-            }
+            let AgentSearchScope {
+                current,
+                selected,
+                search_blueprint,
+                context,
+                explanations,
+                matching,
+            } = agent_search_scope(
+                repository,
+                actor,
+                &input.blueprint,
+                input.query.as_deref(),
+                &input.filters,
+                &input.relationship_filters,
+                input.context_code.as_deref(),
+            )
+            .await?;
             // Like the Explorer, count only for a first page, and only so far.
             let (versions, total_count) = repository
                 .search_result_versions_and_count(
@@ -2018,11 +2106,8 @@ pub async fn execute_read(
             };
             for item in &mut items {
                 item.schema_outdated = item.blueprint_version != current.blueprint.version;
-                item.match_explanations = resolved
-                    .as_ref()
-                    .and_then(|resolved| resolved.explanations.get(&item.id))
-                    .cloned()
-                    .unwrap_or_default();
+                item.match_explanations =
+                    explanations.get(&item.id).cloned().unwrap_or_default();
             }
             let table_paths = agent_table_paths(&sort_blueprint);
             repository
@@ -3072,6 +3157,109 @@ async fn resolve_agent_search_sort(
     }))
 }
 
+/// A search's blueprint, context and matching entities, shared by the tools
+/// that search and count.
+struct AgentSearchScope {
+    current: crate::model::BlueprintWithAttributes,
+    selected: Option<i64>,
+    search_blueprint: crate::model::BlueprintWithAttributes,
+    context: SearchContext,
+    explanations: HashMap<Uuid, Vec<crate::model::MatchExplanation>>,
+    /// `None` when neither a query nor a filter narrows the blueprint.
+    matching: Option<Vec<Uuid>>,
+}
+
+async fn agent_search_scope(
+    repository: &CatalogRepository,
+    actor: Uuid,
+    blueprint: &crate::model::SearchBlueprint,
+    query: Option<&str>,
+    filters: &[crate::model::SearchFilter],
+    relationship_filters: &[crate::model::RelationshipFilter],
+    context_code: Option<&str>,
+) -> Result<AgentSearchScope, ToolError> {
+    if blueprint.code.is_empty() {
+        return Err(ToolError::InvalidArguments(
+            "blueprint.code must not be empty".to_owned(),
+        ));
+    }
+    if filters.len() > MAX_SEARCH_FILTERS || relationship_filters.len() > MAX_SEARCH_FILTERS {
+        return Err(ToolError::InvalidArguments(format!(
+            "filters and relationship_filters must each contain at most {MAX_SEARCH_FILTERS} items"
+        )));
+    }
+    let current = repository
+        .get_blueprint_by_code(&blueprint.code)
+        .await?
+        .ok_or(RepositoryError::NotFound("blueprint"))?;
+    let (selected, search_blueprint) = match blueprint.version {
+        // The latest published revision is the requested one.
+        Some(version) if version == current.blueprint.version => (Some(version), current.clone()),
+        Some(version) => {
+            let published = repository
+                .get_published_blueprint_by_code_and_version(&blueprint.code, version)
+                .await?
+                .ok_or(RepositoryError::NotFound("blueprint"))?;
+            (Some(published.blueprint.version), published)
+        }
+        None => (None, current.clone()),
+    };
+    let query = query.map(str::trim).filter(|value| !value.is_empty());
+    let context = repository
+        .search_context(context_code.unwrap_or("default"))
+        .await?
+        .ok_or_else(|| ToolError::InvalidArguments("context_code is not a context".to_owned()))?;
+    let resolved = match query {
+        Some(query) => Some(
+            repository
+                .resolve_search(&search_blueprint, selected, Some(query))
+                .await
+                .map_err(|error| ToolError::InvalidArguments(error.to_string()))?,
+        ),
+        None => None,
+    };
+    let mut matching = resolved
+        .as_ref()
+        .map(|resolved| resolved.ids.iter().copied().collect::<Vec<_>>());
+    let mut resolved_filters = Vec::with_capacity(filters.len());
+    for filter in filters {
+        resolved_filters
+            .push(resolve_agent_filter(repository, &search_blueprint, filter, actor).await?);
+    }
+    if !resolved_filters.is_empty() {
+        let ids = repository
+            .filter_entity_ids(current.blueprint.id, selected, &resolved_filters, &context)
+            .await?;
+        matching = Some(intersect_ids(matching, ids));
+    }
+    let mut resolved_relationship_filters = Vec::with_capacity(relationship_filters.len());
+    for filter in relationship_filters {
+        resolved_relationship_filters
+            .push(resolve_agent_relationship_filter(repository, &search_blueprint, filter).await?);
+    }
+    if !resolved_relationship_filters.is_empty() {
+        let ids = repository
+            .filter_relationship_entity_ids(
+                current.blueprint.id,
+                selected,
+                &resolved_relationship_filters,
+                &context,
+            )
+            .await?;
+        matching = Some(intersect_ids(matching, ids));
+    }
+    Ok(AgentSearchScope {
+        current,
+        selected,
+        search_blueprint,
+        context,
+        explanations: resolved
+            .map(|resolved| resolved.explanations)
+            .unwrap_or_default(),
+        matching,
+    })
+}
+
 pub(crate) fn tool_actor(repository: &CatalogRepository, user_id: Uuid) -> AuthorizationActor {
     repository
         .authorization_actor()
@@ -3175,9 +3363,11 @@ async fn read_authorized(
         // Match the HTTP search endpoint: collection searches require a
         // workspace-wide entities.read grant, rather than exposing partial
         // results for a scoped grant.
-        "search_entities" | "find_records" | "list_saved_searches" | "get_saved_search" => {
-            ("entities.read", None, None)
-        }
+        "search_entities"
+        | "find_records"
+        | "count_records"
+        | "list_saved_searches"
+        | "get_saved_search" => ("entities.read", None, None),
         _ => return Err(ToolError::UnknownTool(name.to_owned())),
     };
     Ok(repository

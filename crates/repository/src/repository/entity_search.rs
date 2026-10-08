@@ -2167,6 +2167,45 @@ impl CatalogRepository {
         })
     }
 
+    /// Entities of `source_blueprint_id` per target of one relationship field,
+    /// as resolved in `context_id`, counting only `source_entity_ids` when
+    /// given, and the sources that link to any of `target_blueprint_ids`.
+    pub async fn relationship_target_counts(
+        &self,
+        source_blueprint_id: Uuid,
+        field: &str,
+        target_blueprint_ids: &[Uuid],
+        context_id: Uuid,
+        source_entity_ids: Option<&HashSet<Uuid>>,
+    ) -> Result<(HashMap<Uuid, i64>, HashSet<Uuid>), RepositoryError> {
+        let mut sources_by_target: HashMap<Uuid, HashSet<Uuid>> = HashMap::new();
+        let mut linked = HashSet::new();
+        for target_blueprint_id in target_blueprint_ids {
+            for (source, target) in self
+                .resolved_relationship_edges(
+                    source_blueprint_id,
+                    field,
+                    *target_blueprint_id,
+                    context_id,
+                )
+                .await?
+            {
+                if source_entity_ids.is_some_and(|ids| !ids.contains(&source)) {
+                    continue;
+                }
+                linked.insert(source);
+                sources_by_target.entry(target).or_default().insert(source);
+            }
+        }
+        Ok((
+            sources_by_target
+                .into_iter()
+                .map(|(target, sources)| (target, sources.len() as i64))
+                .collect(),
+            linked,
+        ))
+    }
+
     async fn resolved_relationship_edges(
         &self,
         source_blueprint_id: Uuid,

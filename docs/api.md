@@ -898,8 +898,10 @@ an entity with a count per field, then pages through the linking entities;
 names up to 100 entities, omitting those the initiating user cannot read;
 `find_records` finds records by name across every published record blueprint,
 ranking exact display-label matches first and omitting records the initiating
-user cannot read; and `list_reusable_attributes` lists reusable attribute
-definitions and groups. `search_entities` reports `total_count`, capped at 500,
+user cannot read; `count_records` counts the records matching the same query
+and filters as `search_entities`, optionally per target of one relationship
+field (labelled, largest first, unreadable targets omitted); and
+`list_reusable_attributes` lists reusable attribute definitions and groups. `search_entities` reports `total_count`, capped at 500,
 on its first page. Each run's system prompt also carries a catalog map: every
 published record blueprint the user can read with the blueprints its
 relationship fields link to, bounded to 8 KiB.
