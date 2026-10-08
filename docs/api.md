@@ -895,8 +895,14 @@ documentation one topic per call so every result stays within the tool result
 bound. `get_incoming_relationships` lists the relationship fields that link to
 an entity with a count per field, then pages through the linking entities;
 `get_entity_hierarchy` reads a self-referencing hierarchy; `get_entity_labels`
-names up to 100 entities, omitting those the initiating user cannot read; and
-`list_reusable_attributes` lists reusable attribute definitions and groups.
+names up to 100 entities, omitting those the initiating user cannot read;
+`find_records` finds records by name across every published record blueprint,
+ranking exact display-label matches first and omitting records the initiating
+user cannot read; and `list_reusable_attributes` lists reusable attribute
+definitions and groups. `search_entities` reports `total_count`, capped at 500,
+on its first page. Each run's system prompt also carries a catalog map: every
+published record blueprint the user can read with the blueprints its
+relationship fields link to, bounded to 8 KiB.
 Built-in tools include exact blueprint-revision
 inspection and read-only entity migration assessment, plus approved replacement
 or removal of relationship targets. Replacement sets the complete target list

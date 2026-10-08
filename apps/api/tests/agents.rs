@@ -2701,6 +2701,168 @@ async fn read_only_runs_offer_no_mutations_and_refuse_one_named_anyway(pool: PgP
 }
 
 #[sqlx::test]
+async fn agent_finds_a_named_record_and_counts_what_links_to_it(pool: PgPool) {
+    let (base_url, api_server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let category = create_blueprint(
+        &client,
+        &base_url,
+        "format_version = 1\ncode = \"category\"\nname = \"Categories\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"",
+    )
+    .await;
+    let product = create_blueprint(
+        &client,
+        &base_url,
+        "format_version = 1\ncode = \"product\"\nname = \"Products\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"\n\n[[attributes]]\ncode = \"category\"\nvalue_type = \"relationship\"\ntarget_blueprint = \"category\"",
+    )
+    .await;
+    let create = |blueprint: &Value, values: Value| {
+        let request = client.post(format!("{base_url}/v1/entities")).json(&json!({
+            "blueprint": {"code": blueprint["blueprint"]["code"], "version": blueprint["blueprint"]["version"]},
+            "values": values,
+        }));
+        async move {
+            request
+                .send()
+                .await
+                .unwrap()
+                .error_for_status()
+                .unwrap()
+                .json::<Value>()
+                .await
+                .unwrap()
+        }
+    };
+    let title = |value: &str| json!({"kind":"scalar","attribute_code":"title","context_id":null,"value":value});
+    // A product whose own title contains the words ranks below the category.
+    let basic = create(&category, json!([title("Basic tools")])).await;
+    let power = create(&category, json!([title("Power tools")])).await;
+    for (name, target) in [
+        ("Hammer", &basic),
+        ("Screwdriver", &basic),
+        ("Basic tools starter kit", &basic),
+        ("Drill", &power),
+    ] {
+        create(
+            &product,
+            json!([title(name), {"kind":"relationship","attribute_code":"category","context_id":null,"target_entity_id":target["id"]}]),
+        )
+        .await;
+    }
+    let workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
+    let actor: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
+    let repository = CatalogRepository::system(pool.clone())
+        .for_workspace(workspace)
+        .await
+        .unwrap();
+
+    // Search syntax in the name is matched as plain words.
+    let found = execute_read(
+        &repository,
+        actor,
+        workspace,
+        "find_records",
+        json!({"text": "basic: tools*"}),
+    )
+    .await
+    .unwrap();
+    assert_eq!(found["total_matches"], 2);
+    assert_eq!(found["truncated"], false);
+    assert_eq!(found["items"][0]["id"], basic["id"]);
+    assert_eq!(found["items"][0]["blueprint_code"], "category");
+    assert_eq!(found["items"][0]["display"]["default"], "Basic tools");
+    assert_eq!(found["items"][1]["blueprint_code"], "product");
+
+    let linked = execute_read(
+        &repository,
+        actor,
+        workspace,
+        "search_entities",
+        json!({
+            "blueprint": {"code": "product"},
+            "relationship_filters": [{"field": "category", "selected_target_ids": [basic["id"]]}],
+            "page": {"size": 1},
+        }),
+    )
+    .await
+    .unwrap();
+    // The total covers every match, not only the returned page.
+    assert_eq!(linked["items"].as_array().unwrap().len(), 1);
+    assert_eq!(linked["total_count"], 3);
+    assert_eq!(linked["total_count_capped"], false);
+
+    // Every run's system prompt maps blueprints to the blueprints they link to.
+    let system_prompt = Arc::new(std::sync::Mutex::new(String::new()));
+    let provider_prompt = system_prompt.clone();
+    let provider_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let provider_address = provider_listener.local_addr().unwrap();
+    let provider = tokio::spawn(async move {
+        axum::serve(
+            provider_listener,
+            Router::new().route(
+                "/v1/chat/completions",
+                post(move |axum::Json(request): axum::Json<Value>| {
+                    *provider_prompt.lock().unwrap() =
+                        request["messages"][0]["content"].as_str().unwrap().to_owned();
+                    async {
+                        axum::response::Response::builder()
+                            .header("content-type", "text/event-stream")
+                            .body(axum::body::Body::from(
+                                "data: {\"choices\":[{\"delta\":{\"content\":\"3\"}}]}\n\ndata: [DONE]\n\n",
+                            ))
+                            .unwrap()
+                    }
+                }),
+            ),
+        )
+        .await
+        .unwrap();
+    });
+    let config = AgentProviderConfig::from_values(|name| match name {
+        "LLM_API_KEY" => Some("test-key".to_owned()),
+        "LLM_BASE_URL" => Some(format!("http://{provider_address}/v1")),
+        _ => None,
+    })
+    .unwrap()
+    .unwrap();
+    let conversation = repository
+        .create_conversation(Some(actor), "categories")
+        .await
+        .unwrap();
+    let run = repository
+        .create_agent_run_for_user(
+            conversation.id,
+            actor,
+            config.base_url.as_str(),
+            &config.model,
+        )
+        .await
+        .unwrap();
+    let provider_client = api::agent_provider::OpenAiCompatibleClient::new(&config).unwrap();
+    let store: Arc<dyn api::storage::ObjectStore> = Arc::new(FakeObjectStore::available());
+    api::agent_runner::run(
+        &repository,
+        &provider_client,
+        &store,
+        run.id,
+        conversation.id,
+    )
+    .await
+    .unwrap();
+    let system_prompt = system_prompt.lock().unwrap().clone();
+    assert!(
+        system_prompt.contains("product (Products): category -> category;"),
+        "{system_prompt}"
+    );
+    assert!(
+        system_prompt.contains("category (Categories): no relationship fields;"),
+        "{system_prompt}"
+    );
+    api_server.abort();
+    provider.abort();
+}
+
+#[sqlx::test]
 async fn runs_stop_after_the_configured_tool_round_limit(pool: PgPool) {
     let (_, api_server) = start_server(pool.clone()).await;
     let requests = Arc::new(std::sync::atomic::AtomicUsize::new(0));
