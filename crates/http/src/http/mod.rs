@@ -18,6 +18,7 @@ mod extractors;
 mod files;
 mod lexicon;
 mod members;
+mod notifications;
 mod pagination;
 mod presentation_assets;
 mod record_controls;
@@ -629,6 +630,21 @@ pub fn router(state: AppState) -> Router {
             axum::routing::put(files::upload_avatar)
                 .delete(files::delete_avatar)
                 .layer(axum::extract::DefaultBodyLimit::disable()),
+        )
+        .route("/notifications", get(notifications::list))
+        .route(
+            "/notifications/unread-count",
+            get(notifications::unread_count),
+        )
+        .route(
+            "/notifications/read-all",
+            post(notifications::mark_all_read),
+        )
+        .route(
+            "/notifications/{notification_id}",
+            get(notifications::get)
+                .patch(notifications::update)
+                .delete(notifications::delete),
         )
         .route("/auth/logout", post(sessions::logout))
         .route("/auth/renew", post(sessions::renew))

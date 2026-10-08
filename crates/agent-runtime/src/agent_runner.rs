@@ -657,6 +657,10 @@ pub async fn resume_claimed(
     .await
 }
 
+/// The audited authorization scope of the notification tools, which need
+/// active membership rather than a permission grant.
+const OWN_NOTIFICATIONS_SCOPE: &str = "own_notifications";
+
 fn mutation_authorization(name: &str, arguments: &Value) -> Option<(&'static str, Option<Uuid>)> {
     Some(match name {
         "create_blueprint" | "create_blueprint_revision" => ("blueprints.write", None),
@@ -716,6 +720,11 @@ fn mutation_authorization(name: &str, arguments: &Value) -> Option<(&'static str
                 .and_then(|id| id.parse().ok()),
         ),
         "acknowledge_rule_finding" => ("rules.manage", None),
+        // Notification tools change only the initiating user's own inbox;
+        // `mutation_authorized` checks active membership instead of a grant.
+        "mark_notifications_read" | "mark_all_notifications_read" | "delete_notifications" => {
+            (OWN_NOTIFICATIONS_SCOPE, None)
+        }
         _ => return None,
     })
 }
@@ -727,6 +736,12 @@ pub async fn mutation_authorized(
     name: &str,
     arguments: &Value,
 ) -> Result<bool, RepositoryError> {
+    if matches!(
+        mutation_authorization(name, arguments),
+        Some((OWN_NOTIFICATIONS_SCOPE, _))
+    ) {
+        return repository.is_active_principal(actor, workspace).await;
+    }
     if name == "apply_entity_batch" {
         let Ok(batch) =
             serde_json::from_value::<crate::model::EntityBatchRequest>(arguments.clone())
@@ -828,6 +843,10 @@ mod tests {
         assert_eq!(
             super::mutation_authorization("add_entity_comment", &json!({"entity_id": entity})),
             Some(("entities.read", Some(entity)))
+        );
+        assert_eq!(
+            super::mutation_authorization("delete_notifications", &json!({})),
+            Some((super::OWN_NOTIFICATIONS_SCOPE, None))
         );
     }
 

@@ -1496,10 +1496,13 @@ impl CatalogRepository {
             }
             Revalidation::Structural => Vec::new(),
         };
-        self.validate_principal_values(transaction, entity, write, mode)
+        let assigned = self
+            .validate_principal_values(transaction, entity, write, mode)
             .await?;
         if mode == Revalidation::Write {
             self.apply_status_effects_in(transaction, entity, write)
+                .await?;
+            self.notify_assignments_on(transaction, entity.id, &assigned)
                 .await?;
         }
         // Every value write validates here, so unique keys stay current.

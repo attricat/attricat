@@ -248,6 +248,20 @@ Pobieranie zwraca `409 file_processing`, dopóki plik nie ma stanu `ready`.
 
 Stan ma maksymalnie 32 KiB i używa kluczy adresu URL przeglądarki rekordów: `blueprint`, `version`, `allVersions`, `query`, `context`, `locked`, `sort`, `attributeFilters` i `relationshipFacets`.
 
+### Powiadomienia
+
+Każda ścieżka działa na Twojej [skrzynce powiadomień](/pl/guides/inbox/) w bieżącym obszarze roboczym i wymaga tylko aktywnego członkostwa. Powiadomienie innego członka zwraca `404`.
+
+| Metoda | Ścieżka | Opis |
+| --- | --- | --- |
+| `GET` | `/notifications` | Od najnowszych, po 30 na stronę, z `has_more` i `unread_count`. `unread_only=true` pomija przeczytane; kolejną stronę pobierzesz z `before_time` i `before_id` ostatniego elementu. |
+| `GET` | `/notifications/unread-count` | `{"count"}`. |
+| `GET`, `DELETE` | `/notifications/{id}` | Odczytuje jedno powiadomienie lub trwale je usuwa. |
+| `PATCH` | `/notifications/{id}` | `{"read": true}` lub `{"read": false}`. |
+| `POST` | `/notifications/read-all` | Oznacza wszystkie nieprzeczytane jako przeczytane; opcjonalne `{"up_to": "<RFC 3339>"}` pozostawia późniejsze nieprzeczytane. Zwraca `{"updated"}`. |
+
+Każde powiadomienie ma `id`, `kind` (np. `entity.assigned`), tekstowy `title`, opcjonalne `body`, autora zmiany, opcjonalny `subject` (`{"kind": "entity" | "agent_conversation", "id"}`), zależne od rodzaju `data`, `read`, `read_at` i `created_at`. Mogą pojawić się nowe rodzaje; dla nieznanych pokazuj `title`.
+
 ### Tłumaczenia
 
 | Metoda | Ścieżka | Opis |

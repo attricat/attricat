@@ -449,6 +449,8 @@ impl CatalogRepository {
             sqlx::query("INSERT INTO agent_run_events (id, run_id, sequence, event_type, payload) VALUES ($1, $2, $3, 'terminal', $4)")
                 .bind(Uuid::new_v4()).bind(run_id).bind(sequence + 1).bind(serde_json::json!({"status": next_status, "code": error_code})).execute(&mut *tx).await?;
         }
+        self.notify_agent_run_on(&mut tx, run_id, next_status, error_code)
+            .await?;
         tx.commit().await?;
         Ok(run)
     }
@@ -476,6 +478,8 @@ impl CatalogRepository {
                 .bind(run_id).bind(ws).execute(&mut *tx).await?;
             sqlx::query("INSERT INTO agent_run_events (id,run_id,sequence,event_type,payload) VALUES ($1,$2,$3,'status','{\"status\":\"failed\"}'::jsonb),($4,$2,$3+1,'terminal','{\"status\":\"failed\",\"code\":\"interrupted\"}'::jsonb)")
                 .bind(Uuid::new_v4()).bind(run_id).bind(sequence).bind(Uuid::new_v4()).execute(&mut *tx).await?;
+            self.notify_agent_run_on(&mut tx, run_id, "failed", Some("interrupted"))
+                .await?;
             tx.commit().await?;
             return Ok(None);
         }
@@ -953,6 +957,10 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
                 .bind(run_id).bind(workspace_id).execute(&mut *tx).await?;
             sqlx::query("INSERT INTO agent_run_events (id,run_id,sequence,event_type,payload) VALUES ($1,$2,$3,'status','{\"status\":\"failed\"}'::jsonb),($4,$2,$3+1,'terminal','{\"status\":\"failed\",\"code\":\"interrupted\"}'::jsonb)")
                 .bind(Uuid::new_v4()).bind(run_id).bind(sequence).bind(Uuid::new_v4()).execute(&mut *tx).await?;
+            self.for_workspace(workspace_id)
+                .await?
+                .notify_agent_run_on(&mut tx, run_id, "failed", Some("interrupted"))
+                .await?;
             self.complete_task_in_transaction(&mut tx, task_id, &owner, token)
                 .await?;
             tx.commit().await?;

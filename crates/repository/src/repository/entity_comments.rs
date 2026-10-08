@@ -67,8 +67,13 @@ impl CatalogRepository {
         validate_body(body)?;
         let mut transaction = self.pool.begin().await?;
         self.lock_entity(&mut transaction, entity).await?;
+        // Notify before inserting so the author's first comment does not make
+        // them a previous commenter; notify_on skips the author anyway.
+        let comment = Uuid::new_v4();
+        self.notify_comment_on(&mut transaction, entity, comment, actor, body)
+            .await?;
         sqlx::query("INSERT INTO entity_comments (id,workspace_id,entity_id,author_user_id,body) VALUES ($1,$2,$3,$4,$5)")
-            .bind(Uuid::new_v4()).bind(self.workspace_id_for_runtime()).bind(entity).bind(actor).bind(body)
+            .bind(comment).bind(self.workspace_id_for_runtime()).bind(entity).bind(actor).bind(body)
             .execute(&mut *transaction).await?;
         self.commit_mutation(transaction).await?;
         Ok(())

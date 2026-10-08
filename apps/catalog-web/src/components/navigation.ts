@@ -8,6 +8,7 @@ import {
   ExplorerIcon,
   ExtensionIcon,
   ExportIcon,
+  InboxIcon,
   LexiconIcon,
   ProfileIcon,
   ReusableAttributeIcon,
@@ -36,6 +37,7 @@ export const navigationRoutes = {
   dataHealth: '/manage/data-health',
   backgroundProcessing: '/manage/background-processing',
   explore: '/',
+  inbox: '/inbox',
   lexicon: '/manage/lexicon',
   extensions: '/manage/extensions',
   extensionContributions: '/extensions',
@@ -66,6 +68,11 @@ export const primaryNavigationItems = [
     icon: AgentIcon,
     labelKey: 'navigation.agents',
     to: navigationRoutes.agents,
+  },
+  {
+    icon: InboxIcon,
+    labelKey: 'navigation.inbox',
+    to: navigationRoutes.inbox,
   },
 ] as const;
 

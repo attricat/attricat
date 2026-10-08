@@ -33,7 +33,8 @@ The agent acts as you. It can only see and change what your role allows.
 - read data health, rule findings, and workflow runs;
 - view images and read text files in the workspace;
 - read extension operation runs and connector jobs (with `extensions.manage`);
-- explain a record's status transitions, approvals, and retention holds.
+- explain a record's status transitions, approvals, and retention holds;
+- read your [inbox](/guides/inbox/).
 
 **With your approval** it can:
 
@@ -43,7 +44,8 @@ The agent acts as you. It can only see and change what your role allows.
 - update system tags and metadata;
 - publish and unpublish records;
 - create, update, and delete contexts;
-- create and update saved searches.
+- create and update saved searches;
+- mark notifications in your inbox as read or unread, or delete them.
 
 It cannot manage rules, workflows, extensions, members, or roles.
 

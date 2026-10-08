@@ -248,6 +248,20 @@ Downloads return `409 file_processing` until the file is `ready`.
 
 State is at most 32 KiB and uses the Explorer URL keys: `blueprint`, `version`, `allVersions`, `query`, `context`, `locked`, `sort`, `attributeFilters`, and `relationshipFacets`.
 
+### Notifications
+
+Every route acts on your own [inbox](/guides/inbox/) in the current workspace and needs only an active membership. Another member's notification returns `404`.
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/notifications` | Newest first, 30 per page, with `has_more` and `unread_count`. `unread_only=true` skips read ones; continue with `before_time` and `before_id` from the last item. |
+| `GET` | `/notifications/unread-count` | `{"count"}`. |
+| `GET`, `DELETE` | `/notifications/{id}` | Read one, or delete it permanently. |
+| `PATCH` | `/notifications/{id}` | `{"read": true}` or `{"read": false}`. |
+| `POST` | `/notifications/read-all` | Mark every unread notification read; optional `{"up_to": "<RFC 3339>"}` keeps later ones unread. Returns `{"updated"}`. |
+
+Each notification has `id`, `kind` (for example `entity.assigned`), a plain-text `title`, an optional `body`, the actor, an optional `subject` (`{"kind": "entity" | "agent_conversation", "id"}`), kind-specific `data`, `read`, `read_at`, and `created_at`. New kinds can appear; show `title` for kinds you do not recognize.
+
 ### Translations
 
 | Method | Path | Description |

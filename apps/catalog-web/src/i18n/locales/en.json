@@ -79,6 +79,9 @@
     "blueprints": "Blueprints",
     "contexts": "Contexts",
     "agents": "Agents",
+    "inbox": "Inbox",
+    "inboxUnread_one": "Inbox, {{count}} unread notification",
+    "inboxUnread_other": "Inbox, {{count}} unread notifications",
     "apps": "Apps",
     "dataHealth": "Data health",
     "auditLog": "Activity / Audit log",
@@ -185,6 +188,39 @@
     "showCallJson": "Show call JSON",
     "showResultJson": "Show result JSON",
     "unknownTool": "unknown tool"
+  },
+  "inbox": {
+    "title": "Inbox",
+    "description": "Notifications about your records, teams and agent conversations in this workspace.",
+    "filter": "Show notifications",
+    "filters": {
+      "all": "All",
+      "unreadCount": "Unread ({{count}})"
+    },
+    "markAllRead": "Mark all as read",
+    "markRead": "Mark as read",
+    "markUnread": "Mark as unread",
+    "delete": "Delete permanently",
+    "deleted": "Notification deleted.",
+    "unread": "Unread",
+    "loading": "Loading notifications…",
+    "empty": "No notifications",
+    "noUnread": "No unread notifications",
+    "emptyDescription": "You are notified here when you are assigned to a record, someone comments on a record you follow, your team changes, or an agent needs you.",
+    "automation": "An automation",
+    "namedRecord": "“{{label}}”",
+    "blueprintRecord": "a {{blueprint}} record",
+    "record": "a record",
+    "messages": {
+      "assigned": "{{actor}} assigned you to {{record}}",
+      "teamAssigned": "{{actor}} assigned your team {{team}} to {{record}}",
+      "commented": "{{actor}} commented on {{record}}",
+      "approvalRequired": "The agent is waiting for your approval in “{{conversation}}”",
+      "runCompleted": "The agent finished in “{{conversation}}”",
+      "runFailed": "The agent run failed in “{{conversation}}”",
+      "teamMemberAdded": "{{actor}} added you to the team {{team}}",
+      "invitationAccepted": "{{actor}} accepted your invitation and joined the workspace"
+    }
   },
   "contexts": {
     "contexts": "Contexts",

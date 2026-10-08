@@ -33,7 +33,8 @@ Agent działa w Twoim imieniu. Widzi i zmienia tylko to, na co pozwala Twoja rol
 - odczytywać stan danych, ustalenia reguł i uruchomienia przepływów pracy;
 - oglądać obrazy i odczytywać pliki tekstowe w obszarze roboczym;
 - odczytywać uruchomienia operacji rozszerzeń i zadania konektorów (z uprawnieniem `extensions.manage`);
-- wyjaśniać przejścia statusów encji, jej zatwierdzenia i blokady retencji.
+- wyjaśniać przejścia statusów encji, jej zatwierdzenia i blokady retencji;
+- odczytywać Twoje [powiadomienia](/pl/guides/inbox/).
 
 **Po Twoim zatwierdzeniu** może:
 
@@ -43,7 +44,8 @@ Agent działa w Twoim imieniu. Widzi i zmienia tylko to, na co pozwala Twoja rol
 - aktualizować tagi systemowe i metadane;
 - publikować rekordy i cofać ich publikację;
 - tworzyć, aktualizować i usuwać konteksty;
-- tworzyć i aktualizować zapisane wyszukiwania.
+- tworzyć i aktualizować zapisane wyszukiwania;
+- oznaczać Twoje powiadomienia jako przeczytane lub nieprzeczytane i je usuwać.
 
 Nie może zarządzać regułami, przepływami pracy, rozszerzeniami, członkami ani rolami.
 

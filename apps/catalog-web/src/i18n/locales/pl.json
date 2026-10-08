@@ -81,6 +81,11 @@
     "blueprints": "Schematy",
     "contexts": "Konteksty",
     "agents": "Agenci",
+    "inbox": "Powiadomienia",
+    "inboxUnread_one": "Powiadomienia: {{count}} nieprzeczytane powiadomienie",
+    "inboxUnread_few": "Powiadomienia: {{count}} nieprzeczytane powiadomienia",
+    "inboxUnread_many": "Powiadomienia: {{count}} nieprzeczytanych powiadomień",
+    "inboxUnread_other": "Powiadomienia: {{count}} nieprzeczytanego powiadomienia",
     "apps": "Aplikacje",
     "dataHealth": "Stan danych",
     "auditLog": "Aktywność / dziennik audytu",
@@ -187,6 +192,39 @@
     "showCallJson": "Pokaż JSON wywołania",
     "showResultJson": "Pokaż JSON wyniku",
     "unknownTool": "nieznane narzędzie"
+  },
+  "inbox": {
+    "title": "Powiadomienia",
+    "description": "Powiadomienia o Twoich rekordach, zespołach i rozmowach z agentem w tym obszarze roboczym.",
+    "filter": "Pokaż powiadomienia",
+    "filters": {
+      "all": "Wszystkie",
+      "unreadCount": "Nieprzeczytane ({{count}})"
+    },
+    "markAllRead": "Oznacz wszystkie jako przeczytane",
+    "markRead": "Oznacz jako przeczytane",
+    "markUnread": "Oznacz jako nieprzeczytane",
+    "delete": "Usuń trwale",
+    "deleted": "Usunięto powiadomienie.",
+    "unread": "Nieprzeczytane",
+    "loading": "Wczytywanie powiadomień…",
+    "empty": "Brak powiadomień",
+    "noUnread": "Brak nieprzeczytanych powiadomień",
+    "emptyDescription": "Powiadomimy Cię tutaj, gdy ktoś przypisze Cię do rekordu, skomentuje obserwowany rekord, zmieni Twój zespół lub gdy agent będzie Cię potrzebował.",
+    "automation": "Automatyzacja",
+    "namedRecord": "„{{label}}”",
+    "blueprintRecord": "rekordu typu {{blueprint}}",
+    "record": "rekordu",
+    "messages": {
+      "assigned": "Przypisano Cię do {{record}} (przez: {{actor}})",
+      "teamAssigned": "Przypisano Twój zespół {{team}} do {{record}} (przez: {{actor}})",
+      "commented": "Nowy komentarz do {{record}} (od: {{actor}})",
+      "approvalRequired": "Agent czeka na Twoje zatwierdzenie w rozmowie „{{conversation}}”",
+      "runCompleted": "Agent zakończył pracę w rozmowie „{{conversation}}”",
+      "runFailed": "Praca agenta w rozmowie „{{conversation}}” zakończyła się błędem",
+      "teamMemberAdded": "Dodano Cię do zespołu {{team}} (przez: {{actor}})",
+      "invitationAccepted": "Przyjęto Twoje zaproszenie do obszaru roboczego (przez: {{actor}})"
+    }
   },
   "contexts": {
     "contexts": "Konteksty",
