@@ -69,7 +69,7 @@ describe('FileAttributeEditor', () => {
       ...attribute,
       file_policy: { ...attribute.file_policy!, cardinality: 'one' as const },
     };
-    const view = render(
+    render(
       <FileAttributeEditor
         attribute={single}
         contextId={null}
@@ -78,11 +78,18 @@ describe('FileAttributeEditor', () => {
         files={[]}
       />,
     );
-    fireEvent.drop(view.container.querySelector('.MuiBox-root')!, {
-      dataTransfer: {
-        files: [file, new File(['more'], 'second.txt', { type: 'text/plain' })],
+    fireEvent.drop(
+      screen.getByRole('button', { name: 'Choose or drop files' })
+        .parentElement!,
+      {
+        dataTransfer: {
+          files: [
+            file,
+            new File(['more'], 'second.txt', { type: 'text/plain' }),
+          ],
+        },
       },
-    });
+    );
     expect(screen.getByText('document.txt')).toBeTruthy();
     expect(screen.queryByText('second.txt')).toBeNull();
     expect(
@@ -92,11 +99,15 @@ describe('FileAttributeEditor', () => {
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
-    fireEvent.drop(view.container.querySelector('.MuiBox-root')!, {
-      dataTransfer: {
-        files: [new File(['again'], 'third.txt', { type: 'text/plain' })],
+    fireEvent.drop(
+      screen.getByRole('button', { name: 'Choose or drop files' })
+        .parentElement!,
+      {
+        dataTransfer: {
+          files: [new File(['again'], 'third.txt', { type: 'text/plain' })],
+        },
       },
-    });
+    );
     expect(screen.queryByText('third.txt')).toBeNull();
   });
 
@@ -128,10 +139,14 @@ describe('FileAttributeEditor', () => {
   });
 
   it('does not queue dropped files until an entity exists', () => {
-    const view = renderEditor();
-    fireEvent.drop(view.container.querySelector('.MuiBox-root')!, {
-      dataTransfer: { files: [file] },
-    });
+    renderEditor();
+    fireEvent.drop(
+      screen.getByRole('button', { name: 'Choose or drop files' })
+        .parentElement!,
+      {
+        dataTransfer: { files: [file] },
+      },
+    );
     expect(screen.queryByText('document.txt')).toBeNull();
   });
 
@@ -235,9 +250,13 @@ describe('FileAttributeEditor', () => {
         name: 'Remove document.txt from upload queue',
       }),
     );
-    fireEvent.drop(view.container.querySelector('.MuiBox-root')!, {
-      dataTransfer: { files: [new File(['x'], 'blocked.txt')] },
-    });
+    fireEvent.drop(
+      screen.getByRole('button', { name: 'Choose or drop files' })
+        .parentElement!,
+      {
+        dataTransfer: { files: [new File(['x'], 'blocked.txt')] },
+      },
+    );
     expect(screen.queryByText('blocked.txt')).toBeNull();
     expect(screen.getByText('document.txt')).toBeTruthy();
     expect(uploadFiles).toHaveBeenCalledOnce();

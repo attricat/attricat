@@ -1040,6 +1040,7 @@
     "removeImageExplanation": "Remove this attachment from the current context? Other uses and retained history will not be deleted.",
     "removeQueuedFile": "Remove {{filename}} from upload queue",
     "savedImmediately": "Uploads and attachment changes save immediately, separately from the record form.",
+    "savingHelp": "About saving files",
     "fileRejected": "{{filename}} was not added. Check the permitted file type, extension and size; images must be PNG, JPEG, GIF or WebP.",
     "singleFileOnly": "This attribute accepts one file. Only the first valid file was queued.",
     "updateFailed": "Could not update attachments. Refresh and try again.",

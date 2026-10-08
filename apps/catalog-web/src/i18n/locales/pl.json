@@ -1070,6 +1070,7 @@
     "removeImageExplanation": "Usunąć ten załącznik z bieżącego kontekstu? Inne użycia i zachowana historia nie zostaną usunięte.",
     "removeQueuedFile": "Usuń {{filename}} z kolejki przesyłania",
     "savedImmediately": "Przesyłanie i zmiany załączników są zapisywane od razu, niezależnie od formularza rekordu.",
+    "savingHelp": "Jak zapisywane są pliki",
     "fileRejected": "Nie dodano {{filename}}. Sprawdź dozwolony typ, rozszerzenie i rozmiar pliku; obrazy muszą być w formacie PNG, JPEG, GIF lub WebP.",
     "singleFileOnly": "Ten atrybut przyjmuje jeden plik. Dodano tylko pierwszy prawidłowy plik.",
     "updateFailed": "Nie udało się zaktualizować załączników. Odśwież i spróbuj ponownie.",

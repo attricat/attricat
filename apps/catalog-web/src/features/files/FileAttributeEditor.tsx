@@ -1,5 +1,14 @@
-import { Alert, Box, Button, Stack, Typography } from '@mui/material';
-import { CloudUploadIcon } from 'lucide-react';
+import {
+  Alert,
+  Box,
+  Button,
+  IconButton,
+  Stack,
+  Tooltip,
+  Typography,
+} from '@mui/material';
+import { CloudUploadIcon, InfoIcon } from 'lucide-react';
+import { compactIconSize } from '../../components/iconSizes';
 import { useId, useRef } from 'react';
 import { ImageGalleryEditor } from './ImageGalleryEditor';
 import { useTranslation } from 'react-i18next';
@@ -40,15 +49,27 @@ const FileAttributeEditorContent = (props: FileAttributeEditorProps) => {
       spacing={1}
       role="group"
       aria-labelledby={labelId}
-      aria-describedby={helpId}
+      aria-describedby={helperText ? helpId : undefined}
     >
-      <Typography id={labelId}>{attributeLabel(attribute)}</Typography>
-      <Typography id={helpId} variant="body2" color="text.secondary">
-        {helperText ?? t('files.savedImmediately')}
-      </Typography>
-      {helperText && entityId && !disabled && (
-        <Typography variant="body2" color="text.secondary">
-          {t('files.savedImmediately')}
+      <Box sx={{ alignItems: 'center', display: 'flex', gap: 0.5 }}>
+        <Typography id={labelId}>{attributeLabel(attribute)}</Typography>
+        {(!helperText || (entityId && !disabled)) && (
+          // Focusable so keyboard users can read it; it also describes the
+          // button for assistive technology.
+          <Tooltip
+            describeChild
+            enterTouchDelay={0}
+            title={t('files.savedImmediately')}
+          >
+            <IconButton aria-label={t('files.savingHelp')} size="small">
+              <InfoIcon size={compactIconSize} />
+            </IconButton>
+          </Tooltip>
+        )}
+      </Box>
+      {helperText && (
+        <Typography id={helpId} variant="body2" color="text.secondary">
+          {helperText}
         </Typography>
       )}
       {error && <Alert severity="error">{error}</Alert>}
