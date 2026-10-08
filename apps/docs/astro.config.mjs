@@ -5,6 +5,11 @@ const polish = (label) => ({ pl: label });
 
 export default defineConfig({
   site: 'https://docs.attricat.com',
+  // Keep links to renamed pages working.
+  redirects: {
+    '/guides/entities': '/guides/records/',
+    '/pl/guides/entities': '/pl/guides/records/',
+  },
   integrations: [
     starlight({
       title: 'Attricat Docs',
