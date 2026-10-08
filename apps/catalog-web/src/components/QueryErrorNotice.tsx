@@ -1,5 +1,6 @@
 import { Alert, AlertTitle, Button } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import { RotateCcwIcon } from 'lucide-react';
 
 export const QueryErrorNotice = ({
   error,
@@ -22,6 +23,7 @@ export const QueryErrorNotice = ({
           disabled={isRetrying}
           onClick={onRetry}
           size="small"
+          startIcon={<RotateCcwIcon />}
         >
           {isRetrying ? t('common.loading') : t('errors.retry')}
         </Button>

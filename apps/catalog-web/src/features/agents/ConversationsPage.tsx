@@ -18,6 +18,7 @@ import { LoadMoreButton } from '../../components/LoadMoreButton';
 import { RouterListItemButton } from '../../components/RouterLink';
 import { searchConversations } from './api';
 import { Trans, useTranslation } from 'react-i18next';
+import { PlusIcon, SearchIcon } from 'lucide-react';
 import { Timestamp } from '../../time/Timestamp';
 import {
   agentRoutes,
@@ -53,7 +54,12 @@ export const ConversationsPage = ({ search }: { search: { q?: string } }) => {
     <PageContainer>
       <PageHeader
         actions={
-          <Button component={Link} to={agentRoutes.create} variant="contained">
+          <Button
+            component={Link}
+            startIcon={<PlusIcon />}
+            to={agentRoutes.create}
+            variant="contained"
+          >
             {t('agents.newConversation')}
           </Button>
         }
@@ -76,7 +82,7 @@ export const ConversationsPage = ({ search }: { search: { q?: string } }) => {
           slotProps={{ htmlInput: { maxLength: maximumSearchLength } }}
           value={draftQuery}
         />
-        <Button type="submit" variant="outlined">
+        <Button startIcon={<SearchIcon />} type="submit" variant="outlined">
           {t('agents.search')}
         </Button>
       </Box>

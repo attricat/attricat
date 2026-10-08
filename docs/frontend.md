@@ -108,6 +108,27 @@ light and dark modes.
 - `src/app/theme.ts` routes MUI’s built-in component icons (Select and NativeSelect arrows, Alert severity icons, the default Chip delete icon, TableSortLabel) to Lucide, and gives `ListItemIcon` a 36px minimum width so a 24px icon keeps a 12px gap before its label. Checkbox and Radio keep their MUI glyphs.
 - Import icons assigned to Attricat concepts from `src/components/systemIcons.ts` so the same concept is represented consistently across navigation, headings, menus, and other surfaces.
 - Keep generic action and status icons, such as add, edit, delete, close, expand, and warnings, local to the component using them.
+- Give a button a leading icon when it starts an action in a page header, toolbar, section, list row, or error notice. Leave Cancel/Save/confirm pairs in dialogs and form submit buttons as plain text. Use the same icon for the same action everywhere:
+
+  | Action                                | Icon                                                                |
+  | ------------------------------------- | ------------------------------------------------------------------- |
+  | Create or add                         | `PlusIcon`                                                          |
+  | Edit, rename, or start a new revision | `PencilIcon`                                                        |
+  | Delete or remove                      | `Trash2Icon`                                                        |
+  | Duplicate or copy                     | `CopyIcon`                                                          |
+  | Retire or archive                     | `ArchiveIcon`                                                       |
+  | Publish                               | `SendIcon` (republish: `RefreshCwIcon`; every channel: `GlobeIcon`) |
+  | Migrate or upgrade to a newer version | `CircleFadingArrowUpIcon`                                           |
+  | Enable / disable                      | `PowerIcon` / `PowerOffIcon`                                        |
+  | Run now / dry run                     | `PlayIcon` / `FlaskConicalIcon`                                     |
+  | Refresh data                          | `RefreshCwIcon`                                                     |
+  | Retry a failed request                | `RotateCcwIcon`                                                     |
+  | Search                                | `SearchIcon`                                                        |
+  | Back / go home                        | `ArrowLeftIcon` / `HouseIcon`                                       |
+  | Import or choose a file to upload     | `UploadIcon`                                                        |
+  | Download or export                    | `DownloadIcon`                                                      |
+  | Install an extension                  | `PackagePlusIcon`                                                   |
+
 - Add a semantic export to the registry before introducing an icon for another system concept.
 
 ## Drag and drop

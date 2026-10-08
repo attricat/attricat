@@ -93,7 +93,10 @@ describe('SessionErrorState', () => {
     expect(markup).toContain('role="alert"');
     expect(markup).toContain('We couldn&#x27;t restore your session');
     expect(markup).toContain('Retry');
-    expect(markup).toMatch(/<button[^>]*>Retry<\/button>/);
+    // The retry button leads with an icon before its label.
+    expect(markup).toMatch(
+      /<button[^>]*>(<span[^>]*>.*?<\/span>)?Retry<\/button>/,
+    );
     expect(markup).toMatch(/<button[^>]*>Sign out<\/button>/);
   });
 });

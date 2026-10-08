@@ -3,6 +3,7 @@ import { Link } from '@tanstack/react-router';
 import { Alert, Button, Paper, Stack, Typography } from '@mui/material';
 import ReactMarkdown from 'react-markdown';
 import { useTranslation } from 'react-i18next';
+import { PackagePlusIcon } from 'lucide-react';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { currentSession } from '../auth/api';
@@ -82,6 +83,7 @@ export const MarketplaceExtensionPage = ({
                           release_id: release.release_id,
                         })
                       }
+                      startIcon={<PackagePlusIcon />}
                       variant="contained"
                     >
                       {t('extensions.install')}

@@ -9,6 +9,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import { CheckIcon, XIcon } from 'lucide-react';
 import { jsonIndent } from './constants';
 import type { AgentToolCall } from './schemas';
 
@@ -50,6 +51,7 @@ export const ApprovalCard = ({
           color="success"
           disabled={isDeciding}
           onClick={() => onDecide(call.id, true)}
+          startIcon={<CheckIcon />}
           variant="contained"
         >
           {t('agents.approve')}
@@ -58,6 +60,7 @@ export const ApprovalCard = ({
           color="error"
           disabled={isDeciding}
           onClick={() => onDecide(call.id, false)}
+          startIcon={<XIcon />}
           variant="outlined"
         >
           {t('agents.reject')}

@@ -1,6 +1,7 @@
 import { Alert, Box, Button, Stack, Typography } from '@mui/material';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { HouseIcon, RotateCcwIcon } from 'lucide-react';
 
 const recoveryScreenMaxWidth = 560;
 
@@ -42,10 +43,14 @@ export const RouterErrorScreen = ({ onRetry }: { onRetry: () => void }) => {
     <RecoveryScreen
       actions={
         <>
-          <Button onClick={onRetry} variant="contained">
+          <Button
+            onClick={onRetry}
+            startIcon={<RotateCcwIcon />}
+            variant="contained"
+          >
             {t('errors.retry')}
           </Button>
-          <Button href="/" variant="outlined">
+          <Button href="/" startIcon={<HouseIcon />} variant="outlined">
             {t('errors.goHome')}
           </Button>
         </>
@@ -62,7 +67,7 @@ export const NotFoundScreen = () => {
   return (
     <RecoveryScreen
       actions={
-        <Button href="/" variant="contained">
+        <Button href="/" startIcon={<HouseIcon />} variant="contained">
           {t('errors.goHome')}
         </Button>
       }

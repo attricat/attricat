@@ -8,9 +8,9 @@ import {
   PanelRightIcon,
   RefreshCwIcon,
   RotateCcwClockIcon,
+  SendIcon,
   TrashIcon,
   Undo2Icon,
-  UploadIcon,
 } from 'lucide-react';
 import { AgentIcon } from '../../../components/systemIcons';
 import {
@@ -301,7 +301,7 @@ export const EntityPreviewToolbar = ({
               >
                 <ListItemIcon>
                   {publication.status === publicationStatuses.notPublished ? (
-                    <UploadIcon size={compactIconSize} />
+                    <SendIcon size={compactIconSize} />
                   ) : (
                     <RefreshCwIcon size={compactIconSize} />
                   )}

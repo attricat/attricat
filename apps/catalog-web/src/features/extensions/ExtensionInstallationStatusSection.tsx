@@ -1,6 +1,12 @@
 import { Button, Chip, Paper, Stack, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import {
+  PowerIcon,
+  PowerOffIcon,
+  ShieldAlertIcon,
+  Trash2Icon,
+} from 'lucide-react';
+import {
   installationStateColor,
   installationStateLabelKey,
 } from './extensionPageUtils';
@@ -43,12 +49,14 @@ export const ExtensionInstallationStatusSection = ({
         <Button
           disabled={locked || installation.state === 'enabled'}
           onClick={() => onLifecycleAction('enable')}
+          startIcon={<PowerIcon />}
         >
           {t('extensions.enable')}
         </Button>
         <Button
           disabled={locked || installation.state !== 'enabled'}
           onClick={() => onLifecycleAction('disable')}
+          startIcon={<PowerOffIcon />}
         >
           {t('extensions.disable')}
         </Button>
@@ -56,10 +64,16 @@ export const ExtensionInstallationStatusSection = ({
           color="warning"
           disabled={locked || installation.state === 'quarantined'}
           onClick={() => onLifecycleAction('quarantine')}
+          startIcon={<ShieldAlertIcon />}
         >
           {t('extensions.quarantine')}
         </Button>
-        <Button color="error" disabled={locked} onClick={onRemove}>
+        <Button
+          color="error"
+          disabled={locked}
+          onClick={onRemove}
+          startIcon={<Trash2Icon />}
+        >
           {t('extensions.remove')}
         </Button>
       </Stack>

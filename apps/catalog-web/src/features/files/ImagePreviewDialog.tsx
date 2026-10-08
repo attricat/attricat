@@ -13,6 +13,14 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  DownloadIcon,
+  ShrinkIcon,
+  ZoomInIcon,
+  ZoomOutIcon,
+} from 'lucide-react';
 import { fileDownloadUrl, getFileMetadata } from './api';
 import {
   DISPLAY_VARIANT_KIND,
@@ -77,18 +85,21 @@ const ImagePreview = ({ file }: { file: GalleryFile }) => {
         <Button
           disabled={!loaded || unavailable || zoom <= IMAGE_MIN_ZOOM}
           onClick={() => changeZoom(zoom - IMAGE_ZOOM_STEP)}
+          startIcon={<ZoomOutIcon />}
         >
           {t('files.zoomOut')}
         </Button>
         <Button
           disabled={!loaded || unavailable || zoom >= IMAGE_MAX_ZOOM}
           onClick={() => changeZoom(zoom + IMAGE_ZOOM_STEP)}
+          startIcon={<ZoomInIcon />}
         >
           {t('files.zoomIn')}
         </Button>
         <Button
           disabled={!loaded || unavailable}
           onClick={() => changeZoom(IMAGE_MIN_ZOOM)}
+          startIcon={<ShrinkIcon />}
         >
           {t('files.fitImage')}
         </Button>
@@ -131,7 +142,11 @@ const ImagePreview = ({ file }: { file: GalleryFile }) => {
         )}
       </Box>
       {ready && !metadata.isError && (
-        <Button component="a" href={fileDownloadUrl(file.id)}>
+        <Button
+          component="a"
+          href={fileDownloadUrl(file.id)}
+          startIcon={<DownloadIcon />}
+        >
           {t('files.downloadFile', { filename: file.filename })}
         </Button>
       )}
@@ -181,6 +196,7 @@ export const ImagePreviewDialog = ({
             <Button
               disabled={index === 0}
               onClick={() => select(files[index - 1].id)}
+              startIcon={<ChevronLeftIcon />}
             >
               {t('files.previousImage')}
             </Button>
@@ -192,6 +208,7 @@ export const ImagePreviewDialog = ({
             </Typography>
             <Button
               disabled={index === files.length - 1}
+              endIcon={<ChevronRightIcon />}
               onClick={() => select(files[index + 1].id)}
             >
               {t('files.nextImage')}

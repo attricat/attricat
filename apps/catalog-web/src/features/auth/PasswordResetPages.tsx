@@ -3,6 +3,7 @@ import { useForm } from '@tanstack/react-form';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { type ReactNode, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ArrowLeftIcon } from 'lucide-react';
 import { AuthFormShell } from './AuthFormShell';
 import { confirmPasswordReset, requestPasswordReset } from './api';
 
@@ -50,7 +51,12 @@ export const PasswordResetRequestPage = () => {
           </Button>
         </>
       )}
-      <Button component={Link} to="/login" variant="text">
+      <Button
+        component={Link}
+        startIcon={<ArrowLeftIcon />}
+        to="/login"
+        variant="text"
+      >
         {t('auth.backToSignIn')}
       </Button>
     </PasswordResetShell>

@@ -9,6 +9,7 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
+import { PlusIcon } from 'lucide-react';
 import {
   DEFAULT_PLURAL_CATEGORY,
   LEXICON_MANAGEMENT_NAMESPACES,
@@ -110,6 +111,7 @@ export const LexiconCoverageSection = ({
                         onTranslate(draft(gap.key, gap.context, category))
                       }
                       size="small"
+                      startIcon={<PlusIcon />}
                     >
                       {t('lexicon.addPluralForm', {
                         category: pluralCategoryLabel(t, category),

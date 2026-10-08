@@ -17,6 +17,7 @@ import {
 } from '@mui/material';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { PlusIcon } from 'lucide-react';
 import { PageContainer } from '../../components/PageContainer';
 import { RouterButton } from '../../components/RouterLink';
 import { PageHeader } from '../../components/PageHeader';
@@ -51,6 +52,7 @@ export const BlueprintsPage = () => {
         actions={
           <Button
             component={Link}
+            startIcon={<PlusIcon />}
             to="/manage/blueprints/new"
             variant="contained"
           >

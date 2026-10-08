@@ -8,6 +8,7 @@ import {
   TextField,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import { CopyIcon } from 'lucide-react';
 import { copyToClipboard } from '../../components/clipboard';
 import { useToast } from '../../components/useToast';
 import { secretDialogMinWidth } from './constants';
@@ -40,7 +41,11 @@ export const SecretDialog = ({
             slotProps={{ input: { readOnly: true } }}
             value={secret ?? ''}
           />
-          <Button onClick={() => void copySecret()} variant="contained">
+          <Button
+            onClick={() => void copySecret()}
+            startIcon={<CopyIcon />}
+            variant="contained"
+          >
             {t('profile.copySecret')}
           </Button>
         </Stack>

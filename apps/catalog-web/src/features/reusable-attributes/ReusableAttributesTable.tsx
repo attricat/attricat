@@ -11,7 +11,7 @@ import {
   Typography,
 } from '@mui/material';
 import { Link } from '@tanstack/react-router';
-import { UploadIcon } from 'lucide-react';
+import { PencilIcon, SendIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { RouterButton } from '../../components/RouterLink';
 import type { ReusableAttribute } from './api';
@@ -81,6 +81,7 @@ export const ReusableAttributesTable = ({
                   <RouterButton
                     params={{ definitionId: attribute.definition_id }}
                     size="small"
+                    startIcon={<PencilIcon />}
                     to="/manage/reusable-attributes/$definitionId"
                   >
                     {t('reusableAttributes.edit')}
@@ -90,7 +91,7 @@ export const ReusableAttributesTable = ({
                       disabled={publishing}
                       onClick={() => onPublish(attribute.id)}
                       size="small"
-                      startIcon={<UploadIcon />}
+                      startIcon={<SendIcon />}
                     >
                       {t('reusableAttributes.publish')}
                     </Button>

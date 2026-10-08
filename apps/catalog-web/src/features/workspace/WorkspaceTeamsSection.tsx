@@ -20,6 +20,7 @@ import {
 } from '@mui/material';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { PencilIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import {
   createTeam,
   deleteTeam,
@@ -209,6 +210,7 @@ export const WorkspaceTeamsSection = ({
                     })}
                     onClick={() => setEditing({ team })}
                     size="small"
+                    startIcon={<PencilIcon />}
                   >
                     {t('workspace.editTeam')}
                   </Button>
@@ -219,6 +221,7 @@ export const WorkspaceTeamsSection = ({
                     color="error"
                     onClick={() => openDelete(team)}
                     size="small"
+                    startIcon={<Trash2Icon />}
                   >
                     {t('workspace.deleteTeam')}
                   </Button>
@@ -244,7 +247,11 @@ export const WorkspaceTeamsSection = ({
         </List>
       </Paper>
       <div>
-        <Button onClick={() => setEditing({ team: null })} variant="contained">
+        <Button
+          onClick={() => setEditing({ team: null })}
+          startIcon={<PlusIcon />}
+          variant="contained"
+        >
           {t('workspace.createTeam')}
         </Button>
       </div>

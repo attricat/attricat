@@ -2,6 +2,7 @@ import { useForm, useStore } from '@tanstack/react-form';
 import { useTranslation } from 'react-i18next';
 import { useMutation } from '@tanstack/react-query';
 import { Alert, Box, Button } from '@mui/material';
+import { RotateCcwIcon } from 'lucide-react';
 import { uploadConversationFiles } from '../files/api';
 import { sendMessage } from './api';
 import { composerMinRows } from './constants';
@@ -103,6 +104,7 @@ export const ConversationComposer = ({
               disabled={send.isPending}
               onClick={submitMessage}
               size="small"
+              startIcon={<RotateCcwIcon />}
             >
               {t('agents.retry')}
             </Button>

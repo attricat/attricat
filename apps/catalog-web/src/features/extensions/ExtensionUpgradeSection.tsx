@@ -1,6 +1,7 @@
 import { Button, Paper, Stack, Typography } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { CircleFadingArrowUpIcon } from 'lucide-react';
 import { ErrorNotice } from './ExtensionErrorNotice';
 import {
   repositoryParts,
@@ -61,6 +62,7 @@ export const ExtensionUpgradeSection = ({
                 release_id: release.release_id,
               })
             }
+            startIcon={<CircleFadingArrowUpIcon />}
           >
             {t('extensions.upgrade')}
           </Button>

@@ -10,6 +10,7 @@ import {
   Paper,
   Typography,
 } from '@mui/material';
+import { PlusIcon } from 'lucide-react';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { listContexts } from './api';
@@ -31,6 +32,7 @@ export const ContextsPage = () => {
         actions={
           <Button
             component={Link}
+            startIcon={<PlusIcon />}
             to="/manage/contexts/new"
             variant="contained"
           >

@@ -16,6 +16,7 @@ import {
 import { useRef, useState } from 'react';
 import { authQueryKeys } from '../auth/queryKeys';
 import { useTranslation } from 'react-i18next';
+import { ArchiveIcon, CopyIcon, PencilIcon } from 'lucide-react';
 import { createRole, listPermissions, listRoles } from './api';
 import { workspaceQueryKeys } from './queryKeys';
 import {
@@ -92,6 +93,7 @@ export const WorkspaceRolesSection = ({
                   <Stack direction="row">
                     <Button
                       onClick={() => setDialogAction({ role, type: 'rename' })}
+                      startIcon={<PencilIcon />}
                     >
                       {t('workspace.renameRole')}
                     </Button>
@@ -99,12 +101,14 @@ export const WorkspaceRolesSection = ({
                       onClick={() =>
                         setDialogAction({ role, type: 'duplicate' })
                       }
+                      startIcon={<CopyIcon />}
                     >
                       {t('workspace.duplicateRole')}
                     </Button>
                     <Button
                       color="error"
                       onClick={() => setDialogAction({ role, type: 'retire' })}
+                      startIcon={<ArchiveIcon />}
                     >
                       {t('workspace.retireRole')}
                     </Button>

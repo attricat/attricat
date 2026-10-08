@@ -50,7 +50,11 @@ export const ReusableAttributesPage = () => {
         title={t('reusableAttributes.title')}
         actions={
           <Stack direction="row" spacing={1}>
-            <Button onClick={() => setGroupOpen(true)} variant="outlined">
+            <Button
+              onClick={() => setGroupOpen(true)}
+              startIcon={<PlusIcon />}
+              variant="outlined"
+            >
               {t('reusableAttributes.newGroup')}
             </Button>
             <Button

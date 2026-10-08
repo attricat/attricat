@@ -1,5 +1,6 @@
 import { Alert, Box, Button } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import { RotateCcwIcon } from 'lucide-react';
 
 export const SessionErrorState = ({
   onRetry,
@@ -23,7 +24,12 @@ export const SessionErrorState = ({
       <Alert
         action={
           <Box sx={{ display: 'flex', gap: 1 }}>
-            <Button color="inherit" onClick={onRetry} size="small">
+            <Button
+              color="inherit"
+              onClick={onRetry}
+              size="small"
+              startIcon={<RotateCcwIcon />}
+            >
               {t('auth.retrySession')}
             </Button>
             <Button color="inherit" onClick={onSignOut} size="small">
@@ -46,7 +52,12 @@ export const SignOutErrorState = ({ onRetry }: { onRetry: () => void }) => {
   return (
     <Alert
       action={
-        <Button color="inherit" onClick={onRetry} size="small">
+        <Button
+          color="inherit"
+          onClick={onRetry}
+          size="small"
+          startIcon={<RotateCcwIcon />}
+        >
           {t('auth.retrySignOut')}
         </Button>
       }

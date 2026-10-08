@@ -16,6 +16,7 @@ import {
 } from '@mui/material';
 import { type ComponentType } from 'react';
 import { useTranslation } from 'react-i18next';
+import { PlusIcon } from 'lucide-react';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { currentSession } from '../auth/api';
@@ -106,6 +107,7 @@ export const WorkflowsPage = () => {
           canManage ? (
             <Button
               component={Link}
+              startIcon={<PlusIcon />}
               to={workflowRoutes.create}
               variant="contained"
             >

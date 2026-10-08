@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from '@tanstack/react-router';
 import { Alert, Box, Button } from '@mui/material';
+import { RotateCcwIcon } from 'lucide-react';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { uploadConversationFiles } from '../files/api';
@@ -107,7 +108,12 @@ export const NewConversationPage = () => {
         {start.isError && (
           <Alert
             action={
-              <Button disabled={start.isPending} onClick={submit} size="small">
+              <Button
+                disabled={start.isPending}
+                onClick={submit}
+                size="small"
+                startIcon={<RotateCcwIcon />}
+              >
                 {t('agents.retry')}
               </Button>
             }

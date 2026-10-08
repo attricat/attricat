@@ -7,6 +7,7 @@ import {
   Typography,
 } from '@mui/material';
 import { Trans, useTranslation } from 'react-i18next';
+import { RefreshCwIcon } from 'lucide-react';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { Timestamp } from '../../time/Timestamp';
@@ -50,6 +51,7 @@ export const BackgroundProcessingPage = () => {
               <Button
                 disabled={status.isFetching}
                 onClick={() => void status.refetch()}
+                startIcon={<RefreshCwIcon />}
               >
                 {t(
                   status.isFetching
@@ -67,7 +69,11 @@ export const BackgroundProcessingPage = () => {
           <Alert
             severity="error"
             action={
-              <Button color="inherit" onClick={() => void session.refetch()}>
+              <Button
+                color="inherit"
+                onClick={() => void session.refetch()}
+                startIcon={<RefreshCwIcon />}
+              >
                 {t('backgroundProcessing.refresh')}
               </Button>
             }

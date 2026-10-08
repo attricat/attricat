@@ -10,6 +10,7 @@ import {
   TextField,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import { ArrowLeftIcon } from 'lucide-react';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { QueryErrorNotice } from '../../components/QueryErrorNotice';
@@ -59,7 +60,12 @@ export const CreateContextPage = () => {
   });
   return (
     <PageContainer>
-      <Button component={Link} to="/manage/contexts" sx={{ mb: 4 }}>
+      <Button
+        component={Link}
+        to="/manage/contexts"
+        sx={{ mb: 4 }}
+        startIcon={<ArrowLeftIcon />}
+      >
         {t('contexts.backToContexts')}
       </Button>
       <PageHeader

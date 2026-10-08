@@ -3,6 +3,13 @@ import { Button, Stack, TextField } from '@mui/material';
 import { type ComponentType, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { UseMutationResult } from '@tanstack/react-query';
+import {
+  PencilIcon,
+  PlayIcon,
+  PowerIcon,
+  PowerOffIcon,
+  SendIcon,
+} from 'lucide-react';
 import { workflowRoutes, workflowStatus } from './constants';
 import type { Workflow } from './schemas';
 
@@ -36,6 +43,7 @@ export const WorkflowActions = ({
       <Button
         component={WorkflowRevisionLink}
         params={{ workflowId, version: String(current.version) }}
+        startIcon={<PencilIcon />}
         to={workflowRoutes.newRevision}
         variant="outlined"
       >
@@ -45,6 +53,7 @@ export const WorkflowActions = ({
         <Button
           disabled={publish.isPending}
           onClick={() => publish.mutate(current.version)}
+          startIcon={<SendIcon />}
           variant="contained"
         >
           {t('workflows.publish')}
@@ -54,6 +63,7 @@ export const WorkflowActions = ({
         <Button
           disabled={enable.isPending}
           onClick={() => enable.mutate(current.version)}
+          startIcon={<PowerIcon />}
           variant="contained"
         >
           {t('workflows.enable')}
@@ -74,6 +84,7 @@ export const WorkflowActions = ({
           <Button
             disabled={runNow.isPending || !manualEntityId.trim()}
             onClick={() => runNow.mutate(manualEntityId.trim())}
+            startIcon={<PlayIcon />}
             variant="outlined"
           >
             {t('workflows.runNow')}
@@ -85,6 +96,7 @@ export const WorkflowActions = ({
           color="warning"
           disabled={disable.isPending}
           onClick={() => disable.mutate()}
+          startIcon={<PowerOffIcon />}
         >
           {t('workflows.disable')}
         </Button>

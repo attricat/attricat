@@ -15,6 +15,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import { FlaskConicalIcon, PlayIcon } from 'lucide-react';
 import type { Rule } from './api';
 import { RULE_STATUS_PUBLISHED } from './constants';
 
@@ -111,6 +112,7 @@ export const RulesSection = ({
                             disabled={running}
                             size="small"
                             onClick={() => onRun(rule, true)}
+                            startIcon={<FlaskConicalIcon />}
                           >
                             {t('rules.dryRun')}
                           </Button>
@@ -118,6 +120,7 @@ export const RulesSection = ({
                             disabled={running}
                             size="small"
                             onClick={() => onRun(rule, false)}
+                            startIcon={<PlayIcon />}
                           >
                             {t('rules.runNow')}
                           </Button>

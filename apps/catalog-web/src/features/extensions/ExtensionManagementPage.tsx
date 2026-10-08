@@ -3,6 +3,7 @@ import { Link, type ToOptions } from '@tanstack/react-router';
 import { Alert, Box, Button, Tab, Tabs } from '@mui/material';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { UploadIcon } from 'lucide-react';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { currentSession } from '../auth/api';
@@ -47,7 +48,11 @@ export const ExtensionManagementPage = ({
         description={t('extensions.description')}
         actions={
           session.data?.capabilities?.extensions_manage ? (
-            <Button component={Link} to="/manage/extensions/sideload">
+            <Button
+              component={Link}
+              startIcon={<UploadIcon />}
+              to="/manage/extensions/sideload"
+            >
               {t('extensions.uploadArchive')}
             </Button>
           ) : undefined

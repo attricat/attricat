@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Alert, Box, Button, Stack, Typography } from '@mui/material';
 import { forwardRef, useImperativeHandle, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { RotateCcwIcon } from 'lucide-react';
 import { checkViolationError } from '../../../api/checkViolations';
 import { ApiErrorAlert } from '../../../components/CheckViolationsAlert';
 import { useViolationText } from '../../../components/useViolationText';
@@ -358,7 +359,12 @@ export const EntityInlineFields = forwardRef<EntityInlineFieldsHandle, Props>(
           <ApiErrorAlert
             action={
               unsaved && (
-                <Button color="inherit" onClick={saves.retry} size="small">
+                <Button
+                  color="inherit"
+                  onClick={saves.retry}
+                  size="small"
+                  startIcon={<RotateCcwIcon />}
+                >
                   {t('errors.retry')}
                 </Button>
               )

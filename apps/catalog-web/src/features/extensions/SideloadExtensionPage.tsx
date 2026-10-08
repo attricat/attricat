@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Alert, Button, Paper, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import { UploadIcon } from 'lucide-react';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { currentSession } from '../auth/api';
@@ -60,7 +61,11 @@ export const SideloadExtensionPage = () => {
         >
           <form.Field name="archive">
             {(field) => (
-              <Button component="label" variant="outlined">
+              <Button
+                component="label"
+                startIcon={<UploadIcon />}
+                variant="outlined"
+              >
                 {field.state.value?.name ?? t('extensions.chooseArchive')}
                 <input
                   accept={extensionArchiveAccept}

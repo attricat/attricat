@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@mui/material';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { PlusIcon } from 'lucide-react';
 import { ApiErrorAlert } from '../../../components/CheckViolationsAlert';
 import { invalidateEntity } from '../invalidateEntity';
 import { ReusableAttributeAttachDialog } from './ReusableAttributeAttachDialog';
@@ -35,6 +36,7 @@ export const ReusableAttributeAttachControl = ({
           setSession((value) => value + 1);
           setOpen(true);
         }}
+        startIcon={<PlusIcon />}
         variant="outlined"
       >
         {t('entities.addReusableAttributeOrGroup')}

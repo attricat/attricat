@@ -10,6 +10,7 @@ import {
 } from '@mui/material';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ArrowDownIcon, ArrowUpIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { listEntityBlueprints } from '../entities/api';
 import { entityQueryKeys } from '../entities/queryKeys';
 import {
@@ -168,6 +169,7 @@ export const WorkspaceNavigationSection = ({
                   displayed.filter((_, position) => position !== index),
                 );
               }}
+              startIcon={<Trash2Icon />}
             >
               {t('workspace.remove')}
             </Button>
@@ -178,6 +180,7 @@ export const WorkspaceNavigationSection = ({
                 [next[index - 1], next[index]] = [next[index], next[index - 1]];
                 setEntries(next);
               }}
+              startIcon={<ArrowUpIcon />}
             >
               {t('workspace.moveUp')}
             </Button>
@@ -188,6 +191,7 @@ export const WorkspaceNavigationSection = ({
                 [next[index + 1], next[index]] = [next[index], next[index + 1]];
                 setEntries(next);
               }}
+              startIcon={<ArrowDownIcon />}
             >
               {t('workspace.moveDown')}
             </Button>
@@ -210,6 +214,7 @@ export const WorkspaceNavigationSection = ({
                 { blueprint_code: first.code, visible_to_role_codes: [] },
               ]);
           }}
+          startIcon={<PlusIcon />}
         >
           {t('workspace.addShortcut')}
         </Button>

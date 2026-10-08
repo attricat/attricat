@@ -13,6 +13,7 @@ import {
 } from '@mui/material';
 import { useEffect, useState, type ReactNode, type RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
+import { RotateCcwIcon, SearchIcon } from 'lucide-react';
 import type { Blueprint, BlueprintWithAttributes } from '../entities/api';
 import {
   blueprintSelectWidth,
@@ -205,7 +206,11 @@ export const ExplorerSearchForm = ({
           </form.Field>
         )}
         {revisionsError && onRetryRevisions && (
-          <Button onClick={onRetryRevisions} variant="text">
+          <Button
+            onClick={onRetryRevisions}
+            startIcon={<RotateCcwIcon />}
+            variant="text"
+          >
             {t('explorer.retry')}
           </Button>
         )}
@@ -222,7 +227,7 @@ export const ExplorerSearchForm = ({
             />
           )}
         </form.Field>
-        <Button type="submit" variant="contained">
+        <Button startIcon={<SearchIcon />} type="submit" variant="contained">
           {t('explorer.search')}
         </Button>
         {inlineActions && endActions && (

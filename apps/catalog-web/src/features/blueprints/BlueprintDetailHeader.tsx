@@ -1,6 +1,7 @@
 import { Link } from '@tanstack/react-router';
 import { Box, Button, Chip, Stack, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import { CircleFadingArrowUpIcon, PencilIcon, SendIcon } from 'lucide-react';
 import { PageHeader } from '../../components/PageHeader';
 import { blueprintStatusChipColor, blueprintStatuses } from './constants';
 import { Timestamp } from '../../time/Timestamp';
@@ -38,17 +39,26 @@ export const BlueprintDetailHeader = ({
               }}
               to="/manage/blueprints/$blueprintId/revisions/$version/new"
             >
-              <Button variant="outlined">
+              <Button startIcon={<PencilIcon />} variant="outlined">
                 {t('blueprints.editBlueprint')}
               </Button>
             </Link>
             {blueprint.status === blueprintStatuses.draft && (
-              <Button color="primary" onClick={onPublish} variant="contained">
+              <Button
+                color="primary"
+                onClick={onPublish}
+                startIcon={<SendIcon />}
+                variant="contained"
+              >
                 {t('blueprints.publish')}
               </Button>
             )}
             {blueprint.status === blueprintStatuses.published && (
-              <Button onClick={onPublishEntities} variant="outlined">
+              <Button
+                onClick={onPublishEntities}
+                startIcon={<SendIcon />}
+                variant="outlined"
+              >
                 {t('blueprints.publishEntities')}
               </Button>
             )}
@@ -56,6 +66,7 @@ export const BlueprintDetailHeader = ({
               <Button
                 disabled={!migrationStatusKnown || migrationActive}
                 onClick={onMigrate}
+                startIcon={<CircleFadingArrowUpIcon />}
                 variant="contained"
               >
                 {migrationActive

@@ -10,6 +10,7 @@ import {
 } from '@mui/material';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { RefreshCwIcon } from 'lucide-react';
 import {
   customThresholdInputWidth,
   customThresholdValue,
@@ -104,7 +105,12 @@ const DataHealthControlsForm = ({
             sx={{ width: customThresholdInputWidth }}
           />
         )}
-        <Button disabled={isRefreshing} onClick={onRefresh} variant="outlined">
+        <Button
+          disabled={isRefreshing}
+          onClick={onRefresh}
+          startIcon={<RefreshCwIcon />}
+          variant="outlined"
+        >
           {isRefreshing ? t('dataHealth.refreshing') : t('dataHealth.refresh')}
         </Button>
       </Stack>

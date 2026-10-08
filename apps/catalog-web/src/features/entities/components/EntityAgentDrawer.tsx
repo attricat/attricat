@@ -8,7 +8,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
-import { PencilIcon, XIcon } from 'lucide-react';
+import { PencilIcon, RotateCcwIcon, XIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useState } from 'react';
 import { createConversation, listConversations } from '../../agents/api';
@@ -144,7 +144,10 @@ export const EntityAgentDrawer = ({
           <Alert
             severity="error"
             action={
-              <Button onClick={() => void conversations.refetch()}>
+              <Button
+                onClick={() => void conversations.refetch()}
+                startIcon={<RotateCcwIcon />}
+              >
                 {t('common.retry')}
               </Button>
             }
