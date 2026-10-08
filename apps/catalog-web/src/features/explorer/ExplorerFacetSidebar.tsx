@@ -118,22 +118,25 @@ export const ExplorerFacetSidebar = ({
             ))}
           </TextField>
         )}
-        <TextField
-          fullWidth
-          label={t('explorer.context')}
-          onChange={(event) => onContextChange(event.target.value)}
-          select
-          size="small"
-          value={contextCode}
-        >
-          {contexts.map((context) => (
-            <MenuItem key={context.id} value={context.code}>
-              {context.code === defaultContextCode
-                ? t('explorer.default')
-                : context.code}
-            </MenuItem>
-          ))}
-        </TextField>
+        {/* Only worth choosing once there is more than the default. */}
+        {contexts.length > 1 && (
+          <TextField
+            fullWidth
+            label={t('explorer.context')}
+            onChange={(event) => onContextChange(event.target.value)}
+            select
+            size="small"
+            value={contextCode}
+          >
+            {contexts.map((context) => (
+              <MenuItem key={context.id} value={context.code}>
+                {context.code === defaultContextCode
+                  ? t('explorer.default')
+                  : context.code}
+              </MenuItem>
+            ))}
+          </TextField>
+        )}
       </Stack>
       <Typography
         color="text.secondary"

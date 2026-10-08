@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
@@ -10,6 +10,7 @@ import {
   searchEntities,
   type EntitySearchResponse,
 } from '../entities/api';
+import type { AttributeContext } from '../contexts/api';
 import { ExplorerFacetSidebar } from './ExplorerFacetSidebar';
 import { relationshipPickerMessageType } from '../entities/components/useRecentlyPreviewedEntities';
 import type {
@@ -69,7 +70,18 @@ const targetPage: EntitySearchResponse = {
   total_count_capped: false,
 };
 
-const Harness = () => {
+const defaultContext = {
+  code: 'default',
+  data: {},
+  id: targetId,
+  parent_id: null,
+};
+
+const Harness = ({
+  contexts = [defaultContext],
+}: {
+  contexts?: AttributeContext[];
+}) => {
   const [facets, setFacets] = useState<ExplorerRelationshipFacet[]>([]);
   return (
     <ExplorerFacetSidebar
@@ -95,14 +107,7 @@ const Harness = () => {
         },
       ]}
       contextCode="default"
-      contexts={[
-        {
-          code: 'default',
-          data: {},
-          id: targetId,
-          parent_id: null,
-        },
-      ]}
+      contexts={contexts}
       facets={facets}
       onAddAttributeFilter={vi.fn()}
       onContextChange={vi.fn()}
@@ -125,18 +130,29 @@ const Harness = () => {
   );
 };
 
-const renderSidebar = () => {
+const renderSidebar = (contexts?: AttributeContext[]) => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   render(
     <QueryClientProvider client={queryClient}>
-      <Harness />
+      <Harness contexts={contexts} />
     </QueryClientProvider>,
   );
 };
 
 describe('ExplorerFacetSidebar', () => {
+  it('offers a context choice only beside the default context', () => {
+    renderSidebar();
+    expect(screen.queryByRole('combobox', { name: 'Context' })).toBeNull();
+    cleanup();
+    renderSidebar([
+      defaultContext,
+      { ...defaultContext, code: 'storefront', id: brandBlueprintId },
+    ]);
+    expect(screen.getByRole('combobox', { name: 'Context' })).toBeTruthy();
+  });
+
   it('opens a relationship picker immediately and applies selections live', async () => {
     vi.mocked(getBlueprintByCode).mockResolvedValue({
       attributes: [],

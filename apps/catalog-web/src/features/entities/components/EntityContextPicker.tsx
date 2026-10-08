@@ -15,7 +15,10 @@ type EntityContextPickerProps = {
   value: string;
 };
 
-/** Chooses an entity attribute context, prioritizing the first five as tabs. */
+/**
+ * Chooses an entity attribute context, prioritizing the first five as tabs.
+ * Hidden while the workspace has only its default context.
+ */
 export const EntityContextPicker = ({
   contexts,
   disabled = false,
@@ -23,6 +26,7 @@ export const EntityContextPicker = ({
   value,
 }: EntityContextPickerProps) => {
   const { t } = useTranslation();
+  if (contexts.length <= 1) return null;
   const tabContexts = contexts.slice(0, CONTEXT_TAB_LIMIT);
   const remainingContexts = contexts.slice(CONTEXT_TAB_LIMIT);
   const tabValue = tabContexts.some((context) => context.id === value)
