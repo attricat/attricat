@@ -86,6 +86,8 @@ export const resultRowOverscan = 10;
 export const facetSidebarWidth = 300;
 /** The entity panel floats over the results; keep most of them visible. */
 export const entityPanelWidth = 'clamp(420px, 36vw, 680px)';
+/** Marks links that switch the panel to another record, so clicking one does not close it. */
+export const entityPanelOpenerAttribute = 'data-entity-panel-opener';
 export const facetSidebarStickyTop = 88;
 export const facetSidebarMaxHeight = 'calc(100dvh - 104px)';
 export const facetHeadingIconSize = 15;

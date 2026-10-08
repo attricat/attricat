@@ -4,7 +4,11 @@ import { EllipsisVerticalIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { EntityItem, EntityPublicationStatus } from '../entities/api';
 import { contextDisplayLabel } from '../entities/entityDisplay';
-import { emptyValuePlaceholder, publicationStatuses } from './constants';
+import {
+  emptyValuePlaceholder,
+  entityPanelOpenerAttribute,
+  publicationStatuses,
+} from './constants';
 import { compactIconSize } from '../../components/iconSizes';
 
 export type ActionMenuPosition = { left: number; top: number };
@@ -28,6 +32,7 @@ export const EntityDisplayCell = ({
   return (
     <Box sx={{ alignItems: 'center', display: 'flex', gap: 1 }}>
       <Link
+        {...(onOpenPanel && { [entityPanelOpenerAttribute]: true })}
         onClick={(event) => {
           if (
             !onOpenPanel ||

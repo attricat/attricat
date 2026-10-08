@@ -48,6 +48,41 @@ test('searches an entity and opens its preview', async ({ page }) => {
   await expect(page.getByLabel('title')).toHaveValue(title);
 });
 
+test('closes the record panel on a click outside it', async ({ page }) => {
+  const code = `product_panel_${suffix()}`;
+  const blueprint = await createEntityBlueprint(
+    code,
+    'Panel products',
+    '[[attributes]]\ncode = "title"\nvalue_type = "string"',
+  );
+  const first = await createEntity(blueprint, [scalar('title', 'First panel')]);
+  const second = await createEntity(blueprint, [
+    scalar('title', 'Second panel'),
+  ]);
+
+  await page.goto(`/?blueprint=${code}`);
+  await page.getByRole('link', { name: 'First panel' }).click();
+  await expect(page).toHaveURL(new RegExp(`entity=${first.id}`));
+  // Another result switches the panel instead of closing it.
+  await page.getByRole('link', { name: 'Second panel' }).click();
+  await expect(page).toHaveURL(new RegExp(`entity=${second.id}`));
+  // Dialogs opened from the panel count as inside it.
+  const panel = page.getByRole('complementary', {
+    name: 'Panel products record',
+  });
+  await panel.getByRole('button', { name: 'Actions', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Duplicate record' }).click();
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: 'Cancel' })
+    .click();
+  await expect(page).toHaveURL(new RegExp(`entity=${second.id}`));
+
+  await page.getByText(/^2 results$/).click();
+  await expect(page).not.toHaveURL(/entity=/);
+  await expect(panel).toHaveCount(0);
+});
+
 test('restores the last selected blueprint and prioritizes the URL', async ({
   page,
 }) => {
