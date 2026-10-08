@@ -12,10 +12,21 @@ export const ImageGallery = ({
   files,
   renderFilePanel,
   renderActions,
+  renderItem = ({ file, children }) => (
+    <Stack key={file.id} spacing={1} sx={{ minWidth: 0 }}>
+      {children}
+    </Stack>
+  ),
 }: {
   files: readonly GalleryFile[];
   renderFilePanel?: (fileId: string) => ReactNode;
   renderActions?: (file: GalleryFile, index: number) => ReactNode;
+  /** Wraps each tile, e.g. to make it sortable; must return a keyed element. */
+  renderItem?: (item: {
+    children: ReactNode;
+    file: GalleryFile;
+    index: number;
+  }) => ReactNode;
 }) => {
   const { t } = useTranslation();
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -38,30 +49,38 @@ export const ImageGallery = ({
           gap: 2,
         }}
       >
-        {files.slice(start, start + GALLERY_PAGE_SIZE).map((file, index) => (
-          <Stack key={file.id} spacing={1} sx={{ minWidth: 0 }}>
-            <ButtonBase
-              aria-label={t('files.previewImage', { filename: file.filename })}
-              onClick={() => setSelectedId(file.id)}
-              sx={{
-                alignSelf: 'flex-start',
-                borderRadius: 1,
-                '&.Mui-focusVisible': {
-                  outline: '2px solid',
-                  outlineColor: 'primary.main',
-                  outlineOffset: 2,
-                },
-              }}
-            >
-              <FileThumbnail file={file} size={GALLERY_THUMBNAIL_SIZE} />
-            </ButtonBase>
-            <Typography variant="body2" sx={{ overflowWrap: 'anywhere' }}>
-              {file.filename}
-            </Typography>
-            {renderActions?.(file, start + index)}
-            {renderFilePanel?.(file.id)}
-          </Stack>
-        ))}
+        {files.slice(start, start + GALLERY_PAGE_SIZE).map((file, index) =>
+          renderItem({
+            file,
+            index: start + index,
+            children: (
+              <>
+                <ButtonBase
+                  aria-label={t('files.previewImage', {
+                    filename: file.filename,
+                  })}
+                  onClick={() => setSelectedId(file.id)}
+                  sx={{
+                    alignSelf: 'flex-start',
+                    borderRadius: 1,
+                    '&.Mui-focusVisible': {
+                      outline: '2px solid',
+                      outlineColor: 'primary.main',
+                      outlineOffset: 2,
+                    },
+                  }}
+                >
+                  <FileThumbnail file={file} size={GALLERY_THUMBNAIL_SIZE} />
+                </ButtonBase>
+                <Typography variant="body2" sx={{ overflowWrap: 'anywhere' }}>
+                  {file.filename}
+                </Typography>
+                {renderActions?.(file, start + index)}
+                {renderFilePanel?.(file.id)}
+              </>
+            ),
+          }),
+        )}
       </Box>
       {pageCount > 1 && (
         <Pagination

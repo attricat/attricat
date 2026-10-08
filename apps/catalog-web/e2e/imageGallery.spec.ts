@@ -70,6 +70,42 @@ max_bytes = 1048576
     await expect(
       page.getByRole('button', { name: 'Move front.png earlier' }),
     ).toBeEnabled();
+    // Dragging back by the handle restores the original order.
+    const dragged = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname ===
+        `/api/entities/${entity.id}/file-attributes/photos/references`,
+    );
+    const handle = await page
+      .getByRole('button', { name: 'Drag to reorder front.png' })
+      .boundingBox();
+    const target = await page
+      .getByRole('button', { name: 'Preview back.png' })
+      .boundingBox();
+    if (!handle || !target) throw new Error('gallery tiles are not visible');
+    await page.mouse.move(
+      handle.x + handle.width / 2,
+      handle.y + handle.height / 2,
+    );
+    await page.mouse.down();
+    // Move in steps so the pointer sensor activates and sorting follows.
+    await page.mouse.move(handle.x, handle.y + handle.height / 2, {
+      steps: 5,
+    });
+    await page.mouse.move(
+      target.x + target.width * 0.25,
+      target.y + target.height / 2,
+      { steps: 20 },
+    );
+    await page.mouse.up();
+    expect((await dragged).ok()).toBe(true);
+    await expect(
+      page.getByRole('button', { name: /^Preview .*\.png$/ }).first(),
+    ).toHaveAccessibleName('Preview front.png');
+    await page.getByRole('button', { name: 'Move front.png later' }).click();
+    await expect(
+      page.getByRole('button', { name: 'Move front.png earlier' }),
+    ).toBeEnabled();
     await page.reload();
     await expect(title).toHaveValue('Edited title');
     const previews = page.getByRole('button', { name: /^Preview .*\.png$/ });
