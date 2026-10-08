@@ -8,6 +8,7 @@ pub struct BlueprintDefinition {
     pub format_version: u32,
     pub code: String,
     pub name: String,
+    pub description: Option<String>,
     pub kind: BlueprintKind,
     pub includes: Vec<IncludeRef>,
     pub views: HashMap<String, ViewDefinition>,
@@ -428,6 +429,7 @@ impl FilePolicy {
 pub struct LocalAttributeDeclaration {
     pub code: String,
     pub name: Option<String>,
+    pub description: Option<String>,
     pub value_type: String,
     pub value_schema: Option<serde_json::Value>,
     /// An unresolved `provider:type@range` reference. The API resolver pins it
@@ -498,6 +500,7 @@ pub struct EffectiveAttribute {
 pub struct CompiledBlueprint {
     pub code: String,
     pub name: String,
+    pub description: Option<String>,
     pub kind: BlueprintKind,
     pub raw_definition_hash: String,
     pub includes: Vec<IncludeRef>,

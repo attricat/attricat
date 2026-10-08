@@ -13,6 +13,13 @@ kind = "entity"
 `kind` is either `entity` or `mixin`. Mixins can be included but cannot create
 entities.
 
+An optional `description`, up to 500 characters, says what the blueprint's
+entities are, such as `description = "Product groupings, such as Basic tools"`.
+Inline attributes accept the same `description` for what they hold; an
+attribute selected with `from` uses the mixin's. The web app does not show
+descriptions yet. The agent reads them in its catalog map, so describe a
+blueprint or field in the words people use for it.
+
 Blueprint codes, attribute codes, include codes, and relationship target
 blueprint codes contain only ASCII letters, numbers, hyphens, and underscores.
 
@@ -613,8 +620,8 @@ type = "incoming_relationship_list"
 label = "{{Products in this category}}"
 ```
 
-These fields resolve references: the blueprint `name`, inline attribute
-`name`, `tabs` and `accordion` section `label`, table `columns[].label`,
+These fields resolve references: the blueprint `name` and `description`,
+inline attribute `name` and `description`, `tabs` and `accordion` section `label`, table `columns[].label`,
 `incoming_relationship_list` `label`, the `name` of a reusable attribute
 definition, and each option `label` in an `x-attricat-status` annotation on an
 inline or reusable attribute ([status control](status-control.md)). Headings,

@@ -2707,13 +2707,13 @@ async fn agent_finds_a_named_record_and_counts_what_links_to_it(pool: PgPool) {
     let category = create_blueprint(
         &client,
         &base_url,
-        "format_version = 1\ncode = \"category\"\nname = \"Categories\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"",
+        "format_version = 1\ncode = \"category\"\nname = \"Categories\"\ndescription = \"Product groupings, such as Basic tools\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"",
     )
     .await;
     let product = create_blueprint(
         &client,
         &base_url,
-        "format_version = 1\ncode = \"product\"\nname = \"Products\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"\n\n[[attributes]]\ncode = \"category\"\nvalue_type = \"relationship\"\ntarget_blueprint = \"category\"",
+        "format_version = 1\ncode = \"product\"\nname = \"Products\"\nkind = \"entity\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"\n\n[[attributes]]\ncode = \"category\"\ndescription = \"Where the product is shelved\"\nvalue_type = \"relationship\"\ntarget_blueprint = \"category\"",
     )
     .await;
     let create = |blueprint: &Value, values: Value| {
@@ -2932,11 +2932,14 @@ async fn agent_finds_a_named_record_and_counts_what_links_to_it(pool: PgPool) {
     .unwrap();
     let system_prompt = system_prompt.lock().unwrap().clone();
     assert!(
-        system_prompt.contains("product (Products): category -> category;"),
+        system_prompt
+            .contains("product (Products): category -> category (Where the product is shelved);"),
         "{system_prompt}"
     );
     assert!(
-        system_prompt.contains("category (Categories): no relationship fields;"),
+        system_prompt.contains(
+            "category (Categories) — Product groupings, such as Basic tools: no relationship fields;"
+        ),
         "{system_prompt}"
     );
     api_server.abort();

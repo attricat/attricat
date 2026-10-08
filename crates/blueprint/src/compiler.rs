@@ -156,6 +156,7 @@ pub fn compile(
     Ok(CompiledBlueprint {
         code: definition.code,
         name: definition.name,
+        description: definition.description,
         kind: definition.kind,
         raw_definition_hash: raw_hash(source),
         includes: definition.includes,

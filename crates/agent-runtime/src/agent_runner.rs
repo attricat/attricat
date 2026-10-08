@@ -140,9 +140,10 @@ struct RunMemo {
 /// Bounds the catalog map so a large catalog cannot crowd out the prompt.
 const MAX_CATALOG_MAP_BYTES: usize = 8 * 1024;
 
-/// One line per published record blueprint the run may read, with the
-/// blueprints its relationship fields link to, so the model can turn a
-/// question about related records into a relationship search directly.
+/// One line per published record blueprint the run may read, with its
+/// description, the blueprints its relationship fields link to, and its
+/// described attributes, so the model can map the user's words to records and
+/// turn a question about related records into a relationship search directly.
 async fn catalog_map(repository: &CatalogRepository) -> Result<String, RunError> {
     let mut lines = Vec::new();
     for summary in repository.list_blueprints().await? {
@@ -151,6 +152,30 @@ async fn catalog_map(repository: &CatalogRepository) -> Result<String, RunError>
         }
         let Some(blueprint) = repository.get_blueprint_by_code(&summary.code).await? else {
             continue;
+        };
+        // Descriptions live in the definition; a stored definition always parses.
+        let definition = catalog_blueprint::parse(&blueprint.blueprint.definition).ok();
+        let descriptions = definition
+            .as_ref()
+            .map(|definition| {
+                definition
+                    .attributes
+                    .iter()
+                    .filter_map(|attribute| match attribute {
+                        catalog_blueprint::AttributeDeclaration::Local(attribute) => attribute
+                            .description
+                            .as_deref()
+                            .map(|description| (attribute.code.as_str(), description)),
+                        _ => None,
+                    })
+                    .collect::<HashMap<_, _>>()
+            })
+            .unwrap_or_default();
+        let described = |code: &str| {
+            descriptions
+                .get(code)
+                .map(|description| format!(" ({description})"))
+                .unwrap_or_default()
         };
         let links = blueprint
             .attributes
@@ -162,24 +187,48 @@ async fn catalog_map(repository: &CatalogRepository) -> Result<String, RunError>
                 } else {
                     attribute.target_blueprint_codes.join(" | ")
                 };
-                format!("{} -> {targets}", attribute.code)
+                format!(
+                    "{} -> {targets}{}",
+                    attribute.code,
+                    described(&attribute.code)
+                )
             })
             .collect::<Vec<_>>();
-        let links = if links.is_empty() {
+        let notes = blueprint
+            .attributes
+            .iter()
+            .filter(|attribute| {
+                attribute.value_type != "relationship"
+                    && descriptions.contains_key(attribute.code.as_str())
+            })
+            .map(|attribute| format!("{}{}", attribute.code, described(&attribute.code)))
+            .collect::<Vec<_>>();
+        let mut line = format!(
+            "{} ({})",
+            blueprint.blueprint.code, blueprint.blueprint.name
+        );
+        if let Some(description) = definition
+            .as_ref()
+            .and_then(|definition| definition.description.as_deref())
+        {
+            line.push_str(&format!(" — {description}"));
+        }
+        line.push_str(": ");
+        line.push_str(&if links.is_empty() {
             "no relationship fields".to_owned()
         } else {
             links.join(", ")
-        };
-        lines.push(format!(
-            "{} ({}): {links}",
-            blueprint.blueprint.code, blueprint.blueprint.name
-        ));
+        });
+        if !notes.is_empty() {
+            line.push_str(&format!("; described attributes: {}", notes.join(", ")));
+        }
+        lines.push(line);
     }
     if lines.is_empty() {
         return Ok(String::new());
     }
     let mut map = String::from(
-        " Catalog map: each published record blueprint you can read, as code (name) and its relationship fields with the blueprints they link to:",
+        " Catalog map: each published record blueprint you can read, as code (name) — its description, then its relationship fields with the blueprints they link to, and its described attributes:",
     );
     for line in lines {
         if map.len() + line.len() + 3 > MAX_CATALOG_MAP_BYTES {

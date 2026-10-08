@@ -13,7 +13,7 @@ Blueprint codes, attribute codes, include aliases, relationship targets, rule co
 
 ## Translated labels
 
-The blueprint `name`, attribute `name`, tab and accordion section `label`, table `columns[].label`, and `incoming_relationship_list` `label` can contain lexicon references: `{{Product}}`, or `{{Order|purchase}}` with a context. Text outside braces is literal, and `\{{` writes a literal `{{`. Malformed references are rejected when the blueprint is saved. See [Translate labels](/builders/translations/).
+The blueprint `name` and `description`, attribute `name` and `description`, tab and accordion section `label`, table `columns[].label`, and `incoming_relationship_list` `label` can contain lexicon references: `{{Product}}`, or `{{Order|purchase}}` with a context. Text outside braces is literal, and `\{{` writes a literal `{{`. Malformed references are rejected when the blueprint is saved. See [Translate labels](/builders/translations/).
 
 ## Top level
 
@@ -32,6 +32,7 @@ Record blueprints use `kind = "entity"`: in blueprint keys, as in the API, recor
 | `format_version` | integer | Yes | Must be `1`. |
 | `code` | code | Yes | Identifier of the blueprint family. It cannot change between revisions. |
 | `name` | string | Yes | Display name. Can change between revisions. |
+| `description` | string | No | What the blueprint's records are, up to 500 characters, such as "Product groupings, such as Basic tools". The agent reads it to match people's words to records; the web app does not show it yet. |
 | `kind` | `"entity"` or `"mixin"` | Yes | An `entity` blueprint can have records. A `mixin` only supplies attributes to other blueprints through `[[includes]]`. |
 | `attributes` | array of tables | Yes | At least one attribute. See [Attributes](#attributes). |
 | `includes` | array of tables | No | Mixins this blueprint pulls attributes from. See [Includes](#includes). |
@@ -59,6 +60,7 @@ value_type = "string"
 | --- | --- | --- | --- |
 | `code` | code | Required | Unique within the blueprint, including attributes pulled in from mixins. |
 | `name` | string | Humanized `code` | Human-readable label shown in forms, filters, previews, and as the default table column heading. Must not be blank. Not allowed with `from`; a selected attribute keeps the mixin attribute's name. |
+| `description` | string | | What the attribute holds, up to 500 characters. Read by the agent; the web app does not show it yet. Not allowed with `from`. |
 | `value_type` | string | | One of the [value types](#value-types). |
 | `from` | string | | `"<include-alias>.<attribute-code>"`. Materializes an attribute from an included mixin. `code` must equal the mixin attribute's code. |
 | `extension_type` | string | | `"<extension-id>:<type-id>@<semver-range>"`. Uses an attribute type declared by an enabled extension. See [Extension attribute types](#extension-attribute-types). |

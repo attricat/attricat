@@ -172,6 +172,79 @@ from = "seo.meta_title"
 }
 
 #[test]
+fn parses_blueprint_and_attribute_descriptions() {
+    let source = r#"
+format_version = 1
+code = "category"
+name = "Category"
+description = "Product groupings, such as Basic tools"
+kind = "entity"
+
+[[attributes]]
+code = "title"
+description = "The category name shown to shoppers"
+value_type = "string"
+"#;
+    let definition = parse(source).unwrap();
+    assert_eq!(
+        definition.description.as_deref(),
+        Some("Product groupings, such as Basic tools")
+    );
+    let catalog_blueprint::AttributeDeclaration::Local(title) = &definition.attributes[0] else {
+        panic!("title is a local attribute");
+    };
+    assert_eq!(
+        title.description.as_deref(),
+        Some("The category name shown to shoppers")
+    );
+    assert!(
+        catalog_blueprint::lexicon_texts(&definition)
+            .iter()
+            .any(|text| text.location == "attribute 'title' description")
+    );
+}
+
+#[test]
+fn rejects_blank_long_and_selected_descriptions() {
+    let with = |description: &str| {
+        format!(
+            "format_version = 1\ncode = \"product\"\nname = \"Product\"\nkind = \"entity\"\n\n[[attributes]]\ncode = \"title\"\ndescription = \"{description}\"\nvalue_type = \"string\"\n"
+        )
+    };
+    assert!(matches!(
+        parse(&with("  ")),
+        Err(BlueprintError::EmptyField("attribute description"))
+    ));
+    assert!(matches!(
+        parse(&with(&"x".repeat(501))),
+        Err(BlueprintError::FieldTooLong {
+            field: "attribute description",
+            max: 500
+        })
+    ));
+    let selected = r#"
+format_version = 1
+code = "product"
+name = "Product"
+kind = "entity"
+
+[[includes]]
+alias = "seo"
+code = "seo"
+version = 1
+
+[[attributes]]
+code = "meta_title"
+description = "Search title"
+from = "seo.meta_title"
+"#;
+    assert!(matches!(
+        parse(selected),
+        Err(BlueprintError::InvalidAttributeDeclaration(code)) if code == "meta_title"
+    ));
+}
+
+#[test]
 fn compiles_scalar_attribute_default_values() {
     let source = r#"
 format_version = 1

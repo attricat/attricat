@@ -8,6 +8,8 @@ pub enum BlueprintError {
     UnsupportedFormatVersion(u32),
     #[error("{0} must not be empty")]
     EmptyField(&'static str),
+    #[error("{field} must be at most {max} characters")]
+    FieldTooLong { field: &'static str, max: usize },
     #[error("blueprints must define at least one attribute")]
     EmptyAttributes,
     #[error("include alias '{0}' is duplicated")]

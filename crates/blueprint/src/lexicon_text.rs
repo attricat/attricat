@@ -11,15 +11,22 @@ pub struct LexiconText<'a> {
     pub counted: bool,
 }
 
-/// Every translatable label in the definition: the blueprint name, local
-/// attribute names and status option labels, and view tab, section, column,
-/// and incoming-relationship labels.
+/// Every translatable label in the definition: the blueprint name and
+/// description, local attribute names, descriptions and status option labels,
+/// and view tab, section, column, and incoming-relationship labels.
 pub fn lexicon_texts(definition: &BlueprintDefinition) -> Vec<LexiconText<'_>> {
     let mut texts = vec![LexiconText {
         location: "name".to_owned(),
         text: &definition.name,
         counted: true,
     }];
+    if let Some(description) = &definition.description {
+        texts.push(LexiconText {
+            location: "description".to_owned(),
+            text: description,
+            counted: false,
+        });
+    }
     for attribute in &definition.attributes {
         let AttributeDeclaration::Local(attribute) = attribute else {
             continue;
@@ -28,6 +35,13 @@ pub fn lexicon_texts(definition: &BlueprintDefinition) -> Vec<LexiconText<'_>> {
             texts.push(LexiconText {
                 location: format!("attribute '{}' name", attribute.code),
                 text: name,
+                counted: false,
+            });
+        }
+        if let Some(description) = &attribute.description {
+            texts.push(LexiconText {
+                location: format!("attribute '{}' description", attribute.code),
+                text: description,
                 counted: false,
             });
         }

@@ -693,6 +693,15 @@
         "default_value": {
           "description": "Value stored in the default context when an entity is created.\nNot supported for relationships and files."
         },
+        "description": {
+          "description": "What the attribute holds, for people and agents. Attributes selected\nwith `from` use the mixin's description and cannot set their own.\n`{{…}}` references resolve from the workspace lexicon.",
+          "maxLength": 500,
+          "minLength": 1,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "extension_configuration": {
           "description": "JSON configuration passed to the extension type.",
           "type": [
@@ -1795,6 +1804,15 @@
         "$ref": "#/$defs/ConnectorJobDefinition"
       },
       "type": "array"
+    },
+    "description": {
+      "description": "What the blueprint's records are, for people and agents, such as\n\"Product groupings, such as Basic tools\". `{{…}}` references resolve\nfrom the workspace lexicon.",
+      "maxLength": 500,
+      "minLength": 1,
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "entity_schema": {
       "description": "JSON Schema (Draft 2020-12) source for cross-field entity validation.\nEntity blueprints only.",

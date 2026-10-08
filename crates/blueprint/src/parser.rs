@@ -29,6 +29,8 @@ pub const ATTRIBUTE_CARDINALITIES: &[&str] = &["one", "many", "one_to_one"];
 pub const DIRECTIONAL_CARDINALITIES: &[&str] = &["one", "many"];
 pub const CONTEXT_FALLBACKS: &[&str] = &["default", "none"];
 pub const CONTEXT_EDITABLE_SCOPES: &[&str] = &["all", "default"];
+/// Longest blueprint or attribute description, in characters.
+pub const MAX_DESCRIPTION_CHARS: usize = 500;
 
 /// An Attricat blueprint: a versioned entity type or an includable mixin.
 #[derive(Deserialize, JsonSchema)]
@@ -45,6 +47,11 @@ struct RawBlueprintDefinition {
     /// workspace lexicon.
     #[schemars(length(min = 1))]
     name: String,
+    /// What the blueprint's records are, for people and agents, such as
+    /// "Product groupings, such as Basic tools". `{{…}}` references resolve
+    /// from the workspace lexicon.
+    #[schemars(length(min = 1, max = MAX_DESCRIPTION_CHARS))]
+    description: Option<String>,
     kind: BlueprintKind,
     /// Exact, version-pinned mixins whose attributes can be selected with `from`.
     #[serde(default)]
@@ -95,6 +102,11 @@ struct RawAttributeDeclaration {
     /// from the workspace lexicon.
     #[schemars(length(min = 1))]
     name: Option<String>,
+    /// What the attribute holds, for people and agents. Attributes selected
+    /// with `from` use the mixin's description and cannot set their own.
+    /// `{{…}}` references resolve from the workspace lexicon.
+    #[schemars(length(min = 1, max = MAX_DESCRIPTION_CHARS))]
+    description: Option<String>,
     /// Stored value type.
     #[schemars(extend("enum" = ATTRIBUTE_VALUE_TYPES))]
     value_type: Option<String>,
@@ -229,6 +241,9 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
     }
     validate_code(&raw.code, "blueprint code")?;
     validate_non_empty(&raw.name, "blueprint name")?;
+    if let Some(description) = &raw.description {
+        validate_description(description, "blueprint description")?;
+    }
     if raw.attributes.is_empty() {
         return Err(BlueprintError::EmptyAttributes);
     }
@@ -298,6 +313,9 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
         }
         if let Some(name) = &attribute.name {
             validate_non_empty(name, "attribute name")?;
+        }
+        if let Some(description) = &attribute.description {
+            validate_description(description, "attribute description")?;
         }
 
         attributes.push(
@@ -465,6 +483,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                     AttributeDeclaration::Local(Box::new(LocalAttributeDeclaration {
                         code: attribute.code,
                         name: attribute.name,
+                        description: attribute.description,
                         value_type,
                         value_schema,
                         extension_type: None,
@@ -483,7 +502,9 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                     }))
                 }
                 (None, None, Some(source))
-                    if !attribute.declares_relationship_targets() && attribute.name.is_none() =>
+                    if !attribute.declares_relationship_targets()
+                        && attribute.name.is_none()
+                        && attribute.description.is_none() =>
                 {
                     let (include_alias, attribute_code) =
                         parse_selection(&attribute.code, &source)?;
@@ -527,6 +548,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                     AttributeDeclaration::Local(Box::new(LocalAttributeDeclaration {
                         code: attribute.code,
                         name: attribute.name,
+                        description: attribute.description,
                         // Resolved before persistence; this keeps the pure compiler
                         // useful without giving extensions storage control.
                         value_type: "string".to_owned(),
@@ -591,6 +613,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
         format_version: raw.format_version,
         code: raw.code,
         name: raw.name,
+        description: raw.description,
         kind: raw.kind,
         includes: raw.includes,
         views: raw.views,
@@ -820,6 +843,17 @@ pub(crate) fn validate_code(value: &str, field: &'static str) -> Result<(), Blue
 fn validate_non_empty(value: &str, field: &'static str) -> Result<(), BlueprintError> {
     if value.trim().is_empty() {
         return Err(BlueprintError::EmptyField(field));
+    }
+    Ok(())
+}
+
+fn validate_description(value: &str, field: &'static str) -> Result<(), BlueprintError> {
+    validate_non_empty(value, field)?;
+    if value.chars().count() > MAX_DESCRIPTION_CHARS {
+        return Err(BlueprintError::FieldTooLong {
+            field,
+            max: MAX_DESCRIPTION_CHARS,
+        });
     }
     Ok(())
 }

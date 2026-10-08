@@ -13,7 +13,7 @@ Kody schematów, kody atrybutów, aliasy include, cele relacji, kody reguł, kod
 
 ## Tłumaczone etykiety
 
-Pola `name` schematu, `name` atrybutu, `label` kart i sekcji akordeonu, `columns[].label` tabeli oraz `label` bloku `incoming_relationship_list` mogą zawierać odwołania do leksykonu: `{{Product}}` lub `{{Order|purchase}}` z kontekstem. Tekst poza nawiasami jest dosłowny, a `\{{` zapisuje dosłowne `{{`. Nieprawidłowe odwołania są odrzucane przy zapisie schematu. Zobacz [Tłumaczenie etykiet](/pl/builders/translations/).
+Pola `name` i `description` schematu, `name` i `description` atrybutu, `label` kart i sekcji akordeonu, `columns[].label` tabeli oraz `label` bloku `incoming_relationship_list` mogą zawierać odwołania do leksykonu: `{{Product}}` lub `{{Order|purchase}}` z kontekstem. Tekst poza nawiasami jest dosłowny, a `\{{` zapisuje dosłowne `{{`. Nieprawidłowe odwołania są odrzucane przy zapisie schematu. Zobacz [Tłumaczenie etykiet](/pl/builders/translations/).
 
 ## Poziom główny
 
@@ -32,6 +32,7 @@ Schematy rekordów mają `kind = "entity"`: w kluczach schematu, tak jak w API, 
 | `format_version` | liczba całkowita | Tak | Musi wynosić `1`. |
 | `code` | kod | Tak | Identyfikator rodziny schematów. Nie może się zmieniać między wersjami. |
 | `name` | ciąg znaków | Tak | Nazwa wyświetlana. Może się zmieniać między wersjami. |
+| `description` | ciąg znaków | Nie | Czym są rekordy schematu, do 500 znaków, np. „Grupy produktów, np. Narzędzia podstawowe”. Agent czyta go, by dopasować słowa użytkowników do rekordów; aplikacja webowa jeszcze go nie wyświetla. |
 | `kind` | `"entity"` lub `"mixin"` | Tak | Schemat `entity` może mieć rekordy. Mixin jedynie dostarcza atrybuty innym schematom przez `[[includes]]`. |
 | `attributes` | tablica tabel | Tak | Co najmniej jeden atrybut. Zobacz [Atrybuty](#atrybuty). |
 | `includes` | tablica tabel | Nie | Mixiny, z których ten schemat pobiera atrybuty. Zobacz [Include](#include). |
@@ -59,6 +60,7 @@ value_type = "string"
 | --- | --- | --- | --- |
 | `code` | kod | Wymagany | Unikalny w obrębie schematu, łącznie z atrybutami pobranymi z domieszek. |
 | `name` | ciąg znaków | `code` w czytelnej formie | Czytelna etykieta wyświetlana w formularzach, filtrach, podglądach oraz jako domyślny nagłówek kolumny tabeli. Nie może być pusta. Niedozwolona razem z `from`; wybrany atrybut zachowuje nazwę atrybutu mixinu. |
+| `description` | ciąg znaków | | Co przechowuje atrybut, do 500 znaków. Czyta go agent; aplikacja webowa jeszcze go nie wyświetla. Niedozwolony razem z `from`. |
 | `value_type` | ciąg znaków | | Jeden z [typów wartości](#typy-wartości). |
 | `from` | ciąg znaków | | `"<include-alias>.<attribute-code>"`. Materializuje atrybut z mixinu wskazanego przez include. `code` musi być równy kodowi atrybutu mixinu. |
 | `extension_type` | ciąg znaków | | `"<extension-id>:<type-id>@<semver-range>"`. Używa typu atrybutu zadeklarowanego przez włączone rozszerzenie. Zobacz [Typy atrybutów z rozszerzeń](#typy-atrybutów-z-rozszerzeń). |
