@@ -5,7 +5,7 @@ description: Build a small catalog with two linked blueprints, a context, and a 
 
 This walkthrough takes about fifteen minutes. You will create a category and a product blueprint, add a product in two languages, and publish it to a channel.
 
-You need a workspace where you are an owner or admin. If you are setting up Attricat yourself, see [Deploy Attricat](/operate/deployment/) first.
+You need a workspace where you are an owner or admin. To try Attricat on your own machine, run `curl -fsSL https://docs.attricat.com/install.sh | sh` and sign in with the credentials it prints. See [Try it on your machine](/operate/deployment/#try-it-on-your-machine) for the details.
 
 ## 1. Create a category blueprint
 

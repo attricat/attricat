@@ -21,6 +21,31 @@ You provide and operate the rest:
 - optionally an **OTLP** trace collector and **Prometheus**;
 - optionally **Redis**, to share a cache between several API replicas.
 
+## Try it on your machine
+
+To evaluate Attricat on one machine with Docker Compose, run:
+
+```sh
+curl -fsSL https://docs.attricat.com/install.sh | sh
+```
+
+The script creates an `attricat` directory in the current directory, writes `compose.yml` and a `.env` file with a generated owner password, and starts the latest image with PostgreSQL, RustFS and Mailpit. When the stack is healthy, it prints the sign-in address, workspace, email and password. Email the server sends, such as password resets, shows up in Mailpit at <http://localhost:8025>.
+
+To change a default, set the variable for `sh` on the first run, for example `curl -fsSL https://docs.attricat.com/install.sh | ATTRICAT_PORT=8080 sh`:
+
+| Variable | Default |
+| --- | --- |
+| `ATTRICAT_DIR` | `attricat` |
+| `ATTRICAT_IMAGE` | `ghcr.io/attricat/attricat:latest` |
+| `ATTRICAT_PORT` | `3000` |
+| `MAILPIT_UI_PORT` | `8025` |
+| `ATTRICAT_OWNER_EMAIL` | `owner@example.com` |
+| `ATTRICAT_OWNER_PASSWORD` | 24 random letters and digits |
+
+The script saves these settings in `.env`. Run it again to pull the newest image; it keeps `.env` and rewrites `compose.yml`. From the `attricat` directory, `docker compose down` stops Attricat and `docker compose down -v` also deletes its data. The image is built for amd64 only, so Apple Silicon and other arm64 machines run it under emulation.
+
+This setup binds to localhost and uses plain HTTP and fixed internal credentials, so use it only for evaluation. The rest of this page covers production.
+
 ## Pin the image
 
 Deploy by digest, never by a moving tag:

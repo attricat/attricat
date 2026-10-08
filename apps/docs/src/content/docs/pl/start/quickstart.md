@@ -5,7 +5,7 @@ description: Zbuduj mały katalog z dwoma powiązanymi schematami, kontekstem i 
 
 Ten przewodnik zajmuje około piętnastu minut. Utworzysz schemat kategorii i schemat produktu, dodasz produkt w dwóch językach i opublikujesz go w kanale.
 
-Potrzebujesz obszaru roboczego, w którym masz rolę właściciela lub administratora. Jeśli samodzielnie konfigurujesz Attricat, najpierw zobacz [Wdrażanie Attricat](/pl/operate/deployment/).
+Potrzebujesz obszaru roboczego, w którym masz rolę właściciela lub administratora. Aby wypróbować Attricat na własnym komputerze, uruchom `curl -fsSL https://docs.attricat.com/install.sh | sh` i zaloguj się danymi, które wypisze. Szczegóły znajdziesz w sekcji [Wypróbuj na swoim komputerze](/pl/operate/deployment/#wypróbuj-na-swoim-komputerze).
 
 ## 1. Utwórz schemat kategorii
 
