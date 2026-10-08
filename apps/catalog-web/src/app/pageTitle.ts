@@ -70,6 +70,7 @@ const simpleManagementPageKeys: Record<string, string> = {
   'background-processing': 'navigation.backgroundProcessing',
   'data-health': 'navigation.dataHealth',
   exports: 'navigation.exports',
+  lexicon: 'navigation.lexicon',
   'system-health': 'navigation.systemHealth',
 };
 
@@ -126,6 +127,8 @@ const sectionTitle = (t: TFunction, [section, ...rest]: Segments) => {
         : t('profile.tokenList');
     case 'agents':
       return agentsTitle(t, rest);
+    case 'inbox':
+      return t('navigation.inbox');
     case 'entities':
       return entitiesTitle(t, rest);
     case 'extensions':

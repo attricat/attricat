@@ -18,6 +18,10 @@ describe('pageTitle', () => {
     expect(pageTitle('/manage/workspace/members', i18n.t)).toBe(
       'Members · Workspace management · Attricat',
     );
+    expect(pageTitle('/inbox', i18n.t)).toBe('Inbox · Attricat');
+    expect(pageTitle('/manage/lexicon', i18n.t)).toBe(
+      `${i18n.t('navigation.lexicon')} · Attricat`,
+    );
   });
 
   it('translates route labels when the language changes', async () => {
