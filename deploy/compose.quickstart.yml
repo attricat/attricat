@@ -1,6 +1,8 @@
 # Runs the published image on one host for evaluation, reusing the
 # development infrastructure from apps/api/compose.yml. For production, use
 # deploy/compose.yml and the Operate section of the docs site.
+# apps/docs/public/install.sh embeds a standalone copy of this stack; keep the
+# two in step.
 name: attricat-quickstart
 
 x-app: &app

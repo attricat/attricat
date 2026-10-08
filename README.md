@@ -24,8 +24,20 @@ The project has three parts:
 
 ### Try the published image
 
-To try Attricat without building it, use
-[`deploy/compose.quickstart.yml`](deploy/compose.quickstart.yml). It runs
+To try Attricat without cloning this repository, run:
+
+```sh
+curl -fsSL https://docs.attricat.com/install.sh | sh
+```
+
+The script creates an `attricat` directory, writes a Compose file and a `.env`
+with a generated owner password, starts the stack below and prints how to sign
+in. Its source is [`apps/docs/public/install.sh`](apps/docs/public/install.sh),
+and [Try it on your machine](https://docs.attricat.com/operate/deployment/#try-it-on-your-machine)
+lists its settings.
+
+From a checkout, use
+[`deploy/compose.quickstart.yml`](deploy/compose.quickstart.yml) instead. It runs
 `ghcr.io/attricat/attricat:latest` with PostgreSQL, RustFS and Mailpit. It
 reuses those service definitions from `apps/api/compose.yml`, so run it from a
 checkout of this repository:

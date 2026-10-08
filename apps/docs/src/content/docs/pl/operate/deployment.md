@@ -21,6 +21,31 @@ Resztę zapewniasz i utrzymujesz samodzielnie:
 - opcjonalnie kolektor śladów **OTLP** i **Prometheus**;
 - opcjonalnie **Redis**, aby kilka replik API współdzieliło bufor.
 
+## Wypróbuj na swoim komputerze
+
+Aby wypróbować Attricat na jednym komputerze z Docker Compose, uruchom:
+
+```sh
+curl -fsSL https://docs.attricat.com/install.sh | sh
+```
+
+Skrypt tworzy katalog `attricat` w bieżącym katalogu, zapisuje w nim `compose.yml` i plik `.env` z wygenerowanym hasłem właściciela, a następnie uruchamia najnowszy obraz razem z PostgreSQL, RustFS i Mailpit. Gdy wszystkie usługi działają, wypisuje adres logowania, obszar roboczy, e-mail i hasło. Wiadomości wysyłane przez serwer, na przykład resetowanie hasła, trafiają do Mailpit pod <http://localhost:8025>.
+
+Aby zmienić wartość domyślną, przekaż zmienną do `sh` przy pierwszym uruchomieniu, na przykład `curl -fsSL https://docs.attricat.com/install.sh | ATTRICAT_PORT=8080 sh`:
+
+| Zmienna | Domyślnie |
+| --- | --- |
+| `ATTRICAT_DIR` | `attricat` |
+| `ATTRICAT_IMAGE` | `ghcr.io/attricat/attricat:latest` |
+| `ATTRICAT_PORT` | `3000` |
+| `MAILPIT_UI_PORT` | `8025` |
+| `ATTRICAT_OWNER_EMAIL` | `owner@example.com` |
+| `ATTRICAT_OWNER_PASSWORD` | 24 losowe litery i cyfry |
+
+Skrypt zapisuje te ustawienia w `.env`. Uruchom go ponownie, aby pobrać najnowszy obraz; zachowa `.env` i nadpisze `compose.yml`. W katalogu `attricat` polecenie `docker compose down` zatrzymuje Attricat, a `docker compose down -v` dodatkowo usuwa jego dane. Obraz jest budowany tylko dla amd64, więc komputery z Apple Silicon i innymi procesorami arm64 uruchamiają go w emulacji.
+
+Ta konfiguracja nasłuchuje tylko na localhost, używa zwykłego HTTP i stałych wewnętrznych danych dostępowych, więc służy wyłącznie do testów. Dalsza część tej strony dotyczy środowiska produkcyjnego.
+
 ## Przypnij obraz
 
 Wdrażaj według skrótu (digest), nigdy według zmieniającego się tagu:
