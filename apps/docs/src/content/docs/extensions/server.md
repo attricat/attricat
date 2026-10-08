@@ -36,28 +36,28 @@ Declare a handler and subscribe to exact event types:
 }
 ```
 
-The component's `handle-event` export receives the event: its ID, type, aggregate kind and ID, correlation and causation IDs, and a JSON payload. Entity events carry the entity ID, its blueprint and revision, and a list of facts describing each changed attribute. See the [event reference](/reference/events/).
+The component's `handle-event` export receives the event: its ID, type, aggregate kind and ID, correlation and causation IDs, and a JSON payload. In event types and host calls, records are called entities. Record events carry the record ID, its blueprint and revision, and a list of facts describing each changed attribute. See the [event reference](/reference/events/).
 
 Delivery rules:
 
 - **At least once.** The same event can arrive twice, including after your handler finished but before Attricat recorded it. Use the event ID as an idempotency key.
 - **No ordering guarantee.** Don't infer causality from arrival order.
-- **Current state is yours to read.** The event says what changed; read the entity if you need its full state.
+- **Current state is yours to read.** The event says what changed; read the record if you need its full state.
 - **Failures quarantine the extension.** A trap, running out of fuel or memory, a timeout, or a returned error quarantines the installation. The delivery is retried, and becomes a dead letter after the configured number of attempts.
 
 Before each delivery, Attricat checks again that the installation is enabled, still on the same release, and still has the grants it needs.
 
 ## Read and write the catalog
 
-With `catalog.read`, a component can read an entity, its direct values, or its values resolved in a context. Responses include the entity's pinned blueprint revision.
+With `catalog.read`, a component can read a record, its direct values, or its values resolved in a context. Responses include the record's pinned blueprint revision.
 
 With `catalog.write`, it can write scalar values in an explicit context. Writes go through the normal path: type checks, schemas, audit, and a new domain event.
 
 A write made while handling an event is attributed to the user or token behind the original change, keeps the event's correlation ID, and is published with source `extension:<extension-id>`. **Ignore events from your own source**, or a handler that writes will trigger itself.
 
-The JSON `catalog.read.v1` and `catalog.command.v1` calls add paged reads, change feeds, single-attribute lookups, and batches of `create`, `update`, `relationships`, and `upsert` intents. An upsert matches on a declared business key attribute, creates only when no entity matches, and fails if more than one does. Its relationship sets apply whether it updates a match or creates the entity.
+The JSON `catalog.read.v1` and `catalog.command.v1` calls add paged reads, change feeds, single-attribute lookups, and batches of `create`, `update`, `relationships`, and `upsert` intents. An upsert matches on a declared business key attribute, creates only when no record matches, and fails if more than one does. Its relationship sets apply whether it updates a match or creates the record.
 
-A lookup resolves exactly like an upsert. If the attribute alone is a declared unique key on a string attribute, the lookup uses that key's normalized values across every revision of the blueprint family; otherwise it matches the exact text among entities of the requested revision. A value that matches more than one entity fails with `lookup matched multiple entities` instead of returning one of them.
+A lookup resolves exactly like an upsert. If the attribute alone is a declared unique key on a string attribute, the lookup uses that key's normalized values across every revision of the blueprint family; otherwise it matches the exact text among records of the requested revision. A value that matches more than one record fails with `lookup matched multiple entities` instead of returning one of them.
 
 ## Storage
 

@@ -9,7 +9,7 @@ An extension is a `.tar.zst` archive with a `manifest.json` at its root and the 
 - **Client components**: JavaScript modules that render inside sandboxed frames at fixed places in the web app, or as full pages. See [Client contributions](/extensions/client/).
 - **Declarations** the host acts on without running your code: attribute types, table cell renderers, configuration schemas, and event contracts.
 
-A reference extension, `attricat-extension-example`, shows all of these working together: it computes numeric attributes from formulas, with a workbench page, an entity action, a table cell, and a server event handler.
+A reference extension, `attricat-extension-example`, shows all of these working together: it computes numeric attributes from formulas, with a workbench page, a record action, a table cell, and a server event handler.
 
 ## The security model
 
@@ -58,6 +58,8 @@ export const mount = async (root, catalog) => {
   return () => root.replaceChildren();
 };
 ```
+
+In API paths, outlet names, and context fields, records are called entities.
 
 The full manifest format is in the [manifest reference](/extensions/manifest/).
 

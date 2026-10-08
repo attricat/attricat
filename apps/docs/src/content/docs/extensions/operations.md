@@ -60,7 +60,7 @@ Limits are 1 GiB per output, 2 GiB per run, and 8 GiB per workspace. Outputs can
 
 ## Interactive operations
 
-Add `interactive` to an operation to let signed-in users start it for an entity or a selection from your version 2 actions:
+Add `interactive` to an operation to let signed-in users start it for a record or a selection from your version 2 actions:
 
 ```json
 {"id": "generate", "handler": "generate", "request_schema": {"type": "object"}, "interactive": {"version": 1, "max_selection": 50}}
@@ -68,20 +68,20 @@ Add `interactive` to an operation to let signed-in users start it for an entity 
 
 It needs `client.operations.start`. Build the component against the `catalog-extension` or `operation-extension` [world](/extensions/server/#host-api-version); its `selection` interface works inside an interactive run.
 
-When a run starts, Catalog checks that the user can read every selected entity and freezes the user, release, input, context, and the ordered selection. Then:
+When a run starts, Catalog checks that the user can read every selected record and freezes the user, release, input, context, and the ordered selection. Then:
 
 - `selection.describe()` returns the count, blueprint revision, and context.
 - `selection.page(cursor, limit)` returns 1 to 10 members with their saved values resolved in the run's context, your own annotations, and `read_at`. Members the user can no longer read come back as `unavailable`, deleted ones as `deleted`.
-- `catalog-data.read` and the connector `catalog` calls are refused. `catalog-data.batch` accepts `update`, `relationships`, and `annotate` intents for selected entities only, checked against the user's current permissions.
+- `catalog-data.read` and the connector `catalog` calls are refused. `catalog-data.batch` accepts `update`, `relationships`, and `annotate` intents for selected records only, checked against the user's current permissions.
 - If the user leaves the workspace, the run stops with a safe reason rather than continuing with the extension's own grants.
 
-Capture what you need from each entity once and keep it in the checkpoint, so a retried batch renders the same bytes. Report progress as `{"completed": n, "total": n, "outcome": {"succeeded": n, "failed": n, "skipped": n}}`; Catalog shows these counts separately from the run status, so a run can complete with some entities failed.
+Capture what you need from each record once and keep it in the checkpoint, so a retried batch renders the same bytes. Report progress as `{"completed": n, "total": n, "outcome": {"succeeded": n, "failed": n, "skipped": n}}`; Catalog shows these counts separately from the run status, so a run can complete with some records failed.
 
-Users see their runs under **Profile → Extension runs**. Only the user who started a run and people with `extensions.manage` can see it. The user who started it can always cancel it, but can open it and download its results only while they can still read every selected entity. People with `extensions.manage` can open, cancel, and download any run.
+Users see their runs under **Profile → Extension runs**. Only the user who started a run and people with `extensions.manage` can see it. The user who started it can always cancel it, but can open it and download its results only while they can still read every selected record. People with `extensions.manage` can open, cancel, and download any run.
 
-## Entity annotations
+## Record annotations
 
-With `catalog.annotations.write`, add `annotate` intents to a batch to record facts on an entity in your own namespace: tags `<extension-id>:<tag>` and the object at `system_metadata[<extension-id>]`.
+With `catalog.annotations.write`, add `annotate` intents to a batch to store facts on a record in your own namespace: tags `<extension-id>:<tag>` and the object at `system_metadata[<extension-id>]`. Intents identify the record by `entity_id`.
 
 ```json
 {"kind": "annotate", "intent_key": "doc-<run>-<entity>", "entity_id": "…",
@@ -89,9 +89,9 @@ With `catalog.annotations.write`, add `annotate` intents to a batch to record fa
  "remove_tags": [], "remove_metadata": [], "expected_revision": null}
 ```
 
-You name local tags and keys only; Catalog adds the namespace. A patch has 1 to 32 operations. Setting a key replaces its value (`null` is allowed). `expected_revision` rejects the write if the namespace changed since you read it; a retried intent key is reported as `already_applied` first. Other writers, including users editing the entity, cannot change your namespace, and your writes do not change the entity's `updated_at`.
+You name local tags and keys only; Catalog adds the namespace. A patch has 1 to 32 operations. Setting a key replaces its value (`null` is allowed). `expected_revision` rejects the write if the namespace changed since you read it; a retried intent key is reported as `already_applied` first. Other writers, including users editing the record, cannot change your namespace, and your writes do not change the record's `updated_at`.
 
-If entities already have data under your extension ID, an operator must adopt the namespace before your first write. Do not store signed URLs or secrets in annotations, and do not treat a tag as proof that a file is still downloadable: outputs expire.
+If records already have data under your extension ID, an operator must adopt the namespace before your first write. Do not store signed URLs or secrets in annotations, and do not treat a tag as proof that a file is still downloadable: outputs expire.
 
 ## File transfers
 
@@ -104,9 +104,9 @@ A delivery attempt is recorded before any network traffic. After a timeout or cr
 
 ## Catalog access in operations
 
-Operations can call `catalog-data.read` and `catalog-data.batch` (the same JSON as `catalog.read.v1` and `catalog.command.v1`), plus connector-shaped `schema`, `page`, and `upsert-batch` calls. Pages hold up to 100 entities and batches up to 100 intents. Batches must carry the current batch key, and each intent key is recorded, so a replayed batch returns `already_applied` instead of writing twice.
+Operations can call `catalog-data.read` and `catalog-data.batch` (the same JSON as `catalog.read.v1` and `catalog.command.v1`), plus connector-shaped `schema`, `page`, and `upsert-batch` calls. Pages hold up to 100 records and batches up to 100 intents. Batches must carry the current batch key, and each intent key is recorded, so a replayed batch returns `already_applied` instead of writing twice.
 
-Page cursors resolve values as of the first page, using value history, and expire after 30 days. This is not a database snapshot: entities created, deleted, or migrated during a long export can still change which entities appear. Freeze the source if you need an exact export.
+Page cursors resolve values as of the first page, using value history, and expire after 30 days. This is not a database snapshot: records created, deleted, or migrated during a long export can still change which records appear. Freeze the source if you need an exact export.
 
 ## Schedules
 
@@ -146,7 +146,7 @@ input = { profile = { version = 1, business_key = "sku", columns = [
 ```
 
 - Jobs are validated against the enabled extension when the blueprint revision is published. An invalid job blocks publication.
-- An **export** job creates one run per enabled [publication channel](/guides/publishing/). Each run reads values in that channel's context and includes only entities published to it.
+- An **export** job creates one run per enabled [publication channel](/guides/publishing/). Each run reads values in that channel's context and includes only records published to it.
 - An **import** job creates one run that writes to its `context`.
 - A later revision matches jobs by `code`. A job left out of the new revision is disabled; its history stays.
 - Set `enabled = false` to pause a job.

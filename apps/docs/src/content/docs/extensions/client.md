@@ -5,6 +5,8 @@ description: Add pages, panels, actions, and table cells to the web app from san
 
 A client contribution is a JavaScript module that Attricat loads into a sandboxed frame at a fixed place in the web app. The host owns everything around the frame: layout, loading and error states, focus, and accessibility landmarks. Your module owns what is inside it.
 
+In outlet names, capabilities, context fields, and API paths, records are called entities.
+
 ## The sandbox
 
 Every contribution gets its own `<iframe sandbox="allow-scripts">` with an opaque origin and a Content Security Policy that blocks network access. The frame has no access to Attricat's page, cookies, storage, or other extensions' frames. It cannot call `fetch` against the API.
@@ -40,9 +42,9 @@ The frame stays mounted when the user switches context or theme. Listen for the 
 | `catalog.request(path)` | `catalog.read` | `GET` one of `/api/entities`, `/api/v1/entities/<uuid>`, or `/api/blueprints/<uuid>/versions/<n>`. Responses are limited to 1 MiB. Revision reads in `blueprint_attribute_configuration` are limited to that outlet's blueprint revision. |
 | `catalog.command({ command_id, payload })` | `client.commands` | Calls one of the extension's declared server commands. |
 | `catalog.storage.get/set/delete/list(…)` | `storage.extension` | The extension's key-value storage. `set` and `delete` accept `expected_revision`. |
-| `catalog.navigate({ entity_id })` | `client.navigation` | Opens an entity page. |
+| `catalog.navigate({ entity_id })` | `client.navigation` | Opens a record page. |
 | `catalog.notify({ message, severity })` | `client.notification` | Shows a host notification. Messages are trimmed to 512 characters. |
-| `catalog.refresh({ target: 'current_entity' })` | `client.refresh` | Reloads the current entity's views after your command changed it. Available in entity outlets. |
+| `catalog.refresh({ target: 'current_entity' })` | `client.refresh` | Reloads the current record's views after your command changed it. Available in record page outlets. |
 | `catalog.dialog.open()` / `catalog.dialog.close()` | `client.action_dialog` | Opens the extension's `action_dialog` from a version 2 selection action, with that action's selection; `close` works inside the dialog. |
 | `catalog.operations.start({ operation_id, input, idempotency_key })` | `client.operations.start` | Starts an [interactive operation](/extensions/operations/#interactive-operations) for the frame's selection and resolves to `{ run_id }`. Available in version 2 selection actions and the action dialog. |
 | `catalog.operations.list()` / `get({ run_id })` / `download({ run_id, artifact_id })` | `client.operations.read` | Only runs of this extension that the signed-in user started, even when that user is an operator. The host performs downloads. |
@@ -65,18 +67,18 @@ A `route` contribution is a page at `/extensions/<extension-id>/<contribution-id
 
 Add a `navigation` contribution to link to it from the sidebar. Workspace administrators decide whether it appears in the extension group or is promoted into the main navigation.
 
-### Entity pages
+### Record pages
 
 | Outlet | Kind | Capability | Context |
 | --- | --- | --- | --- |
 | `entity_preview_panel` | `embedded` | | `entity_id`, optional `context_id` |
-| `entity_action` | `embedded` | `client.entity_action` | entity, attribute, context |
-| `entity_attribute_decoration` | `embedded` | `client.entity_decoration` | entity, attribute, blueprint and revision, optional context |
+| `entity_action` | `embedded` | `client.entity_action` | record, attribute, context |
+| `entity_attribute_decoration` | `embedded` | `client.entity_decoration` | record, attribute, blueprint and revision, optional context |
 | `entity_header_action` | `action` | `client.entity_header_action` | `entity_id`, `blueprint_id`, `blueprint_version` |
 | `entity_attribute_panel` | `panel` | `client.entity_attribute_panel` | `entity_id`, `attribute_id`, `blueprint_id`, `blueprint_version`, `context_id` |
 | `file_panel` | `panel` | `client.file_panel` | `file_id`, `entity_id`, `attribute_id`, `blueprint_id`, `blueprint_version` |
 
-`entity_preview_panel` appears in the entity's extension drawer. A version 2 `entity_action` receives the [selection context](#selection-context) instead. Action bars show one primary and three secondary actions before an overflow menu. Panels show up to three contributions before overflow.
+`entity_preview_panel` appears in the record's extension drawer. A version 2 `entity_action` receives the [selection context](#selection-context) instead. Action bars show one primary and three secondary actions before an overflow menu. Panels show up to three contributions before overflow.
 
 ### Explorer
 
@@ -104,7 +106,7 @@ Contributions to `entity_action`, `explorer_row_action`, and `explorer_bulk_acti
 }
 ```
 
-`selection_source` is `entity_preview`, `explorer_row`, or `explorer_selection`. `entity_ids` lists 1 to 50 saved entities of one blueprint revision in display order. `context_id` is the surface's value-resolution context, or `null` for the default. Version 1 contributions keep the contexts above.
+`selection_source` is `entity_preview`, `explorer_row`, or `explorer_selection`. `entity_ids` lists 1 to 50 saved records of one blueprint revision in display order. `context_id` is the surface's value-resolution context, or `null` for the default. Version 1 contributions keep the contexts above.
 
 ### Action dialog
 
@@ -112,7 +114,7 @@ Contributions to `entity_action`, `explorer_row_action`, and `explorer_bulk_acti
 | --- | --- | --- | --- |
 | `action_dialog` | `dialog` | `client.action_dialog` | The opening action's selection context, captured when it opens. |
 
-A `dialog` contribution needs a `title`. Your version 2 actions open it with `catalog.dialog.open()`. The host draws the dialog around your frame, shows how many entities it applies to, and warns about unsaved edits. It stays open when the row menu closes or the selection changes, and closes on navigation. Key presses inside your frame do not reach the host, so call `catalog.dialog.close()` when the user presses Escape. Closing it before starting a run does nothing; closing it afterwards does not cancel the run.
+A `dialog` contribution needs a `title`. Your version 2 actions open it with `catalog.dialog.open()`. The host draws the dialog around your frame, shows how many records it applies to, and warns about unsaved edits. It stays open when the row menu closes or the selection changes, and closes on navigation. Key presses inside your frame do not reach the host, so call `catalog.dialog.close()` when the user presses Escape. Closing it before starting a run does nothing; closing it afterwards does not cancel the run.
 
 ### Blueprints
 

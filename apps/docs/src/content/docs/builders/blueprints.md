@@ -9,7 +9,7 @@ A blueprint is a TOML document that describes one kind of catalog record: its at
 
 You can write blueprints in two places:
 
-- **Manage → Blueprints → New blueprint** in the web app. The editor validates as you type and shows a preview of the resulting entity page, where you can try editing sample values.
+- **Manage → Blueprints → New blueprint** in the web app. The editor validates as you type and shows a preview of the resulting record page, where you can try editing sample values.
 - Any text editor, then upload with the CLI:
 
   ```sh
@@ -38,14 +38,14 @@ fields = ["name"]
 ```
 
 - `code` identifies the blueprint for its whole life. Pick it carefully; it cannot change in later revisions.
-- `kind = "entity"` means people can create entities from it.
-- Every entity blueprint needs `views.dropdown_option`. It tells Attricat how to label a category wherever one is shown in a list: relationship pickers, filter pills, search results.
+- `kind = "entity"` means people can create records from it. In blueprint TOML, the API and the CLI, records are called entities.
+- Every record blueprint needs `views.dropdown_option`. It tells Attricat how to label a category wherever one is shown in a list: relationship pickers, filter pills, search results.
 
-Save this as a draft. A draft can be edited freely and cannot hold entities yet.
+Save this as a draft. A draft can be edited freely and cannot hold records yet.
 
 ## Step 2: publish
 
-Publishing freezes the revision. From then on it never changes, and entities can be created from it.
+Publishing freezes the revision. From then on it never changes, and records can be created from it.
 
 In the web app, open the blueprint and choose **Publish**. With the CLI:
 
@@ -104,7 +104,7 @@ A few choices in this file:
 
 - `sku` has `context_editable = "default"`. A SKU is the same everywhere, so it can only be edited in the default context. In any other context it shows as read-only.
 - `price` has a `value_schema` that rejects negative numbers. The schema is JSON inside a TOML string. See [Validation](/builders/validation/).
-- `stock_on_hand` starts at `0` on new entities because of `default_value`.
+- `stock_on_hand` starts at `0` on new records because of `default_value`.
 - `order_cutoff` is a `time`: a wall-clock time plus an IANA time zone, such as 09:30 in `Europe/Warsaw`.
 
 ## Step 4: relationships
@@ -128,7 +128,7 @@ cardinality = "one"
 
 The target blueprints must exist before you publish the product blueprint.
 
-Relationships are how you model tags, labels, and taxonomies in Attricat. [Model your catalog](/builders/modeling/) explains why a category should be an entity and not a string.
+Relationships are how you model tags, labels, and taxonomies in Attricat. [Model your catalog](/builders/modeling/) explains why a category should be a record and not a string.
 
 ## Step 5: context behavior
 
@@ -239,7 +239,7 @@ The `catalog.entity_heading` stack turns its first field into the page title and
 
 ## Step 8: validation across fields
 
-A `value_schema` checks one value. An `entity_schema` checks the whole entity, so it can express rules like "a product on sale needs a sale price". This example assumes the blueprint also has an `on_sale` boolean and a `sale_price` number:
+A `value_schema` checks one value. An `entity_schema` checks the whole record, so it can express rules like "a product on sale needs a sale price". This example assumes the blueprint also has an `on_sale` boolean and a `sale_price` number:
 
 ```toml
 entity_schema = '''
@@ -354,11 +354,11 @@ Here:
 
 See [Control a record's lifecycle](/builders/validation/#control-a-records-lifecycle) for how each control behaves, and [Statuses](/reference/blueprint/#statuses) for every key.
 
-## Revisions and existing entities
+## Revisions and existing records
 
-Every entity remembers the exact blueprint revision it was created with. When you publish revision 2 of `product`, existing products stay on revision 1: their values and validation keep meaning what they meant when they were written.
+Every record remembers the exact blueprint revision it was created with. When you publish revision 2 of `product`, existing products stay on revision 1: their values and validation keep meaning what they meant when they were written.
 
-Attricat then marks them as outdated and offers to migrate them. Revisions that only add optional attributes can be migrated in bulk. Changes that remove or retype attributes, or add required ones, need a decision per entity. See [Revisions and migration](/builders/revisions/).
+Attricat then marks them as outdated and offers to migrate them. Revisions that only add optional attributes can be migrated in bulk. Changes that remove or retype attributes, or add required ones, need a decision per record. See [Revisions and migration](/builders/revisions/).
 
 Two practices save trouble later:
 
@@ -372,6 +372,6 @@ A blueprint can also carry:
 - [Rules](/builders/rules/) that flag data-quality problems, such as a missing title, and can [enforce](/builders/rules/#enforce-a-rule) them on save or on status changes.
 - [Status attributes](/builders/validation/#statuses) with allowed transitions and [translated labels](/builders/translations/#status-labels).
 - A [publication policy](/guides/publishing/#keep-publication-after-trusted-edits) that lets trusted roles edit without withdrawing channel approvals.
-- [Connector jobs](/reference/blueprint/#connector-jobs) that import or export entities through a connector extension.
+- [Connector jobs](/reference/blueprint/#connector-jobs) that import or export records through a connector extension.
 - Attributes whose type comes from an [extension](/reference/blueprint/#extension-attribute-types).
-- A [layout for extension panels and actions](/reference/blueprint/#extension_layout) on its entity pages.
+- A [layout for extension panels and actions](/reference/blueprint/#extension_layout) on its record pages.

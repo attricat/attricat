@@ -1,6 +1,6 @@
 ---
 title: Views and layouts
-description: Control how entity pages, forms, and Explorer tables are laid out, using declarative blocks and registered components.
+description: Control how record pages, forms, and Explorer tables are laid out, using declarative blocks and registered components.
 ---
 
 Views are part of a blueprint revision. They describe layout only: which attributes appear, in what order, grouped how. They cannot run code. The web app renders the blocks it knows and the components registered with it.
@@ -11,10 +11,10 @@ Views are optional. Without them, the web app shows attributes in declaration or
 
 | View | Where it appears |
 | --- | --- |
-| `dropdown_option` | The label of an entity in pickers, filter pills, and search. Required for entity blueprints. |
-| `detail` | The entity page, its preview, and the create form. Fields are shown and edited in this layout. |
+| `dropdown_option` | The label of a record in pickers, filter pills, and search. Required for record blueprints. |
+| `detail` | The record page, its preview, and the create form. Fields are shown and edited in this layout. |
 | `table` | The Explorer's result columns. |
-| `extension_layout` | Order and visibility of extension panels and actions on this blueprint's entity pages. |
+| `extension_layout` | Order and visibility of extension panels and actions on this blueprint's record pages. |
 
 `views.edit` is deprecated. The web app ignores it, and blueprints that still define it remain valid.
 
@@ -79,11 +79,11 @@ tabs = [
 
 `field` accepts scalar and file attributes. `relationship_list` accepts relationship attributes. Referencing an attribute the blueprint does not have, or the wrong kind, fails validation.
 
-The detail layout drives both display and editing. On the entity page, every field the user may change is an editable control in its place in the layout; readonly fields, fields locked by the record's status, and fields managed in the default context show their value. Editable attributes the layout leaves out appear after it under **Other attributes**, so a required attribute is always reachable. The create form uses the same layout.
+The detail layout drives both display and editing. On the record page, every field the user may change is an editable control in its place in the layout; readonly fields, fields locked by the record's status, and fields managed in the default context show their value. Editable attributes the layout leaves out appear after it under **Other attributes**, so a required attribute is always reachable. The create form uses the same layout.
 
-## Entity heading
+## Record heading
 
-To give the detail page a proper title, wrap fields in a `stack` with the `catalog.entity_heading` component. Its first child must be a scalar field and becomes the page heading. Later children, text or scalar fields, form the subtitle.
+To give the detail page a proper title, wrap fields in a `stack` with the `catalog.entity_heading` component. Component and extension outlet identifiers, like this one, call records entities. Its first child must be a scalar field and becomes the page heading. Later children, text or scalar fields, form the subtitle.
 
 ```toml
 [[views.detail.children]]
@@ -95,11 +95,11 @@ children = [
 ]
 ```
 
-If the title field is empty, the entity ID is shown. The heading is removed from the page body so it does not appear twice. The heading only displays values, so its editable fields are offered as editors first, above the rest of the layout.
+If the title field is empty, the record ID is shown. The heading is removed from the page body so it does not appear twice. The heading only displays values, so its editable fields are offered as editors first, above the rest of the layout.
 
 ## Showing what links here
 
-`incoming_relationship_list` shows entities that point at the current one, such as the products in a category. It is a button that opens a paged list, so nothing is loaded until someone asks.
+`incoming_relationship_list` shows records that point at the current one, such as the products in a category. It is a button that opens a paged list, so nothing is loaded until someone asks.
 
 ```toml
 { type = "incoming_relationship_list",
@@ -108,13 +108,13 @@ If the title field is empty, the entity ID is shown. The heading is removed from
   relationships = [{ source_blueprint = "product", field = "categories" }] }
 ```
 
-List several `relationships` to combine sources. An entity that matches more than one appears once.
+List several `relationships` to combine sources. A record that matches more than one appears once.
 
 ## Hierarchies
 
 `catalog.relationship_hierarchy` shows ancestor chains as breadcrumbs, resolved in the selected context.
 
-On a self-referencing relationship, such as `category.parent`, it shows the current entity's own ancestry:
+On a self-referencing relationship, such as `category.parent`, it shows the current record's own ancestry:
 
 ```toml
 { type = "relationship_list", field = "parent",
@@ -143,7 +143,7 @@ field = "family.product_type.name"
 label = "Product type"
 ```
 
-A column is a local scalar attribute, or a path through up to three relationships that ends in a scalar attribute. Each hop is resolved with the linked entity's own blueprint revision. If an older linked entity does not have the attribute, the cell is empty. A many-valued path can show several values in one cell.
+A column is a local scalar attribute, or a path through up to three relationships that ends in a scalar attribute. Each hop is resolved with the linked record's own blueprint revision. If an older linked record does not have the attribute, the cell is empty. A many-valued path can show several values in one cell.
 
 Columns can be sorted when they resolve to a scalar and every relationship in the path has `cardinality = "one"`.
 
@@ -193,7 +193,7 @@ renderer = { id = "catalog.url_display", version = 1 }
 | Email | `catalog.email_display`, `catalog.email_edit` | One plain ASCII address, such as `name+tag@example.com`. Shown as a `mailto:` link. |
 | URL | `catalog.url_display`, `catalog.url_edit` | Absolute `http://` or `https://` URLs only. Links open in a new tab. |
 | Phone | `catalog.phone_display`, `catalog.phone_edit` | Stored as typed. Numbers starting with `+` and a country code become `tel:` links; extensions can use `ext.` or `x`. |
-| Markdown | `catalog.markdown_display`, `catalog.markdown_edit` | CommonMark with **Write** and **Preview** tabs. On the entity page a set value shows formatted until you choose to edit it. Raw HTML is ignored, images show their alt text, and links are limited to HTTP(S), `mailto:`, relative paths, and fragments. Text is stored exactly as typed, including whitespace. Not available for table columns. |
+| Markdown | `catalog.markdown_display`, `catalog.markdown_edit` | CommonMark with **Write** and **Preview** tabs. On the record page a set value shows formatted until you choose to edit it. Raw HTML is ignored, images show their alt text, and links are limited to HTTP(S), `mailto:`, relative paths, and fragments. Text is stored exactly as typed, including whitespace. Not available for table columns. |
 
 Values that do not fit the control, such as older data, are still shown, as plain text without a link or swatch. Fields without a component use the standard editor for their value type.
 
@@ -203,9 +203,9 @@ The edit controls validate only in the web app. To reject bad values from the AP
 
 Every block can name a component with `component = { id, version, props }`. The ID and version must match a registered component, the component must support the block and value type, and `props` may contain only the options it declares. The built-in components are listed in the [blueprint reference](/reference/blueprint/#component-references).
 
-## Extension panels on entity pages
+## Extension panels on record pages
 
-Workspace administrators set the default order of extension contributions for the whole workspace. A blueprint can override three entity outlets for its own entities:
+Workspace administrators set the default order of extension contributions for the whole workspace. A blueprint can override three record page outlets for its own records:
 
 ```toml
 [views.extension_layout]

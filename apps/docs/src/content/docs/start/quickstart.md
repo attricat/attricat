@@ -34,7 +34,7 @@ fields = ["name"]
 
 Save it, then **Publish** revision 1.
 
-`parent` points at another category, so categories can form a tree.
+`parent` points at another category, so categories can form a tree. `kind = "entity"` makes this a record blueprint: blueprint files, the API, and the CLI call records entities.
 
 ## 2. Create a product blueprint
 
@@ -82,11 +82,11 @@ columns = [
 
 Publish it.
 
-`entity_schema` sits above the first `[[attributes]]` on purpose. In TOML, every key after a `[table]` header belongs to that table, so a top-level key placed further down would become part of the last attribute.
+`entity_schema` holds the record schema. It sits above the first `[[attributes]]` on purpose. In TOML, every key after a `[table]` header belongs to that table, so a top-level key placed further down would become part of the last attribute.
 
 ## 3. Add categories
 
-Open the **Entity explorer**, choose **Category**, and **Create entity** twice:
+Open the **Record explorer**, choose **Category**, and **Create record** twice:
 
 1. `name` = *Apparel*
 2. `name` = *Shirts*, `parent` = *Apparel*
@@ -100,7 +100,7 @@ Choose **Product** in the Explorer and create one:
 - `price` = *49*
 - `categories` = *Shirts*
 
-Try saving without a title: the entity schema rejects it. Try a price of *-1*: the value schema rejects it.
+Try saving without a title: the record schema rejects it. Try a price of *-1*: the value schema rejects it.
 
 ## 5. Add a context
 
@@ -130,5 +130,5 @@ With a few more products and categories:
 ## Next steps
 
 - [Author a blueprint](/builders/blueprints/) covers files, layouts, mixins, and more.
-- [Model your catalog](/builders/modeling/) helps decide what should be an entity, attribute, or context.
+- [Model your catalog](/builders/modeling/) helps decide what should be a record, attribute, or context.
 - [Workspace administration](/operate/workspaces/) explains how to invite your team.

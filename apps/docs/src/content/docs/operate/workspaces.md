@@ -3,7 +3,7 @@ title: Workspace administration
 description: Manage members, teams, roles, invitations, sidebar navigation, API tokens, and the audit log.
 ---
 
-A workspace is one catalog with its own members, blueprints, entities, contexts, and extensions. Workspaces are fully separated: nothing is shared between them.
+A workspace is one catalog with its own members, blueprints, records, contexts, and extensions. Workspaces are fully separated: nothing is shared between them.
 
 Most administration happens under **Manage → Workspace management**, which has five tabs: **Members**, **Teams**, **Roles**, **Invitations**, and **Navigation**.
 
@@ -39,8 +39,8 @@ A role is a named set of permissions. Four built-in roles cannot be changed:
 | --- | --- |
 | `owner` | Everything, including transferring ownership. |
 | `admin` | Everything except workspace ownership and lifecycle. |
-| `editor` | Read and write blueprints, entities, and contexts; delete entities; read data health. Cannot publish blueprints or entities, or administer the workspace. |
-| `viewer` | Read blueprints, entities, contexts, and data health. |
+| `editor` | Read and write blueprints, records, and contexts; delete records; read data health. Cannot publish blueprints or records, or administer the workspace. |
+| `viewer` | Read blueprints, records, contexts, and data health. |
 
 Create **custom roles** under **Roles** to give a narrower or different set. You can only put permissions into a role that you have yourself. Duplicate a built-in role to start from its permissions. Retiring a custom role can move its grants to a replacement role.
 
@@ -53,11 +53,11 @@ A role grant applies at one scope:
 | Scope | Applies to |
 | --- | --- |
 | **Entire workspace** | Everything. |
-| **Blueprint family** | One blueprint and its entities, across all revisions. |
-| **Entity** | One entity. |
-| **Context subtree** | The context settings of one context and the contexts below it, but not its parent or siblings. It does not cover entities or their values. |
+| **Blueprint family** | One blueprint and its records, across all revisions. |
+| **Record** | One record. |
+| **Context subtree** | The context settings of one context and the contexts below it, but not its parent or siblings. It does not cover records or their values. |
 
-Grants add up. A person with `viewer` on the workspace and `editor` on the `PL` context subtree can read everything, and can edit or delete the `PL` context and its children and make them publication channels. Creating contexts needs a workspace grant. A context subtree grant does not let anyone read or edit entity values in those contexts: access to entities comes from workspace, blueprint family, and entity grants.
+Grants add up. A person with `viewer` on the workspace and `editor` on the `PL` context subtree can read everything, and can edit or delete the `PL` context and its children and make them publication channels. Creating contexts needs a workspace grant. A context subtree grant does not let anyone read or edit record values in those contexts: access to records comes from workspace, blueprint family, and record grants.
 
 The owner role can only be granted on the whole workspace.
 
@@ -71,7 +71,7 @@ Invitation and onboarding emails need [SMTP configured](/reference/configuration
 
 ## Navigation
 
-**Navigation** controls the blueprint shortcuts in the Explorer sidebar. Pin published entity blueprints and, optionally, limit each shortcut to certain roles so people see the parts of the catalog they work on.
+**Navigation** controls the blueprint shortcuts in the Explorer sidebar. Pin published record blueprints and, optionally, limit each shortcut to certain roles so people see the parts of the catalog they work on.
 
 Changing navigation needs `workspace_navigation.manage`.
 
@@ -79,7 +79,7 @@ Changing navigation needs `workspace_navigation.manage`.
 
 **Profile → Account** shows how other people see you in the workspace.
 
-- **Change display name** sets the name shown on member lists, the audit log, and entity history. It must be 2–64 characters of letters, digits, and spaces, and cannot start or end with a space. Your display name is shared across all your workspaces.
+- **Change display name** sets the name shown on member lists, the audit log, and record history. It must be 2–64 characters of letters, digits, and spaces, and cannot start or end with a space. Your display name is shared across all your workspaces.
 - **Upload photo** sets your avatar from a PNG or JPEG image of up to 10 MB. The image is cropped to a centered square, resized, and placed on a white background, so it takes a moment to appear. **Change photo** replaces it and **Remove photo** goes back to your initials.
 
 Your photo belongs to the current workspace: set one in each workspace you use. Every member of the workspace can see it, but only the resized version is shared. The original file you uploaded is never shown to anyone.
@@ -98,14 +98,14 @@ Creating tokens needs `tokens.manage`.
 
 ## Retention holds
 
-A retention hold keeps a file's exact bytes in storage until a date. While any hold on a file is active, Attricat never reclaims it, even when no entity references it any more.
+A retention hold keeps a file's exact bytes in storage until a date. While any hold on a file is active, Attricat never reclaims it, even when no record references it any more.
 
 Holds come from two places:
 
 - **Record statuses.** A blueprint status with `retention_days` places a hold on the files of a record when it enters that status, for example when a document is released. See [Retain released files](/builders/validation/#retain-released-files). These holds cannot be released early.
 - **Explicit holds**, such as a legal hold. People with the `files.hold` permission (owners and admins by default) can place one on a file for a number of days with a reason, and release it early.
 
-The entity page lists the holds on its files and when they expire. Placing and releasing holds is recorded in the audit log.
+The record page lists the holds on its files and when they expire. Placing and releasing holds is recorded in the audit log.
 
 ```sh
 curl -X POST "$CATALOG_API_URL/files/<file-id>/retention-holds" \

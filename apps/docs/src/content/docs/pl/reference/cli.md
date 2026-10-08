@@ -5,6 +5,8 @@ description: Klient wiersza poleceń acli, jego konfiguracja, uwierzytelnianie, 
 
 `acli` to klient wiersza poleceń dla API Attricat, przeznaczony dla skryptów, zadań CI i agentów. Po powodzeniu wypisuje odpowiedź JSON z API bez zmian na standardowe wyjście. Błędy trafiają na standardowe wyjście błędów jako JSON. Każde polecenie ma wbudowaną pomoc: `acli --help` i `acli <group> --help`.
 
+W poleceniach, opcjach i odpowiedziach API rekordy występują pod nazwą `entity`, np. `acli entity create`.
+
 `acli` jest dołączony do obrazu kontenera:
 
 ```sh
@@ -18,7 +20,7 @@ docker run --rm -e CATALOG_SERVER -e CATALOG_TOKEN ghcr.io/attricat/attricat@sha
 | Adres serwera | `--server` | `CATALOG_SERVER`, potem `CATALOG_API_URL` | Adres API. Domyślnie `http://127.0.0.1:3000`. |
 | Token | `--token`, `--token-stdin` | `CATALOG_TOKEN` | Osobisty token API. |
 | Plik sesji | `--session-file` | `CATALOG_SESSION_FILE` | Przechowuje sesję przeglądarki między poleceniami. |
-| Adres aplikacji webowej | | `CATALOG_WEB_URL` | Gdy jest ustawiony, polecenia zapisanych wyszukiwań wypisują też krótki link do przeglądarki encji. |
+| Adres aplikacji webowej | | `CATALOG_WEB_URL` | Gdy jest ustawiony, polecenia zapisanych wyszukiwań wypisują też krótki link do przeglądarki rekordów. |
 | Pominięcie `.env` | `--no-env` | | Nie odczytuje `.env` z bieżącego katalogu. |
 
 Domyślnie `acli` odczytuje `.env` z bieżącego katalogu, nie nadpisując zmiennych już ustawionych w powłoce.
@@ -164,7 +166,7 @@ acli context update <context-id> --parent-id <id> --data <json>
 acli context delete <context-id>
 ```
 
-### Encje i wartości
+### Rekordy i wartości
 
 ```sh
 acli entity create --blueprint <code> --values values.toml [--context-id <id>] [--system-tags <json>] [--system-metadata <json>]

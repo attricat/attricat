@@ -23,7 +23,7 @@ Przesłane archiwa przechodzą te same kontrole co instalacje z rejestru: limity
 
 Nowa instalacja startuje jako **wyłączona**. Przed jej włączeniem:
 
-1. **Przeczytaj żądane uprawnienia.** Każde z nich wskazuje możliwość, np. `catalog.write` (zmiana encji), `events.subscribe` (reagowanie na zmiany), `network.request` (wywoływanie usług zewnętrznych) lub `client.entity_action` (dodanie przycisku na stronach encji). Wszystkie wymienia [dokumentacja manifestu](/pl/extensions/manifest/#uprawnienia).
+1. **Przeczytaj żądane uprawnienia.** Każde z nich wskazuje możliwość, np. `catalog.write` (zmiana rekordów), `events.subscribe` (reagowanie na zmiany), `network.request` (wywoływanie usług zewnętrznych) lub `client.entity_action` (dodanie przycisku na stronach rekordów). W nazwach uprawnień rekordy występują pod nazwą `entity`. Wszystkie wymienia [dokumentacja manifestu](/pl/extensions/manifest/#uprawnienia).
 2. **Sprawdź dostęp do sieci.** `network.request` pozwala wyłącznie na wywołania wzorców URL wymienionych jako uprawnienia hosta. Każdy wzorzec pokazuje swoje hosty, metody, limity rozmiaru i limit czasu.
 3. **Skonfiguruj** rozszerzenie, jeśli ma ustawienia.
 4. **Przyznaj** wymagane uprawnienia. Uprawnienia opcjonalne można pominąć; rozszerzenie musi działać bez nich.
@@ -39,9 +39,9 @@ Trwające operacje pozostają przy wydaniu, na którym się rozpoczęły. Są ws
 
 ## Rozmieść interfejs rozszerzeń
 
-Gdy kilka rozszerzeń dodaje elementy w tym samym miejscu, np. na pasku akcji encji, pojawiają się w stałej kolejności według identyfikatora rozszerzenia. **Zarządzanie → Rozszerzenia → Układ rozszerzeń** pozwala zmienić kolejność, ukryć elementy i przenieść strony rozszerzeń do głównej nawigacji.
+Gdy kilka rozszerzeń dodaje elementy w tym samym miejscu, np. na pasku akcji rekordu, pojawiają się w stałej kolejności według identyfikatora rozszerzenia. **Zarządzanie → Rozszerzenia → Układ rozszerzeń** pozwala zmienić kolejność, ukryć elementy i przenieść strony rozszerzeń do głównej nawigacji.
 
-Schemat może nadpisać układ dla stron swoich encji. Zobacz [Widoki i układy](/pl/builders/views/#panele-rozszerzeń-na-stronach-encji).
+Schemat może nadpisać układ dla stron swoich rekordów. Zobacz [Widoki i układy](/pl/builders/views/#panele-rozszerzeń-na-stronach-rekordów).
 
 ## Sekrety
 

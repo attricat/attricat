@@ -23,7 +23,7 @@ Uploaded archives get the same checks as registry installs: size limits, safe fi
 
 A new installation starts **disabled**. Before enabling it:
 
-1. **Read the requested permissions.** Each one names a capability, such as `catalog.write` (change entities), `events.subscribe` (react to changes), `network.request` (call external services), or `client.entity_action` (add a button to entity pages). The [manifest reference](/extensions/manifest/#capabilities) lists them all.
+1. **Read the requested permissions.** Each one names a capability, such as `catalog.write` (change records), `events.subscribe` (react to changes), `network.request` (call external services), or `client.entity_action` (add a button to record pages). Permission names call records entities. The [manifest reference](/extensions/manifest/#capabilities) lists them all.
 2. **Check network access.** `network.request` only allows calls to the URL patterns listed as host permissions. Each pattern shows its hosts, methods, size limits, and timeout.
 3. **Configure** the extension if it has settings.
 4. **Grant** the required permissions. Optional permissions can be left out; the extension must work without them.
@@ -39,9 +39,9 @@ Running operations stay on the release they started with. They pause until that 
 
 ## Arrange extension UI
 
-When several extensions contribute to the same place, such as the entity action bar, they appear in a fixed order by extension ID. **Manage → Extensions → Extension layout** lets you change the order, hide contributions, and promote extension pages into the main navigation.
+When several extensions contribute to the same place, such as the record action bar, they appear in a fixed order by extension ID. **Manage → Extensions → Extension layout** lets you change the order, hide contributions, and promote extension pages into the main navigation.
 
-A blueprint can override the layout for its own entity pages. See [Views and layouts](/builders/views/#extension-panels-on-entity-pages).
+A blueprint can override the layout for its own record pages. See [Views and layouts](/builders/views/#extension-panels-on-record-pages).
 
 ## Secrets
 

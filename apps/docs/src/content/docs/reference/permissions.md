@@ -5,6 +5,8 @@ description: Every workspace permission, what it allows, and which built-in role
 
 Permissions are granted through roles. See [Workspace administration](/operate/workspaces/#roles) for roles and scopes.
 
+Permissions for records are named `entities.*`, as in the API.
+
 A missing or expired sign-in returns `401`. A signed-in person without the permission gets `403`, and the response does not reveal whether the target exists.
 
 | Permission | Allows | owner | admin | editor | viewer |
@@ -19,10 +21,10 @@ A missing or expired sign-in returns `401`. A signed-in person without the permi
 | `blueprints.read` | Blueprints and reusable attributes. | ✓ | ✓ | ✓ | ✓ |
 | `blueprints.write` | Creating blueprint drafts and revisions; reusable attributes. | ✓ | ✓ | ✓ | |
 | `blueprints.publish` | Publishing blueprint revisions. | ✓ | ✓ | | |
-| `entities.read` | Entities, search, saved searches, files, and history; the user and team directory for assignments (`GET /directory`, `acli directory`), which lists member names and email addresses. | ✓ | ✓ | ✓ | ✓ |
-| `entities.write` | Creating and editing entities, uploading files, migrating entities, attaching reusable attributes, running extension commands from the UI. | ✓ | ✓ | ✓ | |
-| `entities.delete` | Deleting entities. | ✓ | ✓ | ✓ | |
-| `entities.publish` | Publishing and unpublishing entities to channels. | ✓ | ✓ | | |
+| `entities.read` | Records, search, saved searches, files, and history; the user and team directory for assignments (`GET /directory`, `acli directory`), which lists member names and email addresses. | ✓ | ✓ | ✓ | ✓ |
+| `entities.write` | Creating and editing records, uploading files, migrating records, attaching reusable attributes, running extension commands from the UI. | ✓ | ✓ | ✓ | |
+| `entities.delete` | Deleting records. | ✓ | ✓ | ✓ | |
+| `entities.publish` | Publishing and unpublishing records to channels. | ✓ | ✓ | | |
 | `contexts.read` | Contexts and publication channels. | ✓ | ✓ | ✓ | ✓ |
 | `contexts.write` | Creating, changing, and deleting contexts; enabling publication channels. | ✓ | ✓ | ✓ | |
 | `data_health.read` | Data health, background processing, metrics, and dead-letter event lists. | ✓ | ✓ | ✓ | ✓ |
@@ -42,7 +44,7 @@ A blueprint status can require a permission or role for a transition, or a diffe
 
 ## Attribute visibility
 
-Permissions apply to whole entities. Anyone who can read an entity can read every attribute value it has, in every context, including value history and the changes it shows. Search, filters, display labels, agent tools, and extensions see the same values. You cannot hide single attributes, such as a valuation or provenance notes, from people who can read the rest of the record.
+Permissions apply to whole records. Anyone who can read a record can read every attribute value it has, in every context, including value history and the changes it shows. Search, filters, display labels, agent tools, and extensions see the same values. You cannot hide single attributes, such as a valuation or provenance notes, from people who can read the rest of the record.
 
 To keep sensitive details from some people, store them in a separate blueprint linked to the record, and grant `entities.read` on that blueprint only to the people who need it. Keep in mind:
 

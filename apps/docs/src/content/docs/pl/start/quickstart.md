@@ -34,7 +34,7 @@ fields = ["name"]
 
 Zapisz go, a następnie **Opublikuj** wersję 1.
 
-`parent` wskazuje na inną kategorię, więc kategorie mogą tworzyć drzewo.
+`parent` wskazuje na inną kategorię, więc kategorie mogą tworzyć drzewo. `kind = "entity"` oznacza schemat rekordu: w plikach schematów, API i CLI rekordy występują pod nazwą `entity`.
 
 ## 2. Utwórz schemat produktu
 
@@ -82,11 +82,11 @@ columns = [
 
 Opublikuj go.
 
-`entity_schema` celowo znajduje się nad pierwszym `[[attributes]]`. W TOML każdy klucz po nagłówku `[table]` należy do tej tabeli, więc klucz najwyższego poziomu umieszczony niżej stałby się częścią ostatniego atrybutu.
+`entity_schema` zawiera schemat rekordu. Celowo znajduje się nad pierwszym `[[attributes]]`. W TOML każdy klucz po nagłówku `[table]` należy do tej tabeli, więc klucz najwyższego poziomu umieszczony niżej stałby się częścią ostatniego atrybutu.
 
 ## 3. Dodaj kategorie
 
-Otwórz **Przeglądarkę encji**, wybierz **Category** i dwukrotnie użyj **Utwórz encję**:
+Otwórz **Przeglądarkę rekordów**, wybierz **Category** i dwukrotnie użyj **Utwórz rekord**:
 
 1. `name` = *Apparel*
 2. `name` = *Shirts*, `parent` = *Apparel*
@@ -100,7 +100,7 @@ Wybierz **Product** w Przeglądarce i utwórz jeden produkt:
 - `price` = *49*
 - `categories` = *Shirts*
 
-Spróbuj zapisać produkt bez tytułu: schemat encji go odrzuci. Spróbuj ustawić cenę *-1*: schemat wartości ją odrzuci.
+Spróbuj zapisać produkt bez tytułu: schemat rekordu go odrzuci. Spróbuj ustawić cenę *-1*: schemat wartości ją odrzuci.
 
 ## 5. Dodaj kontekst
 
@@ -130,5 +130,5 @@ Gdy masz już kilka produktów i kategorii:
 ## Kolejne kroki
 
 - [Tworzenie schematu](/pl/builders/blueprints/) omawia pliki, układy, mixiny i nie tylko.
-- [Modelowanie katalogu](/pl/builders/modeling/) pomaga zdecydować, co powinno być encją, atrybutem, a co kontekstem.
+- [Modelowanie katalogu](/pl/builders/modeling/) pomaga zdecydować, co powinno być rekordem, atrybutem, a co kontekstem.
 - [Administrowanie obszarem roboczym](/pl/operate/workspaces/) wyjaśnia, jak zaprosić zespół.

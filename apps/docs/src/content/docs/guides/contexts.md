@@ -3,11 +3,11 @@ title: Contexts
 description: Store values that differ by market, language, channel, or location, and control how they inherit.
 ---
 
-A context is a place in which an entity's values can differ. Markets, languages, sales channels, and stores are typical contexts. Contexts form a tree under a root context called `default`.
+A context is a place in which a record's values can differ. Markets, languages, sales channels, and stores are typical contexts. Contexts form a tree under a root context called `default`.
 
 ## How inheritance works
 
-Every entity can have values in any context. When a context has no value for an attribute, Attricat looks at its parent, then the parent's parent, up to `default`, and shows the first value it finds.
+Every record can have values in any context. When a context has no value for an attribute, Attricat looks at its parent, then the parent's parent, up to `default`, and shows the first value it finds.
 
 ```text
 default            description = "Linen shirt"
@@ -42,14 +42,14 @@ The `default` context always has the ID `00000000-0000-4000-8000-000000000001`.
 
 ## Change the tree
 
-You can move a context to a different parent. Before the move is saved, Attricat checks every entity against its new inheritance chain. If any entity would become invalid, for example by losing a required value, the move is rejected.
+You can move a context to a different parent. Before the move is saved, Attricat checks every record against its new inheritance chain. If any record would become invalid, for example by losing a required value, the move is rejected.
 
 A context that is in use cannot be deleted.
 
 ## Work in a context
 
 - In the **Explorer**, the **Context** selector shows, filters, and sorts values as they resolve in that context.
-- On an entity, the **Context** selector switches the values you see and edit.
+- On a record, the **Context** selector switches the values you see and edit.
 - In relationship facets, **Tree options** chooses the context used to resolve links.
 
 ## Plan the tree first
@@ -69,7 +69,7 @@ Contexts are not languages by default. If yours represent locales, record that i
 
 ## Contexts as publication channels
 
-Any context can be enabled as an export channel under **Manage → Exports**. Entities are then published to it separately. See [Publishing](/guides/publishing/).
+Any context can be enabled as an export channel under **Manage → Exports**. Records are then published to it separately. See [Publishing](/guides/publishing/).
 
 ## Contexts from solution packs
 

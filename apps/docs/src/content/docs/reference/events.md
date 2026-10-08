@@ -7,16 +7,18 @@ Every catalog change records an event in the same database transaction as the ch
 
 Events drive [workflows](/builders/workflows/), [rules](/builders/rules/), and [extension event handlers](/extensions/server/#handle-catalog-events). They are not exposed as a public feed.
 
+In event types and payloads, records are called entities, as in `entity.updated.v1`.
+
 ## Event types
 
 | Type | Recorded when |
 | --- | --- |
-| `entity.created.v1` | An entity is created. |
-| `entity.updated.v1` | An entity's values, relationships, or annotations change. |
-| `entity.deleted.v1` | An entity is deleted. |
-| `entity.migrated.v1` | An entity moves to a newer blueprint revision. |
-| `entity.published.v1` | An entity is published to a channel. |
-| `entity.unpublished.v1` | An entity's publication is withdrawn. |
+| `entity.created.v1` | A record is created. |
+| `entity.updated.v1` | A record's values, relationships, or annotations change. |
+| `entity.deleted.v1` | A record is deleted. |
+| `entity.migrated.v1` | A record moves to a newer blueprint revision. |
+| `entity.published.v1` | A record is published to a channel. |
+| `entity.unpublished.v1` | A record's publication is withdrawn. |
 | `attribute_value.changed.v1` | An attribute value is set, replaced, or removed. |
 | `attribute_value.restored.v1` | A value is restored from history. |
 | `relationship.changed.v1` | Relationship targets are added or removed. |
@@ -43,9 +45,9 @@ A version suffix never changes meaning. An incompatible payload gets a new `.vN`
 | `source_name` | Which producer, such as a workflow (`workflow:<id>`) or extension (`extension:<extension-id>`). |
 | `metadata`, `payload` | JSON objects, each up to 64 KiB. |
 
-## Entity payloads
+## Record payloads
 
-Entity and value events describe what changed, not the whole entity:
+Record and value events describe what changed, not the whole record:
 
 ```json
 {
@@ -65,7 +67,7 @@ Entity and value events describe what changed, not the whole entity:
 }
 ```
 
-To act on the entity's current state, read it; the payload is only a description of the change.
+To act on the record's current state, read it; the payload is only a description of the change.
 
 ### Which changes produce facts
 
@@ -75,7 +77,7 @@ To act on the entity's current state, read it; the payload is only a description
 - **Relationship attributes:** each added or removed target is its own fact, with `change_kind` `relationship_add` or `relationship_remove`, `relationship_target_entity_id` set, and the target ID as the value. A save that only changes relationships records `relationship.changed.v1`; one that also changes other values records `entity.updated.v1`.
 - **File attributes:** uploading, linking, reordering, or removing files is recorded in the audit log but records no event and no fact.
 - System tag and system metadata changes are not attribute values and add no fact.
-- **Migrations:** `entity.migrated.v1` has no `facts`. Its payload names the entity, its blueprint, `source_version`, `target_version`, and `migration_id`. When the migration dropped or re-pointed a relationship, `released_relationships` lists the targets the entity no longer points to, as `attribute_code` and `target_entity_ids` (at most 100 per relationship and 1,000 per event).
+- **Migrations:** `entity.migrated.v1` has no `facts`. Its payload names the record, its blueprint, `source_version`, `target_version`, and `migration_id`. When the migration dropped or re-pointed a relationship, `released_relationships` lists the targets the record no longer points to, as `attribute_code` and `target_entity_ids` (at most 100 per relationship and 1,000 per event).
 
 ## Delivery guarantees
 

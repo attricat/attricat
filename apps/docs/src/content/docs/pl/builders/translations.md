@@ -46,7 +46,7 @@ Pozostały tekst, na przykład bloki `heading` i `text`, separatory wyświetlani
 ]
 ```
 
-Przetłumaczoną etykietę, z takim samym zastępowaniem brakujących tłumaczeń jak w innych etykietach, pokazują znaczniki statusu, lista wyboru statusu na stronie encji i w formularzu tworzenia, lista wartości filtra i etykiety filtrów w Przeglądarce oraz wartości wyświetlane jako tekst. Wyszukiwanie, filtry, zapisane wyszukiwania, API i eksporty nadal używają kodu, więc przetłumaczenie lub zmiana etykiety nigdy nie zmienia zapisanych danych. Kontekst, na przykład `{{Draft|status}}`, oddziela status „Draft” od innych użyć tego słowa.
+Przetłumaczoną etykietę, z takim samym zastępowaniem brakujących tłumaczeń jak w innych etykietach, pokazują znaczniki statusu, lista wyboru statusu na stronie rekordu i w formularzu tworzenia, lista wartości filtra i etykiety filtrów w Przeglądarce oraz wartości wyświetlane jako tekst. Wyszukiwanie, filtry, zapisane wyszukiwania, API i eksporty nadal używają kodu, więc przetłumaczenie lub zmiana etykiety nigdy nie zmienia zapisanych danych. Kontekst, na przykład `{{Draft|status}}`, oddziela status „Draft” od innych użyć tego słowa.
 
 ## Składnia odwołań
 
@@ -120,7 +120,7 @@ W ten sposób zmienisz nazwę etykiety lub poprawisz literówkę. Klucz w schema
 
 Etykiety bez liczby, takie jak etykiety kart i nagłówki kolumn, używają osobnych kluczy dla liczby pojedynczej i mnogiej: `{{Product}}` i `{{Products}}`.
 
-Tam, gdzie aplikacja pokazuje liczbę encji, na przykład w liczbie wyników Przeglądarki encji, może użyć nazwy schematu w formie odpowiedniej dla tej liczby: „1 Produkt”, „3 Produkty”, „5 Produktów”. W tym celu nadaj wpisowi nazwy schematu po jednej formie dla każdej kategorii liczby mnogiej języka:
+Tam, gdzie aplikacja pokazuje liczbę rekordów, na przykład w liczbie wyników Przeglądarki rekordów, może użyć nazwy schematu w formie odpowiedniej dla tej liczby: „1 Produkt”, „3 Produkty”, „5 Produktów”. W tym celu nadaj wpisowi nazwy schematu po jednej formie dla każdej kategorii liczby mnogiej języka:
 
 ```sh
 acli lexicon set --key Product --language en --plural-category one --text Product
@@ -152,7 +152,7 @@ Raport pokazuje dla każdego języka:
 - **Nieprzetłumaczone** odwołania z etykiet katalogu, które nie mają wpisu w tym języku. Angielski nigdy się tu nie pojawia, ponieważ klucz jest tekstem angielskim.
 - **Brakujące kategorie liczby mnogiej** dla nazw schematów (które aplikacja pokazuje z liczbami) oraz dla wpisów, które mają już formy liczby mnogiej. Dla angielskiego tu pojawiają się brakujące formy `one` i `other`.
 
-Raport pokazuje też wpisy **osierocone**, których klucza i kontekstu nie używa już żadna wersja schematu ani atrybut wielokrotnego użytku. Przejrzyj je przed usunięciem: starsze wersje, których nadal używają encje, liczą się jako używane.
+Raport pokazuje też wpisy **osierocone**, których klucza i kontekstu nie używa już żadna wersja schematu ani atrybut wielokrotnego użytku. Przejrzyj je przed usunięciem: starsze wersje, których nadal używają rekordy, liczą się jako używane.
 
 ## Tłumaczenia z pakietów rozwiązań
 

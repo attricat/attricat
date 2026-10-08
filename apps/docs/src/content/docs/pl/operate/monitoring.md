@@ -7,12 +7,12 @@ description: Obserwuj stan danych katalogu, kolejki w tle, metryki, ślady i nie
 
 **Zarządzanie → Stan danych** podsumowuje stan katalogu:
 
-- **Karty podsumowania**: nieaktualne encje, aktywne encje, zaległe encje oraz relacje wskazujące na usunięte encje.
+- **Karty podsumowania**: nieaktualne rekordy, aktywne rekordy, zaległe rekordy oraz relacje wskazujące na usunięte rekordy.
 - **Pamięć masowa**: rozmiar każdej tabeli i łączny.
-- **Stan schematów**: dla każdego schematu liczba encji, liczba encji nieaktualnych lub zaległych oraz najstarsza aktualizacja.
+- **Stan schematów**: dla każdego schematu liczba rekordów, liczba rekordów nieaktualnych lub zaległych oraz najstarsza aktualizacja.
 - **Rozkład świeżości**: jak dawno aktualizowano wartości.
-- **Kompletność domyślna**: ile encji ma w kontekście domyślnym każde pole wymagane przez schemat.
-- **Pokrycie kontekstów**: ile encji ma własne wartości w każdym kontekście.
+- **Kompletność domyślna**: ile rekordów ma w kontekście domyślnym każde pole wymagane przez schemat.
+- **Pokrycie kontekstów**: ile rekordów ma własne wartości w każdym kontekście.
 - **Integralność relacji**: powiązania, których cel został usunięty.
 
 **Nieaktualne po** określa, co jest uznawane za zaległe, od 1 do 3650 dni (domyślnie 90). Wyniki są domyślnie buforowane przez pięć minut (`DATA_HEALTH_CACHE_TTL_SECONDS`); **Odśwież** czyści bufor.

@@ -51,7 +51,7 @@ List capabilities in `permissions` or `optional_permissions`. Each one allows a 
 
 | Capability | Allows |
 | --- | --- |
-| `catalog.read` | Reading entities, values, and blueprints. |
+| `catalog.read` | Reading records, values, and blueprints. |
 | `catalog.write` | Writing values and running create, update, relationship, and upsert commands. |
 | `events.subscribe` | Receiving catalog events and consumed extension events. |
 | `events.emit` | Publishing this extension's declared events. |
@@ -61,7 +61,7 @@ List capabilities in `permissions` or `optional_permissions`. Each one allows a 
 | `secrets.read` | Reading named workspace secrets at run time. |
 | `logging.write` | Writing log messages. |
 | `artifacts.read`, `artifacts.write` | Reading operation inputs and writing operation outputs. |
-| `catalog.annotations.write` | Writing this extension's own namespace of entity tags and metadata. See [Entity annotations](/extensions/operations/#entity-annotations). |
+| `catalog.annotations.write` | Writing this extension's own namespace of record tags and metadata. See [Record annotations](/extensions/operations/#record-annotations). |
 | `network.request` | Making outbound HTTPS requests that match a granted host permission. |
 | `webhooks.receive` | Declaring inbound webhooks (not delivered yet). |
 
@@ -70,9 +70,9 @@ List capabilities in `permissions` or `optional_permissions`. Each one allows a 
 | Capability | Allows |
 | --- | --- |
 | `client.commands` | Calling the extension's server commands from its UI. |
-| `client.navigation` | Navigating the user to an entity. |
+| `client.navigation` | Navigating the user to a record. |
 | `client.notification` | Showing a notification. |
-| `client.refresh` | Refreshing the current entity after a change. |
+| `client.refresh` | Refreshing the current record after a change. |
 | `client.events` | Receiving context-change events in the frame. |
 | `client.confirmation` | Asking the user to confirm an action. |
 | `client.download` | Offering a file download. |
@@ -89,7 +89,7 @@ List capabilities in `permissions` or `optional_permissions`. Each one allows a 
 
 ### Client placement
 
-Each placement capability allows a contribution at one outlet. See [Client contributions](/extensions/client/#outlets).
+Each placement capability allows a contribution at one outlet. See [Client contributions](/extensions/client/#outlets). In capability, outlet, and event names, records are called entities.
 
 `client.blueprint_configuration`, `client.entity_decoration`, `client.entity_action`, `client.entity_header_action`, `client.entity_attribute_panel`, `client.explorer_row_action`, `client.explorer_table_cell`, `client.explorer_action`, `client.explorer_bulk_action`, `client.blueprint_detail_panel`, `client.blueprint_panel`, `client.blueprint_publish_check`, `client.file_panel`, `client.audit_event_panel`, `client.data_health_card`, `client.action_dialog`.
 

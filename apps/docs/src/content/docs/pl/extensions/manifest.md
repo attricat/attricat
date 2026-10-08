@@ -29,7 +29,7 @@ Identyfikatory używane w manifeście (`catalog.id` oraz identyfikatory artefakt
 | `event_contracts` | | Zdarzenia publikowane lub konsumowane przez to rozszerzenie. |
 | `server` | | Procedury obsługi zdarzeń, polecenia, operacje i webhooki. |
 | `ui` | | Kontrybucje klienckie. |
-| `cell_renderers` | | Renderery komórek tabeli przeglądarki encji. |
+| `cell_renderers` | | Renderery komórek tabeli przeglądarki rekordów. |
 | `attribute_types` | | Typy atrybutów dla Schematów. |
 
 ## Artefakty
@@ -51,7 +51,7 @@ Wymień uprawnienia w `permissions` lub `optional_permissions`. Każde z nich ze
 
 | Uprawnienie | Zezwala na |
 | --- | --- |
-| `catalog.read` | Odczyt encji, wartości i Schematów. |
+| `catalog.read` | Odczyt rekordów, wartości i Schematów. |
 | `catalog.write` | Zapis wartości i wykonywanie poleceń create, update, relationship i upsert. |
 | `events.subscribe` | Odbieranie zdarzeń katalogu i konsumowanych zdarzeń rozszerzeń. |
 | `events.emit` | Publikowanie zadeklarowanych zdarzeń tego rozszerzenia. |
@@ -61,7 +61,7 @@ Wymień uprawnienia w `permissions` lub `optional_permissions`. Każde z nich ze
 | `secrets.read` | Odczyt nazwanych sekretów obszaru roboczego w trakcie działania. |
 | `logging.write` | Zapisywanie komunikatów dziennika. |
 | `artifacts.read`, `artifacts.write` | Odczyt danych wejściowych operacji i zapis danych wyjściowych operacji. |
-| `catalog.annotations.write` | Zapis własnej przestrzeni nazw tagów i metadanych encji. Zobacz [Adnotacje encji](/pl/extensions/operations/#adnotacje-encji). |
+| `catalog.annotations.write` | Zapis własnej przestrzeni nazw tagów i metadanych rekordów. Zobacz [Adnotacje rekordów](/pl/extensions/operations/#adnotacje-rekordów). |
 | `network.request` | Wykonywanie wychodzących żądań HTTPS pasujących do przyznanego uprawnienia hosta. |
 | `webhooks.receive` | Deklarowanie przychodzących webhooków (jeszcze nie są dostarczane). |
 
@@ -70,9 +70,9 @@ Wymień uprawnienia w `permissions` lub `optional_permissions`. Każde z nich ze
 | Uprawnienie | Zezwala na |
 | --- | --- |
 | `client.commands` | Wywoływanie poleceń serwerowych rozszerzenia z jego interfejsu. |
-| `client.navigation` | Przeniesienie użytkownika do encji. |
+| `client.navigation` | Przeniesienie użytkownika do rekordu. |
 | `client.notification` | Wyświetlenie powiadomienia. |
-| `client.refresh` | Odświeżenie bieżącej encji po zmianie. |
+| `client.refresh` | Odświeżenie bieżącego rekordu po zmianie. |
 | `client.events` | Odbieranie w ramce zdarzeń zmiany kontekstu. |
 | `client.confirmation` | Poproszenie użytkownika o potwierdzenie akcji. |
 | `client.download` | Udostępnienie pliku do pobrania. |
@@ -89,7 +89,7 @@ Wymień uprawnienia w `permissions` lub `optional_permissions`. Każde z nich ze
 
 ### Umiejscowienie w kliencie
 
-Każde uprawnienie umiejscowienia zezwala na kontrybucję w jednym miejscu osadzenia. Zobacz [Kontrybucje klienckie](/pl/extensions/client/#miejsca-osadzenia).
+Każde uprawnienie umiejscowienia zezwala na kontrybucję w jednym miejscu osadzenia. Zobacz [Kontrybucje klienckie](/pl/extensions/client/#miejsca-osadzenia). W nazwach uprawnień, miejsc osadzenia i zdarzeń rekordy występują pod nazwą `entity`.
 
 `client.blueprint_configuration`, `client.entity_decoration`, `client.entity_action`, `client.entity_header_action`, `client.entity_attribute_panel`, `client.explorer_row_action`, `client.explorer_table_cell`, `client.explorer_action`, `client.explorer_bulk_action`, `client.blueprint_detail_panel`, `client.blueprint_panel`, `client.blueprint_publish_check`, `client.file_panel`, `client.audit_event_panel`, `client.data_health_card`, `client.action_dialog`.
 

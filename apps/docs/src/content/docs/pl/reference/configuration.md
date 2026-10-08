@@ -52,7 +52,7 @@ Proces roboczy plików potrzebuje tych samych wartości `DATABASE_URL` i `S3_*` 
 | `WEB_DIST_DIR` | Nieustawiona | Katalog ze skompilowaną aplikacją webową. Gdy jest ustawiona, API serwuje aplikację pod `/` i udostępnia trasy API także pod `/api`. Obraz kontenera ustawia `/srv/attricat/web`. |
 | `RUST_LOG` | `info` | Filtr logów, np. `api=debug`. |
 | `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | Nieustawiona | Punkt końcowy OTLP/gRPC do eksportu śladów z API i procesu roboczego plików. Pozostaw nieustawioną, aby wyłączyć eksport śladów. |
-| `CATALOG_DEVTOOLS` | `true` w lokalnym środowisku deweloperskim | Włącza Inspektor w aplikacji webowej oraz wpisy czasu SQL przeglądarki encji w nagłówku `Server-Timing`. W produkcji ustaw `false`. W innych kompilacjach, także produkcyjnych, przeglądarka może wczytać Inspektor na żądanie po ustawieniu w local storage `catalog.inspector-enabled` na `true` i przeładowaniu strony; czasy SQL nadal wymagają tego ustawienia w API. Treść zapytań SQL i wartości parametrów nigdy nie są ujawniane. |
+| `CATALOG_DEVTOOLS` | `true` w lokalnym środowisku deweloperskim | Włącza Inspektor w aplikacji webowej oraz wpisy czasu SQL przeglądarki rekordów w nagłówku `Server-Timing`. W produkcji ustaw `false`. W innych kompilacjach, także produkcyjnych, przeglądarka może wczytać Inspektor na żądanie po ustawieniu w local storage `catalog.inspector-enabled` na `true` i przeładowaniu strony; czasy SQL nadal wymagają tego ustawienia w API. Treść zapytań SQL i wartości parametrów nigdy nie są ujawniane. |
 
 ## Początkowy obszar roboczy i właściciel
 
@@ -93,19 +93,19 @@ Czas trwania sesji (osiem godzin), limit prób logowania (pięć niepowodzeń na
 
 | Zmienna | Domyślnie | Opis |
 | --- | --- | --- |
-| `PREVIEW_MAX_RELATIONSHIP_DEPTH` | `3` | Największa głębokość zagnieżdżenia relacji, o jaką może prosić podgląd encji. |
-| `PREVIEW_MAX_RELATIONSHIP_ITEMS` | `10` | Maksymalna liczba powiązanych encji pokazywanych bezpośrednio w podglądzie dla jednej relacji. |
+| `PREVIEW_MAX_RELATIONSHIP_DEPTH` | `3` | Największa głębokość zagnieżdżenia relacji, o jaką może prosić podgląd rekordu. |
+| `PREVIEW_MAX_RELATIONSHIP_ITEMS` | `10` | Maksymalna liczba powiązanych rekordów pokazywanych bezpośrednio w podglądzie dla jednej relacji. |
 | `ENTITY_MAX_PAGE_SIZE` | `100` | Największy rozmiar strony przy przeglądaniu celów relacji. |
 | `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE` | `50` | Największy rozmiar strony list relacji przychodzących. Ogranicza `page_size` w blokach widoku `incoming_relationship_list`. |
-| `RELATIONSHIP_FACET_MAX_NODES` | `100` | Maksymalna liczba węzłów zwracanych na stronę faset relacji w przeglądarce encji. |
+| `RELATIONSHIP_FACET_MAX_NODES` | `100` | Maksymalna liczba węzłów zwracanych na stronę faset relacji w przeglądarce rekordów. |
 | `DATA_HEALTH_CACHE_TTL_SECONDS` | `300` | Jak długo buforowane są odpowiedzi stanu danych. `0` wyłącza bufor. Każda zapisana zmiana katalogu odświeża je przy następnym żądaniu. |
 | `CACHE_BACKEND` | `memory` | Gdzie przechowywane są buforowane definicje: `memory` (w każdym procesie) lub `redis` (wspólnie dla wszystkich replik, które współdzielą wtedy także limity żądań sieciowych rozszerzeń). Przy obu ustawieniach buforowane dane są zawsze poprawne. Gdy Redis jest niedostępny, API działa dalej z pamięci i samo odnawia połączenie. |
 | `REDIS_URL` | Brak | Adres połączenia z Redis. Wymagany, gdy `CACHE_BACKEND` ma wartość `redis`. Dla TLS użyj `rediss://` (lub `valkeys://`). |
 | `CACHE_MAX_ENTRIES` | `20000` | Maksymalna liczba wpisów bufora w pamięci jednego procesu. |
 | `CACHE_KEY_PREFIX` | `attricat` | Początek każdego klucza w Redis; po nim następuje losowy identyfikator bazy danych. Kopia bazy danych zachowuje ten identyfikator, więc kopia działająca obok źródła (na przykład środowisko testowe sklonowane z produkcji) wymaga innego prefiksu albo innej bazy Redis. Po przywróceniu kopii zapasowej w miejsce dotychczasowej bazy zmień go albo wyczyść Redis. |
 | `ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS` | `90` | Liczba dni przechowywania historii wartości atrybutów. Co minutę API przez maksymalnie 10 sekund usuwa starszą historię, najwyżej 1000 wierszy na transakcję. Nieudane czyszczenie trafia do logu i jest ponawiane; nie zatrzymuje API. |
-| `BLUEPRINT_MIGRATION_PAGE_SIZE` | `100` | Liczba encji odczytywanych na stronę podczas migracji schematu w tle. Od 1 do 1000. |
-| `BLUEPRINT_MIGRATION_CONCURRENCY` | `4` | Liczba encji migrowanych jednocześnie w ramach jednej partii migracji. Od 1 do 64. |
+| `BLUEPRINT_MIGRATION_PAGE_SIZE` | `100` | Liczba rekordów odczytywanych na stronę podczas migracji schematu w tle. Od 1 do 1000. |
+| `BLUEPRINT_MIGRATION_CONCURRENCY` | `4` | Liczba rekordów migrowanych jednocześnie w ramach jednej partii migracji. Od 1 do 64. |
 
 ## Praca w tle
 

@@ -36,11 +36,11 @@ Planowanie zapisuje niezmienny plan próbny bez zmieniania zasobów katalogu. Sp
 
 - `--prefix` tworzy kody nowych Schematów, takie jak `example_product`. Użyj od 1 do 32 małych liter, cyfr lub podkreśleń; zacznij literą i nie kończ podkreśleniem.
 - `--blueprint-publication` przyjmuje `draft` lub `publish`. Nawigacja i dane przykładowe mogą wymagać opublikowanych Schematów, więc wybór `draft` może zablokować taki pakiet.
-- `--include-sample-data` jawnie wybiera fikcyjne encje przykładowe. Pomiń tę opcję, jeśli ich nie potrzebujesz.
+- `--include-sample-data` jawnie wybiera fikcyjne rekordy przykładowe. Pomiń tę opcję, jeśli ich nie potrzebujesz.
 
 | Akcja | Znaczenie |
 | --- | --- |
-| `create` | Utworzenie Schematu, kontekstu, kanału publikacji, reguły, przepływu pracy, zapisanego wyszukiwania, zasobu graficznego lub wybranej encji przykładowej. |
+| `create` | Utworzenie Schematu, kontekstu, kanału publikacji, reguły, przepływu pracy, zapisanego wyszukiwania, zasobu graficznego lub wybranego rekordu przykładowego. |
 | `map` | Ponowne użycie jawnie wskazanego zgodnego zasobu lub kontekstu albo zasobu zainstalowanego przez wymagany pakiet. |
 | `append` | Dodanie wpisów nawigacji, układu rozszerzeń lub tłumaczeń. |
 | `satisfied` | Żądane ustawienie lub kanał publikacji już istnieje w dokładnie tej postaci. |
@@ -53,11 +53,11 @@ Można zastosować tylko gotowe plany. Plan wygasa po 24 godzinach, jeśli jego 
 ### Reguły, przepływy pracy i zapisane wyszukiwania
 
 - **Reguły** są tworzone dla Schematów pakietu i publikowane. Podsumowanie planu pokazuje, które zostaną włączone; pozostałe są wyłączone, dopóki ich nie włączysz. Reguły wymagają opublikowanych Schematów, więc `--blueprint-publication draft` blokuje regułę dla nowo tworzonego Schematu.
-- Reguła, która **odrzuca nieprawidłowe zmiany**, nie jest włączana dla Schematu wskazanego przez Ciebie lub użytego ponownie, ponieważ ten Schemat może już mieć encje. Zostaje zainstalowana jako wyłączona, a podsumowanie planu pokazuje `enable_deferred_reason: enforcing_rule_requires_dry_run`. Uruchom regułę w trybie próbnym, przejrzyj wyniki i włącz ją tak jak każdą inną regułę.
+- Reguła, która **odrzuca nieprawidłowe zmiany**, nie jest włączana dla Schematu wskazanego przez Ciebie lub użytego ponownie, ponieważ ten Schemat może już mieć rekordy. Zostaje zainstalowana jako wyłączona, a podsumowanie planu pokazuje `enable_deferred_reason: enforcing_rule_requires_dry_run`. Uruchom regułę w trybie próbnym, przejrzyj wyniki i włącz ją tak jak każdą inną regułę.
 - **Przepływy pracy** są zawsze publikowane. Podsumowanie planu pokazuje, które zostaną włączone; pozostałe są wyłączone, dopóki ich nie włączysz.
-- **Zapisane wyszukiwania** są udostępniane całemu obszarowi roboczemu i pojawiają się na liście **Zapisane wyszukiwania** w Przeglądarce encji. Właścicielem wyszukiwań utworzonych przez stosowany plan jesteś Ty. Wyszukiwanie, które z kodami Twojego obszaru roboczego byłoby nieprawidłowe, na przykład większe niż 32 KiB po podstawieniu długiego kodu kontekstu, jest blokowane jako `saved_search_state_invalid`, a `invalid_state_reason` w podsumowaniu planu podaje przyczynę.
+- **Zapisane wyszukiwania** są udostępniane całemu obszarowi roboczemu i pojawiają się na liście **Zapisane wyszukiwania** w Przeglądarce rekordów. Właścicielem wyszukiwań utworzonych przez stosowany plan jesteś Ty. Wyszukiwanie, które z kodami Twojego obszaru roboczego byłoby nieprawidłowe, na przykład większe niż 32 KiB po podstawieniu długiego kodu kontekstu, jest blokowane jako `saved_search_state_invalid`, a `invalid_state_reason` w podsumowaniu planu podaje przyczynę.
 
-Kody nowych reguł i przepływów pracy zaczynają się od Twojego prefiksu. Włączone reguły i przepływy pracy reagują na późniejsze zmiany, także na encje przykładowe tworzone przez ten sam plan, dlatego przejrzyj je przed zastosowaniem. Po instalacji są zwykłymi zasobami, którymi zarządzasz jak zwykle.
+Kody nowych reguł i przepływów pracy zaczynają się od Twojego prefiksu. Włączone reguły i przepływy pracy reagują na późniejsze zmiany, także na rekordy przykładowe tworzone przez ten sam plan, dlatego przejrzyj je przed zastosowaniem. Po instalacji są zwykłymi zasobami, którymi zarządzasz jak zwykle.
 
 ## 3. Rozwiąż konflikty
 
@@ -92,7 +92,7 @@ acli solution-pack plan --file pack.tar.zst --prefix example \
   --map-context contexts/poland=PL
 ```
 
-Kanał może wymagać spełnienia niektórych reguł pakietu lub poprawności encji, zanim encja zostanie w nim opublikowana; podsumowanie planu je wymienia (`required_rule_codes`, `require_valid_entity`). Kanał jest planowany po tych regułach. Kanał, którego wymaganej reguły nie da się utworzyć ani znaleźć, jest blokowany jako `dependency_not_creatable`. Wymagana reguła zainstalowana jako wyłączona nie jest uwzględniana w kontrolach kanału, dopóki jej nie włączysz.
+Kanał może wymagać spełnienia niektórych reguł pakietu lub poprawności rekordu, zanim rekord zostanie w nim opublikowany; podsumowanie planu je wymienia (`required_rule_codes`, `require_valid_entity`). W podsumowaniach planu i zdarzeniach rekordy występują pod nazwą `entity`. Kanał jest planowany po tych regułach. Kanał, którego wymaganej reguły nie da się utworzyć ani znaleźć, jest blokowany jako `dependency_not_creatable`. Wymagana reguła zainstalowana jako wyłączona nie jest uwzględniana w kontrolach kanału, dopóki jej nie włączysz.
 
 Wskazany kontekst jest używany bez zmian. Jeśli pakiet oczekuje, że będzie kanałem, istniejący kanał o dokładnie takich samych ustawieniach, łącznie z wymaganymi sprawdzeniami, ma status `satisfied`, a brakujący zostanie utworzony. Kanał o innych ustawieniach, na przykład wyłączony, gdy pakiet oczekuje włączonego, powoduje konflikt `publication_channel_mismatch`: zmień kanał samodzielnie albo nie wskazuj tego kontekstu. Reguły, zapisane wyszukiwania i wartości przykładowe przypisane do kontekstu pakietu używają utworzonego lub wskazanego kontekstu.
 
@@ -130,7 +130,7 @@ Kontrole są informacyjne. Negatywny wynik nie cofa zasobów ani nie blokuje uko
 
 ## Ponawianie i odzyskiwanie
 
-Jeśli stosowanie pakietu zostało przerwane lub zakończyło się błędem, który pozwala na wznowienie, ponów je z tym samym identyfikatorem planu. Serwer sprawdza ukończone kroki i kontynuuje pozostałe bez tworzenia duplikatów; każdy kontekst, kanał, reguła, przepływ pracy i zapisane wyszukiwanie powstaje razem z zapisem swojego kroku. Rozpoczęte stosowanie można wznowić po wygaśnięciu planu, dopóki nie upłynie termin przechowywania jego danych. Jeśli Schemat utworzony przez plan zyska encje, zanim wznowione stosowanie dojdzie do egzekwowanej reguły tego Schematu, ten krok kończy się błędem `rule_dry_run_required`; uruchom regułę w trybie próbnym i włącz ją samodzielnie.
+Jeśli stosowanie pakietu zostało przerwane lub zakończyło się błędem, który pozwala na wznowienie, ponów je z tym samym identyfikatorem planu. Serwer sprawdza ukończone kroki i kontynuuje pozostałe bez tworzenia duplikatów; każdy kontekst, kanał, reguła, przepływ pracy i zapisane wyszukiwanie powstaje razem z zapisem swojego kroku. Rozpoczęte stosowanie można wznowić po wygaśnięciu planu, dopóki nie upłynie termin przechowywania jego danych. Jeśli Schemat utworzony przez plan zyska rekordy, zanim wznowione stosowanie dojdzie do egzekwowanej reguły tego Schematu, ten krok kończy się błędem `rule_dry_run_required`; uruchom regułę w trybie próbnym i włącz ją samodzielnie.
 
 Jeśli zmiany w obszarze roboczym unieważniły plan, przejrzyj ukończone kroki i diagnostykę przed utworzeniem kolejnego. Jeśli późniejszy krok zakończy się trwałym błędem, wcześniejsze udane zapisy pozostają w obszarze roboczym; Attricat ich nie wycofuje.
 
@@ -147,9 +147,9 @@ Niezmienione, dokładnie zgodne opublikowane Schematy i niezmienione zasoby graf
 
 ## Opcjonalne dane przykładowe
 
-Dodaj `--include-sample-data` podczas planowania dopiero po przeczytaniu ostrzeżenia. Encje przykładowe powstają na podstawie opublikowanych Schematów i otrzymują widoczne oznaczenie danych przykładowych. Ich wartości trafiają do kontekstu domyślnego albo, jeśli tak przewiduje pakiet, do jednego z jego kontekstów. Encje przykładowe mogą też mieć dołączone pliki z pakietu, na przykład obrazy lub dokumenty PDF; planowanie przesyła je do zwykłego magazynu plików, a na encjach przykładowych pojawiają się jako zwykłe pliki. Attricat sprawdza typ każdego pliku i reguły plików atrybutu, ale nie potrafi ocenić, czy jego treść jest fikcyjna. Są zwykłymi encjami: ich tworzenie zapisuje audyt i zdarzenia `entity.created.v1`, może uruchamiać aktywne przepływy pracy lub rozszerzenia i powodować skutki w systemach zewnętrznych. Wartości mogą pozostać w historii audytu i zdarzeń po usunięciu tymczasowych danych pakietu.
+Dodaj `--include-sample-data` podczas planowania dopiero po przeczytaniu ostrzeżenia. Rekordy przykładowe powstają na podstawie opublikowanych Schematów i otrzymują widoczne oznaczenie danych przykładowych. Ich wartości trafiają do kontekstu domyślnego albo, jeśli tak przewiduje pakiet, do jednego z jego kontekstów. Rekordy przykładowe mogą też mieć dołączone pliki z pakietu, na przykład obrazy lub dokumenty PDF; planowanie przesyła je do zwykłego magazynu plików, a w rekordach przykładowych pojawiają się jako zwykłe pliki. Attricat sprawdza typ każdego pliku i reguły plików atrybutu, ale nie potrafi ocenić, czy jego treść jest fikcyjna. Są zwykłymi rekordami: ich tworzenie zapisuje audyt i zdarzenia `entity.created.v1`, może uruchamiać aktywne przepływy pracy lub rozszerzenia i powodować skutki w systemach zewnętrznych. Wartości mogą pozostać w historii audytu i zdarzeń po usunięciu tymczasowych danych pakietu.
 
-Sprawdzanie (`inspect`) odrzuca pakiet, którego encje przykładowe ustawiają status albo atrybut przypisania użytkownika lub zespołu. Odrzuca też pakiet, w którym dwie encje przykładowe jednego Schematu mają tę samą wartość klucza unikalnego. Encja przykładowa kolidująca z istniejącą encją wskazanego lub ponownie użytego Schematu, na przykład w kluczu unikalnym, powoduje błąd swojego kroku stosowania.
+Sprawdzanie (`inspect`) odrzuca pakiet, którego rekordy przykładowe ustawiają status albo atrybut przypisania użytkownika lub zespołu. Odrzuca też pakiet, w którym dwa rekordy przykładowe jednego Schematu mają tę samą wartość klucza unikalnego. Rekord przykładowy kolidujący z istniejącym rekordem wskazanego lub ponownie użytego Schematu, na przykład w kluczu unikalnym, powoduje błąd swojego kroku stosowania.
 
 Pierwszy plan z danymi przykładowymi rezerwuje dokładnie tę kombinację wydania, archiwum i zestawu danych. Drugi plan nie może wybrać tej samej kombinacji, nawet po wygaśnięciu lub porzuceniu pierwszego; zmiana prefiksu nie usuwa rezerwacji. Ponawiaj oryginalny plan. Jeśli wygaśnie przed rozpoczęciem stosowania, uzgodnij nowe wydanie z wydawcą.
 
@@ -159,7 +159,7 @@ Stosowanie pakietu z danymi przykładowymi można wznowić przez 30 dni od rozpo
 acli solution-pack applications abandon <application-id>
 ```
 
-Po porzuceniu serwer usuwa tymczasowe dane wejściowe, w tym pliki z pakietu, które nie zostały dołączone. Wcześniej utworzone encje i zwykła historia audytu oraz zdarzeń pozostają bez zmian. Usunięcie encji przykładowej usuwa ją razem z wartościami we wszystkich kontekstach i plikami, jak każdą inną encję; przechowywane pliki podlegają zwykłym zasadom przechowywania plików. Późniejsze wydania nie resetują bieżących wartości ani nie przywracają usuniętych oznaczeń danych przykładowych. Nie ma polecenia resetowania zestawu ani automatycznego sprzątania.
+Po porzuceniu serwer usuwa tymczasowe dane wejściowe, w tym pliki z pakietu, które nie zostały dołączone. Wcześniej utworzone rekordy i zwykła historia audytu oraz zdarzeń pozostają bez zmian. Usunięcie rekordu przykładowego usuwa go razem z wartościami we wszystkich kontekstach i plikami, jak każdy inny rekord; przechowywane pliki podlegają zwykłym zasadom przechowywania plików. Późniejsze wydania nie resetują bieżących wartości ani nie przywracają usuniętych oznaczeń danych przykładowych. Nie ma polecenia resetowania zestawu ani automatycznego sprzątania.
 
 ## Tłumaczenia
 

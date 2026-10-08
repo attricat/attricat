@@ -3,11 +3,11 @@ title: Konteksty
 description: Przechowuj wartości różniące się zależnie od rynku, języka, kanału lub lokalizacji i kontroluj sposób ich dziedziczenia.
 ---
 
-Kontekst to miejsce, w którym wartości encji mogą się różnić. Typowe konteksty to rynki, języki, kanały sprzedaży i sklepy. Konteksty tworzą drzewo pod kontekstem głównym o nazwie `default`.
+Kontekst to miejsce, w którym wartości rekordu mogą się różnić. Typowe konteksty to rynki, języki, kanały sprzedaży i sklepy. Konteksty tworzą drzewo pod kontekstem głównym o nazwie `default`.
 
 ## Jak działa dziedziczenie
 
-Każda encja może mieć wartości w dowolnym kontekście. Gdy kontekst nie ma wartości dla atrybutu, Attricat sprawdza jego kontekst nadrzędny, następnie nadrzędny kontekstu nadrzędnego, aż do `default`, i pokazuje pierwszą znalezioną wartość.
+Każdy rekord może mieć wartości w dowolnym kontekście. Gdy kontekst nie ma wartości dla atrybutu, Attricat sprawdza jego kontekst nadrzędny, następnie nadrzędny kontekstu nadrzędnego, aż do `default`, i pokazuje pierwszą znalezioną wartość.
 
 ```text
 default            description = "Linen shirt"
@@ -42,14 +42,14 @@ Kontekst `default` zawsze ma identyfikator `00000000-0000-4000-8000-000000000001
 
 ## Zmiana drzewa
 
-Możesz przenieść kontekst pod inny kontekst nadrzędny. Zanim przeniesienie zostanie zapisane, Attricat sprawdza każdą encję względem jej nowego łańcucha dziedziczenia. Jeśli którakolwiek encja stałaby się nieprawidłowa, na przykład przez utratę wymaganej wartości, przeniesienie zostaje odrzucone.
+Możesz przenieść kontekst pod inny kontekst nadrzędny. Zanim przeniesienie zostanie zapisane, Attricat sprawdza każdy rekord względem jego nowego łańcucha dziedziczenia. Jeśli którykolwiek rekord stałby się nieprawidłowy, na przykład przez utratę wymaganej wartości, przeniesienie zostaje odrzucone.
 
 Nie można usunąć kontekstu, który jest w użyciu.
 
 ## Praca w kontekście
 
 - W **Przeglądarce** selektor **Kontekst** pokazuje, filtruje i sortuje wartości rozstrzygnięte w danym kontekście.
-- Na stronie encji selektor **Kontekst** przełącza wartości, które widzisz i edytujesz.
+- Na stronie rekordu selektor **Kontekst** przełącza wartości, które widzisz i edytujesz.
 - W fasetach relacji **Opcje drzewa** określają kontekst używany do rozwiązywania powiązań.
 
 ## Najpierw zaplanuj drzewo
@@ -69,7 +69,7 @@ Konteksty domyślnie nie są językami. Jeśli Twoje konteksty reprezentują ust
 
 ## Konteksty jako kanały publikacji
 
-Każdy kontekst można włączyć jako kanał eksportu w **Zarządzanie → Eksporty**. Encje są wtedy publikowane w nim osobno. Zobacz [Publikowanie](/pl/guides/publishing/).
+Każdy kontekst można włączyć jako kanał eksportu w **Zarządzanie → Eksporty**. Rekordy są wtedy publikowane w nim osobno. Zobacz [Publikowanie](/pl/guides/publishing/).
 
 ## Konteksty z pakietów rozwiązań
 

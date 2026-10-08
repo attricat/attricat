@@ -31,7 +31,7 @@ Przechowuj dane uwierzytelniające w menedżerze sekretów, a nie w poleceniach,
 5. Uruchom rolę `migrate` obrazu.
 6. Uruchom API i proces roboczy plików na przywróconej parze.
 7. Poczekaj na obie kontrole gotowości.
-8. Sprawdź znaną encję, znany przesłany plik i znany wynik operacji rozszerzenia.
+8. Sprawdź znany rekord, znany przesłany plik i znany wynik operacji rozszerzenia.
 
 Jeśli którykolwiek krok się nie powiedzie, pozostaw środowisko docelowe zatrzymane i zbadaj problem. Nigdy nie uruchamiaj produkcyjnie środowiska, w którym przywrócono tylko jedną część.
 

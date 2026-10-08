@@ -93,8 +93,8 @@ Session lifetime (eight hours), the login rate limit (five failures per workspac
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `PREVIEW_MAX_RELATIONSHIP_DEPTH` | `3` | Deepest relationship nesting an entity preview may request. |
-| `PREVIEW_MAX_RELATIONSHIP_ITEMS` | `10` | Maximum related entities shown inline per relationship in a preview. |
+| `PREVIEW_MAX_RELATIONSHIP_DEPTH` | `3` | Deepest relationship nesting a record preview may request. |
+| `PREVIEW_MAX_RELATIONSHIP_ITEMS` | `10` | Maximum related records shown inline per relationship in a preview. |
 | `ENTITY_MAX_PAGE_SIZE` | `100` | Largest page size for relationship target browsing. |
 | `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE` | `50` | Largest page size for incoming-relationship lists. Caps `page_size` in `incoming_relationship_list` view blocks. |
 | `RELATIONSHIP_FACET_MAX_NODES` | `100` | Maximum nodes returned per page of an Explorer relationship facet. |
@@ -104,8 +104,8 @@ Session lifetime (eight hours), the login rate limit (five failures per workspac
 | `CACHE_MAX_ENTRIES` | `20000` | Maximum number of in-memory cache entries per process. |
 | `CACHE_KEY_PREFIX` | `attricat` | First part of every Redis key; a random identifier of the database follows it. A copy of a database keeps that identifier, so a copy that runs alongside its source (such as staging cloned from production) needs a different prefix or Redis database. After restoring a backup in place, change it or flush Redis. |
 | `ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS` | `90` | Days of attribute-value history kept. Every minute the API spends up to 10 seconds deleting older history, at most 1,000 rows per transaction. A failed cleanup is logged and tried again; it does not stop the API. |
-| `BLUEPRINT_MIGRATION_PAGE_SIZE` | `100` | Entities read per page during a background blueprint migration. 1 to 1000. |
-| `BLUEPRINT_MIGRATION_CONCURRENCY` | `4` | Entities migrated at the same time within one migration batch. 1 to 64. |
+| `BLUEPRINT_MIGRATION_PAGE_SIZE` | `100` | Records read per page during a background blueprint migration. 1 to 1000. |
+| `BLUEPRINT_MIGRATION_CONCURRENCY` | `4` | Records migrated at the same time within one migration batch. 1 to 64. |
 
 ## Background work
 

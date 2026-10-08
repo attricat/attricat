@@ -3,7 +3,7 @@ title: Administracja obszarem roboczym
 description: Zarządzaj członkami, zespołami, rolami, zaproszeniami, nawigacją paska bocznego, tokenami API i dziennikiem audytu.
 ---
 
-Obszar roboczy to jeden katalog z własnymi członkami, schematami, encjami, kontekstami i rozszerzeniami. Obszary robocze są całkowicie odseparowane: nic nie jest między nimi współdzielone.
+Obszar roboczy to jeden katalog z własnymi członkami, schematami, rekordami, kontekstami i rozszerzeniami. Obszary robocze są całkowicie odseparowane: nic nie jest między nimi współdzielone.
 
 Większość zadań administracyjnych wykonasz w **Zarządzanie → Zarządzanie obszarem roboczym**, gdzie jest pięć kart: **Członkowie**, **Zespoły**, **Role**, **Zaproszenia** i **Nawigacja**.
 
@@ -39,8 +39,8 @@ Rola to nazwany zestaw uprawnień. Czterech wbudowanych ról nie można zmienia�
 | --- | --- |
 | `owner` | Wszystko, łącznie z przeniesieniem własności. |
 | `admin` | Wszystko oprócz własności i cyklu życia obszaru roboczego. |
-| `editor` | Odczytywać i zapisywać schematy, encje i konteksty; usuwać encje; odczytywać stan danych. Nie może publikować schematów ani encji ani administrować obszarem roboczym. |
-| `viewer` | Odczytywać schematy, encje, konteksty i stan danych. |
+| `editor` | Odczytywać i zapisywać schematy, rekordy i konteksty; usuwać rekordy; odczytywać stan danych. Nie może publikować schematów ani rekordów ani administrować obszarem roboczym. |
+| `viewer` | Odczytywać schematy, rekordy, konteksty i stan danych. |
 
 Utwórz **role niestandardowe** na karcie **Role**, aby przyznać węższy lub inny zestaw uprawnień. Do roli możesz dodać tylko te uprawnienia, które masz sam. Zduplikuj rolę wbudowaną, aby zacząć od jej uprawnień. Wycofując rolę niestandardową, możesz przenieść jej przydziały na rolę zastępczą.
 
@@ -53,11 +53,11 @@ Przydział roli obowiązuje w jednym zakresie:
 | Zakres | Obejmuje |
 | --- | --- |
 | **Cały obszar roboczy** | Wszystko. |
-| **Rodzina schematów** | Jeden schemat i jego encje we wszystkich wersjach. |
-| **Encja** | Jedną encję. |
-| **Poddrzewo kontekstu** | Ustawienia jednego kontekstu i kontekstów poniżej niego, ale nie jego kontekstu nadrzędnego ani kontekstów równorzędnych. Nie obejmuje encji ani ich wartości. |
+| **Rodzina schematów** | Jeden schemat i jego rekordy we wszystkich wersjach. |
+| **Rekord** | Jeden rekord. |
+| **Poddrzewo kontekstu** | Ustawienia jednego kontekstu i kontekstów poniżej niego, ale nie jego kontekstu nadrzędnego ani kontekstów równorzędnych. Nie obejmuje rekordów ani ich wartości. |
 
-Przydziały sumują się. Osoba z rolą `viewer` w obszarze roboczym i `editor` w poddrzewie kontekstu `PL` może odczytywać wszystko, a także edytować lub usuwać kontekst `PL` i jego konteksty podrzędne oraz robić z nich kanały publikacji. Tworzenie kontekstów wymaga przydziału w całym obszarze roboczym. Przydział w poddrzewie kontekstu nie pozwala odczytywać ani edytować wartości encji w tych kontekstach: dostęp do encji wynika z przydziałów w obszarze roboczym, rodzinie schematów i encji.
+Przydziały sumują się. Osoba z rolą `viewer` w obszarze roboczym i `editor` w poddrzewie kontekstu `PL` może odczytywać wszystko, a także edytować lub usuwać kontekst `PL` i jego konteksty podrzędne oraz robić z nich kanały publikacji. Tworzenie kontekstów wymaga przydziału w całym obszarze roboczym. Przydział w poddrzewie kontekstu nie pozwala odczytywać ani edytować wartości rekordów w tych kontekstach: dostęp do rekordów wynika z przydziałów w obszarze roboczym, rodzinie schematów i rekordzie.
 
 Rolę właściciela można przydzielić tylko w całym obszarze roboczym.
 
@@ -71,7 +71,7 @@ Wiadomości z zaproszeniami i linkami wdrożeniowymi wymagają [skonfigurowanego
 
 ## Nawigacja
 
-Karta **Nawigacja** określa skróty do schematów na pasku bocznym przeglądarki encji. Przypnij opublikowane schematy encji i opcjonalnie ogranicz każdy skrót do wybranych ról, aby użytkownicy widzieli te części katalogu, nad którymi pracują.
+Karta **Nawigacja** określa skróty do schematów na pasku bocznym przeglądarki rekordów. Przypnij opublikowane schematy rekordów i opcjonalnie ogranicz każdy skrót do wybranych ról, aby użytkownicy widzieli te części katalogu, nad którymi pracują.
 
 Zmiana nawigacji wymaga uprawnienia `workspace_navigation.manage`.
 
@@ -79,7 +79,7 @@ Zmiana nawigacji wymaga uprawnienia `workspace_navigation.manage`.
 
 **Profil → Konto** pokazuje, jak widzą Cię inne osoby w obszarze roboczym.
 
-- **Zmień nazwę wyświetlaną** ustawia nazwę widoczną na liście członków, w dzienniku audytu i w historii encji. Musi mieć od 2 do 64 znaków, zawierać tylko litery, cyfry i spacje oraz nie może zaczynać się ani kończyć spacją. Nazwa wyświetlana jest wspólna dla wszystkich Twoich obszarów roboczych.
+- **Zmień nazwę wyświetlaną** ustawia nazwę widoczną na liście członków, w dzienniku audytu i w historii rekordu. Musi mieć od 2 do 64 znaków, zawierać tylko litery, cyfry i spacje oraz nie może zaczynać się ani kończyć spacją. Nazwa wyświetlana jest wspólna dla wszystkich Twoich obszarów roboczych.
 - **Prześlij zdjęcie** ustawia awatar z obrazu PNG lub JPEG o rozmiarze do 10 MB. Obraz jest przycinany do wyśrodkowanego kwadratu, zmniejszany i umieszczany na białym tle, więc pojawia się po chwili. **Zmień zdjęcie** zastępuje go, a **Usuń zdjęcie** przywraca inicjały.
 
 Zdjęcie należy do bieżącego obszaru roboczego: ustaw je w każdym obszarze, z którego korzystasz. Widzą je wszyscy członkowie obszaru, ale udostępniana jest tylko zmniejszona wersja. Przesłany oryginalny plik nigdy nie jest nikomu pokazywany.
@@ -98,14 +98,14 @@ Tworzenie tokenów wymaga uprawnienia `tokens.manage`.
 
 ## Blokady retencji
 
-Blokada retencji przechowuje dokładną zawartość pliku w magazynie do określonej daty. Dopóki plik ma choć jedną aktywną blokadę, Attricat nigdy go nie usuwa, nawet jeśli żadna encja już się do niego nie odwołuje.
+Blokada retencji przechowuje dokładną zawartość pliku w magazynie do określonej daty. Dopóki plik ma choć jedną aktywną blokadę, Attricat nigdy go nie usuwa, nawet jeśli żaden rekord już się do niego nie odwołuje.
 
 Blokady pochodzą z dwóch źródeł:
 
 - **Statusy rekordów.** Status w schemacie z `retention_days` zakłada blokadę na pliki rekordu, gdy ten przechodzi do tego statusu, np. gdy dokument zostaje wydany. Zobacz [Zachowuj wydane pliki](/pl/builders/validation/#zachowuj-wydane-pliki). Takich blokad nie można zwolnić przed terminem.
 - **Blokady jawne**, np. blokada na potrzeby postępowania prawnego. Osoby z uprawnieniem `files.hold` (domyślnie właściciele i administratorzy) mogą założyć ją na plik na określoną liczbę dni, podając powód, i zwolnić ją przed terminem.
 
-Strona encji wyświetla blokady jej plików i datę ich wygaśnięcia. Zakładanie i zwalnianie blokad jest zapisywane w dzienniku audytu.
+Strona rekordu wyświetla blokady jego plików i datę ich wygaśnięcia. Zakładanie i zwalnianie blokad jest zapisywane w dzienniku audytu.
 
 ```sh
 curl -X POST "$CATALOG_API_URL/files/<file-id>/retention-holds" \

@@ -7,16 +7,18 @@ Większość pytań o modelowanie w Attricat sprowadza się do czterech element�
 
 | Użyj | Do | Przykład |
 | --- | --- | --- |
-| **Schematu encji** | Czegoś z własną tożsamością, nazwą lub cyklem życia | Produkt, kategoria, marka, dostawca |
-| **Atrybutu skalarnego** | Faktu dotyczącego jednej encji | SKU, tytuł, waga, data premiery |
-| **Relacji** | Powiązania między encjami | Produkt → kategorie, produkt → marka |
+| **Schematu rekordu** | Czegoś z własną tożsamością, nazwą lub cyklem życia | Produkt, kategoria, marka, dostawca |
+| **Atrybutu skalarnego** | Faktu dotyczącego jednego rekordu | SKU, tytuł, waga, data premiery |
+| **Relacji** | Powiązania między rekordami | Produkt → kategorie, produkt → marka |
 | **Kontekstu** | Zakresu, w którym wartości się różnią | Rynek, język, kanał sprzedaży, sklep |
 
-## Klasyfikacje to encje
+W TOML schematu i nazwach uprawnień rekordy występują pod nazwą `entity`, np. `kind = "entity"`.
 
-Tagi, etykiety, kategorie, kolory, materiały i certyfikaty powinny być encjami powiązanymi relacjami. Nie modeluj ich jako łańcuchów znaków ani list łańcuchów znaków.
+## Klasyfikacje to rekordy
 
-Klasyfikacja zwykle potrzebuje tego, czego łańcuch znaków nie zapewni: stałej tożsamości po zmianie nazwy, przetłumaczonej nazwy, rodzica w hierarchii, opisu, właściciela. Encja ma to wszystko, a relacja zapisuje, które klasyfikacje mają zastosowanie.
+Tagi, etykiety, kategorie, kolory, materiały i certyfikaty powinny być rekordami powiązanymi relacjami. Nie modeluj ich jako łańcuchów znaków ani list łańcuchów znaków.
+
+Klasyfikacja zwykle potrzebuje tego, czego łańcuch znaków nie zapewni: stałej tożsamości po zmianie nazwy, przetłumaczonej nazwy, rodzica w hierarchii, opisu, właściciela. Rekord ma to wszystko, a relacja zapisuje, które klasyfikacje mają zastosowanie.
 
 ```toml
 format_version = 1
@@ -50,7 +52,7 @@ Kilka wskazówek:
 
 - **Jeden schemat na słownik.** Kolor nie jest kategorią tylko dlatego, że oba pojawiają się przy produkcie. Trzymaj je osobno, chyba że mają wspólne znaczenie i cykl życia.
 - **Nazywaj relacje zgodnie z ich znaczeniem.** `materials` i `certifications` są czytelniejsze niż ogólne `tags`. Zachowaj ogólną relację `labels` dla adnotacji, które przecinają wiele dziedzin.
-- **Zachowaj stały atrybut z kodem**, gdy potrzebują go integracje, i zadeklaruj go jako [klucz unikalny](/pl/builders/validation/#klucze-unikalne), aby nie dało się go użyć ponownie. Same relacje zawsze używają UUID encji.
+- **Zachowaj stały atrybut z kodem**, gdy potrzebują go integracje, i zadeklaruj go jako [klucz unikalny](/pl/builders/validation/#klucze-unikalne), aby nie dało się go użyć ponownie. Same relacje zawsze używają UUID rekordu.
 - **Użyj atrybutu skalarnego** dla wartości wewnętrznych i niewspółdzielonych: SKU, notatki tekstowej.
 
 ### Pojedynczy wybór i powiązania wyłączne
@@ -67,7 +69,7 @@ cardinality = "one"
 
 Dodaj `target_cardinality = "one"` tylko wtedy, gdy każdy cel może zostać przypisany tylko raz, na przykład produkt i jego unikalny rekord kodu kreskowego.
 
-### Powiązania z kilkoma rodzajami encji
+### Powiązania z kilkoma rodzajami rekordów
 
 Relacja może wskazywać dowolny schemat, jeden schemat albo listę schematów. Użyj listy, gdy powiązanie ma jasne znaczenie, ale więcej niż jeden rodzaj celu, np. przedmiot oceny zgodności:
 
@@ -78,11 +80,11 @@ value_type = "relationship"
 target_blueprints = ["product", "product_revision", "material", "part"]
 ```
 
-Powiązania z innymi schematami są odrzucane, okno wyboru encji pozwala wskazać, który z wymienionych schematów przeszukać, a każdy z nich może pokazać powiązania blokiem `incoming_relationship_list`. Zamiast jednej nieograniczonej relacji wybieraj jedną relację na znaczenie.
+Powiązania z innymi schematami są odrzucane, okno wyboru rekordu pozwala wskazać, który z wymienionych schematów przeszukać, a każdy z nich może pokazać powiązania blokiem `incoming_relationship_list`. Zamiast jednej nieograniczonej relacji wybieraj jedną relację na znaczenie.
 
 ### Klucze biznesowe
 
-Numery części, dokumentów czy inwentarzowe identyfikują encję dla ludzi i innych systemów. Zadeklaruj je jako [klucze unikalne](/pl/builders/validation/#klucze-unikalne); łącz atrybuty, gdy identyfikator jest unikalny tylko w obrębie czegoś innego, np. oznaczenie wersji w obrębie dokumentu albo numer części w obrębie producenta.
+Numery części, dokumentów czy inwentarzowe identyfikują rekord dla ludzi i innych systemów. Zadeklaruj je jako [klucze unikalne](/pl/builders/validation/#klucze-unikalne); łącz atrybuty, gdy identyfikator jest unikalny tylko w obrębie czegoś innego, np. oznaczenie wersji w obrębie dokumentu albo numer części w obrębie producenta.
 
 ## Hierarchie
 
@@ -98,9 +100,9 @@ tree = true
 context_editable = "default"
 ```
 
-`tree = true` sprawia, że relacja jest jednokrotnego wyboru, i odrzuca każde powiązanie, które uczyniłoby kategorię własnym przodkiem (`409 relationship_cycle`). Dla struktur, w których encja może mieć kilka celów, ale nigdy nie może wrócić do siebie, takich jak zależności czy łańcuchy poprzedników, użyj `acyclic = true`. Oba ustawienia wymagają `context_editable = "default"`, więc hierarchia jest taka sama w każdym kontekście. Publikacja któregokolwiek z nich na istniejących danych zgłasza cykle, które już istnieją.
+`tree = true` sprawia, że relacja jest jednokrotnego wyboru, i odrzuca każde powiązanie, które uczyniłoby kategorię własnym przodkiem (`409 relationship_cycle`). Dla struktur, w których rekord może mieć kilka celów, ale nigdy nie może wrócić do siebie, takich jak zależności czy łańcuchy poprzedników, użyj `acyclic = true`. Oba ustawienia wymagają `context_editable = "default"`, więc hierarchia jest taka sama w każdym kontekście. Publikacja któregokolwiek z nich na istniejących danych zgłasza cykle, które już istnieją.
 
-**Przeglądarka encji** wykrywa relacje odwołujące się do własnego schematu i zamienia filtr dla `product.categories` w drzewo z sumowanymi licznikami. Wybranie *Shirts* obejmuje także produkty przypisane do kategorii podrzędnych. Zobacz [Przeglądanie encji](/pl/guides/explore/#fasety-relacji).
+**Przeglądarka rekordów** wykrywa relacje odwołujące się do własnego schematu i zamienia filtr dla `product.categories` w drzewo z sumowanymi licznikami. Wybranie *Shirts* obejmuje także produkty przypisane do kategorii podrzędnych. Zobacz [Przeglądanie rekordów](/pl/guides/explore/#fasety-relacji).
 
 Aby pokazać ścieżkę na stronie produktu, użyj komponentu [`catalog.relationship_hierarchy`](/pl/builders/views/#hierarchie). Aby wykryć kategorię, która stała się własnym przodkiem, dodaj regułę z predykatem [`acyclic`](/pl/builders/rules/#predykaty).
 
@@ -108,10 +110,10 @@ Aby pokazać ścieżkę na stronie produktu, użyj komponentu [`catalog.relation
 
 Niektóre ograniczenia dotyczą dwóch rekordów: zakłady na certyfikacie muszą należeć do dostawcy z certyfikatu, a niezgodności nie można zamknąć, dopóki wskazujące ją działanie korygujące jest otwarte. Zapisz je w rekordzie, do którego ograniczenie należy, jako [kontrolę `linked` lub `referenced_by`](/pl/builders/validation/#sprawdzaj-powiązane-rekordy).
 
-- **Jeden krok.** Kontrola odczytuje rekordy, które encja wskazuje, albo rekordy, które wskazują ją, i na tym się zatrzymuje. Jeśli ograniczenie wymaga dwóch kroków, dodaj relację lub atrybut, który przybliży potrzebną wartość o jeden krok.
+- **Jeden krok.** Kontrola odczytuje rekordy, które wskazuje zapisywany rekord, albo rekordy, które go wskazują, i na tym się zatrzymuje. Jeśli ograniczenie wymaga dwóch kroków, dodaj relację lub atrybut, który przybliży potrzebną wartość o jeden krok.
 - **Ograniczony zakres.** Kontrola odczytuje najwyżej 200 powiązanych rekordów na relację i 1000 rekordów wskazujących. Relacje, które mają być sprawdzane, utrzymuj małe; kontrole na większych zbiorach nie przechodzą.
 - **Sprawdzane przy zapisie właściciela.** Zmiana powiązanego rekordu nie jest odrzucana. Połącz kontrolę z [regułą](/pl/builders/rules/#zmiany-w-powiązanych-rekordach) wyzwalaną zdarzeniem, aby rekordy, których to dotyczy, były zgłaszane jako ustalenia.
-- **Dla każdego kontekstu.** Powiązane rekordy są odczytywane w tym samym kontekście co encja, więc relacja, która różni się między rynkami, jest sprawdzana osobno dla każdego rynku.
+- **Dla każdego kontekstu.** Powiązane rekordy są odczytywane w tym samym kontekście co zapisywany rekord, więc relacja, która różni się między rynkami, jest sprawdzana osobno dla każdego rynku.
 
 ## Konteksty
 
@@ -142,7 +144,7 @@ Definicje atrybutów można współdzielić na dwa sposoby.
 
 **Mixiny** współdzielą atrybuty między schematami. Mixin to schemat z `kind = "mixin"`; inne schematy przypinają przez include jedną konkretną wersję i wybierają jej atrybuty przez `from`. Używaj ich dla grup pól, których wiele schematów potrzebuje w tej samej postaci, np. SEO lub wymiarów. Zobacz [Tworzenie schematu](/pl/builders/blueprints/#krok-9-udostępnij-atrybuty-w-mixinie).
 
-**Atrybuty wielokrotnego użytku** to rejestr pojedynczych definicji atrybutów w obszarze roboczym, zarządzany w **Zarządzanie → Atrybuty wielokrotnego użytku**. Edytorzy mogą dołączyć opublikowany atrybut wielokrotnego użytku lub ich grupę do pojedynczej encji. Używaj ich dla okazjonalnych pól, których potrzebują tylko niektóre encje i które nie należą do schematu. Definicja jest zapisana w TOML:
+**Atrybuty wielokrotnego użytku** to rejestr pojedynczych definicji atrybutów w obszarze roboczym, zarządzany w **Zarządzanie → Atrybuty wielokrotnego użytku**. Edytorzy mogą dołączyć opublikowany atrybut wielokrotnego użytku lub ich grupę do pojedynczego rekordu. Używaj ich dla okazjonalnych pól, których potrzebują tylko niektóre rekordy i które nie należą do schematu. Definicja jest zapisana w TOML:
 
 ```toml
 code = "country_of_origin"
@@ -151,9 +153,9 @@ value_type = "string"
 searchable = true
 ```
 
-Przyjmuje te same klucze atrybutów co schemat (`value_type`, `value_schema`, `default_value`, `tags`, `context_fallback`, `context_editable`, `readonly` oraz klucze relacji z `target_blueprint_code`), a także `searchable`, który uwzględnia wartości w wyszukiwaniu i filtrach **Przeglądarki encji**. Każda zmiana tworzy nową wersję; wersję trzeba opublikować, zanim będzie można ją dołączyć. Przestrzeń nazw pochodzi z obszaru roboczego, więc pełny kod atrybutu wielokrotnego użytku to `<namespace>:<code>`.
+Przyjmuje te same klucze atrybutów co schemat (`value_type`, `value_schema`, `default_value`, `tags`, `context_fallback`, `context_editable`, `readonly` oraz klucze relacji z `target_blueprint_code`), a także `searchable`, który uwzględnia wartości w wyszukiwaniu i filtrach **Przeglądarki rekordów**. Każda zmiana tworzy nową wersję; wersję trzeba opublikować, zanim będzie można ją dołączyć. Przestrzeń nazw pochodzi z obszaru roboczego, więc pełny kod atrybutu wielokrotnego użytku to `<namespace>:<code>`.
 
-Tworzenie i publikowanie atrybutów wielokrotnego użytku wymaga uprawnienia `blueprints.write`. Dołączenie takiego atrybutu do encji wymaga uprawnienia `entities.write` do tej encji.
+Tworzenie i publikowanie atrybutów wielokrotnego użytku wymaga uprawnienia `blueprints.write`. Dołączenie takiego atrybutu do rekordu wymaga uprawnienia `entities.write` do tego rekordu.
 
 ## Przypisz odpowiedzialność
 
@@ -180,6 +182,6 @@ Dokładne zasady opisuje sekcja [Przypisania użytkowników i zespołów](/pl/re
 
 ## Tagi systemowe i metadane
 
-Każda encja ma też `system_tags` (zbiór łańcuchów znaków) i `system_metadata` (obiekt JSON do 64 KiB). Znajdują się poza schematem, nie są wersjonowane i nie są pokazywane w widokach. Służą automatyzacji: oznaczaniu partii do przetworzenia, zapisywaniu źródła importu lub oznaczaniu rekordu do przeglądu. Przepływy pracy i reguły mogą je odczytywać i zapisywać. Wyszukiwanie może filtrować po tagach systemowych.
+Każdy rekord ma też `system_tags` (zbiór łańcuchów znaków) i `system_metadata` (obiekt JSON do 64 KiB). Znajdują się poza schematem, nie są wersjonowane i nie są pokazywane w widokach. Służą automatyzacji: oznaczaniu partii do przetworzenia, zapisywaniu źródła importu lub oznaczaniu rekordu do przeglądu. Przepływy pracy i reguły mogą je odczytywać i zapisywać. Wyszukiwanie może filtrować po tagach systemowych.
 
 Do wszystkiego, co człowiek ma widzieć lub edytować, używaj atrybutów.

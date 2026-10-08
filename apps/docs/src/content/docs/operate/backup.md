@@ -31,7 +31,7 @@ Rehearse at least once per release, into a disposable database and bucket:
 5. Run the image's `migrate` role.
 6. Start the API and file worker against the restored pair.
 7. Wait for both readiness checks.
-8. Check a known entity, a known uploaded file, and a known extension operation output.
+8. Check a known record, a known uploaded file, and a known extension operation output.
 
 If any step fails, leave the target stopped and investigate. Never go live with only one half restored.
 

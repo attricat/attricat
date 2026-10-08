@@ -27,7 +27,7 @@ The site is organized into sections, each a directory under `src/content/docs`:
 | Directory | Contents |
 | --- | --- |
 | `start/` (plus `introduction.md`) | Concepts and a quickstart. |
-| `guides/` | Day-to-day use: Explorer, search syntax, entities, contexts, publishing, agents. |
+| `guides/` | Day-to-day use: Explorer, search syntax, records, contexts, publishing, agents. |
 | `builders/` | Catalog design: modeling, blueprints, views, validation, revisions, rules, workflows, solution packs, extension management. |
 | `extensions/` | Building extensions: packaging, manifest, server runtime, client contributions, operations. |
 | `operate/` | Workspace administration, deployment, monitoring, backup. |

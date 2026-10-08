@@ -9,10 +9,10 @@ Every change is validated on the server, recorded in the audit log, and kept in 
 
 ## What it is good at
 
-- **Catalogs whose shape changes.** A blueprint revision never changes after it is published, and each entity stays on the revision it was written under until you migrate it. You can evolve the model without breaking what is already there.
+- **Catalogs whose shape changes.** A blueprint revision never changes after it is published, and each record stays on the revision it was written under until you migrate it. You can evolve the model without breaking what is already there.
 - **Values that differ by place.** A context tree (for example market, then channel) lets each value be set once and inherited, with overrides only where they are needed.
-- **Classifications and taxonomies.** Categories, brands, and materials are entities of their own, linked by relationships, so they can be renamed, translated, and arranged in hierarchies.
-- **Controlled output.** Publishing approves an entity for a channel. Any later edit withdraws the approval until someone publishes again.
+- **Classifications and taxonomies.** Categories, brands, and materials are records of their own, linked by relationships, so they can be renamed, translated, and arranged in hierarchies.
+- **Controlled output.** Publishing approves a record for a channel. Any later edit withdraws the approval until someone publishes again.
 - **Extending safely.** Extensions run in sandboxes and can only do what an administrator grants them.
 
 ## How the parts fit
@@ -21,13 +21,13 @@ Every change is validated on the server, recorded in the audit log, and kept in 
 | --- | --- |
 | **Workspace** | One catalog with its own members, data, and settings. |
 | **Blueprint** | A versioned TOML definition of a record type: attributes, validation, and layout. |
-| **Entity** | One record, pinned to a blueprint revision. |
-| **Attribute** | A field of an entity: text, number, date, relationship, file, and more. |
+| **Record** | One catalog item, such as a product or a category, pinned to a blueprint revision. |
+| **Attribute** | A field of a record: text, number, date, relationship, file, and more. |
 | **Context** | A place where values can differ, arranged in a tree under `default`. |
-| **Relationship** | A typed link from one entity to others. |
-| **Publication channel** | A context enabled for export, where entities are approved one by one. |
-| **Rule** | A data-quality check that records findings. |
-| **Workflow** | A small automation that tags or updates an entity after an event. |
+| **Relationship** | A typed link from one record to others. |
+| **Publication channel** | A context enabled for export, where records are approved one by one. |
+| **Rule** | A data-quality check that reports findings. |
+| **Workflow** | A small automation that tags or updates a record after an event. |
 | **Extension** | A package adding server logic, UI, attribute types, or integrations. |
 | **Solution pack** | An archive that sets up a workspace for a use case. |
 | **Agent** | An AI assistant that reads the catalog and proposes changes for approval. |

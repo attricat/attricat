@@ -5,6 +5,8 @@ description: The acli command-line client, its configuration, authentication, in
 
 `acli` is a command-line client for the Attricat API, built for scripts, CI jobs, and agents. On success it prints the API's JSON response unchanged to standard output. Errors go to standard error as JSON. Every command has built-in help: `acli --help` and `acli <group> --help`.
 
+In commands, options, and API output, records are called entities, as in `acli entity create`.
+
 `acli` is included in the container image:
 
 ```sh
@@ -164,7 +166,7 @@ acli context update <context-id> --parent-id <id> --data <json>
 acli context delete <context-id>
 ```
 
-### Entities and values
+### Records and values
 
 ```sh
 acli entity create --blueprint <code> --values values.toml [--context-id <id>] [--system-tags <json>] [--system-metadata <json>]

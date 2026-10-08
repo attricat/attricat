@@ -7,7 +7,7 @@ Ta strona prowadzi jeden przykład, sprzedawcę odzieży działającego w Polsce
 
 ## Obszar roboczy
 
-Obszar roboczy to jeden katalog. Ma własnych członków, role, schematy, encje, konteksty, rozszerzenia i dziennik audytu. Obszary robocze nie współdzielą niczego między sobą.
+Obszar roboczy to jeden katalog. Ma własnych członków, role, schematy, rekordy, konteksty, rozszerzenia i dziennik audytu. Obszary robocze nie współdzielą niczego między sobą.
 
 Użytkownicy logują się do obszaru roboczego za pomocą jego **identyfikatora logowania**, na przykład `retailer.example`, oraz swojego adresu e-mail i hasła.
 
@@ -51,11 +51,13 @@ Schematy zmieniają się z czasem. Każda zmiana to nowa **wersja**: 1, 2, 3. We
 
 Gdy sprzedawca dodaje `care_instructions` w wersji 2, produkty utworzone w wersji 1 zachowują wersję 1. Zostają oznaczone jako nieaktualne i można je **zmigrować**, gdy ktoś będzie gotowy. Stare wartości nigdy nie są interpretowane na nowo według nowych reguł.
 
-## Encje
+## Rekordy
 
-Encja to jeden rekord: jeden produkt, jedna kategoria. Jest tworzona z bieżącej wersji schematu i pozostaje do niej przypięta aż do migracji.
+Rekord to jeden element katalogu: jeden produkt, jedna kategoria. Jest tworzony z bieżącej wersji schematu i pozostaje do niej przypięty aż do migracji.
 
-Oprócz atrybutów każda encja ma **tagi systemowe** i **metadane systemowe** na potrzeby automatyzacji, na przykład tag `needs-review` ustawiany przez przepływ pracy.
+W plikach TOML schematów, API i CLI rekordy występują pod nazwą `entity`, na przykład `kind = "entity"` i `entity_schema`.
+
+Oprócz atrybutów każdy rekord ma **tagi systemowe** i **metadane systemowe** na potrzeby automatyzacji, na przykład tag `needs-review` ustawiany przez przepływ pracy.
 
 ## Konteksty
 
@@ -76,11 +78,11 @@ Każdy atrybut decyduje, czy dziedziczy wartości (`context_fallback`) i czy mo�
 
 ## Relacje
 
-Atrybut relacji łączy encję z innymi. `product.categories` wskazuje na encje `category`, a `category.parent` łączy kategorię z kategorią nadrzędną, tworząc drzewo.
+Atrybut relacji łączy rekord z innymi. `product.categories` wskazuje na rekordy `category`, a `category.parent` łączy kategorię z kategorią nadrzędną, tworząc drzewo.
 
 Relacje mogą być jednokrotnego wyboru (`cardinality = "one"`) lub wielokrotnego wyboru i, jak każda inna wartość, mogą różnić się zależnie od kontekstu.
 
-Klasyfikacje takie jak kategorie, marki i materiały są encjami, a nie łańcuchami znaków. Dzięki temu każda z nich ma tożsamość, nazwę, którą można przetłumaczyć, i miejsce w hierarchii.
+Klasyfikacje takie jak kategorie, marki i materiały są rekordami, a nie łańcuchami znaków. Dzięki temu każda z nich ma tożsamość, nazwę, którą można przetłumaczyć, i miejsce w hierarchii.
 
 ## Publikacja
 
@@ -104,11 +106,11 @@ Każda zmiana jest zapisywana wraz z informacją, kto ją wprowadził, kiedy i p
 
 ## Automatyzacja
 
-- **Reguły** sprawdzają encje i zapisują ustalenia, na przykład „produkt nie ma tytułu”. Nigdy nie zmieniają danych.
-- **Przepływy pracy** reagują na zdarzenia, tagując encję lub zapisując wartość.
+- **Reguły** sprawdzają rekordy i zapisują ustalenia, na przykład „produkt nie ma tytułu”. Nigdy nie zmieniają danych.
+- **Przepływy pracy** reagują na zdarzenia, tagując rekord lub zapisując wartość.
 - **Rozszerzenia** uruchamiają kod w piaskownicy, aby integrować inne systemy, dodawać elementy interfejsu, obliczać wartości oraz importować lub eksportować dane.
 - **Agenci** odpowiadają na pytania o katalog i proponują zmiany, z których każda czeka na zatwierdzenie przez człowieka.
 
 ## Dostęp
 
-Użytkownicy otrzymują **role** (`owner`, `admin`, `editor`, `viewer` lub role niestandardowe). Rolę można przyznać dla całego obszaru roboczego albo ograniczyć do jednego schematu, jednej encji lub jednej gałęzi drzewa kontekstów. Niemiecki zespół sprzedawcy ma rolę edytora tylko w poddrzewie `DE`.
+Użytkownicy otrzymują **role** (`owner`, `admin`, `editor`, `viewer` lub role niestandardowe). Rolę można przyznać dla całego obszaru roboczego albo ograniczyć do jednego schematu, jednego rekordu lub jednej gałęzi drzewa kontekstów. Niemiecki zespół sprzedawcy ma rolę edytora tylko w poddrzewie `DE`.

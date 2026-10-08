@@ -7,16 +7,18 @@ Każda zmiana w katalogu zapisuje zdarzenie w tej samej transakcji bazy danych c
 
 Zdarzenia napędzają [przepływy pracy](/pl/builders/workflows/), [reguły](/pl/builders/rules/) i [procedury obsługi zdarzeń w rozszerzeniach](/pl/extensions/server/#obsługuj-zdarzenia-katalogu). Nie są udostępniane jako publiczny strumień.
 
+W typach i ładunkach zdarzeń rekordy występują pod nazwą `entity`, np. `entity.updated.v1`.
+
 ## Typy zdarzeń
 
 | Typ | Rejestrowane, gdy |
 | --- | --- |
-| `entity.created.v1` | Encja zostaje utworzona. |
-| `entity.updated.v1` | Zmieniają się wartości, relacje lub adnotacje encji. |
-| `entity.deleted.v1` | Encja zostaje usunięta. |
-| `entity.migrated.v1` | Encja przechodzi na nowszą wersję schematu. |
-| `entity.published.v1` | Encja zostaje opublikowana w kanale. |
-| `entity.unpublished.v1` | Publikacja encji zostaje wycofana. |
+| `entity.created.v1` | Rekord zostaje utworzony. |
+| `entity.updated.v1` | Zmieniają się wartości, relacje lub adnotacje rekordu. |
+| `entity.deleted.v1` | Rekord zostaje usunięty. |
+| `entity.migrated.v1` | Rekord przechodzi na nowszą wersję schematu. |
+| `entity.published.v1` | Rekord zostaje opublikowany w kanale. |
+| `entity.unpublished.v1` | Publikacja rekordu zostaje wycofana. |
 | `attribute_value.changed.v1` | Wartość atrybutu zostaje ustawiona, zastąpiona lub usunięta. |
 | `attribute_value.restored.v1` | Wartość zostaje przywrócona z historii. |
 | `relationship.changed.v1` | Cele relacji zostają dodane lub usunięte. |
@@ -36,16 +38,16 @@ Przyrostek wersji nigdy nie zmienia znaczenia. Niezgodny ładunek otrzymuje nowy
 | `id` | UUID zdarzenia. Używaj go do deduplikacji. |
 | `event_type` | Na przykład `entity.updated.v1`. |
 | `occurred_at` | Kiedy zmiana została zapisana. |
-| `aggregate_kind`, `aggregate_id` | Co się zmieniło, np. `entity` i jej UUID. |
+| `aggregate_kind`, `aggregate_id` | Co się zmieniło, np. `entity` i jego UUID. |
 | `correlation_id` | Wspólny dla wszystkiego, co wynikło z jednego żądania lub zadania. |
 | `causation_id` | Zdarzenie, które bezpośrednio spowodowało to zdarzenie, jeśli istnieje. |
 | `source_kind` | `api`, `worker`, `plugin` lub `system`. |
 | `source_name` | Który producent, np. przepływ pracy (`workflow:<id>`) lub rozszerzenie (`extension:<extension-id>`). |
 | `metadata`, `payload` | Obiekty JSON, każdy do 64 KiB. |
 
-## Ładunki encji
+## Ładunki rekordów
 
-Zdarzenia encji i wartości opisują, co się zmieniło, a nie całą encję:
+Zdarzenia rekordów i wartości opisują, co się zmieniło, a nie cały rekord:
 
 ```json
 {
@@ -65,7 +67,7 @@ Zdarzenia encji i wartości opisują, co się zmieniło, a nie całą encję:
 }
 ```
 
-Aby działać na bieżącym stanie encji, odczytaj ją; ładunek jest wyłącznie opisem zmiany.
+Aby działać na bieżącym stanie rekordu, odczytaj go; ładunek jest wyłącznie opisem zmiany.
 
 ### Które zmiany tworzą fakty
 
@@ -75,7 +77,7 @@ Aby działać na bieżącym stanie encji, odczytaj ją; ładunek jest wyłączni
 - **Atrybuty relacji:** każdy dodany lub usunięty cel to osobny fakt z `change_kind` równym `relationship_add` lub `relationship_remove`, ustawionym `relationship_target_entity_id` i identyfikatorem celu jako wartością. Zapis zmieniający tylko relacje tworzy `relationship.changed.v1`; zapis zmieniający też inne wartości tworzy `entity.updated.v1`.
 - **Atrybuty plikowe:** przesłanie, podłączenie, zmiana kolejności lub usunięcie plików trafia do dziennika audytu, ale nie tworzy zdarzenia ani faktu.
 - Zmiany tagów i metadanych systemowych nie są wartościami atrybutów i nie dodają faktów.
-- **Migracje:** `entity.migrated.v1` nie zawiera `facts`. Jego ładunek wskazuje encję, jej Schemat, `source_version`, `target_version` i `migration_id`. Jeśli migracja usunęła relację lub zmieniła jej cele, `released_relationships` wymienia cele, których encja już nie wskazuje, jako `attribute_code` i `target_entity_ids` (najwyżej 100 na relację i 1000 na zdarzenie).
+- **Migracje:** `entity.migrated.v1` nie zawiera `facts`. Jego ładunek wskazuje rekord, jego schemat, `source_version`, `target_version` i `migration_id`. Jeśli migracja usunęła relację lub zmieniła jej cele, `released_relationships` wymienia cele, których rekord już nie wskazuje, jako `attribute_code` i `target_entity_ids` (najwyżej 100 na relację i 1000 na zdarzenie).
 
 ## Gwarancje dostarczania
 

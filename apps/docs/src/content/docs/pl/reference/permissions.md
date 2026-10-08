@@ -5,6 +5,8 @@ description: Wszystkie uprawnienia obszaru roboczego, na co pozwalają i które 
 
 Uprawnienia przyznaje się przez role. Role i zakresy opisuje [Administracja obszarem roboczym](/pl/operate/workspaces/#role).
 
+Uprawnienia do rekordów mają nazwy `entities.*`, tak jak w API.
+
 Brak zalogowania lub wygasła sesja zwraca `401`. Zalogowana osoba bez uprawnienia otrzymuje `403`, a odpowiedź nie ujawnia, czy obiekt docelowy istnieje.
 
 | Uprawnienie | Zakres | owner | admin | editor | viewer |
@@ -14,15 +16,15 @@ Brak zalogowania lub wygasła sesja zwraca `401`. Zalogowana osoba bez uprawnien
 | `roles.grant` | Przydzielanie i odbieranie ról. Wymagane razem z `members.manage`. | ✓ | ✓ | | |
 | `roles.manage` | Role niestandardowe; ponawianie dostarczeń zdarzeń, które stały się martwymi wiadomościami. | ✓ | ✓ | | |
 | `tokens.manage` | Tworzenie i odwoływanie własnych osobistych tokenów API. | ✓ | ✓ | | |
-| `workspace_navigation.manage` | Skróty na pasku bocznym przeglądarki encji. | ✓ | ✓ | | |
+| `workspace_navigation.manage` | Skróty na pasku bocznym przeglądarki rekordów. | ✓ | ✓ | | |
 | `audit.read` | Dziennik audytu. | ✓ | ✓ | | |
 | `blueprints.read` | Schematy i atrybuty wielokrotnego użytku. | ✓ | ✓ | ✓ | ✓ |
 | `blueprints.write` | Tworzenie szkiców i wersji schematów; atrybuty wielokrotnego użytku. | ✓ | ✓ | ✓ | |
 | `blueprints.publish` | Publikowanie wersji schematów. | ✓ | ✓ | | |
-| `entities.read` | Encje, wyszukiwanie, zapisane wyszukiwania, pliki i historia; katalog użytkowników i zespołów do przypisań (`GET /directory`, `acli directory`), który pokazuje imiona i nazwiska oraz adresy e-mail członków. | ✓ | ✓ | ✓ | ✓ |
-| `entities.write` | Tworzenie i edytowanie encji, przesyłanie plików, migrowanie encji, dołączanie atrybutów wielokrotnego użytku, uruchamianie poleceń rozszerzeń z interfejsu. | ✓ | ✓ | ✓ | |
-| `entities.delete` | Usuwanie encji. | ✓ | ✓ | ✓ | |
-| `entities.publish` | Publikowanie encji w kanałach i wycofywanie ich publikacji. | ✓ | ✓ | | |
+| `entities.read` | Rekordy, wyszukiwanie, zapisane wyszukiwania, pliki i historia; katalog użytkowników i zespołów do przypisań (`GET /directory`, `acli directory`), który pokazuje imiona i nazwiska oraz adresy e-mail członków. | ✓ | ✓ | ✓ | ✓ |
+| `entities.write` | Tworzenie i edytowanie rekordów, przesyłanie plików, migrowanie rekordów, dołączanie atrybutów wielokrotnego użytku, uruchamianie poleceń rozszerzeń z interfejsu. | ✓ | ✓ | ✓ | |
+| `entities.delete` | Usuwanie rekordów. | ✓ | ✓ | ✓ | |
+| `entities.publish` | Publikowanie rekordów w kanałach i wycofywanie ich publikacji. | ✓ | ✓ | | |
 | `contexts.read` | Konteksty i kanały eksportu. | ✓ | ✓ | ✓ | ✓ |
 | `contexts.write` | Tworzenie, zmienianie i usuwanie kontekstów; włączanie kanałów eksportu. | ✓ | ✓ | ✓ | |
 | `data_health.read` | Stan danych, przetwarzanie w tle, metryki i listy martwych wiadomości zdarzeń. | ✓ | ✓ | ✓ | ✓ |
@@ -42,7 +44,7 @@ Status w schemacie może wymagać do przejścia uprawnienia lub roli albo innej 
 
 ## Widoczność atrybutów
 
-Uprawnienia dotyczą całych encji. Kto może odczytać encję, może odczytać każdą wartość jej atrybutów we wszystkich kontekstach, także historię wartości i pokazywane w niej zmiany. Te same wartości widzą wyszukiwanie, filtry, etykiety wyświetlania, narzędzia agenta i rozszerzenia. Nie da się ukryć pojedynczych atrybutów, takich jak wycena czy uwagi o pochodzeniu, przed osobami, które mogą odczytać resztę rekordu.
+Uprawnienia dotyczą całych rekordów. Kto może odczytać rekord, może odczytać każdą wartość jego atrybutów we wszystkich kontekstach, także historię wartości i pokazywane w niej zmiany. Te same wartości widzą wyszukiwanie, filtry, etykiety wyświetlania, narzędzia agenta i rozszerzenia. Nie da się ukryć pojedynczych atrybutów, takich jak wycena czy uwagi o pochodzeniu, przed osobami, które mogą odczytać resztę rekordu.
 
 Aby ukryć poufne dane przed częścią osób, zapisz je w osobnym schemacie powiązanym z rekordem i nadaj `entities.read` dla tego schematu tylko osobom, które ich potrzebują. Pamiętaj, że:
 

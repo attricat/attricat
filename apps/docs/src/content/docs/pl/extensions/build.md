@@ -9,7 +9,7 @@ Rozszerzenie to archiwum `.tar.zst` z plikiem `manifest.json` w katalogu główn
 - **Komponenty klienckie**: moduły JavaScript renderowane w izolowanych ramkach w stałych miejscach aplikacji webowej albo jako pełne strony. Zobacz [Kontrybucje klienckie](/pl/extensions/client/).
 - **Deklaracje**, na podstawie których działa host bez uruchamiania Twojego kodu: typy atrybutów, renderery komórek tabeli, schematy konfiguracji i kontrakty zdarzeń.
 
-Rozszerzenie referencyjne `attricat-extension-example` pokazuje, jak wszystkie te elementy działają razem: oblicza numeryczne atrybuty z formuł i ma stronę warsztatu, akcję encji, komórkę tabeli oraz serwerową obsługę zdarzeń.
+Rozszerzenie referencyjne `attricat-extension-example` pokazuje, jak wszystkie te elementy działają razem: oblicza numeryczne atrybuty z formuł i ma stronę warsztatu, akcję rekordu, komórkę tabeli oraz serwerową obsługę zdarzeń.
 
 ## Model bezpieczeństwa
 
@@ -58,6 +58,8 @@ export const mount = async (root, catalog) => {
   return () => root.replaceChildren();
 };
 ```
+
+W ścieżkach API, nazwach miejsc osadzenia i polach kontekstu rekordy występują pod nazwą `entity`.
 
 Pełny format manifestu opisuje [dokumentacja manifestu](/pl/extensions/manifest/).
 

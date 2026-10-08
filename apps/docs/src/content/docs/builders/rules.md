@@ -1,9 +1,9 @@
 ---
 title: Data quality rules
-description: Define versioned checks that flag entities with missing, stale, or wrongly tagged data, and manage the findings.
+description: Define versioned checks that flag records with missing, stale, or wrongly tagged data, and manage the findings.
 ---
 
-A rule checks entities of one blueprint against a simple condition and records a **finding** for each entity that fails. Findings resolve themselves when the entity is fixed. Rules only read data; they never change an entity.
+A rule checks records of one blueprint against a simple condition and saves a **finding** for each record that fails. Findings resolve themselves when the record is fixed. Rules only read data; they never change a record. In events, the API and the CLI, records are called entities.
 
 Use rules for questions like "which published products have no title?" or "which prices haven't been touched in a year?". To change data automatically, use a [workflow](/builders/workflows/).
 
@@ -41,7 +41,7 @@ attribute_code = "title"
 | `name` | Display name. |
 | `severity` | `info`, `warning`, `error`, or `critical`. |
 | `triggers` | 1 to 8 triggers. See below. |
-| `predicate` | The condition an entity must satisfy. See below. |
+| `predicate` | The condition a record must satisfy. See below. |
 
 ### Triggers
 
@@ -49,17 +49,17 @@ attribute_code = "title"
 | --- | --- | --- |
 | `manual` | | When someone chooses **Run now**. |
 | `schedule` | `cron`, `timezone = "UTC"` | On a six-field cron schedule (seconds first), in UTC. `0 0 6 * * *` is 06:00 every day. |
-| `event` | `event_type` | For the changed entity, after one of: `entity.created.v1`, `entity.updated.v1`, `entity.migrated.v1`, `attribute_value.changed.v1`, `attribute_value.restored.v1`, `relationship.changed.v1`. |
+| `event` | `event_type` | For the changed record, after one of: `entity.created.v1`, `entity.updated.v1`, `entity.migrated.v1`, `attribute_value.changed.v1`, `attribute_value.restored.v1`, `relationship.changed.v1`. |
 | `post_import` | | Reserved for future import integration. |
 
 ### Predicates
 
-An entity **fails** when the predicate is not satisfied. Rules use the same predicates as [entity checks](/builders/validation/#compare-attributes-with-checks), [status transition conditions](/builders/validation/#conditions-on-transitions), and [publication channel checks](/guides/publishing/#require-checks-before-publication). The [blueprint reference](/reference/blueprint/#predicates) lists every key.
+A record **fails** when the predicate is not satisfied. Rules use the same predicates as [record checks](/builders/validation/#compare-attributes-with-checks), [status transition conditions](/builders/validation/#conditions-on-transitions), and [publication channel checks](/guides/publishing/#require-checks-before-publication). The [blueprint reference](/reference/blueprint/#predicates) lists every key.
 
 - **Values:** `required`, `compare` (with another attribute or a literal), `one_of`, and `relative_date` (against now plus `offset_days`).
 - **Tags:** `has_tag` and `missing_tag` check system tags.
-- **Linked records:** `linked` checks the records an entity links to; `referenced_by` counts the records that link to it.
-- **Reporting only:** `stale` (not updated within an age limit), `unique` (no other entity of the blueprint has the same values), and `acyclic` (a relationship never leads back to the entity).
+- **Linked records:** `linked` checks the records the checked record links to; `referenced_by` counts the records that link to it.
+- **Reporting only:** `stale` (not updated within an age limit), `unique` (no other record of the blueprint has the same values), and `acyclic` (a relationship never leads back to the record).
 - **Combinations:** `all_of` and `any_of`.
 
 A comparison whose value is missing is satisfied, and so are `one_of` and `relative_date` when the attribute is empty. Combine them with `required` when the value must exist:
@@ -73,7 +73,7 @@ predicates = [
 ]
 ```
 
-`linked` and `referenced_by` follow one relationship hop. Their nested predicate reads the other record and can compare with the entity being checked through `subject_attribute_code`:
+`linked` and `referenced_by` follow one relationship hop. Their nested predicate reads the other record and can compare with the record being checked through `subject_attribute_code`:
 
 ```toml
 # Every facility on a supplier certificate belongs to that supplier.
@@ -95,7 +95,7 @@ predicate = { type = "one_of", attribute_code = "state", values = ["open"] }
 
 ### Expiry and other time-based checks
 
-`relative_date` compares with the time the rule runs. Give such a rule a `schedule` trigger: an entity that nobody edits can still expire overnight, and only a scheduled run notices.
+`relative_date` compares with the time the rule runs. Give such a rule a `schedule` trigger: a record that nobody edits can still expire overnight, and only a scheduled run notices.
 
 ```toml
 format_version = 1
@@ -119,11 +119,11 @@ A negative `offset_days` looks back: `op = "gte"` with `offset_days = -365` mean
 
 ### Contexts
 
-A rule attached to a context checks the entity's resolved values in that context, including inherited values. A rule without a context checks every context and fails if any of them fails; the finding's evidence lists the failing context codes under `contexts`.
+A rule attached to a context checks the record's resolved values in that context, including inherited values. A rule without a context checks every context and fails if any of them fails; the finding's evidence lists the failing context codes under `contexts`.
 
 ### Changes to linked records
 
-`linked` and `referenced_by` depend on other records. When a linked or referencing record changes, event-triggered rules also re-run for up to 100 entities that depend on it, so their findings stay current. That includes a record a referencing record stops pointing to, for example when a corrective action is moved to another nonconformance, as recorded in the event's [facts](/reference/events/#which-changes-produce-facts). A blueprint migration that drops or re-points a relationship records no facts, but its `entity.migrated.v1` event lists the released records, so they re-run too. Rules with only schedule or manual triggers notice the change on their next run.
+`linked` and `referenced_by` depend on other records. When a linked or referencing record changes, event-triggered rules also re-run for up to 100 records that depend on it, so their findings stay current. That includes a record a referencing record stops pointing to, for example when a corrective action is moved to another nonconformance, as recorded in the event's [facts](/reference/events/#which-changes-produce-facts). A blueprint migration that drops or re-points a relationship records no facts, but its `entity.migrated.v1` event lists the released records, so they re-run too. Rules with only schedule or manual triggers notice the change on their next run.
 
 The [blueprint reference](/reference/blueprint/#predicates) has the comparison rules for each type and the limits on nesting and linked records.
 
@@ -162,13 +162,13 @@ acli rule run-now <rule-id> --idempotency-key check-one --entity-id <uuid>
 acli rule run-now <rule-id> --idempotency-key preview --dry-run
 ```
 
-A dry run reports how many entities would fail and saves no findings. Reusing an idempotency key returns the original run instead of starting a new one.
+A dry run reports how many records would fail and saves no findings. Reusing an idempotency key returns the original run instead of starting a new one.
 
 Each run processes candidates in pages of 500 and stops after 10,000. A schedule never overlaps itself: if the previous run is still pending, the next occurrence is skipped.
 
 ## Enforce a rule
 
-By default a rule only reports findings. An **enforcing** rule also stops writes that would leave an entity violating it. Add an `enforcement` table:
+By default a rule only reports findings. An **enforcing** rule also stops writes that would leave a record violating it. Add an `enforcement` table:
 
 ```toml
 format_version = 1
@@ -193,7 +193,7 @@ from = "review"
 to = "released"
 ```
 
-`on_save = true` rejects any write that leaves the entity violating the rule. Each entry in `transitions` guards a change of a [status](/builders/validation/#statuses) attribute into `to`, optionally only from `from`. Guarded transitions are checked on the state the change produces, so a value saved in the same write counts. Inside a blueprint, write the table as `[rules.enforcement]` and `[[rules.enforcement.transitions]]` after the rule's `[[rules]]` header.
+`on_save = true` rejects any write that leaves the record violating the rule. Each entry in `transitions` guards a change of a [status](/builders/validation/#statuses) attribute into `to`, optionally only from `from`. Guarded transitions are checked on the state the change produces, so a value saved in the same write counts. Inside a blueprint, write the table as `[rules.enforcement]` and `[[rules.enforcement.transitions]]` after the rule's `[[rules]]` header.
 
 Enforcement needs a severity of `error` or `critical` and a predicate that can be checked during a save. The [blueprint reference](/reference/blueprint/#rules) lists every key and requirement.
 
@@ -203,10 +203,10 @@ A write that violates an enforcing rule is rejected with `422 rule_violation`, a
 
 ### Dry run before enabling
 
-Enforcing a rule on existing data can block people who did nothing wrong. So when the rule's blueprint revision already has entities, Attricat needs a completed **full dry run** of the exact revision you are enabling. Otherwise enabling fails with `409 rule_dry_run_required`.
+Enforcing a rule on existing data can block people who did nothing wrong. So when the rule's blueprint revision already has records, Attricat needs a completed **full dry run** of the exact revision you are enabling. Otherwise enabling fails with `409 rule_dry_run_required`.
 
 1. Publish the revision.
-2. Run a dry run over all entities, without `--entity-id`, and wait for it to complete on the **Runs** tab. A dry run may target a published revision that is not enabled yet.
+2. Run a dry run over all records, without `--entity-id`, and wait for it to complete on the **Runs** tab. A dry run may target a published revision that is not enabled yet.
 
    ```sh
    acli rule run-now <rule-id> --idempotency-key enforce-preview --dry-run
@@ -215,22 +215,22 @@ Enforcing a rule on existing data can block people who did nothing wrong. So whe
    The CLI dry-runs the enabled revision, or the latest published one when none is enabled. To dry-run a specific revision while another is enabled, call `POST /rules/{id}/run-now` with `{"dry_run": true, "idempotency_key": "…", "version": 2}`.
 3. Enable the revision.
 
-If the dry run found violations, enabling fails with `409 rule_has_existing_violations`, and `details.existing_violations` gives the count. Either fix those entities and dry-run again, or accept them explicitly through the API:
+If the dry run found violations, enabling fails with `409 rule_has_existing_violations`, and `details.existing_violations` gives the count. Either fix those records and dry-run again, or accept them explicitly through the API:
 
 ```http
 POST /rules/{id}/versions/{version}/enable
 {"accept_existing_violations": true}
 ```
 
-A dry run stops after 10,000 entities. When the blueprint revision has more, the dry run can't vouch for the rest, so enabling still fails with `409 rule_dry_run_required` unless you send `accept_existing_violations` as above. In that case the error message says the dry run stopped early, and `details` is `{"truncated": true, "existing_violations": …}` with the violations it found among the entities it checked. Such a run has `"truncated": true` in `GET /rule-runs`.
+A dry run stops after 10,000 records. When the blueprint revision has more, the dry run can't vouch for the rest, so enabling still fails with `409 rule_dry_run_required` unless you send `accept_existing_violations` as above. In that case the error message says the dry run stopped early, and `details` is `{"truncated": true, "existing_violations": …}` with the violations it found among the records it checked. Such a run has `"truncated": true` in `GET /rule-runs`.
 
-An entity that already violates an enforcing rule cannot be saved until a save fixes the violation.
+A record that already violates an enforcing rule cannot be saved until a save fixes the violation.
 
 ## Work with findings
 
-**Manage → Data quality rules → Findings** lists findings with their rule, entity, context, and status. There is one finding per rule, entity, and context. When a later evaluation passes, the finding is resolved. If the problem comes back, the same finding reopens.
+**Manage → Data quality rules → Findings** lists findings with their rule, record, context, and status. There is one finding per rule, record, and context. When a later evaluation passes, the finding is resolved. If the problem comes back, the same finding reopens.
 
-**Acknowledge** a finding to record that someone has seen it. It stays until the entity passes.
+**Acknowledge** a finding to record that someone has seen it. It stays until the record passes.
 
 ```sh
 acli rule findings --entity-id <uuid>

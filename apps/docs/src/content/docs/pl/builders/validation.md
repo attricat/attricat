@@ -1,18 +1,18 @@
 ---
 title: Walidacja
-description: Ograniczaj pojedyncze wartości i całe encje za pomocą JSON Schema i dowiedz się, jak walidacja współdziała z kontekstami.
+description: Ograniczaj pojedyncze wartości i całe rekordy za pomocą JSON Schema i dowiedz się, jak walidacja współdziała z kontekstami.
 ---
 
 Attricat waliduje każdy zapis na serwerze, zanim cokolwiek zostanie zapisane. Walidacja pochodzi z następujących źródeł:
 
 1. **Typ atrybutu.** Atrybut `number` odrzuca `"abc"`; `date` odrzuca `2026-13-01`.
 2. **`value_schema`** w atrybucie: JSON Schema dla jednej wartości.
-3. **`entity_schema`** w schemacie: JSON Schema dla całej encji.
-4. **`unique_keys`** w schemacie: identyfikatory biznesowe, których dwie encje nie mogą współdzielić. Zobacz [Klucze unikalne](#klucze-unikalne).
-5. **Kontrole** w `x-attricat-checks` schematu encji: porównania atrybutów i kontrole powiązanych rekordów.
+3. **`entity_schema`** w schemacie: JSON Schema dla całego rekordu.
+4. **`unique_keys`** w schemacie: identyfikatory biznesowe, których dwa rekordy nie mogą współdzielić. Zobacz [Klucze unikalne](#klucze-unikalne).
+5. **Kontrole** w `x-attricat-checks` schematu walidacji rekordu: porównania atrybutów i kontrole powiązanych rekordów.
 6. **Warunki** przejść statusu oraz **egzekwowane reguły**.
 
-Oba schematy walidacji używają JSON Schema Draft 2020-12. Aplikacja internetowa korzysta z tych samych schematów, aby ostrzegać Cię podczas pisania, ale liczy się odpowiedź serwera.
+Oba schematy walidacji używają JSON Schema Draft 2020-12. Aplikacja internetowa korzysta z tych samych schematów, aby ostrzegać Cię podczas pisania, ale liczy się odpowiedź serwera. W TOML schematu, API, kodach błędów i dzienniku audytu rekordy występują pod nazwą `entity`.
 
 ## Ogranicz jedną wartość
 
@@ -112,7 +112,7 @@ value_schema = '''{
 
 Jeśli którykolwiek warunek nie jest spełniony, cały zapis zostaje odrzucony z `422 transition_conditions_unmet` i listą wszystkich niespełnionych warunków. Egzekwowane reguły mogą chronić przejścia w ten sam sposób; zobacz [Egzekwowanie reguły](/pl/builders/rules/#egzekwowanie-reguły).
 
-Aby z wyprzedzeniem sprawdzić, które statusy docelowe są dostępne, wywołaj `GET /v1/entities/{id}/status-transitions?context_id=<uuid>` (bez parametru używany jest kontekst domyślny). Odpowiedź zawiera każde zadeklarowane przejście z zapisanego statusu z polem `allowed`, a dla zablokowanych także `denial_code` i `denial_reason`, oraz `unmet`, czyli niespełnione warunki i egzekwowane reguły. Są one oceniane na zapisanej encji tak, jakby status już się zmienił. Podobnie jak zapis, punkt końcowy sprawdza wybrany kontekst i każdy kontekst, który dziedziczy z niego status, a każdy niespełniony warunek wymienia konteksty, w których nie jest spełniony. Blokada przez warunki ma `denial_code` `transition_conditions_unmet`.
+Aby z wyprzedzeniem sprawdzić, które statusy docelowe są dostępne, wywołaj `GET /v1/entities/{id}/status-transitions?context_id=<uuid>` (bez parametru używany jest kontekst domyślny). Odpowiedź zawiera każde zadeklarowane przejście z zapisanego statusu z polem `allowed`, a dla zablokowanych także `denial_code` i `denial_reason`, oraz `unmet`, czyli niespełnione warunki i egzekwowane reguły. Są one oceniane na zapisanym rekordzie tak, jakby status już się zmienił. Podobnie jak zapis, punkt końcowy sprawdza wybrany kontekst i każdy kontekst, który dziedziczy z niego status, a każdy niespełniony warunek wymienia konteksty, w których nie jest spełniony. Blokada przez warunki ma `denial_code` `transition_conditions_unmet`.
 
 ### Kontroluj cykl życia rekordu
 
@@ -122,11 +122,11 @@ W dokumentach kontrolowanych, inspekcjach czy ocenach status może też decydowa
 
 Przejście może określać wymagania. Osoba zapisująca zmianę musi spełnić je wszystkie, oprócz posiadania `entities.write`:
 
-- `permission`: [uprawnienie](/pl/reference/permissions/), które musi mieć dla tej encji, np. `entities.publish`.
-- `roles`: musi mieć co najmniej jedną z tych ról (wbudowaną lub [niestandardową](/pl/operate/workspaces/#role)), przydzieloną w całym obszarze roboczym, dla schematu lub dla tej encji.
-- `separate_from`: rozdzielenie obowiązków. Nie może to być osoba, która jako ostatnia wykonała w tej encji i w tym kontekście przejście o jednym z podanych kodów `code`. Na przykład osoba, która przesłała dokument do przeglądu, nie może go też zatwierdzić.
+- `permission`: [uprawnienie](/pl/reference/permissions/), które musi mieć dla tego rekordu, np. `entities.publish`.
+- `roles`: musi mieć co najmniej jedną z tych ról (wbudowaną lub [niestandardową](/pl/operate/workspaces/#role)), przydzieloną w całym obszarze roboczym, dla schematu lub dla tego rekordu.
+- `separate_from`: rozdzielenie obowiązków. Nie może to być osoba, która jako ostatnia wykonała w tym rekordzie i w tym kontekście przejście o jednym z podanych kodów `code`. Na przykład osoba, która przesłała dokument do przeglądu, nie może go też zatwierdzić.
 
-Nadaj przejściu `code`, aby wskazywać je w `separate_from` i w historii. Odrzucone przejście zwraca `403 status_transition_forbidden` lub `403 status_separation_of_duties` i nic nie zostaje zapisane. Lista wyboru statusu na stronie encji wyłącza przejścia, których nie możesz wykonać, i wyjaśnia dlaczego.
+Nadaj przejściu `code`, aby wskazywać je w `separate_from` i w historii. Odrzucone przejście zwraca `403 status_transition_forbidden` lub `403 status_separation_of_duties` i nic nie zostaje zapisane. Lista wyboru statusu na stronie rekordu wyłącza przejścia, których nie możesz wykonać, i wyjaśnia dlaczego.
 
 Te same kontrole obowiązują każdego, kto zapisuje dane: API, CLI, przepływy pracy (jako osobę, której zmiana uruchomiła przepływ), rozszerzenia i agentów (jako osobę, która zatwierdziła zmianę). Zapis bez możliwej do ustalenia osoby, np. z zaplanowanego zadania, nie może wykonać ograniczonego przejścia.
 
@@ -141,7 +141,7 @@ Wymagania zawsze dotyczą osoby zapisującej zmianę. Nie mogą odwoływać się
 
 Rekordu nie można usunąć, dopóki którykolwiek z jego kontekstów ma status z blokadą, niezależnie od jej postaci.
 
-Blokady są egzekwowane na serwerze dla każdej drogi zapisu: strony encji, API, CLI, przepływów pracy, rozszerzeń, agentów, przywracania z historii wartości, przesyłania plików i zmiany ich kolejności oraz migracji. Odrzucony zapis zwraca `409 record_locked`. Strona encji pokazuje zablokowane pola jako tylko do odczytu wraz z powodem.
+Blokady są egzekwowane na serwerze dla każdej drogi zapisu: strony rekordu, API, CLI, przepływów pracy, rozszerzeń, agentów, przywracania z historii wartości, przesyłania plików i zmiany ich kolejności oraz migracji. Odrzucony zapis zwraca `409 record_locked`. Strona rekordu pokazuje zablokowane pola jako tylko do odczytu wraz z powodem.
 
 Status, który deklaruje blokadę, wymaga jawnej listy `transitions`, więc wyjście z niego jest zawsze nazwanym, ograniczonym przejściem. Aby poprawić wydany rekord, najpierw wykonaj przejście korygujące, a dopiero potem edytuj. Korekta może zmienić wyłącznie status. Odblokowanie jest zapisywane w dzienniku audytu jako `entity.record.unlock`.
 
@@ -153,14 +153,14 @@ Blokady działają w obrębie kontekstu: rekord wydany na jednym rynku nadal mo�
 
 Gdy objęta treść się później zmieni, zatwierdzenie zostaje unieważnione w tym samym zapisie, a jeśli rekord wciąż ma status zatwierdzony, przechodzi do `void_to`. Na przykład edycja tytułu zatwierdzonego dokumentu może odesłać go z powrotem do przeglądu. Zmiany atrybutów, których zatwierdzenie nie obejmuje, nie naruszają zatwierdzenia.
 
-Zatwierdzenia i unieważnienia pojawiają się w dzienniku audytu (`entity.approval.record`, `entity.approval.void`) oraz w panelu **Kontrola rekordu** na stronie encji.
+Zatwierdzenia i unieważnienia pojawiają się w dzienniku audytu (`entity.approval.record`, `entity.approval.void`) oraz w panelu **Kontrola rekordu** na stronie rekordu.
 
 #### Zachowuj wydane pliki
 
-`retention_days` w zablokowanym statusie zakłada blokadę retencji na każdy plik, do którego odwołują się zablokowane atrybuty, gdy rekord przechodzi do tego statusu. Zablokowane pliki nigdy nie są usuwane z magazynu przed wygaśnięciem blokady, nawet jeśli późniejsza korekta je odłączy. Blokady są wyświetlane na stronie encji i w dzienniku audytu. Zobacz [Blokady retencji](/pl/operate/workspaces/#blokady-retencji).
-## Ogranicz całą encję
+`retention_days` w zablokowanym statusie zakłada blokadę retencji na każdy plik, do którego odwołują się zablokowane atrybuty, gdy rekord przechodzi do tego statusu. Zablokowane pliki nigdy nie są usuwane z magazynu przed wygaśnięciem blokady, nawet jeśli późniejsza korekta je odłączy. Blokady są wyświetlane na stronie rekordu i w dzienniku audytu. Zobacz [Blokady retencji](/pl/operate/workspaces/#blokady-retencji).
+## Ogranicz cały rekord
 
-`entity_schema` widzi encję jako jeden obiekt JSON. Używaj go dla reguł obejmujących więcej niż jeden atrybut:
+`entity_schema` widzi rekord jako jeden obiekt JSON. Używaj go dla reguł obejmujących więcej niż jeden atrybut:
 
 ```toml
 entity_schema = '''
@@ -191,16 +191,16 @@ Obiekt walidowany przez Attricat wygląda tak:
 ```
 
 - Wartości skalarne pojawiają się w postaci JSON.
-- Relacje są tablicami UUID encji docelowych. Użyj `minItems` i `maxItems`, aby wymagać co najmniej jednej kategorii lub najwyżej trzech tagów.
+- Relacje są tablicami UUID rekordów docelowych. Użyj `minItems` i `maxItems`, aby wymagać co najmniej jednej kategorii lub najwyżej trzech tagów.
 - Atrybuty bez wartości są pomijane, więc `required` oznacza „ma wartość”.
 
 Najwyższego poziomu `required`, `properties`, `dependentRequired` i `dependentSchemas` mogą wskazywać tylko atrybuty, które ma schemat, w tym atrybuty wybrane z domieszek. Literówka w tych miejscach powoduje błąd kompilacji.
 
-`entity_schema` jest dozwolony tylko w schematach encji. Encja, która nie przejdzie walidacji, zwraca `422 entity_schema_mismatch`.
+`entity_schema` jest dozwolony tylko w schematach rekordów. Rekord, który nie przejdzie walidacji, zwraca `422 entity_schema_mismatch`.
 
 ## Porównuj atrybuty za pomocą kontroli
 
-JSON Schema nie wyrazi warunku „data ważności nie może być wcześniejsza niż data rozpoczęcia”. Zamiast tego dodaj do schematu encji nazwane kontrole w `x-attricat-checks`:
+JSON Schema nie wyrazi warunku „data ważności nie może być wcześniejsza niż data rozpoczęcia”. Zamiast tego dodaj do schematu walidacji rekordu nazwane kontrole w `x-attricat-checks`:
 
 ```toml
 entity_schema = '''
@@ -235,7 +235,7 @@ Kontrole działają po JSON Schema, na każdej ścieżce zapisu: w API, CLI, apl
 
 ## Sprawdzaj powiązane rekordy
 
-Kontrola może sięgnąć o jeden krok wzdłuż relacji. `linked` sprawdza rekordy, które encja wskazuje, a `referenced_by` liczy rekordy, które wskazują ją.
+Kontrola może sięgnąć o jeden krok wzdłuż relacji. `linked` sprawdza rekordy, które wskazuje zapisywany rekord, a `referenced_by` liczy rekordy, które go wskazują.
 
 ```toml
 entity_schema = '''
@@ -255,16 +255,16 @@ entity_schema = '''
 '''
 ```
 
-- Wewnątrz `linked` i `referenced_by` klucz `attribute_code` wskazuje atrybut drugiego rekordu. `subject_attribute_code` wskazuje atrybut zapisywanej encji.
+- Wewnątrz `linked` i `referenced_by` klucz `attribute_code` wskazuje atrybut drugiego rekordu. `subject_attribute_code` wskazuje atrybut zapisywanego rekordu.
 - `quantifier` w `linked` to `all` (domyślnie; spełniony, gdy nie ma powiązań), `any` lub `none`.
-- Powiązane rekordy są rozstrzygane w tym samym kontekście co encja. Atrybut, którego powiązany rekord nie ma, jest traktowany jako brakujący. Usunięte rekordy są pomijane.
-- Kontrola nie przechodzi, jeśli relacja ma więcej niż 200 powiązanych rekordów albo encję wskazuje więcej niż 1000 rekordów.
+- Powiązane rekordy są rozstrzygane w tym samym kontekście co zapisywany rekord. Atrybut, którego powiązany rekord nie ma, jest traktowany jako brakujący. Usunięte rekordy są pomijane.
+- Kontrola nie przechodzi, jeśli relacja ma więcej niż 200 powiązanych rekordów albo zapisywany rekord wskazuje więcej niż 1000 rekordów.
 
 ### Zmiany w powiązanych rekordach są zgłaszane, a nie odrzucane
 
-Kontrola działa przy zapisie własnej encji. Edycja powiązanego rekordu nie sprawdza ponownie każdej encji, która go wskazuje, i nie jest odrzucana. Jeśli zakład straci zatwierdzenie, certyfikaty, które go wskazują, nie blokują tej zmiany.
+Kontrola działa przy zapisie własnego rekordu. Edycja powiązanego rekordu nie sprawdza ponownie każdego rekordu, który go wskazuje, i nie jest odrzucana. Jeśli zakład straci zatwierdzenie, certyfikaty, które go wskazują, nie blokują tej zmiany.
 
-Aby wychwycić takie przypadki, dodaj [regułę](/pl/builders/rules/) z tym samym predykatem i wyzwalaczem `event`. Gdy zmieni się rekord powiązany lub wskazujący, reguły wyzwalane zdarzeniem uruchamiają się ponownie dla maksymalnie 100 zależnych od niego encji i zapisują ustalenia. Samego certyfikatu nie da się ponownie zapisać, dopóki problem nie zostanie usunięty, bo przy następnym zapisie jego kontrola nie przejdzie.
+Aby wychwycić takie przypadki, dodaj [regułę](/pl/builders/rules/) z tym samym predykatem i wyzwalaczem `event`. Gdy zmieni się rekord powiązany lub wskazujący, reguły wyzwalane zdarzeniem uruchamiają się ponownie dla maksymalnie 100 zależnych od niego rekordów i zapisują ustalenia. Samego certyfikatu nie da się ponownie zapisać, dopóki problem nie zostanie usunięty, bo przy następnym zapisie jego kontrola nie przejdzie.
 
 ## Egzekwowane reguły
 
@@ -276,7 +276,7 @@ Aby wychwycić takie przypadki, dodaj [regułę](/pl/builders/rules/) z tym samy
 | --- | --- | --- |
 | `entity_check_failed` | 422 | Kontrola z `x-attricat-checks` nie przechodzi w którymś kontekście. |
 | `transition_conditions_unmet` | 422 | Warunki przejścia statusu nie są spełnione. |
-| `rule_violation` | 422 | Po zapisie encja naruszałaby egzekwowaną regułę. |
+| `rule_violation` | 422 | Po zapisie rekord naruszałby egzekwowaną regułę. |
 | `publication_checks_failed` | 422 | Kontrole wymagane przez kanał nie przechodzą. Zobacz [Publikowanie](/pl/guides/publishing/#wymagaj-kontroli-przed-publikacją). |
 | `status_transition_forbidden` | 403 | Przejście wymaga uprawnienia lub roli, których nie masz. Zobacz [Kto może wykonać przejście](#kto-może-wykonać-przejście). |
 | `status_separation_of_duties` | 403 | To przejście musi wykonać ktoś inny. |
@@ -284,11 +284,11 @@ Aby wychwycić takie przypadki, dodaj [regułę](/pl/builders/rules/) z tym samy
 
 Przy zapisie kontrole, warunki i egzekwowane reguły działają w tej kolejności, po JSON Schema, a zgłaszana jest tylko pierwsza grupa, która nie przeszła. Cztery błędy `422` wymieniają do 50 naruszeń w `error.details.violations`, każde z kodem `code`, komunikatem `message`, kontekstami `contexts`, w których wystąpiło, i atrybutami `attributes`, których dotyczy. Wszystkie pola opisuje [dokumentacja API](/pl/reference/api/#szczegóły-błędu).
 
-W aplikacji internetowej strona encji wymienia kontrole, które nie przeszły, wraz z kontekstami, i pokazuje każdy komunikat przy polach wymienionych w `attributes`. Komunikat przy polu znika, gdy je edytujesz. Klienci API otrzymują te same informacje w `attributes`. Aby usunąć problem, zmień te atrybuty w wymienionych kontekstach albo popraw powiązane lub wskazujące rekordy, o których mówi komunikat. Odrzucona zmiana pozostaje w swoim polu i jest wysyłana ponownie z następnym zapisywanym polem. Przy zmianie statusu sprawdź niespełnione warunki przez [punkt końcowy status-transitions](#warunki-przejść).
+W aplikacji internetowej strona rekordu wymienia kontrole, które nie przeszły, wraz z kontekstami, i pokazuje każdy komunikat przy polach wymienionych w `attributes`. Komunikat przy polu znika, gdy je edytujesz. Klienci API otrzymują te same informacje w `attributes`. Aby usunąć problem, zmień te atrybuty w wymienionych kontekstach albo popraw powiązane lub wskazujące rekordy, o których mówi komunikat. Odrzucona zmiana pozostaje w swoim polu i jest wysyłana ponownie z następnym zapisywanym polem. Przy zmianie statusu sprawdź niespełnione warunki przez [punkt końcowy status-transitions](#warunki-przejść).
 
 ## Klucze unikalne
 
-Schemat walidacji sprawdza jedną encję naraz, więc nie powstrzyma dwóch encji przed otrzymaniem tego samego numeru części. Zadeklaruj zamiast tego klucz unikalny:
+Schemat walidacji sprawdza jeden rekord naraz, więc nie powstrzyma dwóch rekordów przed otrzymaniem tego samego numeru części. Zadeklaruj zamiast tego klucz unikalny:
 
 ```toml
 [[unique_keys]]
@@ -300,20 +300,20 @@ code = "document_revision"
 attributes = ["document", "revision_label"]
 ```
 
-Drugi klucz jest złożony: dokument może mieć tylko jedną wersję `B`, ale każdy dokument może mieć własną. Domyślnie tekst jest porównywany bez względu na wielkość liter i nadmiarowe białe znaki, a encja bez którejś wartości klucza nie jest względem niego sprawdzana. Zapis powodujący konflikt zwraca `409 unique_key_conflict` z encją, która już ma tę wartość.
+Drugi klucz jest złożony: dokument może mieć tylko jedną wersję `B`, ale każdy dokument może mieć własną. Domyślnie tekst jest porównywany bez względu na wielkość liter i nadmiarowe białe znaki, a rekord bez którejś wartości klucza nie jest względem niego sprawdzany. Zapis powodujący konflikt zwraca `409 unique_key_conflict` z rekordem, który już ma tę wartość.
 
-Zasady porównywania, klucze w poszczególnych kontekstach i to, co się dzieje po dodaniu klucza do schematu, który ma już encje, opisuje sekcja [Klucze unikalne](/pl/reference/blueprint/#klucze-unikalne).
+Zasady porównywania, klucze w poszczególnych kontekstach i to, co się dzieje po dodaniu klucza do schematu, który ma już rekordy, opisuje sekcja [Klucze unikalne](/pl/reference/blueprint/#klucze-unikalne).
 
 ## Walidacja a konteksty
 
-Encja ma w każdym kontekście rozstrzygnięty zestaw wartości, zbudowany z jej własnych wartości i wartości odziedziczonych. Po każdej zmianie Attricat waliduje encję w **każdym** kontekście, nie tylko w edytowanym.
+Rekord ma w każdym kontekście rozstrzygnięty zestaw wartości, zbudowany z jego własnych wartości i wartości odziedziczonych. Po każdej zmianie Attricat waliduje rekord w **każdym** kontekście, nie tylko w edytowanym.
 
 Załóżmy na przykład, że `title` jest wymagany i dziedziczy wartość z kontekstu domyślnego. Wyczyszczenie domyślnego tytułu pozostawiłoby każdy kontekst potomny bez tytułu, więc zapis zostaje odrzucony, mimo że edytowano kontekst domyślny.
 
-Przeniesienie kontekstu pod nowego rodzica jest sprawdzane tak samo: przed zapisaniem przeniesienia każda aktywna encja jest walidowana względem nowego łańcucha dziedziczenia.
+Przeniesienie kontekstu pod nowego rodzica jest sprawdzane tak samo: przed zapisaniem przeniesienia każdy aktywny rekord jest walidowany względem nowego łańcucha dziedziczenia.
 
 ## Czego nie waliduje się
 
 - Tagi widoczności i `readonly` są wskazówkami prezentacyjnymi. Nie blokują zapisu wartości przez API.
-- `system_tags` i `system_metadata` encji znajdują się poza schematem i nie są sprawdzane.
-- Schemat walidacji z nowszej wersji schematu nie dotyczy encji pozostających przy starszej wersji, dopóki nie zostaną zmigrowane.
+- `system_tags` i `system_metadata` rekordów znajdują się poza schematem i nie są sprawdzane.
+- Schemat walidacji z nowszej wersji schematu nie dotyczy rekordów pozostających przy starszej wersji, dopóki nie zostaną zmigrowane.

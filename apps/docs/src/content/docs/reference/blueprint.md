@@ -25,20 +25,22 @@ kind = "entity"
 entity_schema = '''{ "type": "object", "required": ["title"] }'''
 ```
 
+Record blueprints use `kind = "entity"`: in blueprint keys, as in the API, records are called entities.
+
 | Key | Type | Required | Description |
 | --- | --- | --- | --- |
 | `format_version` | integer | Yes | Must be `1`. |
 | `code` | code | Yes | Identifier of the blueprint family. It cannot change between revisions. |
 | `name` | string | Yes | Display name. Can change between revisions. |
-| `kind` | `"entity"` or `"mixin"` | Yes | An `entity` blueprint can have entities. A `mixin` only supplies attributes to other blueprints through `[[includes]]`. |
+| `kind` | `"entity"` or `"mixin"` | Yes | An `entity` blueprint can have records. A `mixin` only supplies attributes to other blueprints through `[[includes]]`. |
 | `attributes` | array of tables | Yes | At least one attribute. See [Attributes](#attributes). |
 | `includes` | array of tables | No | Mixins this blueprint pulls attributes from. See [Includes](#includes). |
-| `views` | table | Entity: yes | Layouts for the web app. Entity blueprints must define `views.dropdown_option`. See [Views](#views). |
-| `entity_schema` | string (JSON) | No | JSON Schema for the whole entity, optionally with [`x-attricat-checks`](#entity-checks). Entity blueprints only. See [Validation](/builders/validation/). |
+| `views` | table | For `entity`: yes | Layouts for the web app. Record blueprints must define `views.dropdown_option`. See [Views](#views). |
+| `entity_schema` | string (JSON) | No | JSON Schema for the whole record, optionally with [`x-attricat-checks`](#record-checks). Record blueprints only. See [Validation](/builders/validation/). |
 | `publication` | table | No | Publication reapproval policy. See [Publication](#publication). |
 | `rules` | array of tables | No | Data-quality rules owned by this blueprint. See [Rules](/builders/rules/). |
-| `unique_keys` | array of tables | No | Business keys whose values must be unique. Entity blueprints only. See [Unique keys](#unique-keys). |
-| `connector_jobs` | array of tables | No | Scheduled or manual import and export jobs run by a connector extension. Entity blueprints only. See [Connector jobs](#connector-jobs). |
+| `unique_keys` | array of tables | No | Business keys whose values must be unique. Record blueprints only. See [Unique keys](#unique-keys). |
+| `connector_jobs` | array of tables | No | Scheduled or manual import and export jobs run by a connector extension. Record blueprints only. See [Connector jobs](#connector-jobs). |
 | `extensions` | table | No | Free-form data for extensions, namespaced as `[extensions.<extension-id>]`. The core compiler ignores it; extensions read it from the stored definition. |
 
 ## Attributes
@@ -64,7 +66,7 @@ value_type = "string"
 | `context_editable` | `"all"` or `"default"` | `"all"` | Where values can be written. `default` restricts writes to the default context: other contexts show the field read-only and the API rejects writes there. |
 | `readonly` | boolean | `false` | Shows the field in the web app but prevents editing it there. The API, CLI, agents, workflows, and extensions can still write it. Use it for values owned by an integration. |
 | `tags` | array of strings | `[]` | Free-form metadata. Must be unique and non-empty. Some tags hide the attribute in the web app; see [Visibility tags](#visibility-tags). |
-| `default_value` | matches the type | Unset | Value stored in the default context when an entity is created without one. Scalar types only. |
+| `default_value` | matches the type | Unset | Value stored in the default context when a record is created without one. Scalar types only. |
 | `value_schema` | string (JSON) | Unset | JSON Schema for one value. Scalar types only. A `string` attribute's schema can make it a [status](#statuses) or a [user or team assignment](#user-or-team-assignments). See [Validation](/builders/validation/). |
 
 ### Value types
@@ -79,7 +81,7 @@ value_type = "string"
 | `datetime` | Timestamp with offset | `value = 2026-03-01T09:30:00Z` | RFC 3339. |
 | `time` | Wall-clock time and IANA time zone | `value = { time = "09:30:00", time_zone = "Europe/Warsaw" }` | Both parts are required. |
 | `json` | Any JSON value | | Cannot be sorted or used in Explorer filters. Prefer typed attributes or relationships. |
-| `relationship` | Links to other entities | | See [Relationship keys](#relationship-keys). |
+| `relationship` | Links to other records | | See [Relationship keys](#relationship-keys). |
 | `file` | Uploaded files | | See [File keys](#file-keys). |
 
 ### Statuses
@@ -137,9 +139,9 @@ Each transition:
 | `from` | option code or `null` | Required. `null` means no value, so an edge from `null` allows setting the first value, including defaults. |
 | `to` | option code or `null` | Required. An edge to `null` allows clearing the value. |
 | `code` | code, up to 128 characters | Names the transition in `separate_from` and in history. |
-| `permission` | permission code | The person saving must hold this [permission](/reference/permissions/) for the entity. |
-| `roles` | 1 to 20 role codes | The person saving must hold at least one of these roles for the workspace, the blueprint, or the entity. |
-| `separate_from` | 1 to 20 transition codes | The person saving must not be the one who most recently made one of these transitions on this entity and context. |
+| `permission` | permission code | The person saving must hold this [permission](/reference/permissions/) for the record. |
+| `roles` | 1 to 20 role codes | The person saving must hold at least one of these roles for the workspace, the blueprint, or the record. |
+| `separate_from` | 1 to 20 transition codes | The person saving must not be the one who most recently made one of these transitions on this record and context. |
 | `conditions` | up to 16 checks | Requirements on the data. See [Transition conditions](#transition-conditions). |
 
 Each `from`/`to` pair may appear only once. `permission`, `roles`, and `separate_from` always refer to the person saving; they cannot refer to a [user or team assignment](#user-or-team-assignments) on the record. Refusals return `403 status_transition_forbidden` or `403 status_separation_of_duties`, and changes to locked content return `409 record_locked`. See [Control a record's lifecycle](/builders/validation/#control-a-records-lifecycle).
@@ -178,16 +180,16 @@ cardinality = "one"
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
-| `target_blueprint` | code | Any entity blueprint | Restricts targets to entities of this blueprint family. |
-| `target_blueprints` | array of codes | Any entity blueprint | Restricts targets to entities of any of these blueprint families. Cannot be combined with `target_blueprint`; a one-item list is the same as `target_blueprint`. |
-| `cardinality` | `"one"`, `"many"`, or `"one_to_one"` | `"many"` | How many targets one entity may link to in one context. `one_to_one` is shorthand for `cardinality = "one"` plus `target_cardinality = "one"` and cannot be combined with `target_cardinality`. |
-| `target_cardinality` | `"one"` or `"many"` | `"many"` | How many entities may link to the same target through this attribute in one context. |
+| `target_blueprint` | code | Any record blueprint | Restricts targets to records of this blueprint family. |
+| `target_blueprints` | array of codes | Any record blueprint | Restricts targets to records of any of these blueprint families. Cannot be combined with `target_blueprint`; a one-item list is the same as `target_blueprint`. |
+| `cardinality` | `"one"`, `"many"`, or `"one_to_one"` | `"many"` | How many targets one record may link to in one context. `one_to_one` is shorthand for `cardinality = "one"` plus `target_cardinality = "one"` and cannot be combined with `target_cardinality`. |
+| `target_cardinality` | `"one"` or `"many"` | `"many"` | How many records may link to the same target through this attribute in one context. |
 | `acyclic` | boolean | `false` | Rejects links that would form a cycle through this attribute. Requires `context_editable = "default"`, and the targets must include the blueprint itself. See [Hierarchies](#hierarchies). |
-| `tree` | boolean | `false` | An acyclic hierarchy in which every entity has at most one target (its parent). Implies `acyclic = true` and defaults `cardinality` to `"one"`; `cardinality = "many"` is rejected. |
+| `tree` | boolean | `false` | An acyclic hierarchy in which every record has at most one target (its parent). Implies `acyclic = true` and defaults `cardinality` to `"one"`; `cardinality = "many"` is rejected. |
 
 `cardinality = "one"` gives a single-select field whose options can be shared, such as a brand. Add `target_cardinality = "one"` only for an exclusive pairing, where each target can be claimed once. A write that breaks either limit returns `409 relationship_cardinality_conflict`.
 
-A write that links an entity of a blueprint not allowed by `target_blueprint` or `target_blueprints` returns `422 relationship_target_type_mismatch`. The entity picker in the web app offers only the allowed blueprints; when there are several, the picker has a **Target blueprint** selector. An `incoming_relationship_list` on any of the allowed target blueprints can list the field.
+A write that links a record of a blueprint not allowed by `target_blueprint` or `target_blueprints` returns `422 relationship_target_type_mismatch`. The record picker in the web app offers only the allowed blueprints; when there are several, the picker has a **Target blueprint** selector. An `incoming_relationship_list` on any of the allowed target blueprints can list the field.
 
 #### Hierarchies
 
@@ -202,11 +204,11 @@ context_editable = "default"
 
 `acyclic` and `tree` protect self-referencing structures such as location or asset hierarchies, and predecessor chains such as revision → previous revision.
 
-- A write that would close a cycle returns `409 relationship_cycle`. `error.details.path` lists the entity IDs along the cycle, starting and ending with the entity being written. Linking an entity to itself is a cycle of length one.
-- In a `tree`, giving an entity a second target returns `409 relationship_cardinality_conflict`.
+- A write that would close a cycle returns `409 relationship_cycle`. `error.details.path` lists the record IDs along the cycle, starting and ending with the record being written. Linking a record to itself is a cycle of length one.
+- In a `tree`, giving a record a second target returns `409 relationship_cardinality_conflict`.
 - Checks see links of every revision of the blueprint and run inside the write's transaction. Two concurrent writes cannot each add half of a cycle.
-- The hierarchy applies to the whole blueprint family as declared by its latest published revision, including entities still pinned to older revisions.
-- Publishing a revision that adds `acyclic` or `tree` checks the existing links first. If they contain cycles, or a tree has entities with more than one target, publication fails with `409 relationship_hierarchy_violations`; `error.details` lists up to 20 cycles and entities with extra targets. Fix the links and publish again.
+- The hierarchy applies to the whole blueprint family as declared by its latest published revision, including records still pinned to older revisions.
+- Publishing a revision that adds `acyclic` or `tree` checks the existing links first. If they contain cycles, or a tree has records with more than one target, publication fails with `409 relationship_hierarchy_violations`; `error.details` lists up to 20 cycles and records with extra targets. Fix the links and publish again.
 
 Relationships cannot have `value_schema` or `default_value`. Constrain them with `entity_schema` instead.
 
@@ -245,7 +247,7 @@ Some tags change where the web app shows an attribute when it builds a layout au
 | --- | --- |
 | `hidden` | Every surface below |
 | `hidden:form` | Editors added outside the layout, such as **Other attributes**, and the automatically generated create form |
-| `hidden:detail` | Automatically generated entity detail views |
+| `hidden:detail` | Automatically generated record detail views |
 | `hidden:explorer` | Explorer filter and facet choices |
 | `hidden:metadata` | The Attributes table on the blueprint page |
 
@@ -293,11 +295,11 @@ A selected attribute keeps all of the mixin's settings. To pick up changes in th
 
 | View | Purpose | Allowed `type` |
 | --- | --- | --- |
-| `dropdown_option` | Label for the entity in relationship pickers, filter pills, and search results. Required on entity blueprints. | `dropdown_option` |
-| `detail` | Entity page and create form. Fields the user may change are edited in place. | A layout block |
+| `dropdown_option` | Label for the record in relationship pickers, filter pills, and search results. Required on record blueprints. | `dropdown_option` |
+| `detail` | Record page and create form. Fields the user may change are edited in place. | A layout block |
 | `edit` | Deprecated and ignored by the web app. Still accepted, and edit components in it are still validated. | A layout block |
 | `table` | Explorer columns. | `table` |
-| `extension_layout` | Order and visibility of extension contributions on this blueprint's entity pages. | `extension_layout` |
+| `extension_layout` | Order and visibility of extension contributions on this blueprint's record pages. | `extension_layout` |
 
 When `detail` or `table` is missing, the web app lists attributes in declaration order.
 
@@ -361,7 +363,7 @@ A column can be sorted in the Explorer only when it is scalar and every relation
 | `accordion` | `sections` = array of `{ label, children }` | Collapsible sections. |
 | `field` | `field` | One scalar or file attribute. |
 | `relationship_list` | `field` | One relationship attribute and its targets. |
-| `incoming_relationship_list` | `label`, `relationships`, `page_size` | A button that opens a paged list of entities linking to this one. `relationships` is an array of `{ source_blueprint, field }`. `page_size` is capped by the server's `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE`. |
+| `incoming_relationship_list` | `label`, `relationships`, `page_size` | A button that opens a paged list of records linking to this one. `relationships` is an array of `{ source_blueprint, field }`. `page_size` is capped by the server's `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE`. |
 | `heading` | `text` | Static heading. |
 | `text` | `text` | Static paragraph. |
 | `divider` | | Horizontal rule. |
@@ -429,7 +431,7 @@ hidden = ["acme.legacy:panel"]
 | `outlets.<outlet>.order` | Contribution keys (`<extension-id>:<contribution-id>`) in display order. |
 | `outlets.<outlet>.hidden` | Contribution keys to hide. |
 
-An outlet you list here replaces the workspace default for that outlet on this blueprint's entities. Outlets you leave out keep the workspace layout. Keys for extensions that are not installed are kept, so a layout survives an extension being disabled and re-enabled.
+An outlet you list here replaces the workspace default for that outlet on this blueprint's records. Outlets you leave out keep the workspace layout. Keys for extensions that are not installed are kept, so a layout survives an extension being disabled and re-enabled.
 
 ## Publication
 
@@ -440,7 +442,7 @@ retain_on_edit_roles = ["editor"]
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
-| `retain_on_edit_roles` | array of role codes | `[]` | Workspace roles whose edits keep an entity's existing channel publications. Everyone else's edits withdraw them. The roles must exist when the revision is published. |
+| `retain_on_edit_roles` | array of role codes | `[]` | Workspace roles whose edits keep a record's existing channel publications. Everyone else's edits withdraw them. The roles must exist when the revision is published. |
 
 This does not grant any permission. See [Publishing](/guides/publishing/).
 
@@ -467,25 +469,25 @@ to = "released"
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
-| `enforcement.on_save` | boolean | `false` | Reject every write that leaves the entity violating the rule. |
+| `enforcement.on_save` | boolean | `false` | Reject every write that leaves the record violating the rule. |
 | `enforcement.transitions` | array of tables | `[]` | Up to 16 guarded status changes, each with `attribute_code`, optional `from`, and `to`. Without `from`, every change into `to` is guarded. |
 
 An `enforcement` table needs `on_save = true` or at least one transition, `severity` `error` or `critical`, and a predicate without `stale`, `unique`, or `acyclic`. Each transition's `attribute_code` must be a status attribute, and `from` and `to` must be codes of its `enum`. Violations return `422 rule_violation`. See [Enforce a rule](/builders/rules/#enforce-a-rule).
 
 ## Predicates
 
-Rules, entity checks, transition conditions, and publication channel checks share one predicate language. A predicate is a table (in TOML) or object (in JSON) tagged by `type`. It **holds** when the data is acceptable. Unknown keys are rejected.
+Rules, record checks, transition conditions, and publication channel checks share one predicate language. A predicate is a table (in TOML) or object (in JSON) tagged by `type`. It **holds** when the data is acceptable. Unknown keys are rejected.
 
 | `type` | Keys | Holds when |
 | --- | --- | --- |
 | `required` | `attribute_code` | The attribute has a value. A relationship needs at least one target. |
 | `stale` | `attribute_code`, `max_age_seconds` (1 to 31536000) | The value changed within `max_age_seconds`. Reporting rules only. |
-| `has_tag` | `tag` | The entity has the system tag. |
-| `missing_tag` | `tag` | The entity does not have the system tag. |
+| `has_tag` | `tag` | The record has the system tag. |
+| `missing_tag` | `tag` | The record does not have the system tag. |
 | `compare` | `attribute_code`, `op`, and exactly one of `other_attribute_code`, `subject_attribute_code`, or `value` | The comparison is true. |
 | `one_of` | `attribute_code`, `values` (1 to 100) | The value is one of `values`. Not for relationships or files. |
 | `relative_date` | `attribute_code`, `op` (`lt`, `lte`, `gt`, `gte`), `offset_days` (-36500 to 36500, default `0`) | The date or datetime compares true with the current time plus `offset_days`. |
-| `unique` | `attribute_codes` (1 to 4 string, number, integer, boolean, date, or datetime attributes) | No other live entity of the blueprint family, on any revision, has the same values in the same context. Reporting rules only. |
+| `unique` | `attribute_codes` (1 to 4 string, number, integer, boolean, date, or datetime attributes) | No other live record of the blueprint family, on any revision, has the same values in the same context. Reporting rules only. |
 | `linked` | `relationship_code`, `quantifier` (`all`, `any`, `none`; default `all`), `predicate` | `all`: every linked record satisfies `predicate` (true with no links). `any`: at least one does. `none`: none does. |
 | `referenced_by` | `blueprint_code`, `relationship_code`, optional `predicate`, `min` and/or `max` (0 to 1000) | The number of `blueprint_code` records whose `relationship_code` targets this record, and that satisfy `predicate`, is between `min` and `max`. `max = 0` means "none". |
 | `acyclic` | `relationship_code` | Following the relationship never returns to the record. Reporting rules only. |
@@ -507,9 +509,9 @@ Rules, entity checks, transition conditions, and publication channel checks shar
 - A predicate nests at most 4 levels deep and has at most 32 parts.
 - At run time, `linked` fails above 200 linked records per relationship, `referenced_by` above 1,000 referring records, and `acyclic` when it cannot finish within 1,000 records.
 
-`stale`, `unique`, and `acyclic` are reporting-only because they cannot be checked within a single save. They are rejected in enforcing rules, entity checks, and transition conditions.
+`stale`, `unique`, and `acyclic` are reporting-only because they cannot be checked within a single save. They are rejected in enforcing rules, record checks, and transition conditions.
 
-### Entity checks
+### Record checks
 
 `x-attricat-checks` is an array inside `entity_schema`:
 
@@ -535,7 +537,7 @@ At most 32 checks. Failures return `422 entity_check_failed`. See [Validation](/
 
 ### Transition conditions
 
-An edge in an `x-attricat-status` annotation's `transitions` can carry `conditions`, an array of up to 16 checks with the same keys as [entity checks](#entity-checks):
+An edge in an `x-attricat-status` annotation's `transitions` can carry `conditions`, an array of up to 16 checks with the same keys as [record checks](#record-checks):
 
 ```json
 { "from": "review", "to": "released", "conditions": [
@@ -548,7 +550,7 @@ Each `from`/`to` pair may appear only once. Unmet conditions return `422 transit
 
 ## Unique keys
 
-A unique key declares a business identifier that two entities of the blueprint family cannot share, such as a part number, a document number, or a combination such as manufacturer and part number.
+A unique key declares a business identifier that two records of the blueprint family cannot share, such as a part number, a document number, or a combination such as manufacturer and part number.
 
 ```toml
 [[unique_keys]]
@@ -572,13 +574,13 @@ case_sensitive = true
 How values are compared:
 
 - Text is trimmed and every run of whitespace becomes one space. Unless `case_sensitive = true`, text is also compared in lowercase, so `ABC-1  Rev` and ` abc-1 rev` are the same key.
-- Numbers compare by value (`1.50` equals `1.5`), date-times by instant, and relationships by the linked entity.
-- An entity that has no value, or only blank text, for any of the key's attributes is not checked against that key. Make the attributes required in `entity_schema` if every entity must have the key.
-- The key covers the whole blueprint family as declared by its latest published revision, including entities pinned to older revisions. Attributes are matched by code.
+- Numbers compare by value (`1.50` equals `1.5`), date-times by instant, and relationships by the linked record.
+- A record that has no value, or only blank text, for any of the key's attributes is not checked against that key. Make the attributes required in `entity_schema` if every record must have the key.
+- The key covers the whole blueprint family as declared by its latest published revision, including records pinned to older revisions. Attributes are matched by code.
 
-A write that would give a second entity the same key value returns `409 unique_key_conflict`. `error.details` names the `key`, the `context` code, the normalized `values`, and the `conflicting_entity_id` that already holds them. The check runs in the database inside the write's transaction, so when two people save the same value at the same moment, exactly one save succeeds.
+A write that would give a second record the same key value returns `409 unique_key_conflict`. `error.details` names the `key`, the `context` code, the normalized `values`, and the `conflicting_entity_id` that already holds them. The check runs in the database inside the write's transaction, so when two people save the same value at the same moment, exactly one save succeeds.
 
-Publishing a revision that adds or changes unique keys checks existing entities first. If some already share a value, publication fails with `409 unique_key_duplicates`, and `error.details.duplicates` lists up to 20 groups with the key, context, values, and entity IDs (`error.details.total` counts all groups). Change or delete the duplicates and publish again.
+Publishing a revision that adds or changes unique keys checks existing records first. If some already share a value, publication fails with `409 unique_key_duplicates`, and `error.details.duplicates` lists up to 20 groups with the key, context, values, and record IDs (`error.details.total` counts all groups). Change or delete the duplicates and publish again.
 
 ## Connector jobs
 
@@ -606,14 +608,14 @@ input = { profile = { version = 1, columns = [{ header = "ID", attribute = "exte
 | `interval_seconds` | integer | Manual only | Run every N seconds, 60 to 2592000. |
 | `enabled` | boolean | `true` | Set `false` to pause the job. |
 
-Jobs are checked against the enabled extension when the revision is published; an invalid job blocks publication. A job removed in a later revision is disabled and its run history is kept. An export job runs once per enabled publication channel and exports only entities published to that channel. See [Operations and connectors](/extensions/operations/).
+Jobs are checked against the enabled extension when the revision is published; an invalid job blocks publication. A job removed in a later revision is disabled and its run history is kept. An export job runs once per enabled publication channel and exports only records published to that channel. See [Operations and connectors](/extensions/operations/).
 
 ## Limits and errors
 
 A few compile-time rules that are easy to miss:
 
 - `format_version` other than `1` is rejected.
-- An entity blueprint without `views.dropdown_option` is rejected.
+- A record blueprint without `views.dropdown_option` is rejected.
 - `entity_schema` on a mixin is rejected.
 - `entity_schema` may only name attributes the blueprint has in its top-level `required`, `properties`, `dependentRequired`, and `dependentSchemas`.
 - Predicates in `x-attricat-checks`, transition `conditions`, and `[[rules]]` must name attributes the blueprint has, with types that suit the predicate. An ordering comparison on a string, or a comparison of a date with a number, is rejected.

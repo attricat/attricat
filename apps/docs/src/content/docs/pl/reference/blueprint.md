@@ -25,20 +25,22 @@ kind = "entity"
 entity_schema = '''{ "type": "object", "required": ["title"] }'''
 ```
 
+Schematy rekordów mają `kind = "entity"`: w kluczach schematu, tak jak w API, rekordy występują pod nazwą `entity`.
+
 | Klucz | Typ | Wymagany | Opis |
 | --- | --- | --- | --- |
 | `format_version` | liczba całkowita | Tak | Musi wynosić `1`. |
 | `code` | kod | Tak | Identyfikator rodziny schematów. Nie może się zmieniać między wersjami. |
 | `name` | ciąg znaków | Tak | Nazwa wyświetlana. Może się zmieniać między wersjami. |
-| `kind` | `"entity"` lub `"mixin"` | Tak | Schemat `entity` może mieć encje. Mixin jedynie dostarcza atrybuty innym schematom przez `[[includes]]`. |
+| `kind` | `"entity"` lub `"mixin"` | Tak | Schemat `entity` może mieć rekordy. Mixin jedynie dostarcza atrybuty innym schematom przez `[[includes]]`. |
 | `attributes` | tablica tabel | Tak | Co najmniej jeden atrybut. Zobacz [Atrybuty](#atrybuty). |
 | `includes` | tablica tabel | Nie | Mixiny, z których ten schemat pobiera atrybuty. Zobacz [Include](#include). |
-| `views` | tabela | Encja: tak | Układy dla aplikacji webowej. Schematy encji muszą definiować `views.dropdown_option`. Zobacz [Widoki](#widoki). |
-| `entity_schema` | ciąg znaków (JSON) | Nie | JSON Schema dla całej encji, opcjonalnie z [`x-attricat-checks`](#kontrole-encji). Tylko schematy encji. Zobacz [Walidacja](/pl/builders/validation/). |
+| `views` | tabela | Dla `entity`: tak | Układy dla aplikacji webowej. Schematy rekordów muszą definiować `views.dropdown_option`. Zobacz [Widoki](#widoki). |
+| `entity_schema` | ciąg znaków (JSON) | Nie | JSON Schema dla całego rekordu, opcjonalnie z [`x-attricat-checks`](#kontrole-rekordów). Tylko schematy rekordów. Zobacz [Walidacja](/pl/builders/validation/). |
 | `publication` | tabela | Nie | Zasady ponownego zatwierdzania publikacji. Zobacz [Publikacja](#publikacja). |
 | `rules` | tablica tabel | Nie | Reguły jakości danych należące do tego schematu. Zobacz [Reguły](/pl/builders/rules/). |
-| `unique_keys` | tablica tabel | Nie | Klucze biznesowe, których wartości muszą być unikalne. Tylko schematy encji. Zobacz [Klucze unikalne](#klucze-unikalne). |
-| `connector_jobs` | tablica tabel | Nie | Zaplanowane lub ręczne zadania importu i eksportu wykonywane przez rozszerzenie konektora. Tylko schematy encji. Zobacz [Zadania konektorów](#zadania-konektorów). |
+| `unique_keys` | tablica tabel | Nie | Klucze biznesowe, których wartości muszą być unikalne. Tylko schematy rekordów. Zobacz [Klucze unikalne](#klucze-unikalne). |
+| `connector_jobs` | tablica tabel | Nie | Zaplanowane lub ręczne zadania importu i eksportu wykonywane przez rozszerzenie konektora. Tylko schematy rekordów. Zobacz [Zadania konektorów](#zadania-konektorów). |
 | `extensions` | tabela | Nie | Dowolne dane dla rozszerzeń, w przestrzeniach nazw `[extensions.<extension-id>]`. Kompilator rdzenia je ignoruje; rozszerzenia odczytują je z zapisanej definicji. |
 
 ## Atrybuty
@@ -64,7 +66,7 @@ value_type = "string"
 | `context_editable` | `"all"` lub `"default"` | `"all"` | Gdzie można zapisywać wartości. `default` ogranicza zapisy do kontekstu domyślnego: inne konteksty pokazują pole tylko do odczytu, a API odrzuca w nich zapisy. |
 | `readonly` | wartość logiczna | `false` | Pokazuje pole w aplikacji webowej, ale uniemożliwia jego edycję w niej. API, CLI, agenci, przepływy pracy i rozszerzenia nadal mogą je zapisywać. Używaj dla wartości, którymi zarządza integracja. |
 | `tags` | tablica ciągów znaków | `[]` | Dowolne metadane. Muszą być unikalne i niepuste. Niektóre tagi ukrywają atrybut w aplikacji webowej; zobacz [Tagi widoczności](#tagi-widoczności). |
-| `default_value` | zgodny z typem | Nieustawiony | Wartość zapisywana w kontekście domyślnym, gdy encja zostaje utworzona bez niej. Tylko typy skalarne. |
+| `default_value` | zgodny z typem | Nieustawiony | Wartość zapisywana w kontekście domyślnym, gdy rekord zostaje utworzony bez niej. Tylko typy skalarne. |
 | `value_schema` | ciąg znaków (JSON) | Nieustawiony | JSON Schema dla jednej wartości. Tylko typy skalarne. Schemat atrybutu `string` może uczynić go [statusem](#statusy) lub [przypisaniem użytkownika lub zespołu](#przypisania-użytkowników-i-zespołów). Zobacz [Walidacja](/pl/builders/validation/). |
 
 ### Typy wartości
@@ -78,8 +80,8 @@ value_type = "string"
 | `date` | Data kalendarzowa | `value = 2026-03-01` | |
 | `datetime` | Znacznik czasu z przesunięciem | `value = 2026-03-01T09:30:00Z` | RFC 3339. |
 | `time` | Godzina zegarowa i strefa czasowa IANA | `value = { time = "09:30:00", time_zone = "Europe/Warsaw" }` | Obie części są wymagane. |
-| `json` | Dowolna wartość JSON | | Nie można według niej sortować ani używać jej w filtrach przeglądarki encji. Preferuj atrybuty typowane lub relacje. |
-| `relationship` | Powiązania z innymi encjami | | Zobacz [Klucze relacji](#klucze-relacji). |
+| `json` | Dowolna wartość JSON | | Nie można według niej sortować ani używać jej w filtrach przeglądarki rekordów. Preferuj atrybuty typowane lub relacje. |
+| `relationship` | Powiązania z innymi rekordami | | Zobacz [Klucze relacji](#klucze-relacji). |
 | `file` | Przesłane pliki | | Zobacz [Klucze plików](#klucze-plików). |
 
 ### Statusy
@@ -137,9 +139,9 @@ Każde przejście:
 | `from` | kod opcji lub `null` | Wymagany. `null` oznacza brak wartości, więc krawędź z `null` pozwala ustawić pierwszą wartość, także domyślną. |
 | `to` | kod opcji lub `null` | Wymagany. Krawędź do `null` pozwala wyczyścić wartość. |
 | `code` | kod, do 128 znaków | Nazywa przejście w `separate_from` i w historii. |
-| `permission` | kod uprawnienia | Osoba zapisująca zmianę musi mieć to [uprawnienie](/pl/reference/permissions/) dla encji. |
-| `roles` | od 1 do 20 kodów ról | Osoba zapisująca zmianę musi mieć co najmniej jedną z tych ról w obszarze roboczym, dla schematu lub dla encji. |
-| `separate_from` | od 1 do 20 kodów przejść | Osoba zapisująca zmianę nie może być tą, która jako ostatnia wykonała jedno z tych przejść w tej encji i tym kontekście. |
+| `permission` | kod uprawnienia | Osoba zapisująca zmianę musi mieć to [uprawnienie](/pl/reference/permissions/) dla rekordu. |
+| `roles` | od 1 do 20 kodów ról | Osoba zapisująca zmianę musi mieć co najmniej jedną z tych ról w obszarze roboczym, dla schematu lub dla rekordu. |
+| `separate_from` | od 1 do 20 kodów przejść | Osoba zapisująca zmianę nie może być tą, która jako ostatnia wykonała jedno z tych przejść w tym rekordzie i tym kontekście. |
 | `conditions` | do 16 kontroli | Wymagania dotyczące danych. Zobacz [Warunki przejść](#warunki-przejść). |
 
 Każda para `from`/`to` może wystąpić tylko raz. `permission`, `roles` i `separate_from` zawsze dotyczą osoby zapisującej zmianę; nie mogą odwoływać się do [przypisania użytkownika lub zespołu](#przypisania-użytkowników-i-zespołów) w rekordzie. Odmowy zwracają `403 status_transition_forbidden` lub `403 status_separation_of_duties`, a zmiany zablokowanej treści zwracają `409 record_locked`. Zobacz [Kontroluj cykl życia rekordu](/pl/builders/validation/#kontroluj-cykl-życia-rekordu).
@@ -178,16 +180,16 @@ cardinality = "one"
 
 | Klucz | Typ | Domyślnie | Opis |
 | --- | --- | --- | --- |
-| `target_blueprint` | kod | Dowolny schemat encji | Ogranicza cele do encji z tej rodziny schematów. |
-| `target_blueprints` | tablica kodów | Dowolny schemat encji | Ogranicza cele do encji z dowolnej z tych rodzin schematów. Nie można łączyć z `target_blueprint`; lista z jednym elementem działa tak samo jak `target_blueprint`. |
-| `cardinality` | `"one"`, `"many"` lub `"one_to_one"` | `"many"` | Z iloma celami jedna encja może być powiązana w jednym kontekście. `one_to_one` to skrót dla `cardinality = "one"` razem z `target_cardinality = "one"` i nie można go łączyć z `target_cardinality`. |
-| `target_cardinality` | `"one"` lub `"many"` | `"many"` | Ile encji może wskazywać ten sam cel przez ten atrybut w jednym kontekście. |
+| `target_blueprint` | kod | Dowolny schemat rekordu | Ogranicza cele do rekordów z tej rodziny schematów. |
+| `target_blueprints` | tablica kodów | Dowolny schemat rekordu | Ogranicza cele do rekordów z dowolnej z tych rodzin schematów. Nie można łączyć z `target_blueprint`; lista z jednym elementem działa tak samo jak `target_blueprint`. |
+| `cardinality` | `"one"`, `"many"` lub `"one_to_one"` | `"many"` | Z iloma celami jeden rekord może być powiązany w jednym kontekście. `one_to_one` to skrót dla `cardinality = "one"` razem z `target_cardinality = "one"` i nie można go łączyć z `target_cardinality`. |
+| `target_cardinality` | `"one"` lub `"many"` | `"many"` | Ile rekordów może wskazywać ten sam cel przez ten atrybut w jednym kontekście. |
 | `acyclic` | wartość logiczna | `false` | Odrzuca powiązania, które utworzyłyby cykl przez ten atrybut. Wymaga `context_editable = "default"`, a cele muszą obejmować sam schemat. Zobacz [Hierarchie](#hierarchie). |
-| `tree` | wartość logiczna | `false` | Hierarchia acykliczna, w której każda encja ma co najwyżej jeden cel (rodzica). Oznacza `acyclic = true` i domyślnie ustawia `cardinality` na `"one"`; `cardinality = "many"` jest odrzucane. |
+| `tree` | wartość logiczna | `false` | Hierarchia acykliczna, w której każdy rekord ma co najwyżej jeden cel (rodzica). Oznacza `acyclic = true` i domyślnie ustawia `cardinality` na `"one"`; `cardinality = "many"` jest odrzucane. |
 
 `cardinality = "one"` daje pole jednokrotnego wyboru, którego opcje mogą być współdzielone, np. marka. Dodaj `target_cardinality = "one"` tylko dla wyłącznego powiązania, w którym każdy cel może zostać zajęty raz. Zapis naruszający którykolwiek limit zwraca `409 relationship_cardinality_conflict`.
 
-Zapis wiążący encję schematu niedozwolonego przez `target_blueprint` lub `target_blueprints` zwraca `422 relationship_target_type_mismatch`. Okno wyboru encji w aplikacji webowej oferuje tylko dozwolone schematy; gdy jest ich kilka, ma pole **Schemat celu**. Blok `incoming_relationship_list` w każdym z dozwolonych schematów docelowych może wyświetlać to pole.
+Zapis wiążący rekord schematu niedozwolonego przez `target_blueprint` lub `target_blueprints` zwraca `422 relationship_target_type_mismatch`. Okno wyboru rekordu w aplikacji webowej oferuje tylko dozwolone schematy; gdy jest ich kilka, ma pole **Schemat celu**. Blok `incoming_relationship_list` w każdym z dozwolonych schematów docelowych może wyświetlać to pole.
 
 #### Hierarchie
 
@@ -202,11 +204,11 @@ context_editable = "default"
 
 `acyclic` i `tree` chronią struktury odwołujące się do siebie, takie jak hierarchie lokalizacji czy zasobów, oraz łańcuchy poprzedników, np. wersja → poprzednia wersja.
 
-- Zapis, który zamknąłby cykl, zwraca `409 relationship_cycle`. `error.details.path` zawiera identyfikatory encji wzdłuż cyklu, zaczynając i kończąc na zapisywanej encji. Powiązanie encji z nią samą jest cyklem o długości jeden.
-- W drzewie (`tree`) nadanie encji drugiego celu zwraca `409 relationship_cardinality_conflict`.
+- Zapis, który zamknąłby cykl, zwraca `409 relationship_cycle`. `error.details.path` zawiera identyfikatory rekordów wzdłuż cyklu, zaczynając i kończąc na zapisywanym rekordzie. Powiązanie rekordu z nim samym jest cyklem o długości jeden.
+- W drzewie (`tree`) nadanie rekordowi drugiego celu zwraca `409 relationship_cardinality_conflict`.
 - Sprawdzenia uwzględniają powiązania ze wszystkich wersji schematu i działają w transakcji zapisu. Dwa równoczesne zapisy nie mogą każdy dodać połowy cyklu.
-- Hierarchia dotyczy całej rodziny schematów zgodnie z jej najnowszą opublikowaną wersją, także encji przypiętych do starszych wersji.
-- Publikacja wersji, która dodaje `acyclic` lub `tree`, najpierw sprawdza istniejące powiązania. Jeśli zawierają cykle albo drzewo ma encje z więcej niż jednym celem, publikacja kończy się błędem `409 relationship_hierarchy_violations`; `error.details` wymienia do 20 cykli i encji z nadmiarowymi celami. Popraw powiązania i opublikuj ponownie.
+- Hierarchia dotyczy całej rodziny schematów zgodnie z jej najnowszą opublikowaną wersją, także rekordów przypiętych do starszych wersji.
+- Publikacja wersji, która dodaje `acyclic` lub `tree`, najpierw sprawdza istniejące powiązania. Jeśli zawierają cykle albo drzewo ma rekordy z więcej niż jednym celem, publikacja kończy się błędem `409 relationship_hierarchy_violations`; `error.details` wymienia do 20 cykli i rekordów z nadmiarowymi celami. Popraw powiązania i opublikuj ponownie.
 
 Relacje nie mogą mieć `value_schema` ani `default_value`. Ograniczaj je zamiast tego przez `entity_schema`.
 
@@ -245,8 +247,8 @@ Niektóre tagi zmieniają miejsca, w których aplikacja webowa pokazuje atrybut,
 | --- | --- |
 | `hidden` | Wszystkich miejscach wymienionych poniżej |
 | `hidden:form` | Edytorach dodawanych poza układem, np. w sekcji **Pozostałe atrybuty**, oraz w automatycznie generowanym formularzu tworzenia |
-| `hidden:detail` | Automatycznie generowanych widokach szczegółów encji |
-| `hidden:explorer` | Opcjach filtrów i faset przeglądarki encji |
+| `hidden:detail` | Automatycznie generowanych widokach szczegółów rekordów |
+| `hidden:explorer` | Opcjach filtrów i faset przeglądarki rekordów |
 | `hidden:metadata` | Tabeli atrybutów na stronie schematu |
 
 ### Typy atrybutów z rozszerzeń
@@ -293,11 +295,11 @@ Wybrany atrybut zachowuje wszystkie ustawienia z mixinu. Aby uwzględnić zmiany
 
 | Widok | Przeznaczenie | Dozwolony `type` |
 | --- | --- | --- |
-| `dropdown_option` | Etykieta encji w selektorach relacji, etykietach filtrów i wynikach wyszukiwania. Wymagany w schematach encji. | `dropdown_option` |
-| `detail` | Strona encji i formularz tworzenia. Pola, które użytkownik może zmienić, są edytowane w miejscu. | Blok układu |
+| `dropdown_option` | Etykieta rekordu w selektorach relacji, etykietach filtrów i wynikach wyszukiwania. Wymagany w schematach rekordów. | `dropdown_option` |
+| `detail` | Strona rekordu i formularz tworzenia. Pola, które użytkownik może zmienić, są edytowane w miejscu. | Blok układu |
 | `edit` | Przestarzały i ignorowany przez aplikację internetową. Nadal akceptowany, a komponenty edycji w nim nadal są walidowane. | Blok układu |
-| `table` | Kolumny przeglądarki encji. | `table` |
-| `extension_layout` | Kolejność i widoczność kontrybucji z rozszerzeń na stronach encji tego schematu. | `extension_layout` |
+| `table` | Kolumny przeglądarki rekordów. | `table` |
+| `extension_layout` | Kolejność i widoczność kontrybucji z rozszerzeń na stronach rekordów tego schematu. | `extension_layout` |
 
 Gdy brakuje `detail` lub `table`, aplikacja webowa wyświetla atrybuty w kolejności deklaracji.
 
@@ -346,7 +348,7 @@ renderer = { id = "catalog.table_image", version = 1 }
 | `fields` | tablica kodów atrybutów | Starszy skrót dla lokalnych kolumn skalarnych. Nie można go łączyć z `columns`. |
 | `component` | odwołanie do komponentu | Opcjonalny komponent tabeli. |
 
-Kolumnę można sortować w przeglądarce encji tylko wtedy, gdy jest skalarna, a każdy krok relacji w jej ścieżce ma `cardinality = "one"`.
+Kolumnę można sortować w przeglądarce rekordów tylko wtedy, gdy jest skalarna, a każdy krok relacji w jej ścieżce ma `cardinality = "one"`.
 
 ### Bloki układu
 
@@ -361,7 +363,7 @@ Kolumnę można sortować w przeglądarce encji tylko wtedy, gdy jest skalarna, 
 | `accordion` | `sections` = tablica `{ label, children }` | Zwijane sekcje. |
 | `field` | `field` | Jeden atrybut skalarny lub plikowy. |
 | `relationship_list` | `field` | Jeden atrybut relacji i jego cele. |
-| `incoming_relationship_list` | `label`, `relationships`, `page_size` | Przycisk otwierający stronicowaną listę encji wskazujących na tę encję. `relationships` to tablica `{ source_blueprint, field }`. `page_size` jest ograniczane przez `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE` serwera. |
+| `incoming_relationship_list` | `label`, `relationships`, `page_size` | Przycisk otwierający stronicowaną listę rekordów wskazujących na ten rekord. `relationships` to tablica `{ source_blueprint, field }`. `page_size` jest ograniczane przez `INCOMING_RELATIONSHIP_MAX_PAGE_SIZE` serwera. |
 | `heading` | `text` | Statyczny nagłówek. |
 | `text` | `text` | Statyczny akapit. |
 | `divider` | | Linia pozioma. |
@@ -429,7 +431,7 @@ hidden = ["acme.legacy:panel"]
 | `outlets.<outlet>.order` | Klucze kontrybucji (`<extension-id>:<contribution-id>`) w kolejności wyświetlania. |
 | `outlets.<outlet>.hidden` | Klucze kontrybucji do ukrycia. |
 
-Punkt osadzenia wymieniony tutaj zastępuje domyślny układ obszaru roboczego dla tego punktu na encjach tego schematu. Punkty, których nie wymienisz, zachowują układ obszaru roboczego. Klucze rozszerzeń, które nie są zainstalowane, są zachowywane, więc układ przetrwa wyłączenie i ponowne włączenie rozszerzenia.
+Punkt osadzenia wymieniony tutaj zastępuje domyślny układ obszaru roboczego dla tego punktu na rekordach tego schematu. Punkty, których nie wymienisz, zachowują układ obszaru roboczego. Klucze rozszerzeń, które nie są zainstalowane, są zachowywane, więc układ przetrwa wyłączenie i ponowne włączenie rozszerzenia.
 
 ## Publikacja
 
@@ -440,7 +442,7 @@ retain_on_edit_roles = ["editor"]
 
 | Klucz | Typ | Domyślnie | Opis |
 | --- | --- | --- | --- |
-| `retain_on_edit_roles` | tablica kodów ról | `[]` | Role obszaru roboczego, których edycje zachowują istniejące publikacje encji w kanałach. Edycje wszystkich pozostałych osób je wycofują. Role muszą istnieć w chwili publikacji wersji. |
+| `retain_on_edit_roles` | tablica kodów ról | `[]` | Role obszaru roboczego, których edycje zachowują istniejące publikacje rekordu w kanałach. Edycje wszystkich pozostałych osób je wycofują. Role muszą istnieć w chwili publikacji wersji. |
 
 Nie przyznaje to żadnych uprawnień. Zobacz [Publikowanie](/pl/guides/publishing/).
 
@@ -467,25 +469,25 @@ to = "released"
 
 | Klucz | Typ | Domyślnie | Opis |
 | --- | --- | --- | --- |
-| `enforcement.on_save` | wartość logiczna | `false` | Odrzuca każdy zapis, po którym encja narusza regułę. |
+| `enforcement.on_save` | wartość logiczna | `false` | Odrzuca każdy zapis, po którym rekord narusza regułę. |
 | `enforcement.transitions` | tablica tabel | `[]` | Do 16 chronionych zmian statusu, każda z `attribute_code`, opcjonalnym `from` oraz `to`. Bez `from` chroniona jest każda zmiana na `to`. |
 
 Tabela `enforcement` wymaga `on_save = true` lub co najmniej jednego przejścia, wagi (`severity`) `error` lub `critical` oraz predykatu bez `stale`, `unique` i `acyclic`. `attribute_code` każdego przejścia musi być atrybutem statusu, a `from` i `to` muszą być kodami z jego `enum`. Naruszenia zwracają `422 rule_violation`. Zobacz [Egzekwowanie reguły](/pl/builders/rules/#egzekwowanie-reguły).
 
 ## Predykaty
 
-Reguły, kontrole encji, warunki przejść i kontrole kanałów publikacji używają jednego języka predykatów. Predykat to tabela (w TOML) lub obiekt (w JSON) rozróżniany kluczem `type`. Jest **spełniony**, gdy dane są poprawne. Nieznane klucze są odrzucane.
+Reguły, kontrole rekordów, warunki przejść i kontrole kanałów publikacji używają jednego języka predykatów. Predykat to tabela (w TOML) lub obiekt (w JSON) rozróżniany kluczem `type`. Jest **spełniony**, gdy dane są poprawne. Nieznane klucze są odrzucane.
 
 | `type` | Klucze | Spełniony, gdy |
 | --- | --- | --- |
 | `required` | `attribute_code` | Atrybut ma wartość. Relacja musi mieć co najmniej jeden cel. |
 | `stale` | `attribute_code`, `max_age_seconds` (od 1 do 31536000) | Wartość zmieniła się w ciągu `max_age_seconds`. Tylko reguły zgłaszające ustalenia. |
-| `has_tag` | `tag` | Encja ma tag systemowy. |
-| `missing_tag` | `tag` | Encja nie ma tagu systemowego. |
+| `has_tag` | `tag` | Rekord ma tag systemowy. |
+| `missing_tag` | `tag` | Rekord nie ma tagu systemowego. |
 | `compare` | `attribute_code`, `op` oraz dokładnie jeden z kluczy `other_attribute_code`, `subject_attribute_code` lub `value` | Porównanie jest prawdziwe. |
 | `one_of` | `attribute_code`, `values` (od 1 do 100) | Wartość jest jedną z `values`. Nie dotyczy relacji ani plików. |
 | `relative_date` | `attribute_code`, `op` (`lt`, `lte`, `gt`, `gte`), `offset_days` (od -36500 do 36500, domyślnie `0`) | Data lub data z godziną spełnia porównanie z bieżącym czasem przesuniętym o `offset_days`. |
-| `unique` | `attribute_codes` (od 1 do 4 atrybutów typu string, number, integer, boolean, date lub datetime) | Żadna inna aktywna encja z rodziny schematów, w dowolnej wersji, nie ma tych samych wartości w tym samym kontekście. Tylko reguły zgłaszające ustalenia. |
+| `unique` | `attribute_codes` (od 1 do 4 atrybutów typu string, number, integer, boolean, date lub datetime) | Żaden inny aktywny rekord z rodziny schematów, w dowolnej wersji, nie ma tych samych wartości w tym samym kontekście. Tylko reguły zgłaszające ustalenia. |
 | `linked` | `relationship_code`, `quantifier` (`all`, `any`, `none`; domyślnie `all`), `predicate` | `all`: każdy powiązany rekord spełnia `predicate` (prawda, gdy nie ma powiązań). `any`: co najmniej jeden go spełnia. `none`: żaden go nie spełnia. |
 | `referenced_by` | `blueprint_code`, `relationship_code`, opcjonalnie `predicate`, `min` i/lub `max` (od 0 do 1000) | Liczba rekordów `blueprint_code`, których relacja `relationship_code` wskazuje ten rekord i które spełniają `predicate`, mieści się między `min` a `max`. `max = 0` oznacza „żaden”. |
 | `acyclic` | `relationship_code` | Podążanie za relacją nigdy nie wraca do rekordu. Tylko reguły zgłaszające ustalenia. |
@@ -507,9 +509,9 @@ Operatory `compare`:
 - Predykat może mieć najwyżej 4 poziomy zagnieżdżenia i najwyżej 32 części.
 - W trakcie działania `linked` nie przechodzi przy ponad 200 powiązanych rekordach na relację, `referenced_by` przy ponad 1000 rekordach wskazujących, a `acyclic`, gdy nie zdoła zakończyć sprawdzania w obrębie 1000 rekordów.
 
-`stale`, `unique` i `acyclic` służą tylko do zgłaszania ustaleń, ponieważ nie da się ich sprawdzić w ramach jednego zapisu. Są odrzucane w egzekwowanych regułach, kontrolach encji i warunkach przejść.
+`stale`, `unique` i `acyclic` służą tylko do zgłaszania ustaleń, ponieważ nie da się ich sprawdzić w ramach jednego zapisu. Są odrzucane w egzekwowanych regułach, kontrolach rekordów i warunkach przejść.
 
-### Kontrole encji
+### Kontrole rekordów
 
 `x-attricat-checks` to tablica wewnątrz `entity_schema`:
 
@@ -535,7 +537,7 @@ Najwyżej 32 kontrole. Niepowodzenie zwraca `422 entity_check_failed`. Zobacz [W
 
 ### Warunki przejść
 
-Krawędź w `transitions` adnotacji `x-attricat-status` może mieć `conditions`, czyli tablicę do 16 kontroli z tymi samymi kluczami co [kontrole encji](#kontrole-encji):
+Krawędź w `transitions` adnotacji `x-attricat-status` może mieć `conditions`, czyli tablicę do 16 kontroli z tymi samymi kluczami co [kontrole rekordów](#kontrole-rekordów):
 
 ```json
 { "from": "review", "to": "released", "conditions": [
@@ -548,7 +550,7 @@ Każda para `from`/`to` może wystąpić tylko raz. Niespełnione warunki zwraca
 
 ## Klucze unikalne
 
-Klucz unikalny deklaruje identyfikator biznesowy, którego dwie encje z tej rodziny schematów nie mogą współdzielić, np. numer części, numer dokumentu albo kombinację, taką jak producent i numer części.
+Klucz unikalny deklaruje identyfikator biznesowy, którego dwa rekordy z tej rodziny schematów nie mogą współdzielić, np. numer części, numer dokumentu albo kombinację, taką jak producent i numer części.
 
 ```toml
 [[unique_keys]]
@@ -572,13 +574,13 @@ case_sensitive = true
 Jak porównywane są wartości:
 
 - Tekst jest przycinany, a każdy ciąg białych znaków zamieniany na jedną spację. Jeśli nie ustawiono `case_sensitive = true`, tekst jest też porównywany małymi literami, więc `ABC-1  Rev` i ` abc-1 rev` to ten sam klucz.
-- Liczby są porównywane według wartości (`1.50` równa się `1.5`), daty z czasem według chwili, a relacje według powiązanej encji.
-- Encja, która nie ma wartości (albo ma tylko pusty tekst) dla któregokolwiek atrybutu klucza, nie jest sprawdzana względem tego klucza. Jeśli każda encja musi mieć klucz, oznacz atrybuty jako wymagane w `entity_schema`.
-- Klucz obejmuje całą rodzinę schematów zgodnie z jej najnowszą opublikowaną wersją, także encje przypięte do starszych wersji. Atrybuty są dopasowywane według kodu.
+- Liczby są porównywane według wartości (`1.50` równa się `1.5`), daty z czasem według chwili, a relacje według powiązanego rekordu.
+- Rekord, który nie ma wartości (albo ma tylko pusty tekst) dla któregokolwiek atrybutu klucza, nie jest sprawdzany względem tego klucza. Jeśli każdy rekord musi mieć klucz, oznacz atrybuty jako wymagane w `entity_schema`.
+- Klucz obejmuje całą rodzinę schematów zgodnie z jej najnowszą opublikowaną wersją, także rekordy przypięte do starszych wersji. Atrybuty są dopasowywane według kodu.
 
-Zapis, który nadałby drugiej encji tę samą wartość klucza, zwraca `409 unique_key_conflict`. `error.details` zawiera `key`, kod kontekstu `context`, znormalizowane wartości `values` oraz `conflicting_entity_id` encji, która już je ma. Sprawdzenie odbywa się w bazie danych w transakcji zapisu, więc gdy dwie osoby zapisują tę samą wartość w tym samym momencie, udaje się dokładnie jeden zapis.
+Zapis, który nadałby drugiemu rekordowi tę samą wartość klucza, zwraca `409 unique_key_conflict`. `error.details` zawiera `key`, kod kontekstu `context`, znormalizowane wartości `values` oraz `conflicting_entity_id` rekordu, który już je ma. Sprawdzenie odbywa się w bazie danych w transakcji zapisu, więc gdy dwie osoby zapisują tę samą wartość w tym samym momencie, udaje się dokładnie jeden zapis.
 
-Publikacja wersji, która dodaje lub zmienia klucze unikalne, najpierw sprawdza istniejące encje. Jeśli niektóre już współdzielą wartość, publikacja kończy się błędem `409 unique_key_duplicates`, a `error.details.duplicates` wymienia do 20 grup z kluczem, kontekstem, wartościami i identyfikatorami encji (`error.details.total` podaje liczbę wszystkich grup). Zmień lub usuń duplikaty i opublikuj ponownie.
+Publikacja wersji, która dodaje lub zmienia klucze unikalne, najpierw sprawdza istniejące rekordy. Jeśli niektóre już współdzielą wartość, publikacja kończy się błędem `409 unique_key_duplicates`, a `error.details.duplicates` wymienia do 20 grup z kluczem, kontekstem, wartościami i identyfikatorami rekordów (`error.details.total` podaje liczbę wszystkich grup). Zmień lub usuń duplikaty i opublikuj ponownie.
 
 ## Zadania konektorów
 
@@ -606,14 +608,14 @@ input = { profile = { version = 1, columns = [{ header = "ID", attribute = "exte
 | `interval_seconds` | liczba całkowita | Tylko ręcznie | Uruchamia zadanie co N sekund, od 60 do 2592000. |
 | `enabled` | wartość logiczna | `true` | Ustaw `false`, aby wstrzymać zadanie. |
 
-Zadania są sprawdzane względem włączonego rozszerzenia podczas publikacji wersji; nieprawidłowe zadanie blokuje publikację. Zadanie usunięte w późniejszej wersji zostaje wyłączone, a jego historia uruchomień jest zachowywana. Zadanie eksportu uruchamia się raz dla każdego włączonego kanału eksportu i eksportuje tylko encje opublikowane w tym kanale. Zobacz [Operacje i konektory](/pl/extensions/operations/).
+Zadania są sprawdzane względem włączonego rozszerzenia podczas publikacji wersji; nieprawidłowe zadanie blokuje publikację. Zadanie usunięte w późniejszej wersji zostaje wyłączone, a jego historia uruchomień jest zachowywana. Zadanie eksportu uruchamia się raz dla każdego włączonego kanału eksportu i eksportuje tylko rekordy opublikowane w tym kanale. Zobacz [Operacje i konektory](/pl/extensions/operations/).
 
 ## Limity i błędy
 
 Kilka reguł kompilacji, które łatwo przeoczyć:
 
 - `format_version` inny niż `1` jest odrzucany.
-- Schemat encji bez `views.dropdown_option` jest odrzucany.
+- Schemat rekordu bez `views.dropdown_option` jest odrzucany.
 - `entity_schema` w mixinie jest odrzucany.
 - `entity_schema` może wskazywać tylko atrybuty, które schemat posiada, w swoich kluczach najwyższego poziomu `required`, `properties`, `dependentRequired` i `dependentSchemas`.
 - Predykaty w `x-attricat-checks`, warunkach przejść (`conditions`) i `[[rules]]` muszą wskazywać atrybuty, które schemat posiada, o typach pasujących do predykatu. Porównanie porządkujące na łańcuchu znaków albo porównanie daty z liczbą jest odrzucane.

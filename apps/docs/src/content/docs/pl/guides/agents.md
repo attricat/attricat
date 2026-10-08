@@ -3,7 +3,7 @@ title: Agenci i zatwierdzenia
 description: Poproś agenta AI o sprawdzenie i zmianę katalogu. Każda zmiana czeka na Twoje zatwierdzenie.
 ---
 
-Agent Attricat to asystent konwersacyjny, który może odczytywać katalog i proponować w nim zmiany. Bez pytania może wyszukiwać encje, sprawdzać schematy, przeszukiwać katalog i przeglądać stan danych. Każda zmiana, którą chce wprowadzić, zatrzymuje się i czeka na zatwierdzenie przez człowieka.
+Agent Attricat to asystent konwersacyjny, który może odczytywać katalog i proponować w nim zmiany. Bez pytania może wyszukiwać rekordy, sprawdzać schematy, przeszukiwać katalog i przeglądać stan danych. Każda zmiana, którą chce wprowadzić, zatrzymuje się i czeka na zatwierdzenie przez człowieka.
 
 Agenci są opcjonalni. Zanim się pojawią, administrator musi [skonfigurować dostawcę AI](/pl/reference/configuration/#agenci).
 
@@ -15,8 +15,8 @@ Otwórz **Agenci** na pasku bocznym i wybierz **Nowa rozmowa**. Nadaj wątkowi t
 
 Rozmowę możesz też rozpocząć:
 
-- przyciskiem **Zapytaj o tę encję** na stronie encji;
-- przyciskiem **Wyślij do rozmowy z agentem** po zaznaczeniu encji w **Przeglądarce encji**.
+- przyciskiem **Zapytaj o ten rekord** na stronie rekordu;
+- przyciskiem **Wyślij do rozmowy z agentem** po zaznaczeniu rekordów w **Przeglądarce rekordów**.
 
 Dołącz pliki przyciskiem **Dodaj pliki**, maksymalnie 16 na wiadomość. Obrazy do 5 MiB są wysyłane do dostawcy, aby agent mógł je zobaczyć. Pozostałe pliki są opisywane nazwą i typem, a agent może je otworzyć swoimi narzędziami do plików.
 
@@ -26,10 +26,10 @@ Agent działa w Twoim imieniu. Widzi i zmienia tylko to, na co pozwala Twoja rol
 
 **Bez zatwierdzenia** może:
 
-- wyświetlać i odczytywać schematy, konteksty, encje i ich historię;
+- wyświetlać i odczytywać schematy, konteksty, rekordy i ich historię;
 - wyszukiwać użytkowników i zespoły obszaru roboczego, aby wypełnić atrybuty użytkownika lub zespołu;
-- wyszukiwać encje i odczytywać zapisane wyszukiwania;
-- wyświetlać podgląd migracji encji;
+- wyszukiwać rekordy i odczytywać zapisane wyszukiwania;
+- wyświetlać podgląd migracji rekordu;
 - odczytywać stan danych, ustalenia reguł i uruchomienia przepływów pracy;
 - oglądać obrazy i odczytywać pliki tekstowe w obszarze roboczym;
 - odczytywać uruchomienia operacji rozszerzeń i zadania konektorów (z uprawnieniem `extensions.manage`);
@@ -38,10 +38,10 @@ Agent działa w Twoim imieniu. Widzi i zmienia tylko to, na co pozwala Twoja rol
 **Po Twoim zatwierdzeniu** może:
 
 - tworzyć schematy i ich wersje oraz publikować schematy;
-- tworzyć, aktualizować, migrować i usuwać encje; ustawiać, usuwać i przywracać wartości; zmieniać relacje; łączyć pliki;
-- wprowadzać kilka zmian encji razem jako jeden wsad;
+- tworzyć, aktualizować, migrować i usuwać rekordy; ustawiać, usuwać i przywracać wartości; zmieniać relacje; łączyć pliki;
+- wprowadzać kilka zmian rekordów razem jako jeden wsad;
 - aktualizować tagi systemowe i metadane;
-- publikować encje i cofać ich publikację;
+- publikować rekordy i cofać ich publikację;
 - tworzyć, aktualizować i usuwać konteksty;
 - tworzyć i aktualizować zapisane wyszukiwania.
 
@@ -58,26 +58,26 @@ Decyzja jest ostateczna. Dwukrotne zatwierdzenie nigdy nie uruchamia zmiany dwa 
 
 Czytaj propozycje uważnie. Zastąpienie relacji ustawia pełną listę dla danego atrybutu i kontekstu; pusta lista usuwa każde powiązanie.
 
-### Zmiany w kilku encjach
+### Zmiany w kilku rekordach
 
-Gdy jedna prośba zmienia kilka encji, np. wydanie nowej wersji i zastąpienie poprzedniej, agent proponuje jeden **wsad** (`apply_entity_batch`). Podsumowanie do zatwierdzenia wymienia wszystkie kroki po kolei. Zatwierdzasz wsad raz i zostaje on zapisany w całości albo wcale: jeśli jeden krok się nie powiedzie, np. dlatego, że encja w międzyczasie się zmieniła, nic nie zostaje zapisane, a agent dowiaduje się, który krok zawiódł.
+Gdy jedna prośba zmienia kilka rekordów, np. wydanie nowej wersji i zastąpienie poprzedniej, agent proponuje jeden **wsad** (`apply_entity_batch`; w nazwach narzędzi agenta i kodach błędów rekordy występują pod nazwą `entity`). Podsumowanie do zatwierdzenia wymienia wszystkie kroki po kolei. Zatwierdzasz wsad raz i zostaje on zapisany w całości albo wcale: jeśli jeden krok się nie powiedzie, np. dlatego, że rekord w międzyczasie się zmienił, nic nie zostaje zapisane, a agent dowiaduje się, który krok zawiódł.
 
 ## Gdy zmiana zostaje odrzucona
 
 Zmiany wprowadzone przez agenta przechodzą tę samą walidację co Twoje edycje, a serwer odrzuca je z tych samych powodów. Gdy zatwierdzona zmiana zostaje odrzucona, nic nie zostaje zapisane. Agent wyjaśnia przyczynę zamiast ponawiać próbę i, jeśli to ma sens, proponuje poprawioną zmianę, która ponownie wymaga Twojego zatwierdzenia.
 
-- **Kontrole i reguły.** Zmianę odrzuca kontrola (`entity_check_failed`), warunek przejścia statusu (`transition_conditions_unmet`), egzekwowana reguła (`rule_violation`) lub kontrole wymagane przez kanał (`publication_checks_failed`), które nie przeszły. Agent wyjaśnia, które kontrole nie przeszły. Aby wyjaśnić, dlaczego opcja statusu jest zablokowana lub encji nie można jeszcze opublikować, może odczytać przejścia statusu i gotowość encji do publikacji.
-- **Klucze unikalne.** Jeśli inna encja ma już ten sam numer części lub dokumentu, zmiana zostaje odrzucona, a agent dowiaduje się, która encja go ma. Powinien pokazać Ci tę encję i zapytać, czy ją zaktualizować, czy użyć innej wartości, zamiast ponawiać próbę.
-- **Hierarchie.** Powiązanie, które uczyniłoby encję własnym przodkiem, np. lokalizację wewnątrz niej samej, zostaje odrzucone wraz ze ścieżką pętli.
+- **Kontrole i reguły.** Zmianę odrzuca kontrola (`entity_check_failed`), warunek przejścia statusu (`transition_conditions_unmet`), egzekwowana reguła (`rule_violation`) lub kontrole wymagane przez kanał (`publication_checks_failed`), które nie przeszły. Agent wyjaśnia, które kontrole nie przeszły. Aby wyjaśnić, dlaczego opcja statusu jest zablokowana lub rekordu nie można jeszcze opublikować, może odczytać przejścia statusu i gotowość rekordu do publikacji.
+- **Klucze unikalne.** Jeśli inny rekord ma już ten sam numer części lub dokumentu, zmiana zostaje odrzucona, a agent dowiaduje się, który rekord go ma. Powinien pokazać Ci ten rekord i zapytać, czy go zaktualizować, czy użyć innej wartości, zamiast ponawiać próbę.
+- **Hierarchie.** Powiązanie, które uczyniłoby rekord własnym przodkiem, np. lokalizację wewnątrz niej samej, zostaje odrzucone wraz ze ścieżką pętli.
 - **Dozwolone cele.** Relacja może wskazywać tylko wymienione w niej schematy.
-- **Ograniczenia publikacji.** Publikacja schematu, który dodaje klucz unikalny lub hierarchię, nie powiedzie się, jeśli istniejące encje je naruszają; agent wymienia je, aby można było je najpierw poprawić.
+- **Ograniczenia publikacji.** Publikacja schematu, który dodaje klucz unikalny lub hierarchię, nie powiedzie się, jeśli istniejące rekordy je naruszają; agent wymienia je, aby można było je najpierw poprawić.
 - **Rekordy kontrolowane.** Schematy mogą ograniczać, kto wykonuje przejście statusu, blokować sfinalizowane rekordy i wiązać zatwierdzenia z przejrzaną treścią, a agent przestrzega tych samych zasad co Ty. Zablokowany rekord lub przejście, którego nie możesz wykonać, kończy się odrzuceniem z jasnym powodem, a agent może pokazać, które przejścia możesz wykonać, kto musi działać i które przejście korygujące odblokowuje rekord.
 - Przy przejściu, które musi wykonać inna osoba niż autor wcześniejszego przejścia, za wykonującego uznaje się Ciebie, ponieważ zatwierdzona przez Ciebie zmiana działa w Twoim imieniu.
 - Jeśli proponowana edycja dotyczy zatwierdzonej treści, to gdy ją zaakceptujesz, zatwierdzenie rekordu zostanie unieważnione, a rekord w tej samej zmianie wróci do wcześniejszego statusu.
 
 ## Gdzie widać zmiany
 
-Zmiany wprowadzone przez agenta są audytowane tak samo jak Twoje edycje. Na stronie **Zmiany** encji oraz w **Zarządzanie → Aktywność / dziennik audytu** widać uruchomienie agenta, narzędzie, decyzję o zatwierdzeniu i osobę, która zatwierdziła zmianę.
+Zmiany wprowadzone przez agenta są audytowane tak samo jak Twoje edycje. Na stronie **Zmiany** rekordu oraz w **Zarządzanie → Aktywność / dziennik audytu** widać uruchomienie agenta, narzędzie, decyzję o zatwierdzeniu i osobę, która zatwierdziła zmianę.
 
 ## Dane wysyłane do dostawcy
 

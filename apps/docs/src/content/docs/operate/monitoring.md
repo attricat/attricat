@@ -7,12 +7,12 @@ description: Watch catalog data health, background queues, metrics, traces, and 
 
 **Manage → Data health** summarizes the state of the catalog:
 
-- **Summary cards**: outdated entities, active entities, stale entities, and relationships pointing at deleted entities.
+- **Summary cards**: outdated records, active records, stale records, and relationships pointing at deleted records.
 - **Storage**: size per table and in total.
-- **Blueprint health**: per blueprint, how many entities there are, how many are outdated or stale, and the oldest update.
+- **Blueprint health**: per blueprint, how many records there are, how many are outdated or stale, and the oldest update.
 - **Freshness distribution**: how recently values were updated.
-- **Default completeness**: how many entities have every field their schema requires in the default context.
-- **Context coverage**: how many entities have their own values in each context.
+- **Default completeness**: how many records have every field their schema requires in the default context.
+- **Context coverage**: how many records have their own values in each context.
 - **Relationship integrity**: links whose target has been deleted.
 
 **Stale after** sets what counts as stale, from 1 to 3650 days (90 by default). Results are cached for five minutes by default (`DATA_HEALTH_CACHE_TTL_SECONDS`); **Refresh** clears the cache.

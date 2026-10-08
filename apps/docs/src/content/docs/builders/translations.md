@@ -46,7 +46,7 @@ A [status](/builders/validation/#statuses) stores a stable code, such as `live`,
 ]
 ```
 
-Status chips, the status select on the entity page and create form, the Explorer's filter value list and filter pills, and plain-text values all show the translated label, with the same fallback as other labels. Searches, filters, saved searches, the API, and exports keep using the code, so translating or rewording a label never changes stored data. A context such as `{{Draft|status}}` keeps a status called "Draft" apart from other uses of the word.
+Status chips, the status select on the record page and create form, the Explorer's filter value list and filter pills, and plain-text values all show the translated label, with the same fallback as other labels. Searches, filters, saved searches, the API, and exports keep using the code, so translating or rewording a label never changes stored data. A context such as `{{Draft|status}}` keeps a status called "Draft" apart from other uses of the word.
 
 ## Reference syntax
 
@@ -120,7 +120,7 @@ Use this to rename a label or fix a typo. Change the key in the blueprint only w
 
 Labels without a number, such as tab labels and column headings, use separate keys for singular and plural wording: `{{Product}}` and `{{Products}}`.
 
-Where the app shows a number of entities, such as the result total in the Explorer, it can use the blueprint name in the correct form for that number: "1 Produkt", "3 Produkty", "5 Produktów". For this, give the blueprint name's entry one form per plural category of the language:
+Where the app shows a number of records, such as the result total in the Explorer, it can use the blueprint name in the correct form for that number: "1 Produkt", "3 Produkty", "5 Produktów". For this, give the blueprint name's entry one form per plural category of the language:
 
 ```sh
 acli lexicon set --key Product --language en --plural-category one --text Product
@@ -152,7 +152,7 @@ The report lists, per language:
 - **Untranslated** references used by catalog labels that have no entry in that language. English is never listed here because the key is the English text.
 - **Missing plural categories** for blueprint names (which the app shows with counts) and for any entry that already has plural forms. For English, this is where missing `one` and `other` forms appear.
 
-It also lists **orphaned** entries whose key and context no longer appear in any blueprint revision or reusable attribute. Review them before deleting: older revisions that entities still use count as in use.
+It also lists **orphaned** entries whose key and context no longer appear in any blueprint revision or reusable attribute. Review them before deleting: older revisions that records still use count as in use.
 
 ## Translations from solution packs
 

@@ -9,7 +9,7 @@ Schemat to dokument TOML opisujący jeden rodzaj rekordu katalogu: jego atrybuty
 
 Schematy możesz pisać w dwóch miejscach:
 
-- W aplikacji internetowej, w **Zarządzanie → Schematy → Nowy schemat**. Edytor waliduje treść podczas pisania i pokazuje podgląd powstałej strony encji, na którym możesz wypróbować edycję przykładowych wartości.
+- W aplikacji internetowej, w **Zarządzanie → Schematy → Nowy schemat**. Edytor waliduje treść podczas pisania i pokazuje podgląd powstałej strony rekordu, na którym możesz wypróbować edycję przykładowych wartości.
 - W dowolnym edytorze tekstu, a następnie przesłać je przez CLI:
 
   ```sh
@@ -38,14 +38,14 @@ fields = ["name"]
 ```
 
 - `code` identyfikuje schemat przez cały czas jego istnienia. Wybierz go starannie; nie można go zmienić w kolejnych wersjach.
-- `kind = "entity"` oznacza, że można z niego tworzyć encje.
-- Każdy schemat encji potrzebuje `views.dropdown_option`. Określa on, jak Attricat opisuje kategorię wszędzie tam, gdzie pojawia się ona na liście: w selektorach relacji, etykietach filtrów i wynikach wyszukiwania.
+- `kind = "entity"` oznacza, że można z niego tworzyć rekordy. W TOML schematu, API i CLI rekordy występują pod nazwą `entity`.
+- Każdy schemat rekordu potrzebuje `views.dropdown_option`. Określa on, jak Attricat opisuje kategorię wszędzie tam, gdzie pojawia się ona na liście: w selektorach relacji, etykietach filtrów i wynikach wyszukiwania.
 
-Zapisz to jako szkic. Szkic można dowolnie edytować, ale nie może jeszcze zawierać encji.
+Zapisz to jako szkic. Szkic można dowolnie edytować, ale nie może jeszcze zawierać rekordów.
 
 ## Krok 2: opublikuj
 
-Publikacja zamraża wersję. Od tej chwili nigdy się nie zmienia i można z niej tworzyć encje.
+Publikacja zamraża wersję. Od tej chwili nigdy się nie zmienia i można z niej tworzyć rekordy.
 
 W aplikacji internetowej otwórz schemat i wybierz **Opublikuj**. Za pomocą CLI:
 
@@ -104,7 +104,7 @@ Kilka decyzji w tym pliku:
 
 - `sku` ma `context_editable = "default"`. SKU jest wszędzie takie samo, więc można je edytować tylko w kontekście domyślnym. W każdym innym kontekście jest wyświetlane jako tylko do odczytu.
 - `price` ma `value_schema`, który odrzuca liczby ujemne. Schemat to JSON zapisany w łańcuchu znaków TOML. Zobacz [Walidacja](/pl/builders/validation/).
-- `stock_on_hand` w nowych encjach zaczyna od `0` dzięki `default_value`.
+- `stock_on_hand` w nowych rekordach zaczyna od `0` dzięki `default_value`.
 - `order_cutoff` jest typu `time`: to godzina zegarowa wraz ze strefą czasową IANA, np. 09:30 w `Europe/Warsaw`.
 
 ## Krok 4: relacje
@@ -128,7 +128,7 @@ cardinality = "one"
 
 Schematy docelowe muszą istnieć, zanim opublikujesz schemat produktu.
 
-Za pomocą relacji modeluje się w Attricat tagi, etykiety i taksonomie. [Modelowanie katalogu](/pl/builders/modeling/) wyjaśnia, dlaczego kategoria powinna być encją, a nie łańcuchem znaków.
+Za pomocą relacji modeluje się w Attricat tagi, etykiety i taksonomie. [Modelowanie katalogu](/pl/builders/modeling/) wyjaśnia, dlaczego kategoria powinna być rekordem, a nie łańcuchem znaków.
 
 ## Krok 5: zachowanie w kontekstach
 
@@ -172,7 +172,7 @@ Atrybut plikowy domyślnie przechowuje jeden plik; `cardinality = "many"` zamien
 
 ## Krok 7: układ
 
-Bez widoków aplikacja internetowa pokazuje atrybuty w kolejności deklaracji. Dodaj widoki, gdy chcesz mieć karty, siatki lub dopracowaną tabelę w **Przeglądarce encji**.
+Bez widoków aplikacja internetowa pokazuje atrybuty w kolejności deklaracji. Dodaj widoki, gdy chcesz mieć karty, siatki lub dopracowaną tabelę w **Przeglądarce rekordów**.
 
 ```toml
 [views.detail]
@@ -239,7 +239,7 @@ Stos `catalog.entity_heading` zamienia swoje pierwsze pole w tytuł strony, a po
 
 ## Krok 8: walidacja wielu pól
 
-`value_schema` sprawdza jedną wartość. `entity_schema` sprawdza całą encję, więc może wyrażać reguły typu „produkt w promocji wymaga ceny promocyjnej”. Ten przykład zakłada, że schemat ma też atrybut logiczny `on_sale` i liczbowy `sale_price`:
+`value_schema` sprawdza jedną wartość. `entity_schema` sprawdza cały rekord, więc może wyrażać reguły typu „produkt w promocji wymaga ceny promocyjnej”. Ten przykład zakłada, że schemat ma też atrybut logiczny `on_sale` i liczbowy `sale_price`:
 
 ```toml
 entity_schema = '''
@@ -354,11 +354,11 @@ W tym przykładzie:
 
 Działanie każdej z tych kontroli opisuje sekcja [Kontroluj cykl życia rekordu](/pl/builders/validation/#kontroluj-cykl-życia-rekordu), a wszystkie klucze sekcja [Statusy](/pl/reference/blueprint/#statusy).
 
-## Wersje a istniejące encje
+## Wersje a istniejące rekordy
 
-Każda encja pamięta dokładną wersję schematu, z którą została utworzona. Gdy opublikujesz wersję 2 schematu `product`, istniejące produkty pozostają przy wersji 1: ich wartości i walidacja zachowują znaczenie z chwili zapisu.
+Każdy rekord pamięta dokładną wersję schematu, z którą został utworzony. Gdy opublikujesz wersję 2 schematu `product`, istniejące produkty pozostają przy wersji 1: ich wartości i walidacja zachowują znaczenie z chwili zapisu.
 
-Attricat oznacza je wtedy jako nieaktualne i proponuje migrację. Wersje, które tylko dodają opcjonalne atrybuty, można migrować zbiorczo. Zmiany, które usuwają atrybuty lub zmieniają ich typ albo dodają atrybuty wymagane, wymagają decyzji dla każdej encji. Zobacz [Wersje i migracja](/pl/builders/revisions/).
+Attricat oznacza je wtedy jako nieaktualne i proponuje migrację. Wersje, które tylko dodają opcjonalne atrybuty, można migrować zbiorczo. Zmiany, które usuwają atrybuty lub zmieniają ich typ albo dodają atrybuty wymagane, wymagają decyzji dla każdego rekordu. Zobacz [Wersje i migracja](/pl/builders/revisions/).
 
 Dwie praktyki oszczędzają później kłopotów:
 
@@ -372,6 +372,6 @@ Schemat może też zawierać:
 - [Reguły](/pl/builders/rules/), które oznaczają problemy z jakością danych, np. brak tytułu, i mogą je [egzekwować](/pl/builders/rules/#egzekwowanie-reguły) przy zapisie lub zmianie statusu.
 - [Atrybuty statusu](/pl/builders/validation/#statusy) z dozwolonymi przejściami i [przetłumaczonymi etykietami](/pl/builders/translations/#etykiety-statusów).
 - [Politykę publikacji](/pl/guides/publishing/#zachowaj-publikację-po-zaufanych-edycjach), która pozwala zaufanym rolom edytować bez cofania zatwierdzeń w kanałach.
-- [Zadania konektorów](/pl/reference/blueprint/#zadania-konektorów), które importują lub eksportują encje przez rozszerzenie konektora.
+- [Zadania konektorów](/pl/reference/blueprint/#zadania-konektorów), które importują lub eksportują rekordy przez rozszerzenie konektora.
 - Atrybuty, których typ pochodzi z [rozszerzenia](/pl/reference/blueprint/#typy-atrybutów-z-rozszerzeń).
-- [Układ paneli i akcji rozszerzeń](/pl/reference/blueprint/#extension_layout) na stronach encji.
+- [Układ paneli i akcji rozszerzeń](/pl/reference/blueprint/#extension_layout) na stronach rekordów.

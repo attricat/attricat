@@ -36,11 +36,11 @@ Planning saves an immutable dry run without changing catalog resources. Review r
 
 - `--prefix` produces new blueprint codes such as `example_product`. Use 1–32 lowercase letters, digits, or underscores, beginning with a letter and not ending with an underscore.
 - `--blueprint-publication` is `draft` or `publish`. Navigation and samples can require published blueprints, so selecting `draft` may block a pack that needs them.
-- `--include-sample-data` explicitly selects fictional sample entities. Leave it out unless you want them.
+- `--include-sample-data` explicitly selects fictional sample records. Leave it out unless you want them.
 
 | Action | Meaning |
 | --- | --- |
-| `create` | Create a blueprint, context, publication channel, rule, workflow, saved search, asset, or selected sample entity. |
+| `create` | Create a blueprint, context, publication channel, rule, workflow, saved search, asset, or selected sample record. |
 | `map` | Reuse an explicitly selected compatible resource or context, or a resource a required pack installed. |
 | `append` | Add navigation, extension-layout, or translation entries. |
 | `satisfied` | The requested setting or publication channel already exists exactly. |
@@ -53,11 +53,11 @@ Only ready plans can be applied. Plans expire after 24 hours if application has 
 ### Rules, workflows, and saved searches
 
 - **Rules** are created for the pack's blueprints and published. The plan summary shows whether each will be enabled; the others stay disabled until you enable them. Rules need published blueprints, so `--blueprint-publication draft` blocks a rule for a newly created blueprint.
-- A rule that **rejects invalid changes** is not enabled on a blueprint you mapped or reused, because that blueprint may already have entities. It is installed disabled, and the plan summary shows `enable_deferred_reason: enforcing_rule_requires_dry_run`. Run a dry run of the rule, review its findings, and enable it as you would any rule.
+- A rule that **rejects invalid changes** is not enabled on a blueprint you mapped or reused, because that blueprint may already have records. It is installed disabled, and the plan summary shows `enable_deferred_reason: enforcing_rule_requires_dry_run`. Run a dry run of the rule, review its findings, and enable it as you would any rule.
 - **Workflows** are always published. The plan summary shows whether each will be enabled; the others stay disabled until you enable them.
 - **Saved searches** are shared with the whole workspace and appear under **Saved searches** in Explore. You own the ones created by the plan you apply. A search that would be invalid with your workspace's codes, for example larger than 32 KiB after a long context code is substituted, is blocked as `saved_search_state_invalid`, and the plan summary's `invalid_state_reason` says why.
 
-New rule and workflow codes start with your prefix. Enabled rules and workflows react to later changes, including sample entities created by the same plan, so review them before applying. After installation they are ordinary resources you manage as usual.
+New rule and workflow codes start with your prefix. Enabled rules and workflows react to later changes, including sample records created by the same plan, so review them before applying. After installation they are ordinary resources you manage as usual.
 
 ## 3. Resolve conflicts
 
@@ -92,7 +92,7 @@ acli solution-pack plan --file pack.tar.zst --prefix example \
   --map-context contexts/poland=PL
 ```
 
-A channel can require some of the pack's rules, or a valid entity, before an entity is published there; the plan summary lists them (`required_rule_codes`, `require_valid_entity`). The channel is planned after those rules. A channel whose required rule can't be created or found is blocked as `dependency_not_creatable`. A required rule that is installed disabled doesn't count toward the channel's checks until you enable it.
+A channel can require some of the pack's rules, or a valid record, before a record is published there; the plan summary lists them (`required_rule_codes`, `require_valid_entity`). In plan summaries and events, records are called entities. The channel is planned after those rules. A channel whose required rule can't be created or found is blocked as `dependency_not_creatable`. A required rule that is installed disabled doesn't count toward the channel's checks until you enable it.
 
 A mapped context is used as it is. If the pack wants it as a channel, an existing channel that matches exactly, including its required checks, is `satisfied` and a missing one is created. A channel whose settings differ, for example one that is switched off when the pack expects it on, is a `publication_channel_mismatch` conflict: change the channel yourself or skip the mapping. Rules, saved searches, and sample values that belong to the pack's context use the created or mapped context.
 
@@ -130,7 +130,7 @@ Checks are informational. A false result does not undo resources or block an oth
 
 ## Retry and recovery
 
-Retry interrupted or resumable failed applications with the same plan ID. The server verifies completed steps and continues pending steps without duplication; each context, channel, rule, workflow, and saved search is created together with the record of its step. A started application can resume after plan expiry, subject to its own retention deadline. If a blueprint the plan created has gained entities by the time a resumed application reaches an enforcing rule for it, that step fails with `rule_dry_run_required`; dry-run the rule and enable it yourself.
+Retry interrupted or resumable failed applications with the same plan ID. The server verifies completed steps and continues pending steps without duplication; each context, channel, rule, workflow, and saved search is created together with the record of its step. A started application can resume after plan expiry, subject to its own retention deadline. If a blueprint the plan created has gained records by the time a resumed application reaches an enforcing rule for it, that step fails with `rule_dry_run_required`; dry-run the rule and enable it yourself.
 
 If workspace changes make a plan stale, review completed steps and diagnostics before creating another plan. If a later step fails permanently, earlier successful writes remain in the workspace; Attricat does not roll them back.
 
@@ -147,9 +147,9 @@ Unchanged exact published blueprints and unchanged assets can be reused; new res
 
 ## Optional sample data
 
-Add `--include-sample-data` during planning only after reviewing the warning. Samples are created against published blueprints and receive a visible **Sample** badge. Their values are set in the default context, or in one of the pack's contexts when the pack says so. Samples can also attach files bundled in the pack, such as images or PDFs; planning uploads them to ordinary file storage, and they appear on the sample entities as ordinary files. Attricat checks each file's type and the attribute's file rules, but cannot tell whether its content is fictional. They are ordinary entities: creation emits audit records and `entity.created.v1` events, may run enabled workflows/extensions, and may cause external effects. Values can remain in ordinary audit/event history after temporary pack staging is removed.
+Add `--include-sample-data` during planning only after reviewing the warning. Samples are created against published blueprints and receive a visible **Sample** badge. Their values are set in the default context, or in one of the pack's contexts when the pack says so. Samples can also attach files bundled in the pack, such as images or PDFs; planning uploads them to ordinary file storage, and they appear on the sample records as ordinary files. Attricat checks each file's type and the attribute's file rules, but cannot tell whether its content is fictional. They are ordinary records: creation emits audit records and `entity.created.v1` events, may run enabled workflows/extensions, and may cause external effects. Values can remain in ordinary audit/event history after temporary pack staging is removed.
 
-Inspection rejects a pack whose samples set a status or a user or team assignment attribute. It also rejects a pack in which two samples of one blueprint share a unique-key value. A sample that collides with an existing entity of a mapped or reused blueprint, for example on a unique key, fails its apply step.
+Inspection rejects a pack whose samples set a status or a user or team assignment attribute. It also rejects a pack in which two samples of one blueprint share a unique-key value. A sample that collides with an existing record of a mapped or reused blueprint, for example on a unique key, fails its apply step.
 
 The first plan with samples selected reserves that exact combination of release, archive, and dataset. A second plan cannot select the same combination, even after expiry or abandonment; changing the prefix does not reset the reservation. Retry the original plan. If it expires before application starts, coordinate a new release with the publisher.
 
@@ -159,7 +159,7 @@ A started sample-selected application has a fixed 30-day resumability window. To
 acli solution-pack applications abandon <application-id>
 ```
 
-Abandoning an application removes staged inputs, including bundled files that were never attached. Previously created entities and ordinary audit/event history remain unchanged. Deleting a sample entity removes it with its values in every context and its files, like any other entity; stored files follow ordinary file retention. Later releases do not reset live sample values or restore removed sample markers. There is no dataset reset or automatic cleanup command.
+Abandoning an application removes staged inputs, including bundled files that were never attached. Previously created records and ordinary audit/event history remain unchanged. Deleting a sample record removes it with its values in every context and its files, like any other record; stored files follow ordinary file retention. Later releases do not reset live sample values or restore removed sample markers. There is no dataset reset or automatic cleanup command.
 
 ## Translations
 

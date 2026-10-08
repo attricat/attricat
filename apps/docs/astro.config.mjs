@@ -58,9 +58,9 @@ export default defineConfig({
           translations: polish('Korzystanie z Attricat'),
           items: [
             {
-              label: 'Explore entities',
+              label: 'Explore records',
               slug: 'guides/explore',
-              translations: polish('Przeglądanie encji'),
+              translations: polish('Przeglądanie rekordów'),
             },
             {
               label: 'Search syntax',
@@ -68,9 +68,9 @@ export default defineConfig({
               translations: polish('Składnia wyszukiwania'),
             },
             {
-              label: 'Work with entities',
-              slug: 'guides/entities',
-              translations: polish('Praca z encjami'),
+              label: 'Work with records',
+              slug: 'guides/records',
+              translations: polish('Praca z rekordami'),
             },
             {
               label: 'Contexts',

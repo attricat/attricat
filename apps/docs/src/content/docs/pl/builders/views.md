@@ -1,6 +1,6 @@
 ---
 title: Widoki i układy
-description: Steruj układem stron encji, formularzy i tabel Przeglądarki encji za pomocą deklaratywnych bloków i zarejestrowanych komponentów.
+description: Steruj układem stron rekordów, formularzy i tabel Przeglądarki rekordów za pomocą deklaratywnych bloków i zarejestrowanych komponentów.
 ---
 
 Widoki są częścią wersji schematu. Opisują wyłącznie układ: które atrybuty się pojawiają, w jakiej kolejności i jak są pogrupowane. Nie mogą uruchamiać kodu. Aplikacja internetowa renderuje znane sobie bloki i zarejestrowane w niej komponenty.
@@ -11,10 +11,10 @@ Widoki są opcjonalne. Bez nich aplikacja internetowa pokazuje atrybuty w kolejn
 
 | Widok | Gdzie się pojawia |
 | --- | --- |
-| `dropdown_option` | Etykieta encji w selektorach, etykietach filtrów i wyszukiwaniu. Wymagany w schematach encji. |
-| `detail` | Strona encji, jej podgląd i formularz tworzenia. W tym układzie pola są zarówno wyświetlane, jak i edytowane. |
-| `table` | Kolumny wyników w **Przeglądarce encji**. |
-| `extension_layout` | Kolejność i widoczność paneli i akcji rozszerzeń na stronach encji tego schematu. |
+| `dropdown_option` | Etykieta rekordu w selektorach, etykietach filtrów i wyszukiwaniu. Wymagany w schematach rekordów. |
+| `detail` | Strona rekordu, jej podgląd i formularz tworzenia. W tym układzie pola są zarówno wyświetlane, jak i edytowane. |
+| `table` | Kolumny wyników w **Przeglądarce rekordów**. |
+| `extension_layout` | Kolejność i widoczność paneli i akcji rozszerzeń na stronach rekordów tego schematu. |
 
 Widok `views.edit` jest przestarzały. Aplikacja internetowa go ignoruje, a schematy, które nadal go definiują, pozostają poprawne.
 
@@ -79,11 +79,11 @@ tabs = [
 
 `field` przyjmuje atrybuty skalarne i plikowe. `relationship_list` przyjmuje atrybuty relacji. Odwołanie do atrybutu, którego schemat nie ma, lub do atrybutu niewłaściwego rodzaju kończy się błędem walidacji.
 
-Układ szczegółów steruje zarówno wyświetlaniem, jak i edycją. Na stronie encji każde pole, które użytkownik może zmienić, jest edytowalną kontrolką w swoim miejscu układu; pola tylko do odczytu, pola zablokowane przez status rekordu i pola zarządzane w kontekście domyślnym pokazują samą wartość. Edytowalne atrybuty pominięte w układzie pojawiają się pod nim w sekcji **Pozostałe atrybuty**, więc wymagany atrybut jest zawsze dostępny. Formularz tworzenia korzysta z tego samego układu.
+Układ szczegółów steruje zarówno wyświetlaniem, jak i edycją. Na stronie rekordu każde pole, które użytkownik może zmienić, jest edytowalną kontrolką w swoim miejscu układu; pola tylko do odczytu, pola zablokowane przez status rekordu i pola zarządzane w kontekście domyślnym pokazują samą wartość. Edytowalne atrybuty pominięte w układzie pojawiają się pod nim w sekcji **Pozostałe atrybuty**, więc wymagany atrybut jest zawsze dostępny. Formularz tworzenia korzysta z tego samego układu.
 
-## Nagłówek encji
+## Nagłówek rekordu
 
-Aby nadać stronie szczegółów właściwy tytuł, umieść pola w `stack` z komponentem `catalog.entity_heading`. Jego pierwszy element podrzędny musi być polem skalarnym i staje się nagłówkiem strony. Kolejne elementy, tekst lub pola skalarne, tworzą podtytuł.
+Aby nadać stronie szczegółów właściwy tytuł, umieść pola w `stack` z komponentem `catalog.entity_heading`. W identyfikatorach komponentów i miejsc osadzenia rozszerzeń, takich jak ten, rekordy występują pod nazwą `entity`. Jego pierwszy element podrzędny musi być polem skalarnym i staje się nagłówkiem strony. Kolejne elementy, tekst lub pola skalarne, tworzą podtytuł.
 
 ```toml
 [[views.detail.children]]
@@ -95,11 +95,11 @@ children = [
 ]
 ```
 
-Jeśli pole tytułu jest puste, wyświetlany jest identyfikator encji. Nagłówek jest usuwany z treści strony, aby nie pojawiał się dwa razy. Nagłówek tylko wyświetla wartości, dlatego jego edytowalne pola są dostępne do edycji jako pierwsze, nad resztą układu.
+Jeśli pole tytułu jest puste, wyświetlany jest identyfikator rekordu. Nagłówek jest usuwany z treści strony, aby nie pojawiał się dwa razy. Nagłówek tylko wyświetla wartości, dlatego jego edytowalne pola są dostępne do edycji jako pierwsze, nad resztą układu.
 
 ## Pokazywanie powiązań przychodzących
 
-`incoming_relationship_list` pokazuje encje wskazujące na bieżącą, np. produkty w kategorii. To przycisk otwierający stronicowaną listę, więc nic nie jest wczytywane, dopóki ktoś o to nie poprosi.
+`incoming_relationship_list` pokazuje rekordy wskazujące na bieżący, np. produkty w kategorii. To przycisk otwierający stronicowaną listę, więc nic nie jest wczytywane, dopóki ktoś o to nie poprosi.
 
 ```toml
 { type = "incoming_relationship_list",
@@ -108,13 +108,13 @@ Jeśli pole tytułu jest puste, wyświetlany jest identyfikator encji. Nagłówe
   relationships = [{ source_blueprint = "product", field = "categories" }] }
 ```
 
-Wymień kilka pozycji w `relationships`, aby połączyć źródła. Encja pasująca do więcej niż jednego źródła pojawia się raz.
+Wymień kilka pozycji w `relationships`, aby połączyć źródła. Rekord pasujący do więcej niż jednego źródła pojawia się raz.
 
 ## Hierarchie
 
 `catalog.relationship_hierarchy` pokazuje łańcuchy przodków jako ścieżkę nawigacyjną, rozstrzygniętą w wybranym kontekście.
 
-W relacji odwołującej się do własnego schematu, takiej jak `category.parent`, pokazuje przodków bieżącej encji:
+W relacji odwołującej się do własnego schematu, takiej jak `category.parent`, pokazuje przodków bieżącego rekordu:
 
 ```toml
 { type = "relationship_list", field = "parent",
@@ -128,7 +128,7 @@ W relacji do innego schematu ustaw `parent_field` na pole celu odwołujące się
   component = { id = "catalog.relationship_hierarchy", version = 1, props = { parent_field = "parent" } } }
 ```
 
-## Tabela Przeglądarki encji
+## Tabela Przeglądarki rekordów
 
 ```toml
 [views.table]
@@ -143,7 +143,7 @@ field = "family.product_type.name"
 label = "Product type"
 ```
 
-Kolumna to lokalny atrybut skalarny albo ścieżka przez maksymalnie trzy relacje, zakończona atrybutem skalarnym. Każdy krok jest rozstrzygany według wersji schematu powiązanej encji. Jeśli starsza powiązana encja nie ma danego atrybutu, komórka jest pusta. Ścieżka o wielu wartościach może pokazać kilka wartości w jednej komórce.
+Kolumna to lokalny atrybut skalarny albo ścieżka przez maksymalnie trzy relacje, zakończona atrybutem skalarnym. Każdy krok jest rozstrzygany według wersji schematu powiązanego rekordu. Jeśli starszy powiązany rekord nie ma danego atrybutu, komórka jest pusta. Ścieżka o wielu wartościach może pokazać kilka wartości w jednej komórce.
 
 Kolumny można sortować, gdy prowadzą do wartości skalarnej, a każda relacja na ścieżce ma `cardinality = "one"`.
 
@@ -193,7 +193,7 @@ renderer = { id = "catalog.url_display", version = 1 }
 | E-mail | `catalog.email_display`, `catalog.email_edit` | Jeden zwykły adres ASCII, np. `name+tag@example.com`. Wyświetlany jako link `mailto:`. |
 | URL | `catalog.url_display`, `catalog.url_edit` | Tylko bezwzględne adresy `http://` lub `https://`. Linki otwierają się w nowej karcie. |
 | Telefon | `catalog.phone_display`, `catalog.phone_edit` | Zapisywany tak, jak go wpisano. Numery zaczynające się od `+` i numeru kierunkowego kraju stają się linkami `tel:`; numer wewnętrzny można poprzedzić `ext.` lub `x`. |
-| Markdown | `catalog.markdown_display`, `catalog.markdown_edit` | CommonMark z kartami **Edytuj** i **Podgląd**. Na stronie encji ustawiona wartość jest pokazywana sformatowana, dopóki nie zdecydujesz się jej edytować. Surowy HTML jest pomijany, obrazy pokazują tekst alternatywny, a linki są ograniczone do HTTP(S), `mailto:`, ścieżek względnych i fragmentów. Tekst jest zapisywany dokładnie tak, jak go wpisano, łącznie z białymi znakami. Niedostępny w kolumnach tabeli. |
+| Markdown | `catalog.markdown_display`, `catalog.markdown_edit` | CommonMark z kartami **Edytuj** i **Podgląd**. Na stronie rekordu ustawiona wartość jest pokazywana sformatowana, dopóki nie zdecydujesz się jej edytować. Surowy HTML jest pomijany, obrazy pokazują tekst alternatywny, a linki są ograniczone do HTTP(S), `mailto:`, ścieżek względnych i fragmentów. Tekst jest zapisywany dokładnie tak, jak go wpisano, łącznie z białymi znakami. Niedostępny w kolumnach tabeli. |
 
 Wartości, które nie pasują do kontrolki, np. starsze dane, nadal są widoczne jako zwykły tekst bez linku i próbki. Pola bez komponentu korzystają ze standardowego edytora dla swojego typu wartości.
 
@@ -203,9 +203,9 @@ Kontrolki edycji walidują wartości tylko w aplikacji internetowej. Aby odrzuca
 
 Każdy blok może wskazać komponent przez `component = { id, version, props }`. Identyfikator i wersja muszą odpowiadać zarejestrowanemu komponentowi, komponent musi obsługiwać dany blok i typ wartości, a `props` może zawierać tylko zadeklarowane przez niego opcje. Wbudowane komponenty są wymienione w [dokumentacji schematu](/pl/reference/blueprint/#odwołania-do-komponentów).
 
-## Panele rozszerzeń na stronach encji
+## Panele rozszerzeń na stronach rekordów
 
-Administratorzy obszaru roboczego ustawiają domyślną kolejność elementów rozszerzeń dla całego obszaru roboczego. Schemat może nadpisać trzy miejsca osadzenia dla własnych encji:
+Administratorzy obszaru roboczego ustawiają domyślną kolejność elementów rozszerzeń dla całego obszaru roboczego. Schemat może nadpisać trzy miejsca osadzenia na stronach własnych rekordów:
 
 ```toml
 [views.extension_layout]

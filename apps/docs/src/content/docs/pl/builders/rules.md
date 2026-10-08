@@ -1,9 +1,9 @@
 ---
 title: Reguły jakości danych
-description: Definiuj wersjonowane kontrole, które oznaczają encje z brakującymi, nieaktualnymi lub błędnie otagowanymi danymi, i zarządzaj ustaleniami.
+description: Definiuj wersjonowane kontrole, które oznaczają rekordy z brakującymi, nieaktualnymi lub błędnie otagowanymi danymi, i zarządzaj ustaleniami.
 ---
 
-Reguła sprawdza encje jednego Schematu pod kątem prostego warunku i zapisuje **ustalenie** dla każdej encji, która go nie spełnia. Ustalenia rozwiązują się same, gdy encja zostanie poprawiona. Reguły tylko odczytują dane; nigdy nie zmieniają encji.
+Reguła sprawdza rekordy jednego Schematu pod kątem prostego warunku i zapisuje **ustalenie** dla każdego rekordu, który go nie spełnia. Ustalenia rozwiązują się same, gdy rekord zostanie poprawiony. Reguły tylko odczytują dane; nigdy nie zmieniają rekordów. W API, CLI i zdarzeniach rekordy występują pod nazwą `entity`.
 
 Używaj reguł do pytań w rodzaju „które opublikowane produkty nie mają tytułu?” albo „których cen nikt nie zmieniał od roku?”. Aby zmieniać dane automatycznie, użyj [przepływu pracy](/pl/builders/workflows/).
 
@@ -41,7 +41,7 @@ attribute_code = "title"
 | `name` | Nazwa wyświetlana. |
 | `severity` | `info`, `warning`, `error` lub `critical`. |
 | `triggers` | Od 1 do 8 wyzwalaczy. Zobacz niżej. |
-| `predicate` | Warunek, który encja musi spełnić. Zobacz niżej. |
+| `predicate` | Warunek, który rekord musi spełnić. Zobacz niżej. |
 
 ### Wyzwalacze
 
@@ -49,17 +49,17 @@ attribute_code = "title"
 | --- | --- | --- |
 | `manual` | | Gdy ktoś wybierze **Uruchom teraz**. |
 | `schedule` | `cron`, `timezone = "UTC"` | Według sześciopolowego harmonogramu cron (sekundy na początku), w UTC. `0 0 6 * * *` oznacza codziennie o 06:00. |
-| `event` | `event_type` | Dla zmienionej encji, po jednym z: `entity.created.v1`, `entity.updated.v1`, `entity.migrated.v1`, `attribute_value.changed.v1`, `attribute_value.restored.v1`, `relationship.changed.v1`. |
+| `event` | `event_type` | Dla zmienionego rekordu, po jednym z: `entity.created.v1`, `entity.updated.v1`, `entity.migrated.v1`, `attribute_value.changed.v1`, `attribute_value.restored.v1`, `relationship.changed.v1`. |
 | `post_import` | | Zarezerwowany dla przyszłej integracji z importem. |
 
 ### Predykaty
 
-Encja **nie spełnia** reguły, gdy predykat nie jest spełniony. Reguły używają tych samych predykatów co [kontrole encji](/pl/builders/validation/#porównuj-atrybuty-za-pomocą-kontroli), [warunki przejść statusu](/pl/builders/validation/#warunki-przejść) i [kontrole kanałów publikacji](/pl/guides/publishing/#wymagaj-kontroli-przed-publikacją). Wszystkie klucze opisuje [dokumentacja Schematu](/pl/reference/blueprint/#predykaty).
+Rekord **nie spełnia** reguły, gdy predykat nie jest spełniony. Reguły używają tych samych predykatów co [kontrole rekordów](/pl/builders/validation/#porównuj-atrybuty-za-pomocą-kontroli), [warunki przejść statusu](/pl/builders/validation/#warunki-przejść) i [kontrole kanałów publikacji](/pl/guides/publishing/#wymagaj-kontroli-przed-publikacją). Wszystkie klucze opisuje [dokumentacja Schematu](/pl/reference/blueprint/#predykaty).
 
 - **Wartości:** `required`, `compare` (z innym atrybutem lub stałą wartością), `one_of` i `relative_date` (względem chwili obecnej przesuniętej o `offset_days`).
 - **Tagi:** `has_tag` i `missing_tag` sprawdzają tagi systemowe.
-- **Powiązane rekordy:** `linked` sprawdza rekordy, z którymi encja jest powiązana; `referenced_by` liczy rekordy, które ją wskazują.
-- **Tylko zgłaszanie ustaleń:** `stale` (brak aktualizacji w zadanym czasie), `unique` (żadna inna encja Schematu nie ma tych samych wartości) i `acyclic` (relacja nigdy nie prowadzi z powrotem do encji).
+- **Powiązane rekordy:** `linked` sprawdza rekordy, z którymi sprawdzany rekord jest powiązany; `referenced_by` liczy rekordy, które go wskazują.
+- **Tylko zgłaszanie ustaleń:** `stale` (brak aktualizacji w zadanym czasie), `unique` (żaden inny rekord Schematu nie ma tych samych wartości) i `acyclic` (relacja nigdy nie prowadzi z powrotem do rekordu).
 - **Kombinacje:** `all_of` i `any_of`.
 
 Porównanie z brakującą wartością jest spełnione; to samo dotyczy `one_of` i `relative_date`, gdy atrybut jest pusty. Połącz je z `required`, jeśli wartość musi istnieć:
@@ -73,7 +73,7 @@ predicates = [
 ]
 ```
 
-`linked` i `referenced_by` przechodzą o jeden krok wzdłuż relacji. Ich zagnieżdżony predykat odczytuje drugi rekord i może porównywać go ze sprawdzaną encją przez `subject_attribute_code`:
+`linked` i `referenced_by` przechodzą o jeden krok wzdłuż relacji. Ich zagnieżdżony predykat odczytuje drugi rekord i może porównywać go ze sprawdzanym rekordem przez `subject_attribute_code`:
 
 ```toml
 # Każdy zakład na certyfikacie dostawcy należy do tego dostawcy.
@@ -95,7 +95,7 @@ predicate = { type = "one_of", attribute_code = "state", values = ["open"] }
 
 ### Wygasanie i inne kontrole zależne od czasu
 
-`relative_date` porównuje datę z chwilą uruchomienia reguły. Nadaj takiej regule wyzwalacz `schedule`: encja, której nikt nie edytuje, może wygasnąć w nocy, a zauważy to tylko przebieg według harmonogramu.
+`relative_date` porównuje datę z chwilą uruchomienia reguły. Nadaj takiej regule wyzwalacz `schedule`: rekord, którego nikt nie edytuje, może wygasnąć w nocy, a zauważy to tylko przebieg według harmonogramu.
 
 ```toml
 format_version = 1
@@ -119,11 +119,11 @@ Ujemne `offset_days` patrzy wstecz: `op = "gte"` z `offset_days = -365` oznacza 
 
 ### Konteksty
 
-Reguła powiązana z kontekstem sprawdza rozstrzygnięte wartości encji w tym kontekście, łącznie z wartościami dziedziczonymi. Reguła bez kontekstu sprawdza każdy kontekst i nie jest spełniona, jeśli nie przejdzie w którymkolwiek z nich; dowody ustalenia podają kody tych kontekstów w polu `contexts`.
+Reguła powiązana z kontekstem sprawdza rozstrzygnięte wartości rekordu w tym kontekście, łącznie z wartościami dziedziczonymi. Reguła bez kontekstu sprawdza każdy kontekst i nie jest spełniona, jeśli nie przejdzie w którymkolwiek z nich; dowody ustalenia podają kody tych kontekstów w polu `contexts`.
 
 ### Zmiany w powiązanych rekordach
 
-`linked` i `referenced_by` zależą od innych rekordów. Gdy zmieni się rekord powiązany lub wskazujący, reguły z wyzwalaczem zdarzenia uruchamiają się też ponownie dla maksymalnie 100 zależnych od niego encji, dzięki czemu ich ustalenia pozostają aktualne. Dotyczy to też rekordu, który rekord wskazujący przestaje wskazywać, na przykład gdy działanie korygujące zostanie przeniesione do innej niezgodności, zgodnie z [faktami](/pl/reference/events/#które-zmiany-tworzą-fakty) zdarzenia. Migracja Schematu, która usuwa relację lub zmienia jej cele, nie zapisuje faktów, ale jej zdarzenie `entity.migrated.v1` wymienia zwolnione rekordy, więc dla nich reguły również uruchamiają się ponownie. Reguły wyzwalane tylko harmonogramem lub ręcznie zauważą zmianę przy następnym przebiegu.
+`linked` i `referenced_by` zależą od innych rekordów. Gdy zmieni się rekord powiązany lub wskazujący, reguły z wyzwalaczem zdarzenia uruchamiają się też ponownie dla maksymalnie 100 zależnych od niego rekordów, dzięki czemu ich ustalenia pozostają aktualne. Dotyczy to też rekordu, który rekord wskazujący przestaje wskazywać, na przykład gdy działanie korygujące zostanie przeniesione do innej niezgodności, zgodnie z [faktami](/pl/reference/events/#które-zmiany-tworzą-fakty) zdarzenia. Migracja Schematu, która usuwa relację lub zmienia jej cele, nie zapisuje faktów, ale jej zdarzenie `entity.migrated.v1` wymienia zwolnione rekordy, więc dla nich reguły również uruchamiają się ponownie. Reguły wyzwalane tylko harmonogramem lub ręcznie zauważą zmianę przy następnym przebiegu.
 
 Zasady porównywania dla każdego typu oraz limity zagnieżdżania i powiązanych rekordów opisuje [dokumentacja Schematu](/pl/reference/blueprint/#predykaty).
 
@@ -162,13 +162,13 @@ acli rule run-now <rule-id> --idempotency-key check-one --entity-id <uuid>
 acli rule run-now <rule-id> --idempotency-key preview --dry-run
 ```
 
-Przebieg próbny (dry run) podaje, ile encji nie spełniłoby reguły, i nie zapisuje żadnych ustaleń. Ponowne użycie klucza idempotencji zwraca pierwotny przebieg zamiast rozpoczynać nowy.
+Przebieg próbny (dry run) podaje, ile rekordów nie spełniłoby reguły, i nie zapisuje żadnych ustaleń. Ponowne użycie klucza idempotencji zwraca pierwotny przebieg zamiast rozpoczynać nowy.
 
 Każdy przebieg przetwarza kandydatów stronami po 500 i zatrzymuje się po 10 000. Harmonogram nigdy nie nakłada się sam na siebie: jeśli poprzedni przebieg wciąż oczekuje, kolejne wystąpienie jest pomijane.
 
 ## Egzekwowanie reguły
 
-Domyślnie reguła tylko zgłasza ustalenia. Reguła **egzekwowana** dodatkowo blokuje zapisy, po których encja naruszałaby regułę. Dodaj tabelę `enforcement`:
+Domyślnie reguła tylko zgłasza ustalenia. Reguła **egzekwowana** dodatkowo blokuje zapisy, po których rekord naruszałby regułę. Dodaj tabelę `enforcement`:
 
 ```toml
 format_version = 1
@@ -193,7 +193,7 @@ from = "review"
 to = "released"
 ```
 
-`on_save = true` odrzuca każdy zapis, po którym encja narusza regułę. Każdy element `transitions` chroni zmianę atrybutu [statusu](/pl/builders/validation/#statusy) na `to`, opcjonalnie tylko z `from`. Chronione przejścia są sprawdzane na stanie, który powstaje po zmianie, więc wartość zapisana w tym samym zapisie się liczy. Wewnątrz Schematu zapisz tabelę jako `[rules.enforcement]` i `[[rules.enforcement.transitions]]` po nagłówku `[[rules]]` danej reguły.
+`on_save = true` odrzuca każdy zapis, po którym rekord narusza regułę. Każdy element `transitions` chroni zmianę atrybutu [statusu](/pl/builders/validation/#statusy) na `to`, opcjonalnie tylko z `from`. Chronione przejścia są sprawdzane na stanie, który powstaje po zmianie, więc wartość zapisana w tym samym zapisie się liczy. Wewnątrz Schematu zapisz tabelę jako `[rules.enforcement]` i `[[rules.enforcement.transitions]]` po nagłówku `[[rules]]` danej reguły.
 
 Egzekwowanie wymaga wagi `error` lub `critical` i predykatu, który da się sprawdzić podczas zapisu. Wszystkie klucze i wymagania wymienia [dokumentacja Schematu](/pl/reference/blueprint/#reguły).
 
@@ -203,10 +203,10 @@ Zapis naruszający egzekwowaną regułę zostaje odrzucony z `422 rule_violation
 
 ### Przebieg próbny przed włączeniem
 
-Egzekwowanie reguły na istniejących danych może zablokować osoby, które nic złego nie zrobiły. Dlatego gdy wersja Schematu reguły ma już encje, Attricat wymaga ukończonego **pełnego przebiegu próbnego** dokładnie tej wersji reguły, którą włączasz. W przeciwnym razie włączenie kończy się błędem `409 rule_dry_run_required`.
+Egzekwowanie reguły na istniejących danych może zablokować osoby, które nic złego nie zrobiły. Dlatego gdy wersja Schematu reguły ma już rekordy, Attricat wymaga ukończonego **pełnego przebiegu próbnego** dokładnie tej wersji reguły, którą włączasz. W przeciwnym razie włączenie kończy się błędem `409 rule_dry_run_required`.
 
 1. Opublikuj wersję.
-2. Uruchom przebieg próbny dla wszystkich encji, bez `--entity-id`, i poczekaj, aż zakończy się na karcie **Historia przebiegów**. Przebieg próbny może dotyczyć opublikowanej wersji, która nie jest jeszcze włączona.
+2. Uruchom przebieg próbny dla wszystkich rekordów, bez `--entity-id`, i poczekaj, aż zakończy się na karcie **Historia przebiegów**. Przebieg próbny może dotyczyć opublikowanej wersji, która nie jest jeszcze włączona.
 
    ```sh
    acli rule run-now <rule-id> --idempotency-key enforce-preview --dry-run
@@ -215,22 +215,22 @@ Egzekwowanie reguły na istniejących danych może zablokować osoby, które nic
    CLI uruchamia przebieg próbny włączonej wersji albo najnowszej opublikowanej, jeśli żadna nie jest włączona. Aby sprawdzić konkretną wersję, gdy włączona jest inna, wywołaj `POST /rules/{id}/run-now` z `{"dry_run": true, "idempotency_key": "…", "version": 2}`.
 3. Włącz wersję.
 
-Jeśli przebieg próbny znalazł naruszenia, włączenie kończy się błędem `409 rule_has_existing_violations`, a `details.existing_violations` podaje ich liczbę. Popraw te encje i powtórz przebieg próbny albo zaakceptuj naruszenia jawnie przez API:
+Jeśli przebieg próbny znalazł naruszenia, włączenie kończy się błędem `409 rule_has_existing_violations`, a `details.existing_violations` podaje ich liczbę. Popraw te rekordy i powtórz przebieg próbny albo zaakceptuj naruszenia jawnie przez API:
 
 ```http
 POST /rules/{id}/versions/{version}/enable
 {"accept_existing_violations": true}
 ```
 
-Przebieg próbny zatrzymuje się po 10 000 encji. Gdy wersja Schematu ma ich więcej, przebieg nie obejmuje pozostałych, więc włączenie nadal kończy się błędem `409 rule_dry_run_required`, chyba że wyślesz `accept_existing_violations`, jak powyżej. W takim przypadku komunikat błędu informuje, że przebieg zatrzymał się przed czasem, a `details` ma postać `{"truncated": true, "existing_violations": …}` i podaje liczbę naruszeń znalezionych wśród sprawdzonych encji. Taki przebieg ma w `GET /rule-runs` pole `"truncated": true`.
+Przebieg próbny zatrzymuje się po 10 000 rekordów. Gdy wersja Schematu ma ich więcej, przebieg nie obejmuje pozostałych, więc włączenie nadal kończy się błędem `409 rule_dry_run_required`, chyba że wyślesz `accept_existing_violations`, jak powyżej. W takim przypadku komunikat błędu informuje, że przebieg zatrzymał się przed czasem, a `details` ma postać `{"truncated": true, "existing_violations": …}` i podaje liczbę naruszeń znalezionych wśród sprawdzonych rekordów. Taki przebieg ma w `GET /rule-runs` pole `"truncated": true`.
 
-Encji, która już narusza egzekwowaną regułę, nie można zapisać, dopóki zapis nie usunie naruszenia.
+Rekordu, który już narusza egzekwowaną regułę, nie można zapisać, dopóki zapis nie usunie naruszenia.
 
 ## Pracuj z ustaleniami
 
-**Zarządzanie → Reguły jakości danych → Ustalenia** wyświetla ustalenia wraz z regułą, encją, kontekstem i stanem. Dla każdej kombinacji reguły, encji i kontekstu istnieje jedno ustalenie. Gdy późniejsza ocena zakończy się powodzeniem, ustalenie zostaje rozwiązane. Jeśli problem wróci, to samo ustalenie zostaje ponownie otwarte.
+**Zarządzanie → Reguły jakości danych → Ustalenia** wyświetla ustalenia wraz z regułą, rekordem, kontekstem i stanem. Dla każdej kombinacji reguły, rekordu i kontekstu istnieje jedno ustalenie. Gdy późniejsza ocena zakończy się powodzeniem, ustalenie zostaje rozwiązane. Jeśli problem wróci, to samo ustalenie zostaje ponownie otwarte.
 
-**Potwierdź** ustalenie, aby zapisać, że ktoś je widział. Pozostaje ono, dopóki encja nie spełni reguły.
+**Potwierdź** ustalenie, aby zapisać, że ktoś je widział. Pozostaje ono, dopóki rekord nie spełni reguły.
 
 ```sh
 acli rule findings --entity-id <uuid>
