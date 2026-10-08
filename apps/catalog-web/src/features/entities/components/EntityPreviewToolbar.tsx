@@ -9,7 +9,7 @@ import {
   RefreshCwIcon,
   RotateCcwClockIcon,
   SendIcon,
-  TrashIcon,
+  Trash2Icon,
   Undo2Icon,
 } from 'lucide-react';
 import { AgentIcon } from '../../../components/systemIcons';
@@ -209,7 +209,7 @@ export const EntityPreviewToolbar = ({
             sx={{ color: 'error.main' }}
           >
             <ListItemIcon sx={{ color: 'inherit' }}>
-              <TrashIcon size={compactIconSize} />
+              <Trash2Icon size={compactIconSize} />
             </ListItemIcon>
             <ListItemText>{t('entities.deleteEntity')}</ListItemText>
           </MenuItem>

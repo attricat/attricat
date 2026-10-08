@@ -1,6 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
 import { Alert, MenuItem, TextField } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import { IconLabel } from '../../components/IconLabel';
+import {
+  BlueprintIcon,
+  ContextIcon,
+  EntityIcon,
+  WorkspaceIcon,
+} from '../../components/systemIcons';
 import { listGrantTargets, selectedScopeTarget, type ScopeType } from './api';
 import { workspaceScope } from './constants';
 import { workspaceQueryKeys } from './queryKeys';
@@ -35,15 +42,23 @@ export const ScopeFields = ({
         value={scope}
       >
         <MenuItem value={workspaceScope}>
-          {t('workspace.entireWorkspace')}
+          <IconLabel icon={WorkspaceIcon}>
+            {t('workspace.entireWorkspace')}
+          </IconLabel>
         </MenuItem>
         <MenuItem value="blueprint_family">
-          {t('workspace.blueprintFamily')}
+          <IconLabel icon={BlueprintIcon}>
+            {t('workspace.blueprintFamily')}
+          </IconLabel>
         </MenuItem>
         <MenuItem value="context_subtree">
-          {t('workspace.contextSubtree')}
+          <IconLabel icon={ContextIcon}>
+            {t('workspace.contextSubtree')}
+          </IconLabel>
         </MenuItem>
-        <MenuItem value="entity">{t('workspace.entity')}</MenuItem>
+        <MenuItem value="entity">
+          <IconLabel icon={EntityIcon}>{t('workspace.entity')}</IconLabel>
+        </MenuItem>
       </TextField>
       <ScopeTargetField
         onScopeTargetChange={onScopeTargetChange}

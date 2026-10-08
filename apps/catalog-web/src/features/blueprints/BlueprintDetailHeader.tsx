@@ -1,7 +1,7 @@
 import { Link } from '@tanstack/react-router';
 import { Box, Button, Chip, Stack, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import { CircleFadingArrowUpIcon, PencilIcon, SendIcon } from 'lucide-react';
+import { CircleArrowUpIcon, PencilIcon, SendIcon } from 'lucide-react';
 import { PageHeader } from '../../components/PageHeader';
 import { blueprintStatusChipColor, blueprintStatuses } from './constants';
 import { Timestamp } from '../../time/Timestamp';
@@ -66,7 +66,7 @@ export const BlueprintDetailHeader = ({
               <Button
                 disabled={!migrationStatusKnown || migrationActive}
                 onClick={onMigrate}
-                startIcon={<CircleFadingArrowUpIcon />}
+                startIcon={<CircleArrowUpIcon />}
                 variant="contained"
               >
                 {migrationActive

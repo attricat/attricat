@@ -1,5 +1,7 @@
 import { Box, Button, MenuItem, TextField } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import { IconLabel } from '../../components/IconLabel';
+import { AgentIcon, AssignedUserIcon } from '../../components/systemIcons';
 import type { AuditEventFilters } from './api';
 import { zonedDateTimeToIso } from '../../time/instantFormat';
 import { useTimeZone } from '../../time/useInstantFormat';
@@ -67,8 +69,12 @@ export const AuditFilters = ({
         value={draft.executor_type ?? ''}
       >
         <MenuItem value="">{t('audit.all')}</MenuItem>
-        <MenuItem value={executorTypes.human}>{t('audit.human')}</MenuItem>
-        <MenuItem value={executorTypes.agent}>{t('audit.agent')}</MenuItem>
+        <MenuItem value={executorTypes.human}>
+          <IconLabel icon={AssignedUserIcon}>{t('audit.human')}</IconLabel>
+        </MenuItem>
+        <MenuItem value={executorTypes.agent}>
+          <IconLabel icon={AgentIcon}>{t('audit.agent')}</IconLabel>
+        </MenuItem>
       </TextField>
       <TextField
         label={t('audit.agentRunId')}

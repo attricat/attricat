@@ -1,6 +1,14 @@
-import { ListItemText, Menu, MenuItem } from '@mui/material';
+import { ListItemIcon, ListItemText, Menu, MenuItem } from '@mui/material';
+import {
+  CopyIcon,
+  InfoIcon,
+  SendIcon,
+  Trash2Icon,
+  Undo2Icon,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { compactIconSize } from '../../components/iconSizes';
 import type {
   EntityItem,
   EntityPublicationReadiness,
@@ -77,7 +85,10 @@ export const EntityActionsMenu = ({
           onSearchInfo(entity);
         }}
       >
-        {t('explorer.searchInfo')}
+        <ListItemIcon>
+          <InfoIcon size={compactIconSize} />
+        </ListItemIcon>
+        <ListItemText>{t('explorer.searchInfo')}</ListItemText>
       </MenuItem>
       <MenuItem
         onClick={() => {
@@ -85,7 +96,10 @@ export const EntityActionsMenu = ({
           duplicate();
         }}
       >
-        {t('entities.duplicateEntity')}
+        <ListItemIcon>
+          <CopyIcon size={compactIconSize} />
+        </ListItemIcon>
+        <ListItemText>{t('entities.duplicateEntity')}</ListItemText>
       </MenuItem>
       {canDelete && (
         <MenuItem
@@ -93,8 +107,12 @@ export const EntityActionsMenu = ({
             onClose();
             onDelete();
           }}
+          sx={{ color: 'error.main' }}
         >
-          {t('entities.deleteEntity')}
+          <ListItemIcon sx={{ color: 'inherit' }}>
+            <Trash2Icon size={compactIconSize} />
+          </ListItemIcon>
+          <ListItemText>{t('entities.deleteEntity')}</ListItemText>
         </MenuItem>
       )}
       {canPublish && publicationContextId && publication && (
@@ -106,14 +124,17 @@ export const EntityActionsMenu = ({
               publish();
             }}
           >
-            {readiness?.ready === false ? (
-              <ListItemText
-                primary={t('entities.publish')}
-                secondary={publicationReadinessText(readiness)}
-              />
-            ) : (
-              t('entities.publish')
-            )}
+            <ListItemIcon>
+              <SendIcon size={compactIconSize} />
+            </ListItemIcon>
+            <ListItemText
+              primary={t('entities.publish')}
+              secondary={
+                readiness?.ready === false
+                  ? publicationReadinessText(readiness)
+                  : undefined
+              }
+            />
           </MenuItem>
           {publication.status !== publicationStatuses.notPublished && (
             <MenuItem
@@ -122,8 +143,12 @@ export const EntityActionsMenu = ({
                 onClose();
                 unpublish();
               }}
+              sx={{ color: 'warning.main' }}
             >
-              {t('entities.unpublish')}
+              <ListItemIcon sx={{ color: 'inherit' }}>
+                <Undo2Icon size={compactIconSize} />
+              </ListItemIcon>
+              <ListItemText>{t('entities.unpublish')}</ListItemText>
             </MenuItem>
           )}
         </>

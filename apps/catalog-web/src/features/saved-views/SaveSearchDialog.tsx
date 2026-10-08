@@ -11,7 +11,9 @@ import {
   Stack,
   TextField,
 } from '@mui/material';
+import { LockIcon, UsersIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { IconLabel } from '../../components/IconLabel';
 import {
   SAVE_SEARCH_FORM_ID,
   SAVED_VIEW_DESCRIPTION_MAX_LENGTH,
@@ -107,10 +109,14 @@ export const SaveSearchDialog = ({
                   }
                 >
                   <MenuItem value={SAVED_VIEW_VISIBILITY_PRIVATE}>
-                    {t('explorer.privateSearch')}
+                    <IconLabel icon={LockIcon}>
+                      {t('explorer.privateSearch')}
+                    </IconLabel>
                   </MenuItem>
                   <MenuItem value={SAVED_VIEW_VISIBILITY_WORKSPACE}>
-                    {t('explorer.workspaceSearch')}
+                    <IconLabel icon={UsersIcon}>
+                      {t('explorer.workspaceSearch')}
+                    </IconLabel>
                   </MenuItem>
                 </TextField>
               )}

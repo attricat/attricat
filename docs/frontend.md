@@ -118,7 +118,7 @@ light and dark modes.
   | Duplicate or copy                     | `CopyIcon`                                                          |
   | Retire or archive                     | `ArchiveIcon`                                                       |
   | Publish                               | `SendIcon` (republish: `RefreshCwIcon`; every channel: `GlobeIcon`) |
-  | Migrate or upgrade to a newer version | `CircleFadingArrowUpIcon`                                           |
+  | Migrate or upgrade to a newer version | `CircleArrowUpIcon`                                                 |
   | Enable / disable                      | `PowerIcon` / `PowerOffIcon`                                        |
   | Run now / dry run                     | `PlayIcon` / `FlaskConicalIcon`                                     |
   | Refresh data                          | `RefreshCwIcon`                                                     |
@@ -129,6 +129,8 @@ light and dark modes.
   | Download or export                    | `DownloadIcon`                                                      |
   | Install an extension                  | `PackagePlusIcon`                                                   |
 
+- Give every item of an action menu a `ListItemIcon`, using the same icon as the matching button. Colour destructive items with `error.main` and reversals such as unpublish with `warning.main`, and pass `color: 'inherit'` to their `ListItemIcon`.
+- When select options name distinct kinds of things (a scope, a visibility, a human or an agent), lead each with `IconLabel` from `src/components/IconLabel.tsx`; it also lays out the selected value. Leave plain value lists, such as codes, numbers, versions, and yes/no, without icons.
 - Add a semantic export to the registry before introducing an icon for another system concept.
 
 ## Drag and drop
