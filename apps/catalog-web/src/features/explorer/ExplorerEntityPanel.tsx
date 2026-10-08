@@ -58,17 +58,33 @@ export const ExplorerEntityPanel = ({
   useEffect(() => {
     panelRef.current?.focus();
   }, [entityId]);
+  // A press that starts in the panel, such as one opening a select whose
+  // backdrop then takes the release, ends in a click on the page body.
+  // Document listeners run before React's, which mark presses inside.
+  const pressedInside = useRef(false);
+  useEffect(() => {
+    const resetPress = () => {
+      pressedInside.current = false;
+    };
+    document.addEventListener('pointerdown', resetPress, true);
+    return () => document.removeEventListener('pointerdown', resetPress, true);
+  }, []);
 
   return (
     // Dialogs, drawers and menus opened from the panel are portalled but
     // still count as inside it.
     <ClickAwayListener
       onClickAway={(event) => {
-        if (closesPanelOnClick(event)) onClose();
+        if (!pressedInside.current && closesPanelOnClick(event)) onClose();
       }}
     >
       {/* Holds the panel without affecting its fixed layout. */}
-      <Box sx={{ display: 'contents' }}>
+      <Box
+        onPointerDownCapture={() => {
+          pressedInside.current = true;
+        }}
+        sx={{ display: 'contents' }}
+      >
         <EntityPreview
           compact
           drawerOffset={entityPanelWidth}

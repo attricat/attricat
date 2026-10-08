@@ -83,6 +83,50 @@ test('closes the record panel on a click outside it', async ({ page }) => {
   await expect(panel).toHaveCount(0);
 });
 
+test('keeps the record panel open while choosing from a select in it', async ({
+  page,
+}) => {
+  const code = `product_panel_select_${suffix()}`;
+  const status = JSON.stringify({
+    type: 'string',
+    enum: ['draft', 'live'],
+    'x-attricat-status': {
+      version: 1,
+      options: [
+        { code: 'draft', label: 'Draft' },
+        { code: 'live', label: 'Live' },
+      ],
+      transitions: [
+        { from: null, to: 'draft' },
+        { from: 'draft', to: 'live' },
+      ],
+    },
+  });
+  const blueprint = await createEntityBlueprint(
+    code,
+    'Panel select products',
+    `[[attributes]]\ncode = "title"\nvalue_type = "string"\n\n[[attributes]]\ncode = "status"\nvalue_type = "string"\nvalue_schema = '${status}'`,
+  );
+  const entity = await createEntity(blueprint, [
+    scalar('title', 'Selectable'),
+    scalar('status', 'draft'),
+  ]);
+
+  await page.goto(`/?blueprint=${code}`);
+  await page.getByRole('link', { name: 'Selectable' }).click();
+  const panel = page.getByRole('complementary', {
+    name: 'Panel select products record',
+  });
+  const select = panel.getByRole('combobox', { name: 'status', exact: true });
+  await select.click();
+  const saved = entitySave(page, entity.id);
+  await page.getByRole('option', { name: 'Live', exact: true }).click();
+  expect((await saved).ok()).toBe(true);
+  await expect(panel).toBeVisible();
+  await expect(select).toContainText('Live');
+  await expect(page).toHaveURL(new RegExp(`entity=${entity.id}`));
+});
+
 test('restores the last selected blueprint and prioritizes the URL', async ({
   page,
 }) => {
