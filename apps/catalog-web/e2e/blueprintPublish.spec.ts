@@ -76,14 +76,14 @@ test('authors, publishes, revises and migrates a blueprint in the browser', asyn
   await publishDraft(page, 2);
 
   await page
-    .getByRole('button', { name: 'Migrate compatible entities' })
+    .getByRole('button', { name: 'Migrate compatible records' })
     .click();
   const migration = page.getByRole('dialog', {
-    name: 'Migrate compatible entities',
+    name: 'Migrate compatible records',
   });
   await migration.getByRole('button', { name: 'Start migration' }).click();
   await expect(migration).toBeHidden();
-  const batches = page.getByRole('table', { name: 'Entity migration batches' });
+  const batches = page.getByRole('table', { name: 'Record migration batches' });
   await expect(async () => {
     await page.getByRole('button', { name: 'Refresh', exact: true }).click();
     await expect(batches.getByText('Completed')).toBeVisible({

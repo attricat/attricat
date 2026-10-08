@@ -139,7 +139,7 @@ price_gross = "price_net * (1 + 0.23)"`,
   await expect(rowAction).toBeVisible();
   await rowAction.click();
   const dialog = page.frameLocator('iframe[title="Recalculate formulas"]');
-  await expect(dialog.getByText('1 selected record')).toBeVisible();
+  await expect(dialog.getByText('1 selected entity')).toBeVisible();
   await dialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(
     page.locator('iframe[title="Recalculate formulas"]'),

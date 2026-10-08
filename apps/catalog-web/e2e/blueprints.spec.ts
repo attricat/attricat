@@ -39,7 +39,7 @@ test('previews blueprint views and inspects revision metadata', async ({
 
   await page.getByRole('tab', { name: 'View definition' }).click();
   await expect(page.getByText(/"detail"/)).toBeVisible();
-  await page.getByRole('tab', { name: 'Entity schema' }).click();
+  await page.getByRole('tab', { name: 'Record schema' }).click();
   await expect(page.getByText(/"required"/)).toBeVisible();
   await page.getByRole('tab', { name: 'Includes' }).click();
   await expect(page.getByText('[]')).toBeVisible();

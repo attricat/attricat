@@ -83,7 +83,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
     expect((await staleSave).status()).toBe(409);
     const conflict = stalePage
       .getByRole('alert')
-      .filter({ hasText: 'Someone else changed this entity' });
+      .filter({ hasText: 'Someone else changed this record' });
     await expect(conflict).toBeVisible();
     await expect(
       conflict.getByRole('button', { name: 'Keep my changes' }),
