@@ -217,6 +217,22 @@ acli saved-view link --state <json>
 
 Stan musi zawierać co najmniej kod schematu, np. `{"blueprint":"product","query":"linen"}`.
 
+### Powiadomienia
+
+Polecenia działają na [skrzynce powiadomień](/pl/guides/inbox/) zalogowanego użytkownika.
+
+```sh
+acli notification list [--unread] [--before-time <created_at> --before-id <id>]
+acli notification count
+acli notification get <id>
+acli notification read <id>
+acli notification unread <id>
+acli notification read-all
+acli notification delete <id>
+```
+
+`delete` usuwa trwale. `list` zwraca po 30 powiadomień na stronę; aby pobrać kolejną, podaj `created_at` i `id` ostatniego z nich.
+
 ### Tłumaczenia
 
 ```sh

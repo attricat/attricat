@@ -115,6 +115,15 @@ async fn old_invitation_cannot_reactivate_a_disabled_member_but_a_new_one_can(po
         accept(&client, &base, &fresh).await.status(),
         StatusCode::OK
     );
+    // The inviter learns that the invitation was accepted.
+    let inviter_inbox = repository
+        .list_notifications(BOOTSTRAP_OWNER_ID.parse().unwrap(), false, None, 10)
+        .await
+        .unwrap();
+    assert_eq!(inviter_inbox.len(), 1);
+    assert_eq!(inviter_inbox[0].kind, "workspace.invitation_accepted");
+    assert_eq!(inviter_inbox[0].actor_user_id, Some(user));
+    assert_eq!(inviter_inbox[0].subject, None);
     assert_eq!(
         client
             .get(format!("{base}/auth/session"))

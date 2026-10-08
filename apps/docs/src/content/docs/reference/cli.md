@@ -217,6 +217,22 @@ acli saved-view link --state <json>
 
 The state needs at least a blueprint code, for example `{"blueprint":"product","query":"linen"}`.
 
+### Notifications
+
+These commands act on the signed-in user's own [inbox](/guides/inbox/).
+
+```sh
+acli notification list [--unread] [--before-time <created_at> --before-id <id>]
+acli notification count
+acli notification get <id>
+acli notification read <id>
+acli notification unread <id>
+acli notification read-all
+acli notification delete <id>
+```
+
+`delete` is permanent. `list` returns 30 notifications per page; pass the `created_at` and `id` of the last one to read the next page.
+
 ### Translations
 
 ```sh

@@ -10,7 +10,9 @@ use api::{
     agent_worker,
     agents::AgentProviderConfig,
     file_worker::{FileWorker, WorkerConfig},
-    repository::{CatalogRepository, RepositoryError},
+    repository::{
+        CatalogRepository, NotificationSubject, NotificationSubjectKind, RepositoryError,
+    },
     storage::FakeObjectStore,
     task_worker::TaskHandler,
 };
@@ -1652,6 +1654,21 @@ async fn agent_run_timeout_is_durably_failed_without_provider_details(pool: PgPo
         Some("agent run exceeded configured timeout")
     );
     assert!(timed_out_run.finished_at.is_some());
+    // The initiator is told in their inbox, linked to the conversation.
+    let inbox = repository
+        .list_notifications(user_id, false, None, 10)
+        .await
+        .unwrap();
+    assert_eq!(inbox.len(), 1);
+    assert_eq!(inbox[0].kind, "agent.run_failed");
+    assert_eq!(inbox[0].data["error_code"], "run_timeout");
+    assert_eq!(
+        inbox[0].subject,
+        Some(NotificationSubject {
+            kind: NotificationSubjectKind::AgentConversation,
+            id: run.conversation_id,
+        })
+    );
     let events = repository.agent_run_events_after(run.id, -1).await.unwrap();
     assert!(events.iter().any(|event| {
         event.event_type == "error"

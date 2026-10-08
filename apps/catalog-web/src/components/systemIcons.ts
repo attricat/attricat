@@ -18,6 +18,7 @@ export { WrenchIcon as InspectorIcon } from 'lucide-react';
 export { SettingsIcon as ManagementIcon } from 'lucide-react';
 export { RocketIcon as OnboardingIcon } from 'lucide-react';
 export { UserIcon as ProfileIcon } from 'lucide-react';
+export { InboxIcon } from 'lucide-react';
 export { ShieldCheckIcon as RuleIcon } from 'lucide-react';
 export { NetworkIcon as RelationshipIcon } from 'lucide-react';
 export { ListChecksIcon as RelationshipPickerIcon } from 'lucide-react';

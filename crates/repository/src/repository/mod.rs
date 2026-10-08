@@ -100,6 +100,7 @@ mod health;
 mod leadership;
 mod lexicon;
 mod members;
+mod notifications;
 mod presentation_assets;
 mod record_values;
 mod references;
@@ -140,6 +141,11 @@ pub use checks::{
 pub use entity_comments::{COMMENT_PAGE_SIZE, EntityComment};
 pub use error_codes::{ErrorClass, ErrorCode, ErrorDescription};
 pub use lexicon::{LexiconEntry, LexiconImportMode, LexiconImportSummary};
+pub use notifications::{
+    MAX_NOTIFICATION_BODY_LENGTH, MAX_NOTIFICATION_TITLE_LENGTH, NOTIFICATION_PAGE_SIZE,
+    NewNotification, Notification, NotificationCursor, NotificationSubject,
+    NotificationSubjectKind, kinds as notification_kinds, notification_excerpt,
+};
 pub use saved_views::SavedView;
 pub use structural_constraints::UniqueKeyDuplicate;
 

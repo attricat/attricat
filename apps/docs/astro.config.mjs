@@ -92,6 +92,11 @@ export default defineConfig({
               slug: 'guides/agents',
               translations: polish('Agenci i zatwierdzenia'),
             },
+            {
+              label: 'Inbox and notifications',
+              slug: 'guides/inbox',
+              translations: polish('Powiadomienia'),
+            },
           ],
         },
         {

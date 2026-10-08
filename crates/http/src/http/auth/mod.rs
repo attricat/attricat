@@ -284,6 +284,12 @@ pub(super) async fn authorize(
             | "/auth/avatar"
             | "/auth/logout"
             | "/auth/renew"
+            // Each member's own inbox: handlers only ever read and change
+            // the caller's notifications, so no catalog permission applies.
+            | "/notifications"
+            | "/notifications/unread-count"
+            | "/notifications/read-all"
+            | "/notifications/{notification_id}"
     ) {
         if !is_active_principal().await? {
             return Err(ApiError::forbidden());

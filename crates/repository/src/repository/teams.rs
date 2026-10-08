@@ -229,6 +229,15 @@ impl CatalogRepository {
                 "every team member must be a workspace member".into(),
             ));
         }
+        let previous: HashSet<Uuid> = sqlx::query_scalar(
+            "SELECT m.user_id FROM team_members tm JOIN workspace_memberships m ON m.id = tm.membership_id WHERE tm.workspace_id = $1 AND tm.team_id = $2",
+        )
+        .bind(self.workspace_id.0)
+        .bind(team_id)
+        .fetch_all(&mut **transaction)
+        .await?
+        .into_iter()
+        .collect();
         sqlx::query("DELETE FROM team_members WHERE workspace_id = $1 AND team_id = $2")
             .bind(self.workspace_id.0)
             .bind(team_id)
@@ -242,6 +251,19 @@ impl CatalogRepository {
         .bind(&memberships)
         .execute(&mut **transaction)
         .await?;
+        let added: Vec<Uuid> = user_ids
+            .iter()
+            .copied()
+            .filter(|user| !previous.contains(user))
+            .collect();
+        if !added.is_empty() {
+            let name: String = sqlx::query_scalar("SELECT name FROM teams WHERE id = $1")
+                .bind(team_id)
+                .fetch_one(&mut **transaction)
+                .await?;
+            self.notify_team_members_added_on(transaction, team_id, &name, &added)
+                .await?;
+        }
         Ok(())
     }
 
@@ -328,22 +350,23 @@ impl CatalogRepository {
     /// fail. A structural revalidation only checks the format. The preview
     /// holds each context's own values, so a reparent changes none of them
     /// today; the early return keeps it that way if that ever changes,
-    /// since a reparent assigns nobody.
+    /// since a reparent assigns nobody. Returns the assignments a write
+    /// made, by attribute code.
     pub(super) async fn validate_principal_values(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         entity: &Entity,
         write: &super::write_context::WriteContext,
         mode: Revalidation,
-    ) -> Result<(), RepositoryError> {
+    ) -> Result<Vec<(String, PrincipalRef)>, RepositoryError> {
         let attributes = write.principal_attributes();
         if attributes.is_empty() {
-            return Ok(());
+            return Ok(Vec::new());
         }
         let after = write.preview(transaction, entity.id).await?;
         let before = entity.projections.get("preview").unwrap_or(&Value::Null);
         let Some(contexts) = after.as_object() else {
-            return Ok(());
+            return Ok(Vec::new());
         };
         let mismatch = |code: &str, context: &str, message: String| {
             RepositoryError::AttributeValueSchemaMismatch {
@@ -371,7 +394,7 @@ impl CatalogRepository {
             }
         }
         if mode == Revalidation::Structural {
-            return Ok(());
+            return Ok(Vec::new());
         }
         let ids = |kind: PrincipalKind| -> Vec<Uuid> {
             changed
@@ -407,6 +430,7 @@ impl CatalogRepository {
             .into_iter()
             .collect()
         };
+        let mut assigned: Vec<(String, PrincipalRef)> = Vec::new();
         for (code, context, reference) in changed {
             let missing = match reference.kind {
                 PrincipalKind::User => (!active_users.contains(&reference.id))
@@ -417,7 +441,13 @@ impl CatalogRepository {
             if let Some(message) = missing {
                 return Err(mismatch(code, context, message.into()));
             }
+            // A value set in several contexts is one assignment.
+            if !assigned.iter().any(|(assigned_code, assigned_reference)| {
+                assigned_code == code && *assigned_reference == reference
+            }) {
+                assigned.push((code.to_owned(), reference));
+            }
         }
-        Ok(())
+        Ok(assigned)
     }
 }

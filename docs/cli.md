@@ -226,6 +226,24 @@ Assignment values are `user:<id>` or `team:<id>`
 ([user or team assignments](blueprints.md#user-or-team-assignments)); filter
 with `"value": "@me"` to find entities assigned to the caller or their teams.
 
+## Notifications
+
+Each command acts on the signed-in user's own inbox in the current workspace;
+see [Notifications](notifications.md).
+
+```sh
+acli notification list [--unread] [--before-time <created_at> --before-id <id>]
+acli notification count            # {"count": <unread>}
+acli notification get <id>
+acli notification read <id>        # mark as read
+acli notification unread <id>      # mark as unread
+acli notification read-all         # mark every unread notification as read
+acli notification delete <id>      # permanent
+```
+
+`list` returns 30 notifications per page with `has_more` and `unread_count`;
+pass the `created_at` and `id` of the last item to read the next page.
+
 ## Translations
 
 `acli lexicon` manages the workspace lexicon used by `{{…}}` references in

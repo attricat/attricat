@@ -48,6 +48,8 @@ runs the ignored RustFS compatibility test.
 - [Tags, labels, and classifications](classifications.md): model controlled
   vocabularies with entities, relationships, contexts, and hierarchies.
 - [Domain eventing](eventing.md): transactional outbox and delivery semantics.
+- [Notifications](notifications.md): per-member workspace inboxes, the system
+  events that notify people, and how to add a producer.
 - [Workflows](workflows.md): versioned triggers and bounded entity actions.
 - [Rules](rules.md): blueprint checks and finding lifecycles.
 - [Extensions](extensions.md): manifest, permissions, runtime, and lifecycle contracts;

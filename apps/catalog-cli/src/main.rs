@@ -85,6 +85,11 @@ enum Command {
     },
     /// List workspace users and teams that assignment attributes can reference.
     Directory,
+    /// Read and manage your own notification inbox in the workspace.
+    Notification {
+        #[command(subcommand)]
+        command: NotificationCommand,
+    },
     /// Manage workspace teams (requires `members.manage`).
     Team {
         #[command(subcommand)]
@@ -189,6 +194,34 @@ struct LexiconIdentity {
     /// CLDR plural category: zero, one, two, few, many, or other.
     #[arg(long, default_value = "other")]
     plural_category: String,
+}
+
+#[derive(Subcommand)]
+enum NotificationCommand {
+    /// List notifications, newest first, with the unread count.
+    List {
+        /// Only list unread notifications.
+        #[arg(long)]
+        unread: bool,
+        /// Continue after a page: the created_at of its last item.
+        #[arg(long, requires = "before_id")]
+        before_time: Option<String>,
+        /// Continue after a page: the id of its last item.
+        #[arg(long, requires = "before_time")]
+        before_id: Option<Uuid>,
+    },
+    /// Print the number of unread notifications.
+    Count,
+    /// Show one notification.
+    Get { id: Uuid },
+    /// Mark a notification as read.
+    Read { id: Uuid },
+    /// Mark a notification as unread.
+    Unread { id: Uuid },
+    /// Mark every unread notification as read.
+    ReadAll,
+    /// Permanently delete a notification.
+    Delete { id: Uuid },
 }
 
 #[derive(Subcommand)]
@@ -1652,6 +1685,10 @@ async fn run(cli: Cli) -> Result<String, CliError> {
     match cli.command {
         Command::Health => request(&client, &server, Method::GET, "/health", None).await,
         Command::Directory => request(&client, &server, Method::GET, "/directory", None).await,
+        Command::Notification { command } => {
+            let (method, path, payload) = notification_request(command);
+            request(&client, &server, method, &path, payload).await
+        }
         Command::Team { command } => {
             let (method, path, payload) = team_request(command);
             request(&client, &server, method, &path, payload).await
@@ -4248,6 +4285,52 @@ fn saved_view_payload(
     }))
 }
 
+fn notification_request(command: NotificationCommand) -> (Method, String, Option<Value>) {
+    match command {
+        NotificationCommand::List {
+            unread,
+            before_time,
+            before_id,
+        } => {
+            let mut params = url::form_urlencoded::Serializer::new(String::new());
+            if unread {
+                params.append_pair("unread_only", "true");
+            }
+            if let (Some(time), Some(id)) = (before_time, before_id) {
+                params.append_pair("before_time", &time);
+                params.append_pair("before_id", &id.to_string());
+            }
+            let query = params.finish();
+            let path = if query.is_empty() {
+                "/notifications".to_owned()
+            } else {
+                format!("/notifications?{query}")
+            };
+            (Method::GET, path, None)
+        }
+        NotificationCommand::Count => (Method::GET, "/notifications/unread-count".to_owned(), None),
+        NotificationCommand::Get { id } => (Method::GET, format!("/notifications/{id}"), None),
+        NotificationCommand::Read { id } => (
+            Method::PATCH,
+            format!("/notifications/{id}"),
+            Some(json!({"read": true})),
+        ),
+        NotificationCommand::Unread { id } => (
+            Method::PATCH,
+            format!("/notifications/{id}"),
+            Some(json!({"read": false})),
+        ),
+        NotificationCommand::ReadAll => (
+            Method::POST,
+            "/notifications/read-all".to_owned(),
+            Some(json!({})),
+        ),
+        NotificationCommand::Delete { id } => {
+            (Method::DELETE, format!("/notifications/{id}"), None)
+        }
+    }
+}
+
 fn team_request(command: TeamCommand) -> (Method, String, Option<Value>) {
     match command {
         TeamCommand::List => (Method::GET, "/workspace/teams".to_owned(), None),
@@ -4607,6 +4690,60 @@ mod tests {
                 "--clear-time-zone"
             ])
             .is_err()
+        );
+    }
+
+    #[test]
+    fn notification_commands_build_requests() {
+        let parse = |args: &[&str]| match Cli::try_parse_from(args).unwrap().command {
+            Command::Notification { command } => notification_request(command),
+            _ => unreachable!(),
+        };
+        let id = "6a1f9a54-2d0c-4f3a-9a7e-1c2b3d4e5f60";
+        assert_eq!(
+            parse(&["acli", "notification", "list"]),
+            (Method::GET, "/notifications".to_owned(), None)
+        );
+        assert_eq!(
+            parse(&[
+                "acli",
+                "notification",
+                "list",
+                "--unread",
+                "--before-time",
+                "2026-10-08T10:00:00Z",
+                "--before-id",
+                id
+            ])
+            .1,
+            format!(
+                "/notifications?unread_only=true&before_time=2026-10-08T10%3A00%3A00Z&before_id={id}"
+            )
+        );
+        assert!(Cli::try_parse_from(["acli", "notification", "list", "--before-id", id]).is_err());
+        assert_eq!(
+            parse(&["acli", "notification", "read", id]),
+            (
+                Method::PATCH,
+                format!("/notifications/{id}"),
+                Some(json!({"read": true}))
+            )
+        );
+        assert_eq!(
+            parse(&["acli", "notification", "unread", id]).2,
+            Some(json!({"read": false}))
+        );
+        assert_eq!(
+            parse(&["acli", "notification", "read-all"]).1,
+            "/notifications/read-all"
+        );
+        assert_eq!(
+            parse(&["acli", "notification", "delete", id]),
+            (Method::DELETE, format!("/notifications/{id}"), None)
+        );
+        assert_eq!(
+            parse(&["acli", "notification", "count"]).1,
+            "/notifications/unread-count"
         );
     }
 

@@ -15,6 +15,8 @@ import {
 } from './sideNavigationLayout';
 
 type NavigationItemProps = {
+  /** The accessible name when it should say more than `label`. */
+  accessibleLabel?: string;
   ariaControls?: string;
   ariaExpanded?: boolean;
   compact: boolean;
@@ -30,6 +32,7 @@ type NavigationItemProps = {
 };
 
 export const NavigationItem = ({
+  accessibleLabel,
   ariaControls,
   ariaExpanded,
   compact,
@@ -45,7 +48,7 @@ export const NavigationItem = ({
   const buttonProps = {
     'aria-controls': ariaControls,
     'aria-expanded': ariaExpanded,
-    'aria-label': label,
+    'aria-label': accessibleLabel ?? label,
     onClick,
     selected,
     sx: compact ? compactNavigationItemSx : sx,

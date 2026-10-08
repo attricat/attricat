@@ -7,6 +7,8 @@ import { useDocumentationUrl } from '../app/documentation';
 import { currentSession } from '../features/auth/api';
 import { authQueryKeys } from '../features/auth/queryKeys';
 import { ExtensionOutlet } from '../features/extensions/ExtensionOutlet';
+import { InboxNavigationIcon } from '../features/notifications/InboxNavigationIcon';
+import { useUnreadNotificationCount } from '../features/notifications/useUnreadNotificationCount';
 import { listSidebarExploreNavigation } from '../features/workspace/api';
 import { workspaceQueryKeys } from '../features/workspace/queryKeys';
 import { ExploreNavigationLinks } from './ExploreNavigationLinks';
@@ -94,6 +96,7 @@ export const SideNavigation = ({
     queryKey: workspaceQueryKeys.sidebarExploreNavigation(),
     queryFn: listSidebarExploreNavigation,
   });
+  const unreadNotifications = useUnreadNotificationCount();
   const managementItems = getVisibleManagementNavigationItems(
     session.data?.capabilities,
   );
@@ -184,8 +187,21 @@ export const SideNavigation = ({
             .filter((item) => compact || item.to !== navigationRoutes.explore)
             .map((item) => (
               <NavigationItem
+                accessibleLabel={
+                  item.to === navigationRoutes.inbox && unreadNotifications > 0
+                    ? t('navigation.inboxUnread', {
+                        count: unreadNotifications,
+                      })
+                    : undefined
+                }
                 compact={compact}
-                icon={createElement(item.icon)}
+                icon={
+                  item.to === navigationRoutes.inbox ? (
+                    <InboxNavigationIcon unread={unreadNotifications} />
+                  ) : (
+                    createElement(item.icon)
+                  )
+                }
                 key={item.to}
                 label={t(item.labelKey)}
                 onClick={

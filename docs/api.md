@@ -509,6 +509,37 @@ existing assignments still resolve its name through `GET /directory`
 deleted teams so existing assignments render; only active members and
 non-deleted teams can be newly assigned.
 
+## Notifications
+
+Each workspace member has an inbox; see [Notifications](notifications.md) for
+what creates notifications and who receives them. Every route acts on the
+authenticated user's notifications in the current workspace and needs only an
+active membership, not a catalog permission. Another member's notification
+returns `404`.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/notifications` | Newest first, 30 per page. `unread_only=true` skips read notifications; continue with `before_time` and `before_id` from the last item (both or neither). Returns `{"items","has_more","unread_count"}`. |
+| `GET` | `/notifications/unread-count` | `{"count"}`. |
+| `GET` | `/notifications/{id}` | One notification. |
+| `PATCH` | `/notifications/{id}` | `{"read": true}` marks it read, `false` unread. Returns `204`. |
+| `POST` | `/notifications/read-all` | Marks every unread notification read. An optional `{"up_to": "<RFC 3339>"}` limits it to notifications created by then, so ones that arrive after a client loaded its list stay unread. Returns `{"updated"}`. |
+| `DELETE` | `/notifications/{id}` | Deletes the notification permanently. Returns `204`. |
+
+A notification:
+
+```json
+{"id":"…","kind":"entity.assigned","title":"Ada assigned you to a Task record","body":null,
+ "actor_user_id":"…","actor_display_name":"Ada","actor_email":"ada@example.test",
+ "subject":{"kind":"entity","id":"…"},"data":{"blueprint_code":"task","blueprint_name":"Task","attribute_code":"assignee"},
+ "read":false,"read_at":null,"created_at":"2026-10-08T10:00:00Z"}
+```
+
+`subject` is `null` for plain messages, or names an `entity` or
+`agent_conversation`. `title` is plain text that stands on its own; `kind` and
+`data` let clients render their own wording. Unknown future kinds can appear,
+so clients should fall back to `title`.
+
 ## Saved views and share links
 
 All routes require an authenticated workspace principal with `entities.read`.
@@ -896,7 +927,11 @@ safe batch migration to a published revision would change, without starting
 one. The agent can propose an approved `duplicate_entity` (`entities.write`)
 and, like any entity reader, an approved `add_entity_comment` written as the
 initiating user; `list_entity_comments` returns bounded pages with each body cut
-to 1,000 characters. The agent may inspect a
+to 1,000 characters. `list_notifications` reads the initiating user's
+[inbox](#notifications) with bodies cut to 500 characters; the approved
+`mark_notifications_read`, `mark_all_notifications_read` and
+`delete_notifications` change only that inbox and need an active membership
+rather than a permission. The agent may inspect a
 context by ID, then propose an approved parent/data replacement or deletion;
 it can also propose approved entity system-tag/metadata updates. Omitted
 annotation fields remain unchanged, and context deletion is rejected when the
