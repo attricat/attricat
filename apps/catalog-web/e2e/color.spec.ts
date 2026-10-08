@@ -108,7 +108,7 @@ columns = [{ field = "title" }, { field = "hex", renderer = { id = "catalog.colo
     await expect(hex).toHaveValue('');
     await page.goto(`/?blueprint=${code}`);
     await expect(
-      page.getByRole('link', { name: 'Color sample' }),
+      page.getByRole('link', { name: 'Color sample', exact: true }),
     ).toBeVisible();
     await expect(page.getByText('#ffffff', { exact: true })).toHaveCount(0);
   });

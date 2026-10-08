@@ -81,7 +81,9 @@ columns = [{ field = "title" }, { field = "contact", renderer = { id = "catalog.
     await page.reload();
     await expect(input).toHaveValue('');
     await page.goto(`/?blueprint=${code}`);
-    await expect(page.getByRole('link', { name: 'Contact' })).toBeVisible();
+    await expect(
+      page.getByRole('link', { name: 'Contact', exact: true }),
+    ).toBeVisible();
     await expect(page.locator('a[href^="mailto:"]')).toHaveCount(0);
   });
 }
