@@ -150,7 +150,7 @@ describe('ImageGallery', () => {
       <ImageGalleryEditor files={files} ordered disabled onChange={onChange} />,
     );
     for (const button of screen.getAllByRole('button', {
-      name: /^(Move|Remove)/,
+      name: /^(Drag|Move|Remove)/,
     }))
       expect((button as HTMLButtonElement).disabled).toBe(true);
     expect(
