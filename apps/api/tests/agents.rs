@@ -2819,6 +2819,26 @@ async fn agent_finds_a_named_record_and_counts_what_links_to_it(pool: PgPool) {
         .to_string();
     assert!(error.contains("it has: category"), "{error}");
 
+    // A mistyped blueprint names the blueprints that do exist.
+    for (tool, arguments) in [
+        (
+            "search_entities",
+            json!({"blueprint": {"code": "products"}}),
+        ),
+        ("get_blueprint", json!({"code": "products"})),
+    ] {
+        let error = execute_read(&repository, actor, workspace, tool, arguments)
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("blueprint 'products' does not exist"),
+            "{error}"
+        );
+        assert!(error.contains("product (Products)"), "{error}");
+        assert!(error.contains("category (Categories)"), "{error}");
+    }
+
     // Every run's system prompt maps blueprints to the blueprints they link to.
     let system_prompt = Arc::new(std::sync::Mutex::new(String::new()));
     let provider_prompt = system_prompt.clone();

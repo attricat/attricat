@@ -1231,8 +1231,16 @@ pub async fn execute_read(
                     None => repository.get_blueprint_by_code_including_drafts(&input.code).await?,
                 },
             };
-            serde_json::to_value(blueprint.ok_or(RepositoryError::NotFound("blueprint"))?)
-                .expect("blueprint serializes")
+            let Some(blueprint) = blueprint else {
+                return Err(match input.version {
+                    // The blueprint exists; that revision does not.
+                    Some(_) if repository.get_blueprint_by_code_including_drafts(&input.code).await?.is_some() => {
+                        RepositoryError::NotFound("blueprint").into()
+                    }
+                    _ => unknown_blueprint(repository, &input.code).await,
+                });
+            };
+            serde_json::to_value(blueprint).expect("blueprint serializes")
         }
         "get_blueprint_revision" => {
             let blueprint_id = parse_uuid(&arguments, "blueprint_id")?;
@@ -2523,10 +2531,9 @@ pub async fn execute_mutation(
                     "invalid saved search input".to_owned(),
                 ));
             }
-            let current = repository
-                .get_blueprint_by_code(blueprint)
-                .await?
-                .ok_or(RepositoryError::NotFound("blueprint"))?;
+            let Some(current) = repository.get_blueprint_by_code(blueprint).await? else {
+                return Err(unknown_blueprint(repository, blueprint).await);
+            };
             let source = if let Some(version) = input.version {
                 repository
                     .get_published_blueprint_by_code_and_version(blueprint, version)
@@ -2712,10 +2719,9 @@ pub async fn execute_mutation(
                     state["relationshipFacets"] = json!(facets.iter().map(|facet| json!({"field":facet.field,"selectedIds":facet.selected_ids})).collect::<Vec<_>>());
                 }
             }
-            let current = repository
-                .get_blueprint_by_code(&blueprint)
-                .await?
-                .ok_or(RepositoryError::NotFound("blueprint"))?;
+            let Some(current) = repository.get_blueprint_by_code(&blueprint).await? else {
+                return Err(unknown_blueprint(repository, &blueprint).await);
+            };
             let source = if let Some(version) = state.get("version").and_then(Value::as_i64) {
                 repository
                     .get_published_blueprint_by_code_and_version(&blueprint, version)
@@ -3157,6 +3163,37 @@ async fn resolve_agent_search_sort(
     }))
 }
 
+/// Blueprints named in an unknown-blueprint error, so it stays within bounds.
+const MAX_NAMED_BLUEPRINTS: usize = 50;
+
+/// An unknown blueprint code names the record blueprints that do exist, so
+/// the model can correct the call without listing blueprints first.
+async fn unknown_blueprint(repository: &CatalogRepository, code: &str) -> ToolError {
+    let blueprints = match repository.list_blueprints().await {
+        Ok(blueprints) => blueprints,
+        Err(error) => return error.into(),
+    };
+    let known = blueprints
+        .iter()
+        .filter(|blueprint| blueprint.kind == "entity")
+        .map(|blueprint| format!("{} ({})", blueprint.code, blueprint.name))
+        .collect::<Vec<_>>();
+    let more = known.len().saturating_sub(MAX_NAMED_BLUEPRINTS);
+    let mut listed = known
+        .into_iter()
+        .take(MAX_NAMED_BLUEPRINTS)
+        .collect::<Vec<_>>()
+        .join(", ");
+    if listed.is_empty() {
+        listed = "none".to_owned();
+    } else if more > 0 {
+        listed.push_str(&format!(", and {more} more (use list_blueprints)"));
+    }
+    ToolError::InvalidArguments(format!(
+        "blueprint '{code}' does not exist; record blueprints: {listed}"
+    ))
+}
+
 /// A search's blueprint, context and matching entities, shared by the tools
 /// that search and count.
 struct AgentSearchScope {
@@ -3188,10 +3225,9 @@ async fn agent_search_scope(
             "filters and relationship_filters must each contain at most {MAX_SEARCH_FILTERS} items"
         )));
     }
-    let current = repository
-        .get_blueprint_by_code(&blueprint.code)
-        .await?
-        .ok_or(RepositoryError::NotFound("blueprint"))?;
+    let Some(current) = repository.get_blueprint_by_code(&blueprint.code).await? else {
+        return Err(unknown_blueprint(repository, &blueprint.code).await);
+    };
     let (selected, search_blueprint) = match blueprint.version {
         // The latest published revision is the requested one.
         Some(version) if version == current.blueprint.version => (Some(version), current.clone()),
