@@ -24,19 +24,17 @@ describe('ExplorerPageHeader', () => {
       <ExplorerPageHeader
         blueprint="product"
         locked={false}
-        lockedBlueprintName="Product"
+        blueprintName="Product"
       />,
     );
     expect(createSearch()).toEqual({ blueprint: 'product' });
+    // The selected blueprint titles the page, not only a locked one.
+    expect(screen.getByRole('heading', { name: 'Product' })).toBeTruthy();
   });
 
   it('locks the create form to a locked Explorer blueprint', () => {
     render(
-      <ExplorerPageHeader
-        blueprint="product"
-        locked
-        lockedBlueprintName="Product"
-      />,
+      <ExplorerPageHeader blueprint="product" locked blueprintName="Product" />,
     );
     expect(createSearch()).toEqual({ blueprint: 'product', locked: true });
   });
@@ -46,9 +44,12 @@ describe('ExplorerPageHeader', () => {
       <ExplorerPageHeader
         blueprint={undefined}
         locked={false}
-        lockedBlueprintName={undefined}
+        blueprintName={undefined}
       />,
     );
     expect(createSearch()).toEqual({});
+    expect(
+      screen.getByRole('heading', { name: 'Record explorer' }),
+    ).toBeTruthy();
   });
 });

@@ -5,8 +5,8 @@ import { ExplorerIcon } from '../../components/systemIcons';
 
 type Props = {
   blueprint: string | undefined;
-  /** Name of the blueprint the Explorer is locked to, if any. */
-  lockedBlueprintName: string | undefined;
+  /** Name of the selected blueprint, which titles the page. */
+  blueprintName: string | undefined;
   locked: boolean;
 };
 
@@ -19,11 +19,10 @@ const createSearch = (blueprint: string | undefined, locked: boolean) => {
 
 export const ExplorerPageHeader = ({
   blueprint,
+  blueprintName,
   locked,
-  lockedBlueprintName,
 }: Props) => {
   const { t } = useTranslation();
-  const lockedName = locked ? lockedBlueprintName : undefined;
   return (
     <PageHeader
       actions={
@@ -32,20 +31,20 @@ export const ExplorerPageHeader = ({
           to="/entities/new"
           variant="contained"
         >
-          {lockedName
-            ? t('explorer.createBlueprint', { blueprint: lockedName })
+          {blueprintName
+            ? t('explorer.createBlueprint', { blueprint: blueprintName })
             : t('explorer.create')}
         </RouterButton>
       }
       description={
-        lockedName
-          ? t('explorer.blueprintDescription', { blueprint: lockedName })
+        blueprintName
+          ? t('explorer.blueprintDescription', { blueprint: blueprintName })
           : t('explorer.description')
       }
       icon={ExplorerIcon}
       title={
-        lockedName
-          ? t('explorer.blueprintTitle', { blueprint: lockedName })
+        blueprintName
+          ? t('explorer.blueprintTitle', { blueprint: blueprintName })
           : t('explorer.title')
       }
     />

@@ -193,7 +193,7 @@ describe('EntityPreviewPage', () => {
       capabilities: { entities_delete: false },
     } as never);
     const { unmount } = renderPage();
-    await screen.findByText('Product');
+    await screen.findByText(/^Product ·/);
     await waitFor(() =>
       expect(outletRender).toHaveBeenCalledWith({
         outlet: 'entity_attribute_panel',

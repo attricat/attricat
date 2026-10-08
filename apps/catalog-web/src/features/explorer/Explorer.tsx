@@ -98,7 +98,7 @@ export const Explorer = ({
     relationshipFacetSources(relationshipFields, search),
     search,
   );
-  const lockedBlueprintName =
+  const blueprintName =
     (selectedBlueprint.data &&
       lexiconText(selectedBlueprint.data.blueprint.name)) ??
     search.blueprint;
@@ -162,8 +162,8 @@ export const Explorer = ({
         <PageContainer>
           <ExplorerPageHeader
             blueprint={blueprintMissing ? undefined : search.blueprint}
+            blueprintName={blueprintMissing ? undefined : blueprintName}
             locked={Boolean(search.locked)}
-            lockedBlueprintName={lockedBlueprintName}
           />
           <ExplorerLoadErrors
             blueprintMissing={blueprintMissing}

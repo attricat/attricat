@@ -1,18 +1,23 @@
 import { Link } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
+import { lexiconText } from '../../lexicon/lexicon';
 
 type Props = {
-  blueprint?: { code: string; version: number };
+  blueprint?: { code: string; name: string; version: number };
+  /** Shown until the blueprint has loaded. */
   label: string;
 };
 
-/** Page eyebrow linking back to the entity list for the blueprint. */
+/**
+ * Page eyebrow naming the kind of record, its blueprint, and linking back to
+ * the record list for that blueprint.
+ */
 export const EntityPageEyebrow = ({ blueprint, label }: Props) => {
   const { t } = useTranslation();
   if (!blueprint) return label;
   return (
     <>
-      {label} ·{' '}
+      {lexiconText(blueprint.name)} ·{' '}
       <Link
         search={{ blueprint: blueprint.code, version: blueprint.version }}
         to="/"

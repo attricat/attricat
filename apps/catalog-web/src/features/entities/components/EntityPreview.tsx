@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Box, CircularProgress } from '@mui/material';
+import { Alert, Box, CircularProgress, Typography } from '@mui/material';
 import { lazy, Suspense, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { QueryErrorNotice } from '../../../components/QueryErrorNotice';
@@ -27,7 +27,6 @@ import { EntityHeading } from './EntityHeading';
 import type { EntityInlineFieldsHandle } from './EntityInlineFields';
 import { EntityPreviewContent } from './EntityPreviewContent';
 import { EntityPreviewToolbar } from './EntityPreviewToolbar';
-import { EntitySchemaSubheader } from './EntitySchemaSubheader';
 import { RecordControlsPanel } from './RecordControlsPanel';
 import { RelationshipPickerActionBar } from './RelationshipPickerActionBar';
 import { useEntityPublications } from './useEntityPublications';
@@ -138,13 +137,22 @@ export const EntityPreview = ({
               />
             )}
             {resolved.data && blueprint.data && (
-              <EntityHeading
-                attributes={blueprint.data.attributes}
-                compact={compact}
-                entityId={entityId}
-                values={resolved.data.values}
-                view={blueprint.data.blueprint.views.detail}
-              />
+              <Box>
+                {/* Names the kind of record; a full page names it in its
+                    header's eyebrow instead. */}
+                {compact && (
+                  <Typography color="primary" component="p" variant="overline">
+                    {lexiconText(blueprint.data.blueprint.name)}
+                  </Typography>
+                )}
+                <EntityHeading
+                  attributes={blueprint.data.attributes}
+                  compact={compact}
+                  entityId={entityId}
+                  values={resolved.data.values}
+                  view={blueprint.data.blueprint.views.detail}
+                />
+              </Box>
             )}
             {actionError && (
               <ApiErrorAlert error={actionError} sx={{ mt: 3 }} />
@@ -193,12 +201,6 @@ export const EntityPreview = ({
               onPublishAll={publications.publishAll}
               onUnpublish={publications.unpublish}
               publicationPending={publications.isPending}
-            />
-            <EntitySchemaSubheader
-              compact={compact}
-              name={
-                blueprint.data && lexiconText(blueprint.data.blueprint.name)
-              }
             />
             {contexts.isPending && (
               <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
