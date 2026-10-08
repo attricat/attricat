@@ -4,13 +4,13 @@ import { pageTitle } from './pageTitle';
 
 describe('pageTitle', () => {
   it('distinguishes routes and resources across browser tabs', () => {
-    expect(pageTitle('/', i18n.t)).toBe('Entity explorer · Attricat');
+    expect(pageTitle('/', i18n.t)).toBe('Record explorer · Attricat');
     expect(pageTitle('/manage/workflows', i18n.t)).toBe('Workflows · Attricat');
     expect(pageTitle('/manage/workflows/new', i18n.t)).toBe(
       'New workflow · Attricat',
     );
     expect(pageTitle('/entities/abcdef12-1234/changes', i18n.t)).toBe(
-      'Changes · Entity abcdef12 · Attricat',
+      'Changes · Record abcdef12 · Attricat',
     );
     expect(pageTitle('/entities/87654321-1234/changes', i18n.t)).not.toBe(
       pageTitle('/entities/abcdef12-1234/changes', i18n.t),

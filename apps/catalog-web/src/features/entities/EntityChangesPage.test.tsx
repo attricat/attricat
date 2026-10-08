@@ -64,7 +64,7 @@ it('loads successive pages of entity changes without discarding prior changes', 
     </QueryClientProvider>,
   );
   expect(await screen.findByText('title', { selector: 'strong' })).toBeTruthy();
-  expect(screen.getByText('Back to entity')).toBeTruthy();
+  expect(screen.getByText('Back to record')).toBeTruthy();
   await userEvent.click(screen.getByRole('button', { name: 'Load more' }));
   await waitFor(() =>
     expect(getEntityChanges).toHaveBeenCalledWith(entityId, 25),

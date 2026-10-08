@@ -350,11 +350,11 @@ describe('RuleInspectionPage', () => {
     await screen.findByText('Check v1');
     const [, manual, scoped] = screen.getAllByRole('row');
     expect(within(manual).getByText('Check v1')).toBeTruthy();
-    expect(within(manual).getByText('All entities')).toBeTruthy();
+    expect(within(manual).getByText('All records')).toBeTruthy();
     // A revision missing from the definitions still identifies its rule.
     expect(within(scoped).getByText('Rule 423e4567 v4')).toBeTruthy();
     expect(
-      within(scoped).getByRole('link', { name: `Entity ${id}` }).textContent,
+      within(scoped).getByRole('link', { name: `Record ${id}` }).textContent,
     ).toBe(id.slice(0, 8));
   });
 });

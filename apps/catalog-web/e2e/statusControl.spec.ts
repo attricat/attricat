@@ -41,7 +41,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
       page.getByRole('option', { name: 'Live', exact: true }),
     ).toBeDisabled();
     await page.getByRole('option', { name: 'Draft', exact: true }).click();
-    await page.getByRole('button', { name: 'Create entity' }).click();
+    await page.getByRole('button', { name: 'Create record' }).click();
     await expect(page).toHaveURL(/\/entities\/[0-9a-f-]{36}$/);
     await expect(page.getByText('Draft', { exact: true })).toBeVisible();
     const entityUrl = page.url();

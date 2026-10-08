@@ -115,7 +115,7 @@ describe('entity form values', () => {
       }),
     ).toEqual({
       fieldErrors: {
-        related_products: 'Enter comma-separated entity UUIDs.',
+        related_products: 'Enter comma-separated record UUIDs.',
       },
     });
   });

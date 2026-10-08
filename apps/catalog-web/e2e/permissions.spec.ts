@@ -88,7 +88,7 @@ test('a viewer can browse the catalog but every write is refused', async ({
   await page.getByRole('option', { name: `Viewer product (${code})` }).click();
   await page.getByRole('button', { name: 'Load blueprint' }).click();
   await page.getByLabel('title').fill('Unauthorized product');
-  await page.getByRole('button', { name: 'Create entity' }).click();
+  await page.getByRole('button', { name: 'Create record' }).click();
   await expect(refusal(page)).toBeVisible();
   await expect(page).toHaveURL(/\/entities\/new(\?|$)/);
 

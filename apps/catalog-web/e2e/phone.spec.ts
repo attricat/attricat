@@ -49,7 +49,7 @@ columns = [{ field = "phone", renderer = { id = "catalog.phone_display", version
     const number = '+1 (202) 555-0123 x0042';
     await input.fill(number);
     await page
-      .getByRole('button', { name: 'Create entity', exact: true })
+      .getByRole('button', { name: 'Create record', exact: true })
       .click();
     await expect(page).toHaveURL(/\/entities\/[0-9a-f-]{36}$/);
     const entityUrl = page.url();

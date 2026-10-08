@@ -13,7 +13,7 @@ const expectLatestRun = async (page: Page, ruleName: string, run: string) => {
     await page.goto('/manage/rules/runs');
     await expect(
       page.getByRole('row').filter({ hasText: ruleName }).first(),
-    ).toHaveAccessibleName(`${ruleName} v1 All entities ${run}`, {
+    ).toHaveAccessibleName(`${ruleName} v1 All records ${run}`, {
       timeout: 1_000,
     });
   }).toPass();

@@ -57,7 +57,7 @@ fixed = "reviewed"
   await page.getByRole('button', { name: 'Enable', exact: true }).click();
   await expect(page.getByText('Enabled revision v1')).toBeVisible();
 
-  await page.getByLabel('Manual run entity ID').fill(entity.id);
+  await page.getByLabel('Manual run record ID').fill(entity.id);
   await page.getByRole('button', { name: 'Run now' }).click();
   await expect(async () => {
     await page.reload();
@@ -77,5 +77,5 @@ fixed = "reviewed"
   await expect(page).toHaveURL(workflowUrl);
   await page.getByRole('button', { name: 'Disable', exact: true }).click();
   await expect(page.getByText('Disabled', { exact: true })).toBeVisible();
-  await expect(page.getByLabel('Manual run entity ID')).toBeHidden();
+  await expect(page.getByLabel('Manual run record ID')).toBeHidden();
 });

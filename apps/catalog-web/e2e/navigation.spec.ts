@@ -17,7 +17,7 @@ test('navigates from the desktop rail and management panel', async ({
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
   await expect(
-    page.getByRole('navigation', { name: /entity explorer/i }),
+    page.getByRole('navigation', { name: /record explorer/i }),
   ).toBeVisible();
   const blueprintSelector = page.getByRole('combobox', {
     name: /select a blueprint/i,
@@ -58,7 +58,7 @@ test('opens mobile navigation and closes it after navigation', async ({
   const backButton = page.getByRole('button', {
     name: 'Back to main navigation',
   });
-  const allEntitiesLink = page.getByRole('link', { name: 'All entities' });
+  const allEntitiesLink = page.getByRole('link', { name: 'All records' });
   await expect(backButton).toBeVisible();
   await expect(allEntitiesLink).toBeVisible();
   const allEntitiesLinkBox = await allEntitiesLink.boundingBox();

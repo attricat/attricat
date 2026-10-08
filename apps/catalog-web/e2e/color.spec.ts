@@ -50,7 +50,7 @@ columns = [{ field = "title" }, { field = "hex", renderer = { id = "catalog.colo
     await expect(text).toHaveValue('');
     await text.fill('#fff');
     await page
-      .getByRole('button', { name: 'Create entity', exact: true })
+      .getByRole('button', { name: 'Create record', exact: true })
       .click();
     await expect(
       page.getByText('Enter a six-digit hex color, such as #1a2b3c.'),
@@ -62,7 +62,7 @@ columns = [{ field = "title" }, { field = "hex", renderer = { id = "catalog.colo
     await text.press('Tab');
     await expect(page.getByLabel('Pick color for hex')).toBeFocused();
     await page
-      .getByRole('button', { name: 'Create entity', exact: true })
+      .getByRole('button', { name: 'Create record', exact: true })
       .click();
     await expect(page).toHaveURL(/\/entities\/[0-9a-f-]{36}$/);
     const entityUrl = page.url();

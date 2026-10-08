@@ -29,10 +29,10 @@ test('searches an entity and opens its preview', async ({ page }) => {
   await expect(page).toHaveURL(new RegExp(`blueprint=${code}.*query=red`));
   await expect(page.getByText('1 result')).toBeVisible();
   await expect(
-    page.getByRole('button', { name: `View entity ID ${entity.id}` }),
+    page.getByRole('button', { name: `View record ID ${entity.id}` }),
   ).toBeVisible();
   await page
-    .getByRole('button', { name: `Entity actions for ${entity.id}` })
+    .getByRole('button', { name: `Record actions for ${entity.id}` })
     .click();
   await page.getByRole('menuitem', { name: 'Search info' }).click();
   await expect(page.getByRole('dialog', { name: 'Search info' })).toContainText(
@@ -86,7 +86,7 @@ test('creates an entity from a blueprint', async ({ page }) => {
   await page.getByRole('option', { name: `Create products (${code})` }).click();
   await page.getByRole('button', { name: 'Load blueprint' }).click();
   await page.getByLabel('title').fill(title);
-  await page.getByRole('button', { name: 'Create entity' }).click();
+  await page.getByRole('button', { name: 'Create record' }).click();
 
   await expect(page).toHaveURL(/\/entities\/[0-9a-f-]{36}$/);
   // The entity page shows each saved value in its inline editor.
@@ -112,7 +112,7 @@ test('creates an entity with typed scalar values', async ({ page }) => {
   await page.getByRole('option', { name: 'True' }).click();
   await page.getByLabel('Launch date').fill('2026-08-20');
   await page.getByLabel('Opening time').fill('09:30:00 America/New_York');
-  await page.getByRole('button', { name: 'Create entity' }).click();
+  await page.getByRole('button', { name: 'Create record' }).click();
 
   await expect(page).toHaveURL(/\/entities\/[0-9a-f-]{36}$/);
   // The entity page shows each saved value in its inline editor.
@@ -179,12 +179,12 @@ test('rejects a browser create that violates a blueprint schema', async ({
   await expect(
     page.getByText('Does not meet the schema requirements.'),
   ).toBeVisible();
-  await page.getByRole('button', { name: 'Create entity' }).click();
+  await page.getByRole('button', { name: 'Create record' }).click();
   await expect(page).toHaveURL(/\/entities\/new(\?|$)/);
   expect(createRequests).toBe(0);
 
   await page.getByLabel('title').fill('Valid title');
-  await page.getByRole('button', { name: 'Create entity' }).click();
+  await page.getByRole('button', { name: 'Create record' }).click();
   await expect(page).toHaveURL(/\/entities\/[0-9a-f-]{36}$/);
 });
 

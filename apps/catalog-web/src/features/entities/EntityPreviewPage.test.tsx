@@ -229,7 +229,7 @@ describe('EntityPreviewPage', () => {
     await user.click(screen.getByRole('button', { name: 'Actions' }));
     expect(
       within(screen.getByRole('menu')).queryByRole('menuitem', {
-        name: 'Delete entity',
+        name: 'Delete record',
       }),
     ).toBeNull();
     unmount();
@@ -242,13 +242,13 @@ describe('EntityPreviewPage', () => {
     await user.click(screen.getByRole('button', { name: 'Actions' }));
     await user.click(
       await within(screen.getByRole('menu')).findByRole('menuitem', {
-        name: 'Delete entity',
+        name: 'Delete record',
       }),
     );
     expect(api.deleteEntity).not.toHaveBeenCalled();
     await user.click(
       within(screen.getByRole('dialog')).getByRole('button', {
-        name: 'Delete entity',
+        name: 'Delete record',
       }),
     );
     await waitFor(() =>
@@ -272,17 +272,17 @@ describe('EntityPreviewPage', () => {
     await user.click(screen.getByRole('button', { name: 'Actions' }));
     await user.click(
       within(screen.getByRole('menu')).getByRole('menuitem', {
-        name: 'Duplicate entity',
+        name: 'Duplicate record',
       }),
     );
     const dialog = screen.getByRole('dialog');
     expect(
-      within(dialog).getByText(/Create a copy of this entity/),
+      within(dialog).getByText(/Create a copy of this record/),
     ).toBeTruthy();
     expect(api.duplicateEntity).not.toHaveBeenCalled();
 
     await user.click(
-      within(dialog).getByRole('button', { name: 'Duplicate entity' }),
+      within(dialog).getByRole('button', { name: 'Duplicate record' }),
     );
     await waitFor(() =>
       expect(navigate).toHaveBeenCalledWith({
@@ -306,7 +306,7 @@ describe('EntityPreviewPage', () => {
 
     renderPage('picker-token');
     screen
-      .getByRole('button', { name: 'Select this entity and close' })
+      .getByRole('button', { name: 'Select this record and close' })
       .click();
 
     expect(postMessage).toHaveBeenCalledWith(
@@ -381,7 +381,7 @@ describe('EntityPreviewPage', () => {
     );
     await userEvent
       .setup()
-      .click(screen.getByRole('button', { name: 'Ask about this entity' }));
+      .click(screen.getByRole('button', { name: 'Ask about this record' }));
     expect(agentDrawerRender).toHaveBeenCalledWith(
       expect.objectContaining({
         entityId: '00000000-0000-4000-8000-000000000001',

@@ -50,9 +50,7 @@ test('shows explorer empty states and configured table fields', async ({
     .click();
   await page.getByLabel('Query').fill('missing');
   await page.getByRole('button', { name: 'Search', exact: true }).click();
-  await expect(
-    page.getByText('No entities matched this search.'),
-  ).toBeVisible();
+  await expect(page.getByText('No records matched this search.')).toBeVisible();
 
   await page.getByLabel('Query').fill('table');
   await page.getByRole('button', { name: 'Search', exact: true }).click();
@@ -603,7 +601,7 @@ value_type = "string"`,
   await page.goto(`/?blueprint=${code}`);
   await expect(
     page.getByText(
-      'Showing current-version entities. 1 older-version entity is hidden.',
+      'Showing current-version records. 1 older-version record is hidden.',
     ),
   ).toBeVisible();
   await expect(
@@ -613,13 +611,13 @@ value_type = "string"`,
     page.getByRole('link', { name: 'Review migrations' }),
   ).toBeVisible();
   await expect(
-    page.getByRole('button', { name: `View entity ID ${oldEntity.id}` }),
+    page.getByRole('button', { name: `View record ID ${oldEntity.id}` }),
   ).toBeHidden();
 
   await page.getByRole('button', { name: 'Show all versions' }).click();
   await expect(page).toHaveURL(/allVersions=true/);
   await expect(
-    page.getByRole('button', { name: `View entity ID ${oldEntity.id}` }),
+    page.getByRole('button', { name: `View record ID ${oldEntity.id}` }),
   ).toBeVisible();
 
   await page.getByLabel('Version scope').click();

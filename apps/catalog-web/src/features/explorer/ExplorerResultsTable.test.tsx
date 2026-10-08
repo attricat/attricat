@@ -197,7 +197,7 @@ describe('ExplorerResultsTable', () => {
     await waitFor(() => expect(view.queryClient.isFetching()).toBe(0));
     await userEvent.setup().click(
       screen.getByRole('button', {
-        name: `Entity actions for ${items[0].id}`,
+        name: `Record actions for ${items[0].id}`,
       }),
     );
     virtualWindow.start = 200;
@@ -271,29 +271,29 @@ describe('ExplorerResultsTable', () => {
     const user = userEvent.setup();
     const { unmount } = renderTable([item]);
     await user.click(
-      screen.getByRole('button', { name: `Entity actions for ${item.id}` }),
+      screen.getByRole('button', { name: `Record actions for ${item.id}` }),
     );
     expect(
-      screen.queryByRole('menuitem', { name: 'Delete entity' }),
+      screen.queryByRole('menuitem', { name: 'Delete record' }),
     ).toBeNull();
     unmount();
 
     vi.mocked(deleteEntity).mockResolvedValue(undefined);
     renderTable([item], true);
     await user.click(
-      screen.getByRole('button', { name: `Entity actions for ${item.id}` }),
+      screen.getByRole('button', { name: `Record actions for ${item.id}` }),
     );
-    await user.click(screen.getByRole('menuitem', { name: 'Delete entity' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Delete record' }));
     expect(deleteEntity).not.toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(deleteEntity).not.toHaveBeenCalled();
     await user.click(
-      screen.getByRole('button', { name: `Entity actions for ${item.id}` }),
+      screen.getByRole('button', { name: `Record actions for ${item.id}` }),
     );
-    await user.click(screen.getByRole('menuitem', { name: 'Delete entity' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Delete record' }));
     await user.click(
       within(screen.getByRole('dialog')).getByRole('button', {
-        name: 'Delete entity',
+        name: 'Delete record',
       }),
     );
     await waitFor(() => expect(deleteEntity).toHaveBeenCalledWith(item.id));
@@ -306,12 +306,12 @@ describe('ExplorerResultsTable', () => {
     );
     renderTable([item], true);
     await user.click(
-      screen.getByRole('button', { name: `Entity actions for ${item.id}` }),
+      screen.getByRole('button', { name: `Record actions for ${item.id}` }),
     );
-    await user.click(screen.getByRole('menuitem', { name: 'Delete entity' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Delete record' }));
     await user.click(
       within(screen.getByRole('dialog')).getByRole('button', {
-        name: 'Delete entity',
+        name: 'Delete record',
       }),
     );
     expect(await screen.findByText('Cannot delete entity')).toBeTruthy();
@@ -322,9 +322,9 @@ describe('ExplorerResultsTable', () => {
     outletMount.mockClear();
     const user = userEvent.setup();
     renderTable();
-    await user.click(screen.getByRole('button', { name: 'Select entities' }));
+    await user.click(screen.getByRole('button', { name: 'Select records' }));
     const selectAll = screen.getByRole('checkbox', {
-      name: 'Select loaded entities (up to 50)',
+      name: 'Select loaded records (up to 50)',
     }) as HTMLInputElement;
     const first = screen.getByRole('checkbox', {
       name: 'Select Sample product',
@@ -367,21 +367,21 @@ describe('ExplorerResultsTable', () => {
       expect.objectContaining({ outlet: 'explorer_bulk_action' }),
     );
     expect(screen.queryByRole('checkbox')).toBeNull();
-    await user.click(screen.getByRole('button', { name: 'Select entities' }));
+    await user.click(screen.getByRole('button', { name: 'Select records' }));
     expect(screen.getByText('0 selected')).toBeTruthy();
   });
 
   it('keeps selection across searches and lets it be reviewed', async () => {
     const user = userEvent.setup();
     const { search } = renderTable();
-    await user.click(screen.getByRole('button', { name: 'Select entities' }));
+    await user.click(screen.getByRole('button', { name: 'Select records' }));
     await user.click(
       screen.getByRole('checkbox', { name: 'Select Sample product' }),
     );
     search([secondItem], 'second-search');
     expect(screen.getByText('1 selected')).toBeTruthy();
     const selectAll = screen.getByRole('checkbox', {
-      name: 'Select loaded entities (up to 50)',
+      name: 'Select loaded records (up to 50)',
     }) as HTMLInputElement;
     expect(selectAll.checked).toBe(false);
     expect(selectAll.getAttribute('data-indeterminate')).toBe('false');
@@ -391,7 +391,7 @@ describe('ExplorerResultsTable', () => {
     expect(screen.getByText('2 selected')).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: '2 selected' }));
-    const review = screen.getByRole('dialog', { name: 'Selected entities' });
+    const review = screen.getByRole('dialog', { name: 'Selected records' });
     expect(within(review).getByText('Sample product')).toBeTruthy();
     await user.click(
       within(review).getByRole('button', {
@@ -409,16 +409,16 @@ describe('ExplorerResultsTable', () => {
       display: { default: `Product ${index}` },
     }));
     renderTable(items);
-    await user.click(screen.getByRole('button', { name: 'Select entities' }));
+    await user.click(screen.getByRole('button', { name: 'Select records' }));
     await user.click(
       screen.getByRole('checkbox', {
-        name: 'Select loaded entities (up to 50)',
+        name: 'Select loaded records (up to 50)',
       }),
     );
     expect(screen.getByText('50 selected')).toBeTruthy();
     expect(
       screen.getByText(
-        'Limit reached: up to 50 loaded entities can be selected',
+        'Limit reached: up to 50 loaded records can be selected',
       ),
     ).toBeTruthy();
     expect(
@@ -436,7 +436,7 @@ describe('ExplorerResultsTable', () => {
     });
     vi.mocked(sendMessage).mockResolvedValue({} as never);
     renderTable();
-    await user.click(screen.getByRole('button', { name: 'Select entities' }));
+    await user.click(screen.getByRole('button', { name: 'Select records' }));
     await user.click(
       screen.getByRole('checkbox', { name: 'Select Sample product' }),
     );
@@ -457,9 +457,7 @@ describe('ExplorerResultsTable', () => {
       }),
     );
     await waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(1));
-    expect(createConversation).toHaveBeenCalledWith(
-      'Review 1 Product entities',
-    );
+    expect(createConversation).toHaveBeenCalledWith('Review 1 Product records');
     expect(sendMessage).toHaveBeenCalledWith(
       '123e4567-e89b-12d3-a456-426614174003',
       expect.stringContaining(`entity_id: ${item.id}`),
@@ -488,7 +486,7 @@ describe('ExplorerResultsTable', () => {
       'initial',
       onSaveSelectionAsSearch,
     );
-    await user.click(screen.getByRole('button', { name: 'Select entities' }));
+    await user.click(screen.getByRole('button', { name: 'Select records' }));
     await user.click(
       screen.getByRole('checkbox', { name: 'Select Second product' }),
     );
@@ -509,7 +507,7 @@ describe('ExplorerResultsTable', () => {
       .mockRejectedValueOnce(new Error('Network error'))
       .mockResolvedValueOnce({} as never);
     renderTable([item]);
-    await user.click(screen.getByRole('button', { name: 'Select entities' }));
+    await user.click(screen.getByRole('button', { name: 'Select records' }));
     await user.click(
       screen.getByRole('checkbox', { name: 'Select Sample product' }),
     );

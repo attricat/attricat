@@ -156,7 +156,7 @@ describe('WorkflowDetailPage', () => {
     renderPage();
     const user = userEvent.setup();
     const entityId = await screen.findByRole('textbox', {
-      name: 'Manual run entity ID',
+      name: 'Manual run record ID',
     });
     await user.type(entityId, '  entity-1  ');
     await user.click(screen.getByRole('button', { name: 'Run now' }));

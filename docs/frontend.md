@@ -73,6 +73,18 @@ light and dark modes.
   registry icon so the side navigation and management dashboard card match
   the page header.
 
+## Wording
+
+- In user-facing text, call a catalog item a **record**, never an "entity".
+  This covers both locale files, page titles, accessible names, tooltips,
+  toasts, and prose sent to agents. In Polish use **rekord** (masculine), and
+  make adjectives, pronouns, verbs, and plural forms agree with it, for
+  example "Usunąć ten rekord?", "Wybrano {{count}} rekordów".
+- Keep "entity" in code: identifiers, translation keys, routes, API fields,
+  and agent tool names such as `get_entity` and `entity_id` that agent prose
+  refers to.
+- When a test or Playwright spec looks up text, use the record wording.
+
 ## Timestamps
 
 - The API stores and returns instants in UTC. Render every instant through `src/time`: `<Timestamp value={iso} />` in JSX, or `useInstantFormat()` where only a string fits (for example a tooltip title or accessible label). Do not call `toLocaleString`, `toLocaleDateString`, `toLocaleTimeString`, or `Intl.DateTimeFormat` elsewhere; ESLint rejects them outside `src/time`.

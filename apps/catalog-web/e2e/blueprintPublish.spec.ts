@@ -52,7 +52,7 @@ test('authors, publishes, revises and migrates a blueprint in the browser', asyn
     .click();
   await page.getByRole('button', { name: 'Load blueprint' }).click();
   await page.getByLabel('title').fill('Authored entity');
-  await page.getByRole('button', { name: 'Create entity' }).click();
+  await page.getByRole('button', { name: 'Create record' }).click();
   await expect(page).toHaveURL(/\/entities\/[0-9a-f-]{36}$/);
   const entityUrl = page.url();
   await expect(page.getByRole('textbox', { name: 'title' })).toHaveValue(

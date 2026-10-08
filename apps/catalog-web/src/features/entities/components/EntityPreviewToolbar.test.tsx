@@ -156,17 +156,17 @@ describe('entity actions menu', () => {
     let menu = await openActions();
     expect(
       menu.getAllByRole('menuitem').map((item) => item.textContent),
-    ).toEqual(['Changes', 'Duplicate entity', 'Delete entity']);
+    ).toEqual(['Changes', 'Duplicate record', 'Delete record']);
     for (const item of menu.getAllByRole('menuitem'))
       expect(item.querySelector('svg')).toBeTruthy();
 
     await userEvent.click(
-      menu.getByRole('menuitem', { name: 'Duplicate entity' }),
+      menu.getByRole('menuitem', { name: 'Duplicate record' }),
     );
     expect(onDuplicate).toHaveBeenCalledOnce();
     menu = await openActions();
     await userEvent.click(
-      menu.getByRole('menuitem', { name: 'Delete entity' }),
+      menu.getByRole('menuitem', { name: 'Delete record' }),
     );
     expect(onDelete).toHaveBeenCalledOnce();
   });
@@ -189,7 +189,7 @@ describe('entity actions menu', () => {
       showExtensions: true,
     });
     expect(
-      screen.queryByRole('button', { name: 'Ask about this entity' }),
+      screen.queryByRole('button', { name: 'Ask about this record' }),
     ).toBeNull();
     expect(
       screen.queryByRole('button', { name: 'Extension contributions' }),
@@ -197,7 +197,7 @@ describe('entity actions menu', () => {
 
     let menu = await openActions();
     await userEvent.click(
-      menu.getByRole('menuitem', { name: 'Ask about this entity' }),
+      menu.getByRole('menuitem', { name: 'Ask about this record' }),
     );
     expect(onOpenAgent).toHaveBeenCalledOnce();
     menu = await openActions();

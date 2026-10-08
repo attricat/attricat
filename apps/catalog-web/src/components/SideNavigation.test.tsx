@@ -140,9 +140,9 @@ describe('SideNavigation', () => {
     const onNavigate = renderNavigation();
 
     expect(
-      screen.getByRole('heading', { name: /entity explorer/i }),
+      screen.getByRole('heading', { name: /record explorer/i }),
     ).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'All entities' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'All records' })).toBeTruthy();
     expect(await screen.findByRole('link', { name: 'Products' })).toBeTruthy();
     expect(screen.queryByRole('link', { name: 'Agents' })).toBeNull();
 
@@ -209,13 +209,13 @@ describe('SideNavigation', () => {
 
     fireEvent.click(screen.getByRole('link', { name: 'Manage' }));
     onCompactManageOpenChange.mockClear();
-    fireEvent.click(screen.getByRole('link', { name: /entity explorer/i }));
+    fireEvent.click(screen.getByRole('link', { name: /record explorer/i }));
 
     expect(onCompactManageOpenChange).toHaveBeenCalledOnce();
     expect(onCompactManageOpenChange).toHaveBeenCalledWith(false);
     expect(screen.queryByRole('navigation', { name: 'Manage' })).toBeNull();
     expect(
-      screen.getByRole('navigation', { name: /entity explorer/i }),
+      screen.getByRole('navigation', { name: /record explorer/i }),
     ).toBeTruthy();
   });
 
@@ -229,7 +229,7 @@ describe('SideNavigation', () => {
       </QueryClientProvider>,
     );
     expect(
-      screen.getByRole('heading', { name: /entity explorer/i }),
+      screen.getByRole('heading', { name: /record explorer/i }),
     ).toBeTruthy();
 
     currentPathname = '/manage/extensions';

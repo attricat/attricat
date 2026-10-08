@@ -138,7 +138,7 @@ test('creates a workspace user and completes onboarding', async ({
     .click();
   await expect(onboardingPage).toHaveURL(/\/$/);
   await expect(
-    onboardingPage.getByRole('link', { name: 'Entity explorer' }),
+    onboardingPage.getByRole('link', { name: 'Record explorer' }),
   ).toBeVisible();
   await expect(
     onboardingPage.getByRole('link', { name: 'Workspace management' }),
