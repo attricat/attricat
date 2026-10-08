@@ -1,18 +1,25 @@
-import { useRef, useState } from 'react';
+import { forwardRef, useId, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  Box,
   Button,
-  FormControl,
+  InputAdornment,
   List,
   MenuItem,
   Stack,
   TextField,
   Typography,
+  type InputBaseComponentProps,
+  type SxProps,
+  type Theme,
 } from '@mui/material';
 import { compactOutlinedActionButtonSx } from '../../../components/CompactOutlinedActionButton';
 import { LoadMoreButton } from '../../../components/LoadMoreButton';
 import { RelationshipSelectorDialog } from '../../../components/RelationshipSelectorDialog';
-import { RelationshipPickerIcon } from '../../../components/systemIcons';
+import {
+  RelationshipIcon,
+  RelationshipPickerIcon,
+} from '../../../components/systemIcons';
 import type { Attribute } from '../api';
 import { attributeCardinalities, RELATIONSHIP_ID_JOINER } from '../constants';
 import {
@@ -30,6 +37,66 @@ import {
   useRecentlyPreviewedEntities,
 } from './useRecentlyPreviewedEntities';
 import { smallIconSize } from '../../../components/iconSizes';
+
+const relationshipAdornment = (
+  <InputAdornment position="start">
+    <RelationshipIcon size={smallIconSize} />
+  </InputAdornment>
+);
+
+/** Height of a pill and of the selector button beside the pills. */
+const pillRowHeight = '24px';
+/**
+ * Padding that keeps one row of pills as tall as a small text field's input
+ * (MUI gives it 8.5px padding around a 1.4375em line).
+ */
+const pillRowPadding = `calc(8.5px - (${pillRowHeight} - 1.4375em) / 2)`;
+
+/** Lets the pills grow the outlined field over several rows. */
+const relationshipInputSx = {
+  alignItems: 'flex-start',
+  '& .MuiInputAdornment-root': {
+    alignSelf: 'flex-start',
+    height: pillRowHeight,
+    maxHeight: 'none',
+    mt: pillRowPadding,
+  },
+  '& .MuiInputBase-input': { height: 'auto', py: pillRowPadding },
+} satisfies SxProps<Theme>;
+
+/**
+ * Stands in for the input of an outlined text field so the selected pills get
+ * its label, border, and focus, error, and disabled states. Focus moving
+ * between the pills and the selector button reads as focus on the field.
+ */
+const RelationshipFieldInput = forwardRef<
+  HTMLDivElement,
+  InputBaseComponentProps
+>(
+  (
+    {
+      'aria-describedby': describedBy,
+      'aria-labelledby': labelledBy,
+      children,
+      className,
+      onBlur,
+      onFocus,
+    },
+    ref,
+  ) => (
+    <Box
+      aria-describedby={describedBy}
+      aria-labelledby={labelledBy}
+      className={className}
+      onBlur={onBlur}
+      onFocus={onFocus}
+      ref={ref}
+      role="group"
+    >
+      {children as ReactNode}
+    </Box>
+  ),
+);
 
 export const RelationshipField = ({
   attribute,
@@ -50,6 +117,7 @@ export const RelationshipField = ({
   value: string;
 }) => {
   const { t } = useTranslation();
+  const fieldId = useId();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [draftIds, setDraftIds] = useState<string[]>([]);
@@ -91,6 +159,7 @@ export const RelationshipField = ({
         label={attributeLabel(attribute)}
         helperText={error ?? t('entities.commaSeparatedUuids')}
         onChange={(event) => onChange(event.target.value)}
+        slotProps={{ input: { startAdornment: relationshipAdornment } }}
         value={value}
       />
     );
@@ -125,51 +194,58 @@ export const RelationshipField = ({
   };
 
   return (
-    <Stack spacing={0.5}>
-      <FormControl error={Boolean(error)} fullWidth>
-        <Stack spacing={0.5}>
-          <Typography variant="body2">{attributeLabel(attribute)}</Typography>
-          <RelationshipSelectionPills
-            action={
-              <Button
-                aria-label={attribute.code}
-                color="primary"
-                disabled={disabled}
-                onClick={openSelector}
-                size="small"
-                startIcon={<RelationshipPickerIcon size={smallIconSize} />}
-                sx={compactOutlinedActionButtonSx}
-                variant="outlined"
-              >
-                {t('entities.openRelationshipSelector')}
-              </Button>
-            }
-            ids={selectedIds}
-            labels={selectionLabels}
-            linkToEntities={linkToEntities}
-            onRemove={
-              disabled
-                ? undefined
-                : (id) =>
-                    onChange(
-                      selectedIds
-                        .filter((selectedId) => selectedId !== id)
-                        .join(RELATIONSHIP_ID_JOINER),
-                    )
-            }
-          />
-        </Stack>
-        {error && (
-          <Typography color="error" variant="caption">
-            {error}
-          </Typography>
-        )}
-        {helperText && (
-          <Typography color="text.secondary" variant="caption">
-            {helperText}
-          </Typography>
-        )}
-      </FormControl>
+    <>
+      <TextField
+        error={Boolean(error)}
+        disabled={disabled}
+        fullWidth
+        helperText={error ?? helperText}
+        id={fieldId}
+        label={attributeLabel(attribute)}
+        slotProps={{
+          htmlInput: {
+            'aria-labelledby': `${fieldId}-label`,
+            children: (
+              <RelationshipSelectionPills
+                action={
+                  <Button
+                    aria-label={attribute.code}
+                    color="primary"
+                    disabled={disabled}
+                    onClick={openSelector}
+                    size="small"
+                    startIcon={<RelationshipPickerIcon size={smallIconSize} />}
+                    sx={compactOutlinedActionButtonSx}
+                    variant="outlined"
+                  >
+                    {t('entities.openRelationshipSelector')}
+                  </Button>
+                }
+                gap={1}
+                ids={selectedIds}
+                labels={selectionLabels}
+                linkToEntities={linkToEntities}
+                onRemove={
+                  disabled
+                    ? undefined
+                    : (id) =>
+                        onChange(
+                          selectedIds
+                            .filter((selectedId) => selectedId !== id)
+                            .join(RELATIONSHIP_ID_JOINER),
+                        )
+                }
+              />
+            ),
+          },
+          input: {
+            inputComponent: RelationshipFieldInput,
+            startAdornment: relationshipAdornment,
+            sx: relationshipInputSx,
+          },
+          inputLabel: { shrink: true },
+        }}
+      />
       <RelationshipSelectorDialog
         actions={{
           applyLabel: t('entities.applyRelationshipSelection'),
@@ -264,6 +340,6 @@ export const RelationshipField = ({
           </Stack>
         </Stack>
       </RelationshipSelectorDialog>
-    </Stack>
+    </>
   );
 };

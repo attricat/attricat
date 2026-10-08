@@ -4,12 +4,15 @@ import { RouterChip } from '../../../components/RouterLink';
 
 export const RelationshipSelectionPills = ({
   action,
+  gap = 2,
   ids,
   labels,
   linkToEntities = false,
   onRemove,
 }: {
   action?: ReactNode;
+  /** Spacing between pills, in theme units. */
+  gap?: number;
   ids: string[];
   labels: Map<string, string>;
   /** Each pill opens its entity; removing one stays on the page. */
@@ -22,7 +25,7 @@ export const RelationshipSelectionPills = ({
       sx={{
         display: 'flex',
         flexWrap: 'wrap',
-        gap: 2,
+        gap,
         minWidth: 0,
       }}
     >
