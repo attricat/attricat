@@ -14,6 +14,43 @@ fn invalid(message: impl Into<String>) -> ToolError {
     ToolError::InvalidArguments(message.into())
 }
 
+/// What a blueprint offers a search path, appended to field errors so the
+/// model can correct a filter, query or sort without reading the blueprint.
+pub(crate) fn search_fields_hint(blueprint: &BlueprintWithAttributes) -> String {
+    let (relationships, attributes): (Vec<_>, Vec<_>) = blueprint
+        .attributes
+        .iter()
+        .partition(|attribute| attribute.value_type == "relationship");
+    let relationships = relationships
+        .iter()
+        .map(|attribute| {
+            let targets = if attribute.target_blueprint_codes.is_empty() {
+                "any blueprint".to_owned()
+            } else {
+                attribute.target_blueprint_codes.join(" | ")
+            };
+            format!("{} -> {targets}", attribute.code)
+        })
+        .collect::<Vec<_>>();
+    let attributes = attributes
+        .iter()
+        .map(|attribute| format!("{} ({})", attribute.code, attribute.value_type))
+        .collect::<Vec<_>>();
+    let list = |items: Vec<String>| {
+        if items.is_empty() {
+            "none".to_owned()
+        } else {
+            items.join(", ")
+        }
+    };
+    format!(
+        "{} has relationship fields: {}; attributes: {}",
+        blueprint.blueprint.code,
+        list(relationships),
+        list(attributes)
+    )
+}
+
 pub(crate) fn intersect_ids(current: Option<Vec<Uuid>>, next: Vec<Uuid>) -> Vec<Uuid> {
     match current {
         None => next,
@@ -52,7 +89,8 @@ pub(crate) async fn resolve_agent_filter(
             })
             .ok_or_else(|| {
                 invalid(format!(
-                    "filters.field segment '{relationship_name}' is not a relationship"
+                    "filters.field segment '{relationship_name}' is not a relationship. {}",
+                    search_fields_hint(&current)
                 ))
             })?;
         relationship_path.push(relationship.code.clone());
@@ -89,7 +127,8 @@ pub(crate) async fn resolve_agent_filter(
                     .filter(|attribute| attribute.searchable)
                     .ok_or_else(|| {
                         invalid(format!(
-                            "filters.field leaf '{leaf}' is not a searchable attribute"
+                            "filters.field leaf '{leaf}' is not a searchable attribute. {}",
+                            search_fields_hint(&current)
                         ))
                     })?;
                 (
@@ -101,7 +140,8 @@ pub(crate) async fn resolve_agent_filter(
             }
             None => {
                 return Err(invalid(format!(
-                    "filters.field leaf '{leaf}' is not an attribute"
+                    "filters.field leaf '{leaf}' is not an attribute. {}",
+                    search_fields_hint(&current)
                 )));
             }
         };
@@ -212,7 +252,8 @@ pub(crate) async fn resolve_agent_relationship_filter(
             .find(|a| a.code == name && a.value_type == "relationship")
             .ok_or_else(|| {
                 invalid(format!(
-                    "relationship_filters.field segment '{name}' is not a relationship"
+                    "relationship_filters.field segment '{name}' is not a relationship. {}",
+                    search_fields_hint(&current)
                 ))
             })?;
         let target = relationship

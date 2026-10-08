@@ -2819,6 +2819,39 @@ async fn agent_finds_a_named_record_and_counts_what_links_to_it(pool: PgPool) {
         .to_string();
     assert!(error.contains("it has: category"), "{error}");
 
+    // A search on a field that does not fit names what the blueprint offers
+    // at that point of the path.
+    let product_fields =
+        "product has relationship fields: category -> category; attributes: title (string)";
+    for (arguments, hint) in [
+        (
+            json!({"blueprint": {"code": "product"}, "filters": [{"field": "categry.title", "operator": "eq", "value": "x"}]}),
+            product_fields,
+        ),
+        (
+            json!({"blueprint": {"code": "product"}, "filters": [{"field": "colour", "operator": "eq", "value": "red"}]}),
+            product_fields,
+        ),
+        (
+            json!({"blueprint": {"code": "product"}, "relationship_filters": [{"field": "category.title", "selected_target_ids": [basic["id"]]}]}),
+            "category has relationship fields: none; attributes: title (string)",
+        ),
+        (
+            json!({"blueprint": {"code": "product"}, "query": "colour:red"}),
+            product_fields,
+        ),
+        (
+            json!({"blueprint": {"code": "product"}, "sort": {"field": "title", "direction": "asc"}}),
+            "product table columns: none",
+        ),
+    ] {
+        let error = execute_read(&repository, actor, workspace, "search_entities", arguments)
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains(hint), "{error}");
+    }
+
     // A mistyped blueprint names the blueprints that do exist.
     for (tool, arguments) in [
         (

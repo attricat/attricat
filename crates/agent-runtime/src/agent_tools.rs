@@ -22,7 +22,9 @@ use crate::{
     repository::{
         AuthorizationActor, CatalogRepository, EntitySearchSort, RepositoryError, SearchContext,
     },
-    search_filters::{intersect_ids, resolve_agent_filter, resolve_agent_relationship_filter},
+    search_filters::{
+        intersect_ids, resolve_agent_filter, resolve_agent_relationship_filter, search_fields_hint,
+    },
 };
 const BLUEPRINT_AUTHORING_GUIDE: &str = include_str!("../../../docs/blueprints.md");
 const VIEW_CONFIGURATION_GUIDE: &str = include_str!("../../../docs/views.md");
@@ -3080,21 +3082,29 @@ async fn resolve_agent_search_sort(
             context: context.clone(),
         }));
     }
-    let configured = blueprint
+    let columns = blueprint
         .blueprint
         .views
         .get("table")
         .and_then(|table| table.get("columns"))
         .and_then(Value::as_array)
-        .is_some_and(|columns| {
+        .map(|columns| {
             columns
                 .iter()
-                .any(|column| column.get("field").and_then(Value::as_str) == Some(&sort.field))
-        });
-    if !configured {
-        return Err(ToolError::InvalidArguments(
-            "sort.field must be a configured table column".to_owned(),
-        ));
+                .filter_map(|column| column.get("field").and_then(Value::as_str))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    if !columns.contains(&sort.field.as_str()) {
+        return Err(ToolError::InvalidArguments(format!(
+            "sort.field must be a configured table column, blueprint_version or publication_status; {} table columns: {}",
+            blueprint.blueprint.code,
+            if columns.is_empty() {
+                "none".to_owned()
+            } else {
+                columns.join(", ")
+            }
+        )));
     }
     let parts: Vec<_> = sort.field.split('.').collect();
     if parts.is_empty() || parts.len() > 4 {
@@ -3250,7 +3260,12 @@ async fn agent_search_scope(
             repository
                 .resolve_search(&search_blueprint, selected, Some(query))
                 .await
-                .map_err(|error| ToolError::InvalidArguments(error.to_string()))?,
+                .map_err(|error| {
+                    ToolError::InvalidArguments(format!(
+                        "{error}. {}",
+                        search_fields_hint(&search_blueprint)
+                    ))
+                })?,
         ),
         None => None,
     };
