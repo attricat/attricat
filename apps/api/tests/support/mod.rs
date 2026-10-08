@@ -443,7 +443,8 @@ async fn start_configured_server(
         axum::serve(listener, router).await.unwrap();
     });
 
-    (format!("http://{address}"), server)
+    // Clients reach the API below `/api`, as the web app and CLI do.
+    (format!("http://{address}/api"), server)
 }
 
 pub fn authenticated_client() -> Client {

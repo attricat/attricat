@@ -6,7 +6,7 @@ root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 example_extension=$(cd "$root/../../attricat-extension-example" && pwd)
 : "${CATALOG_TOKEN:?Set a workspace-owner personal API token before running this test.}"
 if [[ -z "${CATALOG_API_URL:-}" && -n "${API_PORT:-}" ]]; then
-  CATALOG_API_URL="http://127.0.0.1:$API_PORT"
+  CATALOG_API_URL="http://127.0.0.1:$API_PORT/api"
 fi
 : "${CATALOG_API_URL:?Run 'just setup' and source .worktree first.}"
 export CATALOG_API_URL

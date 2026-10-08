@@ -49,7 +49,7 @@ Proces roboczy plików potrzebuje tych samych wartości `DATABASE_URL` i `S3_*` 
 | `DATABASE_TASK_POOL_CONNECTIONS` | `10` | Liczba połączeń w puli używanej przez procesy robocze w tle, współdzielonej przez wszystkie obszary robocze. Liczba całkowita od 1 do 100. API zapisuje w logu przy starcie sumę połączeń pul żądań, zadań i konserwacji. Każdy proces API może też utrzymywać do trzech połączeń poza pulami dla koordynatorów zadań w tle; wymagają one połączeń w trybie sesji, więc tryb transakcyjny PgBouncera nie jest obsługiwany. Zobacz [Uruchom kilka replik API](/pl/operate/deployment/#uruchom-kilka-replik-api). |
 | `BIND_ADDR` | `127.0.0.1:3000` | Adres, na którym nasłuchuje API. Obraz kontenera ustawia `0.0.0.0:3000`. |
 | `CATALOG_AUTO_MIGRATE` | `true` | Stosuje migracje bazy danych przy starcie API. W produkcji ustaw `false` i uruchom raz rolę `migrate` obrazu przed wdrożeniem replik API. |
-| `WEB_DIST_DIR` | Nieustawiona | Katalog ze skompilowaną aplikacją webową. Gdy jest ustawiona, API serwuje aplikację pod `/` i udostępnia trasy API także pod `/api`. Obraz kontenera ustawia `/srv/attricat/web`. |
+| `WEB_DIST_DIR` | Nieustawiona | Katalog ze skompilowaną aplikacją webową. Gdy jest ustawiona, API serwuje aplikację pod każdą ścieżką poza `/api` i sondami stanu. Obraz kontenera ustawia `/srv/attricat/web`. |
 | `RUST_LOG` | `info` | Filtr logów, np. `api=debug`. |
 | `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | Nieustawiona | Punkt końcowy OTLP/gRPC do eksportu śladów z API i procesu roboczego plików. Pozostaw nieustawioną, aby wyłączyć eksport śladów. |
 | `CATALOG_DEVTOOLS` | `true` w lokalnym środowisku deweloperskim | Włącza Inspektor w aplikacji webowej oraz wpisy czasu SQL przeglądarki rekordów w nagłówku `Server-Timing`. W produkcji ustaw `false`. W innych kompilacjach, także produkcyjnych, przeglądarka może wczytać Inspektor na żądanie po ustawieniu w local storage `catalog.inspector-enabled` na `true` i przeładowaniu strony; czasy SQL nadal wymagają tego ustawienia w API. Treść zapytań SQL i wartości parametrów nigdy nie są ujawniane. |
@@ -205,7 +205,7 @@ Te limity agentów są stałe: 32 KiB na wiadomość użytkownika, 16 załączni
 
 | Zmienna | Domyślnie | Opis |
 | --- | --- | --- |
-| `CATALOG_API_URL` | `http://127.0.0.1:3000` | Adres API, do którego serwer deweloperski Vite przekierowuje `/api`. Odczytuje go także CLI. |
+| `CATALOG_API_URL` | `http://127.0.0.1:3000/api` | Bazowy adres URL API razem z `/api`. Używa go CLI, a serwer deweloperski Vite przekierowuje `/api` do jego źródła (origin). |
 | `WEB_PORT` | `5173` | Port serwera deweloperskiego Vite. |
 
 ## Lokalne usługi deweloperskie

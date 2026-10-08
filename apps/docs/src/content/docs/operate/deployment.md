@@ -8,7 +8,7 @@ Attricat ships as one container image. The same image runs three roles:
 | Role | Runs | Replicas |
 | --- | --- | --- |
 | `migrate` | Applies database migrations, then exits. | One, before each rollout. |
-| `api` | The web app at `/`, the API at `/api` (and at its original paths), and all background workers except file processing. | One or more. |
+| `api` | The web app at `/`, the API at `/api`, and all background workers except file processing. | One or more. |
 | `file-worker` | Scans, processes, and cleans up uploaded files. | One or more. |
 
 The image also contains the `acli` CLI as a fourth role.

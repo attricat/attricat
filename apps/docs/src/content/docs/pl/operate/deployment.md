@@ -8,7 +8,7 @@ Attricat jest dostarczany jako jeden obraz kontenera. Ten sam obraz uruchamia tr
 | Rola | Uruchamia | Repliki |
 | --- | --- | --- |
 | `migrate` | Stosuje migracje bazy danych, a następnie kończy działanie. | Jedna, przed każdym wdrożeniem. |
-| `api` | Aplikację webową pod `/`, API pod `/api` (oraz pod oryginalnymi ścieżkami) i wszystkie procesy robocze w tle z wyjątkiem przetwarzania plików. | Jedna lub więcej. |
+| `api` | Aplikację webową pod `/`, API pod `/api` i wszystkie procesy robocze w tle z wyjątkiem przetwarzania plików. | Jedna lub więcej. |
 | `file-worker` | Skanuje, przetwarza i porządkuje przesłane pliki. | Jedna lub więcej. |
 
 Obraz zawiera też klienta CLI `acli` jako czwartą rolę.

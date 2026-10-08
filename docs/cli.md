@@ -14,14 +14,14 @@ port 3000.
 By default, `acli` loads `.env` from the current directory without replacing
 variables already exported by the shell. In a worktree, its `CATALOG_API_URL`
 therefore supplies the API URL. The precedence is `--server`, `CATALOG_SERVER`,
-`CATALOG_API_URL`, then `http://127.0.0.1:3000`. Pass `--no-env` to skip loading
-that file.
+`CATALOG_API_URL`, then `http://127.0.0.1:3000/api`. Each is the API base URL,
+including its `/api` path. Pass `--no-env` to skip loading that file.
 
 ```sh
 acli health
 source .worktree
-acli --no-env --server "http://127.0.0.1:$API_PORT" health
-CATALOG_SERVER="http://127.0.0.1:$API_PORT" acli health
+acli --no-env --server "http://127.0.0.1:$API_PORT/api" health
+CATALOG_SERVER="http://127.0.0.1:$API_PORT/api" acli health
 ```
 
 During development, run the workspace binary without installing it:

@@ -9,7 +9,7 @@ In the API, records are called entities, as in routes (`/v1/entities`), fields (
 
 ## Base URL
 
-When the API serves the web app (as the container image does), API routes are available both at their own paths and below `/api`. For example, `GET https://catalog.example.com/api/blueprints` and `GET https://catalog.example.com/blueprints` are the same route. Integrations should use the `/api` prefix.
+API routes are served below `/api`, for example `GET https://catalog.example.com/api/blueprints`; the paths on this page are relative to it. Every other path belongs to the web app. The health probes (`/health`, `/health/live`, `/health/ready`) also answer at the root for load balancers and container checks.
 
 ## Authentication
 

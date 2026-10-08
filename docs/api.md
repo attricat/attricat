@@ -6,6 +6,11 @@ Failures return a JSON `error` object with a machine-readable code and message,
 alongside the HTTP status; some add an `error.details` object (see
 [Errors](#errors)). Use the [CLI](cli.md) for shell automation.
 
+The API serves its routes below `/api`; the paths in this reference are
+relative to it, so `GET /blueprints` is `GET /api/blueprints`. The health
+probes also answer at the root (`/health`, `/health/live`, `/health/ready`).
+With `WEB_DIST_DIR` set, every other path serves the web app.
+
 ## Authorization
 
 `GET /health`, `GET /health/live`, `GET /health/ready`, `POST /auth/discover`, `GET /auth/sample-logins`, `POST /auth/login`,

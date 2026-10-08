@@ -17,7 +17,7 @@ docker run --rm -e CATALOG_SERVER -e CATALOG_TOKEN ghcr.io/attricat/attricat@sha
 
 | Ustawienie | Flaga | Zmienna środowiskowa | Opis |
 | --- | --- | --- | --- |
-| Adres serwera | `--server` | `CATALOG_SERVER`, potem `CATALOG_API_URL` | Adres API. Domyślnie `http://127.0.0.1:3000`. |
+| Adres serwera | `--server` | `CATALOG_SERVER`, potem `CATALOG_API_URL` | Bazowy adres URL API razem z `/api`. Domyślnie `http://127.0.0.1:3000/api`. |
 | Token | `--token`, `--token-stdin` | `CATALOG_TOKEN` | Osobisty token API. |
 | Plik sesji | `--session-file` | `CATALOG_SESSION_FILE` | Przechowuje sesję przeglądarki między poleceniami. |
 | Adres aplikacji webowej | | `CATALOG_WEB_URL` | Gdy jest ustawiony, polecenia zapisanych wyszukiwań wypisują też krótki link do przeglądarki rekordów. |

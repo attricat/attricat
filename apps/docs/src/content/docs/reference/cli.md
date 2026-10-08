@@ -17,7 +17,7 @@ docker run --rm -e CATALOG_SERVER -e CATALOG_TOKEN ghcr.io/attricat/attricat@sha
 
 | Setting | Flag | Environment | Description |
 | --- | --- | --- | --- |
-| Server URL | `--server` | `CATALOG_SERVER`, then `CATALOG_API_URL` | API address. Defaults to `http://127.0.0.1:3000`. |
+| Server URL | `--server` | `CATALOG_SERVER`, then `CATALOG_API_URL` | API base URL, including `/api`. Defaults to `http://127.0.0.1:3000/api`. |
 | Token | `--token`, `--token-stdin` | `CATALOG_TOKEN` | Personal API token. |
 | Session file | `--session-file` | `CATALOG_SESSION_FILE` | Stores a browser session between commands. |
 | Web URL | | `CATALOG_WEB_URL` | When set, saved-search commands also print a short Explorer link. |

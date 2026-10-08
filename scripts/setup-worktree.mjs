@@ -104,7 +104,7 @@ env = setEnvValue(
   `postgres://postgres:postgres@localhost:${ports.POSTGRES_PORT}/catalog`,
 );
 env = setEnvValue(env, "BIND_ADDR", `127.0.0.1:${ports.API_PORT}`);
-env = setEnvValue(env, "CATALOG_API_URL", `http://127.0.0.1:${ports.API_PORT}`);
+env = setEnvValue(env, "CATALOG_API_URL", `http://127.0.0.1:${ports.API_PORT}/api`);
 env = setEnvValue(env, "WEB_PORT", ports.WEB_PORT);
 env = setEnvValue(env, "DOCS_PORT", ports.DOCS_PORT);
 env = setEnvValue(env, "POSTGRES_PORT", ports.POSTGRES_PORT);

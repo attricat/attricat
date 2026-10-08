@@ -17,10 +17,11 @@ export default defineConfig(({ mode }) => {
     plugins: [tanstackRouter({ autoCodeSplitting: true }), react()],
     server: {
       proxy: {
+        // The API serves its routes below `/api`, so requests pass through
+        // unchanged to the origin of its base URL.
         '/api': {
-          target: apiUrl ?? 'http://127.0.0.1:3000',
+          target: new URL(apiUrl ?? 'http://127.0.0.1:3000/api').origin,
           changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/api/, ''),
         },
       },
     },

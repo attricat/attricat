@@ -9,7 +9,7 @@ W API rekordy występują pod nazwą `entity`, np. w trasach (`/v1/entities`), p
 
 ## Bazowy adres URL
 
-Gdy API serwuje aplikację webową (tak jak w obrazie kontenera), trasy API są dostępne zarówno pod ich własnymi ścieżkami, jak i pod `/api`. Na przykład `GET https://catalog.example.com/api/blueprints` i `GET https://catalog.example.com/blueprints` to ta sama trasa. Integracje powinny używać prefiksu `/api`.
+Trasy API są dostępne pod `/api`, np. `GET https://catalog.example.com/api/blueprints`; ścieżki na tej stronie są względne wobec tego prefiksu. Wszystkie pozostałe ścieżki należą do aplikacji webowej. Sondy stanu (`/health`, `/health/live`, `/health/ready`) odpowiadają także w katalogu głównym, na potrzeby load balancerów i kontroli kontenerów.
 
 ## Uwierzytelnianie
 

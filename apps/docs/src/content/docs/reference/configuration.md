@@ -49,7 +49,7 @@ The file worker needs the same `DATABASE_URL` and `S3_*` values plus `FILE_WORKE
 | `DATABASE_TASK_POOL_CONNECTIONS` | `10` | Connections in the pool used by background workers, shared by all workspaces. Integer from 1 to 100. The API logs the total of the request, task, and maintenance pools at startup. Each API process may also hold up to three connections outside the pools for background coordinators, and these need session-mode connections: PgBouncer's transaction pooling is not supported. See [Run several API replicas](/operate/deployment/#run-several-api-replicas). |
 | `BIND_ADDR` | `127.0.0.1:3000` | Address the API listens on. The container image sets `0.0.0.0:3000`. |
 | `CATALOG_AUTO_MIGRATE` | `true` | Apply database migrations when the API starts. Set `false` in production and run the image's `migrate` role once before rolling out API replicas. |
-| `WEB_DIST_DIR` | Unset | Directory containing the compiled web app. When set, the API serves the app at `/` and also exposes API routes below `/api`. The container image sets `/srv/attricat/web`. |
+| `WEB_DIST_DIR` | Unset | Directory containing the compiled web app. When set, the API serves the app for every path outside `/api` and the health probes. The container image sets `/srv/attricat/web`. |
 | `RUST_LOG` | `info` | Log filter, for example `api=debug`. |
 | `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | Unset | OTLP/gRPC endpoint for trace export from the API and file worker. Leave unset to disable tracing export. |
 | `CATALOG_DEVTOOLS` | `true` in local development | Enables the web Inspector and the Explorer's SQL timing entries in the `Server-Timing` header. Set `false` in production. In other builds, including production, a browser can load the Inspector on demand by setting local storage `catalog.inspector-enabled` to `true` and reloading; SQL timings still require this setting on the API. SQL text and bind values are never exposed. |
@@ -205,7 +205,7 @@ These agent limits are fixed: 32 KiB per user message, 16 attachments per messag
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `CATALOG_API_URL` | `http://127.0.0.1:3000` | API address the Vite development server proxies `/api` to. The CLI also reads it. |
+| `CATALOG_API_URL` | `http://127.0.0.1:3000/api` | API base URL, including `/api`. The CLI uses it, and the Vite development server proxies `/api` to its origin. |
 | `WEB_PORT` | `5173` | Port of the Vite development server. |
 
 ## Local development services

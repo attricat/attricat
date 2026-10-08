@@ -35,6 +35,7 @@ const GENERATOR_TOKEN_PERMISSIONS: &[&str] = &[
 #[derive(Parser)]
 #[command(name = "acli", about = "JSON-first client for the Catalog API")]
 struct Cli {
+    /// API base URL, including its `/api` path.
     #[arg(long, env = "CATALOG_SERVER")]
     server: Option<Url>,
     /// Personal API token. Prefer CATALOG_TOKEN or --token-stdin to avoid exposing it in process arguments.
@@ -1592,7 +1593,7 @@ async fn run(cli: Cli) -> Result<String, CliError> {
             Ok(value) => Url::parse(&value).map_err(|error| {
                 CliError::Input(format!("CATALOG_API_URL is not a valid URL: {error}"))
             })?,
-            Err(_) => Url::parse("http://127.0.0.1:3000").expect("valid default URL"),
+            Err(_) => Url::parse("http://127.0.0.1:3000/api").expect("valid default URL"),
         },
     };
     let session_file = cli.session_file;
