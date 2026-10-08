@@ -34,3 +34,4 @@ export { LockKeyholeIcon as PermissionIcon } from 'lucide-react';
 export { SquareActivityIcon as ExtensionRunIcon } from 'lucide-react';
 export { UserRoundIcon as AssignedUserIcon } from 'lucide-react';
 export { UsersRoundIcon as TeamIcon } from 'lucide-react';
+export { UserPlusIcon as InvitationIcon } from 'lucide-react';

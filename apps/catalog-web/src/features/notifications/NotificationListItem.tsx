@@ -12,6 +12,7 @@ import { useTranslation } from 'react-i18next';
 import { RouterListItemButton } from '../../components/RouterLink';
 import { Timestamp } from '../../time/Timestamp';
 import { conversationRoute, entityRoute } from './constants';
+import { NotificationKindIcon } from './NotificationKindIcon';
 import { notificationMessage } from './notificationMessage';
 import type { Notification } from './schemas';
 
@@ -64,6 +65,18 @@ export const NotificationListItem = ({
           width: 8,
         }}
       />
+      <Box
+        component="span"
+        sx={{
+          color: 'text.secondary',
+          display: 'inline-flex',
+          flexShrink: 0,
+          // Centre the icon on the first line of the message.
+          mt: 0.75,
+        }}
+      >
+        <NotificationKindIcon notification={notification} />
+      </Box>
       <Stack component="span" spacing={0.5} sx={{ minWidth: 0 }}>
         <Typography
           component="span"

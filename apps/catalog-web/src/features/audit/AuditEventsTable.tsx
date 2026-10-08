@@ -13,11 +13,8 @@ import type { AuditEvent } from './api';
 import { Timestamp } from '../../time/Timestamp';
 import { AuditActor } from './AuditActor';
 import { auditActor, auditTarget } from './auditFormat';
-import {
-  auditOutcomeSuccess,
-  auditTableColumnCount,
-  executorTypes,
-} from './constants';
+import { AuditExecutorType } from './AuditExecutorType';
+import { auditOutcomeSuccess, auditTableColumnCount } from './constants';
 import { EmptyState } from '../../components/EmptyState';
 import { AuditLogIcon } from '../../components/systemIcons';
 
@@ -72,15 +69,7 @@ export const AuditEventsTable = ({
                 <AuditActor event={event} systemLabel={systemLabel} />
               </TableCell>
               <TableCell>
-                <Chip
-                  color={
-                    event.executor_type === executorTypes.agent
-                      ? 'secondary'
-                      : 'default'
-                  }
-                  label={event.executor_type}
-                  size="small"
-                />
+                <AuditExecutorType executorType={event.executor_type} />
               </TableCell>
               <TableCell>{event.action}</TableCell>
               <TableCell>{auditTarget(event, workspaceLabel)}</TableCell>
