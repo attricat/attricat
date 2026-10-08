@@ -3,6 +3,7 @@ import { Alert, MenuItem, TextField, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { listEntityBlueprints } from '../api';
 import { entityQueryKeys } from '../queryKeys';
+import { lexiconText } from '../../lexicon/lexicon';
 
 type Props = {
   onChange: (blueprintCode: string) => void;
@@ -30,7 +31,7 @@ export const EntityBlueprintSelect = ({ onChange, value }: Props) => {
         {(blueprints.data ?? []).map((option) => (
           <MenuItem key={option.code} value={option.code}>
             {t('entities.blueprintOption', {
-              name: option.name,
+              name: lexiconText(option.name),
               code: option.code,
             })}
           </MenuItem>

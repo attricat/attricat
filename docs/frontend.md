@@ -84,6 +84,13 @@ light and dark modes.
   and agent tool names such as `get_entity` and `entity_id` that agent prose
   refers to.
 - When a test or Playwright spec looks up text, use the record wording.
+- Render every label a blueprint author writes through `lexiconText` from
+  `src/features/lexicon/lexicon.ts`: blueprint and reusable attribute names,
+  attribute names (via `attributeLabel`), tab, accordion, column and incoming
+  relationship labels, and status option labels (via the `status.ts`
+  helpers). This includes select options, page titles, tooltips, and
+  accessible names. Codes are identifiers and stay untranslated.
+  `lexiconCountNoun` needs the raw name, so pass it unresolved.
 
 ## Timestamps
 

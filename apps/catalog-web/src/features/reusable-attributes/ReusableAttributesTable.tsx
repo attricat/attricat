@@ -20,6 +20,7 @@ import {
   STATUS_DRAFT,
   STATUS_PUBLISHED,
 } from './constants';
+import { lexiconText } from '../lexicon/lexicon';
 
 export const ReusableAttributesTable = ({
   attributes,
@@ -54,7 +55,7 @@ export const ReusableAttributesTable = ({
                     params={{ definitionId: attribute.definition_id }}
                     to="/manage/reusable-attributes/$definitionId"
                   >
-                    <Typography>{attribute.name}</Typography>
+                    <Typography>{lexiconText(attribute.name)}</Typography>
                     <Typography color="text.secondary" variant="caption">
                       {attribute.namespace}:{attribute.code}
                     </Typography>

@@ -26,6 +26,7 @@ import {
 } from './constants';
 import { latestReusableAttributeRevisions } from './latestRevisions';
 import { ReusableAttributeIcon } from '../../components/systemIcons';
+import { lexiconText } from '../lexicon/lexicon';
 
 const definitionValue = (definition: string, key: string) =>
   definition.match(new RegExp(`^${key}\\s*=\\s*"([^"]*)"`, 'm'))?.[1];
@@ -137,7 +138,7 @@ export const ReusableAttributeEditorPage = ({
           title={
             attribute
               ? t('reusableAttributes.editor.editTitle', {
-                  name: attribute.name,
+                  name: lexiconText(attribute.name),
                 })
               : t('reusableAttributes.editor.newTitle')
           }

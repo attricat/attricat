@@ -20,6 +20,7 @@ import {
   reusableSelectionTypes,
   type ReusableSelectionType,
 } from '../constants';
+import { lexiconText } from '../../lexicon/lexicon';
 
 type Props = {
   attachAttributeDisabled: boolean;
@@ -95,7 +96,7 @@ export const ReusableAttributeAttachDialog = ({
               <MenuItem key={attribute.id} value={attribute.id}>
                 {t('entities.reusableAttributeOption', {
                   qualifiedCode: `${attribute.namespace}${REUSABLE_ATTRIBUTE_NAMESPACE_SEPARATOR}${attribute.code}`,
-                  name: attribute.name,
+                  name: lexiconText(attribute.name),
                   version: attribute.version,
                 })}
               </MenuItem>
