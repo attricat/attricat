@@ -59,6 +59,12 @@ const DATA_HEALTH_SECTIONS: [&str; 5] = [
 const MAX_SEARCH_FILTERS: usize = 20;
 /// Matches the HTTP entity label route.
 const MAX_ENTITY_LABEL_IDS: usize = 100;
+/// Search totals stop counting here, as the Explorer's do.
+const SEARCH_TOTAL_COUNT_CAP: i64 = 500;
+const DEFAULT_FIND_RECORDS_LIMIT: usize = 10;
+const MAX_FIND_RECORDS_LIMIT: usize = 25;
+/// Matches considered before ranking, so a common word stays cheap to name.
+const MAX_FIND_RECORDS_CANDIDATES: usize = 100;
 /// Single-entity mutations whose approved write must apply to the entity
 /// state the proposal was made against; see [`pin_entity_versions`].
 const VERSION_PINNED_TOOLS: [&str; 9] = [
@@ -375,6 +381,11 @@ pub fn definitions() -> Vec<ToolDefinition> {
             "search_entities",
             "Search entities of a blueprint by scalar values, attribute filters, relationship filters, and system tags. filters use {field, operator, value} with a scalar or file leaf, including is_set presence checks such as entities without an attached file (see the filters parameter for operators per attribute type); relationship_filters use {field, selected_target_ids} with a relationship path and target entity UUIDs. All filters combine with AND. Filters, sorting and table values read the context_code context (default: default), falling back through its parent contexts per attribute; free text matches values in every context. Query terms are whitespace-separated AND terms. Bare free text searches scalar values on the selected blueprint only. Use *:value for global relationship-aware discovery through up to three incoming edges. Use attribute:value for a selected-blueprint attribute; use relationship:value or an explicit path with up to three relationship hops and a scalar leaf; and use blueprint:value or blueprint.attribute:value for the selected blueprint (code or name). Use @id:uuid1,uuid2 for selected-blueprint entity IDs or relationship.@id:uuid1,uuid2 for entities linked to those IDs (at most 100 IDs per term). A trailing * means prefix matching. Results include match_explanations with deterministic match witnesses and relationship paths. Omit blueprint.version to include every published revision; set outdated to true to return only entities that are not on the latest published revision. Use sort with a configured scalar table-column field, blueprint_version, or publication_status and asc or desc direction; ascending blueprint_version puts older schemas first, ascending publication_status puts unpublished entities first and requires sort.context_code for an enabled channel. Relationship table columns use paths of up to three hops. A relationship-path sort without blueprint.version is accepted only when the complete matching result uses one source version. Without sort, results are paginated in ascending creation order.",
             json!({"type":"object","required":["blueprint"],"properties":{"blueprint":{"type":"object","required":["code"],"properties":{"code":{"type":"string"},"version":{"type":"integer","minimum":1}},"additionalProperties":false},"query":{"type":"string"},"filters":attribute_filter_parameters(),"relationship_filters":relationship_filter_parameters(),"system_tags":{"type":"array","items":{"type":"string"}},"outdated":{"type":"boolean"},"context_code":{"type":"string"},"sort":{"type":"object","required":["field","direction"],"properties":{"field":{"type":"string"},"direction":{"type":"string","enum":["asc","desc"]},"context_code":{"type":"string"}},"additionalProperties":false},"page":{"type":"object","properties":{"size":{"type":"integer","minimum":1,"maximum":100},"cursor":{"type":"string"}},"additionalProperties":false}},"additionalProperties":false}),
+        ),
+        definition(
+            "find_records",
+            "Find records by name across every blueprint when the user names a record (such as a category, brand or location) without saying which blueprint it belongs to. Matches the words of text in records' values, case-insensitively, and returns {id, blueprint_code, blueprint_name, display} items with exact display-label matches first, plus total_matches and truncated. Then use the record: get_incoming_relationships counts what links to it, and search_entities with relationship_filters lists those records.",
+            json!({"type":"object","required":["text"],"properties":{"text":{"type":"string","minLength":1},"limit":{"type":"integer","minimum":1,"maximum":MAX_FIND_RECORDS_LIMIT}},"additionalProperties":false}),
         ),
         definition(
             "create_blueprint",
@@ -718,6 +729,7 @@ pub fn kind(name: &str) -> Result<ToolKind, ToolError> {
         | "view_image"
         | "read_file"
         | "search_entities"
+        | "find_records"
         | "list_saved_searches"
         | "get_saved_search"
         | "get_entity_publications"
@@ -1705,6 +1717,97 @@ pub async fn execute_read(
                 "message": "The text file is attached to this tool result for reading.",
             })
         }
+        "find_records" => {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct Input {
+                text: String,
+                #[serde(default)]
+                limit: Option<usize>,
+            }
+            let input: Input = decode(arguments)?;
+            // `:` and `*` are search syntax; a name is matched as plain words.
+            let query = input
+                .text
+                .split(|character: char| character.is_whitespace() || matches!(character, ':' | '*'))
+                .filter(|word| !word.is_empty())
+                .collect::<Vec<_>>()
+                .join(" ");
+            if query.is_empty() {
+                return Err(ToolError::InvalidArguments(
+                    "text must contain at least one word".to_owned(),
+                ));
+            }
+            let limit = input.limit.unwrap_or(DEFAULT_FIND_RECORDS_LIMIT);
+            if !(1..=MAX_FIND_RECORDS_LIMIT).contains(&limit) {
+                return Err(ToolError::InvalidArguments(format!(
+                    "limit must be between 1 and {MAX_FIND_RECORDS_LIMIT}"
+                )));
+            }
+            let mut candidates = Vec::new();
+            let mut truncated = false;
+            for summary in repository.list_blueprints().await? {
+                if summary.kind != "entity" {
+                    continue;
+                }
+                // Searches run on a blueprint's latest published revision.
+                let Some(blueprint) = repository.get_blueprint_by_code(&summary.code).await? else {
+                    continue;
+                };
+                let resolved = repository
+                    .resolve_search(&blueprint, None, Some(&query))
+                    .await
+                    .map_err(|error| ToolError::InvalidArguments(error.to_string()))?;
+                let mut ids = resolved.ids.into_iter().collect::<Vec<_>>();
+                ids.sort_unstable();
+                for id in ids {
+                    if candidates.len() == MAX_FIND_RECORDS_CANDIDATES {
+                        truncated = true;
+                        break;
+                    }
+                    candidates.push((id, blueprint.blueprint.code.clone(), blueprint.blueprint.name.clone()));
+                }
+            }
+            let ids = candidates.iter().map(|(id, _, _)| *id).collect::<Vec<_>>();
+            let readable = repository
+                .authorized_entity_ids(actor, workspace, "entities.read", &ids)
+                .await?;
+            let labels = repository
+                .entity_labels(&ids.into_iter().filter(|id| readable.contains(id)).collect::<Vec<_>>())
+                .await?
+                .into_iter()
+                .map(|label| (label.id, label.display))
+                .collect::<HashMap<_, _>>();
+            let wanted = query.to_lowercase();
+            let mut items = candidates
+                .into_iter()
+                .filter_map(|(id, blueprint_code, blueprint_name)| {
+                    let display = labels.get(&id)?;
+                    let label = display
+                        .get("default")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .to_lowercase();
+                    // Exact label matches first, then labels that start with the text.
+                    let rank = if label == wanted {
+                        0
+                    } else if label.starts_with(&wanted) {
+                        1
+                    } else {
+                        2
+                    };
+                    Some((rank, json!({"id": id, "blueprint_code": blueprint_code, "blueprint_name": blueprint_name, "display": display})))
+                })
+                .collect::<Vec<_>>();
+            items.sort_by_key(|(rank, _)| *rank);
+            let total_matches = items.len();
+            truncated |= total_matches > limit;
+            json!({
+                "items": items.into_iter().take(limit).map(|(_, item)| item).collect::<Vec<_>>(),
+                "total_matches": total_matches,
+                "truncated": truncated,
+            })
+        }
         "search_entities" => {
             #[derive(Deserialize)]
             #[serde(deny_unknown_fields)]
@@ -1817,14 +1920,20 @@ pub async fn execute_read(
                     .await?;
                 matching = Some(intersect_ids(matching, ids));
             }
-            let versions = repository
-                .search_result_versions(
+            // Like the Explorer, count only for a first page, and only so far.
+            let (versions, total_count) = repository
+                .search_result_versions_and_count(
                     current.blueprint.id,
                     selected,
                     matching.as_deref(),
                     &input.system_tags,
                     input.outdated,
                     current.blueprint.version,
+                    input
+                        .page
+                        .cursor
+                        .is_none()
+                        .then_some(SEARCH_TOTAL_COUNT_CAP + 1),
                 )
                 .await?;
             let relationship_sort = input
@@ -1942,7 +2051,7 @@ pub async fn execute_read(
                                 &[],
                                 true,
                                 current.blueprint.version,
-                                501,
+                                SEARCH_TOTAL_COUNT_CAP + 1,
                             )
                             .await?,
                     )
@@ -1953,12 +2062,13 @@ pub async fn execute_read(
                 blueprint: sort_blueprint,
                 items,
                 next_cursor,
-                total_count: None,
-                total_count_capped: false,
+                total_count: total_count.map(|count| count.min(SEARCH_TOTAL_COUNT_CAP)),
+                total_count_capped: total_count.is_some_and(|count| count > SEARCH_TOTAL_COUNT_CAP),
                 result_version_scope,
-                hidden_outdated_count: hidden_outdated_count.map(|count| count.min(500)),
+                hidden_outdated_count: hidden_outdated_count
+                    .map(|count| count.min(SEARCH_TOTAL_COUNT_CAP)),
                 hidden_outdated_count_capped: hidden_outdated_count
-                    .is_some_and(|count| count > 500),
+                    .is_some_and(|count| count > SEARCH_TOTAL_COUNT_CAP),
             })
             .expect("models serialize")
         }
@@ -3065,7 +3175,7 @@ async fn read_authorized(
         // Match the HTTP search endpoint: collection searches require a
         // workspace-wide entities.read grant, rather than exposing partial
         // results for a scoped grant.
-        "search_entities" | "list_saved_searches" | "get_saved_search" => {
+        "search_entities" | "find_records" | "list_saved_searches" | "get_saved_search" => {
             ("entities.read", None, None)
         }
         _ => return Err(ToolError::UnknownTool(name.to_owned())),
