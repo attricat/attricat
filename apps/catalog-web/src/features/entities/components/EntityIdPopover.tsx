@@ -7,16 +7,7 @@ import { copyToClipboard } from '../../../components/clipboard';
 import { useToast } from '../../../components/useToast';
 import { compactIconSize } from '../../../components/iconSizes';
 
-export const EntityIdPopover = ({
-  alignWithText = false,
-  edge,
-  entityId,
-}: {
-  alignWithText?: boolean;
-  /** Offsets the button's padding where it starts a line of content. */
-  edge?: 'start';
-  entityId: string;
-}) => {
+export const EntityIdPopover = ({ entityId }: { entityId: string }) => {
   const { t } = useTranslation();
   const { show } = useToast();
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
@@ -34,10 +25,8 @@ export const EntityIdPopover = ({
       <Tooltip title={t('entities.viewEntityId')}>
         <IconButton
           aria-label={label}
-          edge={edge}
           onClick={(event) => setAnchor(event.currentTarget)}
           size="small"
-          sx={alignWithText ? { transform: 'translateY(-2px)' } : undefined}
         >
           <HashIcon size={compactIconSize} />
         </IconButton>

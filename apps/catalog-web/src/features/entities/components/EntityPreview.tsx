@@ -196,7 +196,6 @@ export const EntityPreview = ({
             />
             <EntitySchemaSubheader
               compact={compact}
-              entityId={entityId}
               name={
                 blueprint.data && lexiconText(blueprint.data.blueprint.name)
               }

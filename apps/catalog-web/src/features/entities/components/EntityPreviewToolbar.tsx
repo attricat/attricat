@@ -3,6 +3,7 @@ import {
   CircleArrowUpIcon,
   CopyIcon,
   GlobeIcon,
+  HashIcon,
   InfoIcon,
   PanelRightIcon,
   RefreshCwIcon,
@@ -27,6 +28,8 @@ import {
 import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RouterMenuItem } from '../../../components/RouterLink';
+import { copyToClipboard } from '../../../components/clipboard';
+import { useToast } from '../../../components/useToast';
 import { EntityToolbar } from './EntityToolbar';
 import type {
   EntityPublicationReadiness,
@@ -84,12 +87,21 @@ export const EntityPreviewToolbar = ({
   publicationPending,
 }: Props) => {
   const { t } = useTranslation();
+  const { show } = useToast();
   // A tooltip cannot host another tooltip, so the UTC value is inline.
   const { formatWithUtc } = useInstantFormat();
   const actionsMenuId = useId();
   const [actionsMenuAnchor, setActionsMenuAnchor] =
     useState<HTMLElement | null>(null);
   const closeActionsMenu = () => setActionsMenuAnchor(null);
+  const copyEntityId = async () => {
+    try {
+      await copyToClipboard(entityId);
+      show({ message: t('common.copied'), severity: 'success' });
+    } catch {
+      show({ message: t('common.copyFailed'), severity: 'error' });
+    }
+  };
   const publishMenuId = useId();
   const [publishMenuAnchor, setPublishMenuAnchor] =
     useState<HTMLElement | null>(null);
@@ -125,6 +137,17 @@ export const EntityPreviewToolbar = ({
           </ListItemIcon>
           <ListItemText>{t('entities.changes')}</ListItemText>
         </RouterMenuItem>
+        <MenuItem
+          onClick={() => {
+            closeActionsMenu();
+            void copyEntityId();
+          }}
+        >
+          <ListItemIcon>
+            <HashIcon size={compactIconSize} />
+          </ListItemIcon>
+          <ListItemText>{t('entities.copyEntityId')}</ListItemText>
+        </MenuItem>
         <MenuItem
           onClick={() => {
             closeActionsMenu();

@@ -156,7 +156,12 @@ describe('entity actions menu', () => {
     let menu = await openActions();
     expect(
       menu.getAllByRole('menuitem').map((item) => item.textContent),
-    ).toEqual(['Changes', 'Duplicate record', 'Delete record']);
+    ).toEqual([
+      'Changes',
+      'Copy record ID',
+      'Duplicate record',
+      'Delete record',
+    ]);
     for (const item of menu.getAllByRole('menuitem'))
       expect(item.querySelector('svg')).toBeTruthy();
 
@@ -169,6 +174,23 @@ describe('entity actions menu', () => {
       menu.getByRole('menuitem', { name: 'Delete record' }),
     );
     expect(onDelete).toHaveBeenCalledOnce();
+  });
+
+  it('copies the record ID', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    renderActions({});
+    const menu = await openActions();
+    await userEvent.click(
+      menu.getByRole('menuitem', { name: 'Copy record ID' }),
+    );
+    expect(writeText).toHaveBeenCalledWith(
+      '123e4567-e89b-12d3-a456-426614174001',
+    );
+    expect(screen.queryByRole('menu')).toBeNull();
   });
 
   it('offers the schema upgrade only for outdated entities', async () => {

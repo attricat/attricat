@@ -53,7 +53,6 @@ export const EntityChangesPage = ({ entityId }: { entityId: string }) => {
         </RouterButton>
       </EntityToolbar>
       <EntitySchemaSubheader
-        entityId={entityId}
         name={
           entityForm.data &&
           lexiconText(entityForm.data.blueprint.blueprint.name)
