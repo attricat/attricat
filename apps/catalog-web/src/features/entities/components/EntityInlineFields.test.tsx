@@ -248,6 +248,31 @@ describe('EntityInlineFields', () => {
     expect(screen.queryByText('This change is not saved yet.')).toBeNull();
   });
 
+  it('marks fields the entity schema requires', () => {
+    renderFields(true, 'Hello', {
+      entitySchema: { required: ['name', 'notes'] },
+    });
+
+    expect(
+      (screen.getByRole('textbox', { name: 'name' }) as HTMLInputElement)
+        .required,
+    ).toBe(true);
+    // A field shown as its value marks its label until it is edited.
+    expect(screen.getByText('notes').textContent).toBe('notes *');
+  });
+
+  it('does not mark required fields outside the default context', () => {
+    renderFields(true, undefined, {
+      entitySchema: { required: ['name'] },
+      viewContextId: '123e4567-e89b-12d3-a456-426614174002',
+    });
+
+    expect(
+      (screen.getByRole('textbox', { name: 'name' }) as HTMLInputElement)
+        .required,
+    ).toBe(false);
+  });
+
   it('keeps a required field that was cleared unsaved', async () => {
     const user = userEvent.setup();
     renderFields(true, undefined, { entitySchema: { required: ['name'] } });

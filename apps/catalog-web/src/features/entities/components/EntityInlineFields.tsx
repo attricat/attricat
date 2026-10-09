@@ -223,6 +223,7 @@ export const EntityInlineFields = forwardRef<EntityInlineFieldsHandle, Props>(
       component?: ComponentReference | null,
     ) => {
       if (!changeableCodes.includes(attribute.code)) return null;
+      const required = requiredAttributes.includes(attribute.code);
       const editComponent =
         resolveEditComponent(component) ?? editComponents.get(attribute.code);
       const rules = fieldRules.get(attribute.code);
@@ -244,7 +245,11 @@ export const EntityInlineFields = forwardRef<EntityInlineFieldsHandle, Props>(
           renderAtRest={
             AtRestDisplay &&
             (({ value, onEdit }) => (
-              <FieldValueAtRest attribute={attribute} onEdit={onEdit}>
+              <FieldValueAtRest
+                attribute={attribute}
+                onEdit={onEdit}
+                required={required}
+              >
                 <AtRestDisplay
                   attribute={attribute}
                   component={component}
@@ -285,6 +290,7 @@ export const EntityInlineFields = forwardRef<EntityInlineFieldsHandle, Props>(
               migrationReviewMessages={{}}
               onChange={onChange}
               onEntityUpdated={saves.noteEntityUpdated}
+              required={required}
               resolvedValues={resolvedValues as ResolvedFormValues}
               statusParentContextIds={statusParentContextIds}
               statusTransitions={statusTransitions}

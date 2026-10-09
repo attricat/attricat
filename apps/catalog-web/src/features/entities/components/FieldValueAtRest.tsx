@@ -13,10 +13,13 @@ import { attributeLabel } from '../entityDisplay';
 export const FieldValueAtRest = ({
   attribute,
   onEdit,
+  required,
   children,
 }: {
   attribute: Attribute;
   onEdit: () => void;
+  /** Marks the label like a required editor's. */
+  required?: boolean;
   children: ReactNode;
 }) => {
   const { t } = useTranslation();
@@ -27,6 +30,7 @@ export const FieldValueAtRest = ({
       <Box sx={{ alignItems: 'center', display: 'flex', gap: 0.5 }}>
         <Typography sx={{ fontWeight: 700 }} variant="subtitle2">
           {label}
+          {required && <span aria-hidden="true"> *</span>}
         </Typography>
         <Tooltip title={editLabel}>
           <IconButton aria-label={editLabel} onClick={onEdit} size="small">
