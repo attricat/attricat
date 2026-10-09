@@ -42,7 +42,12 @@ const FileAttributeEditorContent = (props: FileAttributeEditorProps) => {
   const helpId = useId();
   const policy = attribute.file_policy;
   if (!policy) return null;
-  const queueDisabled = !uploads.canUpload || !uploads.canQueueFile;
+  const queueDisabled = !uploads.canQueue || !uploads.canQueueFile;
+  const savingHelp = uploads.deferred
+    ? t('files.uploadedOnCreate')
+    : !entityId
+      ? t('files.saveEntityBeforeUploading')
+      : (!helperText || !disabled) && t('files.savedImmediately');
 
   return (
     <Stack
@@ -53,14 +58,10 @@ const FileAttributeEditorContent = (props: FileAttributeEditorProps) => {
     >
       <Box sx={{ alignItems: 'center', display: 'flex', gap: 0.5 }}>
         <Typography id={labelId}>{attributeLabel(attribute)}</Typography>
-        {(!helperText || (entityId && !disabled)) && (
+        {savingHelp && (
           // Focusable so keyboard users can read it; it also describes the
           // button for assistive technology.
-          <Tooltip
-            describeChild
-            enterTouchDelay={0}
-            title={t('files.savedImmediately')}
-          >
+          <Tooltip describeChild enterTouchDelay={0} title={savingHelp}>
             <IconButton aria-label={t('files.savingHelp')} size="small">
               <InfoIcon size={compactIconSize} />
             </IconButton>
@@ -78,9 +79,6 @@ const FileAttributeEditorContent = (props: FileAttributeEditorProps) => {
           {message}
         </Alert>
       ))}
-      {!entityId && (
-        <Alert severity="info">{t('files.saveEntityBeforeUploading')}</Alert>
-      )}
       <Box
         onDragOver={(event) => event.preventDefault()}
         onDrop={(event) => {
@@ -113,7 +111,7 @@ const FileAttributeEditorContent = (props: FileAttributeEditorProps) => {
         >
           {t('files.chooseOrDropFiles')}
         </Button>
-        {uploads.pending.length > 0 && (
+        {entityId && uploads.pending.length > 0 && (
           <Button
             color="primary"
             disabled={!uploads.canUpload || !uploads.hasQueuedFiles}
@@ -126,7 +124,7 @@ const FileAttributeEditorContent = (props: FileAttributeEditorProps) => {
       </Box>
       {uploads.pending.map((item) => (
         <PendingFileRow
-          disabled={disabled || uploads.busy}
+          disabled={!uploads.canQueue}
           item={item}
           key={item.id}
           onRetry={() => uploads.retry(item)}

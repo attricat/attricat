@@ -6,6 +6,7 @@ import { invalidateEntity } from '../entities/invalidateEntity';
 import { uploadFiles, updateFileReferences } from './api';
 import { fileCardinalities } from './constants';
 import { acceptsFile, pendingFileId } from './fileAcceptance';
+import { useQueuedFileUploadsContext } from './queuedFileUploads';
 import type { FileMetadata } from './schemas';
 
 export type PendingFile = {
@@ -30,7 +31,15 @@ export const usePendingFileUploads = (options: Options) => {
   const { attribute, contextId, disabled, entityId, files } = options;
   const { t } = useTranslation();
   const client = useQueryClient();
-  const [pending, setPending] = useState<PendingFile[]>([]);
+  // Before the entity exists, files wait in the creating page's queue.
+  const queue = useQueuedFileUploadsContext();
+  const deferred = !entityId && queue !== null;
+  const [localPending, setLocalPending] = useState<PendingFile[]>([]);
+  const pending: readonly PendingFile[] = deferred
+    ? (queue.pending[attribute.code] ?? [])
+    : localPending;
+  const setPending = (change: (items: PendingFile[]) => PendingFile[]) =>
+    deferred ? queue.update(attribute.code, change) : setLocalPending(change);
   const [saved, setSaved] = useState<{
     source: FileMetadata[];
     value: FileMetadata[];
@@ -56,16 +65,19 @@ export const usePendingFileUploads = (options: Options) => {
   const canQueueFile =
     !singleFile || (uploaded.length === 0 && pending.length === 0);
   const canUpload = !disabled && Boolean(entityId) && !busy;
+  const canQueue = canUpload || (!disabled && deferred);
   const permitted = () =>
     active.current &&
     !current.current.disabled &&
     Boolean(current.current.entityId);
+  const queuePermitted = () =>
+    active.current && !current.current.disabled && (deferred || permitted());
   const refresh = async () => {
     if (!entityId) return;
     await invalidateEntity(client, entityId);
   };
   const add = (candidates: FileList | File[]) => {
-    if (!canUpload || !canQueueFile || lock.current || !permitted()) return;
+    if (!canQueue || !canQueueFile || lock.current || !queuePermitted()) return;
     const rejected: string[] = [];
     const accepted = Array.from(candidates).filter((file) => {
       if (acceptsFile(file, attribute)) return true;
@@ -163,14 +175,16 @@ export const usePendingFileUploads = (options: Options) => {
     add,
     busy,
     errors,
+    canQueue,
     canQueueFile,
     canUpload,
+    deferred,
     changeReferences,
     hasQueuedFiles: pending.some((item) => !item.error && item.progress === 0),
     pending,
     uploaded,
     removePending: (id: string) => {
-      if (permitted() && !lock.current)
+      if (queuePermitted() && !lock.current)
         setPending((items) => items.filter((item) => item.id !== id));
     },
     retry: (item: PendingFile) => void upload([item]),

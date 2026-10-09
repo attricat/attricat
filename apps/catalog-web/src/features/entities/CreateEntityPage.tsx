@@ -6,6 +6,12 @@ import { listContexts } from '../contexts/api';
 import { contextQueryKeys } from '../contexts/queryKeys';
 import { defaultContextCode } from '../contexts/constants';
 import { draftEditors } from '../drafts/constants';
+import {
+  QueuedFileUploadsContext,
+  useQueuedFileUploads,
+  type QueuedFiles,
+} from '../files/queuedFileUploads';
+import { useToast } from '../../components/useToast';
 import { createEntity, getBlueprintByCode } from './api';
 import { EntityForm, type EntityFormHandle } from './components/EntityForm';
 import { EntityPage } from './components/EntityPage';
@@ -31,6 +37,12 @@ export const CreateEntityPage = ({
       getBlueprintByCode(blueprintCode!, undefined, signal),
     enabled: Boolean(blueprintCode),
   });
+  // Another blueprint or version may not have the same file attributes.
+  const queuedFiles = useQueuedFileUploads(
+    blueprint.data &&
+      `${blueprint.data.blueprint.id}:${blueprint.data.blueprint.version}`,
+  );
+  const toast = useToast();
   const contexts = useQuery({
     queryKey: contextQueryKeys.all(),
     queryFn: ({ signal }) => listContexts(signal),
@@ -39,18 +51,20 @@ export const CreateEntityPage = ({
     (context) => context.code === defaultContextCode,
   )?.id;
   const create = useMutation({
-    mutationFn: ({
+    mutationFn: async ({
       values,
       relationships,
+      files,
     }: {
       values: Parameters<typeof createEntity>[0]['values'];
       relationships: { attribute_code: string; target_entity_ids: string[] }[];
+      files: QueuedFiles;
     }) => {
       const resolved = blueprint.data;
       if (!resolved) throw new Error(t('entities.chooseBeforeCreate'));
       if (!defaultContextId)
         throw new Error(t('entities.defaultContextUnavailable'));
-      return createEntity({
+      const entity = await createEntity({
         blueprint: {
           code: resolved.blueprint.code,
           version: resolved.blueprint.version,
@@ -70,10 +84,31 @@ export const CreateEntityPage = ({
           ),
         ],
       });
-    },
-    onSuccess: (entity) => {
+      // The entity exists now: forget the draft before the slower uploads so
+      // leaving mid-upload cannot offer to create it again. A failed upload
+      // is retried on the entity's page.
       entityFormRef.current?.clearDraft();
       void invalidateEntitySearches(client);
+      const failedFiles = await queuedFiles.uploadQueued(
+        files,
+        entity.id,
+        defaultContextId,
+      );
+      return { entity, failedFiles };
+    },
+    onSuccess: ({ entity, failedFiles }) => {
+      if (failedFiles.length > 0)
+        toast.show({
+          message: t('files.uploadAfterCreateFailed', {
+            count: failedFiles.length,
+            files: failedFiles
+              .map(({ filename, message }) =>
+                message ? `${filename} (${message})` : filename,
+              )
+              .join(', '),
+          }),
+          severity: 'error',
+        });
       void navigate({
         to: '/entities/$entityId',
         params: { entityId: entity.id },
@@ -85,36 +120,42 @@ export const CreateEntityPage = ({
       blueprint={blueprint.data?.blueprint}
       title={t('entities.createEntity')}
     >
-      <EntityForm
-        blueprint={blueprint.data}
-        contextId={defaultContextId}
-        draft={
-          blueprint.data && {
-            editor: draftEditors.entityCreate,
-            resource: [blueprint.data.blueprint.id],
-            source: String(blueprint.data.blueprint.version),
+      <QueuedFileUploadsContext value={queuedFiles.queue}>
+        <EntityForm
+          blueprint={blueprint.data}
+          contextId={defaultContextId}
+          draft={
+            blueprint.data && {
+              editor: draftEditors.entityCreate,
+              resource: [blueprint.data.blueprint.id],
+              source: String(blueprint.data.blueprint.version),
+            }
           }
-        }
-        defaultContextId={defaultContextId}
-        error={blueprint.error ?? create.error}
-        isLoadingBlueprint={blueprint.isFetching || create.isPending}
-        lockedBlueprint={search.locked}
-        onLoadBlueprint={(code) =>
-          void navigate({
-            replace: true,
-            search: { ...search, blueprint: code },
-          })
-        }
-        onSubmit={({ values, relationships }) =>
-          create.mutate({ values, relationships })
-        }
-        ref={entityFormRef}
-        submitLabel={
-          blueprint.data
-            ? t('entities.createEntity')
-            : t('entities.loadBlueprint')
-        }
-      />
+          defaultContextId={defaultContextId}
+          error={blueprint.error ?? create.error}
+          isLoadingBlueprint={blueprint.isFetching || create.isPending}
+          lockedBlueprint={search.locked}
+          onLoadBlueprint={(code) =>
+            void navigate({
+              replace: true,
+              search: { ...search, blueprint: code },
+            })
+          }
+          onSubmit={({ values, relationships }) =>
+            create.mutate({
+              values,
+              relationships,
+              files: queuedFiles.queue.pending,
+            })
+          }
+          ref={entityFormRef}
+          submitLabel={
+            blueprint.data
+              ? t('entities.createEntity')
+              : t('entities.loadBlueprint')
+          }
+        />
+      </QueuedFileUploadsContext>
     </EntityPage>
   );
 };

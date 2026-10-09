@@ -12,6 +12,10 @@ import '../../i18n';
 import type { Attribute } from '../entities/api';
 import { uploadFiles, updateFileReferences, getFileMetadata } from './api';
 import { FileAttributeEditor } from './FileAttributeEditor';
+import {
+  QueuedFileUploadsContext,
+  useQueuedFileUploads,
+} from './queuedFileUploads';
 import type { FileMetadata } from './schemas';
 
 vi.mock('./api', () => ({
@@ -148,6 +152,55 @@ describe('FileAttributeEditor', () => {
       },
     );
     expect(screen.queryByText('document.txt')).toBeNull();
+  });
+
+  it('queues files for upload once a new entity is created', async () => {
+    vi.mocked(uploadFiles).mockResolvedValue({
+      files: [],
+    } as unknown as Awaited<ReturnType<typeof uploadFiles>>);
+    const failed: unknown[][] = [];
+    const Creating = () => {
+      const queued = useQueuedFileUploads('product');
+      return (
+        <QueuedFileUploadsContext value={queued.queue}>
+          <FileAttributeEditor
+            attribute={attribute}
+            contextId={null}
+            disabled={false}
+            files={[]}
+          />
+          <button
+            onClick={() =>
+              void queued
+                .uploadQueued(queued.queue.pending, entityId, 'context-id')
+                .then((names) => failed.push(names))
+            }
+            type="button"
+          >
+            Create
+          </button>
+        </QueuedFileUploadsContext>
+      );
+    };
+    render(<Creating />);
+    fireEvent.drop(
+      screen.getByRole('button', { name: 'Choose or drop files' })
+        .parentElement!,
+      { dataTransfer: { files: [file] } },
+    );
+    expect(screen.getByText('document.txt')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Upload 1/ })).toBeNull();
+    expect(uploadFiles).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+    await waitFor(() => expect(failed).toEqual([[]]));
+    expect(uploadFiles).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attributeCode: 'document',
+        contextId: 'context-id',
+        entityId,
+        files: [file],
+      }),
+    );
   });
 
   it('uploads each queued file only once when upload is clicked repeatedly', async () => {
