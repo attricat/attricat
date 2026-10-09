@@ -704,7 +704,7 @@
     "query": "Query",
     "searchSyntax": "Search syntax",
     "queryExamples": "This blueprint: term · One field: sku:term* · All fields on a related record: relationship:term · A related field: relationship.field:term · Global connected search (up to 3 hops): *:term",
-    "searchTerms": "Search this blueprint, e.g. term",
+    "searchTerms": "Search anything",
     "querySuggestions": {
       "label": "Query suggestions",
       "attribute": "Match only in {{name}}",

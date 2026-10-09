@@ -720,7 +720,7 @@
     "query": "Zapytanie",
     "searchSyntax": "Składnia wyszukiwania",
     "queryExamples": "Ten schemat: tekst · Jedno pole: pole:tekst* · Wszystkie pola powiązanego rekordu: relacja:tekst · Pole powiązanego rekordu: relacja.pole:tekst · Globalne wyszukiwanie powiązanych rekordów (do 3 relacji): *:tekst",
-    "searchTerms": "Przeszukaj ten schemat, np. tekst",
+    "searchTerms": "Wyszukaj cokolwiek",
     "querySuggestions": {
       "label": "Podpowiedzi zapytania",
       "attribute": "Szukaj tylko w polu {{name}}",

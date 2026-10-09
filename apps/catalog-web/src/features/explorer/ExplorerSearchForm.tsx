@@ -227,7 +227,12 @@ export const ExplorerSearchForm = ({
             />
           )}
         </form.Field>
-        <Button startIcon={<SearchIcon />} type="submit" variant="contained">
+        <Button
+          startIcon={<SearchIcon />}
+          sx={{ flexShrink: 0 }}
+          type="submit"
+          variant="contained"
+        >
           {t('explorer.search')}
         </Button>
         {inlineActions && endActions && (
