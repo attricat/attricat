@@ -30,10 +30,11 @@ type FileAttributeEditorProps = {
   error?: string;
   helperText?: string;
   onEntityUpdated?: (updatedAt: string) => void;
+  required?: boolean;
 };
 
 const FileAttributeEditorContent = (props: FileAttributeEditorProps) => {
-  const { attribute, entityId, error, helperText } = props;
+  const { attribute, entityId, error, helperText, required } = props;
   const disabled = props.disabled || attribute.readonly === true;
   const { t } = useTranslation();
   const input = useRef<HTMLInputElement>(null);
@@ -57,7 +58,11 @@ const FileAttributeEditorContent = (props: FileAttributeEditorProps) => {
       aria-describedby={helperText ? helpId : undefined}
     >
       <Box sx={{ alignItems: 'center', display: 'flex', gap: 0.5 }}>
-        <Typography id={labelId}>{attributeLabel(attribute)}</Typography>
+        <Typography id={labelId}>
+          {attributeLabel(attribute)}
+          {/* Matches the asterisk MUI adds to required field labels. */}
+          {required && <span aria-hidden> *</span>}
+        </Typography>
         {savingHelp && (
           // Focusable so keyboard users can read it; it also describes the
           // button for assistive technology.

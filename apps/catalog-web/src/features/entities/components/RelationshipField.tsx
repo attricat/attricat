@@ -105,10 +105,12 @@ export const RelationshipField = ({
   helperText,
   linkToEntities = false,
   onChange,
+  required,
   value,
 }: {
   attribute: Attribute;
   disabled?: boolean;
+  required?: boolean;
   error?: string;
   helperText?: string;
   /** Lets each selected entity be opened from its pill. */
@@ -157,6 +159,7 @@ export const RelationshipField = ({
         disabled={disabled}
         error={Boolean(error)}
         label={attributeLabel(attribute)}
+        required={required}
         helperText={error ?? t('entities.commaSeparatedUuids')}
         onChange={(event) => onChange(event.target.value)}
         slotProps={{ input: { startAdornment: relationshipAdornment } }}
@@ -202,6 +205,7 @@ export const RelationshipField = ({
         helperText={error ?? helperText}
         id={fieldId}
         label={attributeLabel(attribute)}
+        required={required}
         slotProps={{
           htmlInput: {
             'aria-labelledby': `${fieldId}-label`,

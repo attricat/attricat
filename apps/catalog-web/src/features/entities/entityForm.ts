@@ -110,6 +110,22 @@ export const entityFormValidationMessages =
     schema: i18n.t('entities.schemaValidationFailed'),
   });
 
+/** Required editable attributes that have no value yet; files upload apart. */
+export const missingRequiredAttributes = (
+  attributes: readonly Attribute[],
+  fields: Record<string, string>,
+  requiredCodes: ReadonlySet<string>,
+): Attribute[] =>
+  attributes.filter((attribute) => {
+    if (!requiredCodes.has(attribute.code) || attribute.readonly === true)
+      return false;
+    const value = fields[attribute.code] ?? '';
+    if (attribute.value_type === attributeValueTypes.file) return false;
+    if (attribute.value_type === attributeValueTypes.relationship)
+      return relationshipIdsForField(value).length === 0;
+    return !value.trim();
+  });
+
 export const validateEntityForm = (
   attributes: readonly Attribute[],
   fields: Record<string, string>,

@@ -224,17 +224,20 @@ describe('EntityForm', () => {
     );
   });
 
-  it('rejects required empty email', async () => {
+  it('disables saving until a required field has a value', () => {
     const { onSubmit } = renderForm({
       blueprint: emailBlueprint(),
       requiredAttributes: ['contact'],
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    const save = screen.getByRole('button', { name: 'Save' });
     expect(screen.getByRole('textbox')).toHaveProperty('required', true);
-    expect(
-      await screen.findByText('A value is required for the target schema.'),
-    ).toBeTruthy();
+    expect(save).toHaveProperty('disabled', true);
+    fireEvent.click(save);
     expect(onSubmit).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: 'name@example.com' },
+    });
+    expect(save).toHaveProperty('disabled', false);
   });
 
   it.each([

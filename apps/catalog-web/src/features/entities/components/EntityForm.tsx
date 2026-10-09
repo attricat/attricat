@@ -1,13 +1,15 @@
 import { VIEW_EDIT_LAYOUT_SPACING } from '../../views/constants';
 import { useForm, useStore } from '@tanstack/react-form';
-import { Alert, Box, Button, Paper, Stack } from '@mui/material';
+import { Alert, Box, Button, Paper, Stack, Tooltip } from '@mui/material';
 import type {
   Attribute,
   BlueprintWithAttributes,
   ComponentReference,
   FormAttributeValue,
 } from '../api';
+import { attributeLabel } from '../entityDisplay';
 import {
+  missingRequiredAttributes,
   relationshipTargetsForForm,
   serializeAttributeValues,
   validateEntityForm,
@@ -217,6 +219,13 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
             ]),
           ]
         : [];
+    // Required by the caller or, in the default context, by the entity schema.
+    const requiredCodes = new Set([
+      ...requiredAttributes,
+      ...(blueprint && contextId === defaultContextId
+        ? entitySchemaRequiredAttributes(blueprint.blueprint.entity_schema)
+        : []),
+    ]);
     const validateFields = (fields: Record<string, string>) => {
       if (!blueprint) return { fieldErrors: {} };
       const validation = validateEntityForm(
@@ -324,6 +333,12 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
 
     useImperativeHandle(ref, () => ({ clearDraft: draft.clear }));
 
+    const missingRequired = missingRequiredAttributes(
+      submittedAttributes,
+      fields,
+      requiredCodes,
+    );
+    const allFieldErrors = { ...serverFieldErrors, ...fieldErrors };
     const editorContext = {
       statusParentContextIds: noStatusParentContextIds,
       disabled: isLoadingBlueprint,
@@ -333,7 +348,7 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
       statusSavedValues: savedValues,
       lockedAttributes,
       statusTransitions: noStatusTransitions,
-      fieldErrors: { ...serverFieldErrors, ...fieldErrors },
+      fieldErrors: allFieldErrors,
       highlightedAttributes,
       migrationReviewMessages,
       resolvedValues: noResolvedValues,
@@ -379,7 +394,7 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
                       resolveEditComponent(component) ??
                       fieldComponents.get(attribute.code)
                     }
-                    required={requiredAttributes.includes(attribute.code)}
+                    required={requiredCodes.has(attribute.code)}
                     onChange={(nextValue) => {
                       const nextFields = {
                         ...field.state.value,
@@ -404,6 +419,7 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
                             : 'form'
                       }
                       headingAttributes={headingFields}
+                      invalidFields={new Set(Object.keys(allFieldErrors))}
                       otherAttributes={otherAttributes}
                       renderEditor={renderEditor}
                       values={noResolvedValues}
@@ -421,13 +437,29 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
             />
           )}
           {formError && <Alert severity="error">{formError}</Alert>}
-          <Button
-            disabled={isLoadingBlueprint}
-            type="submit"
-            variant="contained"
+          <Tooltip
+            describeChild
+            title={
+              !isLoadingBlueprint && missingRequired.length > 0
+                ? t('entities.fillRequiredFields', {
+                    fields: missingRequired.map(attributeLabel).join(', '),
+                  })
+                : ''
+            }
           >
-            {isLoadingBlueprint ? t('entities.loadingBlueprint') : submitLabel}
-          </Button>
+            {/* A disabled button fires no events, so the wrapper shows why. */}
+            <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+              <Button
+                disabled={isLoadingBlueprint || missingRequired.length > 0}
+                type="submit"
+                variant="contained"
+              >
+                {isLoadingBlueprint
+                  ? t('entities.loadingBlueprint')
+                  : submitLabel}
+              </Button>
+            </Box>
+          </Tooltip>
         </Stack>
       </Paper>
     );

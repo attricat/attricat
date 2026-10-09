@@ -64,6 +64,7 @@ export const EntityAttributeEditor = ({
         // Linked entities can be opened once this entity exists.
         linkToEntities={Boolean(entityId)}
         onChange={onChange}
+        required={required}
         value={value}
       />
     ) : attribute.value_type === attributeValueTypes.file ? (
@@ -76,6 +77,7 @@ export const EntityAttributeEditor = ({
         error={error}
         helperText={helperText}
         onEntityUpdated={onEntityUpdated}
+        required={required}
       />
     ) : (
       <ScalarAttributeEditor

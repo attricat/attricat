@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   hasInvalidScalarField,
+  missingRequiredAttributes,
   relationshipTargetsForForm,
   serializeAttributeValues,
   validateEntityForm,
@@ -24,6 +25,23 @@ const typedAttributes = [
 ] as const satisfies readonly Attribute[];
 
 describe('entity form values', () => {
+  it('lists required attributes without a value, ignoring files and system fields', () => {
+    const required = [
+      ...attributes,
+      { code: 'photo', value_type: 'file' },
+      { code: 'sku', value_type: 'string', readonly: true },
+    ] satisfies Attribute[];
+    const codes = new Set(['title', 'related_products', 'photo', 'sku']);
+    const missing = (fields: Record<string, string>) =>
+      missingRequiredAttributes(required, fields, codes).map(
+        (attribute) => attribute.code,
+      );
+    expect(missing({ title: '  ' })).toEqual(['title', 'related_products']);
+    expect(missing({ title: 'Lamp', related_products: entityIdOne })).toEqual(
+      [],
+    );
+  });
+
   it('validates only configured URL editors, including required and optional clearing', () => {
     const validate = (title: string, required: string[] = []) =>
       validateEntityForm(

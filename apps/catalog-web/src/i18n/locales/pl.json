@@ -432,6 +432,7 @@
     "invalidTimeZone": "Oczekiwano strefy czasowej IANA",
     "invalidJson": "Oczekiwano JSON",
     "blueprintLabel": "Schemat: {{name}}",
+    "fillRequiredFields": "Uzupełnij wymagane pola: {{fields}}",
     "blueprintOption": "{{name}} ({{code}})",
     "reusableAttributeOption": "{{qualifiedCode}} · {{name}} v{{version}}",
     "entityConversationTitle": "Zapytaj o ten rekord · {{entityId}}",
@@ -1355,6 +1356,7 @@
     "saveTeam": "Zapisz zespół"
   },
   "views": {
+    "tabHasErrors": "Zawiera pola wymagające uwagi",
     "emailInvalid": "Wprowadź jeden adres e-mail, na przykład imie@example.com.",
     "phoneHelp": "Dodaj + i numer kierunkowy kraju, aby umożliwić połączenie. Numer wewnętrzny można poprzedzić ext. lub x.",
     "urlInvalid": "Wpisz pełny adres HTTP lub HTTPS bez spacji i danych logowania.",

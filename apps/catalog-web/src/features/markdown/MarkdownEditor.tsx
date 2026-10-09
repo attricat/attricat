@@ -8,6 +8,7 @@ export const MarkdownEditor = ({
   value,
   onChange,
   disabled,
+  required,
   error,
   helperText,
 }: {
@@ -15,6 +16,7 @@ export const MarkdownEditor = ({
   value: string;
   onChange: (value: string) => void;
   disabled: boolean;
+  required?: boolean;
   error?: string;
   helperText?: string;
 }) => {
@@ -51,6 +53,7 @@ export const MarkdownEditor = ({
           label={label}
           value={value}
           disabled={disabled}
+          required={required}
           error={Boolean(error)}
           helperText={error ?? helperText}
           onChange={(event) => {

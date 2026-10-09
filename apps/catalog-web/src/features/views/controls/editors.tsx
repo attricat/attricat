@@ -124,6 +124,7 @@ export const MarkdownFieldEditor = ({
   attribute,
   value,
   disabled,
+  required,
   error,
   helperText,
   onChange,
@@ -132,6 +133,7 @@ export const MarkdownFieldEditor = ({
     label={attributeLabel(attribute)}
     value={value}
     disabled={disabled}
+    required={required}
     error={error}
     helperText={helperText}
     onChange={onChange}
@@ -153,6 +155,7 @@ export const StatusEditor = ({
   inheritedValue,
   transitions = [],
   disabled,
+  required,
   error,
   helperText,
   onChange,
@@ -191,6 +194,7 @@ export const StatusEditor = ({
       label={attributeLabel(attribute)}
       value={value}
       disabled={disabled}
+      required={required}
       slotProps={{ select: { readOnly: disabled } }}
       error={Boolean(error) || !known}
       helperText={

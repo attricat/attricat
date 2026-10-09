@@ -69,6 +69,10 @@ export const componentPlacedFields = (
   ),
 ];
 
+/** Attribute codes placed anywhere within these nodes. */
+export const nodesPlacedFields = (nodes: readonly ViewNode[]) =>
+  new Set(nodes.flatMap((node) => placedFields(node)));
+
 /** Attribute codes the view places as fields or relationship lists. */
 export const viewPlacedFields = (view?: ViewDefinition) =>
   new Set(placedFields(view));

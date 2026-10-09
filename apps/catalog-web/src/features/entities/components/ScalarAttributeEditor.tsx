@@ -28,6 +28,7 @@ const BuiltInEditor = ({
   attribute,
   value,
   disabled,
+  required,
   error,
   helperText,
   onChange,
@@ -36,6 +37,7 @@ const BuiltInEditor = ({
   const common = {
     fullWidth: true,
     disabled,
+    required,
     error: Boolean(error),
     helperText: error ?? helperText,
     label: attributeLabel(attribute),

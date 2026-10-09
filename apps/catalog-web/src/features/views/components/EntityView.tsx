@@ -55,6 +55,8 @@ export type EntityViewProps = {
   contextId?: string;
   entityId?: string;
   fallbackVisibilityScope?: AttributeVisibilityScope;
+  /** Fields with errors, so collapsed layout blocks can point to them. */
+  invalidFields?: ReadonlySet<string>;
   /** Lays grids out in one column regardless of the viewport, as in a narrow panel. */
   singleColumn?: boolean;
 };
@@ -71,6 +73,7 @@ export const EntityView = ({
   contextId,
   entityId,
   fallbackVisibilityScope,
+  invalidFields,
   singleColumn = false,
 }: EntityViewProps) => {
   const { t } = useTranslation();
@@ -143,7 +146,11 @@ export const EntityView = ({
     if (node.type === viewBlockTypes.tabs)
       return (
         <Box key={key}>
-          <ViewTabs render={renderNodes} tabs={node.tabs} />
+          <ViewTabs
+            invalidFields={invalidFields}
+            render={renderNodes}
+            tabs={node.tabs}
+          />
         </Box>
       );
     if (node.type === viewBlockTypes.accordion)

@@ -422,6 +422,7 @@
     "invalidTimeZone": "Expected an IANA time zone",
     "invalidJson": "Expected JSON",
     "blueprintLabel": "Blueprint: {{name}}",
+    "fillRequiredFields": "Fill in the required fields: {{fields}}",
     "blueprintOption": "{{name}} ({{code}})",
     "reusableAttributeOption": "{{qualifiedCode}} · {{name}} v{{version}}",
     "entityConversationTitle": "Ask about this record · {{entityId}}",
@@ -1315,6 +1316,7 @@
     "saveTeam": "Save team"
   },
   "views": {
+    "tabHasErrors": "Contains fields that need attention",
     "emailInvalid": "Enter a single email address, for example name@example.com.",
     "phoneHelp": "Include + and the country code to enable calling. Extensions may use ext. or x.",
     "urlInvalid": "Enter an absolute HTTP or HTTPS URL without spaces or embedded credentials.",
