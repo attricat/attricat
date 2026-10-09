@@ -81,7 +81,10 @@ export const CreateEntityPage = ({
     },
   });
   return (
-    <EntityPage title={t('entities.createEntity')}>
+    <EntityPage
+      blueprint={blueprint.data?.blueprint}
+      title={t('entities.createEntity')}
+    >
       <EntityForm
         blueprint={blueprint.data}
         contextId={defaultContextId}

@@ -94,7 +94,10 @@ export const MigrateEntityPage = ({ entityId }: { entityId: string }) => {
     },
   });
   return (
-    <EntityPage title={t('entities.upgradeEntity')}>
+    <EntityPage
+      blueprint={preview.data?.target.blueprint}
+      title={t('entities.upgradeEntity')}
+    >
       <Box sx={{ mt: 1 }}>
         <Link params={{ entityId }} to="/entities/$entityId">
           {t('entities.backToEntity')}

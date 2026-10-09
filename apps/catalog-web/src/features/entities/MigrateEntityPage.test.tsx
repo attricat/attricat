@@ -39,7 +39,10 @@ it('freezes removal confirmations and submits their snapshot while migrating', a
   vi.mocked(previewEntityMigration).mockResolvedValue({
     migration_id: 'migration-1',
     source_version: 1,
-    target: { blueprint: { version: 2 }, attributes: [] },
+    target: {
+      blueprint: { id: 'blueprint-1', name: 'Product', version: 2 },
+      attributes: [],
+    },
     values: [],
     status: 'needs_input',
     issues: [{ kind: 'removed', attribute_code: 'legacy', message: 'Removed' }],

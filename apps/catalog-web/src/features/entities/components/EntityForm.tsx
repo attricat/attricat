@@ -1,6 +1,6 @@
 import { VIEW_EDIT_LAYOUT_SPACING } from '../../views/constants';
 import { useForm, useStore } from '@tanstack/react-form';
-import { Alert, Box, Button, Paper, Stack, Typography } from '@mui/material';
+import { Alert, Box, Button, Paper, Stack } from '@mui/material';
 import type {
   Attribute,
   BlueprintWithAttributes,
@@ -364,14 +364,6 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
                 />
               )}
             </form.Field>
-          )}
-          {blueprint && (
-            <Typography color="text.secondary">
-              {t('entities.versionedCode', {
-                code: blueprint.blueprint.code,
-                version: blueprint.blueprint.version,
-              })}
-            </Typography>
           )}
           {blueprint && (
             <form.Field name="fields">

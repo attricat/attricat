@@ -423,7 +423,6 @@
     "invalidJson": "Expected JSON",
     "blueprintLabel": "Blueprint: {{name}}",
     "blueprintOption": "{{name}} ({{code}})",
-    "versionedCode": "{{code}} v{{version}}",
     "reusableAttributeOption": "{{qualifiedCode}} · {{name}} v{{version}}",
     "entityConversationTitle": "Ask about this record · {{entityId}}",
     "changeKind": {

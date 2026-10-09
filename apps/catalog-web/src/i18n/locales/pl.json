@@ -433,7 +433,6 @@
     "invalidJson": "Oczekiwano JSON",
     "blueprintLabel": "Schemat: {{name}}",
     "blueprintOption": "{{name}} ({{code}})",
-    "versionedCode": "{{code}} v{{version}}",
     "reusableAttributeOption": "{{qualifiedCode}} · {{name}} v{{version}}",
     "entityConversationTitle": "Zapytaj o ten rekord · {{entityId}}",
     "changeKind": {
