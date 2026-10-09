@@ -24,8 +24,13 @@ export const compactNavigationItemSx = {
   width: '100%',
 } as const;
 
-/** Hover for unselected items on the navigation background. */
+/**
+ * Hover for unselected items on the navigation background. The hover changes
+ * instantly: MUI's background fade would cross-fade two adjacent items as the
+ * pointer moves between them, so neither looks hovered for a moment.
+ */
 export const navigationItemHoverSx = {
+  '& .MuiListItemButton-root': { transition: 'none' },
   '& .MuiListItemButton-root:not(.Mui-selected):hover': {
     backgroundColor: 'action.navigationHover',
   },
