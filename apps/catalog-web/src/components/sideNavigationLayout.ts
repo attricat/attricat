@@ -24,6 +24,13 @@ export const compactNavigationItemSx = {
   width: '100%',
 } as const;
 
+/** Hover for unselected items on the navigation background. */
+export const navigationItemHoverSx = {
+  '& .MuiListItemButton-root:not(.Mui-selected):hover': {
+    backgroundColor: 'action.navigationHover',
+  },
+} as const;
+
 export const navigationHeaderSx = {
   alignItems: 'center',
   display: 'flex',

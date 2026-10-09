@@ -25,6 +25,10 @@ declare module '@mui/material/styles' {
     /** Icon rail and its flyout panels. */
     navigation: { panel: string; rail: string };
   }
+  interface TypeAction {
+    /** Hover on navigation items, which sit on the navigation background. */
+    navigationHover: string;
+  }
 }
 
 export const monoFontFamily = typography.families.mono;
@@ -72,6 +76,7 @@ export const makeTheme = (mode: DesignMode) => {
       divider: c.border.default,
       action: {
         hover: c.action.hover,
+        navigationHover: c.action.navigationHover,
         selected: c.action.selected,
         disabledBackground: c.action.disabled,
         focus: c.action.hover,

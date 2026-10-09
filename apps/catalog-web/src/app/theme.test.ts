@@ -17,6 +17,9 @@ describe('catalog theme', () => {
       panel: tokens.background.navigation,
       rail: tokens.background.navigationRail,
     });
+    expect(theme.palette.action.navigationHover).toBe(
+      tokens.action.navigationHover,
+    );
     expect(theme.palette.text.secondary).toBe(tokens.text.secondary);
     expect(theme.shape.borderRadius).toBe(radius.control);
     expect(theme.spacing(1)).toBe('4px');

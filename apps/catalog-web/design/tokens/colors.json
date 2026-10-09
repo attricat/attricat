@@ -10,7 +10,7 @@
     "background":{"default":"#F6F9FC","surface":"#FFFFFF","elevated":"#FFFFFF","inset":"#FAFCFE","navigation":"#EDF1F6","navigationRail":"#EDF1F6"},
     "text":{"primary":"#0A2540","secondary":"#425466","disabled":"#687385","inverse":"#FFFFFF"},
     "border":{"default":"#E3E8EE","subtle":"#EDF1F6","strong":"#8792A2"},
-    "action":{"hover":"#F3F8FE","selected":"#DCEAFA","focus":"#006EE0","disabled":"#EDF1F6"},
+    "action":{"hover":"#F3F8FE","navigationHover":"#E3E8EE","selected":"#DCEAFA","focus":"#006EE0","disabled":"#EDF1F6"},
     "semantic":{"success":{"main":"#1A7F4B","tint":"#E7F6EE"},"warning":{"main":"#E0A030","tint":"#FFF6DE","foreground":"#7A5200","onMain":"#0A2540"},"error":{"main":"#C23A3A","tint":"#FDECEC"},"info":{"main":"#0E7490","tint":"#E4F5F8"}}
   },
   "dark": {
@@ -18,7 +18,7 @@
     "background":{"default":"#0D1526","surface":"#131D31","elevated":"#1A2540","inset":"#101A2C","navigation":"#131D31","navigationRail":"#0D1526"},
     "text":{"primary":"#EAF0F8","secondary":"#A9B6C9","disabled":"#7D8BA1","inverse":"#0D1526"},
     "border":{"default":"#2A3752","subtle":"#1F2A42","strong":"#5A6A86"},
-    "action":{"hover":"#1A2842","selected":"#1D3558","focus":"#7CBBFF","disabled":"#2A3752"},
+    "action":{"hover":"#1A2842","navigationHover":"#1A2842","selected":"#1D3558","focus":"#7CBBFF","disabled":"#2A3752"},
     "semantic":{"success":{"main":"#6FD8A0","tint":"#12302A"},"warning":{"main":"#FFD88A","tint":"#382F22","foreground":"#FFD88A","onMain":"#0D1526"},"error":{"main":"#FF9A96","tint":"#3A1F2A"},"info":{"main":"#67D4E4","tint":"#113540"}}
   }
 }

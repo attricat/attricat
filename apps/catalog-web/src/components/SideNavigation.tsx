@@ -29,6 +29,7 @@ import {
   isWithinRoute,
   mobileExplorePanelId,
   navigationHeaderSx,
+  navigationItemHoverSx,
 } from './sideNavigationLayout';
 import {
   AppsIcon,
@@ -117,6 +118,7 @@ export const SideNavigation = ({
   return (
     <Box
       sx={{
+        ...navigationItemHoverSx,
         backgroundColor: compact
           ? 'background.navigation.rail'
           : 'background.navigation.panel',

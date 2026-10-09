@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import {
   compactNavigationWidth,
   managementSidebarWidth,
+  navigationItemHoverSx,
   navigationHeaderSx,
 } from './sideNavigationLayout';
 
@@ -18,6 +19,7 @@ export const NavigationFlyout = ({
     aria-label={title}
     component="nav"
     sx={{
+      ...navigationItemHoverSx,
       backgroundColor: 'background.navigation.panel',
       borderColor: 'divider',
       borderRight: 1,
