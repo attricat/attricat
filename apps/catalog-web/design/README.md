@@ -1,6 +1,6 @@
 # Attricat design snapshot
 
-These files are copied verbatim from the canonical [Attricat design repository](https://github.com/attricat/design) at commit `2b7e49feb8ba99a6f0b21993a12db63fa6afa1c7`:
+These files are copied verbatim from the canonical [Attricat design repository](https://github.com/attricat/design) at commit `a73e2d376015346d23813316221c7fed638103b1`:
 
 - `tokens/{colors,typography,radius,elevation}.json`
 - `assets/logos/{mark,mark-dark,wordmark-light,wordmark-dark,favicon}.svg`

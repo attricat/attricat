@@ -27,18 +27,6 @@ declare module '@mui/material/styles' {
   }
 }
 
-/**
- * Local extension pending an upstream semantic token: in light mode the
- * canvas and surface are nearly white, so navigation takes a slate swatch to
- * stay distinct from the page. Dark mode keeps its canvas/surface pairing.
- */
-const navigationBackground = (mode: DesignMode) =>
-  mode === 'light'
-    ? { panel: colors.palette.slate['100'], rail: colors.palette.slate['100'] }
-    : {
-        panel: colors.dark.background.surface,
-        rail: colors.dark.background.default,
-      };
 export const monoFontFamily = typography.families.mono;
 
 // Icons rendered inside a component that sizes them with its own font size.
@@ -71,7 +59,10 @@ export const makeTheme = (mode: DesignMode) => {
       background: {
         default: c.background.default,
         paper: c.background.surface,
-        navigation: navigationBackground(mode),
+        navigation: {
+          panel: c.background.navigation,
+          rail: c.background.navigationRail,
+        },
       },
       text: {
         primary: c.text.primary,
