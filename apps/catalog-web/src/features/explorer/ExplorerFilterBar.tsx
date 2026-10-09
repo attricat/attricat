@@ -1,10 +1,11 @@
-import { Button, Chip, Stack, Typography } from '@mui/material';
-import { PlusIcon } from 'lucide-react';
-import { useLayoutEffect, useRef, useState } from 'react';
+import { Box, Button, Chip, Typography } from '@mui/material';
+import { CircleXIcon, PlusIcon } from 'lucide-react';
+import { useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 import { compactOutlinedActionButtonSx } from '../../components/CompactOutlinedActionButton';
-import type { Attribute } from '../entities/api';
+import type { Attribute, Blueprint } from '../entities/api';
 import { isHiddenByDefault } from '../entities/attributeVisibility';
+import { attributeLabel } from '../entities/entityDisplay';
 import { AttributeFilterDialog } from './AttributeFilterDialog';
 import { principalConfiguration } from '../principals/principal';
 import { usePrincipalDirectory } from '../principals/usePrincipalDirectory';
@@ -20,23 +21,33 @@ import {
   type AttributeFilterRequest,
 } from './attributeFilterValues';
 import { explorerVisibilityScope, maximumAttributeFilters } from './constants';
-import type { RelationshipFilterAttribute } from './relationshipFilterTypes';
+import { RelationshipFacetChip } from './RelationshipFacetChip';
+import type {
+  ExplorerRelationshipFacet,
+  RelationshipFacetUpdate,
+  RelationshipFilterAttribute,
+} from './relationshipFilterTypes';
 import type { AttributeFilter } from './search';
 import { useRelationshipFilterPaths } from './useRelationshipFilterPaths';
 import { smallIconSize } from '../../components/iconSizes';
 import { useTimeZone } from '../../time/useInstantFormat';
+import { lexiconText } from '../lexicon/lexicon';
 
 type Props = {
   filters: AttributeFilter[];
   filterRequest?: AttributeFilterRequest;
   attributes: Attribute[];
-  blueprintName: string;
+  blueprint: string;
+  blueprints?: Blueprint[];
+  /** Receives focus when the last chip is removed and nothing can be added. */
+  emptyFocusTarget?: RefObject<HTMLElement | null>;
+  facets?: ExplorerRelationshipFacet[];
   pathAttributes?: { code: string; value_type: Attribute['value_type'] }[];
   relationshipAttributes?: RelationshipFilterAttribute[];
   onAdd: (filter: AttributeFilter) => void;
-  onAddRelationship: (attribute: RelationshipFilterAttribute) => void;
   onRemove: (index: number) => void;
   onUpdate: (index: number, filter: AttributeFilter) => void;
+  onUpdateFacet?: (field: string, updates: RelationshipFacetUpdate) => void;
 };
 
 type EditorState = {
@@ -46,45 +57,76 @@ type EditorState = {
   draft: AttributeFilterDraft;
 };
 
-export const ExplorerFilterPicker = ({
+/** Keeps the facet being picked mounted even before it has selections. */
+const withOpenFacet = (
+  facets: ExplorerRelationshipFacet[],
+  relationshipToOpen: RelationshipFilterAttribute | undefined,
+) =>
+  relationshipToOpen &&
+  !facets.some(
+    (facet) => facet.sourceRelationship.code === relationshipToOpen.code,
+  )
+    ? [...facets, { selectedIds: [], sourceRelationship: relationshipToOpen }]
+    : facets;
+
+/**
+ * Explorer filters as one row of chips: each chip opens its editor and the
+ * trailing button adds another, so the results keep the full page width.
+ */
+export const ExplorerFilterBar = ({
   filters,
   filterRequest,
   attributes,
-  blueprintName,
+  blueprint,
+  blueprints = [],
+  emptyFocusTarget,
+  facets = [],
   pathAttributes = [],
   relationshipAttributes = [],
   onAdd,
-  onAddRelationship,
   onRemove,
   onUpdate,
+  onUpdateFacet = () => undefined,
 }: Props) => {
   const { t } = useTranslation();
   const timeZone = useTimeZone();
   const [open, setOpen] = useState(false);
+  const [relationshipToOpen, setRelationshipToOpen] =
+    useState<RelationshipFilterAttribute>();
   const [editor, setEditor] = useState<EditorState>({
     session: 0,
     editingIndex: null,
     draft: emptyAttributeFilterDraft,
   });
-  // Open for each new external request while rendering, so the dialog starts
-  // from the requested draft without an extra effect pass.
-  const chipRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const selectedFacets = facets.filter((facet) => facet.selectedIds.length);
+  const chipKeys = [
+    ...filters.map((filter, index) => attributeFilterKey(filter, index)),
+    ...selectedFacets.map((facet) => facet.sourceRelationship.code),
+  ];
+  const chipRefs = useRef(new Map<string, HTMLDivElement>());
+  const chipRef = (key: string) => (element: HTMLDivElement | null) => {
+    if (element) chipRefs.current.set(key, element);
+    else chipRefs.current.delete(key);
+  };
   const addButtonRef = useRef<HTMLButtonElement>(null);
-  const removedIndex = useRef<number | null>(null);
+  const removedPosition = useRef<number | null>(null);
   // Deleting a chip removes the focused element. Move focus to the chip that
   // took its place, else the previous one, else Add filter, so keyboard focus
-  // stays in the list (and inside a surrounding drawer or dialog).
+  // stays in the row.
   useLayoutEffect(() => {
-    const index = removedIndex.current;
-    if (index === null) return;
-    removedIndex.current = null;
-    const next = chipRefs.current[Math.min(index, filters.length - 1)];
-    (next ?? addButtonRef.current)?.focus();
-  }, [filters]);
-  const remove = (index: number) => {
-    removedIndex.current = index;
-    onRemove(index);
+    const position = removedPosition.current;
+    if (position === null) return;
+    removedPosition.current = null;
+    const key = chipKeys[Math.min(position, chipKeys.length - 1)];
+    const next = key === undefined ? undefined : chipRefs.current.get(key);
+    (next ?? addButtonRef.current ?? emptyFocusTarget?.current)?.focus();
+  });
+  const removeChip = (position: number, remove: () => void) => {
+    removedPosition.current = position;
+    remove();
   };
+  // Open for each new external request while rendering, so the dialog starts
+  // from the requested draft without an extra effect pass.
   const [handledRequest, setHandledRequest] = useState(filterRequest);
   if (filterRequest !== handledRequest) {
     setHandledRequest(filterRequest);
@@ -129,17 +171,14 @@ export const ExplorerFilterPicker = ({
   const directory = usePrincipalDirectory(
     attributes.some((attribute) => principalConfiguration(attribute)),
   );
-
-  if (!filterableAttributes.length) {
-    return (
-      <Typography color="text.secondary" sx={{ mt: 1 }} variant="body2">
-        {t('explorer.noFilterableAttributes')}
-      </Typography>
-    );
-  }
+  const blueprintName = (code: string) => {
+    const name = blueprints.find((item) => item.code === code)?.name;
+    return name === undefined ? code : lexiconText(name);
+  };
 
   const findAttribute = (code: string) =>
-    filterableAttributes.find((item) => item.code === code);
+    filterableAttributes.find((item) => item.code === code) ??
+    attributes.find((item) => item.code === code);
   const openEditor = (
     editingIndex: number | null,
     draft: AttributeFilterDraft,
@@ -168,35 +207,82 @@ export const ExplorerFilterPicker = ({
     close();
   };
   const selectRelationship = (attribute: RelationshipFilterAttribute) => {
-    onAddRelationship(attribute);
+    setRelationshipToOpen(attribute);
     close();
   };
 
   return (
-    <Stack spacing={1} sx={{ mt: 1 }}>
-      <Stack
-        direction="row"
-        spacing={2}
-        sx={{ alignItems: 'center', flexWrap: 'wrap' }}
-        useFlexGap
-      >
-        {filters.map((filter, index) => (
+    <Box
+      aria-label={t('explorer.filters')}
+      role="group"
+      sx={{
+        alignItems: 'center',
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: 1,
+        minWidth: 0,
+        mt: 2.5,
+      }}
+    >
+      {filters.map((filter, index) => {
+        const key = attributeFilterKey(filter, index);
+        const label = attributeFilterLabel(
+          t,
+          filter,
+          findAttribute(filter.field),
+          directory.data,
+        );
+        return (
           <Chip
-            key={attributeFilterKey(filter, index)}
-            label={attributeFilterLabel(
-              t,
-              filter,
-              findAttribute(filter.field),
-              directory.data,
-            )}
+            deleteIcon={
+              <CircleXIcon
+                aria-label={t('explorer.removeAttributeFilter', {
+                  filter: label,
+                })}
+              />
+            }
+            key={key}
+            label={label}
             onClick={() => openFilter(filter, index)}
-            onDelete={() => remove(index)}
-            ref={(element: HTMLDivElement | null) => {
-              chipRefs.current[index] = element;
-            }}
+            onDelete={() => removeChip(index, () => onRemove(index))}
+            ref={chipRef(key)}
             size="small"
+            sx={{
+              maxWidth: '100%',
+              '& .MuiChip-label': { overflow: 'hidden' },
+            }}
+            title={label}
           />
-        ))}
+        );
+      })}
+      {withOpenFacet(facets, relationshipToOpen).map((facet) => {
+        const { code } = facet.sourceRelationship;
+        const fieldLabel = attributeLabel(facet.sourceRelationship);
+        return (
+          <RelationshipFacetChip
+            chipRef={chipRef(code)}
+            facet={facet}
+            fieldLabel={fieldLabel}
+            key={code}
+            label={t('explorer.relationshipFacetLabel', {
+              attribute: fieldLabel,
+              blueprint: blueprintName(
+                facet.sourceRelationship.target_blueprint_code,
+              ),
+            })}
+            onClose={() => setRelationshipToOpen(undefined)}
+            onOpen={() => setRelationshipToOpen(facet.sourceRelationship)}
+            onRemove={() =>
+              removeChip(chipKeys.indexOf(code), () =>
+                onUpdateFacet(code, { selectedIds: [] }),
+              )
+            }
+            onUpdate={onUpdateFacet}
+            open={relationshipToOpen?.code === code}
+          />
+        );
+      })}
+      {filterableAttributes.length > 0 && (
         <Button
           color="primary"
           onClick={() => openEditor(null, emptyAttributeFilterDraft)}
@@ -208,7 +294,7 @@ export const ExplorerFilterPicker = ({
         >
           {t('explorer.addAttributeFilter')}
         </Button>
-      </Stack>
+      )}
       {maximumReached && (
         <Typography color="text.secondary" variant="body2">
           {t('explorer.maximumAttributeFilters', {
@@ -218,7 +304,7 @@ export const ExplorerFilterPicker = ({
       )}
       <AttributeFilterDialog
         attributes={filterableAttributes}
-        blueprintName={blueprintName}
+        blueprintName={blueprintName(blueprint)}
         editing={editor.editingIndex !== null}
         initialDraft={editor.draft}
         key={editor.session}
@@ -229,6 +315,6 @@ export const ExplorerFilterPicker = ({
         open={open}
         relationshipPathsLoading={relationshipPaths.loading}
       />
-    </Stack>
+    </Box>
   );
 };

@@ -55,6 +55,123 @@ describe('ExplorerSearchForm version scope', () => {
     ).toBeTruthy();
   });
 
+  it('applies a blueprint choice immediately', async () => {
+    const onBlueprintChange = vi.fn();
+    const onSubmit = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <ExplorerSearchForm
+        blueprints={[
+          revisions[0],
+          { ...revisions[0], code: 'brand', name: 'Brand' },
+        ]}
+        currentVersion={3}
+        onBlueprintChange={onBlueprintChange}
+        onSubmit={onSubmit}
+        revisions={revisions}
+        search={{ blueprint: 'product' }}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole('combobox', { name: /select a blueprint/i }),
+    );
+    await user.click(screen.getByRole('option', { name: /Brand/ }));
+    expect(onBlueprintChange).toHaveBeenCalledWith('brand');
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('offers a context choice only beside the default context', async () => {
+    const onContextChange = vi.fn();
+    const user = userEvent.setup();
+    const context = {
+      code: 'default',
+      data: {},
+      id: '123e4567-e89b-12d3-a456-426614174001',
+      parent_id: null,
+    };
+    const { rerender } = render(
+      <ExplorerSearchForm
+        blueprints={revisions}
+        contexts={[context]}
+        currentVersion={3}
+        lockedBlueprint
+        onContextChange={onContextChange}
+        onSubmit={vi.fn()}
+        revisions={revisions}
+        search={{ blueprint: 'product' }}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /^Search scope/ }));
+    expect(screen.queryByRole('combobox', { name: 'Context' })).toBeNull();
+    await user.keyboard('{Escape}');
+
+    rerender(
+      <ExplorerSearchForm
+        blueprints={revisions}
+        contexts={[context, { ...context, code: 'storefront', id: 'store' }]}
+        currentVersion={3}
+        lockedBlueprint
+        onContextChange={onContextChange}
+        onSubmit={vi.fn()}
+        revisions={revisions}
+        search={{ blueprint: 'product' }}
+      />,
+    );
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Search scope: Current — v3, Default context',
+      }),
+    );
+    await user.click(screen.getByRole('combobox', { name: 'Context' }));
+    await user.click(screen.getByRole('option', { name: 'storefront' }));
+    expect(onContextChange).toHaveBeenCalledWith('storefront');
+  });
+
+  it('marks the scope button when the scope differs from the defaults', () => {
+    const scopeButton = () =>
+      screen.getByRole('button', { name: /^Search scope/ });
+    const { rerender } = render(
+      <ExplorerSearchForm
+        blueprints={revisions}
+        currentVersion={3}
+        lockedBlueprint
+        onSubmit={vi.fn()}
+        revisions={revisions}
+        search={{ blueprint: 'product' }}
+      />,
+    );
+    expect(scopeButton().querySelector('.MuiBadge-invisible')).toBeTruthy();
+
+    rerender(
+      <ExplorerSearchForm
+        blueprints={revisions}
+        currentVersion={3}
+        lockedBlueprint
+        onSubmit={vi.fn()}
+        revisions={revisions}
+        search={{ blueprint: 'product', version: 3 }}
+      />,
+    );
+    expect(scopeButton().querySelector('.MuiBadge-invisible')).toBeTruthy();
+
+    rerender(
+      <ExplorerSearchForm
+        blueprints={revisions}
+        currentVersion={3}
+        lockedBlueprint
+        onSubmit={vi.fn()}
+        revisions={revisions}
+        search={{ blueprint: 'product', version: 2 }}
+      />,
+    );
+    expect(scopeButton().getAttribute('aria-label')).toBe(
+      'Search scope: Version 2',
+    );
+    expect(scopeButton().querySelector('.MuiBadge-dot')).toBeTruthy();
+    expect(scopeButton().querySelector('.MuiBadge-invisible')).toBeNull();
+  });
+
   it('defaults to current and searches immediately for a historical version', async () => {
     const onSubmit = vi.fn();
     const user = userEvent.setup();
@@ -69,10 +186,13 @@ describe('ExplorerSearchForm version scope', () => {
       />,
     );
 
-    expect(screen.getByLabelText('Version scope').textContent).toContain(
-      'Current — v3',
+    await user.click(
+      screen.getByRole('button', { name: 'Search scope: Current — v3' }),
     );
-    await user.click(screen.getByLabelText('Version scope'));
+    expect(
+      screen.getByRole('combobox', { name: 'Version scope' }).textContent,
+    ).toContain('Current — v3');
+    await user.click(screen.getByRole('combobox', { name: 'Version scope' }));
     await user.click(screen.getByRole('option', { name: 'Version 2' }));
 
     expect(onSubmit).toHaveBeenCalledOnce();
@@ -98,6 +218,14 @@ describe('ExplorerSearchForm version scope', () => {
     await user.click(screen.getByRole('button', { name: 'Search syntax' }));
 
     expect(screen.getByText(/This blueprint: term/)).toBeTruthy();
+    const guide = screen.getByRole('link', {
+      name: 'Read the search syntax guide',
+    });
+    expect(guide.getAttribute('href')).toBe(
+      'https://docs.attricat.com/guides/search-syntax/',
+    );
+    expect(guide.getAttribute('target')).toBe('_blank');
+    expect(guide.getAttribute('rel')).toBe('noopener noreferrer');
   });
 
   it('submits all versions as the explicit all-version scope', async () => {

@@ -8,6 +8,7 @@ export const documentationPages = {
   home: '',
   blueprints: 'builders/blueprints/',
   contexts: 'guides/contexts/',
+  searchSyntax: 'guides/search-syntax/',
   extensions: 'builders/extensions/',
   workspaces: 'operate/workspaces/',
 } as const;

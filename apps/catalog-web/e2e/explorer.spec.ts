@@ -285,15 +285,11 @@ value_type = "integer"`,
 
   await page.goto(`/?blueprint=${code}`);
   await expect(page.getByText('2 results')).toBeVisible();
-  await page.getByRole('button', { name: 'Open navigation' }).click();
   await expect(
     page.getByRole('combobox', { name: /select a blueprint/i }),
   ).toHaveCount(1);
-  const mobileFilters = page.locator('.MuiDrawer-paper aside');
-  await expect(
-    mobileFilters.getByRole('heading', { name: 'Filters' }),
-  ).toBeVisible();
-  await mobileFilters.getByRole('button', { name: 'Add filter' }).click();
+  const filters = page.getByRole('group', { name: 'Filters' });
+  await filters.getByRole('button', { name: 'Add filter' }).click();
   const filterDialog = page.getByRole('dialog', {
     name: /^Add filter/,
   });
@@ -307,10 +303,8 @@ value_type = "integer"`,
   await filterDialog.getByLabel('Value').press('Enter');
 
   await expect(filterDialog).toBeHidden();
-  await expect(mobileFilters.getByText('stock > "5"')).toBeVisible();
+  await expect(filters.getByText('stock > "5"')).toBeVisible();
   await expect(page.getByText('1 result')).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(mobileFilters).toBeHidden();
   await expect(
     page.getByRole('cell', { name: 'In stock' }).first(),
   ).toBeVisible();
@@ -319,9 +313,7 @@ value_type = "integer"`,
     .poll(() => new URL(page.url()).searchParams.get('attributeFilters'))
     .toContain('stock');
 
-  await page.getByRole('button', { name: 'Open navigation' }).click();
-  await expect(mobileFilters).toBeVisible();
-  await mobileFilters.getByText('stock > "5"').click();
+  await filters.getByText('stock > "5"').click();
   const editDialog = page.getByRole('dialog', {
     name: /^Edit filter/,
   });
@@ -329,16 +321,15 @@ value_type = "integer"`,
   await editDialog.getByLabel('Value').fill('10');
   await editDialog.getByLabel('Value').press('Enter');
   await expect(editDialog).toBeHidden();
-  await expect(mobileFilters.getByText('stock > "10"')).toBeVisible();
+  await expect(filters.getByText('stock > "10"')).toBeVisible();
 
-  await mobileFilters
+  await filters
     .locator('.MuiChip-root')
     .filter({ hasText: 'stock > "10"' })
     .locator('.MuiChip-deleteIcon')
     .click();
   await expect(page.getByText('2 results')).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(mobileFilters).toBeHidden();
+  await expect(filters.locator('.MuiChip-root')).toHaveCount(0);
 });
 
 test('filters explorer results with a relationship hierarchy facet', async ({
@@ -393,13 +384,17 @@ target_blueprint = "${categoryCode}"`,
   await expect
     .poll(() => new URL(page.url()).searchParams.get('relationshipFacets'))
     .toContain(child.id);
-  await expect(page.getByText('category: 1 selected')).toBeVisible();
+  const categoryChip = page
+    .getByRole('group', { name: 'Filters' })
+    .locator('.MuiChip-root')
+    .filter({ hasText: /^category: / });
+  await expect(categoryChip).toBeVisible();
   await expect(page.getByText('1 result')).toBeVisible();
   await expect(page.getByRole('cell', { name: 'Running shoe' })).toBeVisible();
   await expect(page.getByRole('cell', { name: 'Canvas bag' })).toBeHidden();
 
-  await page
-    .getByLabel('Remove relationship filter category: 1 selected')
+  await categoryChip
+    .getByLabel(/^Remove relationship filter category: /)
     .click();
   await expect(page.getByText('2 results')).toBeVisible();
 });
@@ -620,7 +615,8 @@ value_type = "string"`,
     page.getByRole('button', { name: `View record ID ${oldEntity.id}` }),
   ).toBeVisible();
 
-  await page.getByLabel('Version scope').click();
+  await page.getByRole('button', { name: /^Search scope/ }).click();
+  await page.getByRole('combobox', { name: 'Version scope' }).click();
   await page.getByRole('option', { name: 'Version 1' }).click();
   await page.getByRole('button', { name: 'Search', exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`blueprint=${code}.*version=1`));

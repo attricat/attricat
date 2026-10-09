@@ -19,6 +19,26 @@ import elevation from '../../design/tokens/elevation.json';
 // These tokens are a pinned snapshot from attricat/design; see design/README.md.
 // These overrides adapt its MUI patterns to the version used by catalog-web.
 export type DesignMode = 'light' | 'dark';
+
+declare module '@mui/material/styles' {
+  interface TypeBackground {
+    /** Icon rail and its flyout panels. */
+    navigation: { panel: string; rail: string };
+  }
+}
+
+/**
+ * Local extension pending an upstream semantic token: in light mode the
+ * canvas and surface are nearly white, so navigation takes a slate swatch to
+ * stay distinct from the page. Dark mode keeps its canvas/surface pairing.
+ */
+const navigationBackground = (mode: DesignMode) =>
+  mode === 'light'
+    ? { panel: colors.palette.slate['100'], rail: colors.palette.slate['100'] }
+    : {
+        panel: colors.dark.background.surface,
+        rail: colors.dark.background.default,
+      };
 export const monoFontFamily = typography.families.mono;
 
 // Icons rendered inside a component that sizes them with its own font size.
@@ -51,6 +71,7 @@ export const makeTheme = (mode: DesignMode) => {
       background: {
         default: c.background.default,
         paper: c.background.surface,
+        navigation: navigationBackground(mode),
       },
       text: {
         primary: c.text.primary,

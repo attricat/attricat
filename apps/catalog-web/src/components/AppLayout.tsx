@@ -12,7 +12,7 @@ import {
   useMediaQuery,
   useTheme,
 } from '@mui/material';
-import { useEffect, useLayoutEffect, useState } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { pageTitle } from '../app/pageTitle';
 import { returnToStorageKey } from '../app/storageKeys';
@@ -24,7 +24,6 @@ import { useWorkspaceLexicon } from '../features/lexicon/lexicon';
 import { useSessionCacheBoundary } from '../features/auth/useSessionCacheBoundary';
 import { DesktopNavigation } from './DesktopNavigation';
 import { MobileNavigation } from './MobileNavigation';
-import { MobileNavigationPanelProvider } from './MobileNavigationPanel';
 import { navigationRoutes, publicRoutes } from './navigation';
 import { SessionErrorState, SignOutErrorState } from './SessionErrorStates';
 import { isWithinRoute } from './sideNavigationLayout';
@@ -134,7 +133,7 @@ export const AppLayout = () => {
     );
 
   return (
-    <MobileNavigationPanelProvider key={sessionBoundary.identity}>
+    <Fragment key={sessionBoundary.identity}>
       <Box sx={{ display: 'flex', minHeight: '100dvh' }}>
         {signOutError && (
           <Box
@@ -162,6 +161,6 @@ export const AppLayout = () => {
       </Box>
       <ExtensionActionDialogHost />
       <ExtensionRunWatcher />
-    </MobileNavigationPanelProvider>
+    </Fragment>
   );
 };

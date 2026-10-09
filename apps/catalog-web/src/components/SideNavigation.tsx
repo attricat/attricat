@@ -13,7 +13,6 @@ import { listSidebarExploreNavigation } from '../features/workspace/api';
 import { workspaceQueryKeys } from '../features/workspace/queryKeys';
 import { ExploreNavigationLinks } from './ExploreNavigationLinks';
 import { ManagementNavigationLinks } from './ManagementNavigationLinks';
-import { useSetMobileExplorePanelTarget } from './mobileNavigationPanelContext';
 import {
   getVisibleManagementNavigationItems,
   navigationRoutes,
@@ -68,7 +67,6 @@ export const SideNavigation = ({
   onSignOut,
 }: SideNavigationProps) => {
   const { t } = useTranslation();
-  const setMobileExplorePanelTarget = useSetMobileExplorePanelTarget();
   const documentationUrl = useDocumentationUrl();
   const { pathname, search } = useRouterState({
     select: (state) => state.location,
@@ -119,7 +117,9 @@ export const SideNavigation = ({
   return (
     <Box
       sx={{
-        backgroundColor: compact ? 'background.default' : 'background.paper',
+        backgroundColor: compact
+          ? 'background.navigation.rail'
+          : 'background.navigation.panel',
         display: 'flex',
         flexDirection: 'column',
         height: '100%',
@@ -226,7 +226,6 @@ export const SideNavigation = ({
                 onNavigate={onNavigate}
               />
             </List>
-            <Box ref={setMobileExplorePanelTarget} sx={{ mt: 2 }} />
           </Box>
         )}
         {compact && (
@@ -314,7 +313,6 @@ export const SideNavigation = ({
       {compact && panels.isOpen('explore') && (
         <NavigationFlyout title={t('navigation.entityExplorer')}>
           <ExploreNavigationLinks {...exploreLinkProps} />
-          <Box ref={setMobileExplorePanelTarget} sx={{ mt: 2 }} />
         </NavigationFlyout>
       )}
       {compact && <Box sx={{ flexGrow: 1 }} />}

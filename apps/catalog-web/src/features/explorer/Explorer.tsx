@@ -1,19 +1,15 @@
 import { Box, Typography, useMediaQuery, useTheme } from '@mui/material';
 import { useNavigate } from '@tanstack/react-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { useMobileExplorePanelTarget } from '../../components/mobileNavigationPanelContext';
 import { PageContainer } from '../../components/PageContainer';
 import {
   SavedSearchesButton,
   ShareSearchButton,
 } from '../saved-views/SavedSearchControls';
 import type { SavedView } from '../saved-views/schemas';
-import { ActiveExplorerFilters } from './ActiveExplorerFilters';
-import { facetSidebarWidth } from './constants';
 import { ExplorerEntityPanel } from './ExplorerEntityPanel';
-import { ExplorerFacetSidebar } from './ExplorerFacetSidebar';
+import { ExplorerFilterBar } from './ExplorerFilterBar';
 import { ExplorerLoadErrors } from './ExplorerLoadErrors';
 import { ExplorerLoadingIndicator } from './ExplorerLoadingIndicator';
 import { ExplorerPageHeader } from './ExplorerPageHeader';
@@ -51,7 +47,6 @@ export const Explorer = ({
   const queryInputRef = useRef<HTMLInputElement>(null);
   const theme = useTheme();
   const isWideDesktop = useMediaQuery(theme.breakpoints.up('lg'));
-  const mobileExplorePanelTarget = useMobileExplorePanelTarget();
   const navigate = useNavigate({ from: '/' });
   const panelOpenerRef = useRef<HTMLElement | null>(null);
   const search = useMemo(
@@ -124,40 +119,9 @@ export const Explorer = ({
     showInPanel(undefined);
     if (panelOpenerRef.current?.isConnected) panelOpenerRef.current.focus();
   };
-  const facetSidebarProps = {
-    attributeFilters: search.attributeFilters ?? [],
-    attributes: selectedBlueprint.data?.attributes ?? [],
-    blueprint: search.blueprint ?? '',
-    blueprints: blueprints.data ?? [],
-    contextCode,
-    contexts: contexts.data ?? [],
-    facets,
-    onAddAttributeFilter: actions.addAttributeFilter,
-    relationshipAttributes: relationshipFields,
-    onBlueprintChange: search.locked ? undefined : actions.selectBlueprint,
-    onContextChange: actions.changeContext,
-    onRemoveAttributeFilter: actions.removeAttributeFilter,
-    onUpdate: actions.updateFacet,
-    onUpdateAttributeFilter: actions.updateAttributeFilter,
-    pathAttributes: selectedBlueprint.data?.table_path_attributes,
-  };
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100dvh' }}>
-      <Box
-        sx={{
-          display: { xs: 'none', lg: 'block' },
-          flexShrink: 0,
-          width: facetSidebarWidth,
-        }}
-      >
-        {/* Always mounted (hidden below lg), so it owns cell filter requests. */}
-        <ExplorerFacetSidebar
-          {...facetSidebarProps}
-          filterRequest={filterRequest}
-          fullHeight
-        />
-      </Box>
       <Box sx={{ flexGrow: 1, minWidth: 0 }}>
         <PageContainer>
           <ExplorerPageHeader
@@ -178,7 +142,11 @@ export const Explorer = ({
             revisionsError={revisions.error?.message}
             revisionsLoading={revisions.isPending}
             onRetryRevisions={() => void revisions.refetch()}
-            lockedBlueprint
+            lockedBlueprint={Boolean(search.locked)}
+            onBlueprintChange={actions.selectBlueprint}
+            contextCode={contextCode}
+            contexts={contexts.data}
+            onContextChange={actions.changeContext}
             onSubmit={actions.submit}
             search={search}
             startActions={
@@ -192,26 +160,24 @@ export const Explorer = ({
             }
             queryInputRef={queryInputRef}
           />
-          <ActiveExplorerFilters
-            attributes={selectedBlueprint.data?.attributes}
-            filters={[
-              ...(search.attributeFilters ?? []).map((filter, index) => ({
-                filter,
-                index,
-                kind: 'attribute' as const,
-              })),
-              ...facets.map((facet) => ({
-                field: facet.sourceRelationship.code,
-                kind: 'relationship' as const,
-                selectedCount: facet.selectedIds.length,
-              })),
-            ]}
-            emptyFocusTarget={queryInputRef}
-            onRemoveAttribute={actions.removeAttributeFilter}
-            onRemoveRelationship={(field) =>
-              actions.updateFacet(field, { selectedIds: [] })
-            }
-          />
+          {search.blueprint && !blueprintMissing && (
+            <ExplorerFilterBar
+              attributes={selectedBlueprint.data?.attributes ?? []}
+              blueprint={search.blueprint}
+              blueprints={blueprints.data}
+              emptyFocusTarget={queryInputRef}
+              facets={facets}
+              filterRequest={filterRequest}
+              filters={search.attributeFilters ?? []}
+              key={search.blueprint}
+              onAdd={actions.addAttributeFilter}
+              onRemove={actions.removeAttributeFilter}
+              onUpdate={actions.updateAttributeFilter}
+              onUpdateFacet={actions.updateFacet}
+              pathAttributes={selectedBlueprint.data?.table_path_attributes}
+              relationshipAttributes={relationshipFields}
+            />
+          )}
           {!search.blueprint && (
             <Typography sx={{ py: 3 }}>{t('explorer.start')}</Typography>
           )}
@@ -236,12 +202,6 @@ export const Explorer = ({
           onOpenEntity={showInPanel}
         />
       )}
-      {mobileExplorePanelTarget &&
-        !isWideDesktop &&
-        createPortal(
-          <ExplorerFacetSidebar {...facetSidebarProps} />,
-          mobileExplorePanelTarget,
-        )}
     </Box>
   );
 };

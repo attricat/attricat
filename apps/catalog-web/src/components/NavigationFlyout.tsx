@@ -18,7 +18,7 @@ export const NavigationFlyout = ({
     aria-label={title}
     component="nav"
     sx={{
-      backgroundColor: 'background.paper',
+      backgroundColor: 'background.navigation.panel',
       borderColor: 'divider',
       borderRight: 1,
       boxShadow: 3,

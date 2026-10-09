@@ -406,6 +406,8 @@ export const ExplorerQueryInput = ({
               </InputAdornment>
             ),
           },
+          // Keep the label raised so the "Search anything" prompt always shows.
+          inputLabel: { shrink: true },
         }}
         sx={{
           '& input::placeholder': { color: 'text.disabled', opacity: 1 },

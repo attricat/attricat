@@ -53,6 +53,12 @@ test('opens mobile navigation and closes it after navigation', async ({
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
+  // The blueprint choice sits in the Explorer page, not the navigation.
+  const blueprintSelector = page.getByRole('combobox', {
+    name: /select a blueprint/i,
+  });
+  await expect(blueprintSelector).toHaveCount(1);
+  await expect(blueprintSelector).toBeVisible();
   await page.getByRole('button', { name: 'Open navigation' }).click();
   await expect(page.locator('.MuiDrawer-paper')).toHaveCSS('width', '264px');
   const backButton = page.getByRole('button', {
@@ -64,11 +70,6 @@ test('opens mobile navigation and closes it after navigation', async ({
   const allEntitiesLinkBox = await allEntitiesLink.boundingBox();
   expect(allEntitiesLinkBox?.width).toBeGreaterThan(220);
   expect(allEntitiesLinkBox?.height).toBeLessThan(80);
-  const blueprintSelector = page.getByRole('combobox', {
-    name: /select a blueprint/i,
-  });
-  await expect(blueprintSelector).toHaveCount(1);
-  await expect(blueprintSelector).toBeVisible();
   await expect(page.getByRole('link', { name: 'Agents' })).toBeHidden();
   await backButton.click();
 

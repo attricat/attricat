@@ -17,4 +17,15 @@ describe('catalog theme', () => {
     expect(theme.shape.borderRadius).toBe(radius.control);
     expect(theme.spacing(1)).toBe('4px');
   });
+
+  it('sets light navigation apart from the page and keeps dark mode tokens', () => {
+    expect(makeTheme('light').palette.background.navigation).toEqual({
+      panel: colors.palette.slate['100'],
+      rail: colors.palette.slate['100'],
+    });
+    expect(makeTheme('dark').palette.background.navigation).toEqual({
+      panel: colors.dark.background.surface,
+      rail: colors.dark.background.default,
+    });
+  });
 });

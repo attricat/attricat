@@ -83,14 +83,10 @@ export const estimatedResultRowHeight = 53;
 export const resultRowOverscan = 10;
 
 // Layout dimensions.
-export const facetSidebarWidth = 300;
 /** The entity panel floats over the results; keep most of them visible. */
 export const entityPanelWidth = 'clamp(420px, 36vw, 680px)';
 /** Marks links that switch the panel to another record, so clicking one does not close it. */
 export const entityPanelOpenerAttribute = 'data-entity-panel-opener';
-export const facetSidebarStickyTop = 88;
-export const facetSidebarMaxHeight = 'calc(100dvh - 104px)';
-export const facetHeadingIconSize = 15;
 export const resultsTableHeight = {
   xs: 'calc(100dvh - 220px)',
   md: 'calc(100dvh - 165px)',
@@ -98,7 +94,7 @@ export const resultsTableHeight = {
 export const displayColumnMinWidth = 280;
 export const idColumnWidth = 48;
 export const blueprintSelectWidth = 280;
-export const versionScopeSelectMinWidth = 190;
+export const searchScopePopoverWidth = 280;
 export const searchSyntaxPopoverMaxWidth = 440;
 export const resultsLoadingIndicatorSize = 80;
 export const columnPreferencesListMaxHeight = 480;
