@@ -205,6 +205,7 @@ export const WorkspaceMembersSection = ({
             <form.Field name="member_id">
               {(field) => (
                 <TextField
+                  required
                   label={t('workspace.member')}
                   onChange={(event) => field.handleChange(event.target.value)}
                   select
@@ -223,6 +224,7 @@ export const WorkspaceMembersSection = ({
             <form.Field name="role_id">
               {(field) => (
                 <TextField
+                  required
                   label={t('workspace.role')}
                   onChange={(event) => field.handleChange(event.target.value)}
                   select

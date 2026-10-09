@@ -133,6 +133,7 @@ export const ReusableAttributeGroupDialog = ({
             <form.Field name="revisionIds">
               {(field) => (
                 <TextField
+                  required
                   helperText={t('reusableAttributes.groupDialog.revisionsHelp')}
                   label={t('reusableAttributes.groupDialog.revisions')}
                   onChange={(event) =>

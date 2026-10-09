@@ -96,6 +96,7 @@ const ScopeTargetField = ({
         <Alert severity="error">{targets.error.message}</Alert>
       )}
       <TextField
+        required
         fullWidth
         helperText={t('workspace.ownedTargets')}
         label={label}

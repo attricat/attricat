@@ -100,6 +100,7 @@ export const ExtensionsLayoutPage = () => {
         >
           {(field) => (
             <TextField
+              required
               error={field.state.meta.errors.length > 0}
               fullWidth
               helperText={field.state.meta.errors[0]}

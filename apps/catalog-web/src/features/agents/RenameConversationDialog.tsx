@@ -76,6 +76,7 @@ export const RenameConversationDialog = ({
           >
             {(field) => (
               <TextField
+                required
                 autoComplete="off"
                 error={field.state.meta.errors.length > 0}
                 fullWidth

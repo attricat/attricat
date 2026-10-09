@@ -74,6 +74,7 @@ export const WorkflowActions = ({
           <TextField
             disabled={runNow.isPending}
             label={t('workflows.entityId')}
+            required
             slotProps={{
               htmlInput: { 'aria-label': t('workflows.manualRunEntityId') },
             }}

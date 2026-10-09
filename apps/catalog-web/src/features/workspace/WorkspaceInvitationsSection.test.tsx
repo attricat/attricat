@@ -49,7 +49,7 @@ const submitForm = async (buttonName: string) => {
   });
   fireEvent.mouseDown(within(form).getByRole('combobox', { name: 'Role' }));
   fireEvent.click(await screen.findByRole('option', { name: 'reader' }));
-  fireEvent.change(within(form).getByLabelText('Expires at'), {
+  fireEvent.change(within(form).getByLabelText(/Expires at/), {
     target: { value: '2099-01-01T12:00' },
   });
   fireEvent.submit(form);

@@ -120,6 +120,7 @@ export const SendSelectedToAgentDialog = ({
           <form.Field name="instructions">
             {(field) => (
               <TextField
+                required
                 disabled={start.isPending}
                 fullWidth
                 label={t('explorer.agentInstructions')}

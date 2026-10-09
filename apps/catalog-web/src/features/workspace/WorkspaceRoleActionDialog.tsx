@@ -147,6 +147,7 @@ export const WorkspaceRoleActionDialog = ({
                   fullWidth
                   helperText={field.state.meta.errors[0]}
                   inputRef={initialFocusRef}
+                  required
                   label={t(
                     action.type === 'rename'
                       ? 'workspace.roleCode'

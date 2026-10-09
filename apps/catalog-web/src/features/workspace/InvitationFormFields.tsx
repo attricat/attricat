@@ -13,6 +13,7 @@ export const RoleSelectField = ({
   const { t } = useTranslation();
   return (
     <TextField
+      required
       label={t('workspace.role')}
       onChange={(event) => onChange(event.target.value)}
       select
@@ -37,6 +38,7 @@ export const ExpiryField = ({
   const { t } = useTranslation();
   return (
     <TextField
+      required
       label={t('workspace.expiresAt')}
       onChange={(event) => onChange(event.target.value)}
       slotProps={{ inputLabel: { shrink: true } }}

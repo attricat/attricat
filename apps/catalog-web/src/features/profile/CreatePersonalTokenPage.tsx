@@ -173,6 +173,7 @@ export const CreatePersonalTokenPage = () => {
             <form.Field name="label">
               {(field) => (
                 <TextField
+                  required
                   label={t('profile.label')}
                   onChange={(event) => field.handleChange(event.target.value)}
                   placeholder={t('profile.labelPlaceholder')}

@@ -102,6 +102,7 @@ export const CreateUserInviteForm = ({
         <form.Field name="email">
           {(field) => (
             <TextField
+              required
               label={t('workspace.email')}
               onChange={(event) => field.handleChange(event.target.value)}
               type="email"

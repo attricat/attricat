@@ -82,6 +82,7 @@ export const ChangeDisplayNameDialog = ({
           >
             {(field) => (
               <TextField
+                required
                 autoComplete="name"
                 error={field.state.meta.errors.length > 0}
                 fullWidth

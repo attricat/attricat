@@ -149,6 +149,7 @@ export const WorkspaceRolesSection = ({
           <form.Field name="code">
             {(field) => (
               <TextField
+                required
                 label={t('workspace.roleCode')}
                 onChange={(event) => field.handleChange(event.target.value)}
                 value={field.state.value}
