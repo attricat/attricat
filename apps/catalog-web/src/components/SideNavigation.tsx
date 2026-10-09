@@ -1,7 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useRouterState } from '@tanstack/react-router';
 import { ArrowLeftIcon, ChevronRightIcon } from 'lucide-react';
-import { createElement } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useDocumentationUrl } from '../app/documentation';
 import { currentSession } from '../features/auth/api';
@@ -19,8 +18,10 @@ import {
   inboxNavigationItem,
   primaryNavigationItems,
 } from './navigation';
+import { NavigationBrandIcon } from './NavigationBrandIcon';
 import { NavigationFlyout } from './NavigationFlyout';
 import { NavigationFooter } from './NavigationFooter';
+import { NavigationIcon } from './NavigationIcon';
 import { NavigationItem } from './NavigationItem';
 import { QueryErrorNotice } from './QueryErrorNotice';
 import {
@@ -31,12 +32,7 @@ import {
   navigationHeaderSx,
   navigationItemHoverSx,
 } from './sideNavigationLayout';
-import {
-  AppsIcon,
-  BrandIcon,
-  ExplorerIcon,
-  ManagementIcon,
-} from './systemIcons';
+import { AppsIcon, ExplorerIcon, ManagementIcon } from './systemIcons';
 import { useCompactNavigationPanels } from './useCompactNavigationPanels';
 import {
   mobileSectionTitleKeys,
@@ -155,9 +151,10 @@ export const SideNavigation = ({
         ) : (
           <Box
             aria-label={t('app.attricat')}
+            data-navigation-icon-trigger
             sx={{ alignItems: 'center', display: 'flex', gap: 1.5 }}
           >
-            <BrandIcon variant={compact ? 'mark' : 'wordmark'} />
+            <NavigationBrandIcon variant={compact ? 'mark' : 'wordmark'} />
           </Box>
         )}
       </Box>
@@ -179,7 +176,7 @@ export const SideNavigation = ({
             ariaControls={mobileExplorePanelId}
             ariaExpanded={false}
             compact={false}
-            icon={<ExplorerIcon />}
+            icon={<NavigationIcon icon={ExplorerIcon} />}
             label={t('navigation.entityExplorer')}
             onClick={() => setMobileSection('explore')}
             trailing={<ChevronRightIcon />}
@@ -191,7 +188,7 @@ export const SideNavigation = ({
             .map((item) => (
               <NavigationItem
                 compact={compact}
-                icon={createElement(item.icon)}
+                icon={<NavigationIcon icon={item.icon} />}
                 key={item.to}
                 label={t(item.labelKey)}
                 onClick={
@@ -234,7 +231,7 @@ export const SideNavigation = ({
           <NavigationItem
             ariaExpanded={panels.isOpen('extensions')}
             compact
-            icon={<AppsIcon />}
+            icon={<NavigationIcon icon={AppsIcon} />}
             label={t('navigation.apps')}
             onClick={() => panels.openOnly('extensions')}
             selected={isWithinRoute(
@@ -247,7 +244,7 @@ export const SideNavigation = ({
         {mobilePrimary && (
           <NavigationItem
             compact={false}
-            icon={<AppsIcon />}
+            icon={<NavigationIcon icon={AppsIcon} />}
             label={t('navigation.apps')}
             onClick={() => setMobileSection('extensions')}
             sx={{ mt: 1 }}
@@ -267,7 +264,7 @@ export const SideNavigation = ({
           <NavigationItem
             ariaExpanded={panels.isOpen('manage')}
             compact
-            icon={<ManagementIcon />}
+            icon={<NavigationIcon icon={ManagementIcon} />}
             label={t('navigation.manage')}
             onClick={() => panels.openOnly('manage')}
             selected={isWithinRoute(pathname, navigationRoutes.manage)}
@@ -277,7 +274,7 @@ export const SideNavigation = ({
         {mobilePrimary && (
           <NavigationItem
             compact={false}
-            icon={<ManagementIcon />}
+            icon={<NavigationIcon icon={ManagementIcon} />}
             label={t('navigation.manage')}
             onClick={() => setMobileSection('manage')}
             sx={{ mt: 1 }}

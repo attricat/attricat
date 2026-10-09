@@ -1,11 +1,11 @@
 import { Link } from '@tanstack/react-router';
 import { ListItemButton, ListItemIcon, ListItemText } from '@mui/material';
-import { createElement } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   getVisibleManagementNavigationItems,
   navigationRoutes,
 } from './navigation';
+import { NavigationIcon } from './NavigationIcon';
 import { ManagementIcon } from './systemIcons';
 
 type ManagementNavigationLinksProps = {
@@ -32,7 +32,7 @@ export const ManagementNavigationLinks = ({
         to={navigationRoutes.manage}
       >
         <ListItemIcon>
-          <ManagementIcon />
+          <NavigationIcon icon={ManagementIcon} />
         </ListItemIcon>
         <ListItemText primary={t('navigation.dashboard')} />
       </ListItemButton>
@@ -45,7 +45,9 @@ export const ManagementNavigationLinks = ({
           selected={pathname.startsWith(item.to)}
           to={item.to}
         >
-          <ListItemIcon>{createElement(item.icon)}</ListItemIcon>
+          <ListItemIcon>
+            <NavigationIcon icon={item.icon} />
+          </ListItemIcon>
           <ListItemText primary={t(item.labelKey)} />
         </ListItemButton>
       ))}

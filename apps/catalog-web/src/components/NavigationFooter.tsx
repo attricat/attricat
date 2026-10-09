@@ -1,10 +1,11 @@
 import { Divider, List, useTheme } from '@mui/material';
 import { LogOutIcon, MoonIcon, SunIcon } from 'lucide-react';
-import { createElement, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useColorMode } from '../app/colorMode';
 import { CurrentUserAvatar } from './CurrentUserAvatar';
 import { profileNavigationItem } from './navigation';
+import { NavigationIcon } from './NavigationIcon';
 import { NavigationItem } from './NavigationItem';
 import { DocumentationIcon } from './systemIcons';
 import { userAvatarSizes } from './userAvatars';
@@ -51,7 +52,7 @@ export const NavigationFooter = ({
         <NavigationItem
           compact={compact}
           href={documentationHref}
-          icon={<DocumentationIcon />}
+          icon={<NavigationIcon icon={DocumentationIcon} />}
           label={t('navigation.documentation')}
           onClick={onDocumentationClick}
         />
@@ -59,7 +60,7 @@ export const NavigationFooter = ({
           compact={compact}
           icon={
             <CurrentUserAvatar
-              fallback={createElement(profileNavigationItem.icon)}
+              fallback={<NavigationIcon icon={profileNavigationItem.icon} />}
               size={userAvatarSizes.inline}
             />
           }
@@ -70,13 +71,13 @@ export const NavigationFooter = ({
         />
         <NavigationItem
           compact={compact}
-          icon={darkMode ? <SunIcon /> : <MoonIcon />}
+          icon={<NavigationIcon icon={darkMode ? SunIcon : MoonIcon} />}
           label={colorModeLabel}
           onClick={() => setColorMode(darkMode ? 'light' : 'dark')}
         />
         <NavigationItem
           compact={compact}
-          icon={<LogOutIcon />}
+          icon={<NavigationIcon icon={LogOutIcon} />}
           label={t('navigation.signOut')}
           onClick={onSignOut}
         />

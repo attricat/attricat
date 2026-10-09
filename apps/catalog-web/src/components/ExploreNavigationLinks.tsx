@@ -8,6 +8,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import type { listSidebarExploreNavigation } from '../features/workspace/api';
 import { navigationRoutes } from './navigation';
+import { NavigationIcon } from './NavigationIcon';
 import { RouterListItemButton } from './RouterLink';
 import { ExplorerIcon, ExplorerShortcutIcon } from './systemIcons';
 import { lexiconText } from '../features/lexicon/lexicon';
@@ -39,7 +40,7 @@ export const ExploreNavigationLinks = ({
         to={navigationRoutes.explore}
       >
         <ListItemIcon>
-          <ExplorerIcon />
+          <NavigationIcon icon={ExplorerIcon} />
         </ListItemIcon>
         <ListItemText primary={t('navigation.allEntities')} />
       </ListItemButton>
@@ -57,7 +58,7 @@ export const ExploreNavigationLinks = ({
           to={navigationRoutes.explore}
         >
           <ListItemIcon>
-            <ExplorerShortcutIcon />
+            <NavigationIcon icon={ExplorerShortcutIcon} />
           </ListItemIcon>
           <ListItemText primary={lexiconText(item.blueprint_name)} />
         </RouterListItemButton>

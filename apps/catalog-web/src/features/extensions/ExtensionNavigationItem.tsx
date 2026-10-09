@@ -1,5 +1,6 @@
 import { ListItemIcon, ListItemText } from '@mui/material';
 import { useRouterState } from '@tanstack/react-router';
+import { NavigationIcon } from '../../components/NavigationIcon';
 import { RouterListItemButton } from '../../components/RouterLink';
 import { ExtensionIcon } from '../../components/systemIcons';
 import type { ExtensionContribution } from './api';
@@ -29,7 +30,7 @@ export const ExtensionNavigationItem = ({
       }}
     >
       <ListItemIcon>
-        <ExtensionIcon />
+        <NavigationIcon icon={ExtensionIcon} />
       </ListItemIcon>
       <ListItemText primary={label} />
     </RouterListItemButton>

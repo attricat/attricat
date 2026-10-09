@@ -1,4 +1,5 @@
 import { Badge } from '@mui/material';
+import { NavigationIcon } from '../../components/NavigationIcon';
 import { InboxIcon } from '../../components/systemIcons';
 import { maxBadgeCount } from './constants';
 
@@ -11,6 +12,6 @@ export const InboxNavigationIcon = ({ unread }: { unread: number }) => (
     max={maxBadgeCount}
     overlap="circular"
   >
-    <InboxIcon />
+    <NavigationIcon icon={InboxIcon} />
   </Badge>
 );
