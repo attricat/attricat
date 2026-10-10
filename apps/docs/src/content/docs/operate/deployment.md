@@ -72,7 +72,7 @@ Every setting is described in the [configuration reference](/reference/configura
 
 ## First start
 
-On first start the API creates the workspace named by `CATALOG_BOOTSTRAP_WORKSPACE_NAME` and an owner account for `CATALOG_BOOTSTRAP_OWNER_EMAIL`. Set `CATALOG_BOOTSTRAP_OWNER_PASSWORD` for that first start so the owner can sign in, then remove it. It never changes an existing password.
+On first start the API creates the workspace named by `ATTRICAT_BOOTSTRAP_WORKSPACE_NAME` and an owner account for `ATTRICAT_BOOTSTRAP_OWNER_EMAIL`. Set `ATTRICAT_BOOTSTRAP_OWNER_PASSWORD` for that first start so the owner can sign in, then remove it. It never changes an existing password.
 
 The owner signs in with the workspace identifier, normally `default.local`, then invites everyone else.
 
@@ -103,7 +103,7 @@ REDIS_URL=rediss://:password@redis.example.com:6380/0
 ## Roll out a new version
 
 1. Keep the digest of the version you are running.
-2. Run the new image's `migrate` role once. Production sets `CATALOG_AUTO_MIGRATE=false`, so API replicas never migrate on their own.
+2. Run the new image's `migrate` role once. Production sets `ATTRICAT_AUTO_MIGRATE=false`, so API replicas never migrate on their own.
 3. Replace the API and file-worker replicas with the new digest.
 4. Wait for `/health/ready` and run your smoke tests.
 
@@ -116,7 +116,7 @@ docker run --rm --env DATABASE_URL "$APP_IMAGE" migrate
 
 ./platform deploy --image "$APP_IMAGE"
 curl --fail --silent --retry 60 --retry-delay 2 --retry-all-errors \
-  https://catalog.example.com/health/ready
+  https://attricat.example.com/health/ready
 ./platform smoke catalog
 ```
 
@@ -127,7 +127,7 @@ Migrations only go forward. Rolling back means redeploying the previous digest:
 ```sh
 ./platform deploy --image ghcr.io/attricat/attricat@sha256:previous
 curl --fail --silent --retry 60 --retry-delay 2 --retry-all-errors \
-  https://catalog.example.com/health/ready
+  https://attricat.example.com/health/ready
 ```
 
 If the previous version cannot run against the migrated database, restore the database and bucket from the backup taken before the rollout. See [Backup and restore](/operate/backup/).
@@ -141,12 +141,12 @@ To rotate: create the new credential, give it to a new revision of the deploymen
 ## Production checklist
 
 - `SESSION_COOKIE_SECURE=true` and HTTPS in front of the API.
-- `CATALOG_DEVTOOLS=false`.
-- `CATALOG_AUTO_MIGRATE=false`, with `migrate` run before each rollout.
+- `ATTRICAT_DEVTOOLS=false`.
+- `ATTRICAT_AUTO_MIGRATE=false`, with `migrate` run before each rollout.
 - `SMTP_TLS_MODE=starttls` or `implicit`.
-- A real `CATALOG_BOOTSTRAP_OWNER_EMAIL`; `CATALOG_BOOTSTRAP_OWNER_PASSWORD` removed after first start.
+- A real `ATTRICAT_BOOTSTRAP_OWNER_EMAIL`; `ATTRICAT_BOOTSTRAP_OWNER_PASSWORD` removed after first start.
 - `FILE_WORKER_METRICS_TOKEN` set, and `/metrics` reachable only from your monitoring network.
 - A private bucket, with credentials limited to `PutObject`, `GetObject`, `DeleteObject`, and `HeadBucket`.
-- `CATALOG_E2E_FIXTURE_EMAIL` and `CATALOG_E2E_FIXTURE_PASSWORD` unset.
+- `ATTRICAT_E2E_FIXTURE_EMAIL` and `ATTRICAT_E2E_FIXTURE_PASSWORD` unset.
 - A tested backup and restore procedure.
 - With several API replicas: PostgreSQL `max_connections` sized for up to three extra connections per API process, no transaction-mode pooler, and optionally `CACHE_BACKEND=redis`.

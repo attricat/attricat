@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use tokio::sync::watch;
 
-use catalog_repository::{repository::SystemRepository, round_trips::measure};
+use attricat_repository::{repository::SystemRepository, round_trips::measure};
 
 /// The documented purge bound is one hour after plan expiry or the application
 /// resumability deadline. The first tick runs immediately at process startup.

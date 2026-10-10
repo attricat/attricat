@@ -31,7 +31,7 @@
       "additionalProperties": false,
       "properties": {
         "id": {
-          "description": "Registered component ID, such as `catalog.field_edit`.",
+          "description": "Registered component ID, such as `attricat.field_edit`.",
           "type": "string",
           "x-attricat-reference": "view_component"
         },
@@ -777,7 +777,7 @@
         },
         "readonly": {
           "default": false,
-          "description": "Preview-only in the Catalog web app. API writes remain allowed.",
+          "description": "Preview-only in the Attricat web app. API writes remain allowed.",
           "type": "boolean"
         },
         "tags": {
@@ -999,7 +999,7 @@
             }
           ],
           "default": null,
-          "description": "Cell renderer, such as `catalog.table_image`."
+          "description": "Cell renderer, such as `attricat.table_image`."
         }
       },
       "required": [

@@ -1,4 +1,4 @@
-use catalog_lexicon::{Reference, Segment, parse};
+use attricat_lexicon::{Reference, Segment, parse};
 use serde_json::{Value, json};
 
 #[test]
@@ -38,7 +38,7 @@ fn lexicon_schema_contract_is_current() {
         .unwrap()
         .join(CONTRACT);
     let mut rendered =
-        serde_json::to_string_pretty(&catalog_lexicon::lexicon_file_json_schema()).unwrap();
+        serde_json::to_string_pretty(&attricat_lexicon::lexicon_file_json_schema()).unwrap();
     rendered.push('\n');
     if std::env::var_os("UPDATE_CONTRACTS").is_some() {
         std::fs::write(&path, rendered).unwrap();

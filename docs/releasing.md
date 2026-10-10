@@ -6,7 +6,7 @@ binaries in the container image, and the standalone `acli` all report the same
 version. Versions follow [Semantic Versioning](https://semver.org/); before
 1.0, a minor release may break compatibility.
 
-The `catalog:host` WIT ABI is versioned separately; see
+The `attricat:host` WIT ABI is versioned separately; see
 [Host ABI versions and evolution](extensions.md#host-abi-versions-and-evolution).
 A release that adds a host ABI version should say so in its notes.
 
@@ -44,5 +44,5 @@ longer satisfy.
   previous tag.
 
 `release.yml` is generated. Change `dist-workspace.toml` (or
-`[package.metadata.dist]` in `apps/catalog-cli/Cargo.toml`) and run
+`[package.metadata.dist]` in `apps/cli/Cargo.toml`) and run
 `dist generate` instead of editing it; `dist plan` previews the artifacts.

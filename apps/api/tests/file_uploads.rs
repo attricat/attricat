@@ -29,7 +29,7 @@ fields = ["image"]
 
 [views.table]
 type = "table"
-columns = [{ field = "image", renderer = { id = "catalog.table_image", version = 1 } }]
+columns = [{ field = "image", renderer = { id = "attricat.table_image", version = 1 } }]
 
 [[attributes]]
 code = "image"
@@ -75,7 +75,7 @@ async fn malformed_trailing_multipart_field_removes_staged_files(pool: PgPool) {
                 path.file_name()
                     .unwrap()
                     .to_string_lossy()
-                    .starts_with("catalog-upload-")
+                    .starts_with("attricat-upload-")
             })
             .collect()
     };
@@ -745,11 +745,11 @@ async fn file_reads_use_active_linked_record_scopes(pool: PgPool) {
         .unwrap();
     let mut headers = reqwest::header::HeaderMap::new();
     headers.insert(
-        "x-catalog-user-id",
+        "x-attricat-user-id",
         reqwest::header::HeaderValue::from_str(&reader_id.to_string()).unwrap(),
     );
     headers.insert(
-        "x-catalog-workspace-id",
+        "x-attricat-workspace-id",
         reqwest::header::HeaderValue::from_static(BOOTSTRAP_WORKSPACE_ID),
     );
     let reader = Client::builder().default_headers(headers).build().unwrap();
@@ -865,7 +865,7 @@ async fn duplicating_an_record_is_atomic_with_its_file_links(pool: PgPool) {
     let record = create_record(&client, &base_url, &blueprint).await;
     let record_id: Uuid = record["id"].as_str().unwrap().parse().unwrap();
     let workspace_id: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
-    let repository = api::repository::CatalogRepository::new(pool.clone(), workspace_id);
+    let repository = api::repository::AttricatRepository::new(pool.clone(), workspace_id);
     let file_id = Uuid::new_v4();
     sqlx::query("INSERT INTO files (id, workspace_id, original_filename, display_filename, mime_type, byte_size, sha256, original_key, status) VALUES ($1, $2, 'p.png', 'p.png', 'image/png', 7, $3, 'files/p.png', 'ready')")
         .bind(file_id)

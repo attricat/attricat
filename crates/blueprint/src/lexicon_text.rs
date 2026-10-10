@@ -1,8 +1,8 @@
-use catalog_lexicon::UsedReference;
+use attricat_lexicon::UsedReference;
 
 use crate::{AttributeDeclaration, BlueprintDefinition, BlueprintError, ViewDefinition, ViewNode};
 
-/// Catalog text that resolves `{{…}}` lexicon references, with its location
+/// Attricat text that resolves `{{…}}` lexicon references, with its location
 /// for error messages. Other text, such as headings, is always literal.
 pub struct LexiconText<'a> {
     pub location: String,
@@ -102,7 +102,7 @@ pub fn status_option_texts<'a>(
     location: &str,
     schema: &'a serde_json::Value,
 ) -> impl Iterator<Item = LexiconText<'a>> {
-    catalog_validation::status::status_option_labels(schema)
+    attricat_validation::status::status_option_labels(schema)
         .into_iter()
         .map(move |(code, text)| LexiconText {
             location: format!("{location} status option '{code}' label"),
@@ -167,7 +167,7 @@ pub(crate) fn validate_lexicon_references(
     definition: &BlueprintDefinition,
 ) -> Result<(), BlueprintError> {
     for text in lexicon_texts(definition) {
-        catalog_lexicon::parse(text.text).map_err(|error| {
+        attricat_lexicon::parse(text.text).map_err(|error| {
             BlueprintError::InvalidLexiconReference {
                 location: text.location,
                 error,
@@ -183,7 +183,7 @@ pub fn lexicon_references(definition: &BlueprintDefinition) -> Vec<UsedReference
     lexicon_texts(definition)
         .into_iter()
         .flat_map(|text| {
-            catalog_lexicon::references(text.text)
+            attricat_lexicon::references(text.text)
                 .unwrap_or_default()
                 .into_iter()
                 .map(move |reference| UsedReference {

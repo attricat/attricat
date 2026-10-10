@@ -26,7 +26,7 @@ Options:
   --checkpoint <path>     Override checkpoint location
   --help                  Show this help
 
-CATALOG_TOKEN is required for writes. CATALOG_SERVER defaults to http://127.0.0.1:3000.
+ATTRICAT_TOKEN is required for writes. ATTRICAT_SERVER defaults to http://127.0.0.1:3000.
 The generator refuses non-local targets unless ALLOW_NON_LOCAL_GENERATOR_TARGET=1.`;
 
 const parseArgs = (argv) => {
@@ -381,12 +381,12 @@ const run = async () => {
     );
   }
   const server = assertLocalTarget(
-    process.env.CATALOG_SERVER ?? "http://127.0.0.1:3000",
+    process.env.ATTRICAT_SERVER ?? "http://127.0.0.1:3000",
   );
-  const token = `${process.env.CATALOG_TOKEN ?? ""}`.trim();
+  const token = `${process.env.ATTRICAT_TOKEN ?? ""}`.trim();
   if (!token)
     throw new Error(
-      "Set CATALOG_TOKEN to a personal access token before running the generator.",
+      "Set ATTRICAT_TOKEN to a personal access token before running the generator.",
     );
   if (existsSync(checkpointPath) && !options.resume)
     throw new Error(
@@ -731,7 +731,7 @@ const run = async () => {
           } catch (error) {
             if (error.message.includes("(403)"))
               throw new Error(
-                "File verification requires records.read for the uploaded record; recreate CATALOG_TOKEN with records.read and records.write, or rerun a clean dataset with --no-files.",
+                "File verification requires records.read for the uploaded record; recreate ATTRICAT_TOKEN with records.read and records.write, or rerun a clean dataset with --no-files.",
               );
             throw error;
           }

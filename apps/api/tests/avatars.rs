@@ -60,11 +60,11 @@ async fn plain_member(pool: &PgPool) -> Client {
     .unwrap();
     let mut headers = reqwest::header::HeaderMap::new();
     headers.insert(
-        "x-catalog-user-id",
+        "x-attricat-user-id",
         reqwest::header::HeaderValue::from_str(&user_id.to_string()).unwrap(),
     );
     headers.insert(
-        "x-catalog-workspace-id",
+        "x-attricat-workspace-id",
         reqwest::header::HeaderValue::from_static(BOOTSTRAP_WORKSPACE_ID),
     );
     Client::builder().default_headers(headers).build().unwrap()

@@ -1,7 +1,7 @@
 use serde::Serialize;
 use uuid::Uuid;
 
-use super::{CatalogRepository, NewUploadedFile, RepositoryError};
+use super::{AttricatRepository, NewUploadedFile, RepositoryError};
 
 /// Only the variant kind the file worker produces for avatar files is served.
 pub const AVATAR_VARIANT_KIND: &str = "avatar";
@@ -15,7 +15,7 @@ pub struct OwnAvatar {
     pub status: String,
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     /// Stores an uploaded avatar as a workspace file and makes it the active
     /// member's avatar in one transaction. The replaced file loses its only
     /// reference and is reclaimed by file reconciliation.
@@ -99,7 +99,7 @@ impl CatalogRepository {
     }
 }
 
-impl<S: super::RepositoryScope> CatalogRepository<S> {
+impl<S: super::RepositoryScope> AttricatRepository<S> {
     /// Returns the member's own avatar in `workspace_id`, whatever its state.
     pub async fn own_avatar(
         &self,

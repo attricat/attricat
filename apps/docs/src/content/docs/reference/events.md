@@ -5,7 +5,7 @@ description: The catalog events Attricat records for every change, their envelop
 
 Every catalog change records an event in the same database transaction as the change and its audit record. If the change is saved, so is the event; if it fails, neither exists.
 
-Events drive [workflows](/builders/workflows/), [rules](/builders/rules/), and [extension event handlers](/extensions/server/#handle-catalog-events). They are not exposed as a public feed.
+Events drive [workflows](/builders/workflows/), [rules](/builders/rules/), and [extension event handlers](/extensions/server/#handle-attricat-events). They are not exposed as a public feed.
 
 ## Event types
 

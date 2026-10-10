@@ -311,7 +311,7 @@ async fn server_timing(
         register_request_timing(id.clone(), timing.clone());
     }
     let started_at = Instant::now();
-    let mut response = catalog_repository::round_trips::measure(
+    let mut response = attricat_repository::round_trips::measure(
         format!("{method} {route}"),
         next.run(request).instrument(span.clone()),
     )
@@ -320,8 +320,8 @@ async fn server_timing(
     let duration_ms = started_at.elapsed().as_secs_f64() * 1_000.0;
     span.record("status", status)
         .record("duration_ms", duration_ms);
-    metrics::counter!("catalog_http_requests_total", "method" => method.clone(), "route" => route.clone(), "status" => status.to_string()).increment(1);
-    metrics::histogram!("catalog_http_request_duration_seconds", "method" => method, "route" => route).record(duration_ms / 1_000.0);
+    metrics::counter!("attricat_http_requests_total", "method" => method.clone(), "route" => route.clone(), "status" => status.to_string()).increment(1);
+    metrics::histogram!("attricat_http_request_duration_seconds", "method" => method, "route" => route).record(duration_ms / 1_000.0);
     if status >= 500 {
         tracing::error!(parent: &span, status, duration_ms, "request failed");
     } else {
@@ -1221,7 +1221,7 @@ mod timing_tests {
     async fn web_app_serves_client_routes_as_index_with_ok() {
         use tower::ServiceExt;
 
-        let dist = std::env::temp_dir().join(format!("catalog-web-dist-{}", Uuid::new_v4()));
+        let dist = std::env::temp_dir().join(format!("web-dist-{}", Uuid::new_v4()));
         std::fs::create_dir_all(dist.join("assets")).unwrap();
         std::fs::write(dist.join("index.html"), "<!doctype html>index").unwrap();
         std::fs::write(dist.join("assets/app.js"), "app").unwrap();
@@ -1255,7 +1255,7 @@ mod timing_tests {
         use axum::http::StatusCode;
         use tower::ServiceExt;
 
-        let dist = std::env::temp_dir().join(format!("catalog-web-dist-{}", Uuid::new_v4()));
+        let dist = std::env::temp_dir().join(format!("web-dist-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&dist).unwrap();
         std::fs::write(dist.join("index.html"), "<!doctype html>index").unwrap();
         let api = Router::new()

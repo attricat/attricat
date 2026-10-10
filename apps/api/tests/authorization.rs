@@ -3,7 +3,7 @@ mod support;
 use support::*;
 
 #[sqlx::test]
-async fn catalog_routes_distinguish_missing_identity_from_missing_permission(pool: PgPool) {
+async fn attricat_routes_distinguish_missing_identity_from_missing_permission(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
 
     let unauthenticated = Client::new()
@@ -19,8 +19,8 @@ async fn catalog_routes_distinguish_missing_identity_from_missing_permission(poo
 
     let unknown_principal = Client::new()
         .get(format!("{base_url}/blueprints"))
-        .header("x-catalog-user-id", Uuid::new_v4().to_string())
-        .header("x-catalog-workspace-id", BOOTSTRAP_WORKSPACE_ID)
+        .header("x-attricat-user-id", Uuid::new_v4().to_string())
+        .header("x-attricat-workspace-id", BOOTSTRAP_WORKSPACE_ID)
         .send()
         .await
         .unwrap();
@@ -28,8 +28,8 @@ async fn catalog_routes_distinguish_missing_identity_from_missing_permission(poo
 
     let wrong_workspace = Client::new()
         .get(format!("{base_url}/blueprints"))
-        .header("x-catalog-user-id", BOOTSTRAP_OWNER_ID)
-        .header("x-catalog-workspace-id", Uuid::new_v4().to_string())
+        .header("x-attricat-user-id", BOOTSTRAP_OWNER_ID)
+        .header("x-attricat-workspace-id", Uuid::new_v4().to_string())
         .send()
         .await
         .unwrap();
@@ -62,8 +62,8 @@ async fn catalog_routes_distinguish_missing_identity_from_missing_permission(poo
 
     let forbidden = Client::new()
         .post(format!("{base_url}/blueprints"))
-        .header("x-catalog-user-id", viewer_id.to_string())
-        .header("x-catalog-workspace-id", workspace_id.to_string())
+        .header("x-attricat-user-id", viewer_id.to_string())
+        .header("x-attricat-workspace-id", workspace_id.to_string())
         .json(&json!({ "definition": "kind = \"record\"\ncode = \"forbidden\"" }))
         .send()
         .await
@@ -148,11 +148,11 @@ async fn context_subtree_grants_allow_descendants_but_not_siblings(pool: PgPool)
         .default_headers({
             let mut headers = reqwest::header::HeaderMap::new();
             headers.insert(
-                "x-catalog-user-id",
+                "x-attricat-user-id",
                 reqwest::header::HeaderValue::from_str(&editor_id.to_string()).unwrap(),
             );
             headers.insert(
-                "x-catalog-workspace-id",
+                "x-attricat-workspace-id",
                 reqwest::header::HeaderValue::from_static(BOOTSTRAP_WORKSPACE_ID),
             );
             headers
@@ -217,7 +217,7 @@ async fn context_subtree_grants_allow_descendants_but_not_siblings(pool: PgPool)
 async fn batched_workspace_permissions_match_per_permission_checks(pool: PgPool) {
     // Starting the server bootstraps the workspace owner.
     let (_, server) = start_server(pool.clone()).await;
-    let repository = api::repository::CatalogRepository::system(pool.clone());
+    let repository = api::repository::AttricatRepository::system(pool.clone());
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
     let permissions: Vec<String> =
         sqlx::query_scalar("SELECT DISTINCT permission_code FROM role_permissions")
@@ -314,7 +314,7 @@ async fn batched_record_authorization_matches_per_target_checks(pool: PgPool) {
     let missing = Uuid::new_v4();
     let requested = [record_a, record_b, missing];
 
-    let repository = api::repository::CatalogRepository::system(pool.clone());
+    let repository = api::repository::AttricatRepository::system(pool.clone());
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
     let mut principals = vec![BOOTSTRAP_OWNER_ID.parse::<Uuid>().unwrap()];
     for (email, scope, target, state) in [
@@ -467,7 +467,7 @@ async fn explore_navigation_lists_only_readable_published_entries(pool: PgPool) 
         .execute(&pool)
         .await
         .unwrap();
-    let repository = api::repository::CatalogRepository::new(pool.clone(), workspace_id);
+    let repository = api::repository::AttricatRepository::new(pool.clone(), workspace_id);
     let codes = |items: Vec<api::repository::ExploreNavigationItem>| {
         items
             .into_iter()

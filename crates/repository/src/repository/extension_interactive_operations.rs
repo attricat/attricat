@@ -7,7 +7,7 @@
 
 use std::collections::{HashMap, HashSet, hash_map::Entry};
 
-use catalog_domain::model::{Attribute, Record};
+use attricat_domain::model::{Attribute, Record};
 use chrono::{DateTime, Duration, Utc};
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -21,7 +21,7 @@ use crate::{
 };
 
 use super::{
-    AuthorizationActor, CatalogRepository, ClaimedTask, RepositoryError,
+    AttricatRepository, AuthorizationActor, ClaimedTask, RepositoryError,
     extension_annotations::own_annotations,
 };
 
@@ -214,7 +214,7 @@ fn request_digest(input: &StartInteractiveOperation) -> String {
     )
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     /// A repository for one interactive run's host calls: catalog effects are
     /// bounded by the initiator's live grants and attributed to that user.
     pub fn for_interactive_run(
@@ -229,7 +229,7 @@ impl CatalogRepository {
             actor_token_id: scope.actor.token_id,
             request_id: Uuid::new_v4(),
             correlation_id: run_id,
-            action: "catalog.extensions.operations.write".to_owned(),
+            action: "attricat.extensions.operations.write".to_owned(),
             authorization_scope: json!({
                 "extension_id": extension_id,
                 "operation_run_id": run_id,
@@ -305,8 +305,8 @@ impl CatalogRepository {
                 Err(RepositoryError::IdempotencyKeyReused)
             };
         }
-        let manifest: catalog_extension_manifest::Manifest = serde_json::from_value(manifest_value)
-            .map_err(|_| {
+        let manifest: attricat_extension_manifest::Manifest =
+            serde_json::from_value(manifest_value).map_err(|_| {
                 RepositoryError::InvalidExtension("stored extension manifest is invalid".into())
             })?;
         let operation = manifest

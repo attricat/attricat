@@ -1,12 +1,12 @@
 mod support;
 
-use api::repository::CatalogRepository;
+use api::repository::AttricatRepository;
 use support::*;
 
 const BOOTSTRAP_WORKSPACE_ID: &str = "00000000-0000-4000-8000-000000000002";
 
 #[sqlx::test]
-async fn workspace_scoped_repository_hides_other_workspace_catalog_rows(pool: PgPool) {
+async fn workspace_scoped_repository_hides_other_workspace_attricat_rows(pool: PgPool) {
     let other_workspace = Uuid::new_v4();
     let other_context = Uuid::new_v4();
     sqlx::query(
@@ -25,7 +25,7 @@ async fn workspace_scoped_repository_hides_other_workspace_catalog_rows(pool: Pg
     .await
     .unwrap();
 
-    let repository = CatalogRepository::system(pool);
+    let repository = AttricatRepository::system(pool);
     let bootstrap = repository
         .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
         .await
@@ -79,13 +79,13 @@ async fn workspace_scoped_repository_hides_other_workspace_catalog_rows(pool: Pg
 async fn workspace_scoped_blueprints_reject_foreign_ids_codes_versions_and_attributes(
     pool: PgPool,
 ) {
-    use api::{model::CreateBlueprint, repository::CatalogRepository};
+    use api::{model::CreateBlueprint, repository::AttricatRepository};
 
     let bootstrap_workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
     let other_workspace = Uuid::new_v4();
     sqlx::query("INSERT INTO workspaces (id, slug, name, login_identifier) VALUES ($1, 'tenant-blueprint', 'Tenant blueprint', 'tenant-blueprint.local')")
         .bind(other_workspace).execute(&pool).await.unwrap();
-    let repository = CatalogRepository::system(pool);
+    let repository = AttricatRepository::system(pool);
     let bootstrap = repository.for_workspace(bootstrap_workspace).await.unwrap();
     repository
         .initialize_workspace(other_workspace)
@@ -179,7 +179,7 @@ async fn workspace_scoped_record_commands_reject_foreign_record_ids(pool: PgPool
     sqlx::query("INSERT INTO records (id, blueprint_id, blueprint_version, workspace_id) VALUES ($1, $2, 1, $3)")
         .bind(record).bind(blueprint).bind(other_workspace).execute(&pool).await.unwrap();
 
-    let repository = CatalogRepository::system(pool);
+    let repository = AttricatRepository::system(pool);
     let bootstrap = repository.for_workspace(bootstrap_workspace).await.unwrap();
     assert!(bootstrap.get_record(record).await.unwrap().is_none());
     assert!(bootstrap.delete_record(record).await.is_err());
@@ -204,7 +204,7 @@ async fn current_values_hides_foreign_record_values(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
-    let repository = CatalogRepository::system(pool);
+    let repository = AttricatRepository::system(pool);
     let bootstrap = repository.for_workspace(bootstrap_workspace).await.unwrap();
     repository
         .initialize_workspace(other_workspace)
@@ -258,7 +258,7 @@ async fn reachable_search_never_traverses_another_workspace(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
-    let repository = CatalogRepository::system(pool);
+    let repository = AttricatRepository::system(pool);
     let bootstrap = repository.for_workspace(bootstrap_workspace).await.unwrap();
     repository
         .initialize_workspace(other_workspace)

@@ -38,31 +38,31 @@ Both processes expose Prometheus metrics. Keep them on a private network.
 | API | `GET /api/metrics` | A session or token with `data_health.read`. |
 | File worker | `GET /metrics` on the operations listener (port 3001) | `Authorization: Bearer $FILE_WORKER_METRICS_TOKEN`. |
 
-Labels are bounded: routes are reported as templates, and no file name, ID, or URL is ever a label. The only series labelled by workspace is `catalog_event_delivery_queue_depth` (`workspace_id`).
+Labels are bounded: routes are reported as templates, and no file name, ID, or URL is ever a label. The only series labelled by workspace is `attricat_event_delivery_queue_depth` (`workspace_id`).
 
 Useful series:
 
 | Series | Watch for |
 | --- | --- |
-| `catalog_database_ready`, `catalog_object_store_ready` | Zero for two probe intervals. |
-| `catalog_task_queue_depth`, `catalog_task_queue_oldest_age_seconds`, `catalog_task_queue_retries` | Growing depth, old tasks, any dead letters. |
-| `catalog_file_worker_queue_depth`, `catalog_file_worker_oldest_age_seconds`, `catalog_file_worker_retries` | Same, for file processing. |
-| `catalog_file_worker_jobs_failed_total` | Increases. |
-| `catalog_event_delivery_queue_depth{workspace_id,consumer,status}` | Growing `pending`, any `dead_letter`. |
-| `catalog_event_deliveries_total{outcome}` | `dead_letter` increases. |
-| `catalog_extension_operation_runs`, `catalog_extension_operation_oldest_age_seconds` | Stuck extension operations. |
-| `catalog_file_uploads_total`, `catalog_file_downloads_total`, `catalog_object_store_operations_total` | Error outcomes. |
-| `catalog_value_history_cleanup_total{outcome}` | `failed`. Repeated `budget_exhausted` means each 10-second run ends with old history still left to delete. |
-| `catalog_upload_cleanup_total{outcome}` | `failed`. Failed deletions of abandoned uploads are retried. |
-| `catalog_query_cache_requests_total{namespace,outcome}` | A falling share of `hit` and `remote_hit` against `miss`. |
-| `catalog_query_cache_redis_connected` | `0` on any replica: it has lost its Redis connection and caches in memory only until it reconnects. |
-| `catalog_query_cache_redis_circuit_opened_total` | Increases: Redis is connected but keeps timing out or dropping commands, so replicas skip it for a few seconds at a time. |
-| `catalog_db_round_trips_per_operation{scope}` | Rising database round trips per request route, task kind or background loop. |
-| `catalog_db_round_trips_total{scope}` | A growing `unscoped` rate, or a background loop whose rate rises while the catalog is idle. |
+| `attricat_database_ready`, `attricat_object_store_ready` | Zero for two probe intervals. |
+| `attricat_task_queue_depth`, `attricat_task_queue_oldest_age_seconds`, `attricat_task_queue_retries` | Growing depth, old tasks, any dead letters. |
+| `attricat_file_worker_queue_depth`, `attricat_file_worker_oldest_age_seconds`, `attricat_file_worker_retries` | Same, for file processing. |
+| `attricat_file_worker_jobs_failed_total` | Increases. |
+| `attricat_event_delivery_queue_depth{workspace_id,consumer,status}` | Growing `pending`, any `dead_letter`. |
+| `attricat_event_deliveries_total{outcome}` | `dead_letter` increases. |
+| `attricat_extension_operation_runs`, `attricat_extension_operation_oldest_age_seconds` | Stuck extension operations. |
+| `attricat_file_uploads_total`, `attricat_file_downloads_total`, `attricat_object_store_operations_total` | Error outcomes. |
+| `attricat_value_history_cleanup_total{outcome}` | `failed`. Repeated `budget_exhausted` means each 10-second run ends with old history still left to delete. |
+| `attricat_upload_cleanup_total{outcome}` | `failed`. Failed deletions of abandoned uploads are retried. |
+| `attricat_query_cache_requests_total{namespace,outcome}` | A falling share of `hit` and `remote_hit` against `miss`. |
+| `attricat_query_cache_redis_connected` | `0` on any replica: it has lost its Redis connection and caches in memory only until it reconnects. |
+| `attricat_query_cache_redis_circuit_opened_total` | Increases: Redis is connected but keeps timing out or dropping commands, so replicas skip it for a few seconds at a time. |
+| `attricat_db_round_trips_per_operation{scope}` | Rising database round trips per request route, task kind or background loop. |
+| `attricat_db_round_trips_total{scope}` | A growing `unscoped` rate, or a background loop whose rate rises while the catalog is idle. |
 
 The event delivery gauge is refreshed every five seconds. For each consumer with deliveries in a workspace, all four statuses are reported, and statuses without deliveries read `0`.
 
-Each request route, task kind and background loop is a round-trip `scope`. To log the count for every operation, set `RUST_LOG=catalog_repository::round_trips=debug`.
+Each request route, task kind and background loop is a round-trip `scope`. To log the count for every operation, set `RUST_LOG=attricat_repository::round_trips=debug`.
 
 Suggested alerts: page when a readiness gauge is zero for two intervals, when any dead-letter or failed count is above zero, or when failure counters increase. Warn when the oldest queued item is older than five minutes for ten minutes, or a queue grows for fifteen minutes. Alert if metrics disappear for two scrape intervals. Tune thresholds to your import and export volume.
 
@@ -80,7 +80,7 @@ Logs and traces never contain object keys, file names, passwords, or tokens.
 
 ## Failed event deliveries
 
-Catalog changes produce internal events that workflows, rules, and extensions consume. A delivery that keeps failing becomes a **dead letter** after five attempts by default.
+Attricat changes produce internal events that workflows, rules, and extensions consume. A delivery that keeps failing becomes a **dead letter** after five attempts by default.
 
 1. List dead letters (needs `data_health.read`):
 

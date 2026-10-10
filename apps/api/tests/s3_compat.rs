@@ -7,17 +7,17 @@ use uuid::Uuid;
 
 #[tokio::test]
 #[ignore = "requires the configured RustFS/S3-compatible endpoint and bucket"]
-async fn rustfs_supports_catalog_s3_operations() {
+async fn rustfs_supports_attricat_s3_operations() {
     let config = StorageConfig::from_env().expect("valid S3 test configuration");
     let store = S3ObjectStore::new(config).await;
-    let key = format!("catalog-s3-compat-test/{}", Uuid::new_v4());
+    let key = format!("attricat-s3-compat-test/{}", Uuid::new_v4());
 
     store.readiness().await.expect("bucket is reachable");
     store
         .put(
             &key,
             StoredObject {
-                bytes: "catalog-s3-compat".into(),
+                bytes: "attricat-s3-compat".into(),
                 content_type: Some("text/plain".into()),
             },
         )

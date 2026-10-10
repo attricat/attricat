@@ -28,7 +28,7 @@ fn resolved_value(
     })
 }
 
-/// See [`CatalogRepository::preview_scope`].
+/// See [`AttricatRepository::preview_scope`].
 pub(super) struct PreviewScope {
     requested_context: AttributeContext,
     tree: std::sync::Arc<ContextTree>,
@@ -46,7 +46,7 @@ struct PreviewRelationship {
     relationship_position: i64,
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     pub async fn resolved_preview(
         &self,
         record_id: Uuid,

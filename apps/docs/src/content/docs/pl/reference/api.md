@@ -7,13 +7,13 @@ Aplikacja webowa Attricat jest zbudowana na tym samym HTTP API, które możesz w
 
 ## Bazowy adres URL
 
-Trasy API są dostępne pod `/api`, np. `GET https://catalog.example.com/api/blueprints`; ścieżki na tej stronie są względne wobec tego prefiksu. Wszystkie pozostałe ścieżki należą do aplikacji webowej. Sondy stanu (`/health`, `/health/live`, `/health/ready`) odpowiadają także w katalogu głównym, na potrzeby load balancerów i kontroli kontenerów.
+Trasy API są dostępne pod `/api`, np. `GET https://attricat.example.com/api/blueprints`; ścieżki na tej stronie są względne wobec tego prefiksu. Wszystkie pozostałe ścieżki należą do aplikacji webowej. Sondy stanu (`/health`, `/health/live`, `/health/ready`) odpowiadają także w katalogu głównym, na potrzeby load balancerów i kontroli kontenerów.
 
 ## Uwierzytelnianie
 
 **Osobisty token API**: wyślij `Authorization: Bearer cat_pat_…`. To token wyznacza obszar roboczy. Tokeny są zalecanym sposobem integracji.
 
-**Sesja przeglądarki**: `POST /auth/login` ustawia plik cookie HttpOnly `catalog_session` oraz czytelny plik cookie `catalog_csrf`. Każde niebezpieczne żądanie (wszystko poza `GET`, `HEAD`, `OPTIONS`) wysłane z plikiem cookie musi także wysłać `X-Catalog-Csrf` z wartością pliku cookie CSRF.
+**Sesja przeglądarki**: `POST /auth/login` ustawia plik cookie HttpOnly `attricat_session` oraz czytelny plik cookie `attricat_csrf`. Każde niebezpieczne żądanie (wszystko poza `GET`, `HEAD`, `OPTIONS`) wysłane z plikiem cookie musi także wysłać `X-Attricat-Csrf` z wartością pliku cookie CSRF.
 
 Klienci nigdy nie wysyłają identyfikatora obszaru roboczego; zawsze pochodzi on z tokenu lub sesji.
 

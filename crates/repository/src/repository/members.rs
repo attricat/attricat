@@ -4,7 +4,7 @@ use serde_json::Value;
 use sqlx::{Postgres, Row, Transaction};
 use uuid::Uuid;
 
-use super::{CatalogRepository, RepositoryError};
+use super::{AttricatRepository, RepositoryError};
 
 const OWNER_ROLE_ID: Uuid = Uuid::from_u128(0x00000000000040008000000000000101);
 type WorkspaceUserInvitation = (Uuid, Uuid, String, Uuid, Vec<u8>, DateTime<Utc>);
@@ -51,7 +51,7 @@ pub struct CompletedWorkspaceOnboarding {
     pub workspace_id: Uuid,
 }
 
-impl<S: super::RepositoryScope> CatalogRepository<S> {
+impl<S: super::RepositoryScope> AttricatRepository<S> {
     pub async fn create_workspace_user(
         &self,
         actor_id: Uuid,

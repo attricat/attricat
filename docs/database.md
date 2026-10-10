@@ -48,11 +48,11 @@ so a request never uses cached state older than what it read:
 
 | Column | Advanced by |
 | --- | --- |
-| `catalog_generation` | blueprint revision publication, rule publication, enabling and disabling a rule, and Explore navigation writes |
+| `attricat_generation` | blueprint revision publication, rule publication, enabling and disabling a rule, and Explore navigation writes |
 | `contexts_generation` | creating, updating, and deleting an attribute context |
 | `extensions_generation` | extension installation, upgrade, lifecycle, grant, configuration, and layout changes, and the workspace extensions mode |
 
-Catalog tables carry a required `workspace_id`. Composite foreign keys keep blueprint revisions, attributes, records, contexts, values, history, relationships, and migration records in the same workspace. Every repository query and mutation binds the server-derived workspace ID explicitly; the application never accepts a tenant ID from a client body or header as authorization input.
+Attricat tables carry a required `workspace_id`. Composite foreign keys keep blueprint revisions, attributes, records, contexts, values, history, relationships, and migration records in the same workspace. Every repository query and mutation binds the server-derived workspace ID explicitly; the application never accepts a tenant ID from a client body or header as authorization input.
 
 ### Identity and seeded RBAC
 
@@ -178,7 +178,7 @@ plural_category)`; `context` is `''` when absent so the constraint covers it.
 `solution_pack_id`) for entries a pack applied and nobody has edited since. A
 workspace write takes over a pack entry; pack applies never update workspace
 entries. Key normalization, language and plural-category validation, and the
-override rule live in `catalog-lexicon` and the repository, not SQL.
+override rule live in `attricat-lexicon` and the repository, not SQL.
 
 ### `teams` and `team_members`
 
@@ -449,10 +449,10 @@ tables with `UNIQUE`/`CHECK`), never as triggers or functions.
 
 ## Projections
 
-`CatalogRepository` is the sole application boundary for catalog persistence.
+`AttricatRepository` is the sole application boundary for catalog persistence.
 Only repository code reads or writes EAV facts, blueprint metadata, and record
 projections. Projection rebuilds run in the same repository transaction as the
-EAV mutation. Direct catalog-table SQL is limited to migrations and storage
+EAV mutation. Direct attricat-table SQL is limited to migrations and storage
 assertions in tests.
 
 The web client accesses catalog data only through feature API modules. Within
@@ -651,7 +651,7 @@ filtering and roll-up counts.
 
 ## Blueprint Compiler
 
-The pure `catalog-blueprint` crate parses and compiles blueprint TOML without
+The pure `attricat-blueprint` crate parses and compiles blueprint TOML without
 SQLx, PostgreSQL, Axum, or Tokio dependencies. See [Blueprint
 Authoring](blueprints.md) for the definition grammar and attribute policies.
 

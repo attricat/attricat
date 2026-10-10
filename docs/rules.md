@@ -1,6 +1,6 @@
 # Rules
 
-Rules are Catalog-owned, versioned blueprint checks. They are deliberately separate from workflows: a workflow mutates one trigger record, while a rule evaluates a restricted predicate over a bounded blueprint candidate page and manages a finding lifecycle.
+Rules are Attricat-owned, versioned blueprint checks. They are deliberately separate from workflows: a workflow mutates one trigger record, while a rule evaluates a restricted predicate over a bounded blueprint candidate page and manages a finding lifecycle.
 
 ## Definition contract
 
@@ -147,7 +147,7 @@ and fail with `422 publication_checks_failed`. See [API](api.md#errors).
 
 ## Runtime guarantees
 
-- A schedule has one durable cursor per rule revision/trigger; Catalog never creates per-record timers.
+- A schedule has one durable cursor per rule revision/trigger; Attricat never creates per-record timers.
 - Each run leases one bounded page (500 records), has a durable UUID cursor, and stops after 10,000 candidates.
 - Schedule occurrence and event IDs are idempotency keys. A rule cannot have overlapping pending or leased scheduled runs.
 - Workers lease, retry with bounded exponential delay, dead-letter after five attempts, and recheck the enabled lifecycle on claim.

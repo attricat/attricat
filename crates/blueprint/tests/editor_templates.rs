@@ -1,12 +1,12 @@
 use std::{fs, path::Path};
 
-use catalog_blueprint::{compile, parse};
+use attricat_blueprint::{compile, parse};
 
 #[test]
 fn every_editor_template_compiles_without_workspace_dependencies() {
     let directory = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../apps/catalog-web/src/features/blueprints/templates");
-    let schema = catalog_blueprint::definition_json_schema();
+        .join("../../apps/web/src/features/blueprints/templates");
+    let schema = attricat_blueprint::definition_json_schema();
     let mut checked = 0;
 
     for entry in fs::read_dir(directory).unwrap() {
@@ -22,7 +22,7 @@ fn every_editor_template_compiles_without_workspace_dependencies() {
 
         let instance =
             serde_json::to_value(toml::from_str::<toml::Value>(&source).unwrap()).unwrap();
-        let violations = catalog_validation::validate_json_schema(&schema, &instance).unwrap();
+        let violations = attricat_validation::validate_json_schema(&schema, &instance).unwrap();
         assert!(
             violations.is_empty(),
             "{} violates the editor schema: {violations:?}",

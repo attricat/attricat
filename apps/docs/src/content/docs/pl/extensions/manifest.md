@@ -5,7 +5,7 @@ description: Każde pole pliku manifest.json rozszerzenia, w tym uprawnienia, up
 
 `manifest.json` to ścisły JSON. Nieznane pola w dowolnym miejscu sprawiają, że pakiet jest nieprawidłowy.
 
-Identyfikatory używane w manifeście (`catalog.id` oraz identyfikatory artefaktów, zależności, reguł uprawnień, procedur obsługi i kontrybucji) mogą zawierać litery ASCII, cyfry, `.`, `_` i `-`. Zachowuj je bez zmian między wydaniami; odwołują się do nich układy i przyznane uprawnienia.
+Identyfikatory używane w manifeście (`attricat.id` oraz identyfikatory artefaktów, zależności, reguł uprawnień, procedur obsługi i kontrybucji) mogą zawierać litery ASCII, cyfry, `.`, `_` i `-`. Zachowuj je bez zmian między wydaniami; odwołują się do nich układy i przyznane uprawnienia.
 
 ## Pola najwyższego poziomu
 
@@ -16,8 +16,8 @@ Identyfikatory używane w manifeście (`catalog.id` oraz identyfikatory artefakt
 | `version` | Tak | Wersja wydania, SemVer. |
 | `description` | Tak | Jednowierszowy opis. |
 | `icons` | Tak | Mapa rozmiarów na ścieżki ikon, z co najmniej jednym wpisem, np. `{ "48": "assets/icon-48.svg" }`. |
-| `catalog.id` | Tak | Identyfikator rozszerzenia, np. `acme.inventory`. |
-| `catalog.host_api` | Tak | Zakres SemVer obsługiwanych wersji API hosta. Musi obejmować bieżącą wersję API hosta, `1.0.0`, np. `>=1.0.0, <2.0.0`. |
+| `attricat.id` | Tak | Identyfikator rozszerzenia, np. `acme.inventory`. |
+| `attricat.host_api` | Tak | Zakres SemVer obsługiwanych wersji API hosta. Musi obejmować bieżącą wersję API hosta, `1.0.0`, np. `>=1.0.0, <2.0.0`. |
 | `artifacts` | Tak | Co najmniej jeden artefakt. |
 | `permissions` | | Uprawnienia, które muszą zostać przyznane, zanim rozszerzenie będzie można włączyć. |
 | `optional_permissions` | | Uprawnienia, które administrator może przyznać. |
@@ -51,8 +51,8 @@ Wymień uprawnienia w `permissions` lub `optional_permissions`. Każde z nich ze
 
 | Uprawnienie | Zezwala na |
 | --- | --- |
-| `catalog.read` | Odczyt rekordów, wartości i Schematów. |
-| `catalog.write` | Zapis wartości i wykonywanie poleceń create, update, relationship i upsert. |
+| `attricat.read` | Odczyt rekordów, wartości i Schematów. |
+| `attricat.write` | Zapis wartości i wykonywanie poleceń create, update, relationship i upsert. |
 | `events.subscribe` | Odbieranie zdarzeń katalogu i konsumowanych zdarzeń rozszerzeń. |
 | `events.emit` | Publikowanie zadeklarowanych zdarzeń tego rozszerzenia. |
 | `storage.extension` | Odczyt i zapis własnego magazynu klucz-wartość rozszerzenia. |
@@ -61,7 +61,7 @@ Wymień uprawnienia w `permissions` lub `optional_permissions`. Każde z nich ze
 | `secrets.read` | Odczyt nazwanych sekretów obszaru roboczego w trakcie działania. |
 | `logging.write` | Zapisywanie komunikatów dziennika. |
 | `artifacts.read`, `artifacts.write` | Odczyt danych wejściowych operacji i zapis danych wyjściowych operacji. |
-| `catalog.annotations.write` | Zapis własnej przestrzeni nazw tagów i metadanych rekordów. Zobacz [Adnotacje rekordów](/pl/extensions/operations/#adnotacje-rekordów). |
+| `attricat.annotations.write` | Zapis własnej przestrzeni nazw tagów i metadanych rekordów. Zobacz [Adnotacje rekordów](/pl/extensions/operations/#adnotacje-rekordów). |
 | `network.request` | Wykonywanie wychodzących żądań HTTPS pasujących do przyznanego uprawnienia hosta. |
 | `webhooks.receive` | Deklarowanie przychodzących webhooków (jeszcze nie są dostarczane). |
 

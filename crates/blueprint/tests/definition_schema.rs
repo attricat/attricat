@@ -12,7 +12,7 @@ fn repository_root() -> &'static Path {
 
 fn rendered_schema() -> String {
     let mut rendered =
-        serde_json::to_string_pretty(&catalog_blueprint::definition_json_schema()).unwrap();
+        serde_json::to_string_pretty(&attricat_blueprint::definition_json_schema()).unwrap();
     rendered.push('\n');
     rendered
 }
@@ -74,15 +74,15 @@ fn schema_accepts_every_parsed_repository_definition() {
         }
     }
 
-    let schema = catalog_blueprint::definition_json_schema();
+    let schema = attricat_blueprint::definition_json_schema();
     let mut checked = 0;
     for definition in definitions {
-        if catalog_blueprint::parse(&definition).is_err() {
+        if attricat_blueprint::parse(&definition).is_err() {
             continue;
         }
         let value: toml::Value = toml::from_str(&definition).unwrap();
         let instance = serde_json::to_value(value).unwrap();
-        let violations = catalog_validation::validate_json_schema(&schema, &instance).unwrap();
+        let violations = attricat_validation::validate_json_schema(&schema, &instance).unwrap();
         assert!(
             violations.is_empty(),
             "schema rejected a parsed definition: {violations:?}\n{definition}"
@@ -94,7 +94,7 @@ fn schema_accepts_every_parsed_repository_definition() {
 
 #[test]
 fn schema_rejects_unknown_keys_and_values() {
-    let schema = catalog_blueprint::definition_json_schema();
+    let schema = attricat_blueprint::definition_json_schema();
     for definition in [
         r#"format_version = 1
 code = "product"
@@ -125,11 +125,11 @@ code = "name"
 value_type = "string"
 "#,
     ] {
-        assert!(catalog_blueprint::parse(definition).is_err());
+        assert!(attricat_blueprint::parse(definition).is_err());
         let instance =
             serde_json::to_value(toml::from_str::<toml::Value>(definition).unwrap()).unwrap();
         assert!(
-            !catalog_validation::validate_json_schema(&schema, &instance)
+            !attricat_validation::validate_json_schema(&schema, &instance)
                 .unwrap()
                 .is_empty(),
             "schema accepted {definition}"

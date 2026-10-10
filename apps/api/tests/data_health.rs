@@ -52,7 +52,7 @@ async fn liveness_and_readiness_have_distinct_dependency_semantics(pool: PgPool)
 }
 
 #[sqlx::test]
-async fn data_health_sections_return_an_empty_catalog(pool: PgPool) {
+async fn data_health_sections_return_an_empty_attricat(pool: PgPool) {
     let (base_url, server) = start_server(pool).await;
     let client = authenticated_client();
 
@@ -152,7 +152,7 @@ async fn metrics_endpoint_exposes_low_cardinality_request_metrics(pool: PgPool) 
         .await
         .unwrap();
 
-    assert!(metrics.contains("catalog_http_requests_total"));
+    assert!(metrics.contains("attricat_http_requests_total"));
     assert!(metrics.contains("route=\"/health\""));
     assert!(!metrics.contains(&base_url));
 

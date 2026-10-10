@@ -1,9 +1,9 @@
 //! Durable background execution and provider adapters.
 
-pub use catalog_domain::{constants, model, task_queue};
-pub use catalog_events as domain_events;
-pub use catalog_repository::{catalog_read_service, catalog_service, file_access, repository};
-pub use catalog_storage as storage;
+pub use attricat_domain::{constants, model, task_queue};
+pub use attricat_events as domain_events;
+pub use attricat_repository::{attricat_read_service, attricat_service, file_access, repository};
+pub use attricat_storage as storage;
 
 pub mod blueprint_migration_worker;
 pub mod event_dispatcher;

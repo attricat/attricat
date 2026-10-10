@@ -4,12 +4,12 @@ ENV NODE_OPTIONS=--max-old-space-size=1536
 RUN npm install --global pnpm@11.25.0
 WORKDIR /src
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY apps/catalog-web/package.json apps/catalog-web/package.json
+COPY apps/web/package.json apps/web/package.json
 COPY apps/docs/package.json apps/docs/package.json
-RUN pnpm install --filter catalog-web --frozen-lockfile
+RUN pnpm install --filter web --frozen-lockfile
 COPY contracts contracts
-COPY apps/catalog-web apps/catalog-web
-RUN pnpm --dir apps/catalog-web build
+COPY apps/web apps/web
+RUN pnpm --dir apps/web build
 
 FROM rust:bookworm AS rust-builder
 # Wasmtime/Cranelift is memory-intensive under full dependency optimization.
@@ -17,7 +17,7 @@ FROM rust:bookworm AS rust-builder
 # on ordinary CI runners; one cargo job prevents parallel compiler spikes.
 ENV CARGO_BUILD_JOBS=1 CARGO_PROFILE_RELEASE_OPT_LEVEL=1
 # This copy intentionally sequences the memory-heavy frontend and Rust builds.
-COPY --from=web-builder /src/apps/catalog-web/dist /tmp/web-dist
+COPY --from=web-builder /src/apps/web/dist /tmp/web-dist
 WORKDIR /src
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 COPY apps apps
@@ -55,7 +55,7 @@ RUN chmod 0555 /usr/local/bin/docker-entrypoint.sh \
  && chown -R attricat:attricat /srv/attricat
 ENV BIND_ADDR=0.0.0.0:3000 \
     WEB_DIST_DIR=/srv/attricat/web \
-    CATALOG_AUTO_MIGRATE=false
+    ATTRICAT_AUTO_MIGRATE=false
 EXPOSE 3000 3001
 USER 10001:10001
 ENTRYPOINT ["docker-entrypoint.sh"]

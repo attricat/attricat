@@ -14,19 +14,19 @@ or inaccessible configured bucket.
 | `DATABASE_REQUEST_POOL_CONNECTIONS` | `10` | API | Maximum connections in the single global request/session pool shared by all workspaces. Must be an integer from 1 to 100. |
 | `DATABASE_TASK_POOL_CONNECTIONS` | `10` | API | Maximum connections in the single global task/worker pool shared by all workspaces. Must be an integer from 1 to 100. The API logs the request + task + maintenance total at startup. Background coordinators hold up to three further connections outside both pools; see [Coordinator leadership](#coordinator-leadership). |
 | `BIND_ADDR` | `127.0.0.1:3000` | API | Listener address. The production image sets `0.0.0.0:3000`. |
-| `CATALOG_AUTO_MIGRATE` | `true` | API | Applies embedded migrations during API startup. Production deployment sets this `false` and runs the image's singleton `migrate` role first. |
+| `ATTRICAT_AUTO_MIGRATE` | `true` | API | Applies embedded migrations during API startup. Production deployment sets this `false` and runs the image's singleton `migrate` role first. |
 | `WEB_DIST_DIR` | Unset | API | Optional compiled SPA directory. The production image sets `/srv/attricat/web`; the SPA then answers every path outside `/api` and the health probes. |
-| `CATALOG_WORKSPACE_ID` | Bootstrap `default` workspace UUID | API | Workspace initialized with the configured owner during startup; it is not an HTTP tenancy selector. |
-| `CATALOG_BOOTSTRAP_WORKSPACE_NAME` | `Default workspace` | API | Display name recorded while initializing the configured workspace. |
-| `CATALOG_BOOTSTRAP_OWNER_EMAIL` | `owner@example.test` | API | Initial owner email. Startup trims and lowercases it before idempotently creating the bootstrap user, membership, and owner grant. Set a real deployment email; it is never an API input. |
-| `CATALOG_BOOTSTRAP_OWNER_ID` | Random UUID | API | Optional stable UUID for the bootstrap owner. |
-| `CATALOG_BOOTSTRAP_OWNER_PASSWORD` | Unset | API | Optional one-time local password for a newly bootstrapped owner. It is hashed before persistence and never updates an existing credential. |
-| `CATALOG_DEMO_MODE` | `false` | API | Public demo deployments only. Implies `CATALOG_SAMPLE_ACCOUNTS`, sets the bootstrap workspace's sign-in identifier to `demo.attricat.com` and its default name to `Demo`, and makes the web sign-in skip the workspace step and pre-select the editor account. Password reset, membership state, role grants, ownership transfer, invitations and user creation return `403 disabled_in_demo`, so visitors cannot lock the shared accounts out or send mail. When an agent provider is configured, the agent is read-only: it is offered no mutation tools, a mutation it names anyway fails the run, and the conversation view says so. Never enable it for a workspace holding private data. |
-| `CATALOG_SAMPLE_ACCOUNTS` | `false`; `true` in `.env.example` | API | Seeds `viewer@`, `editor@` and `admin@` accounts on the bootstrap owner's email domain with those built-in roles and the `CATALOG_BOOTSTRAP_OWNER_PASSWORD` password, which it then requires. `GET /auth/sample-logins` publishes these accounts and the password so the sign-in page can offer them. Development and demos only. |
+| `ATTRICAT_WORKSPACE_ID` | Bootstrap `default` workspace UUID | API | Workspace initialized with the configured owner during startup; it is not an HTTP tenancy selector. |
+| `ATTRICAT_BOOTSTRAP_WORKSPACE_NAME` | `Default workspace` | API | Display name recorded while initializing the configured workspace. |
+| `ATTRICAT_BOOTSTRAP_OWNER_EMAIL` | `owner@example.test` | API | Initial owner email. Startup trims and lowercases it before idempotently creating the bootstrap user, membership, and owner grant. Set a real deployment email; it is never an API input. |
+| `ATTRICAT_BOOTSTRAP_OWNER_ID` | Random UUID | API | Optional stable UUID for the bootstrap owner. |
+| `ATTRICAT_BOOTSTRAP_OWNER_PASSWORD` | Unset | API | Optional one-time local password for a newly bootstrapped owner. It is hashed before persistence and never updates an existing credential. |
+| `ATTRICAT_DEMO_MODE` | `false` | API | Public demo deployments only. Implies `ATTRICAT_SAMPLE_ACCOUNTS`, sets the bootstrap workspace's sign-in identifier to `demo.attricat.com` and its default name to `Demo`, and makes the web sign-in skip the workspace step and pre-select the editor account. Password reset, membership state, role grants, ownership transfer, invitations and user creation return `403 disabled_in_demo`, so visitors cannot lock the shared accounts out or send mail. When an agent provider is configured, the agent is read-only: it is offered no mutation tools, a mutation it names anyway fails the run, and the conversation view says so. Never enable it for a workspace holding private data. |
+| `ATTRICAT_SAMPLE_ACCOUNTS` | `false`; `true` in `.env.example` | API | Seeds `viewer@`, `editor@` and `admin@` accounts on the bootstrap owner's email domain with those built-in roles and the `ATTRICAT_BOOTSTRAP_OWNER_PASSWORD` password, which it then requires. `GET /auth/sample-logins` publishes these accounts and the password so the sign-in page can offer them. Development and demos only. |
 | `SESSION_COOKIE_SECURE` | `true` | API | Adds `Secure` to browser session and CSRF cookies. Set `false` only for local HTTP development or test servers. |
 | `RUST_LOG` | `info` | API | Structured tracing filter (for example, `api=debug`). |
 | `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | Unset | API and file worker | Optional OTLP/gRPC trace collector endpoint. Local development sends traces to Jaeger. Unset it to disable trace export. |
-| `CATALOG_DEVTOOLS` | `true` locally | API process and Vite | Shared switch for development tooling. It controls the web Inspector and sanitized Explorer `Server-Timing` metrics, including aggregate SQL execution time and query count; these Explorer metrics are absent when disabled. Other builds, including production, load the Inspector on demand only in a browser where local storage `catalog.inspector-enabled` is `true`; it then shows server status, the running build, and the session, but no Explorer timings unless the API also enables this setting. SQL statements and bind values are never exposed. |
+| `ATTRICAT_DEVTOOLS` | `true` locally | API process and Vite | Shared switch for development tooling. It controls the web Inspector and sanitized Explorer `Server-Timing` metrics, including aggregate SQL execution time and query count; these Explorer metrics are absent when disabled. Other builds, including production, load the Inspector on demand only in a browser where local storage `attricat.inspector-enabled` is `true`; it then shows server status, the running build, and the session, but no Explorer timings unless the API also enables this setting. SQL statements and bind values are never exposed. |
 | `LLM_API_KEY` | Unset (agents unavailable) | API only | Secret API key for the OpenAI-compatible provider. Never send, persist, or log it. |
 | `LLM_BASE_URL` | `https://api.openai.com/v1` | API only | Absolute HTTP(S) base URL for OpenAI-compatible Chat Completions. |
 | `LLM_MODEL` | `gpt-4o-mini` | API only | Provider model identifier captured on each run, never a browser-selected setting. |
@@ -62,11 +62,11 @@ or inaccessible configured bucket.
 | `TASK_WORKER_SHUTDOWN_GRACE_SECONDS` | `30` | API | Positive bounded drain period; unfinished generic task leases are allowed to expire. |
 | `BLUEPRINT_MIGRATION_PAGE_SIZE` | `100` | API | Record migration candidate keyset page size; must be between 1 and 1000. |
 | `BLUEPRINT_MIGRATION_CONCURRENCY` | `4` | API | Maximum concurrent record attempts within one migration batch; must be between 1 and 64. |
-| `CATALOG_API_URL` | `http://127.0.0.1:3000/api` | Vite, CLI | API base URL, including `/api`. The web app's development proxy forwards `/api` to its origin. |
+| `ATTRICAT_API_URL` | `http://127.0.0.1:3000/api` | Vite, CLI | API base URL, including `/api`. The web app's development proxy forwards `/api` to its origin. |
 | `EXTENSION_OFFICIAL_REGISTRY` | `attricat/attricat-extensions` | API | Canonical public GitHub `owner/repository` used as every workspace's immutable official extension source. |
 | `EXTENSIONS_MODE` | `enabled` | API | Deployment emergency gate. Set exactly `disabled` to block all new extension execution, artifacts, runtime descriptors, commands, storage, host calls, and event delivery without changing installations or grants. Invalid configured values fail closed. |
 | `EXTENSION_DENYLIST` | Empty | API | Comma-separated targeted containment entries. Each entry is an extension ID (`acme.extension`) or exact release (`acme.extension@uuid`). Evaluated at every runtime gate. |
-| `POSTGRES_DB` | `catalog` | Docker Compose | Local PostgreSQL database name. |
+| `POSTGRES_DB` | `attricat` | Docker Compose | Local PostgreSQL database name. |
 | `POSTGRES_USER` | `postgres` | Docker Compose | Local PostgreSQL user. |
 | `POSTGRES_PASSWORD` | `postgres` | Docker Compose | Local PostgreSQL password. |
 | `POSTGRES_PORT` | `5432` | Docker Compose | Host port mapped to PostgreSQL. |
@@ -76,7 +76,7 @@ or inaccessible configured bucket.
 | `SMTP_TLS_MODE` | `starttls` | API | Required SMTP encryption mode: `starttls` or `implicit` in production. `disabled` is only for the trusted local Mailpit relay. Opportunistic TLS is rejected. |
 | `SMTP_USERNAME` | Unset | API | Optional SMTP username. |
 | `SMTP_PASSWORD` | Unset | API | Optional SMTP password; keep it in a secret manager outside local development. |
-| `MAIL_FROM` | `Catalog <no-reply@catalog.local>` | API local development | Sender address for lifecycle email. |
+| `MAIL_FROM` | `Attricat <no-reply@attricat.local>` | API local development | Sender address for lifecycle email. |
 | `PASSWORD_RESET_URL` | Local web confirmation URL | API local development | Absolute web URL used in reset email; `just setup` uses the worktree's `WEB_PORT`. |
 | `WORKSPACE_INVITATION_URL` | Local invitation URL | API local development | Absolute web URL used for delivered existing-user workspace invitations. |
 | `WORKSPACE_ONBOARDING_URL` | Local onboarding URL | API local development | Absolute web URL used for delivered new-user onboarding links. |
@@ -101,8 +101,8 @@ or inaccessible configured bucket.
 | `FILE_WORKER_MAX_PIXELS` | `40000000` | File worker | Maximum decoded image pixels accepted for processing. |
 | `FILE_WORKER_MAX_ATTEMPTS` | `5` | File worker | Attempts before a job becomes terminally failed. |
 | `FILE_DELETE_GRACE_SECONDS` | `86400` | File worker | Delay between an unreferenced file being soft-deleted and its object purge. |
-| `CATALOG_E2E_FIXTURE_EMAIL` | Unset | API test environments | Optional test fixture user email. It takes effect only when paired with `CATALOG_E2E_FIXTURE_PASSWORD`; do not set either in production. |
-| `CATALOG_E2E_FIXTURE_PASSWORD` | Unset | API test environments | Optional test fixture user password paired with `CATALOG_E2E_FIXTURE_EMAIL`; do not set either in production. |
+| `ATTRICAT_E2E_FIXTURE_EMAIL` | Unset | API test environments | Optional test fixture user email. It takes effect only when paired with `ATTRICAT_E2E_FIXTURE_PASSWORD`; do not set either in production. |
+| `ATTRICAT_E2E_FIXTURE_PASSWORD` | Unset | API test environments | Optional test fixture user password paired with `ATTRICAT_E2E_FIXTURE_EMAIL`; do not set either in production. |
 | `RUSTFS_PORT` | `9000` | Docker Compose | Worktree-specific host port for the local RustFS S3 API. |
 | `RUSTFS_CONSOLE_PORT` | `9001` | Docker Compose | Worktree-specific host port for the local RustFS console. |
 | `REDIS_PORT` | `6379` | Docker Compose | Worktree-specific host port for the local Redis that `just dev` starts. The API uses it only with `CACHE_BACKEND=redis`. |
@@ -187,7 +187,7 @@ Every provider request contains the complete stored conversation history, so an
 attachment is considered again on every run and tool-call round while its
 message remains in that history. For each conversation-message attachment, the
 provider always receives a text record containing its display filename, MIME
-type, and Catalog file ID. It does **not** receive the object-store key, a
+type, and Attricat file ID. It does **not** receive the object-store key, a
 signed download URL, checksum, or byte size.
 
 The original file bytes are forwarded only when the attachment's MIME type
@@ -208,7 +208,7 @@ otherwise it sends the tool result metadata without image bytes. A successful
 otherwise it sends its result metadata without file text. These tool results
 include the requested file ID, filename, and MIME type.
 
-Catalog retains conversation messages and their attachment records (file ID,
+Attricat retains conversation messages and their attachment records (file ID,
 display filename, MIME type, byte size, and status) and keeps referenced file
 objects according to the file-retention policy below. It does not retain raw
 provider response bodies or provider credentials. The configured provider
@@ -243,7 +243,7 @@ its attempt counter only when the job is terminally failed.
 RustFS is a local-development S3-compatible adapter, replacing the deprecated
 MinIO local stack. It is not a production provider selection: production uses
 the same generic `S3_*` settings for its chosen S3-compatible service. The
-local bucket is initialized as `catalog-files`; open `$RUSTFS_UI_URL` after
+local bucket is initialized as `attricat-files`; open `$RUSTFS_UI_URL` after
 sourcing `.worktree` to inspect it. Back up PostgreSQL file metadata
 and the configured bucket together once file uploads are enabled.
 
@@ -284,13 +284,13 @@ private monitoring routes have their own access rules. The API checks the
 credential's workspace and grants for each request; missing or invalid
 credentials return `401`, while a valid identity without the required grant
 returns `403`. Unsafe **cookie-authenticated** requests also require the
-`X-Catalog-Csrf` synchronizer token.
+`X-Attricat-Csrf` synchronizer token.
 
 Browser sessions are scoped to the workspace resolved from the submitted login
 identifier. Clients do not provide a workspace UUID or tenancy header.
 
-The CLI resolves its API URL in this order: `--server`, `CATALOG_SERVER`,
-`CATALOG_API_URL` from the environment or worktree `.env`, then
+The CLI resolves its API URL in this order: `--server`, `ATTRICAT_SERVER`,
+`ATTRICAT_API_URL` from the environment or worktree `.env`, then
 `http://127.0.0.1:3000/api`. See [the CLI guide](cli.md#start-locally).
 
 The API validates the five `EVENT_DISPATCHER_*` settings above during startup;

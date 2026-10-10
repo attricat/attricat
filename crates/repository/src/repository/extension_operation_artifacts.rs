@@ -9,7 +9,7 @@ use serde_json::Value;
 use sqlx::{FromRow, Postgres, Transaction};
 use uuid::Uuid;
 
-use super::{CatalogRepository, RepositoryError};
+use super::{AttricatRepository, RepositoryError};
 
 pub const MAX_OPERATION_ARTIFACT_BYTES: i64 = 1024 * 1024 * 1024;
 pub const MAX_OPERATION_RUN_ARTIFACT_BYTES: i64 = 2 * 1024 * 1024 * 1024;
@@ -36,8 +36,8 @@ fn artifact_error(message: &str) -> RepositoryError {
     RepositoryError::InvalidExtension(message.into())
 }
 
-impl CatalogRepository {
-    /// Attaches a ready, workspace-owned Catalog file as this run's approved
+impl AttricatRepository {
+    /// Attaches a ready, workspace-owned Attricat file as this run's approved
     /// input. `source_reference.input_file_id` is the only supported public
     /// attachment shape; callers cannot supply an object key, checksum, or
     /// arbitrary artifact metadata.

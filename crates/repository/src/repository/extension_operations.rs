@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::task_queue::{TaskInsert, TaskKind, TaskStatus};
 
-use super::{CatalogRepository, ClaimedTask, RepositoryError, bounded_task_error_message};
+use super::{AttricatRepository, ClaimedTask, RepositoryError, bounded_task_error_message};
 
 const MAX_JSON_BYTES: usize = 64 * 1024;
 const MAX_IDEMPOTENCY_BYTES: usize = 128;
@@ -142,7 +142,7 @@ fn bounded_message(value: &str) -> String {
     }
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     async fn enqueue_extension_operation_task(
         &self,
         transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
@@ -210,8 +210,8 @@ impl CatalogRepository {
                 "extension release changed; revalidate the operation request".into(),
             ));
         }
-        let manifest: catalog_extension_manifest::Manifest = serde_json::from_value(manifest_value)
-            .map_err(|_| {
+        let manifest: attricat_extension_manifest::Manifest =
+            serde_json::from_value(manifest_value).map_err(|_| {
                 RepositoryError::InvalidExtension("stored extension manifest is invalid".into())
             })?;
         let operation = manifest

@@ -5,8 +5,8 @@ use super::{
     extractors::{ApiJson, ApiPath, ApiQuery},
 };
 use crate::{
-    catalog_read_service::CatalogReadService,
-    catalog_service::CatalogMutationService,
+    attricat_read_service::AttricatReadService,
+    attricat_service::AttricatMutationService,
     constants::DEFAULT_PAGE_SIZE,
     model::{
         AppendAttributeValues, AttributeValue, CreateRecordFormRequest, IncomingRelationshipsPage,
@@ -16,16 +16,16 @@ use crate::{
     },
     repository::decode_search_cursor,
 };
+use attricat_validation::validate_json_schema;
 use axum::{Json, extract::State, http::StatusCode};
 use base64::{Engine, engine::general_purpose::STANDARD};
-use catalog_validation::validate_json_schema;
 use chrono::{DateTime, NaiveDate, NaiveTime};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::agents::{MAX_CONVERSATION_MESSAGE_BYTES, MAX_TOOL_CALL_ARGUMENT_BYTES};
-use catalog_agent_runtime::{
+use attricat_agent_runtime::{
     agent_provider::{ChatMessage, OpenAiCompatibleClient},
     agent_tools::{ToolDefinition, ToolFunction},
 };
@@ -120,7 +120,7 @@ pub(super) async fn smart_fill_record_form(
         .agent_provider
         .as_ref()
         .ok_or_else(|| ApiError::service_unavailable("agents are not configured"))?;
-    let (record, values) = CatalogReadService::new(&repository)
+    let (record, values) = AttricatReadService::new(&repository)
         .record_with_values(input.record_id)
         .await?;
     let blueprint = repository
@@ -381,7 +381,7 @@ pub(super) async fn smart_fill_record_form(
         repository.append_conversation_message(id, None, "assistant", json!({"draft_proposal":{"fields":fields,"explanation":explanation,"base_values":base_values}})).await?;
         let title_repository = repository.clone();
         tokio::spawn(async move {
-            catalog_agent_runtime::conversation_title::maybe_generate_title(
+            attricat_agent_runtime::conversation_title::maybe_generate_title(
                 &title_repository,
                 &provider,
                 id,
@@ -451,7 +451,7 @@ pub(super) async fn delete_record(
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(record_id): ApiPath<Uuid>,
 ) -> Result<StatusCode, ApiError> {
-    CatalogMutationService::new(&repository)
+    AttricatMutationService::new(&repository)
         .delete_record(record_id)
         .await?;
     invalidate_data_health(&state, &repository);
@@ -463,7 +463,7 @@ pub(super) async fn create_record_form(
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiJson(input): ApiJson<CreateRecordFormRequest>,
 ) -> Result<(StatusCode, Json<Record>), ApiError> {
-    let record = CatalogMutationService::new(&repository)
+    let record = AttricatMutationService::new(&repository)
         .create_record(input, Some(user_id))
         .await?;
     invalidate_data_health(&state, &repository);
@@ -485,7 +485,7 @@ pub(super) async fn apply_record_batch(
     {
         return Err(ApiError::forbidden());
     }
-    let response = CatalogMutationService::new(&repository)
+    let response = AttricatMutationService::new(&repository)
         .apply_record_batch(input)
         .await?;
     invalidate_data_health(&state, &repository);
@@ -496,7 +496,7 @@ pub(super) async fn duplicate_record(
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(record_id): ApiPath<Uuid>,
 ) -> Result<(StatusCode, Json<Record>), ApiError> {
-    let record = CatalogMutationService::new(&repository)
+    let record = AttricatMutationService::new(&repository)
         .duplicate_record(record_id)
         .await?;
     invalidate_data_health(&state, &repository);
@@ -510,7 +510,7 @@ pub(super) async fn get_record_form(
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(record_id): ApiPath<Uuid>,
 ) -> Result<Json<RecordFormResponse>, ApiError> {
-    let (record, values) = CatalogReadService::new(&repository)
+    let (record, values) = AttricatReadService::new(&repository)
         .record_with_values(record_id)
         .await?;
     // The remaining reads are independent of each other.
@@ -557,7 +557,7 @@ pub(super) async fn update_record_form(
     ApiPath(record_id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<UpdateRecordFormRequest>,
 ) -> Result<Json<Record>, ApiError> {
-    let record = CatalogMutationService::new(&repository)
+    let record = AttricatMutationService::new(&repository)
         .update_record(record_id, input)
         .await?;
     invalidate_data_health(&state, &repository);
@@ -616,7 +616,7 @@ pub(super) async fn publish_record(
     ApiPath(record_id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<PublicationContextRequest>,
 ) -> Result<Json<crate::model::RecordPublicationStatus>, ApiError> {
-    let status = CatalogMutationService::new(&repository)
+    let status = AttricatMutationService::new(&repository)
         .publish_record(record_id, input.context_id)
         .await?;
     invalidate_data_health(&state, &repository);
@@ -627,7 +627,7 @@ pub(super) async fn publish_record_all_channels(
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(record_id): ApiPath<Uuid>,
 ) -> Result<Json<Vec<crate::model::RecordPublicationStatus>>, ApiError> {
-    let status = CatalogMutationService::new(&repository)
+    let status = AttricatMutationService::new(&repository)
         .publish_record_all_channels(record_id)
         .await?;
     invalidate_data_health(&state, &repository);
@@ -639,7 +639,7 @@ pub(super) async fn unpublish_record(
     ApiPath(record_id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<PublicationContextRequest>,
 ) -> Result<StatusCode, ApiError> {
-    CatalogMutationService::new(&repository)
+    AttricatMutationService::new(&repository)
         .unpublish_record(record_id, input.context_id)
         .await?;
     invalidate_data_health(&state, &repository);
@@ -659,7 +659,7 @@ pub(super) async fn migrate_record_to_latest(
     ApiQuery(version): ApiQuery<RecordVersionQuery>,
     ApiJson(input): ApiJson<MigrateRecordRequest>,
 ) -> Result<Json<Record>, ApiError> {
-    let record = CatalogMutationService::new(&repository)
+    let record = AttricatMutationService::new(&repository)
         .migrate_record_checked(record_id, input, version.expected_updated_at)
         .await?;
     invalidate_data_health(&state, &repository);
@@ -671,7 +671,7 @@ pub(super) async fn append_values(
     ApiPath(record_id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<AppendAttributeValues>,
 ) -> Result<(StatusCode, Json<Vec<AttributeValue>>), ApiError> {
-    let values = CatalogMutationService::new(&repository)
+    let values = AttricatMutationService::new(&repository)
         .append_values(record_id, input)
         .await?;
     invalidate_data_health(&state, &repository);
@@ -765,7 +765,7 @@ pub(super) async fn restore_value(
     ApiPath((record_id, history_id)): ApiPath<(Uuid, Uuid)>,
     ApiQuery(input): ApiQuery<RecordVersionQuery>,
 ) -> Result<(StatusCode, Json<AttributeValue>), ApiError> {
-    let value = CatalogMutationService::new(&repository)
+    let value = AttricatMutationService::new(&repository)
         .restore_value_checked(record_id, history_id, input.expected_updated_at)
         .await?;
     invalidate_data_health(&state, &repository);
@@ -777,7 +777,7 @@ pub(super) async fn replace_relationships(
     ApiPath(record_id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<RelationshipMutation>,
 ) -> Result<(StatusCode, Json<Vec<AttributeValue>>), ApiError> {
-    let values = CatalogMutationService::new(&repository)
+    let values = AttricatMutationService::new(&repository)
         .replace_relationships(record_id, input)
         .await?;
     invalidate_data_health(&state, &repository);
@@ -789,7 +789,7 @@ pub(super) async fn remove_relationships(
     ApiPath(record_id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<RelationshipMutation>,
 ) -> Result<(StatusCode, Json<Vec<AttributeValue>>), ApiError> {
-    let values = CatalogMutationService::new(&repository)
+    let values = AttricatMutationService::new(&repository)
         .remove_relationships(record_id, input)
         .await?;
     invalidate_data_health(&state, &repository);

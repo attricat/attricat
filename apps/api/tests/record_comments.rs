@@ -39,9 +39,9 @@ async fn readers_can_comment_but_only_authors_can_edit(pool: PgPool) {
     sqlx::query("INSERT INTO role_grants (id,workspace_id,membership_id,role_id,scope_type,scope_target_id) VALUES ($1,$2,$3,'00000000-0000-4000-8000-000000000104','workspace',$2)")
         .bind(Uuid::new_v4()).bind(workspace).bind(membership).execute(&pool).await.unwrap();
     let mut headers = reqwest::header::HeaderMap::new();
-    headers.insert("x-catalog-user-id", user.to_string().parse().unwrap());
+    headers.insert("x-attricat-user-id", user.to_string().parse().unwrap());
     headers.insert(
-        "x-catalog-workspace-id",
+        "x-attricat-workspace-id",
         workspace.to_string().parse().unwrap(),
     );
     let viewer = Client::builder().default_headers(headers).build().unwrap();

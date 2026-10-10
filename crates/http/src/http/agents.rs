@@ -126,7 +126,7 @@ pub(super) async fn create_conversation(
 }
 
 fn request_actor(
-    repository: &crate::repository::CatalogRepository,
+    repository: &crate::repository::AttricatRepository,
     user_id: Uuid,
 ) -> crate::repository::AuthorizationActor {
     repository
@@ -138,7 +138,7 @@ fn request_actor(
 }
 
 pub(super) async fn readable_conversation(
-    repository: &crate::repository::CatalogRepository,
+    repository: &crate::repository::AttricatRepository,
     user: Uuid,
     workspace: Uuid,
     id: Uuid,
@@ -163,7 +163,7 @@ pub(super) async fn readable_conversation(
 /// Keeps items that are either not record-bound or bound to a record the
 /// user may read, authorizing every record in one query.
 async fn retain_readable<T>(
-    repository: &crate::repository::CatalogRepository,
+    repository: &crate::repository::AttricatRepository,
     user: Uuid,
     workspace: Uuid,
     items: Vec<T>,
@@ -461,7 +461,7 @@ pub(super) async fn reject(
 }
 async fn decide_and_enqueue(
     state: &AppState,
-    repository: crate::repository::CatalogRepository,
+    repository: crate::repository::AttricatRepository,
     tool_call_id: Uuid,
     user: Uuid,
     workspace_id: Uuid,
@@ -471,7 +471,7 @@ async fn decide_and_enqueue(
     let run = repository.get_agent_run(call.run_id).await?;
     readable_conversation(&repository, user, workspace_id, run.conversation_id).await?;
     if matches!(decision, ApprovalDecision::Approve)
-        && !catalog_agent_runtime::agent_runner::mutation_authorized(
+        && !attricat_agent_runtime::agent_runner::mutation_authorized(
             &repository,
             user,
             workspace_id,
@@ -514,7 +514,7 @@ const STREAM_POLL_MIN: std::time::Duration = std::time::Duration::from_millis(25
 const STREAM_POLL_MAX: std::time::Duration = std::time::Duration::from_secs(2);
 
 async fn authorize_event_stream(
-    repository: &crate::repository::CatalogRepository,
+    repository: &crate::repository::AttricatRepository,
     principal: AuthenticatedPrincipal,
     session: Option<&AuthenticatedSession>,
     workspace: Uuid,

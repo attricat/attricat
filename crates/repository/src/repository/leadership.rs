@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 
 use sqlx::{Connection, PgConnection};
 
-use super::{CatalogRepository, RepositoryError, RepositoryScope};
+use super::{AttricatRepository, RepositoryError, RepositoryScope};
 
 /// How often a non-leader tries to take over.
 const ACQUIRE_INTERVAL: Duration = Duration::from_secs(5);
@@ -36,7 +36,7 @@ impl CoordinatorLeadership {
     /// lock is free and kept while its connection stays open.
     pub async fn is_leader<S: RepositoryScope>(
         &mut self,
-        repository: &CatalogRepository<S>,
+        repository: &AttricatRepository<S>,
     ) -> bool {
         if let Some(connection) = self.connection.as_mut() {
             if self
@@ -78,7 +78,7 @@ impl CoordinatorLeadership {
     }
 }
 
-impl<S: RepositoryScope> CatalogRepository<S> {
+impl<S: RepositoryScope> AttricatRepository<S> {
     /// Opens a dedicated connection and takes the coordinator's session lock
     /// on it, or returns `None` when another session holds it.
     pub(crate) async fn try_coordinator_lock(

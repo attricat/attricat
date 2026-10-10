@@ -12,7 +12,7 @@ use super::{
 };
 use crate::{
     extension_registry::{DiscoveredExtension, GitHubRepository},
-    repository::{CatalogRepository, ExtensionRegistrySource},
+    repository::{AttricatRepository, ExtensionRegistrySource},
 };
 
 #[derive(Deserialize)]
@@ -118,7 +118,7 @@ pub(super) async fn extension_details(
 /// workspace's configured registries.
 async fn registry_sources(
     state: &AppState,
-    repository: &CatalogRepository,
+    repository: &AttricatRepository,
 ) -> Result<Vec<GitHubRepository>, ApiError> {
     let mut sources = vec![state.official_registry.clone()];
     sources.extend(
@@ -140,7 +140,7 @@ async fn registry_sources(
 /// source could not be checked.
 pub(super) async fn find_trusted_extension(
     state: &AppState,
-    repository: &CatalogRepository,
+    repository: &AttricatRepository,
     target: &str,
 ) -> Result<DiscoveredExtension, ApiError> {
     let mut unavailable = false;

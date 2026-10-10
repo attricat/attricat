@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use api::{
     event_dispatcher::{self, DispatcherConfig, EventHandlerRegistry},
-    repository::CatalogRepository,
+    repository::AttricatRepository,
     task_worker::{self, TaskHandlerRegistry, TaskWorkerConfig},
     workflow_runtime,
 };
@@ -153,7 +153,7 @@ default_value = "untitled"
         .await
         .unwrap();
     let run_id: Uuid = run["id"].as_str().unwrap().parse().unwrap();
-    let repository = CatalogRepository::new(
+    let repository = AttricatRepository::new(
         pool.clone(),
         support::BOOTSTRAP_WORKSPACE_ID.parse().unwrap(),
     );
@@ -308,7 +308,7 @@ default_value = "untitled"
         .error_for_status()
         .unwrap();
 
-    let repository = CatalogRepository::new(
+    let repository = AttricatRepository::new(
         pool.clone(),
         support::BOOTSTRAP_WORKSPACE_ID.parse().unwrap(),
     );
@@ -394,7 +394,7 @@ default_value = "untitled"
 async fn workflow_outbox_dispatcher_and_worker_are_idempotent_and_disable_safe(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
-    let repository = CatalogRepository::new(
+    let repository = AttricatRepository::new(
         pool.clone(),
         support::BOOTSTRAP_WORKSPACE_ID.parse().unwrap(),
     );
@@ -653,7 +653,7 @@ default_value = "untitled"
         .await
         .unwrap();
     assert!(
-        CatalogRepository::system(pool.clone())
+        AttricatRepository::system(pool.clone())
             .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
             .await
             .unwrap()
@@ -679,7 +679,7 @@ default_value = "untitled"
     .fetch_one(&pool)
     .await
     .unwrap();
-    CatalogRepository::system(pool.clone())
+    AttricatRepository::system(pool.clone())
         .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
         .await
         .unwrap()
@@ -770,7 +770,7 @@ async fn fan_out_latest_event(pool: &PgPool, record_id: &str) -> (String, u64) {
     .fetch_one(pool)
     .await
     .unwrap();
-    let created = CatalogRepository::system(pool.clone())
+    let created = AttricatRepository::system(pool.clone())
         .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
         .await
         .unwrap()
@@ -949,7 +949,7 @@ async fn product_state(pool: &PgPool, id: Uuid) -> (Option<String>, bool) {
 }
 
 /// Claims and handles the run's task once, then requeues it if it failed.
-async fn handle_workflow_task_once(repository: &CatalogRepository) -> bool {
+async fn handle_workflow_task_once(repository: &AttricatRepository) -> bool {
     let task = repository
         .claim_task("referencing-test", Duration::from_secs(30))
         .await
@@ -1042,7 +1042,7 @@ tags = ["needs-review"]"#,
         .await
         .unwrap();
     let run_id = run["id"].as_str().unwrap();
-    let repository = CatalogRepository::new(pool.clone(), BOOTSTRAP_WORKSPACE_ID.parse().unwrap());
+    let repository = AttricatRepository::new(pool.clone(), BOOTSTRAP_WORKSPACE_ID.parse().unwrap());
 
     // The retired product has no transition to in_review: it fails on its own
     // while the other targets commit, and the run stays pending for a retry.
@@ -1190,7 +1190,7 @@ async fn referencing_update_refuses_more_targets_than_its_limit(pool: PgPool) {
         .unwrap()
         .error_for_status()
         .unwrap();
-    let repository = CatalogRepository::new(pool.clone(), BOOTSTRAP_WORKSPACE_ID.parse().unwrap());
+    let repository = AttricatRepository::new(pool.clone(), BOOTSTRAP_WORKSPACE_ID.parse().unwrap());
     assert!(!handle_workflow_task_once(&repository).await);
     for id in [first, second] {
         assert!(!product_state(&pool, id).await.1);
@@ -1274,7 +1274,7 @@ fixed = "Reworked""#,
     let record_id: Uuid = id.parse().unwrap();
     publish_in_channel(&pool, record_id, channel).await;
     assert_eq!(fan_out_latest_event(&pool, id).await.1, 1);
-    let repository = CatalogRepository::system(pool.clone())
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(bootstrap_workspace_id())
         .await
         .unwrap();

@@ -4,7 +4,7 @@ use super::{
     extractors::{ApiJson, ApiPath, ApiQuery},
 };
 use crate::{
-    catalog_service::CatalogMutationService,
+    attricat_service::AttricatMutationService,
     model::{
         AttachReusableAttribute, CreateReusableAttribute, CreateReusableAttributeGroup,
         RecordReusableAttribute, ReusableAttribute, ReusableAttributeGroup,
@@ -41,7 +41,7 @@ pub(super) async fn create(
     Ok((
         StatusCode::CREATED,
         Json(
-            CatalogMutationService::new(&repository)
+            AttricatMutationService::new(&repository)
                 .create_reusable_attribute(input)
                 .await?,
         ),
@@ -57,7 +57,7 @@ pub(super) async fn create_revision(
     Ok((
         StatusCode::CREATED,
         Json(
-            CatalogMutationService::new(&repository)
+            AttricatMutationService::new(&repository)
                 .create_reusable_attribute_revision(definition_id, input)
                 .await?,
         ),
@@ -70,7 +70,7 @@ pub(super) async fn publish_revision(
     ApiPath(revision_id): ApiPath<Uuid>,
 ) -> Result<Json<ReusableAttribute>, ApiError> {
     Ok(Json(
-        CatalogMutationService::new(&repository)
+        AttricatMutationService::new(&repository)
             .publish_reusable_attribute_revision(revision_id)
             .await?,
     ))
@@ -91,7 +91,7 @@ pub(super) async fn create_group(
     Ok((
         StatusCode::CREATED,
         Json(
-            CatalogMutationService::new(&repository)
+            AttricatMutationService::new(&repository)
                 .create_reusable_attribute_group(input)
                 .await?,
         ),
@@ -107,7 +107,7 @@ pub(super) async fn attach(
     Ok((
         StatusCode::CREATED,
         Json(
-            CatalogMutationService::new(&repository)
+            AttricatMutationService::new(&repository)
                 .attach_reusable_attribute(record_id, input)
                 .await?,
         ),
@@ -122,7 +122,7 @@ pub(super) async fn attach_group(
     Ok((
         StatusCode::CREATED,
         Json(
-            CatalogMutationService::new(&repository)
+            AttricatMutationService::new(&repository)
                 .attach_reusable_attribute_group(record_id, group_id)
                 .await?,
         ),

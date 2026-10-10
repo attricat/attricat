@@ -7,17 +7,17 @@ Server-side extension code is a WebAssembly **component** declared as a `server_
 
 ## Host API version
 
-The host interface is the WIT package `catalog:host@1.0.0`, in `crates/extension-runtime/wit-host/catalog-extension.wit` in the Attricat repository. Set `catalog.host_api` in your manifest to a range that accepts it, such as `">=1.0.0, <2.0.0"`. Every release with such a range can use every feature: event handlers, commands, typed reads and writes, scoped configuration, every kind of [operation](/extensions/operations/), and all client outlets.
+The host interface is the WIT package `attricat:host@1.0.0`, in `crates/extension-runtime/wit-host/attricat-extension.wit` in the Attricat repository. Set `attricat.host_api` in your manifest to a range that accepts it, such as `">=1.0.0, <2.0.0"`. Every release with such a range can use every feature: event handlers, commands, typed reads and writes, scoped configuration, every kind of [operation](/extensions/operations/), and all client outlets.
 
 Build your component against one of these worlds:
 
 | World | Exports |
 | --- | --- |
-| `catalog-extension` | `handler` and `operations` |
+| `attricat-extension` | `handler` and `operations` |
 | `handler-extension` | `handler` (event handlers and commands) |
 | `operation-extension` | `operations` |
 
-Every import is always available, but some only work in the right place. The operation interfaces (`artifacts`, `catalog-data`, `catalog`, `transfer`, `selection`) return an error outside an operation run. Inside a run, the typed `read` and `write` functions and the `catalog.read.v1` and `catalog.command.v1` calls return an error; use the run's own catalog interfaces instead.
+Every import is always available, but some only work in the right place. The operation interfaces (`artifacts`, `attricat-data`, `catalog`, `transfer`, `selection`) return an error outside an operation run. Inside a run, the typed `read` and `write` functions and the `attricat.read.v1` and `attricat.command.v1` calls return an error; use the run's own catalog interfaces instead.
 
 Later 1.x versions only add to 1.0. A component built for an earlier 1.x keeps working on newer hosts without a rebuild.
 
@@ -26,7 +26,7 @@ Later 1.x versions only add to 1.0. A component built for an earlier 1.x keeps w
 Declare a handler and subscribe to exact event types:
 
 ```json
-"permissions": ["events.subscribe", "catalog.read", "catalog.write"],
+"permissions": ["events.subscribe", "attricat.read", "attricat.write"],
 "server": {
   "event_handlers": [{
     "id": "recalculate",
@@ -49,13 +49,13 @@ Before each delivery, Attricat checks again that the installation is enabled, st
 
 ## Read and write the catalog
 
-With `catalog.read`, a component can read a record, its direct values, or its values resolved in a context. Responses include the record's pinned blueprint revision.
+With `attricat.read`, a component can read a record, its direct values, or its values resolved in a context. Responses include the record's pinned blueprint revision.
 
-With `catalog.write`, it can write scalar values in an explicit context. Writes go through the normal path: type checks, schemas, audit, and a new domain event.
+With `attricat.write`, it can write scalar values in an explicit context. Writes go through the normal path: type checks, schemas, audit, and a new domain event.
 
 A write made while handling an event is attributed to the user or token behind the original change, keeps the event's correlation ID, and is published with source `extension:<extension-id>`. **Ignore events from your own source**, or a handler that writes will trigger itself.
 
-The JSON `catalog.read.v1` and `catalog.command.v1` calls add paged reads, change feeds, single-attribute lookups, and batches of `create`, `update`, `relationships`, and `upsert` intents. An upsert matches on a declared business key attribute, creates only when no record matches, and fails if more than one does. Its relationship sets apply whether it updates a match or creates the record.
+The JSON `attricat.read.v1` and `attricat.command.v1` calls add paged reads, change feeds, single-attribute lookups, and batches of `create`, `update`, `relationships`, and `upsert` intents. An upsert matches on a declared business key attribute, creates only when no record matches, and fails if more than one does. Its relationship sets apply whether it updates a match or creates the record.
 
 A lookup resolves exactly like an upsert. If the attribute alone is a declared unique key on a string attribute, the lookup uses that key's normalized values across every revision of the blueprint family; otherwise it matches the exact text among records of the requested revision. A value that matches more than one record fails with `lookup matched multiple records` instead of returning one of them.
 
@@ -69,7 +69,7 @@ With `storage.extension`, `storage.get.v1`, `storage.set.v1`, `storage.delete.v1
 
 ## Commands for your UI
 
-Server commands let an extension's client component ask its server component to do something. Declare them in `server.commands` with request and response schemas. The client calls `catalog.command({ command_id, payload })`. Attricat validates the payload, checks the caller's session, the contribution, the release, and the grants, then invokes your handler.
+Server commands let an extension's client component ask its server component to do something. Declare them in `server.commands` with request and response schemas. The client calls `attricat.command({ command_id, payload })`. Attricat validates the payload, checks the caller's session, the contribution, the release, and the grants, then invokes your handler.
 
 ## Secrets
 

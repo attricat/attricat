@@ -5,7 +5,7 @@ mod support;
 use std::time::Duration;
 
 use api::{
-    repository::CatalogRepository, rule_runtime, task_queue::TaskKind, task_worker::TaskOutcome,
+    repository::AttricatRepository, rule_runtime, task_queue::TaskKind, task_worker::TaskOutcome,
 };
 use support::*;
 
@@ -28,7 +28,7 @@ async fn create(
 
 /// Runs queued rule tasks to completion; other task kinds are acknowledged.
 async fn drain_rule_tasks(pool: &PgPool) {
-    let repository = CatalogRepository::new(pool.clone(), BOOTSTRAP_WORKSPACE_ID.parse().unwrap());
+    let repository = AttricatRepository::new(pool.clone(), BOOTSTRAP_WORKSPACE_ID.parse().unwrap());
     let handler = rule_runtime::task_handler(repository.clone());
     for _ in 0..50 {
         let Some(task) = repository
@@ -528,7 +528,7 @@ fn rule(code: &str, predicate: &str, extra: &str) -> String {
 
 #[sqlx::test]
 async fn new_rule_predicates_open_and_resolve_findings(pool: PgPool) {
-    CatalogRepository::system(pool.clone())
+    AttricatRepository::system(pool.clone())
         .ensure_rule_permissions()
         .await
         .unwrap();
@@ -648,7 +648,7 @@ max_bytes = 1048576
 
 #[sqlx::test]
 async fn predicates_see_file_values_and_explicit_empty_local_values(pool: PgPool) {
-    CatalogRepository::system(pool.clone())
+    AttricatRepository::system(pool.clone())
         .ensure_rule_permissions()
         .await
         .unwrap();
@@ -663,7 +663,7 @@ async fn predicates_see_file_values_and_explicit_empty_local_values(pool: PgPool
     .await;
     assert!(status.is_success(), "{french}");
     let workspace_id: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
-    let repository = CatalogRepository::new(pool.clone(), workspace_id);
+    let repository = AttricatRepository::new(pool.clone(), workspace_id);
     let mut ids = Vec::new();
     for title in ["with photo", "photo removed in fr"] {
         let item = create_record_with(
@@ -731,7 +731,7 @@ async fn predicates_see_file_values_and_explicit_empty_local_values(pool: PgPool
 
 #[sqlx::test]
 async fn enforcing_rules_dry_run_before_enabling_and_reject_writes(pool: PgPool) {
-    CatalogRepository::system(pool.clone())
+    AttricatRepository::system(pool.clone())
         .ensure_rule_permissions()
         .await
         .unwrap();
@@ -865,7 +865,7 @@ async fn enforcing_rules_dry_run_before_enabling_and_reject_writes(pool: PgPool)
 
 #[sqlx::test]
 async fn channels_require_checks_before_publication(pool: PgPool) {
-    CatalogRepository::system(pool.clone())
+    AttricatRepository::system(pool.clone())
         .ensure_rule_permissions()
         .await
         .unwrap();
@@ -961,7 +961,7 @@ async fn channels_require_checks_before_publication(pool: PgPool) {
 
 #[sqlx::test]
 async fn retained_edits_withdraw_publications_whose_channel_checks_now_fail(pool: PgPool) {
-    CatalogRepository::system(pool.clone())
+    AttricatRepository::system(pool.clone())
         .ensure_rule_permissions()
         .await
         .unwrap();
@@ -1146,7 +1146,7 @@ cardinality = "one"
 /// page at once; each candidate still sees only its own related records.
 #[sqlx::test]
 async fn rule_pages_resolve_related_records_per_candidate(pool: PgPool) {
-    CatalogRepository::system(pool.clone())
+    AttricatRepository::system(pool.clone())
         .ensure_rule_permissions()
         .await
         .unwrap();
@@ -1274,7 +1274,7 @@ predicates = [
 /// references and the one it stopped referencing.
 #[sqlx::test]
 async fn referenced_by_rules_reevaluate_records_that_lose_a_reference(pool: PgPool) {
-    CatalogRepository::system(pool.clone())
+    AttricatRepository::system(pool.clone())
         .ensure_rule_permissions()
         .await
         .unwrap();
@@ -1352,7 +1352,7 @@ predicate = {type = "one_of", attribute_code = "state", values = ["open"]}"#,
     .await
     .unwrap();
     assert_eq!(event.event_type, "relationship.changed.v1");
-    let created_runs = CatalogRepository::system(pool.clone())
+    let created_runs = AttricatRepository::system(pool.clone())
         .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
         .await
         .unwrap()
@@ -1369,7 +1369,7 @@ predicate = {type = "one_of", attribute_code = "state", values = ["open"]}"#,
 /// record it released, although `record.migrated.v1` carries no facts.
 #[sqlx::test]
 async fn referenced_by_rules_reevaluate_records_a_migration_releases(pool: PgPool) {
-    CatalogRepository::system(pool.clone())
+    AttricatRepository::system(pool.clone())
         .ensure_rule_permissions()
         .await
         .unwrap();
@@ -1480,7 +1480,7 @@ predicate = {type = "one_of", attribute_code = "state", values = ["open"]}"#,
         "{}",
         event.payload
     );
-    let created_runs = CatalogRepository::system(pool.clone())
+    let created_runs = AttricatRepository::system(pool.clone())
         .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
         .await
         .unwrap()

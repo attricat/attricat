@@ -426,7 +426,7 @@ impl QueryCache {
             tracing::error!(%error, "cache tag invalidation is unavailable");
             self.inner.l1.invalidate_all();
         }
-        metrics::counter!("catalog_query_cache_invalidations_total").increment(1);
+        metrics::counter!("attricat_query_cache_invalidations_total").increment(1);
     }
 
     pub fn entry_count(&self) -> u64 {
@@ -540,7 +540,7 @@ impl QueryCache {
 
 fn record(key: &CacheKey, outcome: &'static str) {
     metrics::counter!(
-        "catalog_query_cache_requests_total",
+        "attricat_query_cache_requests_total",
         "namespace" => key.namespace().to_owned(),
         "outcome" => outcome
     )

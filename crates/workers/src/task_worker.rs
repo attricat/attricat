@@ -12,7 +12,7 @@ use std::{
 };
 
 use async_trait::async_trait;
-use catalog_repository::round_trips::measure;
+use attricat_repository::round_trips::measure;
 use chrono::Utc;
 use metrics::{counter, gauge, histogram};
 use tokio::{sync::watch, task::JoinSet, time};
@@ -135,7 +135,7 @@ async fn run(
     mut shutdown: watch::Receiver<()>,
 ) -> Result<(), TaskError> {
     let kinds = registry.kinds();
-    gauge!("catalog_task_worker_active_kinds").set(kinds.len() as f64);
+    gauge!("attricat_task_worker_active_kinds").set(kinds.len() as f64);
     if kinds.is_empty() {
         tracing::info!(
             "task worker started with no active kinds; no task will be leased before a safe cutover"
@@ -186,7 +186,7 @@ async fn run(
                 tracing::error!(kind = %task.kind, task_id = %task.id, "claimed task has no handler");
                 break;
             };
-            counter!("catalog_tasks_total", "kind" => task.kind.as_str(), "outcome" => "claimed")
+            counter!("attricat_tasks_total", "kind" => task.kind.as_str(), "outcome" => "claimed")
                 .increment(1);
             let task_repository = repository.clone();
             running.spawn(execute(task_repository, handler, task));
@@ -249,33 +249,33 @@ async fn record_queue_metrics(
     const STATUSES: [&str; 3] = ["queued", "leased", "dead_letter"];
     for kind in kinds {
         for status in STATUSES {
-            gauge!("catalog_task_queue_depth", "kind" => kind.as_str(), "status" => status)
+            gauge!("attricat_task_queue_depth", "kind" => kind.as_str(), "status" => status)
                 .set(0.0);
-            gauge!("catalog_task_queue_oldest_age_seconds", "kind" => kind.as_str(), "status" => status).set(0.0);
-            gauge!("catalog_task_queue_retries", "kind" => kind.as_str(), "status" => status)
+            gauge!("attricat_task_queue_oldest_age_seconds", "kind" => kind.as_str(), "status" => status).set(0.0);
+            gauge!("attricat_task_queue_retries", "kind" => kind.as_str(), "status" => status)
                 .set(0.0);
         }
     }
     for (kind, status, count, oldest_age, retries) in repository.task_queue_health(kinds).await? {
-        gauge!("catalog_task_queue_depth", "kind" => kind.clone(), "status" => status.clone())
+        gauge!("attricat_task_queue_depth", "kind" => kind.clone(), "status" => status.clone())
             .set(count as f64);
-        gauge!("catalog_task_queue_oldest_age_seconds", "kind" => kind.clone(), "status" => status.clone())
+        gauge!("attricat_task_queue_oldest_age_seconds", "kind" => kind.clone(), "status" => status.clone())
             .set(oldest_age.max(0.0));
-        gauge!("catalog_task_queue_retries", "kind" => kind, "status" => status)
+        gauge!("attricat_task_queue_retries", "kind" => kind, "status" => status)
             .set(retries as f64);
     }
 
     const OPERATION_STATUSES: [&str; 3] = ["pending", "leased", "dead_letter"];
     for status in OPERATION_STATUSES {
-        gauge!("catalog_extension_operation_runs", "status" => status).set(0.0);
-        gauge!("catalog_extension_operation_oldest_age_seconds", "status" => status).set(0.0);
-        gauge!("catalog_extension_operation_retries", "status" => status).set(0.0);
+        gauge!("attricat_extension_operation_runs", "status" => status).set(0.0);
+        gauge!("attricat_extension_operation_oldest_age_seconds", "status" => status).set(0.0);
+        gauge!("attricat_extension_operation_retries", "status" => status).set(0.0);
     }
     for (status, count, oldest_age, retries) in repository.extension_operation_health().await? {
-        gauge!("catalog_extension_operation_runs", "status" => status.clone()).set(count as f64);
-        gauge!("catalog_extension_operation_oldest_age_seconds", "status" => status.clone())
+        gauge!("attricat_extension_operation_runs", "status" => status.clone()).set(count as f64);
+        gauge!("attricat_extension_operation_oldest_age_seconds", "status" => status.clone())
             .set(oldest_age.max(0.0));
-        gauge!("catalog_extension_operation_retries", "status" => status).set(retries as f64);
+        gauge!("attricat_extension_operation_retries", "status" => status).set(retries as f64);
     }
     Ok(())
 }
@@ -298,7 +298,7 @@ fn bounded_error(code: &str, message: &str) -> (String, String) {
 async fn execute(repository: SystemRepository, handler: Arc<dyn TaskHandler>, task: ClaimedTask) {
     let started = Instant::now();
     let kind = task.kind;
-    gauge!("catalog_task_worker_tasks_in_flight", "kind" => kind.as_str()).increment(1.0);
+    gauge!("attricat_task_worker_tasks_in_flight", "kind" => kind.as_str()).increment(1.0);
     let lease_duration = kind.policy().lease_duration;
     let heartbeat_every = lease_duration
         .checked_div(3)
@@ -320,14 +320,14 @@ async fn execute(repository: SystemRepository, handler: Arc<dyn TaskHandler>, ta
     let outcome = match crate::heartbeat::with_heartbeat(handled, renewals).await {
         Ok(outcome) => outcome,
         Err(error) => {
-            counter!("catalog_tasks_total", "kind" => kind.as_str(), "outcome" => "lease_lost")
+            counter!("attricat_tasks_total", "kind" => kind.as_str(), "outcome" => "lease_lost")
                 .increment(1);
             tracing::warn!(task_id = %task.id, kind = %kind, error = %error, "task heartbeat lost its lease");
             // The execution future has already dropped its transactions and
             // other resources before lease-loss cleanup starts.
             handler.on_lease_lost(task.clone()).await;
-            histogram!("catalog_task_worker_task_duration_seconds", "kind" => kind.as_str(), "outcome" => "lease_lost").record(started.elapsed().as_secs_f64());
-            gauge!("catalog_task_worker_tasks_in_flight", "kind" => kind.as_str()).decrement(1.0);
+            histogram!("attricat_task_worker_task_duration_seconds", "kind" => kind.as_str(), "outcome" => "lease_lost").record(started.elapsed().as_secs_f64());
+            gauge!("attricat_task_worker_tasks_in_flight", "kind" => kind.as_str()).decrement(1.0);
             return;
         }
     };
@@ -382,20 +382,20 @@ async fn execute(repository: SystemRepository, handler: Arc<dyn TaskHandler>, ta
     };
     let metric_outcome = match result {
         Ok(outcome) => {
-            counter!("catalog_tasks_total", "kind" => kind.as_str(), "outcome" => outcome)
+            counter!("attricat_tasks_total", "kind" => kind.as_str(), "outcome" => outcome)
                 .increment(1);
             outcome
         }
         Err(error) => {
-            counter!("catalog_tasks_total", "kind" => kind.as_str(), "outcome" => "lease_lost")
+            counter!("attricat_tasks_total", "kind" => kind.as_str(), "outcome" => "lease_lost")
                 .increment(1);
             tracing::warn!(task_id = %task.id, kind = %kind, error = %error, "task outcome could not be committed");
             "lease_lost"
         }
     };
-    histogram!("catalog_task_worker_task_duration_seconds", "kind" => kind.as_str(), "outcome" => metric_outcome)
+    histogram!("attricat_task_worker_task_duration_seconds", "kind" => kind.as_str(), "outcome" => metric_outcome)
         .record(started.elapsed().as_secs_f64());
-    gauge!("catalog_task_worker_tasks_in_flight", "kind" => kind.as_str()).decrement(1.0);
+    gauge!("attricat_task_worker_tasks_in_flight", "kind" => kind.as_str()).decrement(1.0);
 }
 
 #[cfg(test)]
@@ -422,9 +422,9 @@ mod tests {
     async fn claim_failure_does_not_stop_the_worker() {
         let pool = sqlx::postgres::PgPoolOptions::new()
             .acquire_timeout(Duration::from_millis(100))
-            .connect_lazy("postgres://postgres@127.0.0.1:1/catalog")
+            .connect_lazy("postgres://postgres@127.0.0.1:1/attricat")
             .unwrap();
-        let repository = crate::repository::CatalogRepository::system(pool);
+        let repository = crate::repository::AttricatRepository::system(pool);
         let registry = TaskHandlerRegistry::new(vec![Arc::new(Duplicate)]).unwrap();
         let (shutdown, receiver) = watch::channel(());
         let worker = start(

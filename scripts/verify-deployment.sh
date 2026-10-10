@@ -75,7 +75,7 @@ for path in auth/session blueprints contexts workspace/navigation/sidebar extens
 done
 assert_status 401 http://127.0.0.1:3001/metrics
 curl --fail --silent -H 'Authorization: Bearer release-test-token' http://127.0.0.1:3001/metrics \
-  | grep -q catalog_file_worker_queue_depth
+  | grep -q attricat_file_worker_queue_depth
 
 # Dependency outages withdraw readiness for both roles without changing liveness.
 "${compose[@]}" stop rustfs

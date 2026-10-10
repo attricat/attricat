@@ -1,6 +1,6 @@
 mod support;
 
-use api::repository::CatalogRepository;
+use api::repository::AttricatRepository;
 use support::*;
 
 const WORKSPACE_ID: &str = "00000000-0000-4000-8000-000000000002";
@@ -32,18 +32,18 @@ async fn workspace_owner(pool: &PgPool) -> (Uuid, Uuid, Uuid) {
 #[sqlx::test]
 async fn custom_roles_are_managed_by_the_repository(pool: PgPool) {
     let (workspace, owner, membership) = workspace_owner(&pool).await;
-    let repository = CatalogRepository::system(pool.clone());
+    let repository = AttricatRepository::system(pool.clone());
     let reader = repository
         .create_workspace_role(
             owner,
             workspace,
-            "catalog-reader",
+            "attricat-reader",
             &["records.read".to_owned()],
         )
         .await
         .unwrap();
     let writer = repository
-        .duplicate_workspace_role(owner, workspace, reader, "catalog-writer")
+        .duplicate_workspace_role(owner, workspace, reader, "attricat-writer")
         .await
         .unwrap();
     repository
@@ -51,7 +51,7 @@ async fn custom_roles_are_managed_by_the_repository(pool: PgPool) {
             owner,
             workspace,
             writer,
-            "catalog-writer",
+            "attricat-writer",
             &["records.read".to_owned(), "records.write".to_owned()],
         )
         .await
@@ -83,7 +83,7 @@ async fn custom_roles_are_managed_by_the_repository(pool: PgPool) {
 #[sqlx::test]
 async fn retiring_a_role_into_owner_keeps_owner_grants_workspace_scoped(pool: PgPool) {
     let (workspace, owner, membership) = workspace_owner(&pool).await;
-    let repository = CatalogRepository::system(pool.clone());
+    let repository = AttricatRepository::system(pool.clone());
     let reader = repository
         .create_workspace_role(
             owner,

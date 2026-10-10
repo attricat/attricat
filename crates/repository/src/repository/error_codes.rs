@@ -436,7 +436,7 @@ impl RepositoryError {
             Self::ApprovalAlreadyDecided => plain(Conflict, Code::ApprovalAlreadyDecided),
             Self::ReusableAttributeAlreadyAttached
             | Self::BlueprintCodeTaken
-            | Self::CatalogCodeTaken
+            | Self::AttricatCodeTaken
             | Self::WorkflowCodeTaken
             | Self::RuleCodeTaken => plain(Conflict, Code::Conflict),
             Self::BlueprintNotPublished => plain(Unprocessable, Code::BlueprintNotPublished),

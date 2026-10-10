@@ -16,9 +16,9 @@ With `WEB_DIST_DIR` set, every other path serves the web app.
 `GET /health`, `GET /health/live`, `GET /health/ready`, `POST /auth/discover`, `GET /auth/sample-logins`, `POST /auth/login`,
 `POST /auth/password-reset`, `POST /auth/password-reset/confirm`, and
 `POST /onboarding/complete` are public. Browser requests authenticate
-with the opaque HttpOnly `catalog_session` cookie created by login; missing,
+with the opaque HttpOnly `attricat_session` cookie created by login; missing,
 expired, rotated, or revoked sessions return `401`. Unsafe cookie-authenticated
-requests must also supply `X-Catalog-Csrf` with the readable `catalog_csrf`
+requests must also supply `X-Attricat-Csrf` with the readable `attricat_csrf`
 synchronizer token or receive `403`. An authenticated principal without the
 required permission or scope receives `403` without revealing whether a target
 exists.
@@ -103,7 +103,7 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `GET`, `POST` | `/extensions/{extension_id}/annotation-namespace` | Inventory an extension's annotation namespace, or explicitly adopt pre-existing annotations under that name for an installed extension (`extensions.read` / `extensions.manage`). |
 | `POST` | `/extensions/{extension_id}/annotation-namespace/records/{record_id}` | Operator repair or cleanup of one claimed namespace on a record using the extension annotation patch shape (`extensions.manage` and `records.write` on the record). |
 | `POST` | `/auth/discover` | Resolve a normalized workspace identifier and return its sign-in methods; rate-limited and intentionally minimal. |
-| `GET` | `/auth/sample-logins` | Return the sample accounts, their shared password and the workspace identifier when `CATALOG_SAMPLE_ACCOUNTS` or `CATALOG_DEMO_MODE` is on, otherwise `null`. Demo mode also rejects password reset and member, role-grant, ownership, invitation and user-creation changes with `403 disabled_in_demo`. |
+| `GET` | `/auth/sample-logins` | Return the sample accounts, their shared password and the workspace identifier when `ATTRICAT_SAMPLE_ACCOUNTS` or `ATTRICAT_DEMO_MODE` is on, otherwise `null`. Demo mode also rejects password reset and member, role-grant, ownership, invitation and user-creation changes with `403 disabled_in_demo`. |
 | `POST` | `/auth/login` | Sign in with a previously resolved workspace identifier, email, and password. |
 | `POST` | `/auth/password-reset` | Request a password-reset message for a local account. |
 | `POST` | `/auth/password-reset/confirm` | Consume a password-reset secret and set a new password. |
@@ -284,7 +284,7 @@ Inspection never returns resource bytes, archive paths, or private object keys.
 `include_sample_data=true` explicitly selects synthetic sample records;
 omitting it skips them. A `from_application=<uuid>` query parameter selects
 one completed application of the same pack in the same workspace, at a lower
-SemVer release. It cannot be combined with explicit maps. Catalog does not
+SemVer release. It cannot be combined with explicit maps. Attricat does not
 search history or suggest a mapping. The planner creates resources for added
 keys and reuses unchanged, exactly matching published targets. It blocks changed
 definitions and reports conflicts for missing, unpublished, revision-drifted, or
@@ -819,38 +819,38 @@ access is required.
 `GET /metrics` serves Prometheus text exposition. All labels are bounded: HTTP
 metrics use method, matched route template, and status; no file ID, object key,
 filename, or request URL is ever a label. Workspace is a label only on
-`catalog_event_delivery_queue_depth` (`workspace_id`, see
+`attricat_event_delivery_queue_depth` (`workspace_id`, see
 [Eventing](eventing.md#operator-runbook)). File operation metrics are:
 
-- `catalog_file_uploads_total` (`outcome`),
-  `catalog_file_downloads_total` (`outcome`), and
-  `catalog_object_store_operations_total` (`operation`, `outcome`);
-- `catalog_file_worker_jobs_claimed_total`,
-  `catalog_file_worker_jobs_completed_total`, and
-  `catalog_file_worker_jobs_failed_total` (`terminal`), plus the queued-job
-gauge `catalog_file_worker_jobs_queued`;
-- `catalog_file_reconciliation_total` (`outcome`),
-  `catalog_file_reconciliation_files_marked_total`, and
-  `catalog_file_purge_jobs_queued_total`;
-- periodic history cleanup: `catalog_value_history_cleanup_total` (bounded
+- `attricat_file_uploads_total` (`outcome`),
+  `attricat_file_downloads_total` (`outcome`), and
+  `attricat_object_store_operations_total` (`operation`, `outcome`);
+- `attricat_file_worker_jobs_claimed_total`,
+  `attricat_file_worker_jobs_completed_total`, and
+  `attricat_file_worker_jobs_failed_total` (`terminal`), plus the queued-job
+gauge `attricat_file_worker_jobs_queued`;
+- `attricat_file_reconciliation_total` (`outcome`),
+  `attricat_file_reconciliation_files_marked_total`, and
+  `attricat_file_purge_jobs_queued_total`;
+- periodic history cleanup: `attricat_value_history_cleanup_total` (bounded
   `outcome` of `success`, `failed`, or `budget_exhausted`),
-  `catalog_value_history_entries_purged_total`, and
-  `catalog_value_history_cleanup_duration_seconds`;
-- abandoned-upload cleanup: `catalog_upload_cleanup_total` (`outcome` of
+  `attricat_value_history_entries_purged_total`, and
+  `attricat_value_history_cleanup_duration_seconds`;
+- abandoned-upload cleanup: `attricat_upload_cleanup_total` (`outcome` of
   `success` or `failed`). Failed deletions retain their durable intent for retry.
 
-Data-health cache decisions are exposed as `catalog_data_health_cache_total`
+Data-health cache decisions are exposed as `attricat_data_health_cache_total`
 with a bounded `status` label. The [query cache](caching.md) reports:
 
-- `catalog_query_cache_requests_total` (`namespace`, `outcome`): one per
+- `attricat_query_cache_requests_total` (`namespace`, `outcome`): one per
   lookup. `namespace` is the first key segment (such as `context_tree`,
   `enabled_rules` or `blueprint_revision`); `outcome` is `hit`, `remote_hit`
   (served from Redis), `miss` (loaded from the database), `stale` (a stale TTL
   value served while another caller reloads) or `stale_reload`;
-- `catalog_query_cache_invalidations_total`: process-local tag evictions;
-- `catalog_query_cache_redis_connected`: `1` while this process's Redis
+- `attricat_query_cache_invalidations_total`: process-local tag evictions;
+- `attricat_query_cache_redis_connected`: `1` while this process's Redis
   connection is up, `0` while it is disconnected and reconnecting;
-- `catalog_query_cache_redis_circuit_opened_total`: times the circuit breaker
+- `attricat_query_cache_redis_circuit_opened_total`: times the circuit breaker
   opened after repeated timeouts or connection failures (once per opening,
   not per skipped command). A disconnect shows in the gauge, not here.
 
@@ -859,12 +859,12 @@ or a worker loop, such as `worker:event_dispatcher:<handler>`) by
 `crates/repository/src/round_trips.rs`. Every completed SQLx statement,
 including `BEGIN` and `COMMIT`, counts once:
 
-- `catalog_db_round_trips_total` (`scope`): statements issued directly in a
+- `attricat_db_round_trips_total` (`scope`): statements issued directly in a
   scope; statements outside any scope use `scope="unscoped"`;
-- `catalog_db_round_trips_per_operation` (`scope`): a histogram of statements
+- `attricat_db_round_trips_per_operation` (`scope`): a histogram of statements
   per completed operation, nested scopes included.
 
-`RUST_LOG=catalog_repository::round_trips=debug` logs each operation's count.
+`RUST_LOG=attricat_repository::round_trips=debug` logs each operation's count.
 See [Database round trips](../perf/round-trips.md) for the measured baseline.
 
 Scrape this endpoint from the private monitoring network rather than exposing
@@ -887,7 +887,7 @@ creates conversations. `GET`/`PATCH`/`DELETE /agent/conversations/{id}` reads,
 renames, or archives a thread; it exposes ordered messages at
 `/agent/conversations/{id}/messages` and run history at
 `/agent/conversations/{id}/runs`. The single-conversation `GET` also returns
-`read_only`, which is `true` when `CATALOG_DEMO_MODE` limits the agent to read
+`read_only`, which is `true` when `ATTRICAT_DEMO_MODE` limits the agent to read
 tools. Posting a message creates a durable queued run and returns `202`. The API worker executes the run independently of the
 HTTP request.
 

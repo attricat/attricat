@@ -235,7 +235,7 @@ image_only = true
 | `allowed_extensions` | array of strings | Any | Accepted extensions, letters and digits only (`jpg`, not `*.jpg`). A leading `.` is ignored. |
 | `max_bytes` | positive integer | Server limit | Per-file size limit. Cannot exceed the server's `FILE_UPLOAD_MAX_BYTES`. |
 | `purposes` | array of codes | `[]` | Labels describing what the files are for, such as `product_image`. |
-| `image_only` | boolean | `false` | Accept images only. Required for the `catalog.table_image` renderer. |
+| `image_only` | boolean | `false` | Accept images only. Required for the `attricat.table_image` renderer. |
 
 These keys are rejected on any attribute that is not `value_type = "file"`. File attributes cannot have `value_schema`, `default_value`, or `target_blueprint`.
 
@@ -338,7 +338,7 @@ label = "Category"
 [[views.table.columns]]
 field = "main_photo"
 label = "Image"
-renderer = { id = "catalog.table_image", version = 1 }
+renderer = { id = "attricat.table_image", version = 1 }
 ```
 
 | Key | Type | Description |
@@ -346,7 +346,7 @@ renderer = { id = "catalog.table_image", version = 1 }
 | `columns` | array of tables | Column definitions. Must be non-empty with unique `field` values. |
 | `columns[].field` | string | A local scalar attribute, a local file attribute with a compatible renderer, or a path of up to three relationship hops ending in a scalar attribute, such as `family.product_type.name`. |
 | `columns[].label` | string | Column header. Defaults to the attribute name. |
-| `columns[].renderer` | component reference | `catalog.table_image@1`, a string display component (`catalog.color_display@1`, `catalog.email_display@1`, `catalog.url_display@1`, or `catalog.phone_display@1`), or an extension cell renderer. |
+| `columns[].renderer` | component reference | `attricat.table_image@1`, a string display component (`attricat.color_display@1`, `attricat.email_display@1`, `attricat.url_display@1`, or `attricat.phone_display@1`), or an extension cell renderer. |
 | `fields` | array of attribute codes | Older shorthand for local scalar columns. Cannot be combined with `columns`. |
 | `component` | component reference | Optional table component. |
 
@@ -375,7 +375,7 @@ Every block accepts an optional `component` reference. Every `field` and `relati
 ### Component references
 
 ```toml
-component = { id = "catalog.url_display", version = 1 }
+component = { id = "attricat.url_display", version = 1 }
 renderer = { id = "example.currency", version = 1, props = { currency = "USD" } }
 ```
 
@@ -389,26 +389,26 @@ Built-in components:
 
 | ID | Version | Used on | Value types | Props |
 | --- | --- | --- | --- | --- |
-| `catalog.field_display` | 1 | `field` (detail) | Scalars | |
-| `catalog.field_edit` | 1 | `field` (edit) | Scalars | |
-| `catalog.relationship_list_display` | 1 | `relationship_list` (detail) | `relationship` | |
-| `catalog.relationship_list_edit` | 1 | `relationship_list` (edit) | `relationship` | |
-| `catalog.relationship_hierarchy` | 1 | `relationship_list` (detail) | `relationship` | `parent_field` |
-| `catalog.incoming_relationship_list_display` | 1 | `incoming_relationship_list` | | |
-| `catalog.record_heading` | 1 | `stack` (detail) | | |
-| `catalog.table_display` | 1 | `table` | Scalars | |
-| `catalog.table_edit` | 1 | `table` | Scalars | |
-| `catalog.table_image` | 1 | table column `renderer` | `file` with `cardinality = "one"` and `image_only = true` | |
-| `catalog.color_display` | 1 | `field` (detail), table column `renderer` | `string` | |
-| `catalog.color_edit` | 1 | `field` (edit) | `string` | |
-| `catalog.email_display` | 1 | `field` (detail), table column `renderer` | `string` | |
-| `catalog.email_edit` | 1 | `field` (edit) | `string` | |
-| `catalog.url_display` | 1 | `field` (detail), table column `renderer` | `string` | |
-| `catalog.url_edit` | 1 | `field` (edit) | `string` | |
-| `catalog.phone_display` | 1 | `field` (detail), table column `renderer` | `string` | |
-| `catalog.phone_edit` | 1 | `field` (edit) | `string` | |
-| `catalog.markdown_display` | 1 | `field` (detail) | `string` | |
-| `catalog.markdown_edit` | 1 | `field` (edit) | `string` | |
+| `attricat.field_display` | 1 | `field` (detail) | Scalars | |
+| `attricat.field_edit` | 1 | `field` (edit) | Scalars | |
+| `attricat.relationship_list_display` | 1 | `relationship_list` (detail) | `relationship` | |
+| `attricat.relationship_list_edit` | 1 | `relationship_list` (edit) | `relationship` | |
+| `attricat.relationship_hierarchy` | 1 | `relationship_list` (detail) | `relationship` | `parent_field` |
+| `attricat.incoming_relationship_list_display` | 1 | `incoming_relationship_list` | | |
+| `attricat.record_heading` | 1 | `stack` (detail) | | |
+| `attricat.table_display` | 1 | `table` | Scalars | |
+| `attricat.table_edit` | 1 | `table` | Scalars | |
+| `attricat.table_image` | 1 | table column `renderer` | `file` with `cardinality = "one"` and `image_only = true` | |
+| `attricat.color_display` | 1 | `field` (detail), table column `renderer` | `string` | |
+| `attricat.color_edit` | 1 | `field` (edit) | `string` | |
+| `attricat.email_display` | 1 | `field` (detail), table column `renderer` | `string` | |
+| `attricat.email_edit` | 1 | `field` (edit) | `string` | |
+| `attricat.url_display` | 1 | `field` (detail), table column `renderer` | `string` | |
+| `attricat.url_edit` | 1 | `field` (edit) | `string` | |
+| `attricat.phone_display` | 1 | `field` (detail), table column `renderer` | `string` | |
+| `attricat.phone_edit` | 1 | `field` (edit) | `string` | |
+| `attricat.markdown_display` | 1 | `field` (detail) | `string` | |
+| `attricat.markdown_edit` | 1 | `field` (edit) | `string` | |
 
 Components marked *(edit)* are accepted only in the deprecated `edit` view. Where a `detail` field is editable, the web app uses the display component's paired edit component, or the standard editor for the value type. See [Field controls](/builders/views/#field-controls) for how these behave.
 

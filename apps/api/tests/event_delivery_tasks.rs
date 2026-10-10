@@ -1,12 +1,14 @@
 use std::time::Duration;
 
-use api::{domain_events::CONTEXT_CREATED_V1, repository::CatalogRepository, task_queue::TaskKind};
+use api::{
+    domain_events::CONTEXT_CREATED_V1, repository::AttricatRepository, task_queue::TaskKind,
+};
 use sqlx::PgPool;
 use uuid::Uuid;
 
 async fn insert_event(pool: &PgPool, event_type: &str, correlation_id: Uuid) -> Uuid {
     let event_id = Uuid::new_v4();
-    sqlx::query("INSERT INTO domain_events (id, workspace_id, event_type, aggregate_kind, aggregate_id, correlation_id, source_kind, source_name, payload) VALUES ($1, '00000000-0000-4000-8000-000000000002', $2, 'context', $3, $4, 'api', 'catalog_api', '{}'::jsonb)")
+    sqlx::query("INSERT INTO domain_events (id, workspace_id, event_type, aggregate_kind, aggregate_id, correlation_id, source_kind, source_name, payload) VALUES ($1, '00000000-0000-4000-8000-000000000002', $2, 'context', $3, $4, 'api', 'attricat_api', '{}'::jsonb)")
         .bind(event_id).bind(event_type).bind(Uuid::new_v4()).bind(correlation_id)
         .execute(pool).await.unwrap();
     event_id
@@ -14,12 +16,12 @@ async fn insert_event(pool: &PgPool, event_type: &str, correlation_id: Uuid) -> 
 
 #[sqlx::test(migrations = "./migrations")]
 async fn event_delivery_materialization_is_atomic_filtered_and_deduplicated(pool: PgPool) {
-    let repository = CatalogRepository::new(
+    let repository = AttricatRepository::new(
         pool.clone(),
         Uuid::from_u128(0x00000000000040008000000000000002),
     );
     repository
-        .ensure_event_consumer("catalog.extensions.wasm", &[CONTEXT_CREATED_V1])
+        .ensure_event_consumer("attricat.extensions.wasm", &[CONTEXT_CREATED_V1])
         .await
         .unwrap();
     let correlation_id = Uuid::new_v4();
@@ -27,11 +29,11 @@ async fn event_delivery_materialization_is_atomic_filtered_and_deduplicated(pool
     insert_event(&pool, "context.updated.v1", Uuid::new_v4()).await;
 
     repository
-        .materialize_event_delivery_tasks("catalog.extensions.wasm", &[CONTEXT_CREATED_V1])
+        .materialize_event_delivery_tasks("attricat.extensions.wasm", &[CONTEXT_CREATED_V1])
         .await
         .unwrap();
     repository
-        .materialize_event_delivery_tasks("catalog.extensions.wasm", &[CONTEXT_CREATED_V1])
+        .materialize_event_delivery_tasks("attricat.extensions.wasm", &[CONTEXT_CREATED_V1])
         .await
         .unwrap();
 
@@ -51,7 +53,7 @@ async fn event_delivery_materialization_is_atomic_filtered_and_deduplicated(pool
     );
     assert_eq!(
         sqlx::query_scalar::<_, i64>(
-            "SELECT watermark FROM event_consumers WHERE name = 'catalog.extensions.wasm'"
+            "SELECT watermark FROM event_consumers WHERE name = 'attricat.extensions.wasm'"
         )
         .fetch_one(&pool)
         .await
@@ -90,32 +92,32 @@ async fn event_delivery_materialization_is_atomic_filtered_and_deduplicated(pool
 
 #[sqlx::test(migrations = "./migrations")]
 async fn materialization_is_idempotent_across_coordinator_restart(pool: PgPool) {
-    let repository = CatalogRepository::new(
+    let repository = AttricatRepository::new(
         pool.clone(),
         Uuid::from_u128(0x00000000000040008000000000000002),
     );
     repository
-        .ensure_event_consumer("catalog.extensions.wasm", &[CONTEXT_CREATED_V1])
+        .ensure_event_consumer("attricat.extensions.wasm", &[CONTEXT_CREATED_V1])
         .await
         .unwrap();
     let event_id = insert_event(&pool, CONTEXT_CREATED_V1, Uuid::new_v4()).await;
     repository
-        .materialize_event_delivery_tasks("catalog.extensions.wasm", &[CONTEXT_CREATED_V1])
+        .materialize_event_delivery_tasks("attricat.extensions.wasm", &[CONTEXT_CREATED_V1])
         .await
         .unwrap();
 
     // A replacement coordinator gets a fresh repository handle but must retain
     // the durable consumer, receipt, and task instead of delivering twice.
-    let restarted = CatalogRepository::new(
+    let restarted = AttricatRepository::new(
         pool.clone(),
         Uuid::from_u128(0x00000000000040008000000000000002),
     );
     restarted
-        .ensure_event_consumer("catalog.extensions.wasm", &[CONTEXT_CREATED_V1])
+        .ensure_event_consumer("attricat.extensions.wasm", &[CONTEXT_CREATED_V1])
         .await
         .unwrap();
     restarted
-        .materialize_event_delivery_tasks("catalog.extensions.wasm", &[CONTEXT_CREATED_V1])
+        .materialize_event_delivery_tasks("attricat.extensions.wasm", &[CONTEXT_CREATED_V1])
         .await
         .unwrap();
     assert_eq!(
@@ -143,18 +145,18 @@ async fn materialization_is_idempotent_across_coordinator_restart(pool: PgPool) 
 
 #[sqlx::test(migrations = "./migrations")]
 async fn newly_eligible_plugin_event_is_backfilled_after_watermark_advanced(pool: PgPool) {
-    let repository = CatalogRepository::new(
+    let repository = AttricatRepository::new(
         pool.clone(),
         Uuid::from_u128(0x00000000000040008000000000000002),
     );
     repository
-        .ensure_event_consumer("catalog.extensions.wasm", &[CONTEXT_CREATED_V1])
+        .ensure_event_consumer("attricat.extensions.wasm", &[CONTEXT_CREATED_V1])
         .await
         .unwrap();
 
     insert_event(&pool, "context.updated.v1", Uuid::new_v4()).await;
     repository
-        .materialize_event_delivery_tasks("catalog.extensions.wasm", &[CONTEXT_CREATED_V1])
+        .materialize_event_delivery_tasks("attricat.extensions.wasm", &[CONTEXT_CREATED_V1])
         .await
         .unwrap();
     let plugin_event = insert_event(
@@ -164,12 +166,12 @@ async fn newly_eligible_plugin_event_is_backfilled_after_watermark_advanced(pool
     )
     .await;
     repository
-        .materialize_event_delivery_tasks("catalog.extensions.wasm", &[CONTEXT_CREATED_V1])
+        .materialize_event_delivery_tasks("attricat.extensions.wasm", &[CONTEXT_CREATED_V1])
         .await
         .unwrap();
     assert_eq!(
         sqlx::query_scalar::<_, i64>(
-            "SELECT watermark FROM event_consumers WHERE name = 'catalog.extensions.wasm'"
+            "SELECT watermark FROM event_consumers WHERE name = 'attricat.extensions.wasm'"
         )
         .fetch_one(&pool)
         .await
@@ -179,7 +181,7 @@ async fn newly_eligible_plugin_event_is_backfilled_after_watermark_advanced(pool
 
     repository
         .materialize_event_delivery_tasks(
-            "catalog.extensions.wasm",
+            "attricat.extensions.wasm",
             &["plugin.acme.producer.inventory_changed.v1"],
         )
         .await
@@ -195,17 +197,17 @@ async fn newly_eligible_plugin_event_is_backfilled_after_watermark_advanced(pool
 
 #[sqlx::test(migrations = "./migrations")]
 async fn expired_event_task_lease_rejects_stale_receipts_and_redelivers(pool: PgPool) {
-    let repository = CatalogRepository::new(
+    let repository = AttricatRepository::new(
         pool.clone(),
         Uuid::from_u128(0x00000000000040008000000000000002),
     );
     repository
-        .ensure_event_consumer("catalog.extensions.wasm", &[CONTEXT_CREATED_V1])
+        .ensure_event_consumer("attricat.extensions.wasm", &[CONTEXT_CREATED_V1])
         .await
         .unwrap();
     let event_id = insert_event(&pool, CONTEXT_CREATED_V1, Uuid::new_v4()).await;
     repository
-        .materialize_event_delivery_tasks("catalog.extensions.wasm", &[CONTEXT_CREATED_V1])
+        .materialize_event_delivery_tasks("attricat.extensions.wasm", &[CONTEXT_CREATED_V1])
         .await
         .unwrap();
 

@@ -1,6 +1,6 @@
 mod support;
 
-use api::{agent_tools, repository::CatalogRepository};
+use api::{agent_tools, repository::AttricatRepository};
 use support::*;
 
 #[sqlx::test]
@@ -174,7 +174,7 @@ cardinality = "one""#,
     }
 
     let workspace = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
-    let repository = CatalogRepository::system(repository_pool)
+    let repository = AttricatRepository::system(repository_pool)
         .for_workspace(workspace)
         .await
         .unwrap();

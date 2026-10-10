@@ -12,16 +12,16 @@ for prerequisites and the worktree-specific ports. Do not assume the API is on
 port 3000.
 
 By default, `acli` loads `.env` from the current directory without replacing
-variables already exported by the shell. In a worktree, its `CATALOG_API_URL`
-therefore supplies the API URL. The precedence is `--server`, `CATALOG_SERVER`,
-`CATALOG_API_URL`, then `http://127.0.0.1:3000/api`. Each is the API base URL,
+variables already exported by the shell. In a worktree, its `ATTRICAT_API_URL`
+therefore supplies the API URL. The precedence is `--server`, `ATTRICAT_SERVER`,
+`ATTRICAT_API_URL`, then `http://127.0.0.1:3000/api`. Each is the API base URL,
 including its `/api` path. Pass `--no-env` to skip loading that file.
 
 ```sh
 acli health
 source .worktree
 acli --no-env --server "http://127.0.0.1:$API_PORT/api" health
-CATALOG_SERVER="http://127.0.0.1:$API_PORT/api" acli health
+ATTRICAT_SERVER="http://127.0.0.1:$API_PORT/api" acli health
 ```
 
 During development, run the workspace binary without installing it:
@@ -278,7 +278,7 @@ acli saved-view create --name 'Active assets' --visibility workspace \
   --state '{"blueprint":"asset","attributeFilters":[{"field":"status","operator":"eq","value":"active"}]}'
 ```
 
-The CLI returns JSON with an `id`; set `CATALOG_WEB_URL` (or `WEB_PORT` from `.worktree`) to also include a short Explorer `url`. The link command creates an unnamed shareable snapshot. Both commands require workspace access and `records.read` (a link does not grant catalog permissions). See [saved views](saved-views.md).
+The CLI returns JSON with an `id`; set `ATTRICAT_WEB_URL` (or `WEB_PORT` from `.worktree`) to also include a short Explorer `url`. The link command creates an unnamed shareable snapshot. Both commands require workspace access and `records.read` (a link does not grant catalog permissions). See [saved views](saved-views.md).
 
 ## JSON, workflow, and binary inputs
 
@@ -310,15 +310,15 @@ email has a resettable credential.
 
 `auth login` and `auth renew` return the API's safe session identity JSON. To
 reuse that browser session in later CLI invocations, pass
-`--session-file <path>` (or set `CATALOG_SESSION_FILE`) to login and each later
+`--session-file <path>` (or set `ATTRICAT_SESSION_FILE`) to login and each later
 authenticated command. The CLI stores only the server-issued session and CSRF
 cookies in that file, sets mode `0600` on Unix, sends the CSRF synchronizer
 header for unsafe requests, replaces the file on renewal, and removes it after
 a successful logout. Do not commit or share this file. Without `--session-file`,
 a login remains valid only for that invocation's HTTP client. A bearer token
-provided with `--token`, `--token-stdin`, or `CATALOG_TOKEN` always takes precedence over a
+provided with `--token`, `--token-stdin`, or `ATTRICAT_TOKEN` always takes precedence over a
 session file; the CLI does not read or send saved browser cookies in that case.
-Prefer `CATALOG_TOKEN` or `--token-stdin` to avoid placing a secret in argv.
+Prefer `ATTRICAT_TOKEN` or `--token-stdin` to avoid placing a secret in argv.
 Credentials are sent only over HTTPS, except to a loopback server for local development.
 When no token is supplied, the saved login session is used.
 
@@ -398,7 +398,7 @@ for the retry lifecycle and safe replay procedure.
 
 ## Workspace administration
 
-Pass a personal API token with `CATALOG_TOKEN`, `--token-stdin`, or (for backwards compatibility)
+Pass a personal API token with `ATTRICAT_TOKEN`, `--token-stdin`, or (for backwards compatibility)
 `--token`. Workspace commands always operate on the workspace selected by that bearer credential; they never
 accept a workspace ID or tenant header. `--permissions` accepts either a JSON
 array (for example, `'["records.read"]'`) or a path to a JSON file. Personal
@@ -409,7 +409,7 @@ only when consuming the secret from the delivered link without placing it in she
 history or argv:
 
 ```sh
-printf '%s' "$CATALOG_INVITATION_SECRET" | CATALOG_TOKEN="$CATALOG_TOKEN" acli workspace invitation accept --secret-stdin
+printf '%s' "$ATTRICAT_INVITATION_SECRET" | ATTRICAT_TOKEN="$ATTRICAT_TOKEN" acli workspace invitation accept --secret-stdin
 # Password setup reads onboarding secret, invitation secret, then password from separate stdin lines.
 printf '%s\n%s\n%s\n' "$ONBOARDING_SECRET" "$INVITATION_SECRET" "$PASSWORD" | acli workspace user set-password --onboarding-secret-stdin --invitation-secret-stdin --password-stdin
 ```
@@ -552,7 +552,7 @@ Start the local stack, then run:
 
 ```sh
 cargo run -p acli -- --session-file .acli-session auth login <workspace-login-identifier> --email <email> --password-stdin
-export CATALOG_TOKEN="$(cargo run -p acli -- --session-file .acli-session token create --generator | jq -r .secret)"
+export ATTRICAT_TOKEN="$(cargo run -p acli -- --session-file .acli-session token create --generator | jq -r .secret)"
 just generate
 ```
 

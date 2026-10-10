@@ -7,13 +7,13 @@ Attricat's web app is built on the same HTTP API you can call from scripts and i
 
 ## Base URL
 
-API routes are served below `/api`, for example `GET https://catalog.example.com/api/blueprints`; the paths on this page are relative to it. Every other path belongs to the web app. The health probes (`/health`, `/health/live`, `/health/ready`) also answer at the root for load balancers and container checks.
+API routes are served below `/api`, for example `GET https://attricat.example.com/api/blueprints`; the paths on this page are relative to it. Every other path belongs to the web app. The health probes (`/health`, `/health/live`, `/health/ready`) also answer at the root for load balancers and container checks.
 
 ## Authentication
 
 **Personal API token**: send `Authorization: Bearer cat_pat_…`. The token decides the workspace. Tokens are the recommended way to integrate.
 
-**Browser session**: `POST /auth/login` sets an HttpOnly `catalog_session` cookie and a readable `catalog_csrf` cookie. Every unsafe request (anything but `GET`, `HEAD`, `OPTIONS`) made with the cookie must also send `X-Catalog-Csrf` with the CSRF cookie's value.
+**Browser session**: `POST /auth/login` sets an HttpOnly `attricat_session` cookie and a readable `attricat_csrf` cookie. Every unsafe request (anything but `GET`, `HEAD`, `OPTIONS`) made with the cookie must also send `X-Attricat-Csrf` with the CSRF cookie's value.
 
 Clients never send a workspace ID; it always comes from the token or session.
 

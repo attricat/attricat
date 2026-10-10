@@ -1,8 +1,8 @@
-//! Host implementation of the `catalog:host` ABI, currently 1.0.0.
+//! Host implementation of the `attricat:host` ABI, currently 1.0.0.
 //!
 //! Every import is linked for every invocation; the host instantiates the
 //! component once and loads only the export the invocation needs, so a
-//! component may target the combined `catalog-extension` world or the
+//! component may target the combined `attricat-extension` world or the
 //! narrower `handler-extension` or `operation-extension` world.
 //!
 //! Run-bound interfaces are implemented by the operation state (including
@@ -18,21 +18,21 @@ use super::*;
 pub(super) mod host_unified {
     wasmtime::component::bindgen!({
         path: "wit-host",
-        world: "catalog-extension",
+        world: "attricat-extension",
         with: {
-            "catalog:host/artifacts.input-artifact": crate::extension_runtime::InputArtifactStream,
-            "catalog:host/artifacts.output-artifact": crate::extension_runtime::OutputArtifactStream,
+            "attricat:host/artifacts.input-artifact": crate::extension_runtime::InputArtifactStream,
+            "attricat:host/artifacts.output-artifact": crate::extension_runtime::OutputArtifactStream,
         },
         imports: { default: async },
         exports: { default: async },
     });
 }
 
-use host_unified::catalog::host as v16;
-use host_unified::exports::catalog::host::{handler as v16_handler, operations as v16_operations};
+use host_unified::attricat::host as v16;
+use host_unified::exports::attricat::host::{handler as v16_handler, operations as v16_operations};
 
 const RUN_ONLY_ERROR: &str = "this interface is available only during an operation run";
-const RUN_CATALOG_ERROR: &str =
+const RUN_ATTRICAT_ERROR: &str =
     "operation runs access catalog data through their run-scoped interfaces";
 
 pub(super) struct UnifiedState {
@@ -49,7 +49,7 @@ impl UnifiedState {
 
     fn deny_in_run(&self) -> Result<(), String> {
         if self.operation.is_some() {
-            Err(RUN_CATALOG_ERROR.into())
+            Err(RUN_ATTRICAT_ERROR.into())
         } else {
             Ok(())
         }
@@ -88,7 +88,10 @@ impl v16::api::Host for UnifiedState {
     }
 
     async fn call(&mut self, operation: String, request: String) -> Result<String, String> {
-        if matches!(operation.as_str(), "catalog.read.v1" | "catalog.command.v1") {
+        if matches!(
+            operation.as_str(),
+            "attricat.read.v1" | "attricat.command.v1"
+        ) {
             self.deny_in_run()?;
         }
         self.host.call(operation, request).await
@@ -109,24 +112,24 @@ impl v16::selection::Host for UnifiedState {
     }
 }
 
-impl v16::catalog_data::Host for UnifiedState {
+impl v16::attricat_data::Host for UnifiedState {
     async fn read(&mut self, request: String) -> Result<String, String> {
-        <OperationState as v16::catalog_data::Host>::read(self.run()?, request).await
+        <OperationState as v16::attricat_data::Host>::read(self.run()?, request).await
     }
 
     async fn batch(&mut self, request: String) -> Result<String, String> {
-        <OperationState as v16::catalog_data::Host>::batch(self.run()?, request).await
+        <OperationState as v16::attricat_data::Host>::batch(self.run()?, request).await
     }
 }
 
-impl v16::catalog::Host for UnifiedState {
+impl v16::attricat::Host for UnifiedState {
     async fn schema(
         &mut self,
         blueprint_id: String,
         blueprint_version: u64,
         context_id: String,
     ) -> Result<String, String> {
-        <OperationState as v16::catalog::Host>::schema(
+        <OperationState as v16::attricat::Host>::schema(
             self.run()?,
             blueprint_id,
             blueprint_version,
@@ -143,7 +146,7 @@ impl v16::catalog::Host for UnifiedState {
         cursor: String,
         limit: u32,
     ) -> Result<String, String> {
-        <OperationState as v16::catalog::Host>::page(
+        <OperationState as v16::attricat::Host>::page(
             self.run()?,
             blueprint_id,
             blueprint_version,
@@ -155,7 +158,7 @@ impl v16::catalog::Host for UnifiedState {
     }
 
     async fn upsert_batch(&mut self, request: String) -> Result<(), String> {
-        <OperationState as v16::catalog::Host>::upsert_batch(self.run()?, request).await
+        <OperationState as v16::attricat::Host>::upsert_batch(self.run()?, request).await
     }
 }
 
@@ -300,7 +303,7 @@ impl ExtensionRuntime {
     async fn instantiate_unified(
         &self,
         installation: &ExtensionRuntimeInstallation,
-        repository: CatalogRepository,
+        repository: AttricatRepository,
         operation: Option<OperationState>,
     ) -> Result<
         (
@@ -365,7 +368,7 @@ impl ExtensionRuntime {
     async fn unified_handler(
         &self,
         installation: &ExtensionRuntimeInstallation,
-        repository: CatalogRepository,
+        repository: AttricatRepository,
     ) -> Result<(Store<UnifiedState>, v16_handler::Guest), ExtensionRuntimeError> {
         let (mut store, pre, instance) = self
             .instantiate_unified(installation, repository, None)
@@ -374,7 +377,7 @@ impl ExtensionRuntime {
             .and_then(|indices| indices.load(&mut store, &instance))
             .map_err(|error| {
                 runtime_error(format!(
-                    "component does not export catalog:host/handler: {error}"
+                    "component does not export attricat:host/handler: {error}"
                 ))
             })?;
         Ok((store, handler))
@@ -383,7 +386,7 @@ impl ExtensionRuntime {
     pub(super) async fn invoke_unified_event(
         &self,
         installation: &ExtensionRuntimeInstallation,
-        repository: CatalogRepository,
+        repository: AttricatRepository,
         handler: &ManifestEventHandler,
         event: &DomainEvent,
     ) -> Result<(), ExtensionRuntimeError> {
@@ -404,7 +407,7 @@ impl ExtensionRuntime {
     pub(super) async fn invoke_unified_command(
         &self,
         installation: &ExtensionRuntimeInstallation,
-        repository: CatalogRepository,
+        repository: AttricatRepository,
         handler: &str,
         request: &str,
         max_response_bytes: u64,
@@ -434,7 +437,7 @@ impl ExtensionRuntime {
     pub(super) async fn invoke_unified_batch(
         &self,
         installation: &ExtensionRuntimeInstallation,
-        repository: CatalogRepository,
+        repository: AttricatRepository,
         run: &ClaimedExtensionOperationRun,
         cancelling: bool,
     ) -> Result<(Value, Value, bool), ExtensionRuntimeError> {
@@ -448,7 +451,7 @@ impl ExtensionRuntime {
             .and_then(|indices| indices.load(&mut store, &instance))
             .map_err(|error| {
                 runtime_error(format!(
-                    "component does not export catalog:host/operations: {error}"
+                    "component does not export attricat:host/operations: {error}"
                 ))
             })?;
         run_operation_batch(&mut store, &operations, run, cancelling).await
@@ -458,7 +461,7 @@ impl ExtensionRuntime {
 /// The unified world's linker; built once per runtime.
 pub(super) fn linker(engine: &Engine) -> Result<Linker<UnifiedState>, ExtensionRuntimeError> {
     let mut linker = Linker::new(engine);
-    host_unified::CatalogExtension::add_to_linker::<UnifiedState, HasSelf<UnifiedState>>(
+    host_unified::AttricatExtension::add_to_linker::<UnifiedState, HasSelf<UnifiedState>>(
         &mut linker,
         |state| state,
     )

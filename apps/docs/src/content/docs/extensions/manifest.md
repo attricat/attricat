@@ -5,7 +5,7 @@ description: Every field of an extension's manifest.json, including capabilities
 
 `manifest.json` is strict JSON. Unknown fields anywhere in it make the package invalid.
 
-IDs used in the manifest (`catalog.id`, artifact, dependency, permission-rule, handler, and contribution IDs) may contain ASCII letters, digits, `.`, `_`, and `-`. Keep them stable across releases; layouts and grants refer to them.
+IDs used in the manifest (`attricat.id`, artifact, dependency, permission-rule, handler, and contribution IDs) may contain ASCII letters, digits, `.`, `_`, and `-`. Keep them stable across releases; layouts and grants refer to them.
 
 ## Top-level fields
 
@@ -16,8 +16,8 @@ IDs used in the manifest (`catalog.id`, artifact, dependency, permission-rule, h
 | `version` | Yes | Release version, SemVer. |
 | `description` | Yes | One-line description. |
 | `icons` | Yes | Map of size to icon path, with at least one entry, such as `{ "48": "assets/icon-48.svg" }`. |
-| `catalog.id` | Yes | Extension ID, such as `acme.inventory`. |
-| `catalog.host_api` | Yes | SemVer range of supported host APIs. It must accept the current host API, `1.0.0`, for example `>=1.0.0, <2.0.0`. |
+| `attricat.id` | Yes | Extension ID, such as `acme.inventory`. |
+| `attricat.host_api` | Yes | SemVer range of supported host APIs. It must accept the current host API, `1.0.0`, for example `>=1.0.0, <2.0.0`. |
 | `artifacts` | Yes | At least one artifact. |
 | `permissions` | | Capabilities that must be granted before the extension can be enabled. |
 | `optional_permissions` | | Capabilities the administrator may grant. |
@@ -47,12 +47,12 @@ IDs used in the manifest (`catalog.id`, artifact, dependency, permission-rule, h
 
 List capabilities in `permissions` or `optional_permissions`. Each one allows a class of operation; an administrator must grant it.
 
-### Catalog and server
+### Attricat and server
 
 | Capability | Allows |
 | --- | --- |
-| `catalog.read` | Reading records, values, and blueprints. |
-| `catalog.write` | Writing values and running create, update, relationship, and upsert commands. |
+| `attricat.read` | Reading records, values, and blueprints. |
+| `attricat.write` | Writing values and running create, update, relationship, and upsert commands. |
 | `events.subscribe` | Receiving catalog events and consumed extension events. |
 | `events.emit` | Publishing this extension's declared events. |
 | `storage.extension` | Reading and writing the extension's own key-value storage. |
@@ -61,7 +61,7 @@ List capabilities in `permissions` or `optional_permissions`. Each one allows a 
 | `secrets.read` | Reading named workspace secrets at run time. |
 | `logging.write` | Writing log messages. |
 | `artifacts.read`, `artifacts.write` | Reading operation inputs and writing operation outputs. |
-| `catalog.annotations.write` | Writing this extension's own namespace of record tags and metadata. See [Record annotations](/extensions/operations/#record-annotations). |
+| `attricat.annotations.write` | Writing this extension's own namespace of record tags and metadata. See [Record annotations](/extensions/operations/#record-annotations). |
 | `network.request` | Making outbound HTTPS requests that match a granted host permission. |
 | `webhooks.receive` | Declaring inbound webhooks (not delivered yet). |
 

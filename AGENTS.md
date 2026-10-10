@@ -1,12 +1,12 @@
 # Frontend
 
-Follow [Frontend Conventions](docs/frontend.md) for `apps/catalog-web`.
+Follow [Frontend Conventions](docs/frontend.md) for `apps/web`.
 
 ## Attricat design system
 
 The [design repository](https://github.com/attricat/design) defines Attricat's
 visual identity. A pinned copy of its tokens and brand assets is stored in
-[`apps/catalog-web/design/`](apps/catalog-web/design/) for reproducible builds;
+[`apps/web/design/`](apps/web/design/) for reproducible builds;
 see its README for the upstream revision. Before
 creating or significantly modifying UI, consult the upstream `STYLE.md` and
 MUI patterns. Do not introduce new colors, typography scales, spacing systems,
@@ -51,7 +51,7 @@ Use SQLx for all migration operations. Create new migrations with
 `sqlx migrate add --source apps/api/migrations <description>` instead of adding
 migration files manually.
 
-## Catalog inspection
+## Attricat inspection
 
 To inspect catalog state, query the API through the CLI first:
 
@@ -61,8 +61,8 @@ cargo run -p acli -- <command>
 acli <command>
 ```
 
-`acli` loads the worktree `.env` by default and uses its `CATALOG_API_URL`.
-Supply `--token` or `CATALOG_TOKEN` when the requested endpoint needs a personal
+`acli` loads the worktree `.env` by default and uses its `ATTRICAT_API_URL`.
+Supply `--token` or `ATTRICAT_TOKEN` when the requested endpoint needs a personal
 API token. Use `just sql` only after the CLI cannot provide the required read or
 when diagnosing the database implementation; do not bypass the API with SQL for
 ordinary catalog inspection.
@@ -81,7 +81,7 @@ event/action. Unit tests alone are not sufficient for these changes. See
 ## Extension host ABI evolution
 
 The server extension ABI evolves additively. `crates/extension-runtime/wit-host/`
-(`catalog:host@1.0.0` and later) is the only WIT package. When extending the ABI:
+(`attricat:host@1.0.0` and later) is the only WIT package. When extending the ABI:
 
 - Add new functions, interfaces, types or worlds to `wit-host`. Never remove,
   rename or change a released item, never add cases or fields to a released
@@ -91,8 +91,8 @@ The server extension ABI evolves additively. `crates/extension-runtime/wit-host/
   accepts the supported ABI can use every feature.
 - When releasing a version, bump the `wit-host` package and
   `SUPPORTED_HOST_API` together, then add the frozen copy at
-  `wit-released/catalog-host-<version>.wit`. Do not edit existing snapshots.
-- `cargo test -p catalog-extension-runtime released_host_abis_are_preserved`
+  `wit-released/attricat-host-<version>.wit`. Do not edit existing snapshots.
+- `cargo test -p attricat-extension-runtime released_host_abis_are_preserved`
   must pass. Do not weaken that test to land a change; design an additive
   alternative instead.
 

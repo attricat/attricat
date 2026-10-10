@@ -16,7 +16,7 @@ async fn owner_lists_tenant_scoped_audit_events_with_filters(pool: sqlx::PgPool)
 
     let response = authenticated_client()
         .get(format!(
-            "{base_url}/audit-events?action_category=catalog&limit=1"
+            "{base_url}/audit-events?action_category=attricat&limit=1"
         ))
         .send()
         .await
@@ -65,8 +65,8 @@ async fn owner_lists_tenant_scoped_audit_events_with_filters(pool: sqlx::PgPool)
         .unwrap();
     let forbidden = reqwest::Client::new()
         .get(format!("{base_url}/audit-events"))
-        .header("x-catalog-user-id", viewer_id.to_string())
-        .header("x-catalog-workspace-id", workspace_id.to_string())
+        .header("x-attricat-user-id", viewer_id.to_string())
+        .header("x-attricat-workspace-id", workspace_id.to_string())
         .send()
         .await
         .unwrap();

@@ -24,17 +24,17 @@ The installer puts `acli` in `~/.local/bin` (or `$XDG_BIN_HOME`). To install a s
 `acli` is also included in the container image:
 
 ```sh
-docker run --rm -e CATALOG_SERVER -e CATALOG_TOKEN ghcr.io/attricat/attricat@sha256:… acli health
+docker run --rm -e ATTRICAT_SERVER -e ATTRICAT_TOKEN ghcr.io/attricat/attricat@sha256:… acli health
 ```
 
 ## Configuration
 
 | Setting | Flag | Environment | Description |
 | --- | --- | --- | --- |
-| Server URL | `--server` | `CATALOG_SERVER`, then `CATALOG_API_URL` | API base URL, including `/api`. Defaults to `http://127.0.0.1:3000/api`. |
-| Token | `--token`, `--token-stdin` | `CATALOG_TOKEN` | Personal API token. |
-| Session file | `--session-file` | `CATALOG_SESSION_FILE` | Stores a browser session between commands. |
-| Web URL | | `CATALOG_WEB_URL` | When set, saved-search commands also print a short Explorer link. |
+| Server URL | `--server` | `ATTRICAT_SERVER`, then `ATTRICAT_API_URL` | API base URL, including `/api`. Defaults to `http://127.0.0.1:3000/api`. |
+| Token | `--token`, `--token-stdin` | `ATTRICAT_TOKEN` | Personal API token. |
+| Session file | `--session-file` | `ATTRICAT_SESSION_FILE` | Stores a browser session between commands. |
+| Web URL | | `ATTRICAT_WEB_URL` | When set, saved-search commands also print a short Explorer link. |
 | Skip `.env` | `--no-env` | | Do not read `.env` from the current directory. |
 
 By default, `acli` reads `.env` from the current directory without overriding variables already set in the shell.
@@ -46,11 +46,11 @@ Credentials are only sent over HTTPS, or to a loopback address for local develop
 **With a token** (recommended for automation). Create a personal API token in the web app under **Profile → Personal API tokens**, then:
 
 ```sh
-export CATALOG_TOKEN=cat_pat_…
+export ATTRICAT_TOKEN=cat_pat_…
 acli blueprint list
 ```
 
-Prefer `CATALOG_TOKEN` or `--token-stdin` over `--token`, which leaves the secret in your shell history and process list.
+Prefer `ATTRICAT_TOKEN` or `--token-stdin` over `--token`, which leaves the secret in your shell history and process list.
 
 **With a password session.** Sign in once and keep the session in a file:
 

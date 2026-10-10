@@ -23,7 +23,7 @@ Przesłane archiwa przechodzą te same kontrole co instalacje z rejestru: limity
 
 Nowa instalacja startuje jako **wyłączona**. Przed jej włączeniem:
 
-1. **Przeczytaj żądane uprawnienia.** Każde z nich wskazuje możliwość, np. `catalog.write` (zmiana rekordów), `events.subscribe` (reagowanie na zmiany), `network.request` (wywoływanie usług zewnętrznych) lub `client.record_action` (dodanie przycisku na stronach rekordów). Wszystkie wymienia [dokumentacja manifestu](/pl/extensions/manifest/#uprawnienia).
+1. **Przeczytaj żądane uprawnienia.** Każde z nich wskazuje możliwość, np. `attricat.write` (zmiana rekordów), `events.subscribe` (reagowanie na zmiany), `network.request` (wywoływanie usług zewnętrznych) lub `client.record_action` (dodanie przycisku na stronach rekordów). Wszystkie wymienia [dokumentacja manifestu](/pl/extensions/manifest/#uprawnienia).
 2. **Sprawdź dostęp do sieci.** `network.request` pozwala wyłącznie na wywołania wzorców URL wymienionych jako uprawnienia hosta. Każdy wzorzec pokazuje swoje hosty, metody, limity rozmiaru i limit czasu.
 3. **Skonfiguruj** rozszerzenie, jeśli ma ustawienia.
 4. **Przyznaj** wymagane uprawnienia. Uprawnienia opcjonalne można pominąć; rozszerzenie musi działać bez nich.
@@ -69,12 +69,12 @@ Otwarte ramki interfejsu wykrywają te zmiany w ciągu 15 sekund i zamykają si�
 
 ```sh
 acli extension-registry list
-acli extension-registry add --source acme/catalog-extensions
+acli extension-registry add --source acme/attricat-extensions
 acli extension list
-acli extension install --owner acme --repository catalog-inventory --release-id <github-release-id>
+acli extension install --owner acme --repository attricat-inventory --release-id <github-release-id>
 acli extension sideload --file inventory-1.2.0.tar.zst
 acli extension configure acme.inventory --configuration config.json
-acli extension grant acme.inventory --grant-kind capability --grant-id catalog.read
+acli extension grant acme.inventory --grant-kind capability --grant-id attricat.read
 acli extension grant acme.inventory --grant-kind host_permission --grant-id inventory-api
 acli extension enable acme.inventory
 acli extension disable acme.inventory

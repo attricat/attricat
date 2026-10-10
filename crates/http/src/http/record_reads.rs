@@ -572,7 +572,7 @@ fn intersect_record_ids(current: Option<Vec<Uuid>>, next: Vec<Uuid>) -> Vec<Uuid
 }
 
 async fn resolve_search_filter(
-    repository: &crate::repository::CatalogRepository,
+    repository: &crate::repository::AttricatRepository,
     blueprint: &crate::model::BlueprintWithAttributes,
     filter: &SearchFilter,
     caller: Uuid,
@@ -676,7 +676,7 @@ async fn resolve_search_filter(
             value,
         });
     }
-    let presence = filter.operator == catalog_validation::saved_search::FILTER_OPERATOR_IS_SET;
+    let presence = filter.operator == attricat_validation::saved_search::FILTER_OPERATOR_IS_SET;
     let valid_operator = match value_type {
         "string" => {
             presence || matches!(filter.operator.as_str(), "eq" | "contains" | "starts_with")
@@ -740,7 +740,7 @@ async fn resolve_search_filter(
 }
 
 async fn resolve_relationship_filter(
-    repository: &crate::repository::CatalogRepository,
+    repository: &crate::repository::AttricatRepository,
     blueprint: &crate::model::BlueprintWithAttributes,
     filter: &RelationshipFilter,
 ) -> Result<RecordRelationshipFilter, ApiError> {
@@ -852,7 +852,7 @@ fn table_relationships(
 }
 
 async fn resolve_table_sort(
-    repository: &crate::repository::CatalogRepository,
+    repository: &crate::repository::AttricatRepository,
     blueprint: &crate::model::BlueprintWithAttributes,
     sort: Option<&crate::model::SearchSort>,
     effective_source_version: Option<i64>,

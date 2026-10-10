@@ -1,6 +1,6 @@
 mod support;
 
-use api::{http::StreamControl, repository::CatalogRepository, storage::FakeObjectStore};
+use api::{http::StreamControl, repository::AttricatRepository, storage::FakeObjectStore};
 use std::{sync::Arc, time::Duration};
 use support::*;
 
@@ -34,7 +34,7 @@ fields = ["title"]
         .bind(id).execute(&pool).await.unwrap();
     sqlx::query("INSERT INTO attribute_value_history (id,workspace_id,record_id,attribute_id,context_id,active,value_text,created_at,archived_at) SELECT gen_random_uuid(),v.workspace_id,v.record_id,v.attribute_id,v.context_id,false,'Recent',now(),now() FROM attribute_values v WHERE v.record_id=$1")
         .bind(id).execute(&pool).await.unwrap();
-    let repository = CatalogRepository::system(pool.clone());
+    let repository = AttricatRepository::system(pool.clone());
     let retention = "90".parse().unwrap();
     let (a, b) = tokio::join!(
         repository.purge_value_history_batch(retention),
@@ -108,7 +108,7 @@ async fn successful_uploads_consume_intents_atomically_and_are_not_cleaned(pool:
     assert_eq!(intents, 0);
     assert!(
         !api::maintenance::cleanup_upload_once(
-            &CatalogRepository::system(pool.clone()),
+            &AttricatRepository::system(pool.clone()),
             store.as_ref()
         )
         .await
@@ -123,7 +123,7 @@ async fn event_replay_drains_all_pages_through_terminal_and_supports_terminal_re
     pool: PgPool,
 ) {
     let (base, server) = start_server(pool.clone()).await;
-    let repository = CatalogRepository::new(pool.clone(), BOOTSTRAP_WORKSPACE_ID.parse().unwrap());
+    let repository = AttricatRepository::new(pool.clone(), BOOTSTRAP_WORKSPACE_ID.parse().unwrap());
     let conversation = repository
         .create_conversation(Some(BOOTSTRAP_OWNER_ID.parse().unwrap()), "replay")
         .await
@@ -181,7 +181,7 @@ async fn event_stream_deadline_releases_the_body_permit(pool: PgPool) {
     let control = StreamControl::new(1, 1, Duration::from_millis(200));
     let (base, server) =
         start_server_with_config(pool.clone(), |state| state.stream_control = control).await;
-    let repo = CatalogRepository::new(pool.clone(), BOOTSTRAP_WORKSPACE_ID.parse().unwrap());
+    let repo = AttricatRepository::new(pool.clone(), BOOTSTRAP_WORKSPACE_ID.parse().unwrap());
     let conversation = repo
         .create_conversation(Some(BOOTSTRAP_OWNER_ID.parse().unwrap()), "deadline")
         .await

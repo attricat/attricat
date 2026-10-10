@@ -1,6 +1,6 @@
 //! The operation-batch lifecycle.
 //!
-//! [`OperationsExport`] wraps the bindgen types of the `catalog:host/operations`
+//! [`OperationsExport`] wraps the bindgen types of the `attricat:host/operations`
 //! export so that one function, [`run_operation_batch`], owns the lifecycle and
 //! its validation.
 
@@ -11,7 +11,7 @@ use wasmtime::Store;
 
 use super::{
     ExtensionRuntimeError, MAX_HOST_JSON_BYTES,
-    unified::host_unified::exports::catalog::host as v16,
+    unified::host_unified::exports::attricat::host as v16,
 };
 use crate::repository::ClaimedExtensionOperationRun;
 
@@ -32,7 +32,7 @@ pub(super) struct BatchOutput {
     done: bool,
 }
 
-/// The `catalog:host/operations` export.
+/// The `attricat:host/operations` export.
 pub(super) trait OperationsExport: Sync {
     type Request: Send + Sync;
 

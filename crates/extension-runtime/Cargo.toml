@@ -1,5 +1,5 @@
 [package]
-name = "catalog-extension-runtime"
+name = "attricat-extension-runtime"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,13 +8,13 @@ publish.workspace = true
 
 [dependencies]
 async-trait.workspace = true
-catalog-cache = { path = "../cache" }
-catalog-domain = { path = "../domain" }
-catalog-events = { path = "../events" }
-catalog-extension-manifest = { path = "../extension-manifest" }
-catalog-repository = { path = "../repository" }
-catalog-storage = { path = "../storage" }
-catalog-workers = { path = "../workers" }
+attricat-cache = { path = "../cache" }
+attricat-domain = { path = "../domain" }
+attricat-events = { path = "../events" }
+attricat-extension-manifest = { path = "../extension-manifest" }
+attricat-repository = { path = "../repository" }
+attricat-storage = { path = "../storage" }
+attricat-workers = { path = "../workers" }
 chrono.workspace = true
 metrics.workspace = true
 reqwest.workspace = true

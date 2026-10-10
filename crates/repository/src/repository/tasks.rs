@@ -6,7 +6,7 @@ use sqlx::{Postgres, Transaction};
 use thiserror::Error;
 use uuid::Uuid;
 
-use super::{CatalogRepository, RepositoryError};
+use super::{AttricatRepository, RepositoryError};
 use crate::task_queue::{
     ParseTaskKindError, TaskInsert, TaskKind, TaskStatus, TaskValidationError,
 };
@@ -154,7 +154,7 @@ impl TryFrom<ClaimedTaskRow> for ClaimedTask {
     }
 }
 
-impl<S: super::RepositoryScope> CatalogRepository<S> {
+impl<S: super::RepositoryScope> AttricatRepository<S> {
     /// Inserts a delivery envelope in the caller's domain transaction. A
     /// conflict means that exact subject generation was already committed.
     pub async fn enqueue_task(

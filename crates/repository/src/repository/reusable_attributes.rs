@@ -1,14 +1,14 @@
 use super::*;
 use crate::persistence_rows::{Db, IntoDomain};
-use catalog_blueprint::{CONTEXT_EDITABLE_SCOPES, CONTEXT_FALLBACKS, DIRECTIONAL_CARDINALITIES};
-use catalog_validation::{CODE_PATTERN, is_valid_code};
+use attricat_blueprint::{CONTEXT_EDITABLE_SCOPES, CONTEXT_FALLBACKS, DIRECTIONAL_CARDINALITIES};
+use attricat_validation::{CODE_PATTERN, is_valid_code};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use sqlx::{Postgres, Transaction};
 use std::collections::HashSet;
 use uuid::Uuid;
 
-fn workspace(repository: &CatalogRepository) -> Uuid {
+fn workspace(repository: &AttricatRepository) -> Uuid {
     repository.workspace_id.0
 }
 
@@ -104,7 +104,7 @@ struct ReusableAttributeDefinition {
     #[serde(default = "default_context_editable")]
     #[schemars(extend("enum" = CONTEXT_EDITABLE_SCOPES))]
     context_editable: String,
-    /// Preview-only in the Catalog web app. API writes remain allowed.
+    /// Preview-only in the Attricat web app. API writes remain allowed.
     #[serde(default)]
     readonly: bool,
     /// Include values in search.
@@ -146,16 +146,16 @@ fn parse_definition(
             "invalid context policy or blank name".to_owned(),
         ));
     }
-    catalog_lexicon::parse(&definition.name).map_err(|error| {
+    attricat_lexicon::parse(&definition.name).map_err(|error| {
         RepositoryError::InvalidReusableAttributeDefinition(format!(
             "name has an invalid lexicon reference: {error}"
         ))
     })?;
     if let Some(schema) = toml_value_to_json(definition.value_schema.clone())? {
-        catalog_validation::validate_json_schema_definition(&schema)
+        attricat_validation::validate_json_schema_definition(&schema)
             .map_err(RepositoryError::InvalidReusableAttributeDefinition)?;
-        for text in catalog_blueprint::status_option_texts("attribute", &schema) {
-            catalog_lexicon::parse(text.text).map_err(|error| {
+        for text in attricat_blueprint::status_option_texts("attribute", &schema) {
+            attricat_lexicon::parse(text.text).map_err(|error| {
                 RepositoryError::InvalidReusableAttributeDefinition(format!(
                     "{} has an invalid lexicon reference: {error}",
                     text.location
@@ -163,11 +163,15 @@ fn parse_definition(
             })?;
         }
         if let Some(default) = toml_value_to_json(definition.default_value.clone())? {
-            catalog_validation::status::validate_status_transition(&schema, &Value::Null, &default)
-                .map_err(RepositoryError::InvalidReusableAttributeDefinition)?;
+            attricat_validation::status::validate_status_transition(
+                &schema,
+                &Value::Null,
+                &default,
+            )
+            .map_err(RepositoryError::InvalidReusableAttributeDefinition)?;
         }
         if schema
-            .get(catalog_validation::principal::PRINCIPAL_KEY)
+            .get(attricat_validation::principal::PRINCIPAL_KEY)
             .is_some()
             && (definition.value_type != "string" || definition.default_value.is_some())
         {
@@ -176,7 +180,9 @@ fn parse_definition(
                     .into(),
             ));
         }
-        if schema.get(catalog_validation::status::STATUS_KEY).is_some()
+        if schema
+            .get(attricat_validation::status::STATUS_KEY)
+            .is_some()
             && definition.value_type != "string"
         {
             return Err(RepositoryError::InvalidReusableAttributeDefinition(
@@ -187,7 +193,7 @@ fn parse_definition(
     Ok(definition)
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     pub async fn create_reusable_attribute(
         &self,
         input: CreateReusableAttribute,
@@ -673,7 +679,7 @@ mod tests {
             assert_eq!(parsed.is_ok(), accepted, "{definition}");
             let instance =
                 serde_json::to_value(toml::from_str::<toml::Value>(definition).unwrap()).unwrap();
-            let violations = catalog_validation::validate_json_schema(&schema, &instance).unwrap();
+            let violations = attricat_validation::validate_json_schema(&schema, &instance).unwrap();
             assert_eq!(
                 violations.is_empty(),
                 accepted,

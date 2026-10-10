@@ -6,7 +6,7 @@ use super::{
     extractors::{ApiJson, ApiPath},
 };
 use crate::{
-    catalog_service::CatalogMutationService,
+    attricat_service::AttricatMutationService,
     model::{
         AttributeContext, CreateAttributeContext, PublicationChannel, UpdateAttributeContext,
         UpdatePublicationChannel,
@@ -19,7 +19,7 @@ pub(super) async fn create_context(
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiJson(input): ApiJson<CreateAttributeContext>,
 ) -> Result<(StatusCode, Json<AttributeContext>), ApiError> {
-    let context = CatalogMutationService::new(&repository)
+    let context = AttricatMutationService::new(&repository)
         .create_context(input)
         .await?;
     invalidate_data_health(&state, &repository);
@@ -72,7 +72,7 @@ pub(super) async fn update_context(
     ApiPath(id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<UpdateAttributeContext>,
 ) -> Result<Json<AttributeContext>, ApiError> {
-    let context = CatalogMutationService::new(&repository)
+    let context = AttricatMutationService::new(&repository)
         .update_context(id, input)
         .await?;
     invalidate_data_health(&state, &repository);
@@ -83,7 +83,7 @@ pub(super) async fn delete_context(
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath(id): ApiPath<Uuid>,
 ) -> Result<StatusCode, ApiError> {
-    CatalogMutationService::new(&repository)
+    AttricatMutationService::new(&repository)
         .delete_context(id)
         .await?;
     invalidate_data_health(&state, &repository);

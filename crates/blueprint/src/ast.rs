@@ -15,7 +15,7 @@ pub struct BlueprintDefinition {
     pub record_schema: Option<serde_json::Value>,
     pub publication: PublicationPolicy,
     pub connector_jobs: Vec<ConnectorJobDefinition>,
-    pub rules: Vec<catalog_rules::CompiledRule>,
+    pub rules: Vec<attricat_rules::CompiledRule>,
     pub unique_keys: Vec<UniqueKeyDefinition>,
     pub attributes: Vec<AttributeDeclaration>,
 }
@@ -34,7 +34,7 @@ pub const MAX_UNIQUE_KEY_ATTRIBUTES: usize = 8;
 #[serde(deny_unknown_fields)]
 pub struct UniqueKeyDefinition {
     /// Stable key identifier, unique within the blueprint.
-    #[schemars(regex(pattern = catalog_validation::CODE_PATTERN))]
+    #[schemars(regex(pattern = attricat_validation::CODE_PATTERN))]
     pub code: String,
     /// One to eight scalar attributes, or single-target relationships, whose
     /// combined values must be unique.
@@ -62,7 +62,7 @@ fn default_unique_key_scope() -> String {
 #[serde(deny_unknown_fields)]
 pub struct ConnectorJobDefinition {
     /// Stable job identifier, unique within the blueprint.
-    #[schemars(regex(pattern = catalog_validation::CODE_PATTERN))]
+    #[schemars(regex(pattern = attricat_validation::CODE_PATTERN))]
     pub code: String,
     /// `import` requires `context`; `export` cannot set `input_file_id`.
     #[schemars(extend("enum" = CONNECTOR_JOB_DIRECTIONS))]
@@ -114,7 +114,7 @@ pub struct PublicationPolicy {
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComponentReference {
-    /// Registered component ID, such as `catalog.field_edit`.
+    /// Registered component ID, such as `attricat.field_edit`.
     #[schemars(extend("x-attricat-reference" = "view_component"))]
     pub id: String,
     /// Component manifest versions are non-negative 32-bit protocol values.
@@ -255,7 +255,7 @@ pub struct TableColumn {
     /// resolve from the workspace lexicon.
     #[serde(default)]
     pub label: Option<String>,
-    /// Cell renderer, such as `catalog.table_image`.
+    /// Cell renderer, such as `attricat.table_image`.
     #[serde(default)]
     pub renderer: Option<ComponentReference>,
 }
@@ -387,11 +387,11 @@ impl BlueprintKind {
 #[serde(deny_unknown_fields)]
 pub struct IncludeRef {
     /// Local name used by `from = "<alias>.<attribute>"` selections.
-    #[schemars(regex(pattern = catalog_validation::CODE_PATTERN))]
+    #[schemars(regex(pattern = attricat_validation::CODE_PATTERN))]
     pub alias: String,
     /// Code of the included mixin blueprint.
     #[schemars(
-        regex(pattern = catalog_validation::CODE_PATTERN),
+        regex(pattern = attricat_validation::CODE_PATTERN),
         extend("x-attricat-reference" = "mixin")
     )]
     pub code: String,
@@ -415,7 +415,7 @@ impl FilePolicy {
     /// Whether a file of a detected MIME type is accepted by this policy, as
     /// for an ordinary upload.
     pub fn allows(&self, mime: &str, filename: &str, size: u64) -> bool {
-        catalog_validation::files::FileConstraints {
+        attricat_validation::files::FileConstraints {
             allowed_mime_groups: &self.allowed_mime_groups,
             allowed_extensions: &self.allowed_extensions,
             max_bytes: self.max_bytes,
@@ -506,7 +506,7 @@ pub struct CompiledBlueprint {
     pub includes: Vec<IncludeRef>,
     pub views: HashMap<String, ViewDefinition>,
     pub record_schema: Option<serde_json::Value>,
-    pub rules: Vec<catalog_rules::CompiledRule>,
+    pub rules: Vec<attricat_rules::CompiledRule>,
     pub unique_keys: Vec<UniqueKeyDefinition>,
     pub attributes: Vec<EffectiveAttribute>,
 }

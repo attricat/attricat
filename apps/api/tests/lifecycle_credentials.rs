@@ -1,6 +1,6 @@
 mod support;
 
-use api::repository::CatalogRepository;
+use api::repository::AttricatRepository;
 use chrono::{Duration, Utc};
 use support::*;
 
@@ -14,7 +14,7 @@ async fn create_user(pool: &PgPool, email: &str, verified: bool) -> Uuid {
 #[sqlx::test]
 async fn lifecycle_tokens_are_digest_only_and_single_use(pool: PgPool) {
     let user = create_user(&pool, "lifecycle@example.test", false).await;
-    let repository = CatalogRepository::system(pool.clone());
+    let repository = AttricatRepository::system(pool.clone());
     let digest = vec![7; 32];
     repository
         .issue_lifecycle_token(
@@ -54,7 +54,7 @@ async fn lifecycle_tokens_are_digest_only_and_single_use(pool: PgPool) {
 #[sqlx::test]
 async fn lifecycle_token_validation_uses_account_state_and_revocation(pool: PgPool) {
     let user = create_user(&pool, "verified@example.test", true).await;
-    let repository = CatalogRepository::system(pool.clone());
+    let repository = AttricatRepository::system(pool.clone());
     let setup = vec![8; 32];
     repository
         .issue_lifecycle_token(
@@ -145,7 +145,7 @@ async fn invite(
 
 #[sqlx::test]
 async fn a_second_onboarding_link_after_password_setup_is_an_invalid_invitation(pool: PgPool) {
-    let repository = CatalogRepository::system(pool.clone());
+    let repository = AttricatRepository::system(pool.clone());
     let email = "two-workspaces@example.test";
     create_user(&pool, email, true).await;
     let (owner, first, second) = two_owned_workspaces(&pool, "second-onboarding").await;
@@ -168,7 +168,7 @@ async fn a_second_onboarding_link_after_password_setup_is_an_invalid_invitation(
 
 #[sqlx::test]
 async fn an_invitation_to_another_workspace_keeps_a_pending_onboarding_link(pool: PgPool) {
-    let repository = CatalogRepository::system(pool.clone());
+    let repository = AttricatRepository::system(pool.clone());
     let email = "pending-elsewhere@example.test";
     let user = create_user(&pool, email, true).await;
     let (owner, first, second) = two_owned_workspaces(&pool, "pending-elsewhere").await;
@@ -185,7 +185,7 @@ async fn an_invitation_to_another_workspace_keeps_a_pending_onboarding_link(pool
 
 #[sqlx::test]
 async fn revoking_workspace_access_keeps_other_workspaces_and_account_tokens(pool: PgPool) {
-    let repository = CatalogRepository::system(pool.clone());
+    let repository = AttricatRepository::system(pool.clone());
     let email = "scoped-revoke@example.test";
     let user = create_user(&pool, email, true).await;
     let (owner, first, second) = two_owned_workspaces(&pool, "scoped-revoke").await;

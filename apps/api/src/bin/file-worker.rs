@@ -140,7 +140,7 @@ async fn worker_liveness() -> impl IntoResponse {
 async fn worker_readiness(State(state): State<OperationsState>) -> Response {
     let database = sqlx::query("SELECT 1").execute(&state.pool).await;
     let storage = state.store.readiness().await;
-    metrics::gauge!("catalog_file_worker_database_ready").set(if database.is_ok() {
+    metrics::gauge!("attricat_file_worker_database_ready").set(if database.is_ok() {
         1.0
     } else {
         0.0

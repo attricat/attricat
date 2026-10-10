@@ -2,7 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 import net from "node:net";
 
 const workspaceRoot = new URL("../", import.meta.url).pathname;
-const webRoot = new URL("../apps/catalog-web/", import.meta.url).pathname;
+const webRoot = new URL("../apps/web/", import.meta.url).pathname;
 
 const availablePort = () =>
   new Promise((resolve, reject) => {
@@ -35,11 +35,11 @@ const playwright = spawn(
     cwd: webRoot,
     env: {
       ...process.env,
-      CATALOG_E2E_API_PORT: String(apiPort),
-      CATALOG_E2E_WEB_PORT: String(webPort),
-      CATALOG_E2E_MAILPIT_SMTP_PORT: String(mailpitSmtpPort),
-      CATALOG_E2E_MAILPIT_UI_PORT: String(mailpitUiPort),
-      CATALOG_E2E_S3_PORT: String(s3Port),
+      ATTRICAT_E2E_API_PORT: String(apiPort),
+      ATTRICAT_E2E_WEB_PORT: String(webPort),
+      ATTRICAT_E2E_MAILPIT_SMTP_PORT: String(mailpitSmtpPort),
+      ATTRICAT_E2E_MAILPIT_UI_PORT: String(mailpitUiPort),
+      ATTRICAT_E2E_S3_PORT: String(s3Port),
     },
     stdio: "inherit",
   },

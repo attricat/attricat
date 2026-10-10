@@ -2,11 +2,11 @@ mod support;
 
 use std::time::Duration;
 
-use api::{account::SessionSecret, repository::CatalogRepository};
+use api::{account::SessionSecret, repository::AttricatRepository};
 use chrono::Utc;
 use support::*;
 
-async fn run(repository: &CatalogRepository, record: Option<Uuid>) -> Uuid {
+async fn run(repository: &AttricatRepository, record: Option<Uuid>) -> Uuid {
     let owner = BOOTSTRAP_OWNER_ID.parse().unwrap();
     let conversation = if let Some(record) = record {
         repository
@@ -73,7 +73,7 @@ async fn assert_stream_closed(response: reqwest::Response) {
 async fn open_agent_streams_stop_after_token_revocation_or_expiry(pool: PgPool) {
     let (base, server) = start_server(pool.clone()).await;
     let owner = authenticated_client();
-    let repository = CatalogRepository::new(pool.clone(), bootstrap_workspace_id());
+    let repository = AttricatRepository::new(pool.clone(), bootstrap_workspace_id());
     let run = run(&repository, None).await;
     for expire in [false, true] {
         let token: Value = owner
@@ -126,7 +126,7 @@ async fn open_agent_streams_stop_after_token_revocation_or_expiry(pool: PgPool) 
 async fn open_agent_streams_stop_after_browser_session_revocation_or_expiry(pool: PgPool) {
     let (base, server) =
         start_server_with_config(pool.clone(), |state| state.allow_trusted_headers = false).await;
-    let repository = CatalogRepository::new(pool.clone(), bootstrap_workspace_id());
+    let repository = AttricatRepository::new(pool.clone(), bootstrap_workspace_id());
     repository
         .ensure_bootstrap_local_password(
             "api-test-owner@example.test",
@@ -157,7 +157,7 @@ async fn open_agent_streams_stop_after_browser_session_revocation_or_expiry(pool
         let mut headers = reqwest::header::HeaderMap::new();
         headers.insert(
             "cookie",
-            format!("catalog_session={}", session.expose_for_delivery())
+            format!("attricat_session={}", session.expose_for_delivery())
                 .parse()
                 .unwrap(),
         );
@@ -188,7 +188,7 @@ async fn open_agent_streams_stop_after_browser_session_revocation_or_expiry(pool
 #[sqlx::test]
 async fn open_agent_streams_stop_when_agent_permission_is_removed(pool: PgPool) {
     let (base, server) = start_server(pool.clone()).await;
-    let repository = CatalogRepository::new(pool.clone(), bootstrap_workspace_id());
+    let repository = AttricatRepository::new(pool.clone(), bootstrap_workspace_id());
     let (user, membership) = add_workspace_user(&pool).await;
     let role = create_role(&pool, "stream_agent", &["agents.run"]).await;
     let grant = grant_role(&pool, membership, role, GrantScope::Workspace).await;
@@ -227,7 +227,7 @@ async fn open_agent_streams_stop_when_the_conversation_record_becomes_unreadable
         .unwrap()
         .parse()
         .unwrap();
-    let repository = CatalogRepository::new(pool.clone(), bootstrap_workspace_id());
+    let repository = AttricatRepository::new(pool.clone(), bootstrap_workspace_id());
     let (user, membership) = add_workspace_user(&pool).await;
     let role = create_role(&pool, "stream_agent", &["agents.run"]).await;
     grant_role(&pool, membership, role, GrantScope::Workspace).await;

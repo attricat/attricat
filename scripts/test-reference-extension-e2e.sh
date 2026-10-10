@@ -4,21 +4,21 @@ set -euo pipefail
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 example_extension=$(cd "$root/../../attricat-extension-example" && pwd)
-: "${CATALOG_TOKEN:?Set a workspace-owner personal API token before running this test.}"
-if [[ -z "${CATALOG_API_URL:-}" && -n "${API_PORT:-}" ]]; then
-  CATALOG_API_URL="http://127.0.0.1:$API_PORT/api"
+: "${ATTRICAT_TOKEN:?Set a workspace-owner personal API token before running this test.}"
+if [[ -z "${ATTRICAT_API_URL:-}" && -n "${API_PORT:-}" ]]; then
+  ATTRICAT_API_URL="http://127.0.0.1:$API_PORT/api"
 fi
-: "${CATALOG_API_URL:?Run 'just setup' and source .worktree first.}"
-export CATALOG_API_URL
+: "${ATTRICAT_API_URL:?Run 'just setup' and source .worktree first.}"
+export ATTRICAT_API_URL
 command -v jq >/dev/null || { echo 'jq is required' >&2; exit 1; }
 
-cli=(cargo run --quiet -p acli -- --token "$CATALOG_TOKEN")
+cli=(cargo run --quiet -p acli -- --token "$ATTRICAT_TOKEN")
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
 (cd "$example_extension" && just check && just pack)
 manifest="$example_extension/manifest.json"
-extension_id=$(jq -er '.catalog.id' "$manifest")
+extension_id=$(jq -er '.attricat.id' "$manifest")
 version=$(jq -er '.version' "$manifest")
 archive="$example_extension/dist/$extension_id-$version.tar.zst"
 test -s "$archive" || { echo "missing packaged example archive: $archive" >&2; exit 1; }
@@ -43,7 +43,7 @@ test -s "$work/workbench.js"
 
 # Trigger the real v1.1 event handler with a fresh blueprint and record, not an
 # existing development fixture. The extension must write the computed value in
-# the same default context after an ordinary Catalog mutation.
+# the same default context after an ordinary Attricat mutation.
 code="reference_formula_$(date +%s)_$$"
 cat > "$work/blueprint.toml" <<TOML
 format_version = 1

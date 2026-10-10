@@ -164,7 +164,7 @@ impl GitHubRegistry {
     pub fn new() -> Result<Self, RegistryError> {
         let client = Client::builder()
             .redirect(Policy::none())
-            .user_agent("catalog-extension-registry")
+            .user_agent("attricat-extension-registry")
             .build()
             .map_err(|_| RegistryError::Unavailable)?;
         // GitHub release download URLs redirect to a short-lived asset URL.
@@ -172,7 +172,7 @@ impl GitHubRegistry {
         // and exact repository before this client follows that redirect.
         let asset_client = Client::builder()
             .redirect(Policy::limited(5))
-            .user_agent("catalog-extension-registry")
+            .user_agent("attricat-extension-registry")
             .build()
             .map_err(|_| RegistryError::Unavailable)?;
         Ok(Self {

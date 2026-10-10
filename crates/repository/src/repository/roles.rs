@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use sqlx::FromRow;
 use uuid::Uuid;
 
-use super::{CatalogRepository, RepositoryError};
+use super::{AttricatRepository, RepositoryError};
 
 #[derive(Debug, serde::Serialize, FromRow)]
 pub struct WorkspaceRole {
@@ -27,7 +27,7 @@ pub struct WorkspaceGrantTarget {
 
 const OWNER_ROLE_ID: Uuid = Uuid::from_u128(0x00000000000040008000000000000101);
 
-impl<S: super::RepositoryScope> CatalogRepository<S> {
+impl<S: super::RepositoryScope> AttricatRepository<S> {
     async fn require_permission(
         &self,
         actor_id: Uuid,

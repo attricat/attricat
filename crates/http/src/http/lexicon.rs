@@ -1,7 +1,7 @@
-use axum::{Json, http::StatusCode};
-use catalog_lexicon::{
+use attricat_lexicon::{
     DEFAULT_PLURAL_CATEGORY, Entry, EntryIdentity, LexiconFile, Report, canonical_language,
 };
+use axum::{Json, http::StatusCode};
 use serde::Deserialize;
 
 use super::{

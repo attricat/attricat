@@ -1,4 +1,4 @@
-use catalog_blueprint::parse;
+use attricat_blueprint::parse;
 
 fn definition(value_type: &str, schema: serde_json::Value) -> String {
     format!(

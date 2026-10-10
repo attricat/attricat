@@ -3,8 +3,8 @@ use serde::Serialize;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use super::{CatalogRepository, RepositoryError, StartExtensionOperation};
-use catalog_blueprint::parse;
+use super::{AttricatRepository, RepositoryError, StartExtensionOperation};
+use attricat_blueprint::parse;
 use sqlx::{Postgres, Transaction};
 
 #[derive(Clone, Debug, Serialize, sqlx::FromRow)]
@@ -30,7 +30,7 @@ fn invalid(message: &str) -> RepositoryError {
     RepositoryError::InvalidExtension(message.into())
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     /// Replace the live job declarations atomically with publication of the
     /// immutable blueprint revision. Stable codes retain run history/IDs;
     /// removed jobs are disabled, never deleted (runs reference them).
@@ -69,7 +69,7 @@ impl CatalogRepository {
                         .find(|op| op.id == job.operation_id)
                 })
                 .ok_or_else(|| invalid("connector operation is not declared"))?;
-            catalog_extension_manifest::validate_schema(&operation.request_schema, &input)
+            attricat_extension_manifest::validate_schema(&operation.request_schema, &input)
                 .map_err(|_| invalid("connector input does not match operation schema"))?;
             let context_id: Option<Uuid> = match job.context.as_deref() {
                 Some(code) => Some(
@@ -190,7 +190,7 @@ impl CatalogRepository {
                 profile.insert("blueprint_version".into(), json!(version));
                 profile.insert("context_id".into(), json!(context));
             }
-            catalog_extension_manifest::validate_schema(&operation.request_schema, &input)
+            attricat_extension_manifest::validate_schema(&operation.request_schema, &input)
                 .map_err(|_| invalid("scoped input does not match connector schema"))?;
             let run = self
                 .start_extension_operation_scoped(

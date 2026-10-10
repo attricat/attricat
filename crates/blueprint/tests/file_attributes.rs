@@ -1,4 +1,4 @@
-use catalog_blueprint::{BlueprintError, compile, parse};
+use attricat_blueprint::{BlueprintError, compile, parse};
 
 fn source(attribute: &str) -> String {
     format!(

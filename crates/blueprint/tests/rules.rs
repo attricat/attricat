@@ -1,4 +1,4 @@
-use catalog_blueprint::{BlueprintError, parse};
+use attricat_blueprint::{BlueprintError, parse};
 
 const BLUEPRINT: &str = r#"
 format_version = 1
@@ -87,8 +87,8 @@ fields = ["owner"]
 
 fn compile(
     source: &str,
-) -> Result<catalog_blueprint::CompiledBlueprint, catalog_blueprint::BlueprintError> {
-    catalog_blueprint::compile(parse(source)?, &[], source)
+) -> Result<attricat_blueprint::CompiledBlueprint, attricat_blueprint::BlueprintError> {
+    attricat_blueprint::compile(parse(source)?, &[], source)
 }
 
 #[test]

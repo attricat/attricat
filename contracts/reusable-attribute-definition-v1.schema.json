@@ -65,7 +65,7 @@
     },
     "readonly": {
       "default": false,
-      "description": "Preview-only in the Catalog web app. API writes remain allowed.",
+      "description": "Preview-only in the Attricat web app. API writes remain allowed.",
       "type": "boolean"
     },
     "searchable": {

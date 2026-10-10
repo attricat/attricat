@@ -5,7 +5,7 @@ use super::record_values::{
 };
 use super::write_context::WriteContext;
 use super::*;
-use catalog_validation::status::{
+use attricat_validation::status::{
     STATUS_KEY, StatusCoverage, TransitionRequirements, has_record_controls, status_approval,
     status_lock, status_retention_days, transition_edges, transition_requirements,
     validate_status_transition,
@@ -224,7 +224,7 @@ fn label(value: &Value) -> String {
     value.as_str().unwrap_or("not set").to_owned()
 }
 
-/// [`CatalogRepository::status_attributes`] from a write's loaded definitions.
+/// [`AttricatRepository::status_attributes`] from a write's loaded definitions.
 fn write_status_attributes(write: &WriteContext) -> Vec<StatusAttribute> {
     write
         .status_attributes()
@@ -238,7 +238,7 @@ fn write_status_attributes(write: &WriteContext) -> Vec<StatusAttribute> {
         .collect()
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     /// Status attributes of the record's blueprint revision and its own additional attributes.
     async fn status_attributes(
         transaction: &mut Transaction<'_, Postgres>,

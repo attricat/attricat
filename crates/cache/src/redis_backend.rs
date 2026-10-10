@@ -123,7 +123,7 @@ impl CircuitBreaker {
                     cooldown_ms = COOLDOWN.as_millis() as u64,
                     "Redis keeps failing; skipping the shared cache tier"
                 );
-                metrics::counter!("catalog_query_cache_redis_circuit_opened_total").increment(1);
+                metrics::counter!("attricat_query_cache_redis_circuit_opened_total").increment(1);
             }
         }
     }
@@ -144,7 +144,7 @@ fn is_transient(failure: &fred::error::Error) -> bool {
 }
 
 /// Tracks the connection state that fred reports in its events, for the
-/// `catalog_query_cache_redis_connected` gauge and the logs.
+/// `attricat_query_cache_redis_connected` gauge and the logs.
 #[derive(Default)]
 struct ConnectionState {
     connected: AtomicBool,
@@ -152,7 +152,7 @@ struct ConnectionState {
 
 impl ConnectionState {
     fn connected(&self, server: &Server) {
-        metrics::gauge!("catalog_query_cache_redis_connected").set(1.0);
+        metrics::gauge!("attricat_query_cache_redis_connected").set(1.0);
         if self.connected.swap(true, Ordering::AcqRel) {
             tracing::debug!(%server, "connected to Redis");
         } else {
@@ -161,7 +161,7 @@ impl ConnectionState {
     }
 
     fn failed(&self, failure: &fred::error::Error, server: Option<&Server>) {
-        metrics::gauge!("catalog_query_cache_redis_connected").set(0.0);
+        metrics::gauge!("attricat_query_cache_redis_connected").set(0.0);
         if self.connected.swap(false, Ordering::AcqRel) {
             tracing::warn!(
                 error = %failure,
@@ -209,7 +209,7 @@ impl Redis {
             .set_policy(ReconnectPolicy::new_exponential(0, 100, 5_000, 2));
         let client = builder.build().map_err(error)?;
         let state = Arc::new(ConnectionState::default());
-        metrics::gauge!("catalog_query_cache_redis_connected").set(0.0);
+        metrics::gauge!("attricat_query_cache_redis_connected").set(0.0);
         client.on_reconnect({
             let state = state.clone();
             move |server| {

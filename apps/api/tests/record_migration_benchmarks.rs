@@ -3,7 +3,7 @@ use api::{
         BlueprintMigrationBatchConfig, BlueprintMigrationBatchTaskHandler,
     },
     model::{CreateBlueprint, NewAttributeValue},
-    repository::CatalogRepository,
+    repository::AttricatRepository,
     task_worker::TaskHandler,
 };
 use serde_json::json;
@@ -94,7 +94,7 @@ image_only = true
 #[sqlx::test]
 #[ignore = "benchmark; run explicitly with a controlled PostgreSQL instance"]
 async fn preserved_value_workloads_report_writes_and_throughput(pool: PgPool) {
-    let repository = CatalogRepository::new(
+    let repository = AttricatRepository::new(
         pool.clone(),
         Uuid::from_u128(0x00000000000040008000000000000002),
     );
@@ -151,7 +151,7 @@ value_type = "string"
 }
 
 async fn run_workload(
-    repository: &CatalogRepository,
+    repository: &AttricatRepository,
     pool: &PgPool,
     target_id: Uuid,
     workload: Workload,

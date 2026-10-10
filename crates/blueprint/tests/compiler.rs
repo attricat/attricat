@@ -1,4 +1,4 @@
-use catalog_blueprint::{
+use attricat_blueprint::{
     BlueprintError, EffectiveAttribute, ResolvedInclude, ViewDefinition, compile, parse, raw_hash,
 };
 
@@ -190,7 +190,7 @@ value_type = "string"
         definition.description.as_deref(),
         Some("Product groupings, such as Basic tools")
     );
-    let catalog_blueprint::AttributeDeclaration::Local(title) = &definition.attributes[0] else {
+    let attricat_blueprint::AttributeDeclaration::Local(title) = &definition.attributes[0] else {
         panic!("title is a local attribute");
     };
     assert_eq!(
@@ -198,7 +198,7 @@ value_type = "string"
         Some("The category name shown to shoppers")
     );
     assert!(
-        catalog_blueprint::lexicon_texts(&definition)
+        attricat_blueprint::lexicon_texts(&definition)
             .iter()
             .any(|text| text.location == "attribute 'title' description")
     );
@@ -553,7 +553,7 @@ type = "stack"
 children = [
   { type = "heading", text = "Product" },
   { type = "section", children = [
-    { type = "grid", children = [{ type = "field", field = "title", component = { id = "catalog.field_display", version = 1 } }] },
+    { type = "grid", children = [{ type = "field", field = "title", component = { id = "attricat.field_display", version = 1 } }] },
     { type = "tabs", tabs = [{ label = "Details", children = [{ type = "text", text = "Information" }] }] },
     { type = "accordion", sections = [{ label = "Related", children = [{ type = "relationship_list", field = "categories" }] }] },
     { type = "divider" }
@@ -594,7 +594,7 @@ fields = ["name"]
 
 [views.detail]
 type = "stack"
-children = [{ type = "incoming_relationship_list", label = "Products in this category", page_size = 10, relationships = [{ source_blueprint = "product", field = "categories" }], component = { id = "catalog.incoming_relationship_list_display", version = 1 } }]
+children = [{ type = "incoming_relationship_list", label = "Products in this category", page_size = 10, relationships = [{ source_blueprint = "product", field = "categories" }], component = { id = "attricat.incoming_relationship_list_display", version = 1 } }]
 
 [[attributes]]
 code = "name"
@@ -643,7 +643,7 @@ value_type = "relationship"
 
     let invalid_component_id = source.replace(
         "fields = [\"categories\"]",
-        "fields = [\"title\"]\ncomponent = { id = \"catalog.bad-id\", version = 1 }",
+        "fields = [\"title\"]\ncomponent = { id = \"attricat.bad-id\", version = 1 }",
     );
     assert!(
         compile(
@@ -656,7 +656,7 @@ value_type = "relationship"
 
     let invalid_component_version = source.replace(
         "fields = [\"categories\"]",
-        "fields = [\"title\"]\ncomponent = { id = \"catalog.table\", version = 0 }",
+        "fields = [\"title\"]\ncomponent = { id = \"attricat.table\", version = 0 }",
     );
     assert!(
         compile(
@@ -695,7 +695,7 @@ fields = ["title"]
 
 [views.detail]
 type = "stack"
-children = [{ type = "field", field = "title", component = { id = "catalog.field_display", version = 1 } }]
+children = [{ type = "field", field = "title", component = { id = "attricat.field_display", version = 1 } }]
 
 [[attributes]]
 code = "title"
@@ -705,15 +705,15 @@ value_type = "string"
 
     for invalid in [
         source.replace("[views.detail]", "[views.edit]"),
-        source.replace("catalog.field_display", "catalog.table_display"),
+        source.replace("attricat.field_display", "attricat.table_display"),
         source.replace("version = 1 }", "version = 2 }"),
         source.replace(
             "version = 1 }",
             "version = 1, props = { label = \"Title\" } }",
         ),
         source.replace(
-            "children = [{ type = \"field\", field = \"title\", component = { id = \"catalog.field_display\", version = 1 } }]",
-            "component = { id = \"catalog.field_display\", version = 1 }\nchildren = []",
+            "children = [{ type = \"field\", field = \"title\", component = { id = \"attricat.field_display\", version = 1 } }]",
+            "component = { id = \"attricat.field_display\", version = 1 }\nchildren = []",
         ),
     ] {
         assert!(compile(parse(&invalid).unwrap(), &[], &invalid).is_err());
@@ -734,15 +734,15 @@ fields = ["phone"]
 
 [views.detail]
 type = "stack"
-children = [{ type = "field", field = "phone", component = { id = "catalog.phone_display", version = 1 } }]
+children = [{ type = "field", field = "phone", component = { id = "attricat.phone_display", version = 1 } }]
 
 [views.edit]
 type = "stack"
-children = [{ type = "field", field = "phone", component = { id = "catalog.phone_edit", version = 1 } }]
+children = [{ type = "field", field = "phone", component = { id = "attricat.phone_edit", version = 1 } }]
 
 [views.table]
 type = "table"
-columns = [{ field = "phone", renderer = { id = "catalog.phone_display", version = 1 } }]
+columns = [{ field = "phone", renderer = { id = "attricat.phone_display", version = 1 } }]
 
 [[attributes]]
 code = "phone"
@@ -751,8 +751,8 @@ value_type = "string"
     assert!(compile(parse(source).unwrap(), &[], source).is_ok());
     for invalid in [
         source.replace("value_type = \"string\"", "value_type = \"integer\""),
-        source.replace("catalog.phone_edit", "catalog.phone_display"),
-        source.replace("catalog.phone_display", "catalog.phone_edit"),
+        source.replace("attricat.phone_edit", "attricat.phone_display"),
+        source.replace("attricat.phone_display", "attricat.phone_edit"),
         source.replace("version = 1 }", "version = 2 }"),
         source.replace(
             "version = 1 }",
@@ -775,13 +775,13 @@ type = "dropdown_option"
 fields = ["url"]
 [views.detail]
 type = "stack"
-children = [{ type = "field", field = "url", component = { id = "catalog.url_display", version = 1 } }]
+children = [{ type = "field", field = "url", component = { id = "attricat.url_display", version = 1 } }]
 [views.edit]
 type = "stack"
-children = [{ type = "field", field = "url", component = { id = "catalog.url_edit", version = 1 } }]
+children = [{ type = "field", field = "url", component = { id = "attricat.url_edit", version = 1 } }]
 [views.table]
 type = "table"
-columns = [{ field = "url", renderer = { id = "catalog.url_display", version = 1 } }]
+columns = [{ field = "url", renderer = { id = "attricat.url_display", version = 1 } }]
 [[attributes]]
 code = "url"
 value_type = "string"
@@ -789,8 +789,8 @@ value_type = "string"
     assert!(compile(parse(source).unwrap(), &[], source).is_ok());
     for invalid in [
         source.replace("value_type = \"string\"", "value_type = \"number\""),
-        source.replace("catalog.url_display", "catalog.url_edit"),
-        source.replace("catalog.url_edit", "catalog.url_display"),
+        source.replace("attricat.url_display", "attricat.url_edit"),
+        source.replace("attricat.url_edit", "attricat.url_display"),
         source.replace("version = 1 }", "version = 2 }"),
         source.replace("version = 1 }", "version = 1, props = { unsafe = true } }"),
     ] {
@@ -811,19 +811,19 @@ type = "dropdown_option"
 fields = ["hex"]
 [views.detail]
 type = "stack"
-children = [{ type = "field", field = "hex", component = { id = "catalog.color_display", version = 1 } }]
+children = [{ type = "field", field = "hex", component = { id = "attricat.color_display", version = 1 } }]
 [views.edit]
 type = "stack"
-children = [{ type = "field", field = "hex", component = { id = "catalog.color_edit", version = 1 } }]
+children = [{ type = "field", field = "hex", component = { id = "attricat.color_edit", version = 1 } }]
 [views.table]
 type = "table"
-columns = [{ field = "hex", renderer = { id = "catalog.color_display", version = 1 } }]
+columns = [{ field = "hex", renderer = { id = "attricat.color_display", version = 1 } }]
 "#;
     assert!(compile(parse(source).unwrap(), &[], source).is_ok());
     for invalid in [
         source.replace("value_type = \"string\"", "value_type = \"number\""),
-        source.replace("catalog.color_display", "catalog.color_edit"),
-        source.replace("catalog.color_edit", "catalog.color_display"),
+        source.replace("attricat.color_display", "attricat.color_edit"),
+        source.replace("attricat.color_edit", "attricat.color_display"),
         source.replace("version = 1 }", "version = 2 }"),
         source.replace("version = 1 }", "version = 1, props = { alpha = true } }"),
         source.replace("type = \"field\"", "type = \"relationship_list\""),
@@ -980,7 +980,7 @@ fields = ["title"]
 
 [views.detail]
 type = "stack"
-component = { id = "catalog.record_heading", version = 1 }
+component = { id = "attricat.record_heading", version = 1 }
 children = [
   { type = "field", field = "title" },
   { type = "text", text = "SKU" },
@@ -1004,8 +1004,8 @@ value_type = "relationship"
     for invalid in [
         source.replace("[views.detail]", "[views.edit]"),
         source.replace(
-            "component = { id = \"catalog.record_heading\", version = 1 }",
-            "component = { id = \"catalog.field_display\", version = 1 }",
+            "component = { id = \"attricat.record_heading\", version = 1 }",
+            "component = { id = \"attricat.field_display\", version = 1 }",
         ),
         source.replace(
             "{ type = \"field\", field = \"title\" }",
@@ -1040,7 +1040,7 @@ fields = ["title"]
 [views.detail]
 type = "stack"
 children = [
-  { type = "relationship_list", field = "parent", component = { id = "catalog.relationship_hierarchy", version = 1 } }
+  { type = "relationship_list", field = "parent", component = { id = "attricat.relationship_hierarchy", version = 1 } }
 ]
 
 [[attributes]]
@@ -1165,7 +1165,7 @@ fields = ["title"]
 [views.table]
 type = "table"
 columns = [
-  { field = "title", label = "Title", renderer = { id = "catalog.table_display", version = 1 } },
+  { field = "title", label = "Title", renderer = { id = "attricat.table_display", version = 1 } },
   { field = "category.name" },
 ]
 
@@ -1217,7 +1217,7 @@ cardinality = "one"
     // Modern column tables must validate their table-level component too.
     let invalid_table_component = source.replace(
         "columns = [",
-        "component = { id = \"catalog.table_edit\", version = 1 }\ncolumns = [",
+        "component = { id = \"attricat.table_edit\", version = 1 }\ncolumns = [",
     );
     assert!(
         compile(
@@ -1291,7 +1291,7 @@ value_type = "number"
     compile(parse(source).unwrap(), &[], source).unwrap();
 }
 
-fn compile_source(source: &str) -> Result<catalog_blueprint::CompiledBlueprint, BlueprintError> {
+fn compile_source(source: &str) -> Result<attricat_blueprint::CompiledBlueprint, BlueprintError> {
     compile(parse(source)?, &[], source)
 }
 

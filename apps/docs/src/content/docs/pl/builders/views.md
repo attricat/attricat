@@ -83,12 +83,12 @@ Układ szczegółów steruje zarówno wyświetlaniem, jak i edycją. Na stronie 
 
 ## Nagłówek rekordu
 
-Aby nadać stronie szczegółów właściwy tytuł, umieść pola w `stack` z komponentem `catalog.record_heading`. Jego pierwszy element podrzędny musi być polem skalarnym i staje się nagłówkiem strony. Kolejne elementy, tekst lub pola skalarne, tworzą podtytuł.
+Aby nadać stronie szczegółów właściwy tytuł, umieść pola w `stack` z komponentem `attricat.record_heading`. Jego pierwszy element podrzędny musi być polem skalarnym i staje się nagłówkiem strony. Kolejne elementy, tekst lub pola skalarne, tworzą podtytuł.
 
 ```toml
 [[views.detail.children]]
 type = "stack"
-component = { id = "catalog.record_heading", version = 1 }
+component = { id = "attricat.record_heading", version = 1 }
 children = [
   { type = "field", field = "title" },
   { type = "field", field = "sku" },
@@ -112,20 +112,20 @@ Wymień kilka pozycji w `relationships`, aby połączyć źródła. Rekord pasuj
 
 ## Hierarchie
 
-`catalog.relationship_hierarchy` pokazuje łańcuchy przodków jako ścieżkę nawigacyjną, rozstrzygniętą w wybranym kontekście.
+`attricat.relationship_hierarchy` pokazuje łańcuchy przodków jako ścieżkę nawigacyjną, rozstrzygniętą w wybranym kontekście.
 
 W relacji odwołującej się do własnego schematu, takiej jak `category.parent`, pokazuje przodków bieżącego rekordu:
 
 ```toml
 { type = "relationship_list", field = "parent",
-  component = { id = "catalog.relationship_hierarchy", version = 1 } }
+  component = { id = "attricat.relationship_hierarchy", version = 1 } }
 ```
 
 W relacji do innego schematu ustaw `parent_field` na pole celu odwołujące się do jego własnego schematu. Na produkcie pokazuje to pełną ścieżkę każdej powiązanej kategorii, np. *Apparel › Shirts › Linen*:
 
 ```toml
 { type = "relationship_list", field = "categories",
-  component = { id = "catalog.relationship_hierarchy", version = 1, props = { parent_field = "parent" } } }
+  component = { id = "attricat.relationship_hierarchy", version = 1, props = { parent_field = "parent" } } }
 ```
 
 ## Tabela Przeglądarki rekordów
@@ -149,13 +149,13 @@ Kolumny można sortować, gdy prowadzą do wartości skalarnej, a każda relacja
 
 ### Miniatury obrazów
 
-`catalog.table_image` pokazuje miniaturę dla atrybutu z jednym obrazem. Atrybut musi mieć `value_type = "file"`, `cardinality = "one"` (domyślnie) i `image_only = true`.
+`attricat.table_image` pokazuje miniaturę dla atrybutu z jednym obrazem. Atrybut musi mieć `value_type = "file"`, `cardinality = "one"` (domyślnie) i `image_only = true`.
 
 ```toml
 [[views.table.columns]]
 field = "main_photo"
 label = "Image"
-renderer = { id = "catalog.table_image", version = 1 }
+renderer = { id = "attricat.table_image", version = 1 }
 ```
 
 ### Renderery komórek z rozszerzeń
@@ -172,28 +172,28 @@ Renderer musi być zadeklarowany przez włączone rozszerzenie dla typu wartośc
 
 ## Kontrolki pól
 
-Atrybut `string` jest domyślnie zwykłym tekstem. Aby pokazać go jako kolor, adres e-mail, URL, numer telefonu lub Markdown, wskaż komponent wyświetlania w jego polu szczegółów (lub kolumnie tabeli). Tam, gdzie pole jest edytowalne, aplikacja internetowa używa sparowanego komponentu edycji, na przykład `catalog.url_edit` dla `catalog.url_display`:
+Atrybut `string` jest domyślnie zwykłym tekstem. Aby pokazać go jako kolor, adres e-mail, URL, numer telefonu lub Markdown, wskaż komponent wyświetlania w jego polu szczegółów (lub kolumnie tabeli). Tam, gdzie pole jest edytowalne, aplikacja internetowa używa sparowanego komponentu edycji, na przykład `attricat.url_edit` dla `attricat.url_display`:
 
 ```toml
 [views.detail]
 type = "stack"
 children = [
-  { type = "field", field = "website", component = { id = "catalog.url_display", version = 1 } },
-  { type = "field", field = "description", component = { id = "catalog.markdown_display", version = 1 } },
+  { type = "field", field = "website", component = { id = "attricat.url_display", version = 1 } },
+  { type = "field", field = "description", component = { id = "attricat.markdown_display", version = 1 } },
 ]
 
 [[views.table.columns]]
 field = "website"
-renderer = { id = "catalog.url_display", version = 1 }
+renderer = { id = "attricat.url_display", version = 1 }
 ```
 
 | Kontrolka | Komponenty | Działanie |
 | --- | --- | --- |
-| Kolor | `catalog.color_display`, `catalog.color_edit` | Sześciocyfrowy kod szesnastkowy (`#RRGGBB`), wpisany lub wybrany w próbniku kolorów. Wyświetlany jako próbka obok tekstu. |
-| E-mail | `catalog.email_display`, `catalog.email_edit` | Jeden zwykły adres ASCII, np. `name+tag@example.com`. Wyświetlany jako link `mailto:`. |
-| URL | `catalog.url_display`, `catalog.url_edit` | Tylko bezwzględne adresy `http://` lub `https://`. Linki otwierają się w nowej karcie. |
-| Telefon | `catalog.phone_display`, `catalog.phone_edit` | Zapisywany tak, jak go wpisano. Numery zaczynające się od `+` i numeru kierunkowego kraju stają się linkami `tel:`; numer wewnętrzny można poprzedzić `ext.` lub `x`. |
-| Markdown | `catalog.markdown_display`, `catalog.markdown_edit` | CommonMark z kartami **Edytuj** i **Podgląd**. Na stronie rekordu ustawiona wartość jest pokazywana sformatowana, dopóki nie zdecydujesz się jej edytować. Surowy HTML jest pomijany, obrazy pokazują tekst alternatywny, a linki są ograniczone do HTTP(S), `mailto:`, ścieżek względnych i fragmentów. Tekst jest zapisywany dokładnie tak, jak go wpisano, łącznie z białymi znakami. Niedostępny w kolumnach tabeli. |
+| Kolor | `attricat.color_display`, `attricat.color_edit` | Sześciocyfrowy kod szesnastkowy (`#RRGGBB`), wpisany lub wybrany w próbniku kolorów. Wyświetlany jako próbka obok tekstu. |
+| E-mail | `attricat.email_display`, `attricat.email_edit` | Jeden zwykły adres ASCII, np. `name+tag@example.com`. Wyświetlany jako link `mailto:`. |
+| URL | `attricat.url_display`, `attricat.url_edit` | Tylko bezwzględne adresy `http://` lub `https://`. Linki otwierają się w nowej karcie. |
+| Telefon | `attricat.phone_display`, `attricat.phone_edit` | Zapisywany tak, jak go wpisano. Numery zaczynające się od `+` i numeru kierunkowego kraju stają się linkami `tel:`; numer wewnętrzny można poprzedzić `ext.` lub `x`. |
+| Markdown | `attricat.markdown_display`, `attricat.markdown_edit` | CommonMark z kartami **Edytuj** i **Podgląd**. Na stronie rekordu ustawiona wartość jest pokazywana sformatowana, dopóki nie zdecydujesz się jej edytować. Surowy HTML jest pomijany, obrazy pokazują tekst alternatywny, a linki są ograniczone do HTTP(S), `mailto:`, ścieżek względnych i fragmentów. Tekst jest zapisywany dokładnie tak, jak go wpisano, łącznie z białymi znakami. Niedostępny w kolumnach tabeli. |
 
 Wartości, które nie pasują do kontrolki, np. starsze dane, nadal są widoczne jako zwykły tekst bez linku i próbki. Pola bez komponentu korzystają ze standardowego edytora dla swojego typu wartości.
 

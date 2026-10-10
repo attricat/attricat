@@ -29,7 +29,7 @@ use crate::{
         selection_action_outlet, validate_schema,
     },
     repository::{
-        CatalogRepository, ExtensionAnnotationNamespace, ExtensionAnnotationPatch,
+        AttricatRepository, ExtensionAnnotationNamespace, ExtensionAnnotationPatch,
         ExtensionAnnotations, InteractiveRun, InteractiveRunArtifact, RepositoryError,
         StartInteractiveOperation,
     },
@@ -98,7 +98,7 @@ pub(super) struct RunScopeQuery {
 /// missing rather than forbidden so run IDs cannot be probed.
 async fn visible_run(
     state: &AppState,
-    repository: &CatalogRepository,
+    repository: &AttricatRepository,
     principal: AuthenticatedPrincipal,
     workspace: ActiveWorkspace,
     run_id: Uuid,

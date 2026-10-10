@@ -8,10 +8,10 @@ use crate::domain_events::{
 
 use super::generations::{Generation, advance_generation};
 use super::record_commands::lock_record_writes;
-use super::{CatalogRepository, RepositoryError, validate_code};
+use super::{AttricatRepository, RepositoryError, validate_code};
 use crate::model::{AttributeContext, CreateAttributeContext, Record, UpdateAttributeContext};
 
-impl CatalogRepository {
+impl AttricatRepository {
     pub async fn create_context(
         &self,
         input: CreateAttributeContext,
@@ -55,7 +55,7 @@ impl CatalogRepository {
             .await?
             .is_empty()
         {
-            return Err(RepositoryError::CatalogCodeTaken);
+            return Err(RepositoryError::AttricatCodeTaken);
         }
         let parent_id = match input.parent_id {
             Some(parent_id) => parent_id,
@@ -329,7 +329,7 @@ impl CatalogRepository {
 }
 
 pub(super) fn context_event(
-    repository: &CatalogRepository,
+    repository: &AttricatRepository,
     event_type: &str,
     context: &AttributeContext,
 ) -> NewDomainEvent {

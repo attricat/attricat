@@ -1,5 +1,5 @@
 use super::*;
-use catalog_validation::status::MAX_RETENTION_DAYS;
+use attricat_validation::status::MAX_RETENTION_DAYS;
 use chrono::Utc;
 
 /// A retention hold keeps a file's exact bytes: storage reclamation skips the
@@ -26,7 +26,7 @@ pub struct FileRetentionHold {
 
 const HOLD_COLUMNS: &str = "id, file_id, source, record_id, attribute_code, status, reason, held_until, created_by_user_id, created_at, released_at, released_by_user_id, (released_at IS NULL AND held_until > now()) AS active";
 
-impl CatalogRepository {
+impl AttricatRepository {
     /// Holds on one file, newest first, including expired and released ones.
     pub async fn file_retention_holds(
         &self,
@@ -140,7 +140,7 @@ impl CatalogRepository {
     }
 }
 
-impl<S: RepositoryScope> CatalogRepository<S> {
+impl<S: RepositoryScope> AttricatRepository<S> {
     /// Registers the permission for explicit file holds and grants it to the
     /// owner and admin system roles.
     pub async fn ensure_retention_hold_permissions(&self) -> Result<(), RepositoryError> {

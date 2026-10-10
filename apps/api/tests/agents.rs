@@ -11,7 +11,7 @@ use api::{
     agents::AgentProviderConfig,
     file_worker::{FileWorker, WorkerConfig},
     repository::{
-        CatalogRepository, NotificationSubject, NotificationSubjectKind, RepositoryError,
+        AttricatRepository, NotificationSubject, NotificationSubjectKind, RepositoryError,
     },
     storage::FakeObjectStore,
     task_worker::TaskHandler,
@@ -26,7 +26,7 @@ async fn agent_blueprint_reads_list_summaries_and_fetch_one_definition(pool: PgP
     let (_base_url, server) = start_server(pool.clone()).await;
     let workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
     let actor: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
-    let repository = CatalogRepository::system(pool)
+    let repository = AttricatRepository::system(pool)
         .for_workspace(workspace)
         .await
         .unwrap();
@@ -157,7 +157,7 @@ async fn approved_record_edits_apply_to_the_proposed_state_and_name_their_target
     let other = create_record(&client, &base_url, &blueprint).await;
     let workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
     let actor: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
-    let repository = CatalogRepository::system(pool)
+    let repository = AttricatRepository::system(pool)
         .for_workspace(workspace)
         .await
         .unwrap();
@@ -374,7 +374,7 @@ async fn agent_reads_incoming_links_hierarchies_labels_and_reusable_attributes(p
     create("linked_order", "Order 1", vec![("parts", root.clone())]).await;
     let workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
     let actor: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
-    let repository = CatalogRepository::system(pool)
+    let repository = AttricatRepository::system(pool)
         .for_workspace(workspace)
         .await
         .unwrap();
@@ -492,8 +492,8 @@ async fn agent_reads_incoming_links_hierarchies_labels_and_reusable_attributes(p
 }
 
 #[sqlx::test]
-async fn agent_duplicates_comments_validates_and_reviews_catalog_health(pool: PgPool) {
-    CatalogRepository::system(pool.clone())
+async fn agent_duplicates_comments_validates_and_reviews_attricat_health(pool: PgPool) {
+    AttricatRepository::system(pool.clone())
         .ensure_rule_permissions()
         .await
         .unwrap();
@@ -510,7 +510,7 @@ async fn agent_duplicates_comments_validates_and_reviews_catalog_health(pool: Pg
     let record_id = record["id"].as_str().unwrap().to_owned();
     let workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
     let actor: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
-    let repository = CatalogRepository::system(pool.clone())
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(workspace)
         .await
         .unwrap();
@@ -702,7 +702,7 @@ async fn agent_duplicates_comments_validates_and_reviews_catalog_health(pool: Pg
 }
 
 #[sqlx::test]
-async fn agent_annotation_and_context_edits_use_catalog_validation(pool: PgPool) {
+async fn agent_annotation_and_context_edits_use_attricat_validation(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
     let blueprint = create_blueprint(&client, &base_url,
@@ -711,7 +711,7 @@ async fn agent_annotation_and_context_edits_use_catalog_validation(pool: PgPool)
     let record_id = record["id"].as_str().unwrap();
     let workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
     let actor: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
-    let repository = CatalogRepository::system(pool)
+    let repository = AttricatRepository::system(pool)
         .for_workspace(workspace)
         .await
         .unwrap();
@@ -767,7 +767,7 @@ async fn agent_annotation_and_context_edits_use_catalog_validation(pool: PgPool)
 
 #[sqlx::test]
 async fn agent_operational_diagnostics_are_bounded_and_omit_internal_payloads(pool: PgPool) {
-    CatalogRepository::system(pool.clone())
+    AttricatRepository::system(pool.clone())
         .ensure_rule_permissions()
         .await
         .unwrap();
@@ -852,7 +852,7 @@ async fn agent_operational_diagnostics_are_bounded_and_omit_internal_payloads(po
             .error_for_status()
             .unwrap();
     }
-    let repository = CatalogRepository::system(pool)
+    let repository = AttricatRepository::system(pool)
         .for_workspace(workspace)
         .await
         .unwrap();
@@ -951,7 +951,7 @@ async fn agent_operational_diagnostics_are_bounded_and_omit_internal_payloads(po
 }
 
 #[sqlx::test]
-async fn agent_history_reads_and_record_value_edits_use_scoped_catalog_services(pool: PgPool) {
+async fn agent_history_reads_and_record_value_edits_use_scoped_attricat_services(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let client = authenticated_client();
     let blueprint = create_blueprint(&client, &base_url,
@@ -970,7 +970,7 @@ async fn agent_history_reads_and_record_value_edits_use_scoped_catalog_services(
     }
     let workspace = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
     let actor = BOOTSTRAP_OWNER_ID.parse().unwrap();
-    let repository = CatalogRepository::system(pool)
+    let repository = AttricatRepository::system(pool)
         .for_workspace(workspace)
         .await
         .unwrap();
@@ -1127,7 +1127,7 @@ async fn completed_conversation_gets_a_provider_generated_title(pool: PgPool) {
     .unwrap()
     .unwrap();
     let provider = api::agent_provider::OpenAiCompatibleClient::new(&config).unwrap();
-    let repository = CatalogRepository::system(pool)
+    let repository = AttricatRepository::system(pool)
         .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
         .await
         .unwrap();
@@ -1151,7 +1151,7 @@ async fn completed_conversation_gets_a_provider_generated_title(pool: PgPool) {
         )
         .await
         .unwrap();
-    catalog_agent_runtime::conversation_title::maybe_generate_title(
+    attricat_agent_runtime::conversation_title::maybe_generate_title(
         &repository,
         &provider,
         conversation.id,
@@ -1177,7 +1177,7 @@ async fn completed_conversation_gets_a_provider_generated_title(pool: PgPool) {
         )
         .await
         .unwrap();
-    catalog_agent_runtime::conversation_title::maybe_generate_title(
+    attricat_agent_runtime::conversation_title::maybe_generate_title(
         &repository,
         &provider,
         draft.id,
@@ -1198,7 +1198,7 @@ async fn completed_conversation_gets_a_provider_generated_title(pool: PgPool) {
 #[sqlx::test]
 async fn conversation_search_paginates_and_manual_titles_win(pool: PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
-    let repository = CatalogRepository::system(pool)
+    let repository = AttricatRepository::system(pool)
         .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
         .await
         .unwrap();
@@ -1369,7 +1369,7 @@ async fn submitting_a_message_and_enqueuing_its_run_are_atomic(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
-    let repository = CatalogRepository::system(pool.clone())
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(workspace_id)
         .await
         .unwrap();
@@ -1523,7 +1523,7 @@ async fn agent_deltas_are_persisted_before_the_provider_finishes(pool: PgPool) {
     })
     .unwrap()
     .unwrap();
-    let repository = CatalogRepository::system(pool.clone())
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
         .await
         .unwrap();
@@ -1610,12 +1610,12 @@ async fn agent_run_timeout_is_durably_failed_without_provider_details(pool: PgPo
     .unwrap();
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
     let user_id = BOOTSTRAP_OWNER_ID.parse::<Uuid>().unwrap();
-    let repository = CatalogRepository::system(pool.clone())
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(workspace_id)
         .await
         .unwrap();
     let task_repository =
-        CatalogRepository::new(pool, support::BOOTSTRAP_WORKSPACE_ID.parse().unwrap());
+        AttricatRepository::new(pool, support::BOOTSTRAP_WORKSPACE_ID.parse().unwrap());
     let handler = agent_worker::AgentTaskHandler::new(
         task_repository.clone(),
         config.clone(),
@@ -1741,7 +1741,7 @@ async fn record_conversation_mutations_uploads_and_events_require_record_read(po
     .execute(&pool)
     .await
     .unwrap();
-    let repository = CatalogRepository::system(pool.clone())
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(workspace)
         .await
         .unwrap();
@@ -1768,11 +1768,11 @@ async fn record_conversation_mutations_uploads_and_events_require_record_read(po
     let client = reqwest::Client::builder()
         .default_headers(reqwest::header::HeaderMap::from_iter([
             (
-                "x-catalog-user-id".parse().unwrap(),
+                "x-attricat-user-id".parse().unwrap(),
                 actor.to_string().parse().unwrap(),
             ),
             (
-                "x-catalog-workspace-id".parse().unwrap(),
+                "x-attricat-workspace-id".parse().unwrap(),
                 workspace.to_string().parse().unwrap(),
             ),
         ]))
@@ -1916,7 +1916,7 @@ async fn agent_read_tools_enforce_initiator_permissions_and_scopes(pool: PgPool)
     .await
     .unwrap();
 
-    let repository = CatalogRepository::system(pool.clone())
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(workspace)
         .await
         .unwrap();
@@ -2180,7 +2180,7 @@ async fn reconciliation_first_rejects_deleted_and_cross_tenant_attachments(pool:
     );
     worker.reconcile().await.unwrap();
 
-    let repository = CatalogRepository::system(pool.clone())
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(workspace_id)
         .await
         .unwrap();
@@ -2196,7 +2196,7 @@ async fn reconciliation_first_rejects_deleted_and_cross_tenant_attachments(pool:
             .await,
         Err(RepositoryError::NotFound("file"))
     ));
-    let other_repository = CatalogRepository::system(pool.clone())
+    let other_repository = AttricatRepository::system(pool.clone())
         .for_workspace(other_workspace_id)
         .await
         .unwrap();
@@ -2291,7 +2291,7 @@ async fn standalone_conversation_upload_survives_reconciliation_until_attached(p
             .unwrap();
     assert!(deleted_at.is_none());
 
-    let repository = CatalogRepository::system(pool.clone())
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
         .await
         .unwrap();
@@ -2545,7 +2545,7 @@ async fn agent_message_requires_a_configured_provider(pool: PgPool) {
 async fn startup_recovery_only_interrupts_expired_agent_tasks(pool: PgPool) {
     use api::task_queue::{TaskInsert, TaskKind};
 
-    let repository = CatalogRepository::new(
+    let repository = AttricatRepository::new(
         pool.clone(),
         support::BOOTSTRAP_WORKSPACE_ID.parse().unwrap(),
     );
@@ -2652,7 +2652,7 @@ async fn read_only_runs_offer_no_mutations_and_refuse_one_named_anyway(pool: PgP
     .unwrap()
     .unwrap();
     config.read_only = true;
-    let repository = CatalogRepository::system(pool.clone())
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
         .await
         .unwrap();
@@ -2751,7 +2751,7 @@ async fn agent_finds_a_named_record_and_counts_what_links_to_it(pool: PgPool) {
     }
     let workspace: Uuid = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
     let actor: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
-    let repository = CatalogRepository::system(pool.clone())
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(workspace)
         .await
         .unwrap();
@@ -2980,7 +2980,7 @@ async fn runs_stop_after_the_configured_tool_round_limit(pool: PgPool) {
     })
     .unwrap()
     .unwrap();
-    let repository = CatalogRepository::system(pool.clone())
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
         .await
         .unwrap();

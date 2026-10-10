@@ -120,10 +120,10 @@ pub fn validate_sample_file_bytes(media_type: &str, bytes: &[u8]) -> Result<(), 
     }
     // The same sniffer as ordinary uploads; sample media types never need
     // the file name to disambiguate.
-    let matches = catalog_validation::files::detect_mime(
+    let matches = attricat_validation::files::detect_mime(
         bytes,
         "",
-        catalog_validation::files::is_plain_text(bytes),
+        attricat_validation::files::is_plain_text(bytes),
     ) == Some(media_type);
     if matches {
         Ok(())
@@ -772,7 +772,7 @@ fn contains_encoded_blob(value: &str) -> bool {
 }
 
 /// Normalizes one unique-key component with the workspace's shared rule
-/// ([`catalog_validation::unique_key::normalize_key_component`]). Stored
+/// ([`attricat_validation::unique_key::normalize_key_component`]). Stored
 /// date-times are already canonical UTC, so sample date-times are converted
 /// to that form first.
 fn sample_key_component(value: &Value, value_type: &str, case_sensitive: bool) -> Option<Value> {
@@ -782,7 +782,7 @@ fn sample_key_component(value: &Value, value_type: &str, case_sensitive: bool) -
             .ok(),
         _ => None,
     };
-    catalog_validation::unique_key::normalize_key_component(
+    attricat_validation::unique_key::normalize_key_component(
         value_type,
         canonical.as_ref().unwrap_or(value),
         case_sensitive,
@@ -875,8 +875,8 @@ pub(crate) fn validate_sample_unique_keys(
 /// A sample's normalized unique-key components in one context path, or `None`
 /// when a component has no value there and so the key does not apply.
 fn unique_key_components(
-    key: &catalog_blueprint::UniqueKeyDefinition,
-    attributes: &HashMap<&str, &catalog_blueprint::EffectiveAttribute>,
+    key: &attricat_blueprint::UniqueKeyDefinition,
+    attributes: &HashMap<&str, &attricat_blueprint::EffectiveAttribute>,
     values: &HashMap<(&str, Option<&str>), Value>,
     path: &[Option<&str>],
 ) -> Option<Vec<Value>> {
@@ -894,7 +894,7 @@ fn unique_key_components(
 /// declared value, unless the attribute does not fall back to parent
 /// contexts, then its default. Defaults are written in the default context.
 fn context_path_value(
-    attribute: &catalog_blueprint::EffectiveAttribute,
+    attribute: &attricat_blueprint::EffectiveAttribute,
     values: &HashMap<(&str, Option<&str>), Value>,
     path: &[Option<&str>],
 ) -> Option<Value> {

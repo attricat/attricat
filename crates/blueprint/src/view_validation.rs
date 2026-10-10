@@ -197,7 +197,7 @@ fn validate_view_nodes(
                     Some(&attribute.value_type),
                 )?;
                 if component.as_ref().is_some_and(|component| {
-                    component.id == "catalog.relationship_hierarchy"
+                    component.id == "attricat.relationship_hierarchy"
                         && component
                             .props
                             .get("parent_field")

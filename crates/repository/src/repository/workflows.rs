@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 const WORKFLOW_FIELDS: &str = "w.id, w.code, w.name, w.version, w.status, w.definition, w.definition_hash, w.compiled_plan, w.published_at, w.created_at, l.enabled_version, (w.compiled_plan @> '{\"triggers\":[{\"type\":\"manual\"}]}'::jsonb) AS manual_enabled";
 
-impl CatalogRepository {
+impl AttricatRepository {
     pub async fn list_workflows(&self) -> Result<Vec<Workflow>, RepositoryError> {
         let q = format!(
             "SELECT {WORKFLOW_FIELDS} FROM workflows w LEFT JOIN workflow_lifecycles l ON l.workflow_id=w.id WHERE w.workspace_id=$1 ORDER BY w.created_at DESC, w.version DESC"
@@ -79,7 +79,7 @@ impl CatalogRepository {
         id: Uuid,
         input: CreateWorkflow,
     ) -> Result<Uuid, RepositoryError> {
-        let compiled = catalog_workflow::compile(&input.definition)
+        let compiled = attricat_workflow::compile(&input.definition)
             .map_err(|e| RepositoryError::InvalidWorkflowDefinition(e.to_string()))?;
         let ws = self.workspace_id.0;
         // A versioned primary key cannot express a unique workflow family code.
@@ -113,7 +113,7 @@ impl CatalogRepository {
         id: Uuid,
         input: CreateWorkflow,
     ) -> Result<Workflow, RepositoryError> {
-        let compiled = catalog_workflow::compile(&input.definition)
+        let compiled = attricat_workflow::compile(&input.definition)
             .map_err(|e| RepositoryError::InvalidWorkflowDefinition(e.to_string()))?;
         let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
@@ -203,13 +203,13 @@ impl CatalogRepository {
         .bind(ws)
         .fetch_one(&mut **tx)
         .await?;
-        let compiled: catalog_workflow::CompiledWorkflow = serde_json::from_value(plan)
+        let compiled: attricat_workflow::CompiledWorkflow = serde_json::from_value(plan)
             .map_err(|error| RepositoryError::InvalidWorkflowDefinition(error.to_string()))?;
         for (trigger_index, trigger) in compiled.triggers.iter().enumerate() {
-            let catalog_workflow::Trigger::Schedule { cron, .. } = trigger else {
+            let attricat_workflow::Trigger::Schedule { cron, .. } = trigger else {
                 continue;
             };
-            let schedule = catalog_workflow::parse_six_field_cron(cron).map_err(|_| {
+            let schedule = attricat_workflow::parse_six_field_cron(cron).map_err(|_| {
                 RepositoryError::InvalidWorkflowDefinition("stored schedule cron is invalid".into())
             })?;
             let next = schedule.after(&Utc::now()).next().ok_or_else(|| {
@@ -260,7 +260,7 @@ impl CatalogRepository {
     }
 }
 
-impl<S: super::RepositoryScope> CatalogRepository<S> {
+impl<S: super::RepositoryScope> AttricatRepository<S> {
     /// Permissions are application data, leaving migrations declarative.
     pub async fn ensure_workflow_permissions(&self) -> Result<(), RepositoryError> {
         let mut tx = self.pool.begin().await?;

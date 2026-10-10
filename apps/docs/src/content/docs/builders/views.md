@@ -83,12 +83,12 @@ The detail layout drives both display and editing. On the record page, every fie
 
 ## Record heading
 
-To give the detail page a proper title, wrap fields in a `stack` with the `catalog.record_heading` component. Its first child must be a scalar field and becomes the page heading. Later children, text or scalar fields, form the subtitle.
+To give the detail page a proper title, wrap fields in a `stack` with the `attricat.record_heading` component. Its first child must be a scalar field and becomes the page heading. Later children, text or scalar fields, form the subtitle.
 
 ```toml
 [[views.detail.children]]
 type = "stack"
-component = { id = "catalog.record_heading", version = 1 }
+component = { id = "attricat.record_heading", version = 1 }
 children = [
   { type = "field", field = "title" },
   { type = "field", field = "sku" },
@@ -112,20 +112,20 @@ List several `relationships` to combine sources. A record that matches more than
 
 ## Hierarchies
 
-`catalog.relationship_hierarchy` shows ancestor chains as breadcrumbs, resolved in the selected context.
+`attricat.relationship_hierarchy` shows ancestor chains as breadcrumbs, resolved in the selected context.
 
 On a self-referencing relationship, such as `category.parent`, it shows the current record's own ancestry:
 
 ```toml
 { type = "relationship_list", field = "parent",
-  component = { id = "catalog.relationship_hierarchy", version = 1 } }
+  component = { id = "attricat.relationship_hierarchy", version = 1 } }
 ```
 
 On a relationship to another blueprint, set `parent_field` to the target's self-referencing field. On a product, this shows the full path of every linked category, such as *Apparel › Shirts › Linen*:
 
 ```toml
 { type = "relationship_list", field = "categories",
-  component = { id = "catalog.relationship_hierarchy", version = 1, props = { parent_field = "parent" } } }
+  component = { id = "attricat.relationship_hierarchy", version = 1, props = { parent_field = "parent" } } }
 ```
 
 ## Explorer table
@@ -149,13 +149,13 @@ Columns can be sorted when they resolve to a scalar and every relationship in th
 
 ### Image thumbnails
 
-`catalog.table_image` shows a thumbnail for a single-image attribute. The attribute must have `value_type = "file"`, `cardinality = "one"` (the default), and `image_only = true`.
+`attricat.table_image` shows a thumbnail for a single-image attribute. The attribute must have `value_type = "file"`, `cardinality = "one"` (the default), and `image_only = true`.
 
 ```toml
 [[views.table.columns]]
 field = "main_photo"
 label = "Image"
-renderer = { id = "catalog.table_image", version = 1 }
+renderer = { id = "attricat.table_image", version = 1 }
 ```
 
 ### Extension cell renderers
@@ -172,28 +172,28 @@ The renderer must be declared by an enabled extension for the column's value typ
 
 ## Field controls
 
-A `string` attribute is plain text by default. To show it as a color, email address, URL, phone number, or Markdown, name a display component on its detail field (or table column). Where the field is editable, the web app uses the paired edit component, such as `catalog.url_edit` for `catalog.url_display`:
+A `string` attribute is plain text by default. To show it as a color, email address, URL, phone number, or Markdown, name a display component on its detail field (or table column). Where the field is editable, the web app uses the paired edit component, such as `attricat.url_edit` for `attricat.url_display`:
 
 ```toml
 [views.detail]
 type = "stack"
 children = [
-  { type = "field", field = "website", component = { id = "catalog.url_display", version = 1 } },
-  { type = "field", field = "description", component = { id = "catalog.markdown_display", version = 1 } },
+  { type = "field", field = "website", component = { id = "attricat.url_display", version = 1 } },
+  { type = "field", field = "description", component = { id = "attricat.markdown_display", version = 1 } },
 ]
 
 [[views.table.columns]]
 field = "website"
-renderer = { id = "catalog.url_display", version = 1 }
+renderer = { id = "attricat.url_display", version = 1 }
 ```
 
 | Control | Components | Behavior |
 | --- | --- | --- |
-| Color | `catalog.color_display`, `catalog.color_edit` | Six-digit hex (`#RRGGBB`), typed or picked with a color picker. Shown as a swatch next to the text. |
-| Email | `catalog.email_display`, `catalog.email_edit` | One plain ASCII address, such as `name+tag@example.com`. Shown as a `mailto:` link. |
-| URL | `catalog.url_display`, `catalog.url_edit` | Absolute `http://` or `https://` URLs only. Links open in a new tab. |
-| Phone | `catalog.phone_display`, `catalog.phone_edit` | Stored as typed. Numbers starting with `+` and a country code become `tel:` links; extensions can use `ext.` or `x`. |
-| Markdown | `catalog.markdown_display`, `catalog.markdown_edit` | CommonMark with **Write** and **Preview** tabs. On the record page a set value shows formatted until you choose to edit it. Raw HTML is ignored, images show their alt text, and links are limited to HTTP(S), `mailto:`, relative paths, and fragments. Text is stored exactly as typed, including whitespace. Not available for table columns. |
+| Color | `attricat.color_display`, `attricat.color_edit` | Six-digit hex (`#RRGGBB`), typed or picked with a color picker. Shown as a swatch next to the text. |
+| Email | `attricat.email_display`, `attricat.email_edit` | One plain ASCII address, such as `name+tag@example.com`. Shown as a `mailto:` link. |
+| URL | `attricat.url_display`, `attricat.url_edit` | Absolute `http://` or `https://` URLs only. Links open in a new tab. |
+| Phone | `attricat.phone_display`, `attricat.phone_edit` | Stored as typed. Numbers starting with `+` and a country code become `tel:` links; extensions can use `ext.` or `x`. |
+| Markdown | `attricat.markdown_display`, `attricat.markdown_edit` | CommonMark with **Write** and **Preview** tabs. On the record page a set value shows formatted until you choose to edit it. Raw HTML is ignored, images show their alt text, and links are limited to HTTP(S), `mailto:`, relative paths, and fragments. Text is stored exactly as typed, including whitespace. Not available for table columns. |
 
 Values that do not fit the control, such as older data, are still shown, as plain text without a link or swatch. Fields without a component use the standard editor for their value type.
 

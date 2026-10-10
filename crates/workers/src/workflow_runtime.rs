@@ -5,12 +5,12 @@ use crate::repository::CoordinatorLeadership;
 use crate::{
     domain_events::{ALL_EVENT_TYPES_V1, DomainEvent},
     event_dispatcher::{EventHandler, EventHandlerCommandContext},
-    repository::{CatalogRepository, ClaimedTask, SystemRepository},
+    repository::{AttricatRepository, ClaimedTask, SystemRepository},
     task_queue::TaskKind,
     task_worker::{TaskHandler, TaskHandlerError, TaskOutcome},
 };
 use async_trait::async_trait;
-use catalog_repository::round_trips::measure;
+use attricat_repository::round_trips::measure;
 use serde_json::Value;
 use std::{
     collections::HashMap,
@@ -26,7 +26,7 @@ pub struct WorkflowIntakeHandler;
 #[async_trait]
 impl EventHandler for WorkflowIntakeHandler {
     fn name(&self) -> &'static str {
-        "catalog.workflows"
+        "attricat.workflows"
     }
     fn event_types(&self) -> &'static [&'static str] {
         ALL_EVENT_TYPES_V1
@@ -104,7 +104,7 @@ impl TaskHandler for WorkflowTaskHandler {
 }
 
 async fn fail_workflow_run(
-    scoped: &CatalogRepository,
+    scoped: &AttricatRepository,
     task: &ClaimedTask,
     message: String,
 ) -> Result<TaskOutcome, TaskHandlerError> {
@@ -157,12 +157,12 @@ pub fn start_schedule_coordinator(
                 let (workspaces, delay) = match repository.polled_workspace_ids().await {
                     Ok(workspaces) => {
                         let workspaces = workspaces.as_ref().clone();
-                        metrics::gauge!("catalog_schedule_coordinator_healthy", "kind" => "workflow")
+                        metrics::gauge!("attricat_schedule_coordinator_healthy", "kind" => "workflow")
                             .set(1.0);
                         (workspaces, Duration::from_millis(250))
                     }
                     Err(error) => {
-                        metrics::gauge!("catalog_schedule_coordinator_healthy", "kind" => "workflow")
+                        metrics::gauge!("attricat_schedule_coordinator_healthy", "kind" => "workflow")
                             .set(0.0);
                         tracing::warn!(%error, "workflow scheduler cannot discover workspaces");
                         (Vec::new(), Duration::from_secs(5))
@@ -232,7 +232,7 @@ pub fn start_schedule_coordinator(
 }
 
 async fn execute(
-    repository: &CatalogRepository,
+    repository: &AttricatRepository,
     run: &crate::repository::ClaimedWorkflowRun,
     task: &ClaimedTask,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -244,7 +244,7 @@ async fn execute(
     {
         return Ok(());
     }
-    let plan: catalog_workflow::CompiledWorkflow =
+    let plan: attricat_workflow::CompiledWorkflow =
         serde_json::from_value(run.compiled_plan.clone())?;
     let worker = repository
         .for_event_handler(&event, &format!("workflow:{}", run.run.workflow_id))

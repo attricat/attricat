@@ -1,17 +1,17 @@
 import http from "k6/http";
 import { check, sleep } from "k6";
 
-const server = (__ENV.CATALOG_SERVER || "http://127.0.0.1:3000").replace(
+const server = (__ENV.ATTRICAT_SERVER || "http://127.0.0.1:3000").replace(
   /\/$/,
   "",
 );
-const token = __ENV.CATALOG_TOKEN;
-const blueprint = __ENV.CATALOG_BLUEPRINT || "demo_pc_components_v1_sku";
+const token = __ENV.ATTRICAT_TOKEN;
+const blueprint = __ENV.ATTRICAT_BLUEPRINT || "demo_pc_components_v1_sku";
 const contextId =
-  __ENV.CATALOG_CONTEXT_ID || "00000000-0000-4000-8000-000000000001";
+  __ENV.ATTRICAT_CONTEXT_ID || "00000000-0000-4000-8000-000000000001";
 const profile = __ENV.PERF_PROFILE || "smoke";
 
-if (!token) throw new Error("CATALOG_TOKEN is required");
+if (!token) throw new Error("ATTRICAT_TOKEN is required");
 
 const profiles = {
   smoke: [{ duration: "20s", target: 2 }],

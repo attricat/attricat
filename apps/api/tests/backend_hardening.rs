@@ -1,6 +1,6 @@
 mod support;
 
-use api::{http::StreamControl, repository::CatalogRepository, storage::FakeObjectStore};
+use api::{http::StreamControl, repository::AttricatRepository, storage::FakeObjectStore};
 use chrono::Utc;
 use sqlx::postgres::PgPoolOptions;
 use std::{sync::Arc, time::Duration};
@@ -272,7 +272,7 @@ async fn cancelled_uploads_are_reconciled_and_failed_deletions_are_retried(pool:
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
     lock.rollback().await.unwrap();
     assert_eq!(store.object_count().await, 1);
-    let repository = CatalogRepository::system(pool.clone());
+    let repository = AttricatRepository::system(pool.clone());
     assert!(
         !api::maintenance::cleanup_upload_once(&repository, store.as_ref())
             .await
@@ -319,7 +319,7 @@ async fn event_streams_hold_admission_until_body_close_and_stop_on_shutdown(pool
         start_server_with_config(pool.clone(), |state| state.stream_control = control.clone())
             .await;
     let owner = authenticated_client();
-    let repository = CatalogRepository::new(pool.clone(), BOOTSTRAP_WORKSPACE_ID.parse().unwrap());
+    let repository = AttricatRepository::new(pool.clone(), BOOTSTRAP_WORKSPACE_ID.parse().unwrap());
     let conversation = repository
         .create_conversation(Some(BOOTSTRAP_OWNER_ID.parse().unwrap()), "stream")
         .await

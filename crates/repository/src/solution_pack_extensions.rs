@@ -29,7 +29,7 @@ use crate::{
     },
     extensions::{ExtensionPackage, Manifest},
     repository::{
-        CatalogRepository, InstalledExtension, PlannedExtensionInstall, RepositoryError,
+        AttricatRepository, InstalledExtension, PlannedExtensionInstall, RepositoryError,
         extension_manifest_sha256, required_extension_grants,
     },
     solution_packs::{ValidatedSolutionPack, parse_version_req},
@@ -209,7 +209,7 @@ pub struct ResolvedExtensionRelease {
 /// extension the official registry does not offer in range is left out, so
 /// the planner reports it as missing.
 pub async fn resolve_official_extensions(
-    repository: &CatalogRepository,
+    repository: &AttricatRepository,
     releases: &dyn OfficialExtensionReleases,
     pack: &ValidatedSolutionPack,
 ) -> Result<Vec<ResolvedExtensionRelease>, SolutionPackExtensionError> {
@@ -255,10 +255,10 @@ pub async fn resolve_official_extensions(
             .map_err(|error| invalid(error.to_string()))?
             .manifest()
             .clone();
-        if manifest.catalog.id != requirement.id {
+        if manifest.attricat.id != requirement.id {
             return Err(invalid(format!(
                 "its manifest declares '{}'",
-                manifest.catalog.id
+                manifest.attricat.id
             )));
         }
         if Version::parse(&manifest.version).ok() != Some(version) {
@@ -346,7 +346,7 @@ fn dependency_order(
 /// where an interrupted one stopped. An installation that no longer matches
 /// the plan is left alone; apply's revalidation then reports the plan stale.
 pub async fn install_planned_extensions(
-    repository: &CatalogRepository,
+    repository: &AttricatRepository,
     object_store: Arc<dyn ObjectStore>,
     releases: &dyn OfficialExtensionReleases,
     plan_id: Uuid,
@@ -358,7 +358,7 @@ pub async fn install_planned_extensions(
 }
 
 async fn install_planned_extension(
-    repository: &CatalogRepository,
+    repository: &AttricatRepository,
     object_store: Arc<dyn ObjectStore>,
     releases: &dyn OfficialExtensionReleases,
     planned: &PlannedExtensionInstall,

@@ -6,9 +6,9 @@
 //! trips rather than repository calls. Statements run outside a scope, or in a
 //! task spawned from one, are reported under the `unscoped` label.
 //!
-//! On completion a scope records `catalog_db_round_trips_per_operation` (total
+//! On completion a scope records `attricat_db_round_trips_per_operation` (total
 //! statements, including nested scopes), adds its own statements to
-//! `catalog_db_round_trips_total`, and emits a debug log line.
+//! `attricat_db_round_trips_total`, and emits a debug log line.
 
 use std::{
     borrow::Cow,
@@ -40,10 +40,10 @@ impl Drop for Report {
         let scope = &self.0;
         let own = scope.own.load(Ordering::Relaxed);
         let total = scope.total.load(Ordering::Relaxed);
-        metrics::counter!("catalog_db_round_trips_total", "scope" => scope.name.to_string())
+        metrics::counter!("attricat_db_round_trips_total", "scope" => scope.name.to_string())
             .increment(own);
         metrics::histogram!(
-            "catalog_db_round_trips_per_operation",
+            "attricat_db_round_trips_per_operation",
             "scope" => scope.name.to_string()
         )
         .record(total as f64);
@@ -77,7 +77,7 @@ pub fn record_round_trip() {
         }
     });
     if scoped.is_err() {
-        metrics::counter!("catalog_db_round_trips_total", "scope" => "unscoped").increment(1);
+        metrics::counter!("attricat_db_round_trips_total", "scope" => "unscoped").increment(1);
     }
 }
 

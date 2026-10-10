@@ -147,7 +147,7 @@ fn asset_archive_with_requirement(
         "name":"Brand",
         "version":version,
         "description":"Brand assets",
-        "catalog":{"host_api":"^1.0"},
+        "attricat":{"host_api":"^1.0"},
         "resources":{"presentation_assets":declarations}
     }))
     .unwrap();
@@ -375,9 +375,9 @@ async fn private_asset_list_metadata_and_content_are_bounded(pool: PgPool) {
         assert_eq!(
             reqwest::Client::new()
                 .get(format!("{base_url}{path}"))
-                .header("x-catalog-user-id", permissionless_user.to_string())
+                .header("x-attricat-user-id", permissionless_user.to_string())
                 .header(
-                    "x-catalog-workspace-id",
+                    "x-attricat-workspace-id",
                     "00000000-0000-4000-8000-000000000002"
                 )
                 .send()
@@ -417,8 +417,8 @@ async fn private_asset_list_metadata_and_content_are_bounded(pool: PgPool) {
         assert_eq!(
             other_client
                 .get(format!("{base_url}/presentation-assets/{id}{suffix}"))
-                .header("x-catalog-user-id", other_user.to_string())
-                .header("x-catalog-workspace-id", other_workspace.to_string())
+                .header("x-attricat-user-id", other_user.to_string())
+                .header("x-attricat-workspace-id", other_workspace.to_string())
                 .send()
                 .await
                 .unwrap()
@@ -432,8 +432,8 @@ async fn private_asset_list_metadata_and_content_are_bounded(pool: PgPool) {
             .post(format!(
                 "{base_url}/solution-packs/plans?prefix=brand&blueprint_publication=draft"
             ))
-            .header("x-catalog-user-id", other_user.to_string())
-            .header("x-catalog-workspace-id", other_workspace.to_string())
+            .header("x-attricat-user-id", other_user.to_string())
+            .header("x-attricat-workspace-id", other_workspace.to_string())
             .multipart(
                 multipart::Form::new()
                     .part(

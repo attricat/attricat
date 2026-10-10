@@ -72,7 +72,7 @@ Każde ustawienie jest opisane w [dokumentacji konfiguracji](/pl/reference/confi
 
 ## Pierwsze uruchomienie
 
-Przy pierwszym uruchomieniu API tworzy obszar roboczy o nazwie z `CATALOG_BOOTSTRAP_WORKSPACE_NAME` i konto właściciela dla `CATALOG_BOOTSTRAP_OWNER_EMAIL`. Ustaw `CATALOG_BOOTSTRAP_OWNER_PASSWORD` na czas pierwszego uruchomienia, aby właściciel mógł się zalogować, a potem usuń tę zmienną. Nigdy nie zmienia ona istniejącego hasła.
+Przy pierwszym uruchomieniu API tworzy obszar roboczy o nazwie z `ATTRICAT_BOOTSTRAP_WORKSPACE_NAME` i konto właściciela dla `ATTRICAT_BOOTSTRAP_OWNER_EMAIL`. Ustaw `ATTRICAT_BOOTSTRAP_OWNER_PASSWORD` na czas pierwszego uruchomienia, aby właściciel mógł się zalogować, a potem usuń tę zmienną. Nigdy nie zmienia ona istniejącego hasła.
 
 Właściciel loguje się identyfikatorem obszaru roboczego, zwykle `default.local`, a następnie zaprasza pozostałe osoby.
 
@@ -103,7 +103,7 @@ REDIS_URL=rediss://:haslo@redis.example.com:6380/0
 ## Wdróż nową wersję
 
 1. Zachowaj skrót aktualnie działającej wersji.
-2. Uruchom raz rolę `migrate` nowego obrazu. Środowisko produkcyjne ustawia `CATALOG_AUTO_MIGRATE=false`, więc repliki API nigdy nie migrują samodzielnie.
+2. Uruchom raz rolę `migrate` nowego obrazu. Środowisko produkcyjne ustawia `ATTRICAT_AUTO_MIGRATE=false`, więc repliki API nigdy nie migrują samodzielnie.
 3. Zastąp repliki API i procesu roboczego plików nowym skrótem.
 4. Poczekaj na `/health/ready` i uruchom testy dymne.
 
@@ -116,7 +116,7 @@ docker run --rm --env DATABASE_URL "$APP_IMAGE" migrate
 
 ./platform deploy --image "$APP_IMAGE"
 curl --fail --silent --retry 60 --retry-delay 2 --retry-all-errors \
-  https://catalog.example.com/health/ready
+  https://attricat.example.com/health/ready
 ./platform smoke catalog
 ```
 
@@ -127,7 +127,7 @@ Migracje działają tylko do przodu. Wycofanie oznacza ponowne wdrożenie poprze
 ```sh
 ./platform deploy --image ghcr.io/attricat/attricat@sha256:previous
 curl --fail --silent --retry 60 --retry-delay 2 --retry-all-errors \
-  https://catalog.example.com/health/ready
+  https://attricat.example.com/health/ready
 ```
 
 Jeśli poprzednia wersja nie może działać na zmigrowanej bazie danych, przywróć bazę danych i zasobnik z kopii zapasowej wykonanej przed wdrożeniem. Zobacz [Kopia zapasowa i przywracanie](/pl/operate/backup/).
@@ -141,12 +141,12 @@ Aby przeprowadzić rotację: utwórz nowe dane uwierzytelniające, przekaż je n
 ## Lista kontrolna dla produkcji
 
 - `SESSION_COOKIE_SECURE=true` i HTTPS przed API.
-- `CATALOG_DEVTOOLS=false`.
-- `CATALOG_AUTO_MIGRATE=false`, z rolą `migrate` uruchamianą przed każdym wdrożeniem.
+- `ATTRICAT_DEVTOOLS=false`.
+- `ATTRICAT_AUTO_MIGRATE=false`, z rolą `migrate` uruchamianą przed każdym wdrożeniem.
 - `SMTP_TLS_MODE=starttls` lub `implicit`.
-- Prawdziwy `CATALOG_BOOTSTRAP_OWNER_EMAIL`; `CATALOG_BOOTSTRAP_OWNER_PASSWORD` usunięty po pierwszym uruchomieniu.
+- Prawdziwy `ATTRICAT_BOOTSTRAP_OWNER_EMAIL`; `ATTRICAT_BOOTSTRAP_OWNER_PASSWORD` usunięty po pierwszym uruchomieniu.
 - Ustawiony `FILE_WORKER_METRICS_TOKEN`, a `/metrics` osiągalne tylko z sieci monitoringu.
 - Prywatny zasobnik z danymi uwierzytelniającymi ograniczonymi do `PutObject`, `GetObject`, `DeleteObject` i `HeadBucket`.
-- Nieustawione `CATALOG_E2E_FIXTURE_EMAIL` i `CATALOG_E2E_FIXTURE_PASSWORD`.
+- Nieustawione `ATTRICAT_E2E_FIXTURE_EMAIL` i `ATTRICAT_E2E_FIXTURE_PASSWORD`.
 - Przetestowana procedura tworzenia kopii zapasowej i przywracania.
 - Przy kilku replikach API: `max_connections` w PostgreSQL z zapasem do trzech dodatkowych połączeń na proces API, brak poolera w trybie transakcyjnym i opcjonalnie `CACHE_BACKEND=redis`.

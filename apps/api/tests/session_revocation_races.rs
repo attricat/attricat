@@ -4,14 +4,14 @@ use std::time::Duration;
 
 use api::{
     account::{Password, SessionSecret, hash_password},
-    repository::CatalogRepository,
+    repository::AttricatRepository,
 };
 use chrono::{Duration as ChronoDuration, Utc};
 use support::*;
 
 async fn renewal_cannot_escape_revocation(pool: PgPool, deactivate: bool) {
     let (_, server) = start_server(pool.clone()).await;
-    let repository = CatalogRepository::system(pool.clone());
+    let repository = AttricatRepository::system(pool.clone());
     let (user, membership) = add_workspace_user(&pool).await;
     let grant = grant_role(&pool, membership, VIEWER_ROLE_ID, GrantScope::Workspace).await;
     let hash = hash_password(&Password::new("session revocation regression password")).unwrap();

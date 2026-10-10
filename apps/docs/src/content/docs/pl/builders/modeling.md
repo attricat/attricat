@@ -104,7 +104,7 @@ context_editable = "default"
 
 **Przeglądarka rekordów** wykrywa relacje odwołujące się do własnego schematu i zamienia filtr dla `product.categories` w drzewo z sumowanymi licznikami. Wybranie *Shirts* obejmuje także produkty przypisane do kategorii podrzędnych. Zobacz [Przeglądanie rekordów](/pl/guides/explore/#fasety-relacji).
 
-Aby pokazać ścieżkę na stronie produktu, użyj komponentu [`catalog.relationship_hierarchy`](/pl/builders/views/#hierarchie). Aby wykryć kategorię, która stała się własnym przodkiem, dodaj regułę z predykatem [`acyclic`](/pl/builders/rules/#predykaty).
+Aby pokazać ścieżkę na stronie produktu, użyj komponentu [`attricat.relationship_hierarchy`](/pl/builders/views/#hierarchie). Aby wykryć kategorię, która stała się własnym przodkiem, dodaj regułę z predykatem [`acyclic`](/pl/builders/rules/#predykaty).
 
 ## Ograniczenia obejmujące relacje
 

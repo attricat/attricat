@@ -21,7 +21,7 @@ On the record page (`RecordInlineFields`), every field the user may change is
 an always-editable control in its `detail` position; readonly, status-locked
 and default-context-only attributes, and every field for users without write
 permission, render as values. Editable fields placed in the
-`catalog.record_heading` block are offered as editors before the layout,
+`attricat.record_heading` block are offered as editors before the layout,
 because the heading only displays values. Editable attributes the layout does
 not place render after it under **Other attributes**, and reusable attributes
 under **Additional attributes**, so a required attribute is never out of
@@ -76,14 +76,14 @@ historical revisions yield an empty cell. `label` is optional; a direct column
 defaults to the attribute's `name`, and a column without either uses the
 humanized field path.
 
-Use `catalog.table_image@1` to render a direct, image-only single-file attribute
+Use `attricat.table_image@1` to render a direct, image-only single-file attribute
 as a thumbnail:
 
 ```toml
 [[views.table.columns]]
 field = "main_photo"
 label = "Image"
-renderer = { id = "catalog.table_image", version = 1 }
+renderer = { id = "attricat.table_image", version = 1 }
 ```
 
 The renderer is valid only when the attribute has `value_type = "file"`,
@@ -168,14 +168,14 @@ allowed target blueprints.
 ## Record Heading
 
 The preview heading reuses a normal `stack` with the
-`catalog.record_heading` component override. Its first child is the scalar
+`attricat.record_heading` component override. Its first child is the scalar
 field rendered as the page `h1`; subsequent children are subtitle or metadata
 content.
 
 ```toml
 [[views.detail.children]]
 type = "stack"
-component = { id = "catalog.record_heading", version = 1 }
+component = { id = "attricat.record_heading", version = 1 }
 
 [[views.detail.children.children]]
 type = "field"
@@ -199,19 +199,19 @@ Data blocks select registered components with a versioned reference:
 [[views.detail.children]]
 type = "field"
 field = "website"
-component = { id = "catalog.url_display", version = 1 }
+component = { id = "attricat.url_display", version = 1 }
 ```
 
 Where a `detail` field is editable, `viewFieldEditComponents` resolves the
 display component's paired edit component (`editComponentId` in the
-TypeScript definition, for example `catalog.url_display` →
-`catalog.url_edit`). Fields without a paired editor use the built-in editor
+TypeScript definition, for example `attricat.url_display` →
+`attricat.url_edit`). Fields without a paired editor use the built-in editor
 for their value type.
 
 Component IDs use dot-delimited lowercase, underscore-separated segments. The frontend registry lives at
-`apps/catalog-web/src/features/views/components/registry.ts`. Layout and
+`apps/web/src/features/views/components/registry.ts`. Layout and
 relationship components have their own modules in that directory; the string
-field controls below live together in `apps/catalog-web/src/features/views/controls`.
+field controls below live together in `apps/web/src/features/views/controls`.
 `RecordView` resolves a blueprint reference through this registry and isolates
 field renderers with an error boundary.
 
@@ -230,20 +230,20 @@ stored.
 
 | Control | Display (detail field, table column) | Paired editor |
 | --- | --- | --- |
-| Color | `catalog.color_display@1` | `catalog.color_edit@1` |
-| Email | `catalog.email_display@1` | `catalog.email_edit@1` |
-| URL | `catalog.url_display@1` | `catalog.url_edit@1` |
-| Phone | `catalog.phone_display@1` | `catalog.phone_edit@1` |
-| Markdown | `catalog.markdown_display@1` (detail field only) | `catalog.markdown_edit@1` |
+| Color | `attricat.color_display@1` | `attricat.color_edit@1` |
+| Email | `attricat.email_display@1` | `attricat.email_edit@1` |
+| URL | `attricat.url_display@1` | `attricat.url_edit@1` |
+| Phone | `attricat.phone_display@1` | `attricat.phone_edit@1` |
+| Markdown | `attricat.markdown_display@1` (detail field only) | `attricat.markdown_edit@1` |
 
 ```toml
 [views.detail]
 type = "stack"
-children = [{ type = "field", field = "website", component = { id = "catalog.url_display", version = 1 } }]
+children = [{ type = "field", field = "website", component = { id = "attricat.url_display", version = 1 } }]
 
 [views.table]
 type = "table"
-columns = [{ field = "website", renderer = { id = "catalog.url_display", version = 1 } }]
+columns = [{ field = "website", renderer = { id = "attricat.url_display", version = 1 } }]
 ```
 
 Shared behavior:

@@ -1,6 +1,6 @@
 //! Enforces additive evolution of the host ABI.
 //!
-//! Every released ABI is frozen in `wit-released/catalog-host-<version>.wit`.
+//! Every released ABI is frozen in `wit-released/attricat-host-<version>.wit`.
 //! The current `wit-host` package must contain every released interface,
 //! function, type and world unchanged. New functions, interfaces, types,
 //! world imports and worlds may be added; nothing released may be removed,
@@ -173,7 +173,7 @@ fn released_host_abis_are_preserved() {
             .expect("released snapshots are versioned");
         assert_eq!(
             path.file_name().and_then(|name| name.to_str()),
-            Some(format!("catalog-host-{version}.wit").as_str()),
+            Some(format!("attricat-host-{version}.wit").as_str()),
             "snapshot file name must match its package version"
         );
         assert_eq!(package.name.namespace, current_package.name.namespace);
@@ -240,6 +240,6 @@ fn released_host_abis_are_preserved() {
     }
     assert!(
         released_versions.contains(&current_version),
-        "wit-host {current_version} has no frozen snapshot; copy it to wit-released/catalog-host-{current_version}.wit when releasing"
+        "wit-host {current_version} has no frozen snapshot; copy it to wit-released/attricat-host-{current_version}.wit when releasing"
     );
 }

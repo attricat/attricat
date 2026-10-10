@@ -1,6 +1,6 @@
 use super::*;
 
-impl<S: RepositoryScope> CatalogRepository<S> {
+impl<S: RepositoryScope> AttricatRepository<S> {
     pub fn pool_for_runtime(&self) -> PgPool {
         self.pool.clone()
     }
@@ -10,8 +10,8 @@ impl<S: RepositoryScope> CatalogRepository<S> {
     pub async fn for_workspace(
         &self,
         workspace_id: Uuid,
-    ) -> Result<CatalogRepository, RepositoryError> {
-        Ok(CatalogRepository {
+    ) -> Result<AttricatRepository, RepositoryError> {
+        Ok(AttricatRepository {
             pool: self.pool.clone(),
             workspace_id: WorkspaceScope(workspace_id),
             audit_context: self.audit_context.clone(),
@@ -28,12 +28,12 @@ impl<S: RepositoryScope> CatalogRepository<S> {
     /// Explicitly leave tenant scope for process-level coordination. System
     /// repositories cannot call workspace data methods until re-scoped.
     pub fn system_scope(&self) -> SystemRepository {
-        CatalogRepository::system(self.pool.clone()).with_cache(self.cache.clone())
+        AttricatRepository::system(self.pool.clone()).with_cache(self.cache.clone())
     }
 }
 
-impl From<CatalogRepository> for SystemRepository {
-    fn from(repository: CatalogRepository) -> Self {
+impl From<AttricatRepository> for SystemRepository {
+    fn from(repository: AttricatRepository) -> Self {
         repository.system_scope()
     }
 }

@@ -1,5 +1,5 @@
 [package]
-name = "catalog-repository"
+name = "attricat-repository"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,17 +10,17 @@ publish.workspace = true
 async-trait.workspace = true
 base64.workspace = true
 bytes.workspace = true
-catalog-blueprint = { path = "../blueprint" }
-catalog-cache = { path = "../cache" }
-catalog-domain = { path = "../domain" }
-catalog-events = { path = "../events" }
-catalog-extension-manifest = { path = "../extension-manifest" }
-catalog-lexicon = { path = "../lexicon" }
-catalog-solution-pack = { path = "../solution-pack" }
-catalog-rules = { path = "../rules" }
-catalog-storage = { path = "../storage" }
-catalog-validation = { path = "../validation" }
-catalog-workflow = { path = "../workflow" }
+attricat-blueprint = { path = "../blueprint" }
+attricat-cache = { path = "../cache" }
+attricat-domain = { path = "../domain" }
+attricat-events = { path = "../events" }
+attricat-extension-manifest = { path = "../extension-manifest" }
+attricat-lexicon = { path = "../lexicon" }
+attricat-solution-pack = { path = "../solution-pack" }
+attricat-rules = { path = "../rules" }
+attricat-storage = { path = "../storage" }
+attricat-validation = { path = "../validation" }
+attricat-workflow = { path = "../workflow" }
 chrono.workspace = true
 chrono-tz.workspace = true
 futures-util.workspace = true

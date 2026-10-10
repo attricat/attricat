@@ -8,8 +8,8 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-use catalog_blueprint::BlueprintKind;
-use catalog_validation::saved_search;
+use attricat_blueprint::BlueprintKind;
+use attricat_validation::saved_search;
 use semver::VersionReq;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -75,7 +75,7 @@ pub struct SeedRule {
     pub enabled: bool,
     /// Native rule TOML without pack-only keys, still using the pack-local code.
     pub definition: String,
-    pub compiled: catalog_rules::CompiledRule,
+    pub compiled: attricat_rules::CompiledRule,
 }
 
 #[derive(Clone, Debug)]
@@ -85,7 +85,7 @@ pub struct SeedWorkflow {
     pub enabled: bool,
     /// Native workflow TOML without pack-only keys, still using the pack-local code.
     pub definition: String,
-    pub compiled: catalog_workflow::CompiledWorkflow,
+    pub compiled: attricat_workflow::CompiledWorkflow,
 }
 
 #[derive(Clone, Debug)]
@@ -463,10 +463,10 @@ fn validate_context_reference(
 /// checks the referencing relationship. Returns the blueprints' logical keys.
 pub(crate) fn predicate_blueprint_keys(
     owner: &str,
-    predicate: &catalog_validation::predicate::Predicate,
+    predicate: &attricat_validation::predicate::Predicate,
     blueprints: &BTreeMap<String, SolutionPackBlueprint>,
 ) -> Result<BTreeSet<String>, SolutionPackError> {
-    use catalog_validation::predicate::Predicate;
+    use attricat_validation::predicate::Predicate;
     fn walk(
         owner: &str,
         predicate: &Predicate,
@@ -530,7 +530,7 @@ fn validate_rule(
         SolutionPackError::Invalid(format!("rule '{key}' must declare its blueprint"))
     })?;
     let context = optional_key(key, &extracted, "context")?;
-    let compiled = catalog_rules::compile(&definition)
+    let compiled = attricat_rules::compile(&definition)
         .map_err(|error| SolutionPackError::Invalid(format!("rule '{key}' is invalid: {error}")))?;
     let expected_code = resource_code(key);
     if compiled.code != expected_code {
@@ -544,7 +544,7 @@ fn validate_rule(
         .iter()
         .map(|attribute| (attribute.code.clone(), attribute.value_type.clone()))
         .collect::<HashMap<_, _>>();
-    catalog_rules::validate_against_attributes(&compiled, &types).map_err(|error| {
+    attricat_rules::validate_against_attributes(&compiled, &types).map_err(|error| {
         SolutionPackError::Invalid(format!(
             "rule '{key}' is invalid for '{blueprint}': {error}"
         ))
@@ -571,7 +571,7 @@ fn validate_workflow(
     let source = utf8_source(key, bytes)?;
     let (extracted, definition) = split_pack_keys(key, source, &["enabled"])?;
     let enabled = required_bool(key, &extracted, "enabled")?;
-    let compiled = catalog_workflow::compile(&definition).map_err(|error| {
+    let compiled = attricat_workflow::compile(&definition).map_err(|error| {
         SolutionPackError::Invalid(format!("workflow '{key}' is invalid: {error}"))
     })?;
     let expected_code = resource_code(key);
@@ -581,7 +581,7 @@ fn validate_workflow(
     if compiled
         .triggers
         .iter()
-        .any(|trigger| matches!(trigger, catalog_workflow::Trigger::Schedule { .. }))
+        .any(|trigger| matches!(trigger, attricat_workflow::Trigger::Schedule { .. }))
     {
         return invalid(format!(
             "workflow '{key}' cannot seed a schedule trigger because it targets a workspace record"
@@ -589,7 +589,7 @@ fn validate_workflow(
     }
     let all = blueprints.values().collect::<Vec<_>>();
     for trigger in &compiled.triggers {
-        if let catalog_workflow::Trigger::Event { attributes, .. } = trigger
+        if let attricat_workflow::Trigger::Event { attributes, .. } = trigger
             && let Some(code) = attributes.iter().find(|code| {
                 !all.iter()
                     .any(|blueprint| declares_attribute(blueprint, code))
@@ -628,12 +628,12 @@ fn declares_relationship(blueprint: &SolutionPackBlueprint, code: &str) -> bool 
 /// update, against the pack blueprints that can hold the written record.
 fn validate_workflow_actions(
     key: &str,
-    actions: &[catalog_workflow::Action],
+    actions: &[attricat_workflow::Action],
     candidates: &[&SolutionPackBlueprint],
 ) -> Result<(), SolutionPackError> {
     for action in actions {
         match action {
-            catalog_workflow::Action::AttributeWrite { attribute_code, .. }
+            attricat_workflow::Action::AttributeWrite { attribute_code, .. }
                 if !candidates
                     .iter()
                     .any(|blueprint| declares_attribute(blueprint, attribute_code)) =>
@@ -642,7 +642,7 @@ fn validate_workflow_actions(
                     "workflow '{key}' writes attribute '{attribute_code}' that no pack blueprint declares"
                 ));
             }
-            catalog_workflow::Action::ReferencingRecordsUpdate {
+            attricat_workflow::Action::ReferencingRecordsUpdate {
                 relationship_attribute,
                 actions,
                 ..
@@ -812,7 +812,7 @@ fn walk_attribute_path<'a>(
     path: &str,
     by_code: &HashMap<&str, &'a SolutionPackBlueprint>,
     referenced: &mut BTreeSet<String>,
-) -> Result<&'a catalog_blueprint::EffectiveAttribute, String> {
+) -> Result<&'a attricat_blueprint::EffectiveAttribute, String> {
     let segments = saved_search::field_path(path)?;
     let mut current = start;
     for (index, segment) in segments.iter().enumerate() {
@@ -860,7 +860,7 @@ fn validate_relationship_path<'a>(
     path: &str,
     by_code: &HashMap<&str, &'a SolutionPackBlueprint>,
     referenced: &mut BTreeSet<String>,
-) -> Result<&'a catalog_blueprint::EffectiveAttribute, String> {
+) -> Result<&'a attricat_blueprint::EffectiveAttribute, String> {
     if path.split('.').count() > saved_search::MAX_RELATIONSHIP_HOPS {
         return Err(format!(
             "relationship facet '{path}' follows more than {} relationship hops",
@@ -1050,7 +1050,7 @@ pub fn validate_context_mapping_requests(
         }
         if mapping.code.is_empty()
             || mapping.code.len() > MAX_IDENTIFIER_BYTES
-            || !catalog_validation::is_valid_code(&mapping.code)
+            || !attricat_validation::is_valid_code(&mapping.code)
         {
             return invalid(format!(
                 "invalid existing context code for '{}'",

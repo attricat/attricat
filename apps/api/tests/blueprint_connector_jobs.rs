@@ -5,11 +5,11 @@ use api::{
     extension_installer::ExtensionInstaller,
     extension_runtime::{ExtensionOperationTaskHandler, ExtensionRuntime, ExtensionRuntimeConfig},
     model::{CreateAttributeContext, CreateBlueprint},
-    repository::CatalogRepository,
+    repository::AttricatRepository,
     storage::{FakeObjectStore, ObjectStore, StoredObject},
     task_worker::TaskHandler,
 };
-use catalog_domain::task_queue::TaskKind;
+use attricat_domain::task_queue::TaskKind;
 use sha2::{Digest, Sha256};
 use std::{sync::Arc, time::Duration};
 use support::json;
@@ -44,7 +44,7 @@ async fn scoped_export_fans_out_to_channels_via_existing_task_queue(pool: sqlx::
     };
     let archive = std::fs::read(path).unwrap();
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = CatalogRepository::system(pool.clone())
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(workspace)
         .await
         .unwrap();
@@ -71,8 +71,8 @@ async fn scoped_export_fans_out_to_channels_via_existing_task_queue(pool: sqlx::
         .await
         .unwrap();
     for capability in [
-        "catalog.read",
-        "catalog.write",
+        "attricat.read",
+        "attricat.write",
         "artifacts.read",
         "artifacts.write",
     ] {

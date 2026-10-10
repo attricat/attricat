@@ -1,4 +1,4 @@
-use catalog_blueprint::parse;
+use attricat_blueprint::parse;
 
 #[test]
 fn accepts_namespaced_extension_metadata_without_relaxing_core_fields() {

@@ -18,7 +18,7 @@ filters by attribute.
 
 - Every request is authorized once at the HTTP boundary.
   `crates/http/src/http/auth/policy.rs` maps the route to a
-  `(permission, TargetKind)` pair, and `CatalogRepository::is_authorized`
+  `(permission, TargetKind)` pair, and `AttricatRepository::is_authorized`
   (`crates/repository/src/repository/mod.rs`) checks it against
   `role_grants`.
 - A grant's scope is `workspace`, `blueprint_family`, `record` or
@@ -53,7 +53,7 @@ return.
 
 | Surface | Path | Gate | Attribute values exposed |
 | --- | --- | --- | --- |
-| Record form | `GET /v1/records/{id}` (`http/records.rs`, `CatalogReadService::record_with_values`, `values.rs` `form_values`/`reusable_form_values`) | `records.read`, record target | All values, plus the full `projections.preview` (every scalar in every context). |
+| Record form | `GET /v1/records/{id}` (`http/records.rs`, `AttricatReadService::record_with_values`, `values.rs` `form_values`/`reusable_form_values`) | `records.read`, record target | All values, plus the full `projections.preview` (every scalar in every context). |
 | Raw record | `GET /records/{id}` (`record_reads.rs`, `record_commands.rs` `get_record`) | same | `projections` (all scalars in all contexts). |
 | Current values | `GET /records/{id}/values/current` (`values.rs` `current_values`) | same | Every value row. |
 | Previews | `GET /records/{id}/preview`, `/resolved-preview`, `/hierarchy` (`record_projection.rs`) | same | All values of the root, plus previews and display labels of readable related records. |
@@ -68,8 +68,8 @@ return.
 | Value history | `GET /records/{id}/values/history` (`values.rs`) | `records.read` | Every archived value. |
 | Record changes | `GET /records/{id}/changes` (`record_commands.rs`) | `records.read` | Before and after values per attribute. |
 | Audit log | `GET /audit-events` | `audit.read` | No values (it does not join `audit_event_changes`). |
-| Domain events | `crates/events` `AffectedFactV1` | extension capability `catalog.read`, workflows | Before and after values for every changed fact. Delivered verbatim to extensions and the extension changes feed, and snapshotted in workflow runs. HTTP workflow-run reads and the agent omit the snapshot. |
-| Extension reads | `extension_runtime.rs` read, page, changes, lookup and connector `schema`/`page` calls (`extension_catalog_data.rs`, `values.rs` `extension_catalog_values_at`) | installation capability grants, workspace-wide, not tied to a user | Full records, values at a point in time, event payloads. Lookup finds a record by attribute value. |
+| Domain events | `crates/events` `AffectedFactV1` | extension capability `attricat.read`, workflows | Before and after values for every changed fact. Delivered verbatim to extensions and the extension changes feed, and snapshotted in workflow runs. HTTP workflow-run reads and the agent omit the snapshot. |
+| Extension reads | `extension_runtime.rs` read, page, changes, lookup and connector `schema`/`page` calls (`extension_attricat_data.rs`, `values.rs` `extension_attricat_values_at`) | installation capability grants, workspace-wide, not tied to a user | Full records, values at a point in time, event payloads. Lookup finds a record by attribute value. |
 | Interactive extension runs | `extension_interactive_operations.rs` `interactive_selection_page` | `records.read` per selected record, for the person who started the run | Checks the caller at record level. |
 | Connector exports | `blueprint_connector_jobs.rs` | `extensions.manage` | Through the extension reads above. `schema` lists every attribute. |
 | Publication channels | `record_publications.rs` | `records.publish`, `contexts.*` | Flags only. Channel consumers read values through extensions. |
@@ -145,7 +145,7 @@ remain:
 2. **One redaction function.** Add `redact(preview_or_values, restricted_codes)`
    and call it at the existing chokepoints:
    - value reads: `form_values`, `file_form_values`, `reusable_form_values`,
-     `current_values`, `extension_catalog_values_at`, `value_history*` and
+     `current_values`, `extension_attricat_values_at`, `value_history*` and
      `record_audit_changes*`;
    - projection reads: `get_record`, every `projections -> 'preview'` select in
      `record_search.rs`, `build_preview`/`resolved_preview`, and
@@ -170,10 +170,10 @@ remain:
 5. **History and events.** History and record-change reads filter by
    attribute code through the same function. Domain events keep full values,
    because they are system data. Delivery to an extension redacts restricted
-   facts unless the installation holds a new `catalog.read_restricted`
+   facts unless the installation holds a new `attricat.read_restricted`
    capability, which administrators grant like the other capabilities.
-6. **Extensions.** Catalog read calls redact unless the installation has
-   `catalog.read_restricted`. Interactive runs also require the person who
+6. **Extensions.** Attricat read calls redact unless the installation has
+   `attricat.read_restricted`. Interactive runs also require the person who
    started the run to have `records.read_restricted`. Connector `schema`
    marks restricted attributes, so export profiles can leave them out.
 7. **Agent.** Tools read through the same redacting layer as the person who

@@ -22,7 +22,7 @@ use uuid::Uuid;
 use std::sync::Mutex;
 
 use super::{
-    CatalogRepository, Record, RepositoryError,
+    AttricatRepository, Record, RepositoryError,
     checks::EnabledRule,
     generations::WritePrefetch,
     record_values::{ContextTree, RecordState, RecordValues, load_record},
@@ -143,7 +143,7 @@ impl WriteContext {
         if let Some(preview) = self.derived().preview.clone() {
             return Ok(preview);
         }
-        let preview = CatalogRepository::build_preview_projection(transaction, record_id).await?;
+        let preview = AttricatRepository::build_preview_projection(transaction, record_id).await?;
         self.derived().preview = Some(preview.clone());
         Ok(preview)
     }
@@ -306,7 +306,7 @@ impl WriteContext {
     pub(super) fn status_attributes(&self) -> Vec<(Uuid, String, Value, String)> {
         self.attributes
             .iter()
-            .filter(|attribute| attribute.declares(catalog_validation::status::STATUS_KEY))
+            .filter(|attribute| attribute.declares(attricat_validation::status::STATUS_KEY))
             .map(|attribute| {
                 (
                     attribute.id,
@@ -322,7 +322,7 @@ impl WriteContext {
     pub(super) fn principal_attributes(&self) -> Vec<(String, Value)> {
         self.attributes
             .iter()
-            .filter(|attribute| attribute.declares(catalog_validation::principal::PRINCIPAL_KEY))
+            .filter(|attribute| attribute.declares(attricat_validation::principal::PRINCIPAL_KEY))
             .map(|attribute| {
                 (
                     attribute.code.clone(),

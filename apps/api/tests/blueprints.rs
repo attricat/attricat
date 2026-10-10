@@ -285,7 +285,7 @@ fields = ["title"]
 
 [views.table]
 type = "table"
-columns = [{ field = "category.name", renderer = { id = "catalog.table_display", version = 1 } }]
+columns = [{ field = "category.name", renderer = { id = "attricat.table_display", version = 1 } }]
 
 [[attributes]]
 code = "title"
@@ -342,7 +342,7 @@ fields = ["title"]
 
 #[sqlx::test]
 async fn blueprint_rules_cannot_take_a_rule_code_owned_by_another_blueprint(pool: PgPool) {
-    let repository = api::repository::CatalogRepository::new(
+    let repository = api::repository::AttricatRepository::new(
         pool.clone(),
         BOOTSTRAP_WORKSPACE_ID.parse().unwrap(),
     );

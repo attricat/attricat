@@ -25,7 +25,7 @@ struct BatchCandidate {
     created_at: DateTime<Utc>,
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     pub async fn list_blueprint_migration_batches(
         &self,
         blueprint_id: Uuid,
@@ -362,7 +362,7 @@ impl CatalogRepository {
                 }
                 break;
             }
-            metrics::counter!("catalog_blueprint_migration_candidates_scanned_total")
+            metrics::counter!("attricat_blueprint_migration_candidates_scanned_total")
                 .increment(candidates.len() as u64);
             let page_started = std::time::Instant::now();
             let candidate_ids: Vec<_> = candidates.iter().map(|candidate| candidate.id).collect();
@@ -377,12 +377,12 @@ impl CatalogRepository {
                 .await;
             for result in results {
                 let outcome = result?;
-                metrics::counter!("catalog_blueprint_migration_records_total", "outcome" => outcome)
+                metrics::counter!("attricat_blueprint_migration_records_total", "outcome" => outcome)
                     .increment(1);
             }
             let elapsed = page_started.elapsed().as_secs_f64();
             if elapsed > 0.0 {
-                metrics::histogram!("catalog_blueprint_migration_records_per_second")
+                metrics::histogram!("attricat_blueprint_migration_records_per_second")
                     .record(candidates.len() as f64 / elapsed);
             }
             let last = candidates.last().expect("non-empty candidate page");
@@ -622,7 +622,7 @@ fn safe_automatic_migration(
     Some(removed)
 }
 
-impl<S: super::RepositoryScope> CatalogRepository<S> {
+impl<S: super::RepositoryScope> AttricatRepository<S> {
     /// Transitional reconciliation for batches committed by an API version
     /// before task delivery owned this kind. It is safe to run repeatedly and
     /// is deliberately not a process-local execution/recovery loop.

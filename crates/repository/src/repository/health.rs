@@ -1,13 +1,13 @@
 use crate::persistence_rows::{Db, IntoDomain};
 use sqlx::query_as;
 
-use super::{CatalogRepository, RepositoryError};
+use super::{AttricatRepository, RepositoryError};
 use crate::model::{
     BlueprintHealth, CompletenessHealth, ContextHealth, DataHealthSummary, FreshnessBand,
     RelationshipHealth, StorageHealth,
 };
 
-impl CatalogRepository {
+impl AttricatRepository {
     pub async fn data_health_summary(
         &self,
         stale_after_days: i64,
@@ -99,7 +99,7 @@ impl CatalogRepository {
     }
 }
 
-impl<S: super::RepositoryScope> CatalogRepository<S> {
+impl<S: super::RepositoryScope> AttricatRepository<S> {
     /// Performs a bounded, side-effect-free database dependency probe for the
     /// API readiness endpoint. This is intentionally separate from liveness:
     /// a live process with an unavailable database must not receive traffic.

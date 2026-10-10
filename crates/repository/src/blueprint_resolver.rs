@@ -1,11 +1,11 @@
 use std::collections::HashSet;
 
 use crate::extensions::Manifest;
-use catalog_blueprint::{
+use attricat_blueprint::{
     BlueprintKind, CompiledBlueprint, ResolvedInclude, ViewDefinition, compile, parse,
     validate_table_renderer,
 };
-use catalog_validation::validate_json_schema;
+use attricat_validation::validate_json_schema;
 use semver::VersionReq;
 use serde_json::{Value, json};
 use sqlx::{Postgres, Transaction};
@@ -115,7 +115,7 @@ fn validate_status_coverage(compiled: &CompiledBlueprint) -> Result<(), Reposito
         let Some(options) = attribute
             .value_schema
             .as_ref()
-            .and_then(|schema| schema.get(catalog_validation::status::STATUS_KEY))
+            .and_then(|schema| schema.get(attricat_validation::status::STATUS_KEY))
             .and_then(|config| config.get("options"))
             .and_then(Value::as_array)
         else {
@@ -348,7 +348,7 @@ async fn validate_table_columns(
                 leaf_type.expect("relationship table path has a leaf")
             };
             if let Some(renderer) = &column.renderer {
-                if renderer.id == "catalog.table_image" {
+                if renderer.id == "attricat.table_image" {
                     let image_attribute = (parts.len() == 1)
                         .then(|| {
                             compiled
@@ -380,10 +380,10 @@ async fn validate_table_columns(
 async fn validate_renderer(
     transaction: &mut Transaction<'_, Postgres>,
     workspace_id: Uuid,
-    renderer: &catalog_blueprint::ComponentReference,
+    renderer: &attricat_blueprint::ComponentReference,
     value_type: &str,
 ) -> Result<(), RepositoryError> {
-    if renderer.id.starts_with("catalog.") {
+    if renderer.id.starts_with("attricat.") {
         return validate_table_renderer(renderer, value_type)
             .map_err(RepositoryError::invalid_blueprint_definition);
     }

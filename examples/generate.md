@@ -8,13 +8,13 @@ Start the local stack and create a generator-scoped personal access token with a
 
 File upload, metadata, and download authorization uses the existing record permissions; there is intentionally no separate `files.read` personal-token permission.
 
-Pass the returned token as `CATALOG_TOKEN`. The generator refuses non-local targets unless `ALLOW_NON_LOCAL_GENERATOR_TARGET=1` is explicitly set.
+Pass the returned token as `ATTRICAT_TOKEN`. The generator refuses non-local targets unless `ALLOW_NON_LOCAL_GENERATOR_TARGET=1` is explicitly set.
 
 ```sh
 just setup
 just dev
 cargo run -p acli -- --session-file .acli-session auth login <workspace-login-identifier> --email <email> --password-stdin
-export CATALOG_TOKEN="$(cargo run -p acli -- --session-file .acli-session token create --generator | jq -r .secret)"
+export ATTRICAT_TOKEN="$(cargo run -p acli -- --session-file .acli-session token create --generator | jq -r .secret)"
 just generate
 ```
 
@@ -30,12 +30,12 @@ Profiles preserve the same component types, distributions, and bounded compatibi
 | `large`  |      1,000,022 | Full local benchmark dataset                  |
 
 ```sh
-CATALOG_TOKEN=cat_pat_... just generate micro
-CATALOG_TOKEN=cat_pat_... just generate medium
-CATALOG_TOKEN=cat_pat_... just generate large
+ATTRICAT_TOKEN=cat_pat_... just generate micro
+ATTRICAT_TOKEN=cat_pat_... just generate medium
+ATTRICAT_TOKEN=cat_pat_... just generate large
 ```
 
-The current industry pack is `pc-components`. It creates fictional manufacturers, hierarchical categories, product families, sellable SKUs, and reference-data records for product types, interface standards, and form factors. Families relate to those controlled classifications as well as category and manufacturer; sellable SKUs relate to their family and bounded compatibility links, reaching category, manufacturer, and technical classifications through that family. Each generated product image is assigned as a SKU's `main_photo`; the SKU Explorer table uses `catalog.table_image@1` to render it as a thumbnail when files are enabled. A fixed, small set of documentation files is assigned to `product_files`. This does not grow with the selected profile.
+The current industry pack is `pc-components`. It creates fictional manufacturers, hierarchical categories, product families, sellable SKUs, and reference-data records for product types, interface standards, and form factors. Families relate to those controlled classifications as well as category and manufacturer; sellable SKUs relate to their family and bounded compatibility links, reaching category, manufacturer, and technical classifications through that family. Each generated product image is assigned as a SKU's `main_photo`; the SKU Explorer table uses `attricat.table_image@1` to render it as a thumbnail when files are enabled. A fixed, small set of documentation files is assigned to `product_files`. This does not grow with the selected profile.
 
 ## Long-running runs
 
@@ -46,13 +46,13 @@ The generator writes an atomic local checkpoint under `.catalog-generator/`, key
 node examples/generate.mjs --size large --dry-run
 
 # Continue a stopped run with the matching checkpoint.
-CATALOG_TOKEN=cat_pat_... just generate-resume large
+ATTRICAT_TOKEN=cat_pat_... just generate-resume large
 
 # Inspect checkpoint state without making API requests.
 node examples/generate.mjs --size large --status
 
 # Machine-readable progress for log collection.
-CATALOG_TOKEN=cat_pat_... node examples/generate.mjs --size medium --progress json
+ATTRICAT_TOKEN=cat_pat_... node examples/generate.mjs --size medium --progress json
 ```
 
 Use `--no-files` for a pure Explorer dataset when file processing is not required. The generator enables the workspace's `default` publication channel, then publishes each completed record to every enabled channel by default; pass `--no-publish` to leave generated records unpublished. The generator marks the checkpoint `benchmark_ready` only after all planned writes, file processing (when enabled), and API-level sample verification complete.

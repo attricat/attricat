@@ -5,7 +5,7 @@ use serde_json::Value;
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
-use super::{CatalogRepository, RepositoryError};
+use super::{AttricatRepository, RepositoryError};
 
 #[derive(Clone, Debug, serde::Serialize, sqlx::FromRow)]
 pub struct Conversation {
@@ -139,7 +139,7 @@ pub enum ApprovalDecision {
     Reject,
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     pub async fn create_conversation(
         &self,
         created_by_user_id: Option<Uuid>,
@@ -782,7 +782,7 @@ impl CatalogRepository {
     }
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     pub async fn list_conversations(&self) -> Result<Vec<Conversation>, RepositoryError> {
         Ok(sqlx::query_as("SELECT id, workspace_id, created_by_user_id, title, title_source, record_id, context_id, created_at, updated_at, archived_at FROM conversations WHERE workspace_id = $1 AND archived_at IS NULL ORDER BY updated_at DESC")
             .bind(self.workspace_id.0).fetch_all(&self.pool).await?)
@@ -892,7 +892,7 @@ impl CatalogRepository {
     }
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     pub async fn agent_event_sequence(
         &self,
         run_id: Uuid,
@@ -904,7 +904,7 @@ impl CatalogRepository {
     }
 }
 
-impl<S: super::RepositoryScope> CatalogRepository<S> {
+impl<S: super::RepositoryScope> AttricatRepository<S> {
     /// System permissions are application data, not migration behavior. Keep
     /// this idempotent bootstrap explicit so SQL migrations remain declarative.
     pub async fn ensure_agent_permissions(&self) -> Result<(), RepositoryError> {

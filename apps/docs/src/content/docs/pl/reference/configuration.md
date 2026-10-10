@@ -15,10 +15,10 @@ Produkcyjne API potrzebuje co najmniej:
 
 ```sh
 DATABASE_URL=postgres://attricat:…@postgres.example:5432/attricat
-CATALOG_AUTO_MIGRATE=false
-CATALOG_BOOTSTRAP_OWNER_EMAIL=owner@example.com
+ATTRICAT_AUTO_MIGRATE=false
+ATTRICAT_BOOTSTRAP_OWNER_EMAIL=owner@example.com
 SESSION_COOKIE_SECURE=true
-CATALOG_DEVTOOLS=false
+ATTRICAT_DEVTOOLS=false
 
 S3_ENDPOINT=https://s3.example.com
 S3_REGION=us-east-1
@@ -33,9 +33,9 @@ SMTP_HOST=smtp.example.com
 SMTP_PORT=587
 SMTP_TLS_MODE=starttls
 MAIL_FROM="Attricat <no-reply@example.com>"
-PASSWORD_RESET_URL=https://catalog.example.com/password-reset/confirm
-WORKSPACE_INVITATION_URL=https://catalog.example.com/invitations/accept
-WORKSPACE_ONBOARDING_URL=https://catalog.example.com/onboarding
+PASSWORD_RESET_URL=https://attricat.example.com/password-reset/confirm
+WORKSPACE_INVITATION_URL=https://attricat.example.com/invitations/accept
+WORKSPACE_ONBOARDING_URL=https://attricat.example.com/onboarding
 ```
 
 Proces roboczy plików potrzebuje tych samych wartości `DATABASE_URL` i `S3_*` oraz `FILE_WORKER_METRICS_TOKEN`, ponieważ obraz kontenera wiąże jego nasłuch operacyjny poza interfejsem loopback.
@@ -48,11 +48,11 @@ Proces roboczy plików potrzebuje tych samych wartości `DATABASE_URL` i `S3_*` 
 | `DATABASE_REQUEST_POOL_CONNECTIONS` | `10` | Liczba połączeń w puli obsługującej żądania HTTP, współdzielonej przez wszystkie obszary robocze. Liczba całkowita od 1 do 100. |
 | `DATABASE_TASK_POOL_CONNECTIONS` | `10` | Liczba połączeń w puli używanej przez procesy robocze w tle, współdzielonej przez wszystkie obszary robocze. Liczba całkowita od 1 do 100. API zapisuje w logu przy starcie sumę połączeń pul żądań, zadań i konserwacji. Każdy proces API może też utrzymywać do trzech połączeń poza pulami dla koordynatorów zadań w tle; wymagają one połączeń w trybie sesji, więc tryb transakcyjny PgBouncera nie jest obsługiwany. Zobacz [Uruchom kilka replik API](/pl/operate/deployment/#uruchom-kilka-replik-api). |
 | `BIND_ADDR` | `127.0.0.1:3000` | Adres, na którym nasłuchuje API. Obraz kontenera ustawia `0.0.0.0:3000`. |
-| `CATALOG_AUTO_MIGRATE` | `true` | Stosuje migracje bazy danych przy starcie API. W produkcji ustaw `false` i uruchom raz rolę `migrate` obrazu przed wdrożeniem replik API. |
+| `ATTRICAT_AUTO_MIGRATE` | `true` | Stosuje migracje bazy danych przy starcie API. W produkcji ustaw `false` i uruchom raz rolę `migrate` obrazu przed wdrożeniem replik API. |
 | `WEB_DIST_DIR` | Nieustawiona | Katalog ze skompilowaną aplikacją webową. Gdy jest ustawiona, API serwuje aplikację pod każdą ścieżką poza `/api` i sondami stanu. Obraz kontenera ustawia `/srv/attricat/web`. |
 | `RUST_LOG` | `info` | Filtr logów, np. `api=debug`. |
 | `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | Nieustawiona | Punkt końcowy OTLP/gRPC do eksportu śladów z API i procesu roboczego plików. Pozostaw nieustawioną, aby wyłączyć eksport śladów. |
-| `CATALOG_DEVTOOLS` | `true` w lokalnym środowisku deweloperskim | Włącza Inspektor w aplikacji webowej oraz wpisy czasu SQL przeglądarki rekordów w nagłówku `Server-Timing`. W produkcji ustaw `false`. W innych kompilacjach, także produkcyjnych, przeglądarka może wczytać Inspektor na żądanie po ustawieniu w local storage `catalog.inspector-enabled` na `true` i przeładowaniu strony; czasy SQL nadal wymagają tego ustawienia w API. Treść zapytań SQL i wartości parametrów nigdy nie są ujawniane. |
+| `ATTRICAT_DEVTOOLS` | `true` w lokalnym środowisku deweloperskim | Włącza Inspektor w aplikacji webowej oraz wpisy czasu SQL przeglądarki rekordów w nagłówku `Server-Timing`. W produkcji ustaw `false`. W innych kompilacjach, także produkcyjnych, przeglądarka może wczytać Inspektor na żądanie po ustawieniu w local storage `attricat.inspector-enabled` na `true` i przeładowaniu strony; czasy SQL nadal wymagają tego ustawienia w API. Treść zapytań SQL i wartości parametrów nigdy nie są ujawniane. |
 
 ## Początkowy obszar roboczy i właściciel
 
@@ -60,13 +60,13 @@ Przy starcie API upewnia się, że istnieje jeden obszar roboczy i jego właści
 
 | Zmienna | Domyślnie | Opis |
 | --- | --- | --- |
-| `CATALOG_WORKSPACE_ID` | `00000000-0000-4000-8000-000000000002` | UUID obszaru roboczego tworzonego przy starcie. Nie wybiera obszaru roboczego dla żądań HTTP; robi to sesja zalogowanego użytkownika lub token. |
-| `CATALOG_BOOTSTRAP_WORKSPACE_NAME` | `Default workspace` | Nazwa wyświetlana używana przy pierwszym utworzeniu obszaru roboczego. |
-| `CATALOG_BOOTSTRAP_OWNER_EMAIL` | `owner@example.test` | Adres e-mail pierwszego właściciela. Jest przycinany i zamieniany na małe litery. Start tworzy użytkownika, członkostwo i przydział roli właściciela, jeśli nie istnieją. We wdrożeniu zawsze ustaw prawdziwy adres. |
-| `CATALOG_BOOTSTRAP_OWNER_ID` | Losowy UUID | Opcjonalny stały UUID początkowego właściciela. |
-| `CATALOG_BOOTSTRAP_OWNER_PASSWORD` | Nieustawiona | Opcjonalne pierwsze hasło nowo utworzonego właściciela. Jest haszowane przed zapisaniem i nigdy nie zmienia istniejącego hasła. Podaj je tylko przy pierwszym uruchomieniu, a następnie usuń. |
-| `CATALOG_DEMO_MODE` | `false` | Tylko dla publicznych wdrożeń demonstracyjnych. Włącza `CATALOG_SAMPLE_ACCOUNTS`, nadaje początkowemu obszarowi roboczemu identyfikator logowania `demo.attricat.com` i domyślną nazwę `Demo`, a strona logowania otwiera go z wybranym kontem edytora. Odwiedzający mogą przełączyć się na konto przeglądającego, administratora lub właściciela. Resetowanie hasła, zmiany członków i przypisań ról, przekazanie własności, zaproszenia i nowi użytkownicy są wyłączone, aby nikt nie zablokował wspólnych kont. Jeśli agenci są skonfigurowani, mogą odczytywać katalog i objaśniać zmiany, ale nie mogą ich wprowadzać. Nigdy nie włączaj tego trybu dla obszaru roboczego z prawdziwymi danymi. |
-| `CATALOG_SAMPLE_ACCOUNTS` | `false` | Tworzy konta `viewer@`, `editor@` i `admin@` w domenie adresu e-mail właściciela, każde z odpowiednią rolą wbudowaną i hasłem z `CATALOG_BOOTSTRAP_OWNER_PASSWORD` (która musi wtedy pozostać ustawiona). Strona logowania pokazuje je do wyboru. Każdy, kto ma dostęp do serwera, może się nimi zalogować, więc używaj tej opcji tylko lokalnie i w wersjach demonstracyjnych. |
+| `ATTRICAT_WORKSPACE_ID` | `00000000-0000-4000-8000-000000000002` | UUID obszaru roboczego tworzonego przy starcie. Nie wybiera obszaru roboczego dla żądań HTTP; robi to sesja zalogowanego użytkownika lub token. |
+| `ATTRICAT_BOOTSTRAP_WORKSPACE_NAME` | `Default workspace` | Nazwa wyświetlana używana przy pierwszym utworzeniu obszaru roboczego. |
+| `ATTRICAT_BOOTSTRAP_OWNER_EMAIL` | `owner@example.test` | Adres e-mail pierwszego właściciela. Jest przycinany i zamieniany na małe litery. Start tworzy użytkownika, członkostwo i przydział roli właściciela, jeśli nie istnieją. We wdrożeniu zawsze ustaw prawdziwy adres. |
+| `ATTRICAT_BOOTSTRAP_OWNER_ID` | Losowy UUID | Opcjonalny stały UUID początkowego właściciela. |
+| `ATTRICAT_BOOTSTRAP_OWNER_PASSWORD` | Nieustawiona | Opcjonalne pierwsze hasło nowo utworzonego właściciela. Jest haszowane przed zapisaniem i nigdy nie zmienia istniejącego hasła. Podaj je tylko przy pierwszym uruchomieniu, a następnie usuń. |
+| `ATTRICAT_DEMO_MODE` | `false` | Tylko dla publicznych wdrożeń demonstracyjnych. Włącza `ATTRICAT_SAMPLE_ACCOUNTS`, nadaje początkowemu obszarowi roboczemu identyfikator logowania `demo.attricat.com` i domyślną nazwę `Demo`, a strona logowania otwiera go z wybranym kontem edytora. Odwiedzający mogą przełączyć się na konto przeglądającego, administratora lub właściciela. Resetowanie hasła, zmiany członków i przypisań ról, przekazanie własności, zaproszenia i nowi użytkownicy są wyłączone, aby nikt nie zablokował wspólnych kont. Jeśli agenci są skonfigurowani, mogą odczytywać katalog i objaśniać zmiany, ale nie mogą ich wprowadzać. Nigdy nie włączaj tego trybu dla obszaru roboczego z prawdziwymi danymi. |
+| `ATTRICAT_SAMPLE_ACCOUNTS` | `false` | Tworzy konta `viewer@`, `editor@` i `admin@` w domenie adresu e-mail właściciela, każde z odpowiednią rolą wbudowaną i hasłem z `ATTRICAT_BOOTSTRAP_OWNER_PASSWORD` (która musi wtedy pozostać ustawiona). Strona logowania pokazuje je do wyboru. Każdy, kto ma dostęp do serwera, może się nimi zalogować, więc używaj tej opcji tylko lokalnie i w wersjach demonstracyjnych. |
 
 Identyfikator logowania początkowego obszaru roboczego to `default.local`.
 
@@ -173,10 +173,10 @@ Attricat wysyła przez SMTP wiadomości z resetowaniem hasła, zaproszeniami i l
 | `SMTP_TLS_MODE` | `starttls` | `starttls` lub `implicit`. `disabled` jest akceptowane tylko dla lokalnego przekaźnika bez uwierzytelniania, takiego jak Mailpit; start odrzuca dane uwierzytelniające w połączeniu z `disabled`. |
 | `SMTP_USERNAME` | Nieustawiona | Nazwa użytkownika SMTP. Ustaw jednocześnie nazwę użytkownika i hasło albo żadne z nich. |
 | `SMTP_PASSWORD` | Nieustawiona | Hasło SMTP. |
-| `MAIL_FROM` | `Catalog <no-reply@catalog.local>` | Adres nadawcy. |
-| `PASSWORD_RESET_URL` | Lokalny URL | Bezwzględny adres URL strony potwierdzenia resetowania hasła w aplikacji webowej, np. `https://catalog.example.com/password-reset/confirm`. |
-| `WORKSPACE_INVITATION_URL` | Lokalny URL | Bezwzględny adres URL używany w zaproszeniach dla istniejących użytkowników, np. `https://catalog.example.com/invitations/accept`. |
-| `WORKSPACE_ONBOARDING_URL` | Lokalny URL | Bezwzględny adres URL używany w linkach wdrożeniowych dla nowych użytkowników, np. `https://catalog.example.com/onboarding`. |
+| `MAIL_FROM` | `Attricat <no-reply@attricat.local>` | Adres nadawcy. |
+| `PASSWORD_RESET_URL` | Lokalny URL | Bezwzględny adres URL strony potwierdzenia resetowania hasła w aplikacji webowej, np. `https://attricat.example.com/password-reset/confirm`. |
+| `WORKSPACE_INVITATION_URL` | Lokalny URL | Bezwzględny adres URL używany w zaproszeniach dla istniejących użytkowników, np. `https://attricat.example.com/invitations/accept`. |
+| `WORKSPACE_ONBOARDING_URL` | Lokalny URL | Bezwzględny adres URL używany w linkach wdrożeniowych dla nowych użytkowników, np. `https://attricat.example.com/onboarding`. |
 
 ## Agenci
 
@@ -206,7 +206,7 @@ Te limity agentów są stałe: 32 KiB na wiadomość użytkownika, 16 załączni
 
 | Zmienna | Domyślnie | Opis |
 | --- | --- | --- |
-| `CATALOG_API_URL` | `http://127.0.0.1:3000/api` | Bazowy adres URL API razem z `/api`. Używa go CLI, a serwer deweloperski Vite przekierowuje `/api` do jego źródła (origin). |
+| `ATTRICAT_API_URL` | `http://127.0.0.1:3000/api` | Bazowy adres URL API razem z `/api`. Używa go CLI, a serwer deweloperski Vite przekierowuje `/api` do jego źródła (origin). |
 | `WEB_PORT` | `5173` | Port serwera deweloperskiego Vite. |
 
 ## Lokalne usługi deweloperskie
@@ -215,7 +215,7 @@ Lokalny stos z repozytorium uruchamia w kontenerach PostgreSQL, Mailpit (przechw
 
 | Zmienna | Domyślnie |
 | --- | --- |
-| `POSTGRES_DB` | `catalog` |
+| `POSTGRES_DB` | `attricat` |
 | `POSTGRES_USER` | `postgres` |
 | `POSTGRES_PASSWORD` | `postgres` |
 | `POSTGRES_PORT` | `5432` |
@@ -226,7 +226,7 @@ Lokalny stos z repozytorium uruchamia w kontenerach PostgreSQL, Mailpit (przechw
 | `RUSTFS_PORT` | `9000` |
 | `RUSTFS_CONSOLE_PORT` | `9001` |
 
-`CATALOG_E2E_FIXTURE_EMAIL` i `CATALOG_E2E_FIXTURE_PASSWORD` tworzą użytkownika testowego na potrzeby testów end-to-end. Nigdy nie ustawiaj ich w produkcji.
+`ATTRICAT_E2E_FIXTURE_EMAIL` i `ATTRICAT_E2E_FIXTURE_PASSWORD` tworzą użytkownika testowego na potrzeby testów end-to-end. Nigdy nie ustawiaj ich w produkcji.
 
 ## CLI
 

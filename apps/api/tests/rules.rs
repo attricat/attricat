@@ -2,7 +2,7 @@ mod support;
 
 use std::time::Duration;
 
-use api::{repository::CatalogRepository, rule_runtime, task_worker::TaskOutcome};
+use api::{repository::AttricatRepository, rule_runtime, task_worker::TaskOutcome};
 use support::*;
 use tokio::time::sleep;
 
@@ -18,7 +18,7 @@ attribute_code = "summary"
 "#;
 
 async fn setup_rule(pool: &PgPool) -> (String, tokio::task::JoinHandle<()>, Uuid, Value) {
-    CatalogRepository::system(pool.clone())
+    AttricatRepository::system(pool.clone())
         .ensure_rule_permissions()
         .await
         .unwrap();
@@ -101,7 +101,7 @@ async fn rule_task_lease_loss_and_crash_after_page_are_fenced(pool: PgPool) {
     let record = create_record(&client, &base_url, &blueprint).await;
     let record_id = record["id"].as_str().unwrap().parse().unwrap();
     let run_id = manual_run(&base_url, rule_id, Some(record_id), "lease-loss").await;
-    let repository = CatalogRepository::new(
+    let repository = AttricatRepository::new(
         pool.clone(),
         support::BOOTSTRAP_WORKSPACE_ID.parse().unwrap(),
     );
@@ -194,7 +194,7 @@ async fn checkpoint_failure_on_final_attempt_dead_letters_rule_run_and_replays_g
         "checkpoint-final-failure",
     )
     .await;
-    let repository = CatalogRepository::new(
+    let repository = AttricatRepository::new(
         pool.clone(),
         support::BOOTSTRAP_WORKSPACE_ID.parse().unwrap(),
     );
@@ -274,7 +274,7 @@ async fn rule_page_continuation_yields_without_failure_budget(pool: PgPool) {
     sqlx::query("INSERT INTO records(id,workspace_id,blueprint_id,blueprint_version,projections) SELECT gen_random_uuid(),$1,$2,$3,'{}'::jsonb FROM generate_series(1,500)")
         .bind(workspace).bind(blueprint_id).bind(blueprint_version).execute(&pool).await.unwrap();
     let run_id = manual_run(&base_url, rule_id, None, "continuation").await;
-    let repository = CatalogRepository::new(
+    let repository = AttricatRepository::new(
         pool.clone(),
         support::BOOTSTRAP_WORKSPACE_ID.parse().unwrap(),
     );

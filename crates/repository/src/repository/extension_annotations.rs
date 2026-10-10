@@ -2,7 +2,7 @@
 //!
 //! An installed extension owns system tags named `<extension-id>:<local>` and
 //! the object stored at `system_metadata[<extension-id>]` once its namespace
-//! is claimed. Callers name only local tags and keys; Catalog derives the
+//! is claimed. Callers name only local tags and keys; Attricat derives the
 //! namespace from the authenticated extension provenance. Claimed namespaces
 //! are protected on every other write path, so a whole-field record update
 //! cannot overwrite them by round-tripping an older annotation object.
@@ -15,7 +15,7 @@ use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
 use super::EventPublisher;
-use super::{CatalogRepository, RepositoryError, system_annotations};
+use super::{AttricatRepository, RepositoryError, system_annotations};
 use crate::domain_events::RECORD_ANNOTATIONS_CHANGED_V1;
 
 /// Maximum add/remove/set/delete operations in one patch.
@@ -236,7 +236,7 @@ pub(crate) fn own_annotations(
     }
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     pub(crate) async fn claimed_annotation_namespaces(
         &self,
         connection: &mut sqlx::PgConnection,

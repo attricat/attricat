@@ -1,5 +1,5 @@
 [package]
-name = "catalog-extension-transfer-test-component"
+name = "attricat-extension-transfer-test-component"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

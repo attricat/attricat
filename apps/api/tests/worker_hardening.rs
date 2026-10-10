@@ -1,13 +1,13 @@
 mod support;
 
 use api::{
-    repository::{AuditContext, CatalogRepository, ClaimedTask, RepositoryError, TaskError},
+    repository::{AttricatRepository, AuditContext, ClaimedTask, RepositoryError, TaskError},
     task_queue::TaskKind,
 };
 use std::time::Duration;
 use support::*;
 
-fn audited(repository: CatalogRepository) -> CatalogRepository {
+fn audited(repository: AttricatRepository) -> AttricatRepository {
     repository.with_audit_context(AuditContext {
         actor_user_id: Some(BOOTSTRAP_OWNER_ID.parse().unwrap()),
         actor_token_id: None,
@@ -21,7 +21,7 @@ fn audited(repository: CatalogRepository) -> CatalogRepository {
     })
 }
 
-async fn agent_task(repository: &CatalogRepository) -> ClaimedTask {
+async fn agent_task(repository: &AttricatRepository) -> ClaimedTask {
     let conversation = repository
         .create_conversation(Some(BOOTSTRAP_OWNER_ID.parse().unwrap()), "Fencing")
         .await
@@ -65,7 +65,7 @@ async fn reclaimed_agent_tasks_cannot_commit_comments_saved_views_or_publication
     let (base, server) = start_server(pool.clone()).await;
     let id = record(&authenticated_client(), &base).await;
     let owner = BOOTSTRAP_OWNER_ID.parse().unwrap();
-    let repository = audited(CatalogRepository::new(
+    let repository = audited(AttricatRepository::new(
         pool.clone(),
         bootstrap_workspace_id(),
     ));
@@ -188,7 +188,7 @@ async fn reclaimed_agent_tasks_cannot_commit_comments_saved_views_or_publication
 async fn sibling_agent_decisions_queue_one_resume_only_after_the_wave_is_resolved(pool: PgPool) {
     use api::repository::ApprovalDecision;
     let (_, server) = start_server(pool.clone()).await;
-    let repository = CatalogRepository::new(pool.clone(), bootstrap_workspace_id());
+    let repository = AttricatRepository::new(pool.clone(), bootstrap_workspace_id());
     let task = agent_task(&repository).await;
     let run_id = task.subject_id;
     let worker = repository.for_agent_task(&task);
@@ -294,7 +294,7 @@ async fn decisions_during_provider_delivery_are_not_lost_and_terminal_runs_canno
 ) {
     use api::repository::ApprovalDecision;
     let (_, server) = start_server(pool.clone()).await;
-    let repository = CatalogRepository::new(pool.clone(), bootstrap_workspace_id());
+    let repository = AttricatRepository::new(pool.clone(), bootstrap_workspace_id());
     let task = agent_task(&repository).await;
     let worker = repository.for_agent_task(&task);
     let run_id = task.subject_id;
@@ -402,7 +402,7 @@ async fn decisions_during_provider_delivery_are_not_lost_and_terminal_runs_canno
 async fn task_fences_use_wall_clock_after_waiting_for_a_domain_lock(pool: PgPool) {
     let (base, server) = start_server(pool.clone()).await;
     let id = record(&authenticated_client(), &base).await;
-    let repository = CatalogRepository::new(pool.clone(), bootstrap_workspace_id());
+    let repository = AttricatRepository::new(pool.clone(), bootstrap_workspace_id());
     let task = agent_task(&repository).await;
     let fenced = repository.for_agent_task(&task);
     let mut blocker = pool.begin().await.unwrap();

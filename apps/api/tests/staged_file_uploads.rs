@@ -275,7 +275,7 @@ async fn a_staged_file_cannot_be_linked_to_an_existing_record(pool: PgPool) {
         .parse()
         .unwrap();
     let repository =
-        api::repository::CatalogRepository::new(pool.clone(), bootstrap_workspace_id());
+        api::repository::AttricatRepository::new(pool.clone(), bootstrap_workspace_id());
     assert!(
         repository
             .link_file_to_attribute(record_id, "gallery", None, staged)
@@ -500,7 +500,7 @@ async fn expired_unclaimed_staged_files_are_reclaimed(pool: PgPool) {
     .await
     .unwrap();
 
-    let system = api::repository::CatalogRepository::system(pool.clone());
+    let system = api::repository::AttricatRepository::system(pool.clone());
     while system.mark_unreferenced_files_deleted(0).await.unwrap() > 0 {}
     let deleted = |id: String| {
         let pool = pool.clone();

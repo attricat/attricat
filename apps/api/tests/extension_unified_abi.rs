@@ -1,4 +1,4 @@
-//! One release on the `catalog:host@1.0.0` ABI declares an event handler, a
+//! One release on the `attricat:host@1.0.0` ABI declares an event handler, a
 //! client command, scoped configuration and an interactive operation.
 
 mod support;
@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use api::{
     extension_runtime::{ExtensionRuntime, ExtensionRuntimeConfig},
-    repository::CatalogRepository,
+    repository::AttricatRepository,
     storage::FakeObjectStore,
 };
 use support::*;
@@ -26,9 +26,9 @@ code = "title"
 value_type = "string"
 "#;
 const PERMISSIONS: &[&str] = &[
-    "catalog.read",
-    "catalog.write",
-    "catalog.annotations.write",
+    "attricat.read",
+    "attricat.write",
+    "attricat.annotations.write",
     "configuration.write",
     "events.subscribe",
     "client.commands",
@@ -39,7 +39,7 @@ const PERMISSIONS: &[&str] = &[
 
 fn unified_component() -> Vec<u8> {
     build_test_component(
-        "catalog-unified-test-component",
+        "attricat-unified-test-component",
         "unified-test.component.wasm",
     )
 }
@@ -51,7 +51,7 @@ fn manifest() -> Value {
         "version": "1.0.0",
         "description": "unified host ABI integration test",
         "icons": {"48": "icon.png"},
-        "catalog": {"id": EXTENSION, "host_api": ">=1.0.0, <2.0.0"},
+        "attricat": {"id": EXTENSION, "host_api": ">=1.0.0, <2.0.0"},
         "permissions": PERMISSIONS,
         "configuration": {"version": 1, "schema": {"type": "object", "additionalProperties": false}},
         "scoped_configuration": {"version": 1, "schema": {"type": "object"}, "scopes": ["blueprint"]},
@@ -90,7 +90,7 @@ fn archive(server: &[u8]) -> Vec<u8> {
 
 #[sqlx::test(migrations = "./migrations")]
 async fn one_unified_component_serves_commands_and_interactive_operations(pool: sqlx::PgPool) {
-    let repository = CatalogRepository::system(pool.clone())
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(bootstrap_workspace_id())
         .await
         .unwrap();
@@ -132,7 +132,7 @@ async fn one_unified_component_serves_commands_and_interactive_operations(pool: 
         "this interface is available only during an operation run"
     );
     assert_eq!(
-        response["catalog_data_error"],
+        response["attricat_data_error"],
         "this interface is available only during an operation run"
     );
 

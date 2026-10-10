@@ -9,8 +9,8 @@ use uuid::Uuid;
 
 pub(super) async fn validate(
     ApiJson(input): ApiJson<CreateWorkflow>,
-) -> Result<Json<catalog_workflow::CompiledWorkflow>, ApiError> {
-    catalog_workflow::compile(&input.definition)
+) -> Result<Json<attricat_workflow::CompiledWorkflow>, ApiError> {
+    attricat_workflow::compile(&input.definition)
         .map(Json)
         .map_err(|e| {
             crate::repository::RepositoryError::InvalidWorkflowDefinition(e.to_string()).into()

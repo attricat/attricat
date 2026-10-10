@@ -7,17 +7,17 @@ Serwerowy kod rozszerzenia to **komponent** WebAssembly zadeklarowany jako artef
 
 ## Wersja API hosta
 
-Interfejs hosta to pakiet WIT `catalog:host@1.0.0` w pliku `crates/extension-runtime/wit-host/catalog-extension.wit` w repozytorium Attricat. Ustaw `catalog.host_api` w manifeście na zakres, który go obejmuje, np. `">=1.0.0, <2.0.0"`. Każde wydanie z takim zakresem może używać wszystkich funkcji: procedur obsługi zdarzeń, poleceń, typowanego odczytu i zapisu, konfiguracji zakresowej, wszystkich rodzajów [operacji](/pl/extensions/operations/) i wszystkich miejsc osadzenia po stronie klienta.
+Interfejs hosta to pakiet WIT `attricat:host@1.0.0` w pliku `crates/extension-runtime/wit-host/attricat-extension.wit` w repozytorium Attricat. Ustaw `attricat.host_api` w manifeście na zakres, który go obejmuje, np. `">=1.0.0, <2.0.0"`. Każde wydanie z takim zakresem może używać wszystkich funkcji: procedur obsługi zdarzeń, poleceń, typowanego odczytu i zapisu, konfiguracji zakresowej, wszystkich rodzajów [operacji](/pl/extensions/operations/) i wszystkich miejsc osadzenia po stronie klienta.
 
 Zbuduj komponent dla jednego z tych światów:
 
 | Świat | Eksportuje |
 | --- | --- |
-| `catalog-extension` | `handler` i `operations` |
+| `attricat-extension` | `handler` i `operations` |
 | `handler-extension` | `handler` (zdarzenia i polecenia) |
 | `operation-extension` | `operations` |
 
-Wszystkie importy są zawsze dostępne, ale część działa tylko we właściwym miejscu. Interfejsy operacji (`artifacts`, `catalog-data`, `catalog`, `transfer`, `selection`) zwracają błąd poza przebiegiem operacji. W przebiegu błąd zwracają typowane funkcje `read` i `write` oraz wywołania `catalog.read.v1` i `catalog.command.v1`; używaj wtedy interfejsów katalogu przypisanych do przebiegu.
+Wszystkie importy są zawsze dostępne, ale część działa tylko we właściwym miejscu. Interfejsy operacji (`artifacts`, `attricat-data`, `catalog`, `transfer`, `selection`) zwracają błąd poza przebiegiem operacji. W przebiegu błąd zwracają typowane funkcje `read` i `write` oraz wywołania `attricat.read.v1` i `attricat.command.v1`; używaj wtedy interfejsów katalogu przypisanych do przebiegu.
 
 Kolejne wersje 1.x tylko rozszerzają 1.0. Komponent zbudowany dla wcześniejszej wersji 1.x działa na nowszych hostach bez przebudowy.
 
@@ -26,7 +26,7 @@ Kolejne wersje 1.x tylko rozszerzają 1.0. Komponent zbudowany dla wcześniejsze
 Zadeklaruj procedurę obsługi i zasubskrybuj dokładne typy zdarzeń:
 
 ```json
-"permissions": ["events.subscribe", "catalog.read", "catalog.write"],
+"permissions": ["events.subscribe", "attricat.read", "attricat.write"],
 "server": {
   "event_handlers": [{
     "id": "recalculate",
@@ -49,13 +49,13 @@ Przed każdym dostarczeniem Attricat ponownie sprawdza, czy instalacja jest wł�
 
 ## Odczytuj i zapisuj katalog
 
-Z `catalog.read` komponent może odczytać rekord, jego bezpośrednie wartości albo wartości rozwiązane w kontekście. Odpowiedzi zawierają przypiętą wersję Schematu rekordu.
+Z `attricat.read` komponent może odczytać rekord, jego bezpośrednie wartości albo wartości rozwiązane w kontekście. Odpowiedzi zawierają przypiętą wersję Schematu rekordu.
 
-Z `catalog.write` może zapisywać wartości skalarne w jawnie wskazanym kontekście. Zapisy przechodzą zwykłą ścieżką: kontrole typów, schematy, audyt i nowe zdarzenie domenowe.
+Z `attricat.write` może zapisywać wartości skalarne w jawnie wskazanym kontekście. Zapisy przechodzą zwykłą ścieżką: kontrole typów, schematy, audyt i nowe zdarzenie domenowe.
 
 Zapis wykonany podczas obsługi zdarzenia jest przypisywany użytkownikowi lub tokenowi, który stoi za pierwotną zmianą, zachowuje identyfikator korelacji zdarzenia i jest publikowany ze źródłem `extension:<extension-id>`. **Ignoruj zdarzenia z własnego źródła**, inaczej procedura obsługi, która zapisuje, będzie wyzwalać samą siebie.
 
-Wywołania JSON `catalog.read.v1` i `catalog.command.v1` dodają odczyty stronicowane, kanały zmian, wyszukiwanie pojedynczego atrybutu oraz partie intencji `create`, `update`, `relationships` i `upsert`. Upsert dopasowuje rekord po zadeklarowanym atrybucie klucza biznesowego, tworzy go tylko wtedy, gdy żaden rekord nie pasuje, i kończy się błędem, jeśli pasuje więcej niż jeden. Zbiory relacji z upsertu są stosowane zarówno wtedy, gdy aktualizuje on dopasowany rekord, jak i wtedy, gdy go tworzy.
+Wywołania JSON `attricat.read.v1` i `attricat.command.v1` dodają odczyty stronicowane, kanały zmian, wyszukiwanie pojedynczego atrybutu oraz partie intencji `create`, `update`, `relationships` i `upsert`. Upsert dopasowuje rekord po zadeklarowanym atrybucie klucza biznesowego, tworzy go tylko wtedy, gdy żaden rekord nie pasuje, i kończy się błędem, jeśli pasuje więcej niż jeden. Zbiory relacji z upsertu są stosowane zarówno wtedy, gdy aktualizuje on dopasowany rekord, jak i wtedy, gdy go tworzy.
 
 Wyszukiwanie działa dokładnie tak samo jak dopasowanie w upsercie. Jeśli sam atrybut tekstowy jest zadeklarowanym kluczem unikalnym, wyszukiwanie korzysta ze znormalizowanych wartości tego klucza we wszystkich wersjach Schematu; w przeciwnym razie dopasowuje dokładny tekst wśród rekordów żądanej wersji. Wartość pasująca do więcej niż jednego rekordu kończy się błędem `lookup matched multiple records`, zamiast zwracać jedną z nich.
 
@@ -69,7 +69,7 @@ Z `storage.extension` wywołania `storage.get.v1`, `storage.set.v1`, `storage.de
 
 ## Polecenia dla Twojego interfejsu
 
-Polecenia serwerowe pozwalają komponentowi klienckiemu rozszerzenia poprosić jego komponent serwerowy o wykonanie działania. Zadeklaruj je w `server.commands` wraz ze schematami żądania i odpowiedzi. Klient wywołuje `catalog.command({ command_id, payload })`. Attricat waliduje ładunek, sprawdza sesję wywołującego, kontrybucję, wydanie i uprawnienia, a następnie wywołuje Twoją procedurę obsługi.
+Polecenia serwerowe pozwalają komponentowi klienckiemu rozszerzenia poprosić jego komponent serwerowy o wykonanie działania. Zadeklaruj je w `server.commands` wraz ze schematami żądania i odpowiedzi. Klient wywołuje `attricat.command({ command_id, payload })`. Attricat waliduje ładunek, sprawdza sesję wywołującego, kontrybucję, wydanie i uprawnienia, a następnie wywołuje Twoją procedurę obsługi.
 
 ## Sekrety
 

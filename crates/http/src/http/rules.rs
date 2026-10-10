@@ -14,8 +14,8 @@ pub struct RuleQuery {
 }
 pub(super) async fn validate(
     ApiJson(input): ApiJson<CreateRule>,
-) -> Result<Json<catalog_rules::CompiledRule>, ApiError> {
-    catalog_rules::compile(&input.definition)
+) -> Result<Json<attricat_rules::CompiledRule>, ApiError> {
+    attricat_rules::compile(&input.definition)
         .map(Json)
         .map_err(|e| {
             crate::repository::RepositoryError::InvalidRuleDefinition(e.to_string()).into()

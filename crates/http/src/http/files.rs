@@ -6,7 +6,9 @@ use super::{
 };
 use crate::{
     file_access::{FileAccessDecision, FileAccessOperation, authorize_file_read},
-    repository::{AVATAR_VARIANT_KIND, CatalogRepository, FileObject, FilePolicy, NewUploadedFile},
+    repository::{
+        AVATAR_VARIANT_KIND, AttricatRepository, FileObject, FilePolicy, NewUploadedFile,
+    },
     storage::ObjectStoreError,
 };
 use axum::{
@@ -31,7 +33,7 @@ use uuid::Uuid;
 const SIGNATURE_SNIFF_BYTES: usize = 512;
 const MAX_CONTEXT_ID_BYTES: usize = 64;
 
-use catalog_validation::files::{detect_mime as detected_mime, is_supported_upload_mime};
+use attricat_validation::files::{detect_mime as detected_mime, is_supported_upload_mime};
 
 /// Avatars accept only these formats; the file worker re-encodes them.
 const AVATAR_MIME_TYPES: &[&str] = &["image/png", "image/jpeg"];
@@ -134,14 +136,14 @@ pub(super) async fn upload(
             .await;
         cleanup(&staged).await;
         let result = result?;
-        metrics::counter!("catalog_file_uploads_total", "outcome" => "success").increment(1);
+        metrics::counter!("attricat_file_uploads_total", "outcome" => "success").increment(1);
         invalidate_data_health(&state, &repository);
         Ok((StatusCode::CREATED, Json(result)))
     }
     .instrument(span)
     .await;
     if result.is_err() {
-        metrics::counter!("catalog_file_uploads_total", "outcome" => "rejected").increment(1);
+        metrics::counter!("attricat_file_uploads_total", "outcome" => "rejected").increment(1);
     }
     result
 }
@@ -179,14 +181,14 @@ pub(super) async fn upload_staged(
             .await;
         cleanup(&staged).await;
         let result = result?;
-        metrics::counter!("catalog_file_uploads_total", "outcome" => "success").increment(1);
+        metrics::counter!("attricat_file_uploads_total", "outcome" => "success").increment(1);
         invalidate_data_health(&state, &repository);
         Ok((StatusCode::CREATED, Json(result)))
     }
     .instrument(span)
     .await;
     if result.is_err() {
-        metrics::counter!("catalog_file_uploads_total", "outcome" => "rejected").increment(1);
+        metrics::counter!("attricat_file_uploads_total", "outcome" => "rejected").increment(1);
     }
     result
 }
@@ -246,7 +248,7 @@ pub(super) async fn upload_conversation(
         .await;
     cleanup(&staged).await;
     let files = result?;
-    metrics::counter!("catalog_file_uploads_total", "outcome" => "success").increment(1);
+    metrics::counter!("attricat_file_uploads_total", "outcome" => "success").increment(1);
     invalidate_data_health(&state, &repository);
     Ok((
         StatusCode::CREATED,
@@ -377,7 +379,7 @@ fn accepted_upload_mimes(
 /// a durable upload intent first, and returns the records to persist.
 async fn store_uploads(
     state: &AppState,
-    repository: &CatalogRepository,
+    repository: &AttricatRepository,
     staged: &[StagedFile],
     mimes: Vec<String>,
 ) -> Result<Vec<NewUploadedFile>, ApiError> {
@@ -481,7 +483,7 @@ pub(super) async fn upload_avatar(
         .await;
     match result {
         Ok(avatar) => {
-            metrics::counter!("catalog_file_uploads_total", "outcome" => "success").increment(1);
+            metrics::counter!("attricat_file_uploads_total", "outcome" => "success").increment(1);
             invalidate_data_health(&state, &repository);
             Ok((StatusCode::CREATED, Json(avatar)))
         }
@@ -598,7 +600,7 @@ async fn authorize(state: &AppState, operation: FileAccessOperation) -> Result<(
 
 pub(super) async fn authorize_read<F>(
     state: &AppState,
-    repository: &CatalogRepository,
+    repository: &AttricatRepository,
     principal: Uuid,
     workspace: Uuid,
     file_id: Uuid,
@@ -698,7 +700,7 @@ async fn download(
                     .expect("range is valid"),
             );
         }
-        metrics::counter!("catalog_file_downloads_total", "outcome" => "success").increment(1);
+        metrics::counter!("attricat_file_downloads_total", "outcome" => "success").increment(1);
         Ok(response)
     }
     .instrument(span)
@@ -783,7 +785,7 @@ async fn stage_field(
     declared_mime: Option<String>,
     max_bytes: u64,
 ) -> Result<StagedFile, ApiError> {
-    let path = TempUpload(std::env::temp_dir().join(format!("catalog-upload-{}", Uuid::new_v4())));
+    let path = TempUpload(std::env::temp_dir().join(format!("attricat-upload-{}", Uuid::new_v4())));
     let mut output = fs::File::create(&path)
         .await
         .map_err(|_| ApiError::internal("temporary upload could not be created"))?;
@@ -856,7 +858,7 @@ async fn cleanup(files: &[StagedFile]) {
 }
 async fn reserve_upload_keys(
     state: &AppState,
-    repository: &CatalogRepository,
+    repository: &AttricatRepository,
     keys: Vec<String>,
 ) -> Result<(), ApiError> {
     // A full request deadline plus an hour permits late completion at the S3
@@ -884,7 +886,7 @@ fn storage_error(error: ObjectStoreError) -> ApiError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use catalog_validation::files::SUPPORTED_UPLOAD_MIME_TYPES;
+    use attricat_validation::files::SUPPORTED_UPLOAD_MIME_TYPES;
 
     #[test]
     fn byte_ranges_follow_rfc_9110() {
@@ -956,7 +958,7 @@ mod tests {
 
     #[test]
     fn staged_path_is_removed_when_request_is_dropped() {
-        let path = std::env::temp_dir().join(format!("catalog-upload-{}", Uuid::new_v4()));
+        let path = std::env::temp_dir().join(format!("attricat-upload-{}", Uuid::new_v4()));
         std::fs::write(&path, b"partial upload").unwrap();
         drop(TempUpload(path.clone()));
         assert!(!path.exists());

@@ -112,17 +112,17 @@ x-app: &app
   restart: unless-stopped
 
 x-environment: &environment
-  DATABASE_URL: postgres://postgres:postgres@postgres:5432/catalog
-  CATALOG_AUTO_MIGRATE: "false"
-  CATALOG_BOOTSTRAP_OWNER_EMAIL: ${ATTRICAT_OWNER_EMAIL:-owner@example.com}
-  CATALOG_BOOTSTRAP_OWNER_PASSWORD: ${ATTRICAT_OWNER_PASSWORD:?Set ATTRICAT_OWNER_PASSWORD in .env}
+  DATABASE_URL: postgres://postgres:postgres@postgres:5432/attricat
+  ATTRICAT_AUTO_MIGRATE: "false"
+  ATTRICAT_BOOTSTRAP_OWNER_EMAIL: ${ATTRICAT_OWNER_EMAIL:-owner@example.com}
+  ATTRICAT_BOOTSTRAP_OWNER_PASSWORD: ${ATTRICAT_OWNER_PASSWORD:?Set ATTRICAT_OWNER_PASSWORD in .env}
   SESSION_COOKIE_SECURE: "false"
-  CATALOG_DEVTOOLS: "false"
+  ATTRICAT_DEVTOOLS: "false"
   S3_ENDPOINT: http://rustfs:9000
   S3_REGION: us-east-1
-  S3_BUCKET: catalog-files
-  S3_ACCESS_KEY_ID: catalog-dev
-  S3_SECRET_ACCESS_KEY: catalog-dev-secret
+  S3_BUCKET: attricat-files
+  S3_ACCESS_KEY_ID: attricat-dev
+  S3_SECRET_ACCESS_KEY: attricat-dev-secret
   S3_FORCE_PATH_STYLE: "true"
   S3_UPLOAD_TIMEOUT_SECONDS: "30"
   S3_DOWNLOAD_TIMEOUT_SECONDS: "30"
@@ -138,7 +138,7 @@ services:
   postgres:
     image: postgres:18-alpine
     environment:
-      POSTGRES_DB: catalog
+      POSTGRES_DB: attricat
       POSTGRES_PASSWORD: postgres
       POSTGRES_USER: postgres
     volumes:
@@ -155,8 +155,8 @@ services:
     image: rustfs/rustfs:1.0.0-beta.12
     command: "/data"
     environment:
-      RUSTFS_ACCESS_KEY: catalog-dev
-      RUSTFS_SECRET_KEY: catalog-dev-secret
+      RUSTFS_ACCESS_KEY: attricat-dev
+      RUSTFS_SECRET_KEY: attricat-dev-secret
     volumes:
       - rustfs-data:/data
     healthcheck:
@@ -173,10 +173,10 @@ services:
       rustfs:
         condition: service_healthy
     environment:
-      AWS_ACCESS_KEY_ID: catalog-dev
-      AWS_SECRET_ACCESS_KEY: catalog-dev-secret
+      AWS_ACCESS_KEY_ID: attricat-dev
+      AWS_SECRET_ACCESS_KEY: attricat-dev-secret
       AWS_DEFAULT_REGION: us-east-1
-      S3_BUCKET: catalog-files
+      S3_BUCKET: attricat-files
     entrypoint:
       - /bin/sh
       - -ec

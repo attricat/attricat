@@ -3,7 +3,7 @@ use std::{
     sync::Arc,
 };
 
-use catalog_cache::{CacheKey, Policy};
+use attricat_cache::{CacheKey, Policy};
 use chrono::{DateTime, Utc};
 use semver::{Version, VersionReq};
 use serde_json::{Value, json};
@@ -20,7 +20,7 @@ use crate::{
 };
 
 use super::generations::{Generation, advance_generation};
-use super::{AuditContext, CatalogRepository, RepositoryError};
+use super::{AttricatRepository, AuditContext, RepositoryError};
 
 fn event_contract_grant_id(provider: &str, contract: &str) -> String {
     format!("{provider}:{contract}")
@@ -160,7 +160,7 @@ pub(crate) fn validate_workspace_extension_layout(layout: &Value) -> Result<(), 
     Ok(())
 }
 
-/// Core Catalog events retain existing subscription semantics. Extension-owned
+/// Core Attricat events retain existing subscription semantics. Extension-owned
 /// events additionally require a matching declared provider contract.
 fn event_contract_subscription_allowed(
     manifest: &Manifest,
@@ -313,7 +313,7 @@ struct RuntimeInstallationRow {
     grant_ids: Vec<String>,
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     /// Changes only the workspace emergency gate; installations and grants are
     /// deliberately untouched so recovery is explicit and reversible.
     pub async fn set_workspace_extensions_enabled(
@@ -914,7 +914,7 @@ impl CatalogRepository {
         let workspace_id = self.extension_workspace();
         let mut transaction = self.pool.begin().await?;
         let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM extension_installations WHERE workspace_id = $1 AND extension_id = $2 FOR UPDATE)")
-            .bind(workspace_id).bind(&manifest.catalog.id).fetch_one(&mut *transaction).await?;
+            .bind(workspace_id).bind(&manifest.attricat.id).fetch_one(&mut *transaction).await?;
         if exists {
             return Err(RepositoryError::ExtensionAlreadyInstalled);
         }
@@ -931,7 +931,7 @@ impl CatalogRepository {
             .as_ref()
             .map(|value| value.version as i32);
         let row = sqlx::query_as::<_, ExtensionInstallation>("INSERT INTO extension_installations (id, workspace_id, extension_id, installed_release_id, state, configuration, configuration_version) VALUES ($1, $2, $3, $4, 'disabled', '{}'::jsonb, $5) RETURNING id, workspace_id, extension_id, installed_release_id, state, configuration, configuration_version, created_at, updated_at")
-            .bind(installation_id).bind(workspace_id).bind(&manifest.catalog.id).bind(installed_release_id).bind(configuration_version).fetch_one(&mut *transaction).await?;
+            .bind(installation_id).bind(workspace_id).bind(&manifest.attricat.id).bind(installed_release_id).bind(configuration_version).fetch_one(&mut *transaction).await?;
         self.write_extension_lifecycle(
             &mut transaction,
             &row,
@@ -1393,7 +1393,7 @@ impl CatalogRepository {
         self.validate_extension_source(source)?;
         let mut transaction = self.pool.begin().await?;
         let current = self
-            .lock_extension(&mut transaction, &manifest.catalog.id)
+            .lock_extension(&mut transaction, &manifest.attricat.id)
             .await?;
         self.ensure_no_enabled_dependents(&mut transaction, &current.extension_id)
             .await?;
@@ -1644,7 +1644,7 @@ impl CatalogRepository {
             .map_err(|error| RepositoryError::InvalidExtension(error.to_string()))?;
         let digest = extension_manifest_sha256(manifest)?;
         sqlx::query("INSERT INTO installed_extension_releases (id, workspace_id, extension_id, version, manifest, manifest_sha256, source) VALUES ($1, $2, $3, $4, $5, $6, $7)")
-            .bind(installed_release_id).bind(self.extension_workspace()).bind(&manifest.catalog.id).bind(&manifest.version).bind(serialized).bind(digest).bind(source).execute(&mut **transaction).await?;
+            .bind(installed_release_id).bind(self.extension_workspace()).bind(&manifest.attricat.id).bind(&manifest.version).bind(serialized).bind(digest).bind(source).execute(&mut **transaction).await?;
         Ok(())
     }
     async fn update_extension_state(

@@ -13,8 +13,8 @@ pub const DEFAULT_FILE_UPLOAD_MAX_BYTES: usize = 50 * 1024 * 1024;
 pub const DEFAULT_FILE_UPLOAD_MAX_FILES: usize = 10;
 pub const SECONDS_PER_HOUR: i64 = 60 * 60;
 
-pub const SESSION_COOKIE: &str = "catalog_session";
-pub const CSRF_COOKIE: &str = "catalog_csrf";
+pub const SESSION_COOKIE: &str = "attricat_session";
+pub const CSRF_COOKIE: &str = "attricat_csrf";
 pub const SESSION_LIFETIME_HOURS: i64 = 8;
 /// Conversation attachments are reclaimed unless a message claims them promptly.
 pub const CONVERSATION_ATTACHMENT_LIFETIME_SECONDS: i64 = 15 * 60;

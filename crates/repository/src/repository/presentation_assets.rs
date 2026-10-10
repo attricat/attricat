@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 use uuid::Uuid;
 
-use super::{CatalogRepository, RepositoryError};
+use super::{AttricatRepository, RepositoryError};
 
 pub const MAX_PRESENTATION_ASSET_PAGE_SIZE: i64 = 100;
 
@@ -20,7 +20,7 @@ pub struct PresentationAsset {
     pub object_key: String,
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     pub async fn list_presentation_assets(
         &self,
         limit: i64,

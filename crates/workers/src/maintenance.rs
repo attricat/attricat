@@ -4,11 +4,11 @@ use std::{
     time::{Duration, Instant},
 };
 
-use catalog_repository::repository::{
+use attricat_repository::repository::{
     RepositoryError, SystemRepository, ValueHistoryRetentionDays,
 };
-use catalog_repository::round_trips::measure;
-use catalog_storage::{ObjectStore, ObjectStoreError};
+use attricat_repository::round_trips::measure;
+use attricat_storage::{ObjectStore, ObjectStoreError};
 use tokio::sync::watch;
 
 const INTERVAL: Duration = Duration::from_secs(60);
@@ -46,7 +46,7 @@ async fn run_once(
     let history = tokio::time::timeout(SWEEP_BUDGET, async {
         loop {
             let deleted = repository.purge_value_history_batch(retention).await?;
-            metrics::counter!("catalog_value_history_entries_purged_total").increment(deleted);
+            metrics::counter!("attricat_value_history_entries_purged_total").increment(deleted);
             if deleted < 1000 {
                 return Ok::<(), RepositoryError>(());
             }
@@ -62,8 +62,8 @@ async fn run_once(
         }
         Err(_) => "budget_exhausted",
     };
-    metrics::counter!("catalog_value_history_cleanup_total", "outcome" => outcome).increment(1);
-    metrics::histogram!("catalog_value_history_cleanup_duration_seconds")
+    metrics::counter!("attricat_value_history_cleanup_total", "outcome" => outcome).increment(1);
+    metrics::histogram!("attricat_value_history_cleanup_duration_seconds")
         .record(started.elapsed().as_secs_f64());
 
     let _ = tokio::time::timeout(SWEEP_BUDGET, async {
@@ -73,7 +73,7 @@ async fn run_once(
                 Ok(false) => break,
                 Err(error) => {
                     tracing::warn!(%error, "upload cleanup failed; durable intent retained for retry");
-                    metrics::counter!("catalog_upload_cleanup_total", "outcome" => "failed").increment(1);
+                    metrics::counter!("attricat_upload_cleanup_total", "outcome" => "failed").increment(1);
                     break;
                 }
             }
@@ -95,6 +95,6 @@ pub async fn cleanup_upload_once(
         Err(error) => return Err(error.into()),
     }
     repository.complete_abandoned_upload(&upload).await?;
-    metrics::counter!("catalog_upload_cleanup_total", "outcome" => "success").increment(1);
+    metrics::counter!("attricat_upload_cleanup_total", "outcome" => "success").increment(1);
     Ok(true)
 }

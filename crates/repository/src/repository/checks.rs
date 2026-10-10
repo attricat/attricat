@@ -1,5 +1,5 @@
 //! Host side of the shared predicate engine: loads bounded, context-resolved
-//! records for [`catalog_validation::predicate`] and enforces record-schema
+//! records for [`attricat_validation::predicate`] and enforces record-schema
 //! checks, status transition conditions and enforcing rules on every write
 //! of values or system tags.
 //!
@@ -17,12 +17,12 @@ use super::structural_constraints::{
     key_hash, walk_hierarchy,
 };
 use super::*;
-use catalog_rules::Severity;
-use catalog_validation::predicate::{
+use attricat_rules::Severity;
+use attricat_validation::predicate::{
     self, Check, CycleState, Evaluation, Failure, MAX_CYCLE_VISITS, MAX_LINKED_RECORDS,
     MAX_REFERENCING_RECORDS, Predicate, RecordSet, Related, Requirements, ResolvedRecord,
 };
-use catalog_validation::unique_key::{UNIQUE_PREDICATE_CASE_SENSITIVE, normalize_key_component};
+use attricat_validation::unique_key::{UNIQUE_PREDICATE_CASE_SENSITIVE, normalize_key_component};
 use chrono::Utc;
 use serde::Serialize;
 use sqlx::PgConnection;
@@ -616,7 +616,7 @@ pub(crate) async fn evaluate_in_context_with(
 pub(crate) struct EnabledRule {
     pub code: String,
     pub context_id: Option<Uuid>,
-    pub compiled: catalog_rules::CompiledRule,
+    pub compiled: attricat_rules::CompiledRule,
 }
 
 impl EnabledRule {
@@ -737,8 +737,12 @@ type JobsByContext<'a> = BTreeMap<Uuid, Vec<Job<'a>>>;
 /// The transition conditions of a status change, failing closed when the
 /// stored edge's conditions are malformed.
 fn change_conditions(change: &StatusChange) -> Result<Vec<Check>, RepositoryError> {
-    catalog_validation::status::transition_conditions(&change.schema, &change.before, &change.after)
-        .map_err(RepositoryError::InvalidBlueprintDefinition)
+    attricat_validation::status::transition_conditions(
+        &change.schema,
+        &change.before,
+        &change.after,
+    )
+    .map_err(RepositoryError::InvalidBlueprintDefinition)
 }
 
 fn condition_jobs<'a>(change: &StatusChange, conditions: &'a [Check]) -> Vec<Job<'a>> {
@@ -942,7 +946,7 @@ pub(super) async fn transition_unmet(
     Ok(unmet)
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     /// Enforces record-schema checks, status transition conditions and
     /// enforcing rules on the transaction's final state. Every write that
     /// changes attribute values calls it through `validate_record_schema_with`,

@@ -66,22 +66,22 @@ Add `interactive` to an operation to let signed-in users start it for a record o
 {"id": "generate", "handler": "generate", "request_schema": {"type": "object"}, "interactive": {"version": 1, "max_selection": 50}}
 ```
 
-It needs `client.operations.start`. Build the component against the `catalog-extension` or `operation-extension` [world](/extensions/server/#host-api-version); its `selection` interface works inside an interactive run.
+It needs `client.operations.start`. Build the component against the `attricat-extension` or `operation-extension` [world](/extensions/server/#host-api-version); its `selection` interface works inside an interactive run.
 
-When a run starts, Catalog checks that the user can read every selected record and freezes the user, release, input, context, and the ordered selection. Then:
+When a run starts, Attricat checks that the user can read every selected record and freezes the user, release, input, context, and the ordered selection. Then:
 
 - `selection.describe()` returns the count, blueprint revision, and context.
 - `selection.page(cursor, limit)` returns 1 to 10 members with their saved values resolved in the run's context, your own annotations, and `read_at`. Members the user can no longer read come back as `unavailable`, deleted ones as `deleted`.
-- `catalog-data.read` and the connector `catalog` calls are refused. `catalog-data.batch` accepts `update`, `relationships`, and `annotate` intents for selected records only, checked against the user's current permissions.
+- `attricat-data.read` and the connector `catalog` calls are refused. `attricat-data.batch` accepts `update`, `relationships`, and `annotate` intents for selected records only, checked against the user's current permissions.
 - If the user leaves the workspace, the run stops with a safe reason rather than continuing with the extension's own grants.
 
-Capture what you need from each record once and keep it in the checkpoint, so a retried batch renders the same bytes. Report progress as `{"completed": n, "total": n, "outcome": {"succeeded": n, "failed": n, "skipped": n}}`; Catalog shows these counts separately from the run status, so a run can complete with some records failed.
+Capture what you need from each record once and keep it in the checkpoint, so a retried batch renders the same bytes. Report progress as `{"completed": n, "total": n, "outcome": {"succeeded": n, "failed": n, "skipped": n}}`; Attricat shows these counts separately from the run status, so a run can complete with some records failed.
 
 Users see their runs under **Profile → Extension runs**. Only the user who started a run and people with `extensions.manage` can see it. The user who started it can always cancel it, but can open it and download its results only while they can still read every selected record. People with `extensions.manage` can open, cancel, and download any run.
 
 ## Record annotations
 
-With `catalog.annotations.write`, add `annotate` intents to a batch to store facts on a record in your own namespace: tags `<extension-id>:<tag>` and the object at `system_metadata[<extension-id>]`. Intents identify the record by `record_id`.
+With `attricat.annotations.write`, add `annotate` intents to a batch to store facts on a record in your own namespace: tags `<extension-id>:<tag>` and the object at `system_metadata[<extension-id>]`. Intents identify the record by `record_id`.
 
 ```json
 {"kind": "annotate", "intent_key": "doc-<run>-<record>", "record_id": "…",
@@ -89,7 +89,7 @@ With `catalog.annotations.write`, add `annotate` intents to a batch to store fac
  "remove_tags": [], "remove_metadata": [], "expected_revision": null}
 ```
 
-You name local tags and keys only; Catalog adds the namespace. A patch has 1 to 32 operations. Setting a key replaces its value (`null` is allowed). `expected_revision` rejects the write if the namespace changed since you read it; a retried intent key is reported as `already_applied` first. Other writers, including users editing the record, cannot change your namespace, and your writes do not change the record's `updated_at`.
+You name local tags and keys only; Attricat adds the namespace. A patch has 1 to 32 operations. Setting a key replaces its value (`null` is allowed). `expected_revision` rejects the write if the namespace changed since you read it; a retried intent key is reported as `already_applied` first. Other writers, including users editing the record, cannot change your namespace, and your writes do not change the record's `updated_at`.
 
 If records already have data under your extension ID, an operator must adopt the namespace before your first write. Do not store signed URLs or secrets in annotations, and do not treat a tag as proof that a file is still downloadable: outputs expire.
 
@@ -102,9 +102,9 @@ With `network.request` and a host permission that sets `max_transfer_bytes`, a c
 
 A delivery attempt is recorded before any network traffic. After a timeout or crash the result is `uncertain` and it is never resent automatically. `acli extension-operation deliveries <run-id>` shows the delivery history.
 
-## Catalog access in operations
+## Attricat access in operations
 
-Operations can call `catalog-data.read` and `catalog-data.batch` (the same JSON as `catalog.read.v1` and `catalog.command.v1`), plus connector-shaped `schema`, `page`, and `upsert-batch` calls. Pages hold up to 100 records and batches up to 100 intents. Batches must carry the current batch key, and each intent key is recorded, so a replayed batch returns `already_applied` instead of writing twice.
+Operations can call `attricat-data.read` and `attricat-data.batch` (the same JSON as `attricat.read.v1` and `attricat.command.v1`), plus connector-shaped `schema`, `page`, and `upsert-batch` calls. Pages hold up to 100 records and batches up to 100 intents. Batches must carry the current batch key, and each intent key is recorded, so a replayed batch returns `already_applied` instead of writing twice.
 
 Page cursors resolve values as of the first page, using value history, and expire after 30 days. This is not a database snapshot: records created, deleted, or migrated during a long export can still change which records appear. Freeze the source if you need an exact export.
 

@@ -2,7 +2,7 @@ mod support;
 
 use std::time::Duration;
 
-use api::repository::CatalogRepository;
+use api::repository::AttricatRepository;
 use chrono::{Duration as ChronoDuration, Utc};
 use support::*;
 
@@ -19,7 +19,7 @@ async fn wait_for_blocked(pool: &PgPool, blocker: i32) {
 
 async fn changed_role_is_not_delegable(pool: PgPool, invite: bool) {
     let (_, server) = start_server(pool.clone()).await;
-    let repository = CatalogRepository::system(pool.clone());
+    let repository = AttricatRepository::system(pool.clone());
     let (user, membership) = add_workspace_user(&pool).await;
     let authority = create_role(
         &pool,
@@ -114,7 +114,7 @@ async fn invitation_rechecks_the_locked_roles_permissions(pool: PgPool) {
 
 async fn former_owner_cannot_delegate(pool: PgPool, invite: bool) {
     let (_, server) = start_server(pool.clone()).await;
-    let repository = CatalogRepository::system(pool.clone());
+    let repository = AttricatRepository::system(pool.clone());
     let owner: Uuid = BOOTSTRAP_OWNER_ID.parse().unwrap();
     let (_, successor) = add_workspace_user(&pool).await;
     let (_, recipient) = add_workspace_user(&pool).await;
@@ -205,7 +205,7 @@ async fn former_owner_cannot_invite_owner_after_waiting_for_transfer(pool: PgPoo
 #[sqlx::test]
 async fn role_edit_cannot_restore_permissions_removed_during_its_lock_wait(pool: PgPool) {
     let (_, server) = start_server(pool.clone()).await;
-    let repository = CatalogRepository::system(pool.clone());
+    let repository = AttricatRepository::system(pool.clone());
     let (user, member) = add_workspace_user(&pool).await;
     let manager = create_role(&pool, "role-manager", &["roles.manage", "records.read"]).await;
     grant_role(&pool, member, manager, GrantScope::Workspace).await;
@@ -275,7 +275,7 @@ async fn role_edit_cannot_restore_permissions_removed_during_its_lock_wait(pool:
 #[sqlx::test]
 async fn role_retirement_cannot_grant_owner_after_a_concurrent_transfer(pool: PgPool) {
     let (_, server) = start_server(pool.clone()).await;
-    let repository = CatalogRepository::system(pool.clone());
+    let repository = AttricatRepository::system(pool.clone());
     let owner = BOOTSTRAP_OWNER_ID.parse().unwrap();
     let (_, successor) = add_workspace_user(&pool).await;
     let (_, recipient) = add_workspace_user(&pool).await;

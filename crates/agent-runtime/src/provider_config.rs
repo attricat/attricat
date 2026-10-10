@@ -5,7 +5,7 @@
 
 use std::{env, time::Duration};
 
-use catalog_domain::agents::MAX_AGENT_MODEL_BYTES;
+use attricat_domain::agents::MAX_AGENT_MODEL_BYTES;
 use secrecy::{ExposeSecret, SecretString};
 use thiserror::Error;
 use url::Url;

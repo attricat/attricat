@@ -4,7 +4,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-use catalog_validation::saved_search;
+use attricat_validation::saved_search;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -356,7 +356,7 @@ pub(crate) fn visit_toml_predicate_blueprint_codes(
     let original = serde_json::to_value(&*predicate)
         .map_err(|_| SolutionPackError::Invalid("predicate is not valid TOML".into()))?;
     let mut rewritten = original.clone();
-    catalog_validation::predicate::visit_predicate_blueprint_codes(&mut rewritten, visit)?;
+    attricat_validation::predicate::visit_predicate_blueprint_codes(&mut rewritten, visit)?;
     if rewritten != original {
         *predicate = toml::Value::try_from(rewritten)
             .map_err(|_| SolutionPackError::Invalid("predicate is not valid TOML".into()))?;

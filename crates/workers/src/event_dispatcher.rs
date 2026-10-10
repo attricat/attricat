@@ -6,12 +6,12 @@
 use std::{collections::HashSet, env, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
-use catalog_repository::round_trips::measure;
+use attricat_repository::round_trips::measure;
 use uuid::Uuid;
 
 use crate::{
     domain_events::DomainEvent,
-    repository::{CatalogRepository, RepositoryError, SystemRepository},
+    repository::{AttricatRepository, RepositoryError, SystemRepository},
 };
 
 #[derive(Clone, Debug)]
@@ -81,11 +81,11 @@ impl DispatcherConfig {
 /// retain the triggering correlation id and use the triggering event as their
 /// causation id.
 pub struct EventHandlerCommandContext {
-    repository: CatalogRepository,
+    repository: AttricatRepository,
 }
 
 impl EventHandlerCommandContext {
-    pub fn repository(&self) -> &CatalogRepository {
+    pub fn repository(&self) -> &AttricatRepository {
         &self.repository
     }
 }
@@ -243,12 +243,12 @@ async fn dispatch_handler(
 }
 
 async fn deliver(
-    repository: &CatalogRepository,
+    repository: &AttricatRepository,
     handler: &dyn EventHandler,
     config: &DispatcherConfig,
     delivery: crate::repository::EventDelivery,
 ) -> Result<(), RepositoryError> {
-    metrics::counter!("catalog_event_deliveries_total", "outcome" => "claimed").increment(1);
+    metrics::counter!("attricat_event_deliveries_total", "outcome" => "claimed").increment(1);
     tracing::info!(handler = handler.name(), event_id = %delivery.event.id, attempt = delivery.attempts, "event delivery claimed");
     let context = EventHandlerCommandContext {
         repository: repository.for_event_handler(&delivery.event, handler.name()),
@@ -264,7 +264,7 @@ async fn deliver(
     match result {
         Ok(Ok(())) => {
             repository.complete_event_delivery(&delivery).await?;
-            metrics::counter!("catalog_event_deliveries_total", "outcome" => "completed")
+            metrics::counter!("attricat_event_deliveries_total", "outcome" => "completed")
                 .increment(1);
         }
         failure => {
@@ -282,7 +282,7 @@ async fn deliver(
                     config.max_attempts,
                 )
                 .await?;
-            metrics::counter!("catalog_event_deliveries_total", "outcome" => if delivery.attempts >= config.max_attempts { "dead_letter" } else { "retry" }).increment(1);
+            metrics::counter!("attricat_event_deliveries_total", "outcome" => if delivery.attempts >= config.max_attempts { "dead_letter" } else { "retry" }).increment(1);
         }
     }
     Ok(())
@@ -292,7 +292,7 @@ async fn deliver(
 /// from the aggregate are reset so a drained queue does not keep reporting its
 /// last non-zero depth.
 async fn record_delivery_health(
-    repository: &CatalogRepository,
+    repository: &AttricatRepository,
     workspace_id: Uuid,
 ) -> Result<(), RepositoryError> {
     const STATUSES: [&str; 4] = ["pending", "leased", "completed", "dead_letter"];
@@ -309,7 +309,7 @@ async fn record_delivery_health(
                 .find(|(name, state, _)| name == consumer && state == status)
                 .map_or(0, |(_, _, count)| *count);
             metrics::gauge!(
-                "catalog_event_delivery_queue_depth",
+                "attricat_event_delivery_queue_depth",
                 "workspace_id" => workspace.clone(),
                 "consumer" => consumer.to_owned(),
                 "status" => status

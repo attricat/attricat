@@ -23,16 +23,16 @@ jobs:
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: catalog
+          POSTGRES_DB: attricat
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U postgres -d catalog"
+          --health-cmd "pg_isready -U postgres -d attricat"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
     env:
-      DATABASE_URL: postgres://postgres:postgres@localhost:5432/catalog
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/attricat
       CARGO_INCREMENTAL: 0
     steps:
       - uses: actions/checkout@v5
@@ -56,16 +56,16 @@ jobs:
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: catalog
+          POSTGRES_DB: attricat
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U postgres -d catalog"
+          --health-cmd "pg_isready -U postgres -d attricat"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
     env:
-      DATABASE_URL: postgres://postgres:postgres@localhost:5432/catalog
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/attricat
       CARGO_BUILD_JOBS: 2
       CARGO_INCREMENTAL: 0
       CARGO_PROFILE_TEST_DEBUG: 0
@@ -95,11 +95,11 @@ jobs:
           node-version: 24
       - run: corepack enable
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --dir apps/catalog-web format:check
-      - run: pnpm --dir apps/catalog-web lint
-      - run: pnpm --dir apps/catalog-web typecheck
-      - run: pnpm --dir apps/catalog-web test
-      - run: pnpm --dir apps/catalog-web inspect:bundle
+      - run: pnpm --dir apps/web format:check
+      - run: pnpm --dir apps/web lint
+      - run: pnpm --dir apps/web typecheck
+      - run: pnpm --dir apps/web test
+      - run: pnpm --dir apps/web inspect:bundle
       - run: pnpm --dir apps/docs build
 
   release-path:

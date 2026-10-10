@@ -1,12 +1,12 @@
 mod support;
 
-use api::repository::{CatalogRepository, NewUploadedFile};
+use api::repository::{AttricatRepository, NewUploadedFile};
 use chrono::Utc;
 use support::*;
 
 #[sqlx::test]
 async fn cleanup_fences_late_finalization_and_stale_cleaner_acknowledgements(pool: PgPool) {
-    let system = CatalogRepository::system(pool.clone());
+    let system = AttricatRepository::system(pool.clone());
     let scoped = system
         .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
         .await

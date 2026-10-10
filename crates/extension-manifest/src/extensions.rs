@@ -18,8 +18,8 @@ use thiserror::Error;
 use url::Url;
 
 pub const MANIFEST_VERSION: u32 = 1;
-/// The host ABI accepted by manifests: the `catalog:host` WIT package version.
-/// It evolves additively, so a manifest whose `catalog.host_api` range accepts
+/// The host ABI accepted by manifests: the `attricat:host` WIT package version.
+/// It evolves additively, so a manifest whose `attricat.host_api` range accepts
 /// it may use every server and client feature.
 pub const SUPPORTED_HOST_API: &str = "1.0.0";
 pub const MAX_EXTENSION_ARCHIVE_BYTES: usize = 32 * 1024 * 1024;
@@ -121,8 +121,8 @@ pub const MAX_INTERACTIVE_SELECTION: u32 = 50;
 /// Contribution contract that receives the selection-aware action context.
 pub const SELECTION_ACTION_CONTRIBUTION_VERSION: u32 = 2;
 pub const CAPABILITIES: &[&str] = &[
-    "catalog.read",
-    "catalog.write",
+    "attricat.read",
+    "attricat.write",
     "events.subscribe",
     "events.emit",
     "storage.extension",
@@ -166,7 +166,7 @@ pub const CAPABILITIES: &[&str] = &[
     "client.operations.start",
     "client.operations.read",
     "client.operations.cancel",
-    "catalog.annotations.write",
+    "attricat.annotations.write",
     "network.request",
     "webhooks.receive",
 ];
@@ -179,7 +179,7 @@ pub struct Manifest {
     pub version: String,
     pub description: String,
     pub icons: BTreeMap<String, String>,
-    pub catalog: CatalogIdentity,
+    pub attricat: AttricatIdentity,
     #[serde(default)]
     pub permissions: Vec<String>,
     #[serde(default)]
@@ -191,7 +191,7 @@ pub struct Manifest {
     pub artifacts: Vec<Artifact>,
     #[serde(default)]
     pub configuration: Option<Configuration>,
-    /// Extension-owned values associated with Catalog objects rather than the
+    /// Extension-owned values associated with Attricat objects rather than the
     /// installation. These values never modify the blueprint definition.
     #[serde(default)]
     pub scoped_configuration: Option<ScopedConfiguration>,
@@ -217,7 +217,7 @@ pub struct Manifest {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct CatalogIdentity {
+pub struct AttricatIdentity {
     pub id: String,
     pub host_api: String,
 }
@@ -523,12 +523,12 @@ impl Manifest {
         }
         let host = Version::parse(host_api)
             .map_err(|_| ManifestError::Invalid("host API version is invalid".into()))?;
-        let range = VersionReq::parse(&self.catalog.host_api).map_err(|_| {
-            ManifestError::Invalid("catalog.host_api must be a SemVer range".into())
+        let range = VersionReq::parse(&self.attricat.host_api).map_err(|_| {
+            ManifestError::Invalid("attricat.host_api must be a SemVer range".into())
         })?;
         if !range.matches(&host) {
             return Err(ManifestError::Invalid(
-                "catalog.host_api is incompatible with this host".into(),
+                "attricat.host_api is incompatible with this host".into(),
             ));
         }
         Version::parse(&self.version)
@@ -541,7 +541,7 @@ impl Manifest {
                 "name, description, and at least one icon are required".into(),
             ));
         }
-        valid_id(&self.catalog.id, "catalog.id")?;
+        valid_id(&self.attricat.id, "attricat.id")?;
         let mut ids = HashSet::new();
         for id in self.permissions.iter().chain(&self.optional_permissions) {
             if !CAPABILITIES.contains(&id.as_str()) {
@@ -607,7 +607,7 @@ impl Manifest {
             "event export",
         )?;
         for contract in &self.event_contracts.exports {
-            contract.validate(&self.catalog.id)?;
+            contract.validate(&self.attricat.id)?;
         }
         let consumed_contracts = self
             .event_contracts
@@ -621,7 +621,7 @@ impl Manifest {
             ));
         }
         for contract in &self.event_contracts.consumes {
-            contract.validate(&self.catalog.id)?;
+            contract.validate(&self.attricat.id)?;
         }
         if !self.event_contracts.exports.is_empty()
             && !self.permissions.iter().any(|item| item == "events.emit")
@@ -786,7 +786,7 @@ impl Manifest {
         }
         for contribution in &self.ui {
             valid_id(&contribution.id, "UI contribution id")?;
-            let contribution_key = format!("{}:{}", self.catalog.id, contribution.id);
+            let contribution_key = format!("{}:{}", self.attricat.id, contribution.id);
             if !valid_contribution_key(&contribution_key) {
                 return Err(ManifestError::Invalid(format!(
                     "UI contribution '{}' stable key exceeds the layout key limit",
@@ -1017,12 +1017,14 @@ impl ExtensionAttributeType {
             ("configuration_schema", self.configuration_schema.as_ref()),
         ] {
             if let Some(schema) = schema {
-                catalog_validation::validate_json_schema_definition(schema).map_err(|message| {
-                    ManifestError::Invalid(format!(
-                        "attribute type '{}'.{label} is not valid JSON Schema: {message}",
-                        self.id
-                    ))
-                })?;
+                attricat_validation::validate_json_schema_definition(schema).map_err(
+                    |message| {
+                        ManifestError::Invalid(format!(
+                            "attribute type '{}'.{label} is not valid JSON Schema: {message}",
+                            self.id
+                        ))
+                    },
+                )?;
             }
         }
         Ok(())
@@ -1404,7 +1406,7 @@ fn validate_url_pattern(pattern: &str) -> Result<(), ManifestError> {
 }
 
 /// A validated selected release archive. Registry discovery supplies the bytes;
-/// installation extracts only declared artifacts to Catalog object storage.
+/// installation extracts only declared artifacts to Attricat object storage.
 pub struct ExtensionPackage {
     manifest: Manifest,
     artifacts: BTreeMap<String, Vec<u8>>,
@@ -1668,11 +1670,11 @@ mod tests {
     fn host_api_ranges_must_accept_the_supported_abi() {
         let mut value = manifest();
         for range in ["^1.0", ">=1.0.0, <2.0.0", "1.0.0"] {
-            value.catalog.host_api = range.into();
+            value.attricat.host_api = range.into();
             assert!(value.validate(SUPPORTED_HOST_API).is_ok(), "{range}");
         }
         for range in [">=1.1.0, <2.0.0", "^2", "<1.0.0"] {
-            value.catalog.host_api = range.into();
+            value.attricat.host_api = range.into();
             assert!(value.validate(SUPPORTED_HOST_API).is_err(), "{range}");
         }
     }
@@ -1782,7 +1784,7 @@ mod tests {
     }
 
     fn manifest() -> Manifest {
-        serde_json::from_value(serde_json::json!({"manifest_version":1,"name":"Acme","version":"1.2.3","description":"test extension","icons":{"48":"icon.png"},"catalog":{"id":"acme.test","host_api":"^1.0"},"permissions":["network.request","webhooks.receive"],"host_permissions":[{"id":"acme","matches":["https://api.acme.example/v1/*"],"methods":["GET"]}],"artifacts":[{"id":"server","kind":"server_wasm","path":"server.wasm"}],"configuration":{"version":1,"schema":{"type":"object","required":["url"],"properties":{"url":{"type":"string"}},"additionalProperties":false}},"server":{"webhooks":[{"id":"events","event_type":"webhook.acme.events.v1","handler":"handle_events_v1","methods":["POST"],"authentication":{"type":"hmac-sha256","signature_header":"X-Signature","timestamp_header":"X-Timestamp","max_age_seconds":300,"secret":"webhook_secret"},"max_body_bytes":1024}]}})).unwrap()
+        serde_json::from_value(serde_json::json!({"manifest_version":1,"name":"Acme","version":"1.2.3","description":"test extension","icons":{"48":"icon.png"},"attricat":{"id":"acme.test","host_api":"^1.0"},"permissions":["network.request","webhooks.receive"],"host_permissions":[{"id":"acme","matches":["https://api.acme.example/v1/*"],"methods":["GET"]}],"artifacts":[{"id":"server","kind":"server_wasm","path":"server.wasm"}],"configuration":{"version":1,"schema":{"type":"object","required":["url"],"properties":{"url":{"type":"string"}},"additionalProperties":false}},"server":{"webhooks":[{"id":"events","event_type":"webhook.acme.events.v1","handler":"handle_events_v1","methods":["POST"],"authentication":{"type":"hmac-sha256","signature_header":"X-Signature","timestamp_header":"X-Timestamp","max_age_seconds":300,"secret":"webhook_secret"},"max_body_bytes":1024}]}})).unwrap()
     }
     #[test]
     fn bounds_tar_metadata_and_trailing_expansion() {
@@ -1821,7 +1823,7 @@ mod tests {
         let value = manifest();
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
         let mut invalid = value.clone();
-        invalid.catalog.host_api = "^2".into();
+        invalid.attricat.host_api = "^2".into();
         assert!(invalid.validate(SUPPORTED_HOST_API).is_err());
         invalid = value.clone();
         invalid.host_permissions[0].matches = vec!["https://127.0.0.1/*".into()];
@@ -1851,23 +1853,23 @@ mod tests {
             outlet: Some(UiOutlet::Navigation),
             title: None,
         });
-        value.catalog.id = "a".repeat(127);
+        value.attricat.id = "a".repeat(127);
         assert_eq!(
-            format!("{}:{}", value.catalog.id, value.ui[0].id).len(),
+            format!("{}:{}", value.attricat.id, value.ui[0].id).len(),
             256
         );
         assert!(value.validate(SUPPORTED_HOST_API).is_ok());
 
-        value.catalog.id = "a".repeat(128);
+        value.attricat.id = "a".repeat(128);
         assert_eq!(
-            format!("{}:{}", value.catalog.id, value.ui[0].id).len(),
+            format!("{}:{}", value.attricat.id, value.ui[0].id).len(),
             257
         );
         let error = value.validate(SUPPORTED_HOST_API).unwrap_err();
         assert!(error.to_string().contains("layout key limit"));
 
         let mut invalid_contribution = value.clone();
-        invalid_contribution.catalog.id = "acme.test".into();
+        invalid_contribution.attricat.id = "acme.test".into();
         invalid_contribution.ui[0].id = "b".repeat(129);
         assert!(
             invalid_contribution
@@ -1877,13 +1879,13 @@ mod tests {
                 .contains("UI contribution id")
         );
         let mut invalid_extension = value;
-        invalid_extension.catalog.id = "a".repeat(129);
+        invalid_extension.attricat.id = "a".repeat(129);
         assert!(
             invalid_extension
                 .validate(SUPPORTED_HOST_API)
                 .unwrap_err()
                 .to_string()
-                .contains("catalog.id")
+                .contains("attricat.id")
         );
     }
 
@@ -1986,10 +1988,10 @@ mod tests {
             "version": "1.0.0",
             "description": "Selection documents",
             "icons": {"48": "icon.png"},
-            "catalog": {"id": "acme.documents", "host_api": ">=1.0.0, <2.0.0"},
+            "attricat": {"id": "acme.documents", "host_api": ">=1.0.0, <2.0.0"},
             "permissions": [
-                "catalog.read",
-                "catalog.annotations.write",
+                "attricat.read",
+                "attricat.annotations.write",
                 "artifacts.write",
                 "client.explorer_bulk_action",
                 "client.action_dialog",

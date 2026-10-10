@@ -39,7 +39,7 @@ value_schema = '''{
 - Labels are nonblank text, at most 200 characters. There may be 1–100 options.
 - Tones are `default`, `success`, `warning`, `error`, or `info`. Omit a tone for
   neutral presentation. Labels always remain visible; color alone is not a
-  status indicator. Labels are catalog-authored text, never HTML.
+  status indicator. Labels are attricat-authored text, never HTML.
 - Labels resolve `{{key}}` / `{{key|context}}` workspace lexicon references
   like other catalog labels ([Translated labels](blueprints.md#translated-labels)),
   for example `"label": "{{Draft|status}}"`. Saving a blueprint or reusable
@@ -110,7 +110,7 @@ Unsaved form edits are not considered.
 Record fields and compact value renderers display a labelled chip. Plain-text
 renderers use the same label. Every label is resolved for the user's UI
 language (then `en`, then the key) through `statusOptionLabel` in
-`apps/catalog-web/src/features/records/status.ts`: chips, the form select,
+`apps/web/src/features/records/status.ts`: chips, the form select,
 the Explorer attribute-filter value select (status filters offer `eq` only)
 and filter pills. Search requests, saved searches, API payloads, events and
 connector exports carry stable codes; consumers that render labels resolve

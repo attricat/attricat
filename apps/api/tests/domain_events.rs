@@ -17,7 +17,7 @@ use api::{
         DispatcherConfig, EventHandler, EventHandlerCommandContext, EventHandlerRegistry,
     },
     model::CreateAttributeContext,
-    repository::CatalogRepository,
+    repository::AttricatRepository,
 };
 use async_trait::async_trait;
 use support::{StatusCode, Uuid, authenticated_client, start_server};
@@ -101,7 +101,7 @@ async fn context_creation_commits_a_typed_outbox_event(pool: sqlx::PgPool) {
     assert_eq!(event.2.to_string(), context["id"].as_str().unwrap());
     assert_eq!(event.3, correlation_id);
     assert_eq!(event.4, "api");
-    assert_eq!(event.5, "catalog_api");
+    assert_eq!(event.5, "attricat_api");
     assert_eq!(event.6["code"], "evented");
     let audit_actor_id = sqlx::query_scalar::<_, Uuid>(
         "SELECT actor_user_id FROM audit_events WHERE actor_user_id IS NOT NULL",
@@ -214,7 +214,7 @@ async fn blueprint_lifecycle_emits_versioned_events(pool: sqlx::PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-async fn outbox_insert_failure_rolls_back_the_catalog_mutation(pool: sqlx::PgPool) {
+async fn outbox_insert_failure_rolls_back_the_attricat_mutation(pool: sqlx::PgPool) {
     sqlx::query(
         "ALTER TABLE domain_events ADD CONSTRAINT domain_events_test_reject CHECK (false) NOT VALID",
     )
@@ -257,12 +257,12 @@ async fn outbox_insert_failure_rolls_back_the_catalog_mutation(pool: sqlx::PgPoo
 
 #[sqlx::test(migrations = "./migrations")]
 async fn consumer_starts_at_the_current_workspace_watermark(pool: sqlx::PgPool) {
-    let repository = api::repository::CatalogRepository::new(
+    let repository = api::repository::AttricatRepository::new(
         pool.clone(),
         support::BOOTSTRAP_WORKSPACE_ID.parse().unwrap(),
     );
     sqlx::query(
-        "INSERT INTO domain_events (id, workspace_id, event_type, aggregate_kind, aggregate_id, correlation_id, source_kind, source_name, payload) VALUES ($1, '00000000-0000-4000-8000-000000000002', 'context.created.v1', 'context', $2, $3, 'api', 'catalog_api', '{}'::jsonb)",
+        "INSERT INTO domain_events (id, workspace_id, event_type, aggregate_kind, aggregate_id, correlation_id, source_kind, source_name, payload) VALUES ($1, '00000000-0000-4000-8000-000000000002', 'context.created.v1', 'context', $2, $3, 'api', 'attricat_api', '{}'::jsonb)",
     )
     .bind(Uuid::new_v4())
     .bind(Uuid::new_v4())
@@ -286,10 +286,10 @@ async fn registration_waits_for_an_uncommitted_outbox_append(pool: sqlx::PgPool)
         .execute(&mut *append)
         .await
         .unwrap();
-    sqlx::query("INSERT INTO domain_events (id, workspace_id, event_type, aggregate_kind, aggregate_id, correlation_id, source_kind, source_name, payload) VALUES ($1,$2,'context.created.v1','context',$3,$4,'api','catalog_api','{}'::jsonb)")
+    sqlx::query("INSERT INTO domain_events (id, workspace_id, event_type, aggregate_kind, aggregate_id, correlation_id, source_kind, source_name, payload) VALUES ($1,$2,'context.created.v1','context',$3,$4,'api','attricat_api','{}'::jsonb)")
         .bind(Uuid::new_v4()).bind(workspace_id).bind(Uuid::new_v4()).bind(Uuid::new_v4())
         .execute(&mut *append).await.unwrap();
-    let repository = CatalogRepository::new(
+    let repository = AttricatRepository::new(
         pool.clone(),
         support::BOOTSTRAP_WORKSPACE_ID.parse().unwrap(),
     );
@@ -312,7 +312,7 @@ async fn registration_waits_for_an_uncommitted_outbox_append(pool: sqlx::PgPool)
 async fn delivery_claims_are_exclusive_and_completion_is_durable(pool: sqlx::PgPool) {
     use std::time::Duration;
 
-    let repository = api::repository::CatalogRepository::new(
+    let repository = api::repository::AttricatRepository::new(
         pool.clone(),
         support::BOOTSTRAP_WORKSPACE_ID.parse().unwrap(),
     );
@@ -322,7 +322,7 @@ async fn delivery_claims_are_exclusive_and_completion_is_durable(pool: sqlx::PgP
         .unwrap();
     let event_id = Uuid::new_v4();
     sqlx::query(
-        "INSERT INTO domain_events (id, workspace_id, event_type, aggregate_kind, aggregate_id, correlation_id, source_kind, source_name, payload) VALUES ($1, '00000000-0000-4000-8000-000000000002', 'context.created.v1', 'context', $2, $3, 'api', 'catalog_api', '{}'::jsonb)",
+        "INSERT INTO domain_events (id, workspace_id, event_type, aggregate_kind, aggregate_id, correlation_id, source_kind, source_name, payload) VALUES ($1, '00000000-0000-4000-8000-000000000002', 'context.created.v1', 'context', $2, $3, 'api', 'attricat_api', '{}'::jsonb)",
     )
     .bind(event_id)
     .bind(Uuid::new_v4())
@@ -366,7 +366,7 @@ async fn delivery_claims_are_exclusive_and_completion_is_durable(pool: sqlx::PgP
 async fn expired_leases_redeliver_the_same_event_and_reject_stale_acknowledgements(
     pool: sqlx::PgPool,
 ) {
-    let repository = CatalogRepository::new(
+    let repository = AttricatRepository::new(
         pool.clone(),
         support::BOOTSTRAP_WORKSPACE_ID.parse().unwrap(),
     );
@@ -375,7 +375,7 @@ async fn expired_leases_redeliver_the_same_event_and_reject_stale_acknowledgemen
         .await
         .unwrap();
     let event_id = Uuid::new_v4();
-    sqlx::query("INSERT INTO domain_events (id, workspace_id, event_type, aggregate_kind, aggregate_id, correlation_id, source_kind, source_name, payload) VALUES ($1, '00000000-0000-4000-8000-000000000002', 'context.created.v1', 'context', $2, $3, 'api', 'catalog_api', '{}'::jsonb)")
+    sqlx::query("INSERT INTO domain_events (id, workspace_id, event_type, aggregate_kind, aggregate_id, correlation_id, source_kind, source_name, payload) VALUES ($1, '00000000-0000-4000-8000-000000000002', 'context.created.v1', 'context', $2, $3, 'api', 'attricat_api', '{}'::jsonb)")
         .bind(event_id).bind(Uuid::new_v4()).bind(Uuid::new_v4()).execute(&pool).await.unwrap();
 
     let first = repository
@@ -426,7 +426,7 @@ async fn expired_leases_redeliver_the_same_event_and_reject_stale_acknowledgemen
 async fn deliveries_can_complete_out_of_order_without_losing_the_deferred_event(
     pool: sqlx::PgPool,
 ) {
-    let repository = CatalogRepository::new(
+    let repository = AttricatRepository::new(
         pool.clone(),
         support::BOOTSTRAP_WORKSPACE_ID.parse().unwrap(),
     );
@@ -435,7 +435,7 @@ async fn deliveries_can_complete_out_of_order_without_losing_the_deferred_event(
         .await
         .unwrap();
     for _ in 0..2 {
-        sqlx::query("INSERT INTO domain_events (id, workspace_id, event_type, aggregate_kind, aggregate_id, correlation_id, source_kind, source_name, payload) VALUES ($1, '00000000-0000-4000-8000-000000000002', 'context.created.v1', 'context', $2, $3, 'api', 'catalog_api', '{}'::jsonb)")
+        sqlx::query("INSERT INTO domain_events (id, workspace_id, event_type, aggregate_kind, aggregate_id, correlation_id, source_kind, source_name, payload) VALUES ($1, '00000000-0000-4000-8000-000000000002', 'context.created.v1', 'context', $2, $3, 'api', 'attricat_api', '{}'::jsonb)")
             .bind(Uuid::new_v4()).bind(Uuid::new_v4()).bind(Uuid::new_v4()).execute(&pool).await.unwrap();
     }
     let deferred = repository
@@ -498,7 +498,7 @@ async fn deliveries_can_complete_out_of_order_without_losing_the_deferred_event(
 async fn dispatcher_preserves_causal_lineage_and_suppresses_its_own_follow_on_event(
     pool: sqlx::PgPool,
 ) {
-    let repository = CatalogRepository::new(
+    let repository = AttricatRepository::new(
         pool.clone(),
         support::BOOTSTRAP_WORKSPACE_ID.parse().unwrap(),
     );
@@ -508,7 +508,7 @@ async fn dispatcher_preserves_causal_lineage_and_suppresses_its_own_follow_on_ev
         .unwrap();
     let event_id = Uuid::new_v4();
     let correlation_id = Uuid::new_v4();
-    sqlx::query("INSERT INTO domain_events (id, workspace_id, event_type, aggregate_kind, aggregate_id, correlation_id, source_kind, source_name, payload) VALUES ($1, '00000000-0000-4000-8000-000000000002', 'context.created.v1', 'context', $2, $3, 'api', 'catalog_api', '{}'::jsonb)")
+    sqlx::query("INSERT INTO domain_events (id, workspace_id, event_type, aggregate_kind, aggregate_id, correlation_id, source_kind, source_name, payload) VALUES ($1, '00000000-0000-4000-8000-000000000002', 'context.created.v1', 'context', $2, $3, 'api', 'attricat_api', '{}'::jsonb)")
         .bind(event_id).bind(Uuid::new_v4()).bind(correlation_id).execute(&pool).await.unwrap();
     let calls = Arc::new(AtomicUsize::new(0));
     let registry = EventHandlerRegistry::new(vec![Arc::new(FollowOnContextHandler {
@@ -561,7 +561,7 @@ async fn dispatcher_preserves_causal_lineage_and_suppresses_its_own_follow_on_ev
 
 #[sqlx::test(migrations = "./migrations")]
 async fn stalled_handler_is_timed_out_and_delivery_is_retried(pool: sqlx::PgPool) {
-    let repository = CatalogRepository::new(
+    let repository = AttricatRepository::new(
         pool.clone(),
         support::BOOTSTRAP_WORKSPACE_ID.parse().unwrap(),
     );
@@ -569,7 +569,7 @@ async fn stalled_handler_is_timed_out_and_delivery_is_retried(pool: sqlx::PgPool
         .ensure_event_consumer("test.stalled", &[CONTEXT_CREATED_V1])
         .await
         .unwrap();
-    sqlx::query("INSERT INTO domain_events (id, workspace_id, event_type, aggregate_kind, aggregate_id, correlation_id, source_kind, source_name, payload) VALUES ($1, '00000000-0000-4000-8000-000000000002', 'context.created.v1', 'context', $2, $3, 'api', 'catalog_api', '{}'::jsonb)")
+    sqlx::query("INSERT INTO domain_events (id, workspace_id, event_type, aggregate_kind, aggregate_id, correlation_id, source_kind, source_name, payload) VALUES ($1, '00000000-0000-4000-8000-000000000002', 'context.created.v1', 'context', $2, $3, 'api', 'attricat_api', '{}'::jsonb)")
         .bind(Uuid::new_v4()).bind(Uuid::new_v4()).bind(Uuid::new_v4()).execute(&pool).await.unwrap();
     let registry = EventHandlerRegistry::new(vec![Arc::new(StalledHandler)]).unwrap();
     let (shutdown, receiver) = tokio::sync::watch::channel(());
@@ -605,7 +605,7 @@ async fn stalled_handler_is_timed_out_and_delivery_is_retried(pool: sqlx::PgPool
 async fn failed_deliveries_wait_until_due_then_dead_letter(pool: sqlx::PgPool) {
     use std::time::Duration;
 
-    let repository = api::repository::CatalogRepository::new(
+    let repository = api::repository::AttricatRepository::new(
         pool.clone(),
         support::BOOTSTRAP_WORKSPACE_ID.parse().unwrap(),
     );
@@ -613,7 +613,7 @@ async fn failed_deliveries_wait_until_due_then_dead_letter(pool: sqlx::PgPool) {
         .ensure_event_consumer("test.retry", &[CONTEXT_CREATED_V1])
         .await
         .unwrap();
-    sqlx::query("INSERT INTO domain_events (id, workspace_id, event_type, aggregate_kind, aggregate_id, correlation_id, source_kind, source_name, payload) VALUES ($1, '00000000-0000-4000-8000-000000000002', 'context.created.v1', 'context', $2, $3, 'api', 'catalog_api', '{}'::jsonb)")
+    sqlx::query("INSERT INTO domain_events (id, workspace_id, event_type, aggregate_kind, aggregate_id, correlation_id, source_kind, source_name, payload) VALUES ($1, '00000000-0000-4000-8000-000000000002', 'context.created.v1', 'context', $2, $3, 'api', 'attricat_api', '{}'::jsonb)")
         .bind(Uuid::new_v4()).bind(Uuid::new_v4()).bind(Uuid::new_v4()).execute(&pool).await.unwrap();
     let first = repository
         .claim_event_delivery(
@@ -674,7 +674,7 @@ async fn failed_deliveries_wait_until_due_then_dead_letter(pool: sqlx::PgPool) {
 
 #[sqlx::test(migrations = "./migrations")]
 async fn dead_letter_can_be_replayed_without_changing_event(pool: sqlx::PgPool) {
-    let repository = api::repository::CatalogRepository::new(
+    let repository = api::repository::AttricatRepository::new(
         pool.clone(),
         support::BOOTSTRAP_WORKSPACE_ID.parse().unwrap(),
     );
@@ -683,7 +683,7 @@ async fn dead_letter_can_be_replayed_without_changing_event(pool: sqlx::PgPool) 
         .await
         .unwrap();
     let event_id = Uuid::new_v4();
-    sqlx::query("INSERT INTO domain_events (id, workspace_id, event_type, aggregate_kind, aggregate_id, correlation_id, source_kind, source_name, payload) VALUES ($1, '00000000-0000-4000-8000-000000000002', 'context.created.v1', 'context', $2, $3, 'api', 'catalog_api', '{}'::jsonb)")
+    sqlx::query("INSERT INTO domain_events (id, workspace_id, event_type, aggregate_kind, aggregate_id, correlation_id, source_kind, source_name, payload) VALUES ($1, '00000000-0000-4000-8000-000000000002', 'context.created.v1', 'context', $2, $3, 'api', 'attricat_api', '{}'::jsonb)")
         .bind(event_id).bind(Uuid::new_v4()).bind(Uuid::new_v4()).execute(&pool).await.unwrap();
     sqlx::query("INSERT INTO event_deliveries (consumer_id, event_id, status, attempts, last_error, failed_at) VALUES ($1, $2, 'dead_letter', 5, 'boom', clock_timestamp())").bind(consumer.id).bind(event_id).execute(&pool).await.unwrap();
     assert_eq!(

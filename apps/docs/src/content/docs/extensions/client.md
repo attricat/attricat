@@ -9,20 +9,20 @@ A client contribution is a JavaScript module that Attricat loads into a sandboxe
 
 Every contribution gets its own `<iframe sandbox="allow-scripts">` with an opaque origin and a Content Security Policy that blocks network access. The frame has no access to Attricat's page, cookies, storage, or other extensions' frames. It cannot call `fetch` against the API.
 
-Everything goes through the `catalog` object the host passes to your module. Each call is checked against your grants and the contribution's context.
+Everything goes through the `attricat` object the host passes to your module. Each call is checked against your grants and the contribution's context.
 
 ## Module contract
 
-A client artifact must export `mount(root, catalog)`. It may return a cleanup function, synchronous or async, that runs when the frame is removed.
+A client artifact must export `mount(root, attricat)`. It may return a cleanup function, synchronous or async, that runs when the frame is removed.
 
 ```js
-export const mount = (root, catalog) => {
+export const mount = (root, attricat) => {
   const render = () => {
-    root.dataset.mode = catalog.theme.color_mode;
-    root.textContent = `Record: ${catalog.context.record_id}`;
+    root.dataset.mode = attricat.theme.color_mode;
+    root.textContent = `Record: ${attricat.context.record_id}`;
   };
-  root.addEventListener('catalog:context-changed.v1', render);
-  root.addEventListener('catalog:theme-changed.v1', render);
+  root.addEventListener('attricat:context-changed.v1', render);
+  root.addEventListener('attricat:theme-changed.v1', render);
   render();
   return () => root.replaceChildren();
 };
@@ -30,28 +30,28 @@ export const mount = (root, catalog) => {
 
 The frame stays mounted when the user switches context or theme. Listen for the change events and update, and throw away any work that belonged to the previous context.
 
-## The `catalog` API
+## The `attricat` API
 
 | Member | Needs | Description |
 | --- | --- | --- |
-| `catalog.context` | | Identifiers for the outlet, such as `record_id` and `context_id`. Only the fields documented for the outlet are present. |
-| `catalog.theme` | | `{ color_mode: 'light' \| 'dark' }`. The frame's `color-scheme` is set to match before `mount`, so system colors like `Canvas` and `CanvasText` follow it. |
-| `catalog.configuration` | `configuration.read` | The installation configuration. |
-| `catalog.request(path)` | `catalog.read` | `GET` one of `/api/records`, `/api/v1/records/<uuid>`, or `/api/blueprints/<uuid>/versions/<n>`. Responses are limited to 1 MiB. Revision reads in `blueprint_attribute_configuration` are limited to that outlet's blueprint revision. |
-| `catalog.command({ command_id, payload })` | `client.commands` | Calls one of the extension's declared server commands. |
-| `catalog.storage.get/set/delete/list(…)` | `storage.extension` | The extension's key-value storage. `set` and `delete` accept `expected_revision`. |
-| `catalog.navigate({ record_id })` | `client.navigation` | Opens a record page. |
-| `catalog.notify({ message, severity })` | `client.notification` | Shows a host notification. Messages are trimmed to 512 characters. |
-| `catalog.refresh({ target: 'current_record' })` | `client.refresh` | Reloads the current record's views after your command changed it. Available in record page outlets. |
-| `catalog.dialog.open()` / `catalog.dialog.close()` | `client.action_dialog` | Opens the extension's `action_dialog` from a version 2 selection action, with that action's selection; `close` works inside the dialog. |
-| `catalog.operations.start({ operation_id, input, idempotency_key })` | `client.operations.start` | Starts an [interactive operation](/extensions/operations/#interactive-operations) for the frame's selection and resolves to `{ run_id }`. Available in version 2 selection actions and the action dialog. |
-| `catalog.operations.list()` / `get({ run_id })` / `download({ run_id, artifact_id })` | `client.operations.read` | Only runs of this extension that the signed-in user started, even when that user is an operator. The host performs downloads. |
-| `catalog.operations.cancel({ run_id })` | `client.operations.cancel` | Cancels one of those runs. |
+| `attricat.context` | | Identifiers for the outlet, such as `record_id` and `context_id`. Only the fields documented for the outlet are present. |
+| `attricat.theme` | | `{ color_mode: 'light' \| 'dark' }`. The frame's `color-scheme` is set to match before `mount`, so system colors like `Canvas` and `CanvasText` follow it. |
+| `attricat.configuration` | `configuration.read` | The installation configuration. |
+| `attricat.request(path)` | `attricat.read` | `GET` one of `/api/records`, `/api/v1/records/<uuid>`, or `/api/blueprints/<uuid>/versions/<n>`. Responses are limited to 1 MiB. Revision reads in `blueprint_attribute_configuration` are limited to that outlet's blueprint revision. |
+| `attricat.command({ command_id, payload })` | `client.commands` | Calls one of the extension's declared server commands. |
+| `attricat.storage.get/set/delete/list(…)` | `storage.extension` | The extension's key-value storage. `set` and `delete` accept `expected_revision`. |
+| `attricat.navigate({ record_id })` | `client.navigation` | Opens a record page. |
+| `attricat.notify({ message, severity })` | `client.notification` | Shows a host notification. Messages are trimmed to 512 characters. |
+| `attricat.refresh({ target: 'current_record' })` | `client.refresh` | Reloads the current record's views after your command changed it. Available in record page outlets. |
+| `attricat.dialog.open()` / `attricat.dialog.close()` | `client.action_dialog` | Opens the extension's `action_dialog` from a version 2 selection action, with that action's selection; `close` works inside the dialog. |
+| `attricat.operations.start({ operation_id, input, idempotency_key })` | `client.operations.start` | Starts an [interactive operation](/extensions/operations/#interactive-operations) for the frame's selection and resolves to `{ run_id }`. Available in version 2 selection actions and the action dialog. |
+| `attricat.operations.list()` / `get({ run_id })` / `download({ run_id, artifact_id })` | `client.operations.read` | Only runs of this extension that the signed-in user started, even when that user is an operator. The host performs downloads. |
+| `attricat.operations.cancel({ run_id })` | `client.operations.cancel` | Cancels one of those runs. |
 
 | Event on `root` | Needs | Fired |
 | --- | --- | --- |
-| `catalog:context-changed.v1` | `client.events` | At start and whenever the outlet's context changes. |
-| `catalog:theme-changed.v1` | | Whenever the user switches between light and dark. |
+| `attricat:context-changed.v1` | `client.events` | At start and whenever the outlet's context changes. |
+| `attricat:theme-changed.v1` | | Whenever the user switches between light and dark. |
 
 Further mediated operations, each with its own capability, cover confirmation dialogs, downloads, opening allowed HTTPS URLs, reading and uploading files in a file context, catalog search, live updates, clipboard writes, and reading the locale. The host draws the dialogs and progress for these.
 
@@ -112,7 +112,7 @@ Contributions to `record_action`, `explorer_row_action`, and `explorer_bulk_acti
 | --- | --- | --- | --- |
 | `action_dialog` | `dialog` | `client.action_dialog` | The opening action's selection context, captured when it opens. |
 
-A `dialog` contribution needs a `title`. Your version 2 actions open it with `catalog.dialog.open()`. The host draws the dialog around your frame, shows how many records it applies to, and warns about unsaved edits. It stays open when the row menu closes or the selection changes, and closes on navigation. Key presses inside your frame do not reach the host, so call `catalog.dialog.close()` when the user presses Escape. Closing it before starting a run does nothing; closing it afterwards does not cancel the run.
+A `dialog` contribution needs a `title`. Your version 2 actions open it with `attricat.dialog.open()`. The host draws the dialog around your frame, shows how many records it applies to, and warns about unsaved edits. It stays open when the row menu closes or the selection changes, and closes on navigation. Key presses inside your frame do not reach the host, so call `attricat.dialog.close()` when the user presses Escape. Closing it before starting a run does nothing; closing it afterwards does not cancel the run.
 
 ### Blueprints
 

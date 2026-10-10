@@ -26,17 +26,17 @@ Instalator umieszcza `acli` w `~/.local/bin` (lub `$XDG_BIN_HOME`). Aby zainstal
 `acli` jest też dołączony do obrazu kontenera:
 
 ```sh
-docker run --rm -e CATALOG_SERVER -e CATALOG_TOKEN ghcr.io/attricat/attricat@sha256:… acli health
+docker run --rm -e ATTRICAT_SERVER -e ATTRICAT_TOKEN ghcr.io/attricat/attricat@sha256:… acli health
 ```
 
 ## Konfiguracja
 
 | Ustawienie | Flaga | Zmienna środowiskowa | Opis |
 | --- | --- | --- | --- |
-| Adres serwera | `--server` | `CATALOG_SERVER`, potem `CATALOG_API_URL` | Bazowy adres URL API razem z `/api`. Domyślnie `http://127.0.0.1:3000/api`. |
-| Token | `--token`, `--token-stdin` | `CATALOG_TOKEN` | Osobisty token API. |
-| Plik sesji | `--session-file` | `CATALOG_SESSION_FILE` | Przechowuje sesję przeglądarki między poleceniami. |
-| Adres aplikacji webowej | | `CATALOG_WEB_URL` | Gdy jest ustawiony, polecenia zapisanych wyszukiwań wypisują też krótki link do przeglądarki rekordów. |
+| Adres serwera | `--server` | `ATTRICAT_SERVER`, potem `ATTRICAT_API_URL` | Bazowy adres URL API razem z `/api`. Domyślnie `http://127.0.0.1:3000/api`. |
+| Token | `--token`, `--token-stdin` | `ATTRICAT_TOKEN` | Osobisty token API. |
+| Plik sesji | `--session-file` | `ATTRICAT_SESSION_FILE` | Przechowuje sesję przeglądarki między poleceniami. |
+| Adres aplikacji webowej | | `ATTRICAT_WEB_URL` | Gdy jest ustawiony, polecenia zapisanych wyszukiwań wypisują też krótki link do przeglądarki rekordów. |
 | Pominięcie `.env` | `--no-env` | | Nie odczytuje `.env` z bieżącego katalogu. |
 
 Domyślnie `acli` odczytuje `.env` z bieżącego katalogu, nie nadpisując zmiennych już ustawionych w powłoce.
@@ -48,11 +48,11 @@ Dane uwierzytelniające są wysyłane tylko przez HTTPS lub na adres loopback w 
 **Tokenem** (zalecane w automatyzacji). Utwórz osobisty token API w aplikacji webowej w **Profil → Osobiste tokeny API**, a następnie:
 
 ```sh
-export CATALOG_TOKEN=cat_pat_…
+export ATTRICAT_TOKEN=cat_pat_…
 acli blueprint list
 ```
 
-Zamiast `--token` wybieraj `CATALOG_TOKEN` lub `--token-stdin`, ponieważ `--token` pozostawia sekret w historii powłoki i na liście procesów.
+Zamiast `--token` wybieraj `ATTRICAT_TOKEN` lub `--token-stdin`, ponieważ `--token` pozostawia sekret w historii powłoki i na liście procesów.
 
 **Sesją z hasłem.** Zaloguj się raz i zachowaj sesję w pliku:
 

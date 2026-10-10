@@ -298,7 +298,7 @@ mod tests {
             causation_id: None,
             source: EventSource {
                 kind: EventSourceKind::Api,
-                name: "catalog_api".to_owned(),
+                name: "attricat_api".to_owned(),
             },
             metadata: json!({}),
             payload: json!({}),

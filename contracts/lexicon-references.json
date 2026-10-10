@@ -1,5 +1,5 @@
 {
-  "description": "Conformance cases for lexicon references in catalog text. Each case gives the input and either the parsed segments or the error code. Run by crates/lexicon and apps/catalog-web.",
+  "description": "Conformance cases for lexicon references in catalog text. Each case gives the input and either the parsed segments or the error code. Run by crates/lexicon and apps/web.",
   "cases": [
     { "input": "", "segments": [] },
     { "input": "Plain text", "segments": [{ "literal": "Plain text" }] },

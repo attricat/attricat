@@ -36,8 +36,8 @@ async fn background_processing_requires_identity_and_data_health_permission(pool
     let client = Client::new();
     let response = client
         .get(format!("{base_url}{ENDPOINT}"))
-        .header("x-catalog-user-id", user_id.to_string())
-        .header("x-catalog-workspace-id", workspace_id.to_string())
+        .header("x-attricat-user-id", user_id.to_string())
+        .header("x-attricat-workspace-id", workspace_id.to_string())
         .send()
         .await
         .unwrap();
@@ -47,8 +47,8 @@ async fn background_processing_requires_identity_and_data_health_permission(pool
         .bind(Uuid::new_v4()).bind(workspace_id).bind(membership_id).execute(&pool).await.unwrap();
     let response = client
         .get(format!("{base_url}{ENDPOINT}"))
-        .header("x-catalog-user-id", user_id.to_string())
-        .header("x-catalog-workspace-id", workspace_id.to_string())
+        .header("x-attricat-user-id", user_id.to_string())
+        .header("x-attricat-workspace-id", workspace_id.to_string())
         .send()
         .await
         .unwrap();

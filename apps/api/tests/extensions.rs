@@ -7,8 +7,8 @@ use api::{
     extension_installer::{ExtensionInstaller, installed_artifact_key},
     model::{CreateBlueprint, NewAttributeValue},
     repository::{
-        CatalogRepository, ExtensionCatalogBatch, ExtensionCatalogIntent,
-        ExtensionCatalogIntentStatus,
+        AttricatRepository, ExtensionAttricatBatch, ExtensionAttricatIntent,
+        ExtensionAttricatIntentStatus,
     },
     storage::{FakeObjectStore, ObjectStore},
 };
@@ -138,7 +138,7 @@ fn release_archive(version: &str, dependencies: Value, artifact_bytes: &[u8]) ->
         "version": version,
         "description": "extension integration test",
         "icons": {"48": "icon.png"},
-        "catalog": {"id": "acme.extension", "host_api": "^1.0"},
+        "attricat": {"id": "acme.extension", "host_api": "^1.0"},
         "permissions": ["network.request"],
         "host_permissions": [{
             "id": "api-read",
@@ -169,14 +169,14 @@ fn release_archive(version: &str, dependencies: Value, artifact_bytes: &[u8]) ->
 
 fn artifact_stream_component() -> Vec<u8> {
     build_test_component(
-        "catalog-artifact-test-component",
+        "attricat-artifact-test-component",
         "artifact-stream-test.component.wasm",
     )
 }
 
 fn transfer_test_component() -> Vec<u8> {
     build_test_component(
-        "catalog-extension-transfer-test-component",
+        "attricat-extension-transfer-test-component",
         "transfer-test.component.wasm",
     )
 }
@@ -188,7 +188,7 @@ fn transfer_test_archive(component: &[u8]) -> Vec<u8> {
     let manifest = serde_json::to_vec(&json!({
         "manifest_version":1,"name":"Transfer probe","version":"1.0.0",
         "description":"Real host transfer policy fixture","icons":{"48":"icon.png"},
-        "catalog":{"id":"acme.transfer-probe","host_api":">=1.0.0, <2.0.0"},
+        "attricat":{"id":"acme.transfer-probe","host_api":">=1.0.0, <2.0.0"},
         "permissions":["network.request","artifacts.read","artifacts.write"],
         "host_permissions":[
             {"id":"api","matches":["https://api.example.com/v1/*"],"methods":["GET"],"max_transfer_bytes":16777216},
@@ -217,7 +217,7 @@ fn artifact_operation_release_archive(extension_id: &str, component: &[u8]) -> V
         "version": "1.0.0",
         "description": "artifact WIT runtime integration test",
         "icons": {"48": "icon.png"},
-        "catalog": {"id": extension_id, "host_api": ">=1.0.0, <2.0.0"},
+        "attricat": {"id": extension_id, "host_api": ">=1.0.0, <2.0.0"},
         "permissions": ["artifacts.read", "artifacts.write"],
         "artifacts": [{"id": "server", "kind": "server_wasm", "path": "server.wasm"}],
         "configuration": {"version": 1, "schema": {"type": "object", "additionalProperties": false}},
@@ -243,7 +243,7 @@ fn operation_release_archive(extension_id: &str) -> Vec<u8> {
         "version": "1.0.0",
         "description": "durable operation integration test",
         "icons": {"48": "icon.png"},
-        "catalog": {"id": extension_id, "host_api": ">=1.0.0, <2.0.0"},
+        "attricat": {"id": extension_id, "host_api": ">=1.0.0, <2.0.0"},
         "artifacts": [{"id": "server", "kind": "server_wasm", "path": "server.wasm"}],
         "configuration": {"version": 1, "schema": {"type": "object", "additionalProperties": false}},
         "server": {"operations": [{
@@ -273,7 +273,7 @@ fn event_contract_release_archive(extension_id: &str, producer: bool) -> Vec<u8>
         "version": "1.0.0",
         "description": "extension event contract integration test",
         "icons": {"48": "icon.png"},
-        "catalog": {"id": extension_id, "host_api": "^1.0"},
+        "attricat": {"id": extension_id, "host_api": "^1.0"},
         "permissions": if producer { json!(["events.emit"]) } else { json!(["events.subscribe"]) },
         "event_contracts": contracts,
         "configuration": {"version": 1, "schema": {"type": "object", "additionalProperties": false}},
@@ -298,7 +298,7 @@ fn storage_client_release_archive(version: &str) -> Vec<u8> {
         "version": version,
         "description": "extension storage integration test",
         "icons": {"48": "icon.png"},
-        "catalog": {"id": "acme.storage", "host_api": "^1.0"},
+        "attricat": {"id": "acme.storage", "host_api": "^1.0"},
         "permissions": ["storage.extension"],
         "configuration": {"version": 1, "schema": {"type": "object", "additionalProperties": false}},
         "artifacts": [{"id": "client", "kind": "client_component", "path": "client.js"}],
@@ -326,7 +326,7 @@ fn client_release_archive_for_outlet(
         "version": "1.0.0",
         "description": "client runtime integration test",
         "icons": {"48": "icon.png"},
-        "catalog": {"id": extension_id, "host_api": "^1.0"},
+        "attricat": {"id": extension_id, "host_api": "^1.0"},
         "permissions": ["configuration.read"],
         "configuration": {"version": 1, "schema": {"type": "object", "additionalProperties": false}},
         "attribute_types": [{
@@ -369,7 +369,7 @@ fn client_release_archive_with_navigation(extension_id: &str) -> Vec<u8> {
         "version": "1.0.0",
         "description": "client runtime integration test",
         "icons": {"48": "icon.png"},
-        "catalog": {"id": extension_id, "host_api": "^1.0"},
+        "attricat": {"id": extension_id, "host_api": "^1.0"},
         "configuration": {"version": 1, "schema": {"type": "object", "additionalProperties": false}},
         "artifacts": [{"id": "client", "kind": "client_component", "path": "client.js"}],
         "ui": [
@@ -389,8 +389,8 @@ fn client_release_archive_with_navigation(extension_id: &str) -> Vec<u8> {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-async fn extension_catalog_upsert_create_writes_declared_relationships(pool: sqlx::PgPool) {
-    let repository = CatalogRepository::system(pool.clone())
+async fn extension_attricat_upsert_create_writes_declared_relationships(pool: sqlx::PgPool) {
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(Uuid::from_u128(0x00000000000040008000000000000002))
         .await
         .unwrap()
@@ -427,10 +427,10 @@ target_blueprint = "extension_linked_item"
         .find(|attribute| attribute.code == "external_id")
         .unwrap()
         .id;
-    let upsert = |key: &str, related: Vec<Uuid>| ExtensionCatalogBatch {
+    let upsert = |key: &str, related: Vec<Uuid>| ExtensionAttricatBatch {
         batch_key: key.into(),
         dry_run: false,
-        intents: vec![ExtensionCatalogIntent::Upsert {
+        intents: vec![ExtensionAttricatIntent::Upsert {
             intent_key: "item".into(),
             blueprint_id: blueprint.blueprint.id,
             blueprint_version: blueprint.blueprint.version,
@@ -453,18 +453,18 @@ target_blueprint = "extension_linked_item"
         }],
     };
     let target = repository
-        .execute_extension_catalog_batch(upsert("target", Vec::new()))
+        .execute_extension_attricat_batch(upsert("target", Vec::new()))
         .await
         .unwrap()[0]
         .record_id
         .unwrap();
     let created = repository
-        .execute_extension_catalog_batch(upsert("source", vec![target, target]))
+        .execute_extension_attricat_batch(upsert("source", vec![target, target]))
         .await
         .unwrap();
     assert_eq!(
         created[0].status,
-        ExtensionCatalogIntentStatus::Applied,
+        ExtensionAttricatIntentStatus::Applied,
         "{:?}",
         created[0].error
     );
@@ -479,8 +479,8 @@ target_blueprint = "extension_linked_item"
 }
 
 #[sqlx::test(migrations = "./migrations")]
-async fn extension_catalog_upsert_is_idempotent_and_emits_a_change_feed(pool: sqlx::PgPool) {
-    let repository = CatalogRepository::system(pool.clone())
+async fn extension_attricat_upsert_is_idempotent_and_emits_a_change_feed(pool: sqlx::PgPool) {
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(Uuid::from_u128(0x00000000000040008000000000000002))
         .await
         .unwrap()
@@ -501,10 +501,10 @@ async fn extension_catalog_upsert_is_idempotent_and_emits_a_change_feed(pool: sq
         .find(|attribute| attribute.code == "external_id")
         .unwrap()
         .id;
-    let batch = |key: &str, title: &str| ExtensionCatalogBatch {
+    let batch = |key: &str, title: &str| ExtensionAttricatBatch {
         batch_key: key.into(),
         dry_run: false,
-        intents: vec![ExtensionCatalogIntent::Upsert {
+        intents: vec![ExtensionAttricatIntent::Upsert {
             intent_key: "item-1".into(),
             blueprint_id: blueprint.blueprint.id,
             blueprint_version: blueprint.blueprint.version,
@@ -530,27 +530,27 @@ async fn extension_catalog_upsert_is_idempotent_and_emits_a_change_feed(pool: sq
         }],
     };
     let created = repository
-        .execute_extension_catalog_batch(batch("batch-1", "first"))
+        .execute_extension_attricat_batch(batch("batch-1", "first"))
         .await
         .unwrap();
     assert_eq!(
         created[0].status,
-        ExtensionCatalogIntentStatus::Applied,
+        ExtensionAttricatIntentStatus::Applied,
         "{:?}",
         created[0].error
     );
     let record_id = created[0].record_id.unwrap();
     let replay = repository
-        .execute_extension_catalog_batch(batch("batch-1", "first"))
+        .execute_extension_attricat_batch(batch("batch-1", "first"))
         .await
         .unwrap();
     assert_eq!(
         replay[0].status,
-        ExtensionCatalogIntentStatus::AlreadyApplied
+        ExtensionAttricatIntentStatus::AlreadyApplied
     );
     assert_eq!(replay[0].record_id, Some(record_id));
     let updated = repository
-        .execute_extension_catalog_batch(batch("batch-2", "second"))
+        .execute_extension_attricat_batch(batch("batch-2", "second"))
         .await
         .unwrap();
     assert_eq!(updated[0].record_id, Some(record_id));
@@ -562,7 +562,7 @@ async fn extension_catalog_upsert_is_idempotent_and_emits_a_change_feed(pool: sq
         .unwrap()
         .blueprint_version;
     let snapshot = repository
-        .extension_catalog_page(api::repository::ExtensionCatalogPageRequest {
+        .extension_attricat_page(api::repository::ExtensionAttricatPageRequest {
             blueprint_id: blueprint.blueprint.id,
             blueprint_version: record_version,
             context_id: None,
@@ -586,7 +586,7 @@ async fn extension_catalog_upsert_is_idempotent_and_emits_a_change_feed(pool: sq
     let channel_id = channel.id;
     let workspace_id = Uuid::from_u128(0x00000000000040008000000000000002);
     let page_for_channel = || {
-        repository.extension_catalog_page(api::repository::ExtensionCatalogPageRequest {
+        repository.extension_attricat_page(api::repository::ExtensionAttricatPageRequest {
             blueprint_id: blueprint.blueprint.id,
             blueprint_version: record_version,
             context_id: Some(channel_id),
@@ -634,7 +634,7 @@ async fn extension_catalog_upsert_is_idempotent_and_emits_a_change_feed(pool: sq
         "disabled channel must be rejected"
     );
     let changes = repository
-        .extension_catalog_changes(blueprint.blueprint.id, record_version, None, 1)
+        .extension_attricat_changes(blueprint.blueprint.id, record_version, None, 1)
         .await
         .unwrap();
     assert_eq!(changes.events.len(), 1);
@@ -643,11 +643,11 @@ async fn extension_catalog_upsert_is_idempotent_and_emits_a_change_feed(pool: sq
         .next_cursor
         .expect("the initial create and update are paged");
     repository
-        .execute_extension_catalog_batch(batch("batch-3", "third"))
+        .execute_extension_attricat_batch(batch("batch-3", "third"))
         .await
         .unwrap();
     let stable_tail = repository
-        .extension_catalog_changes(blueprint.blueprint.id, record_version, Some(cursor), 1)
+        .extension_attricat_changes(blueprint.blueprint.id, record_version, Some(cursor), 1)
         .await
         .unwrap();
     assert_eq!(stable_tail.events.len(), 1);
@@ -657,7 +657,7 @@ async fn extension_catalog_upsert_is_idempotent_and_emits_a_change_feed(pool: sq
     );
     assert_eq!(
         repository
-            .extension_catalog_changes(blueprint.blueprint.id, record_version, None, 10)
+            .extension_attricat_changes(blueprint.blueprint.id, record_version, None, 10)
             .await
             .unwrap()
             .events
@@ -687,7 +687,7 @@ value_type = "string"
 
 #[sqlx::test(migrations = "./migrations")]
 async fn extension_intents_use_unique_keys_and_withdraw_publications(pool: sqlx::PgPool) {
-    let repository = CatalogRepository::system(pool.clone())
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(bootstrap_workspace_id())
         .await
         .unwrap()
@@ -708,10 +708,10 @@ async fn extension_intents_use_unique_keys_and_withdraw_publications(pool: sqlx:
         .find(|attribute| attribute.code == "external_id")
         .unwrap()
         .id;
-    let upsert = |key: &str, lookup: &str, title: &str| ExtensionCatalogBatch {
+    let upsert = |key: &str, lookup: &str, title: &str| ExtensionAttricatBatch {
         batch_key: key.into(),
         dry_run: false,
-        intents: vec![ExtensionCatalogIntent::Upsert {
+        intents: vec![ExtensionAttricatIntent::Upsert {
             intent_key: "item".into(),
             blueprint_id: blueprint.blueprint.id,
             blueprint_version: blueprint.blueprint.version,
@@ -730,7 +730,7 @@ async fn extension_intents_use_unique_keys_and_withdraw_publications(pool: sqlx:
     };
     // The first upsert creates; it must write the key value itself.
     let mut first = upsert("u1", "EXT-1", "first");
-    if let ExtensionCatalogIntent::Upsert { values, .. } = &mut first.intents[0] {
+    if let ExtensionAttricatIntent::Upsert { values, .. } = &mut first.intents[0] {
         values.push(NewAttributeValue::Scalar {
             attribute_id: Some(external_id),
             attribute_code: None,
@@ -739,12 +739,12 @@ async fn extension_intents_use_unique_keys_and_withdraw_publications(pool: sqlx:
         });
     }
     let created = repository
-        .execute_extension_catalog_batch(first)
+        .execute_extension_attricat_batch(first)
         .await
         .unwrap();
     assert_eq!(
         created[0].status,
-        ExtensionCatalogIntentStatus::Applied,
+        ExtensionAttricatIntentStatus::Applied,
         "{:?}",
         created[0].error
     );
@@ -765,12 +765,12 @@ async fn extension_intents_use_unique_keys_and_withdraw_publications(pool: sqlx:
     // The declared key resolves the lookup with its normalization, so a
     // differently cased and spaced value updates the same record.
     let updated = repository
-        .execute_extension_catalog_batch(upsert("u2", "  ext-1 ", "second"))
+        .execute_extension_attricat_batch(upsert("u2", "  ext-1 ", "second"))
         .await
         .unwrap();
     assert_eq!(
         updated[0].status,
-        ExtensionCatalogIntentStatus::Applied,
+        ExtensionAttricatIntentStatus::Applied,
         "{:?}",
         updated[0].error
     );
@@ -812,7 +812,7 @@ async fn sideload_installs_a_validated_local_archive(pool: sqlx::PgPool) {
 #[sqlx::test(migrations = "./migrations")]
 async fn enabled_event_types_follow_authorized_consumption_contracts(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = CatalogRepository::system(pool.clone())
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(workspace)
         .await
         .unwrap();
@@ -873,11 +873,11 @@ async fn enabled_event_types_follow_authorized_consumption_contracts(pool: sqlx:
         .await
         .unwrap();
     repository
-        .ensure_event_consumer("catalog.extensions.wasm", &[])
+        .ensure_event_consumer("attricat.extensions.wasm", &[])
         .await
         .unwrap();
     repository
-        .materialize_event_delivery_tasks("catalog.extensions.wasm", &event_types)
+        .materialize_event_delivery_tasks("attricat.extensions.wasm", &event_types)
         .await
         .unwrap();
     assert_eq!(
@@ -936,7 +936,7 @@ async fn enabled_event_types_follow_authorized_consumption_contracts(pool: sqlx:
 #[sqlx::test(migrations = "./migrations")]
 async fn navigation_contributions_target_same_release_routes(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = CatalogRepository::system(pool)
+    let repository = AttricatRepository::system(pool)
         .for_workspace(workspace)
         .await
         .unwrap();
@@ -971,7 +971,7 @@ async fn navigation_contributions_target_same_release_routes(pool: sqlx::PgPool)
 #[sqlx::test(migrations = "./migrations")]
 async fn enabled_client_contributions_are_hidden_after_state_changes(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = CatalogRepository::system(pool)
+    let repository = AttricatRepository::system(pool)
         .for_workspace(workspace)
         .await
         .unwrap();
@@ -1081,7 +1081,7 @@ async fn extension_layout_replacement_rejects_non_object_roots_and_repairs_malfo
     pool: sqlx::PgPool,
 ) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = CatalogRepository::new(pool.clone(), workspace);
+    let repository = AttricatRepository::new(pool.clone(), workspace);
     for malformed in [json!("scalar"), json!([])] {
         sqlx::query("UPDATE workspaces SET settings=$2 WHERE id=$1")
             .bind(workspace)
@@ -1147,7 +1147,7 @@ async fn extension_layout_replacement_rejects_non_object_roots_and_repairs_malfo
 #[sqlx::test(migrations = "./migrations")]
 async fn extension_layout_order_is_stable_and_host_owned(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = CatalogRepository::system(pool.clone())
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(workspace)
         .await
         .unwrap();
@@ -1263,7 +1263,7 @@ async fn blueprint_layout_overlays_owned_outlets_and_preserves_global_workspace_
     pool: sqlx::PgPool,
 ) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = CatalogRepository::system(pool)
+    let repository = AttricatRepository::system(pool)
         .for_workspace(workspace)
         .await
         .unwrap();
@@ -1403,11 +1403,11 @@ async fn operation_runs_keep_a_batch_key_across_crash_reclaim_and_fence_stale_ch
     pool: sqlx::PgPool,
 ) {
     use api::repository::StartExtensionOperation;
-    use catalog_domain::task_queue::TaskKind;
+    use attricat_domain::task_queue::TaskKind;
     use std::time::Duration;
 
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = CatalogRepository::system(pool.clone())
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(workspace)
         .await
         .unwrap();
@@ -1640,7 +1640,7 @@ async fn operation_runs_keep_a_batch_key_across_crash_reclaim_and_fence_stale_ch
 #[sqlx::test(migrations = "./migrations")]
 async fn operation_http_routes_start_list_and_cancel_without_exposing_input(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = CatalogRepository::system(pool.clone())
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(workspace)
         .await
         .unwrap();
@@ -1696,7 +1696,7 @@ async fn operation_http_routes_start_list_and_cancel_without_exposing_input(pool
 #[sqlx::test(migrations = "./migrations")]
 async fn extension_attribute_types_are_pinned_and_survive_provider_disable(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = CatalogRepository::system(pool)
+    let repository = AttricatRepository::system(pool)
         .for_workspace(workspace)
         .await
         .unwrap();
@@ -1773,7 +1773,7 @@ extension_configuration = '{"currency":"USD"}'
 #[sqlx::test(migrations = "./migrations")]
 async fn hidden_contributions_remain_authorized_and_are_validated_on_publish(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = CatalogRepository::system(pool)
+    let repository = AttricatRepository::system(pool)
         .for_workspace(workspace)
         .await
         .unwrap();
@@ -1859,7 +1859,7 @@ async fn workspace_safe_mode_blocks_runtime_descriptors_and_storage_without_muta
     pool: sqlx::PgPool,
 ) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = CatalogRepository::system(pool)
+    let repository = AttricatRepository::system(pool)
         .for_workspace(workspace)
         .await
         .unwrap();
@@ -1925,7 +1925,7 @@ async fn workspace_safe_mode_blocks_runtime_descriptors_and_storage_without_muta
 #[sqlx::test(migrations = "./migrations")]
 async fn extension_storage_enforces_cas_bounds_quota_and_workspace_namespace(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = CatalogRepository::system(pool)
+    let repository = AttricatRepository::system(pool)
         .for_workspace(workspace)
         .await
         .unwrap();
@@ -2065,7 +2065,7 @@ async fn extension_storage_list_treats_like_characters_as_literal_prefixes(pool:
         .execute(&pool)
         .await
         .unwrap();
-    let repository = CatalogRepository::system(pool)
+    let repository = AttricatRepository::system(pool)
         .for_workspace(workspace)
         .await
         .unwrap();
@@ -2115,7 +2115,7 @@ async fn extension_storage_list_treats_like_characters_as_literal_prefixes(pool:
 #[sqlx::test(migrations = "./migrations")]
 async fn lifecycle_installs_validated_archive_artifacts_and_retains_history(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = CatalogRepository::system(pool.clone())
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(workspace)
         .await
         .unwrap();
@@ -2308,12 +2308,12 @@ async fn operation_artifacts_are_run_scoped_quota_bound_cleaned_and_downloadable
         repository::{MAX_OPERATION_ARTIFACT_BYTES, StartExtensionOperation},
         storage::StoredObject,
     };
-    use catalog_domain::task_queue::TaskKind;
+    use attricat_domain::task_queue::TaskKind;
     use sha2::{Digest, Sha256};
     use std::time::Duration;
 
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = CatalogRepository::system(pool.clone())
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(workspace)
         .await
         .unwrap();
@@ -2433,7 +2433,7 @@ async fn operation_artifacts_are_run_scoped_quota_bound_cleaned_and_downloadable
         .execute(&pool)
         .await
         .unwrap();
-    let foreign = CatalogRepository::system(pool.clone())
+    let foreign = AttricatRepository::system(pool.clone())
         .for_workspace(foreign_workspace)
         .await
         .unwrap();
@@ -2639,12 +2639,12 @@ async fn artifact_wit_component_copies_a_large_approved_input_in_bounded_chunks(
         storage::StoredObject,
         task_worker::{TaskHandler, TaskOutcome},
     };
-    use catalog_domain::task_queue::TaskKind;
+    use attricat_domain::task_queue::TaskKind;
     use sha2::{Digest, Sha256};
     use std::time::Duration;
 
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = CatalogRepository::system(pool.clone())
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(workspace)
         .await
         .unwrap();
@@ -2769,9 +2769,9 @@ async fn packaged_transfer_import_rejects_ssrf_without_network_io(pool: sqlx::Pg
         repository::StartExtensionOperation,
         task_worker::TaskHandler,
     };
-    use catalog_domain::task_queue::TaskKind;
+    use attricat_domain::task_queue::TaskKind;
     use std::time::Duration;
-    let repository = CatalogRepository::system(pool.clone())
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(Uuid::from_u128(0x00000000000040008000000000000002))
         .await
         .unwrap();
@@ -2850,12 +2850,12 @@ async fn packaged_public_http_transfer_and_redirect_policy(pool: sqlx::PgPool) {
         repository::StartExtensionOperation,
         task_worker::TaskHandler,
     };
-    use catalog_domain::task_queue::TaskKind;
+    use attricat_domain::task_queue::TaskKind;
     use std::time::Duration;
     if std::env::var("ATTRICAT_PUBLIC_HTTP_TRANSFER_TEST").as_deref() != Ok("1") {
         return;
     }
-    let repository = CatalogRepository::system(pool.clone())
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(Uuid::from_u128(0x00000000000040008000000000000002))
         .await
         .unwrap();
@@ -2942,10 +2942,10 @@ async fn packaged_public_http_transfer_and_redirect_policy(pool: sqlx::PgPool) {
 #[sqlx::test(migrations = "./migrations")]
 async fn delivery_attempt_is_uncertain_until_confirmed_and_never_auto_resends(pool: sqlx::PgPool) {
     use api::repository::{DeliveryState, StartExtensionOperation};
-    use catalog_domain::task_queue::TaskKind;
+    use attricat_domain::task_queue::TaskKind;
     use std::time::Duration;
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = CatalogRepository::system(pool.clone())
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(workspace)
         .await
         .unwrap();
@@ -3050,7 +3050,7 @@ async fn delivery_attempt_is_uncertain_until_confirmed_and_never_auto_resends(po
 async fn operation_schedules_are_workspace_scoped_and_occurrences_deduplicated(pool: sqlx::PgPool) {
     use api::repository::CreateExtensionOperationSchedule;
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = CatalogRepository::system(pool.clone())
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(workspace)
         .await
         .unwrap();
@@ -3162,7 +3162,7 @@ async fn operation_schedules_are_workspace_scoped_and_occurrences_deduplicated(p
         .execute(&pool)
         .await
         .unwrap();
-    let foreign = CatalogRepository::system(pool.clone())
+    let foreign = AttricatRepository::system(pool.clone())
         .for_workspace(foreign_id)
         .await
         .unwrap();
@@ -3233,13 +3233,13 @@ async fn packaged_csv_connector_exports_through_the_real_host(pool: sqlx::PgPool
         repository::StartExtensionOperation,
         task_worker::TaskHandler,
     };
-    use catalog_domain::task_queue::TaskKind;
+    use attricat_domain::task_queue::TaskKind;
     use std::time::Duration;
     let Ok(path) = std::env::var("ATTRICAT_CONNECTOR_CSV_ARCHIVE") else {
         return;
     };
     let archive = std::fs::read(path).unwrap();
-    let repository = CatalogRepository::system(pool.clone())
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(Uuid::from_u128(0x00000000000040008000000000000002))
         .await
         .unwrap();
@@ -3264,8 +3264,8 @@ async fn packaged_csv_connector_exports_through_the_real_host(pool: sqlx::PgPool
         .await
         .unwrap();
     for capability in [
-        "catalog.read",
-        "catalog.write",
+        "attricat.read",
+        "attricat.write",
         "artifacts.read",
         "artifacts.write",
     ] {
@@ -3347,7 +3347,7 @@ async fn packaged_csv_connector_exports_through_the_real_host(pool: sqlx::PgPool
     server.abort();
 
     // A real packaged import spans two worker leases, reopens the durable
-    // input, and commits two independently deduplicated Catalog upsert batches.
+    // input, and commits two independently deduplicated Attricat upsert batches.
     use api::{storage::StoredObject, task_worker::TaskOutcome};
     use sha2::{Digest, Sha256};
     let csv = format!(
@@ -3463,7 +3463,7 @@ async fn packaged_csv_connector_exports_through_the_real_host(pool: sqlx::PgPool
         if batch == 0 {
             assert!(matches!(result, TaskOutcome::Reschedule { .. }));
             // The next page must read values as of the first page's cursor,
-            // even if a Catalog write lands between worker leases.
+            // even if a Attricat write lands between worker leases.
             let key_attribute = blueprint
                 .attributes
                 .iter()
@@ -3471,7 +3471,7 @@ async fn packaged_csv_connector_exports_through_the_real_host(pool: sqlx::PgPool
                 .unwrap()
                 .id;
             let last = repository
-                .extension_catalog_lookup(
+                .extension_attricat_lookup(
                     blueprint.blueprint.id,
                     blueprint.blueprint.version,
                     key_attribute,
@@ -3557,12 +3557,12 @@ async fn artifact_completion_faults_abort_metadata_and_delete_orphans(pool: sqlx
         storage::StoredObject,
         task_worker::TaskHandler,
     };
-    use catalog_domain::task_queue::TaskKind;
+    use attricat_domain::task_queue::TaskKind;
     use sha2::{Digest, Sha256};
     use std::time::Duration;
 
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = CatalogRepository::system(pool.clone())
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(workspace)
         .await
         .unwrap();
@@ -3671,7 +3671,7 @@ async fn artifact_completion_faults_abort_metadata_and_delete_orphans(pool: sqlx
 #[sqlx::test(migrations = "./migrations")]
 async fn client_artifacts_revalidate_against_the_installed_release(pool: sqlx::PgPool) {
     let workspace = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = CatalogRepository::system(pool.clone())
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(workspace)
         .await
         .unwrap();
@@ -3723,7 +3723,7 @@ async fn client_artifacts_revalidate_against_the_installed_release(pool: sqlx::P
 #[sqlx::test(migrations = "./migrations")]
 async fn extension_lookup_resolves_like_an_upsert(pool: sqlx::PgPool) {
     let workspace_id = Uuid::from_u128(0x00000000000040008000000000000002);
-    let repository = CatalogRepository::system(pool.clone())
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(workspace_id)
         .await
         .unwrap()
@@ -3775,7 +3775,7 @@ async fn extension_lookup_resolves_like_an_upsert(pool: sqlx::PgPool) {
         );
     }
     let lookup = |attribute_id, value: &'static str| {
-        repository.extension_catalog_lookup(
+        repository.extension_attricat_lookup(
             blueprint.blueprint.id,
             blueprint.blueprint.version,
             attribute_id,

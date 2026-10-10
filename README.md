@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="apps/catalog-web/design/assets/logos/wordmark-dark.svg">
-    <img alt="Attricat" src="apps/catalog-web/design/assets/logos/wordmark-light.svg" width="242" height="48">
+    <source media="(prefers-color-scheme: dark)" srcset="apps/web/design/assets/logos/wordmark-dark.svg">
+    <img alt="Attricat" src="apps/web/design/assets/logos/wordmark-light.svg" width="242" height="48">
   </picture>
 </p>
 
@@ -16,8 +16,8 @@ The project has three parts:
 | Part | Path | What it is |
 | --- | --- | --- |
 | API | `apps/api` | Rust (Axum) server and SQLx database migrations |
-| CLI | `apps/catalog-cli` | Command-line client for the API, with JSON output |
-| Web app | `apps/catalog-web` | React and Vite interface |
+| CLI | `apps/cli` | Command-line client for the API, with JSON output |
+| Web app | `apps/web` | React and Vite interface |
 
 ## Self-hosting
 
@@ -124,6 +124,6 @@ and the rules for UI and database changes.
 The code is licensed under the [GNU Affero General Public License, version
 3](LICENSE) (`AGPL-3.0-only`).
 
-The design assets in `apps/catalog-web/design/` come from the separate
+The design assets in `apps/web/design/` come from the separate
 [Attricat design repository](https://github.com/attricat/design) and follow its
 license. Third-party dependencies keep their own licenses.

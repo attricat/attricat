@@ -473,7 +473,7 @@ pub(super) async fn detail(
 
 async fn selected_release(
     state: &AppState,
-    repository: &crate::repository::CatalogRepository,
+    repository: &crate::repository::AttricatRepository,
     input: &ReleaseRequest,
 ) -> Result<DiscoveredRelease, ApiError> {
     let target = GitHubRepository::from_str(&format!("{}/{}", input.owner, input.repository))
@@ -555,7 +555,7 @@ pub(super) async fn upgrade(
     // only its returned installation would allow a selected archive to mutate
     // a different installed extension before this handler rejects the request.
     let package = unpack_extension(archive).await?;
-    if package.manifest().catalog.id != extension_id {
+    if package.manifest().attricat.id != extension_id {
         return Err(ApiError::invalid_input(
             "selected release has a different extension ID".to_owned(),
         ));

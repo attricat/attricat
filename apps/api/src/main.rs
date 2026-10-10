@@ -20,7 +20,7 @@ use api::{
     http::{AppState, BuildInfo, SampleAccount, SampleLogins, StreamControl, router},
     mail::SmtpMailDelivery,
     maintenance,
-    repository::{CatalogRepository, SystemRepository, ValueHistoryRetentionDays},
+    repository::{AttricatRepository, SystemRepository, ValueHistoryRetentionDays},
     rule_runtime,
     solution_pack_extensions::{
         LocalExtensionReleases, OfficialExtensionRegistry, OfficialExtensionReleases,
@@ -31,7 +31,7 @@ use api::{
     telemetry::{init_metrics, init_tracing},
     workflow_runtime,
 };
-use catalog_cache::{CacheConfig, QueryCache};
+use attricat_cache::{CacheConfig, QueryCache};
 use sqlx::postgres::PgPoolOptions;
 use tokio::sync::Semaphore;
 use uuid::Uuid;
@@ -80,7 +80,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let bind_addr: SocketAddr = std::env::var("BIND_ADDR")
         .unwrap_or_else(|_| "127.0.0.1:3000".to_owned())
         .parse()?;
-    let devtools_enabled = std::env::var("CATALOG_DEVTOOLS").is_ok_and(|value| value == "true");
+    let devtools_enabled = std::env::var("ATTRICAT_DEVTOOLS").is_ok_and(|value| value == "true");
     let max_preview_relationship_depth = std::env::var("PREVIEW_MAX_RELATIONSHIP_DEPTH")
         .unwrap_or_else(|_| DEFAULT_PREVIEW_RELATIONSHIP_DEPTH.to_string())
         .parse()?;
@@ -96,19 +96,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let max_relationship_facet_nodes = std::env::var("RELATIONSHIP_FACET_MAX_NODES")
         .unwrap_or_else(|_| DEFAULT_RELATIONSHIP_FACET_NODES.to_string())
         .parse()?;
-    let workspace_id = std::env::var("CATALOG_WORKSPACE_ID")
+    let workspace_id = std::env::var("ATTRICAT_WORKSPACE_ID")
         .unwrap_or_else(|_| "00000000-0000-4000-8000-000000000002".to_owned())
         .parse::<Uuid>()?;
     // A public demo deployment signs visitors in to the bootstrap workspace
     // with seeded per-role accounts, which the web app offers to pre-fill.
-    let demo_mode = boolean_env("CATALOG_DEMO_MODE", false)?;
-    let sample_accounts = demo_mode || boolean_env("CATALOG_SAMPLE_ACCOUNTS", false)?;
+    let demo_mode = boolean_env("ATTRICAT_DEMO_MODE", false)?;
+    let sample_accounts = demo_mode || boolean_env("ATTRICAT_SAMPLE_ACCOUNTS", false)?;
     // Demo visitors share accounts, so the agent may only read there.
     let agent_provider = agent_provider.map(|mut config| {
         config.read_only = demo_mode;
         config
     });
-    let bootstrap_workspace_name = std::env::var("CATALOG_BOOTSTRAP_WORKSPACE_NAME")
+    let bootstrap_workspace_name = std::env::var("ATTRICAT_BOOTSTRAP_WORKSPACE_NAME")
         .unwrap_or_else(|_| {
             if demo_mode {
                 "Demo"
@@ -117,26 +117,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             }
             .to_owned()
         });
-    let bootstrap_owner_email = std::env::var("CATALOG_BOOTSTRAP_OWNER_EMAIL")
+    let bootstrap_owner_email = std::env::var("ATTRICAT_BOOTSTRAP_OWNER_EMAIL")
         .unwrap_or_else(|_| "owner@example.test".to_owned())
         .trim()
         .to_lowercase();
-    let bootstrap_owner_id = std::env::var("CATALOG_BOOTSTRAP_OWNER_ID")
+    let bootstrap_owner_id = std::env::var("ATTRICAT_BOOTSTRAP_OWNER_ID")
         .ok()
         .map(|value| value.parse())
         .transpose()?;
-    let bootstrap_owner_password = std::env::var("CATALOG_BOOTSTRAP_OWNER_PASSWORD").ok();
+    let bootstrap_owner_password = std::env::var("ATTRICAT_BOOTSTRAP_OWNER_PASSWORD").ok();
     if sample_accounts && bootstrap_owner_password.is_none() {
         return Err(
-            "CATALOG_SAMPLE_ACCOUNTS and CATALOG_DEMO_MODE require CATALOG_BOOTSTRAP_OWNER_PASSWORD"
+            "ATTRICAT_SAMPLE_ACCOUNTS and ATTRICAT_DEMO_MODE require ATTRICAT_BOOTSTRAP_OWNER_PASSWORD"
                 .into(),
         );
     }
-    let e2e_fixture = std::env::var("CATALOG_E2E_FIXTURE_EMAIL")
+    let e2e_fixture = std::env::var("ATTRICAT_E2E_FIXTURE_EMAIL")
         .ok()
-        .zip(std::env::var("CATALOG_E2E_FIXTURE_PASSWORD").ok());
+        .zip(std::env::var("ATTRICAT_E2E_FIXTURE_PASSWORD").ok());
     if bootstrap_owner_email.is_empty() || !bootstrap_owner_email.contains('@') {
-        return Err("CATALOG_BOOTSTRAP_OWNER_EMAIL must be a valid email address".into());
+        return Err("ATTRICAT_BOOTSTRAP_OWNER_EMAIL must be a valid email address".into());
     }
     // Complete migrations and bootstrap before creating serving pools.
     // Tenant isolation is enforced by explicit repository scope/predicates;
@@ -145,7 +145,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .max_connections(MAINTENANCE_POOL_CONNECTIONS)
         .connect(&database_url)
         .await?;
-    let auto_migrate = boolean_env("CATALOG_AUTO_MIGRATE", true)?;
+    let auto_migrate = boolean_env("ATTRICAT_AUTO_MIGRATE", true)?;
     if auto_migrate {
         tracing::info!("running database migrations");
         MIGRATOR.run(&maintenance_pool).await?;
@@ -154,31 +154,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             "automatic migrations disabled; expecting the migrate role to have completed"
         );
     }
-    CatalogRepository::system(maintenance_pool.clone())
+    AttricatRepository::system(maintenance_pool.clone())
         .ensure_agent_permissions()
         .await?;
-    CatalogRepository::system(maintenance_pool.clone())
+    AttricatRepository::system(maintenance_pool.clone())
         .ensure_audit_permissions()
         .await?;
-    CatalogRepository::system(maintenance_pool.clone())
+    AttricatRepository::system(maintenance_pool.clone())
         .ensure_record_publication_permissions()
         .await?;
-    CatalogRepository::system(maintenance_pool.clone())
+    AttricatRepository::system(maintenance_pool.clone())
         .ensure_retention_hold_permissions()
         .await?;
-    CatalogRepository::system(maintenance_pool.clone())
+    AttricatRepository::system(maintenance_pool.clone())
         .ensure_extension_registry_permissions()
         .await?;
-    CatalogRepository::system(maintenance_pool.clone())
+    AttricatRepository::system(maintenance_pool.clone())
         .ensure_workflow_permissions()
         .await?;
-    CatalogRepository::system(maintenance_pool.clone())
+    AttricatRepository::system(maintenance_pool.clone())
         .ensure_solution_pack_permissions()
         .await?;
-    CatalogRepository::system(maintenance_pool.clone())
+    AttricatRepository::system(maintenance_pool.clone())
         .ensure_rule_permissions()
         .await?;
-    let bootstrap_repository = CatalogRepository::system(maintenance_pool.clone());
+    let bootstrap_repository = AttricatRepository::system(maintenance_pool.clone());
     // Repair pre-existing workspaces once at startup; scope derivation and
     // request reads never provision data or acquire an extra connection.
     for id in bootstrap_repository.active_workspace_ids().await? {
@@ -268,7 +268,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .unwrap_or_else(|_| "1025".to_owned())
         .parse()?;
     let mail_from = std::env::var("MAIL_FROM")
-        .unwrap_or_else(|_| "Catalog <no-reply@catalog.local>".to_owned());
+        .unwrap_or_else(|_| "Attricat <no-reply@attricat.local>".to_owned());
     let mail_delivery = Arc::new(SmtpMailDelivery::new(
         &smtp_host,
         smtp_port,
@@ -291,7 +291,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             Ok(directory) if devtools_enabled => Arc::new(LocalExtensionReleases::new(directory)),
             Ok(_) => {
                 return Err(
-                    "SOLUTION_PACK_LOCAL_EXTENSIONS_DIR requires CATALOG_DEVTOOLS=true".into(),
+                    "SOLUTION_PACK_LOCAL_EXTENSIONS_DIR requires ATTRICAT_DEVTOOLS=true".into(),
                 );
             }
             Err(_) => Arc::new(OfficialExtensionRegistry::new(
@@ -314,7 +314,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         QueryCache::from_config(CacheConfig::from_env()?, &database_identity.to_string()).await?;
     extension_runtime::use_network_rate_limiter(rate_limiter);
     let task_repository =
-        CatalogRepository::system(task_pool.clone()).with_cache(query_cache.clone());
+        AttricatRepository::system(task_pool.clone()).with_cache(query_cache.clone());
     // Agent provider calls are not safely resumable. On process restart mark
     // any previously running run interrupted before its task can be reclaimed.
     if agent_provider.is_some() {
@@ -388,7 +388,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         shutdown_receiver.clone(),
     );
     let workflow_repository =
-        CatalogRepository::system(task_pool.clone()).with_cache(query_cache.clone());
+        AttricatRepository::system(task_pool.clone()).with_cache(query_cache.clone());
     let dispatcher_handles = event_dispatcher::start(
         workflow_repository.clone(),
         rule_runtime::add_to_registry(workflow_runtime::add_to_registry(
@@ -416,7 +416,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     axum::serve(
         listener,
         router(AppState {
-            repository: CatalogRepository::system(request_pool.clone())
+            repository: AttricatRepository::system(request_pool.clone())
                 .with_cache(query_cache.clone()),
             agent_provider,
             official_extension_releases,
@@ -512,7 +512,7 @@ async fn shutdown_signal() {
 }
 
 const MAX_GLOBAL_POOL_CONNECTIONS: u32 = 100;
-/// Sign-in identifier of the bootstrap workspace in `CATALOG_DEMO_MODE`.
+/// Sign-in identifier of the bootstrap workspace in `ATTRICAT_DEMO_MODE`.
 const DEMO_LOGIN_IDENTIFIER: &str = "demo.attricat.com";
 /// Built-in roles that receive a seeded account beside the bootstrap owner,
 /// from least to most privileged.
@@ -530,7 +530,7 @@ async fn seed_sample_accounts(
     let domain = owner_email
         .split_once('@')
         .map(|(_, domain)| domain)
-        .ok_or("CATALOG_BOOTSTRAP_OWNER_EMAIL must be a valid email address")?;
+        .ok_or("ATTRICAT_BOOTSTRAP_OWNER_EMAIL must be a valid email address")?;
     let mut accounts = Vec::new();
     for role in SAMPLE_ACCOUNT_ROLES {
         let email = format!("{role}@{domain}");

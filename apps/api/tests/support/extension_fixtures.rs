@@ -7,7 +7,7 @@ use api::{
     extension_installer::ExtensionInstaller,
     extension_runtime::{ExtensionOperationTaskHandler, ExtensionRuntime, ExtensionRuntimeConfig},
     model::{CreateBlueprint, NewAttributeValue},
-    repository::CatalogRepository,
+    repository::AttricatRepository,
     storage::FakeObjectStore,
     task_queue::TaskKind,
     task_worker::{TaskHandler, TaskOutcome},
@@ -81,7 +81,7 @@ pub fn build_test_component(package: &str, output: &str) -> Vec<u8> {
 /// requeueing rescheduled ones. Bounded so a run that never settles cannot
 /// hang the test.
 pub async fn drain_extension_operations(
-    repository: &CatalogRepository,
+    repository: &AttricatRepository,
     store: Arc<FakeObjectStore>,
 ) {
     let runtime = ExtensionRuntime::new(store, ExtensionRuntimeConfig::default()).unwrap();
@@ -122,7 +122,7 @@ pub async fn drain_extension_operations(
 /// Side-loads `archive`, grants every capability in `permissions`, enables
 /// the extension and returns its installed release id.
 pub async fn install_extension(
-    repository: &CatalogRepository,
+    repository: &AttricatRepository,
     store: Arc<FakeObjectStore>,
     extension_id: &str,
     archive: &[u8],
@@ -147,7 +147,7 @@ pub async fn install_extension(
 }
 
 /// Creates and publishes a blueprint, returning its `(id, version)`.
-pub async fn published_blueprint(repository: &CatalogRepository, definition: &str) -> (Uuid, i64) {
+pub async fn published_blueprint(repository: &AttricatRepository, definition: &str) -> (Uuid, i64) {
     let blueprint = repository
         .create_blueprint(CreateBlueprint {
             definition: definition.into(),
@@ -163,7 +163,7 @@ pub async fn published_blueprint(repository: &CatalogRepository, definition: &st
 
 /// Creates a record whose `title` attribute is `title`.
 pub async fn titled_record(
-    repository: &CatalogRepository,
+    repository: &AttricatRepository,
     blueprint: (Uuid, i64),
     title: &str,
 ) -> Uuid {

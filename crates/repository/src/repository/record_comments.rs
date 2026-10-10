@@ -1,4 +1,4 @@
-use super::{CatalogRepository, RepositoryError};
+use super::{AttricatRepository, RepositoryError};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use sqlx::FromRow;
@@ -26,7 +26,7 @@ fn validate_body(body: &str) -> Result<(), RepositoryError> {
     Ok(())
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     pub async fn list_record_comments(
         &self,
         record: Uuid,

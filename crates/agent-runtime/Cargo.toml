@@ -1,5 +1,5 @@
 [package]
-name = "catalog-agent-runtime"
+name = "attricat-agent-runtime"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,14 +10,14 @@ publish.workspace = true
 async-trait.workspace = true
 base64.workspace = true
 chrono.workspace = true
-catalog-blueprint = { path = "../blueprint" }
-catalog-domain = { path = "../domain" }
-catalog-repository = { path = "../repository" }
-catalog-rules = { path = "../rules" }
-catalog-storage = { path = "../storage" }
-catalog-validation = { path = "../validation" }
-catalog-workers = { path = "../workers" }
-catalog-workflow = { path = "../workflow" }
+attricat-blueprint = { path = "../blueprint" }
+attricat-domain = { path = "../domain" }
+attricat-repository = { path = "../repository" }
+attricat-rules = { path = "../rules" }
+attricat-storage = { path = "../storage" }
+attricat-validation = { path = "../validation" }
+attricat-workers = { path = "../workers" }
+attricat-workflow = { path = "../workflow" }
 futures-util.workspace = true
 reqwest.workspace = true
 secrecy.workspace = true

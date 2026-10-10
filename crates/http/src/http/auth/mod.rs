@@ -11,15 +11,15 @@ use super::{AppState, audit, error::ApiError};
 use crate::{
     account::{SessionDigest, SessionSecret},
     constants::SESSION_COOKIE,
-    repository::{AuthorizationActor, CatalogRepository},
+    repository::{AttricatRepository, AuthorizationActor},
 };
 
 mod policy;
 
-const USER_HEADER: &str = "x-catalog-user-id";
-const WORKSPACE_HEADER: &str = "x-catalog-workspace-id";
+const USER_HEADER: &str = "x-attricat-user-id";
+const WORKSPACE_HEADER: &str = "x-attricat-workspace-id";
 const AUTHORIZATION_HEADER: &str = "authorization";
-const CSRF_HEADER: &str = "x-catalog-csrf";
+const CSRF_HEADER: &str = "x-attricat-csrf";
 
 /// Verified request identity. It is inserted only after membership and policy
 /// evaluation, never constructed from an unvalidated handler argument.
@@ -51,7 +51,7 @@ pub(super) struct AuthenticatedSession(pub SessionDigest);
 /// Repository explicitly scoped to the authenticated workspace. It is inserted
 /// only by authorization after workspace selection.
 #[derive(Clone)]
-pub(super) struct ScopedRepository(pub CatalogRepository);
+pub(super) struct ScopedRepository(pub AttricatRepository);
 
 impl FromRequestParts<AppState> for ScopedRepository {
     type Rejection = ApiError;

@@ -6,12 +6,12 @@ mod support;
 use std::time::Duration;
 
 use api::{
-    repository::CatalogRepository, rule_runtime, task_queue::TaskKind, task_worker::TaskOutcome,
+    repository::AttricatRepository, rule_runtime, task_queue::TaskKind, task_worker::TaskOutcome,
 };
 use support::*;
 
 async fn drain_rule_tasks(pool: &PgPool) {
-    let repository = CatalogRepository::new(pool.clone(), BOOTSTRAP_WORKSPACE_ID.parse().unwrap());
+    let repository = AttricatRepository::new(pool.clone(), BOOTSTRAP_WORKSPACE_ID.parse().unwrap());
     let handler = rule_runtime::task_handler(repository.clone());
     for _ in 0..50 {
         let Some(task) = repository
@@ -69,7 +69,7 @@ async fn send(request: reqwest::RequestBuilder) -> (StatusCode, Value) {
 
 #[sqlx::test]
 async fn published_versions_contexts_and_rules_apply_to_the_next_request(pool: PgPool) {
-    CatalogRepository::system(pool.clone())
+    AttricatRepository::system(pool.clone())
         .ensure_rule_permissions()
         .await
         .unwrap();
@@ -205,7 +205,7 @@ async fn published_versions_contexts_and_rules_apply_to_the_next_request(pool: P
 
 #[sqlx::test]
 async fn the_database_identity_is_created_once(pool: PgPool) {
-    let repository = CatalogRepository::system(pool.clone());
+    let repository = AttricatRepository::system(pool.clone());
     let first = repository.ensure_database_identity().await.unwrap();
     assert_eq!(repository.ensure_database_identity().await.unwrap(), first);
 }

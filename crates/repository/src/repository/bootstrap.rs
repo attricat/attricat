@@ -2,11 +2,11 @@ use uuid::Uuid;
 
 use crate::account::{Password, hash_password};
 
-use super::{CatalogRepository, RepositoryError};
+use super::{AttricatRepository, RepositoryError};
 
 const OWNER_ROLE_ID: Uuid = Uuid::from_u128(0x00000000000040008000000000000101);
 
-impl<S: super::RepositoryScope> CatalogRepository<S> {
+impl<S: super::RepositoryScope> AttricatRepository<S> {
     /// Applies deployment-provided metadata to the workspace selected for bootstrap.
     pub async fn configure_bootstrap_workspace(
         &self,

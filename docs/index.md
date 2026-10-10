@@ -96,8 +96,8 @@ separate API and Vite processes on fresh ports; it never changes the development
 database.
 
 ```sh
-pnpm --dir apps/catalog-web exec playwright install chromium
-pnpm --dir apps/catalog-web test:e2e
+pnpm --dir apps/web exec playwright install chromium
+pnpm --dir apps/web test:e2e
 ```
 
 With Colima, ensure its Docker runtime is running. The test setup resolves the

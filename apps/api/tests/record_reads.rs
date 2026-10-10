@@ -194,7 +194,7 @@ async fn related_record_previews_are_workspace_scoped_across_pages_and_deletions
     .unwrap();
     // A workspace inserted directly needs the default context that workspace
     // provisioning creates; record creation resolves values against it.
-    api::repository::CatalogRepository::system(pool.clone())
+    api::repository::AttricatRepository::system(pool.clone())
         .initialize_workspace(other_workspace_id)
         .await
         .unwrap();
@@ -216,11 +216,11 @@ async fn related_record_previews_are_workspace_scoped_across_pages_and_deletions
         .unwrap();
     let mut other_headers = HeaderMap::new();
     other_headers.insert(
-        "x-catalog-user-id",
+        "x-attricat-user-id",
         HeaderValue::from_static(BOOTSTRAP_OWNER_ID),
     );
     other_headers.insert(
-        "x-catalog-workspace-id",
+        "x-attricat-workspace-id",
         HeaderValue::from_str(&other_workspace_id.to_string()).unwrap(),
     );
     let other_client = Client::builder()
@@ -631,11 +631,11 @@ value_type = "string"
         }
         let mut headers = HeaderMap::new();
         headers.insert(
-            "x-catalog-user-id",
+            "x-attricat-user-id",
             HeaderValue::from_str(&user.to_string()).unwrap(),
         );
         headers.insert(
-            "x-catalog-workspace-id",
+            "x-attricat-workspace-id",
             HeaderValue::from_str(&workspace.to_string()).unwrap(),
         );
         clients.push(Client::builder().default_headers(headers).build().unwrap());

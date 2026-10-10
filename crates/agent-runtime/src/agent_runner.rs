@@ -11,7 +11,7 @@ use crate::{
     },
     agent_tools::{self, ToolKind},
     agents::MAX_INLINE_ATTACHMENT_BYTES,
-    repository::{AgentAuditAttribution, AuditContext, CatalogRepository, RepositoryError},
+    repository::{AgentAuditAttribution, AttricatRepository, AuditContext, RepositoryError},
     storage::ObjectStore,
 };
 use base64::{Engine, engine::general_purpose::STANDARD};
@@ -91,7 +91,7 @@ pub enum RunError {
 }
 
 pub async fn run(
-    repository: &CatalogRepository,
+    repository: &AttricatRepository,
     provider: &OpenAiCompatibleClient,
     object_store: &Arc<dyn ObjectStore>,
     run_id: Uuid,
@@ -106,7 +106,7 @@ pub async fn run(
 /// Drives a run whose queued-to-running transition was atomically claimed by
 /// the process-owned dispatcher.
 pub async fn run_claimed(
-    repository: &CatalogRepository,
+    repository: &AttricatRepository,
     provider: &OpenAiCompatibleClient,
     object_store: &Arc<dyn ObjectStore>,
     run_id: Uuid,
@@ -144,7 +144,7 @@ const MAX_CATALOG_MAP_BYTES: usize = 8 * 1024;
 /// description, the blueprints its relationship fields link to, and its
 /// described attributes, so the model can map the user's words to records and
 /// turn a question about related records into a relationship search directly.
-async fn catalog_map(repository: &CatalogRepository) -> Result<String, RunError> {
+async fn catalog_map(repository: &AttricatRepository) -> Result<String, RunError> {
     let mut lines = Vec::new();
     for summary in repository.list_blueprints().await? {
         if summary.kind != "record" {
@@ -154,7 +154,7 @@ async fn catalog_map(repository: &CatalogRepository) -> Result<String, RunError>
             continue;
         };
         // Descriptions live in the definition; a stored definition always parses.
-        let definition = catalog_blueprint::parse(&blueprint.blueprint.definition).ok();
+        let definition = attricat_blueprint::parse(&blueprint.blueprint.definition).ok();
         let descriptions = definition
             .as_ref()
             .map(|definition| {
@@ -162,7 +162,7 @@ async fn catalog_map(repository: &CatalogRepository) -> Result<String, RunError>
                     .attributes
                     .iter()
                     .filter_map(|attribute| match attribute {
-                        catalog_blueprint::AttributeDeclaration::Local(attribute) => attribute
+                        attricat_blueprint::AttributeDeclaration::Local(attribute) => attribute
                             .description
                             .as_deref()
                             .map(|description| (attribute.code.as_str(), description)),
@@ -243,7 +243,7 @@ async fn catalog_map(repository: &CatalogRepository) -> Result<String, RunError>
 }
 
 async fn drive(
-    repository: &CatalogRepository,
+    repository: &AttricatRepository,
     provider: &OpenAiCompatibleClient,
     object_store: &Arc<dyn ObjectStore>,
     run_id: Uuid,
@@ -530,7 +530,7 @@ async fn drive(
     Ok(())
 }
 async fn flush_deltas(
-    repository: &CatalogRepository,
+    repository: &AttricatRepository,
     run_id: Uuid,
     pending: &Mutex<String>,
 ) -> Result<(), RepositoryError> {
@@ -544,7 +544,7 @@ async fn flush_deltas(
 }
 
 async fn request_message(
-    repository: &CatalogRepository,
+    repository: &AttricatRepository,
     object_store: &Arc<dyn ObjectStore>,
     message: crate::repository::ConversationMessage,
 ) -> ChatMessage {
@@ -678,7 +678,7 @@ async fn request_message(
 /// executed once; rejected calls become structured tool results. The run is
 /// then sent back to the provider with that result in thread history.
 pub async fn resume(
-    repository: &CatalogRepository,
+    repository: &AttricatRepository,
     provider: &OpenAiCompatibleClient,
     object_store: &Arc<dyn ObjectStore>,
     run_id: Uuid,
@@ -691,7 +691,7 @@ pub async fn resume(
 
 /// Resumes a decision-bearing run after the dispatcher claimed it.
 pub async fn resume_claimed(
-    repository: &CatalogRepository,
+    repository: &AttricatRepository,
     provider: &OpenAiCompatibleClient,
     object_store: &Arc<dyn ObjectStore>,
     run_id: Uuid,
@@ -840,7 +840,7 @@ fn mutation_authorization(name: &str, arguments: &Value) -> Option<(&'static str
 }
 
 pub async fn mutation_authorized(
-    repository: &CatalogRepository,
+    repository: &AttricatRepository,
     actor: Uuid,
     workspace: Uuid,
     name: &str,
@@ -895,7 +895,7 @@ fn agent_audit_context(
         // provide its request/correlation identity without retaining prompts.
         request_id: call.id,
         correlation_id: run.id,
-        action: format!("catalog.agent.{}", call.tool_name),
+        action: format!("attricat.agent.{}", call.tool_name),
         authorization_scope: json!({"permission": permission}),
         target: match target_id {
             Some(id) => json!({"id": id}),
@@ -914,7 +914,7 @@ fn agent_audit_context(
 }
 
 pub(crate) async fn fail_run(
-    repository: &CatalogRepository,
+    repository: &AttricatRepository,
     run_id: Uuid,
     code: &str,
     message: &str,

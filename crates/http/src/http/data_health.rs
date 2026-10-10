@@ -1,7 +1,7 @@
 use super::{AppState, auth::ActiveWorkspace, error::ApiError, extractors::ApiQuery};
 use crate::{
     constants::{DEFAULT_STALE_AFTER_DAYS, MAX_STALE_AFTER_DAYS},
-    repository::{CatalogRepository, RepositoryError},
+    repository::{AttricatRepository, RepositoryError},
 };
 use axum::{
     Json,
@@ -57,10 +57,10 @@ pub(super) async fn readiness(State(state): State<AppState>) -> Response {
     );
     let database_ready = matches!(database, Ok(Ok(())));
     let storage_ready = matches!(storage, Ok(Ok(())));
-    metrics::gauge!("catalog_database_ready").set(if database_ready { 1.0 } else { 0.0 });
+    metrics::gauge!("attricat_database_ready").set(if database_ready { 1.0 } else { 0.0 });
     // Object-store readiness is also recorded at the storage boundary, but set
     // it here so every readiness response has a complete dependency snapshot.
-    metrics::gauge!("catalog_object_store_ready").set(if storage_ready { 1.0 } else { 0.0 });
+    metrics::gauge!("attricat_object_store_ready").set(if storage_ready { 1.0 } else { 0.0 });
     if database_ready && storage_ready {
         (StatusCode::OK, Json(json!({ "status": "ready" }))).into_response()
     } else {
@@ -160,7 +160,7 @@ impl DataHealthCache {
 
 async fn cached_data_health<T>(
     state: &AppState,
-    repository: &CatalogRepository,
+    repository: &AttricatRepository,
     workspace_id: Uuid,
     key: String,
     load: impl std::future::Future<Output = Result<T, RepositoryError>>,
@@ -188,7 +188,7 @@ where
     } else {
         (to_json(load.await?)?, "BYPASS")
     };
-    metrics::counter!("catalog_data_health_cache_total", "status" => cache_status).increment(1);
+    metrics::counter!("attricat_data_health_cache_total", "status" => cache_status).increment(1);
     let mut response = Json(value).into_response();
     response.headers_mut().append(
         HeaderName::from_static("server-timing"),
@@ -206,7 +206,7 @@ fn to_json(value: impl Serialize) -> Result<Value, ApiError> {
         .map_err(|_| ApiError::internal("data health response could not be serialized"))
 }
 /// Drops cached data-health responses for the repository's workspace only.
-pub(super) fn invalidate_data_health(state: &AppState, repository: &CatalogRepository) {
+pub(super) fn invalidate_data_health(state: &AppState, repository: &AttricatRepository) {
     state
         .data_health_cache
         .invalidate(repository.workspace_id_for_runtime());

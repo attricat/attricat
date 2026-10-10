@@ -2,7 +2,7 @@
 
 `apps/api/tests/round_trip_baseline.rs` measures database round trips (one per
 completed SQL statement, including `BEGIN`/`COMMIT`) for hot request and worker
-paths using the `catalog_db_round_trips_*` metrics:
+paths using the `attricat_db_round_trips_*` metrics:
 
 ```sh
 set -a; source .env; set +a
@@ -14,10 +14,10 @@ OTEL_EXPORTER_OTLP_TRACES_ENDPOINT= RUST_LOG=warn \
 Without `ROUND_TRIP_EXTENSION_ARCHIVE` the harness installs the unified test
 component, whose event handler is a no-op.
 
-In a running server, `catalog_db_round_trips_per_operation{scope}` (per
+In a running server, `attricat_db_round_trips_per_operation{scope}` (per
 request route, background tick, or task kind) and
-`catalog_db_round_trips_total{scope}` are exported on `/metrics`; set
-`RUST_LOG=catalog_repository::round_trips=debug` for a log line per operation.
+`attricat_db_round_trips_total{scope}` are exported on `/metrics`; set
+`RUST_LOG=attricat_repository::round_trips=debug` for a log line per operation.
 
 ## Baseline (before optimization)
 

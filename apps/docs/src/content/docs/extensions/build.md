@@ -17,7 +17,7 @@ Extension code never runs in Attricat's own process or page.
 
 - Server components run in a WebAssembly sandbox with no file system, environment, clock, or sockets. Everything they do goes through host calls, and each call is checked against the permissions the administrator granted.
 - Client components run in `<iframe sandbox="allow-scripts">` frames with an opaque origin and a Content Security Policy that blocks network access. They talk to Attricat through a message channel that exposes only the operations they were granted.
-- Catalog changes made by an extension go through the same validation, audit log, and event stream as a person's edits.
+- Attricat changes made by an extension go through the same validation, audit log, and event stream as a person's edits.
 
 Design with that in mind: your extension asks for capabilities; an administrator decides which to grant.
 
@@ -30,11 +30,11 @@ Design with that in mind: your extension asks for capabilities; an administrator
   "version": "1.0.0",
   "description": "Shows warehouse stock on product pages.",
   "icons": { "48": "assets/icon-48.svg" },
-  "catalog": {
+  "attricat": {
     "id": "acme.inventory",
     "host_api": ">=1.0.0, <2.0.0"
   },
-  "permissions": ["catalog.read"],
+  "permissions": ["attricat.read"],
   "artifacts": [
     { "id": "panel", "kind": "client_component", "path": "dist/panel.js" }
   ],
@@ -52,8 +52,8 @@ Design with that in mind: your extension asks for capabilities; an administrator
 
 ```js
 // dist/panel.js
-export const mount = async (root, catalog) => {
-  const form = await catalog.request(`/api/v1/records/${catalog.context.record_id}`);
+export const mount = async (root, attricat) => {
+  const form = await attricat.request(`/api/v1/records/${attricat.context.record_id}`);
   root.textContent = `${form.blueprint.blueprint.name} v${form.record.blueprint_version}`;
   return () => root.replaceChildren();
 };
@@ -69,7 +69,7 @@ Three version numbers are independent:
 | --- | --- |
 | `manifest_version` | The manifest format. Currently `1`. |
 | `version` | Your release, as SemVer. |
-| `catalog.host_api` | The SemVer range of Attricat host APIs your code works with, such as `>=1.0.0, <2.0.0`. |
+| `attricat.host_api` | The SemVer range of Attricat host APIs your code works with, such as `>=1.0.0, <2.0.0`. |
 
 Attricat never installs a release whose `host_api` range does not include the running host API.
 
@@ -104,7 +104,7 @@ Check that your code handles:
 - **Duplicate and out-of-order events.** Delivery is at least once. Use the event ID as an idempotency key.
 - **Its own events.** A write from your event handler produces a new event. Ignore events whose source is your own extension, or you will loop.
 - **Missing permissions.** Optional permissions may not be granted; degrade gracefully.
-- **Light and dark mode.** Read `catalog.theme` in client components.
+- **Light and dark mode.** Read `attricat.theme` in client components.
 
 ## Publish
 
@@ -118,9 +118,9 @@ To distribute through a registry, publish the archive as an asset of a GitHub Re
     "name": "Inventory panel",
     "description": "Shows warehouse stock on product pages.",
     "icon": "icon.svg",
-    "repository": "acme/catalog-inventory"
+    "repository": "acme/attricat-inventory"
   }]
 }
 ```
 
-Workspace administrators add your registry with `acli extension-registry add --source acme/catalog-extensions`. The official registry is `attricat/attricat-extensions`.
+Workspace administrators add your registry with `acli extension-registry add --source acme/attricat-extensions`. The official registry is `attricat/attricat-extensions`.

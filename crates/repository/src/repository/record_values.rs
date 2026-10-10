@@ -19,7 +19,7 @@
 //! `context_fallback = "none"` only looks at the requested context.
 use super::RepositoryError;
 use super::values::{NativeValueRow, native_value_json};
-use catalog_validation::predicate::ResolvedRecord;
+use attricat_validation::predicate::ResolvedRecord;
 use chrono::{DateTime, Utc};
 use serde_json::{Map, Value};
 use sqlx::PgConnection;

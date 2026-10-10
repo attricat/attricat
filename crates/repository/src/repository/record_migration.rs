@@ -7,7 +7,7 @@ use crate::domain_events::{
     RECORD_MIGRATED_V1, RecordMigratedV1, ReleasedRelationshipV1,
 };
 use crate::persistence_rows::Db;
-use catalog_validation::validate_json_schema;
+use attricat_validation::validate_json_schema;
 use serde_json::{Map, Value};
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
@@ -62,7 +62,7 @@ pub(super) struct MigrationTarget {
     pub default_context_id: Uuid,
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     pub async fn preview_record_migration(
         &self,
         record_id: Uuid,
@@ -418,7 +418,7 @@ impl CatalogRepository {
             let lock_started = std::time::Instant::now();
             self.lock_relationship_cardinality_writes(&mut transaction)
                 .await?;
-            metrics::histogram!("catalog_record_migration_relationship_lock_wait_seconds")
+            metrics::histogram!("attricat_record_migration_relationship_lock_wait_seconds")
                 .record(lock_started.elapsed().as_secs_f64());
         }
         let record = self.lock_record(&mut transaction, record_id).await?;
@@ -459,7 +459,7 @@ impl CatalogRepository {
                 .execute(&mut *transaction)
                 .await?;
             self.commit_mutation(transaction).await?;
-            metrics::histogram!("catalog_record_migration_transaction_duration_seconds")
+            metrics::histogram!("attricat_record_migration_transaction_duration_seconds")
                 .record(transaction_started.elapsed().as_secs_f64());
             return Err(RepositoryError::MigrationTargetChanged);
         }
@@ -718,7 +718,7 @@ impl CatalogRepository {
             .execute(&mut *transaction)
             .await?;
             self.commit_mutation(transaction).await?;
-            metrics::histogram!("catalog_record_migration_transaction_duration_seconds")
+            metrics::histogram!("attricat_record_migration_transaction_duration_seconds")
                 .record(transaction_started.elapsed().as_secs_f64());
             return Err(RepositoryError::MigrationNeedsResolution(unresolved));
         }
@@ -828,7 +828,7 @@ impl CatalogRepository {
                 causation_id: None,
                 source: EventSource {
                     kind: EventSourceKind::Api,
-                    name: "catalog_api".to_owned(),
+                    name: "attricat_api".to_owned(),
                 },
                 metadata: input
                     .removal_policy
@@ -847,13 +847,13 @@ impl CatalogRepository {
             },
         )
         .await?;
-        metrics::counter!("catalog_record_migration_values_total", "action" => "preserved")
+        metrics::counter!("attricat_record_migration_values_total", "action" => "preserved")
             .increment(preserved_count);
-        metrics::counter!("catalog_record_migration_values_total", "action" => "archived")
+        metrics::counter!("attricat_record_migration_values_total", "action" => "archived")
             .increment(archived_count);
-        metrics::counter!("catalog_record_migration_values_total", "action" => "replaced")
+        metrics::counter!("attricat_record_migration_values_total", "action" => "replaced")
             .increment(replaced_count);
-        metrics::histogram!("catalog_record_migration_transaction_duration_seconds")
+        metrics::histogram!("attricat_record_migration_transaction_duration_seconds")
             .record(transaction_started.elapsed().as_secs_f64());
         Ok(target_record)
     }

@@ -50,12 +50,12 @@ documentation site in `apps/docs`, use `pnpm --dir apps/docs dev`.
 
 1. Open `/login` in the web app.
 2. Enter the workspace identifier `default.local` and select **Continue**.
-3. Sign in with `CATALOG_BOOTSTRAP_OWNER_EMAIL` and its password from `.env`.
+3. Sign in with `ATTRICAT_BOOTSTRAP_OWNER_EMAIL` and its password from `.env`.
 
 ## Guidelines
 
 **UI.** The web app uses a pinned copy of the
-[Attricat design system](apps/catalog-web/design/). Read the
+[Attricat design system](apps/web/design/). Read the
 [style guide](https://github.com/attricat/design/blob/main/STYLE.md) before
 changing the interface, and check both light and dark mode.
 

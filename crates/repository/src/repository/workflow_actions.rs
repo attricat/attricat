@@ -1,6 +1,6 @@
 //! Workflow action execution. Every workflow write, whether to the trigger
 //! record or to a record that references it, goes through
-//! [`CatalogRepository::apply_workflow_actions`], which uses the ordinary
+//! [`AttricatRepository::apply_workflow_actions`], which uses the ordinary
 //! record update seam, so it is validated, audited and published exactly like
 //! any other record write.
 use super::system_annotations::{TagMetadataPatch, apply_tag_metadata_patch};
@@ -41,10 +41,10 @@ impl WorkflowRecordChange {
     fn stage(
         &mut self,
         record: &Record,
-        action: &catalog_workflow::Action,
+        action: &attricat_workflow::Action,
         event: &crate::domain_events::DomainEvent,
     ) -> Result<(), RepositoryError> {
-        use catalog_workflow::Action;
+        use attricat_workflow::Action;
         match action {
             Action::SystemTagsAdd { tags } => self.patch_tags(
                 record,
@@ -119,12 +119,12 @@ impl WorkflowRecordChange {
 
 /// Resolves an attribute write's value, which must be a JSON scalar.
 fn scalar_source_value(
-    source: &catalog_workflow::ScalarSource,
+    source: &attricat_workflow::ScalarSource,
     event: &crate::domain_events::DomainEvent,
 ) -> Result<Value, RepositoryError> {
     let value = match source {
-        catalog_workflow::ScalarSource::Fixed { fixed } => fixed.clone(),
-        catalog_workflow::ScalarSource::Event { event_field } => {
+        attricat_workflow::ScalarSource::Fixed { fixed } => fixed.clone(),
+        attricat_workflow::ScalarSource::Event { event_field } => {
             workflow_event_path(&event.payload, event_field)
                 .cloned()
                 .ok_or_else(|| {
@@ -146,11 +146,11 @@ struct ReferencingAction<'a> {
     run: &'a super::ClaimedWorkflowRun,
     action_index: i32,
     relationship_attribute: &'a str,
-    actions: &'a [catalog_workflow::Action],
+    actions: &'a [attricat_workflow::Action],
     event: &'a crate::domain_events::DomainEvent,
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     /// Executes one workflow action. A local action records its idempotency key
     /// in the same transaction as the locked record mutation, audit, and outbox
     /// event, so a reclaimed run observes the key and cannot repeat effects.
@@ -158,10 +158,10 @@ impl CatalogRepository {
         &self,
         run: &super::ClaimedWorkflowRun,
         action_index: i32,
-        action: &catalog_workflow::Action,
+        action: &attricat_workflow::Action,
         event: &crate::domain_events::DomainEvent,
     ) -> Result<super::WorkflowActionResult, RepositoryError> {
-        if let catalog_workflow::Action::ReferencingRecordsUpdate {
+        if let attricat_workflow::Action::ReferencingRecordsUpdate {
             relationship_attribute,
             max_targets,
             actions,
@@ -268,7 +268,7 @@ impl CatalogRepository {
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         record: Record,
-        actions: &[catalog_workflow::Action],
+        actions: &[attricat_workflow::Action],
         event: &crate::domain_events::DomainEvent,
     ) -> Result<(), RepositoryError> {
         let mut change = WorkflowRecordChange::default();

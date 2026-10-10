@@ -5,8 +5,8 @@ use std::{sync::Arc, time::Duration};
 use api::{
     model::{CreateAttributeContext, RelationshipTargets},
     repository::{
-        AuthorizationActor, CatalogRepository, ExtensionCatalogBatch, ExtensionCatalogIntent,
-        ExtensionCatalogIntentStatus, InteractiveRunFailure, InteractiveRunScope,
+        AttricatRepository, AuthorizationActor, ExtensionAttricatBatch, ExtensionAttricatIntent,
+        ExtensionAttricatIntentStatus, InteractiveRunFailure, InteractiveRunScope,
         InteractiveRunStatus, RepositoryError, StartExtensionOperation,
     },
     storage::FakeObjectStore,
@@ -39,8 +39,8 @@ code = "title"
 value_type = "string"
 "#;
 const PERMISSIONS: &[&str] = &[
-    "catalog.read",
-    "catalog.annotations.write",
+    "attricat.read",
+    "attricat.annotations.write",
     "artifacts.write",
     "client.explorer_bulk_action",
     "client.explorer_row_action",
@@ -51,7 +51,7 @@ const PERMISSIONS: &[&str] = &[
 
 fn interactive_component() -> Vec<u8> {
     build_test_component(
-        "catalog-interactive-test-component",
+        "attricat-interactive-test-component",
         "interactive-test.component.wasm",
     )
 }
@@ -63,7 +63,7 @@ fn archive(extension_id: &str, server: &[u8]) -> Vec<u8> {
         "version": "1.0.0",
         "description": "interactive operation integration test",
         "icons": {"48": "icon.png"},
-        "catalog": {"id": extension_id, "host_api": ">=1.0.0, <2.0.0"},
+        "attricat": {"id": extension_id, "host_api": ">=1.0.0, <2.0.0"},
         "permissions": PERMISSIONS,
         "configuration": {"version": 1, "schema": {"type": "object", "additionalProperties": false}},
         "artifacts": [
@@ -95,7 +95,7 @@ fn archive(extension_id: &str, server: &[u8]) -> Vec<u8> {
 }
 
 async fn install(
-    repository: &CatalogRepository,
+    repository: &AttricatRepository,
     store: Arc<FakeObjectStore>,
     server: &[u8],
 ) -> Uuid {
@@ -151,7 +151,7 @@ async fn record_scoped_viewer(pool: &sqlx::PgPool, record_id: Uuid) -> ScopedVie
 async fn interactive_run_reads_its_selection_and_annotates_through_the_v15_world(
     pool: sqlx::PgPool,
 ) {
-    let repository = CatalogRepository::system(pool.clone())
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(bootstrap_workspace_id())
         .await
         .unwrap();
@@ -335,7 +335,7 @@ async fn interactive_run_reads_its_selection_and_annotates_through_the_v15_world
     .unwrap();
     assert_eq!(events, 2);
     let audited: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM audit_events WHERE action='catalog.extensions.operations.write' AND actor_user_id=$1 AND metadata->'annotations'->>'extension_id'=$2",
+        "SELECT COUNT(*) FROM audit_events WHERE action='attricat.extensions.operations.write' AND actor_user_id=$1 AND metadata->'annotations'->>'extension_id'=$2",
     )
     .bind(support::BOOTSTRAP_OWNER_ID.parse::<Uuid>().unwrap())
     .bind(EXTENSION)
@@ -358,7 +358,7 @@ async fn interactive_run_reads_its_selection_and_annotates_through_the_v15_world
 
 #[sqlx::test(migrations = "./migrations")]
 async fn interactive_runs_are_authorized_per_record_and_fail_closed(pool: sqlx::PgPool) {
-    let repository = CatalogRepository::system(pool.clone())
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(bootstrap_workspace_id())
         .await
         .unwrap();
@@ -652,8 +652,8 @@ async fn interactive_runs_are_authorized_per_record_and_fail_closed(pool: sqlx::
     server.abort();
 }
 
-fn annotate(key: &str, record_id: Uuid, expected_revision: Option<i64>) -> ExtensionCatalogIntent {
-    ExtensionCatalogIntent::Annotate {
+fn annotate(key: &str, record_id: Uuid, expected_revision: Option<i64>) -> ExtensionAttricatIntent {
+    ExtensionAttricatIntent::Annotate {
         intent_key: key.into(),
         record_id,
         add_tags: vec!["generated".into()],
@@ -664,8 +664,8 @@ fn annotate(key: &str, record_id: Uuid, expected_revision: Option<i64>) -> Exten
     }
 }
 
-fn batch(key: &str, intents: Vec<ExtensionCatalogIntent>) -> ExtensionCatalogBatch {
-    ExtensionCatalogBatch {
+fn batch(key: &str, intents: Vec<ExtensionAttricatIntent>) -> ExtensionAttricatBatch {
+    ExtensionAttricatBatch {
         batch_key: key.into(),
         dry_run: false,
         intents,
@@ -692,14 +692,14 @@ value_type = "string"
 
 #[sqlx::test(migrations = "./migrations")]
 async fn annotation_tag_changes_run_tag_checks(pool: sqlx::PgPool) {
-    let repository = CatalogRepository::system(pool.clone())
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(bootstrap_workspace_id())
         .await
         .unwrap();
     let extension = repository.for_extension("acme.docs");
     let blueprint = published_blueprint(&repository, TAG_CHECKED_BLUEPRINT).await;
     let item = titled_record(&repository, blueprint, "Item").await;
-    let tag = |key: &str, tag: &str| ExtensionCatalogIntent::Annotate {
+    let tag = |key: &str, tag: &str| ExtensionAttricatIntent::Annotate {
         intent_key: key.into(),
         record_id: item,
         add_tags: vec![tag.into()],
@@ -709,19 +709,19 @@ async fn annotation_tag_changes_run_tag_checks(pool: sqlx::PgPool) {
         expected_revision: None,
     };
     let allowed = extension
-        .execute_extension_catalog_batch(batch("t1", vec![tag("t1", "reviewed")]))
+        .execute_extension_attricat_batch(batch("t1", vec![tag("t1", "reviewed")]))
         .await
         .unwrap();
     assert_eq!(
         allowed[0].status,
-        ExtensionCatalogIntentStatus::Applied,
+        ExtensionAttricatIntentStatus::Applied,
         "{allowed:?}"
     );
     let blocked = extension
-        .execute_extension_catalog_batch(batch("t2", vec![tag("t2", "blocked")]))
+        .execute_extension_attricat_batch(batch("t2", vec![tag("t2", "blocked")]))
         .await
         .unwrap();
-    assert_eq!(blocked[0].status, ExtensionCatalogIntentStatus::Rejected);
+    assert_eq!(blocked[0].status, ExtensionAttricatIntentStatus::Rejected);
     let tags: Vec<String> = sqlx::query_scalar("SELECT system_tags FROM records WHERE id = $1")
         .bind(item)
         .fetch_one(&pool)
@@ -734,7 +734,7 @@ async fn annotation_tag_changes_run_tag_checks(pool: sqlx::PgPool) {
 async fn extension_annotation_namespaces_are_patched_and_protected_on_every_write_path(
     pool: sqlx::PgPool,
 ) {
-    let repository = CatalogRepository::system(pool.clone())
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(bootstrap_workspace_id())
         .await
         .unwrap();
@@ -743,29 +743,29 @@ async fn extension_annotation_namespaces_are_patched_and_protected_on_every_writ
     let first = titled_record(&repository, blueprint, "First").await;
 
     let applied = extension
-        .execute_extension_catalog_batch(batch("b1", vec![annotate("a1", first, Some(0))]))
+        .execute_extension_attricat_batch(batch("b1", vec![annotate("a1", first, Some(0))]))
         .await
         .unwrap();
     assert_eq!(
         applied[0].status,
-        ExtensionCatalogIntentStatus::Applied,
+        ExtensionAttricatIntentStatus::Applied,
         "{applied:?}"
     );
     assert_eq!(applied[0].annotation_revision, Some(1));
     // A retry is recognized before its now-stale expected revision is tested.
     let replay = extension
-        .execute_extension_catalog_batch(batch("b1", vec![annotate("a1", first, Some(0))]))
+        .execute_extension_attricat_batch(batch("b1", vec![annotate("a1", first, Some(0))]))
         .await
         .unwrap();
     assert_eq!(
         replay[0].status,
-        ExtensionCatalogIntentStatus::AlreadyApplied
+        ExtensionAttricatIntentStatus::AlreadyApplied
     );
     let stale = extension
-        .execute_extension_catalog_batch(batch("b2", vec![annotate("a2", first, Some(0))]))
+        .execute_extension_attricat_batch(batch("b2", vec![annotate("a2", first, Some(0))]))
         .await
         .unwrap();
-    assert_eq!(stale[0].status, ExtensionCatalogIntentStatus::Rejected);
+    assert_eq!(stale[0].status, ExtensionAttricatIntentStatus::Rejected);
     assert!(
         stale[0]
             .error
@@ -774,9 +774,9 @@ async fn extension_annotation_namespaces_are_patched_and_protected_on_every_writ
             .contains("expected revision 0")
     );
     let contradictory = extension
-        .execute_extension_catalog_batch(batch(
+        .execute_extension_attricat_batch(batch(
             "b3",
-            vec![ExtensionCatalogIntent::Annotate {
+            vec![ExtensionAttricatIntent::Annotate {
                 intent_key: "a3".into(),
                 record_id: first,
                 add_tags: vec!["x".into()],
@@ -790,16 +790,16 @@ async fn extension_annotation_namespaces_are_patched_and_protected_on_every_writ
         .unwrap();
     assert_eq!(
         contradictory[0].status,
-        ExtensionCatalogIntentStatus::Rejected
+        ExtensionAttricatIntentStatus::Rejected
     );
 
     // A disjoint writer keeps the first namespace untouched.
     let other = repository.for_extension("acme.other");
     let applied = other
-        .execute_extension_catalog_batch(batch("o1", vec![annotate("o1", first, None)]))
+        .execute_extension_attricat_batch(batch("o1", vec![annotate("o1", first, None)]))
         .await
         .unwrap();
-    assert_eq!(applied[0].status, ExtensionCatalogIntentStatus::Applied);
+    assert_eq!(applied[0].status, ExtensionAttricatIntentStatus::Applied);
     let (tags, metadata): (Vec<String>, Value) =
         sqlx::query_as("SELECT system_tags, system_metadata FROM records WHERE id=$1")
             .bind(first)
@@ -812,9 +812,9 @@ async fn extension_annotation_namespaces_are_patched_and_protected_on_every_writ
 
     // Legacy create fields cannot write a claimed namespace.
     let create = extension
-        .execute_extension_catalog_batch(batch(
+        .execute_extension_attricat_batch(batch(
             "c1",
-            vec![ExtensionCatalogIntent::Create {
+            vec![ExtensionAttricatIntent::Create {
                 intent_key: "c1".into(),
                 blueprint_id: blueprint.0,
                 blueprint_version: blueprint.1,
@@ -825,7 +825,7 @@ async fn extension_annotation_namespaces_are_patched_and_protected_on_every_writ
         ))
         .await
         .unwrap();
-    assert_eq!(create[0].status, ExtensionCatalogIntentStatus::Rejected);
+    assert_eq!(create[0].status, ExtensionAttricatIntentStatus::Rejected);
 
     let (base, server) =
         start_server_with_object_store(pool.clone(), Arc::new(FakeObjectStore::available())).await;
@@ -886,7 +886,7 @@ async fn extension_annotation_namespaces_are_patched_and_protected_on_every_writ
 
 #[sqlx::test(migrations = "./migrations")]
 async fn legacy_annotations_require_explicit_namespace_adoption(pool: sqlx::PgPool) {
-    let repository = CatalogRepository::system(pool.clone())
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(bootstrap_workspace_id())
         .await
         .unwrap();
@@ -906,10 +906,10 @@ async fn legacy_annotations_require_explicit_namespace_adoption(pool: sqlx::PgPo
         .id;
     let extension = repository.for_extension(EXTENSION);
     let rejected = extension
-        .execute_extension_catalog_batch(batch("l1", vec![annotate("l1", legacy, None)]))
+        .execute_extension_attricat_batch(batch("l1", vec![annotate("l1", legacy, None)]))
         .await
         .unwrap();
-    assert_eq!(rejected[0].status, ExtensionCatalogIntentStatus::Rejected);
+    assert_eq!(rejected[0].status, ExtensionAttricatIntentStatus::Rejected);
     assert!(rejected[0].error.as_deref().unwrap().contains("adopt"));
 
     let (base, server) = start_server_with_object_store(pool.clone(), store).await;
@@ -940,10 +940,13 @@ async fn legacy_annotations_require_explicit_namespace_adoption(pool: sqlx::PgPo
 
     // Adoption preserves data; a non-object value must be repaired, not merged.
     let not_object = extension
-        .execute_extension_catalog_batch(batch("l2", vec![annotate("l2", legacy, None)]))
+        .execute_extension_attricat_batch(batch("l2", vec![annotate("l2", legacy, None)]))
         .await
         .unwrap();
-    assert_eq!(not_object[0].status, ExtensionCatalogIntentStatus::Rejected);
+    assert_eq!(
+        not_object[0].status,
+        ExtensionAttricatIntentStatus::Rejected
+    );
     let tags: Vec<String> = sqlx::query_scalar("SELECT system_tags FROM records WHERE id=$1")
         .bind(legacy)
         .fetch_one(&pool)
@@ -977,23 +980,23 @@ async fn legacy_annotations_require_explicit_namespace_adoption(pool: sqlx::PgPo
     .unwrap();
     assert_eq!(audited, json!("not an object"));
     let accepted = extension
-        .execute_extension_catalog_batch(batch("l3", vec![annotate("l3", legacy, Some(1))]))
+        .execute_extension_attricat_batch(batch("l3", vec![annotate("l3", legacy, Some(1))]))
         .await
         .unwrap();
-    assert_eq!(accepted[0].status, ExtensionCatalogIntentStatus::Applied);
+    assert_eq!(accepted[0].status, ExtensionAttricatIntentStatus::Applied);
     // Reserved Core names can never be claimed.
     let reserved = repository
         .for_extension("attricat.sample")
-        .execute_extension_catalog_batch(batch("r1", vec![annotate("r1", legacy, None)]))
+        .execute_extension_attricat_batch(batch("r1", vec![annotate("r1", legacy, None)]))
         .await
         .unwrap();
-    assert_eq!(reserved[0].status, ExtensionCatalogIntentStatus::Rejected);
+    assert_eq!(reserved[0].status, ExtensionAttricatIntentStatus::Rejected);
     server.abort();
 }
 
 #[sqlx::test(migrations = "./migrations")]
 async fn generic_writes_serialize_with_namespace_claims(pool: sqlx::PgPool) {
-    let repository = CatalogRepository::system(pool.clone())
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(bootstrap_workspace_id())
         .await
         .unwrap();
@@ -1065,7 +1068,7 @@ async fn generic_writes_serialize_with_namespace_claims(pool: sqlx::PgPool) {
 
 #[sqlx::test(migrations = "./migrations")]
 async fn replay_is_refused_after_the_run_context_is_deleted(pool: sqlx::PgPool) {
-    let repository = CatalogRepository::system(pool.clone())
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(bootstrap_workspace_id())
         .await
         .unwrap();
@@ -1132,7 +1135,7 @@ async fn replay_is_refused_after_the_run_context_is_deleted(pool: sqlx::PgPool) 
 
 #[sqlx::test(migrations = "./migrations")]
 async fn selection_pages_hold_at_most_one_pool_connection(pool: sqlx::PgPool) {
-    let repository = CatalogRepository::system(pool.clone())
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(bootstrap_workspace_id())
         .await
         .unwrap();
@@ -1148,7 +1151,7 @@ async fn selection_pages_hold_at_most_one_pool_connection(pool: sqlx::PgPool) {
         .connect_with((*pool.connect_options()).clone())
         .await
         .unwrap();
-    let bounded_repository = CatalogRepository::system(bounded)
+    let bounded_repository = AttricatRepository::system(bounded)
         .for_workspace(bootstrap_workspace_id())
         .await
         .unwrap();
@@ -1195,7 +1198,7 @@ target_cardinality = "many"
 "#;
 #[sqlx::test(migrations = "./migrations")]
 async fn interactive_links_require_read_access_to_every_target(pool: sqlx::PgPool) {
-    let repository = CatalogRepository::system(pool.clone())
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(bootstrap_workspace_id())
         .await
         .unwrap();
@@ -1234,7 +1237,7 @@ async fn interactive_links_require_read_access_to_every_target(pool: sqlx::PgPoo
         context_id: None,
     };
     let run = repository.for_interactive_run(EXTENSION, Uuid::new_v4(), &scope);
-    let link = |key: &str, target: Uuid| ExtensionCatalogIntent::Relationships {
+    let link = |key: &str, target: Uuid| ExtensionAttricatIntent::Relationships {
         intent_key: key.into(),
         record_id: source,
         relationships: vec![RelationshipTargets {
@@ -1247,13 +1250,13 @@ async fn interactive_links_require_read_access_to_every_target(pool: sqlx::PgPoo
 
     // The initiator cannot read the target, even though the source is selected.
     let denied = run
-        .execute_extension_catalog_batch(batch("link-1", vec![link("hidden", hidden)]))
+        .execute_extension_attricat_batch(batch("link-1", vec![link("hidden", hidden)]))
         .await
         .unwrap();
-    assert_eq!(denied[0].status, ExtensionCatalogIntentStatus::Rejected);
+    assert_eq!(denied[0].status, ExtensionAttricatIntentStatus::Rejected);
     let allowed = run
-        .execute_extension_catalog_batch(batch("link-2", vec![link("readable", readable)]))
+        .execute_extension_attricat_batch(batch("link-2", vec![link("readable", readable)]))
         .await
         .unwrap();
-    assert_eq!(allowed[0].status, ExtensionCatalogIntentStatus::Applied);
+    assert_eq!(allowed[0].status, ExtensionAttricatIntentStatus::Applied);
 }

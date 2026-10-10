@@ -4,7 +4,7 @@
 //! persistence-only `FromRow` implementation while conversions at repository
 //! boundaries return the dependency-free public DTO.
 
-use catalog_domain::model::*;
+use attricat_domain::model::*;
 use sqlx::{FromRow, Row, postgres::PgRow};
 use std::ops::{Deref, DerefMut};
 

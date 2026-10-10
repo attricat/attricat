@@ -22,7 +22,7 @@ use api::{
     file_access::{AllowFileAccess, FileAccessPolicy},
     http::{AppState, BuildInfo, router},
     mail::{MailDelivery, MailError},
-    repository::CatalogRepository,
+    repository::AttricatRepository,
     solution_pack_extensions::OfficialExtensionReleases,
     storage::{FakeObjectStore, ObjectStore},
     telemetry::init_metrics,
@@ -330,7 +330,7 @@ async fn start_configured_server(
 ) -> (String, JoinHandle<()>) {
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
     let owner_id = BOOTSTRAP_OWNER_ID.parse::<Uuid>().unwrap();
-    let system = CatalogRepository::system(pool.clone());
+    let system = AttricatRepository::system(pool.clone());
     for workspace in system.active_workspace_ids().await.unwrap() {
         system.initialize_workspace(workspace).await.unwrap();
     }
@@ -362,38 +362,38 @@ async fn start_configured_server(
         .execute(&pool)
         .await
         .unwrap();
-    CatalogRepository::system(pool.clone())
+    AttricatRepository::system(pool.clone())
         .ensure_agent_permissions()
         .await
         .unwrap();
-    CatalogRepository::system(pool.clone())
+    AttricatRepository::system(pool.clone())
         .ensure_audit_permissions()
         .await
         .unwrap();
-    CatalogRepository::system(pool.clone())
+    AttricatRepository::system(pool.clone())
         .ensure_extension_registry_permissions()
         .await
         .unwrap();
-    CatalogRepository::system(pool.clone())
+    AttricatRepository::system(pool.clone())
         .ensure_workflow_permissions()
         .await
         .unwrap();
-    CatalogRepository::system(pool.clone())
+    AttricatRepository::system(pool.clone())
         .ensure_record_publication_permissions()
         .await
         .unwrap();
-    CatalogRepository::system(pool.clone())
+    AttricatRepository::system(pool.clone())
         .ensure_retention_hold_permissions()
         .await
         .unwrap();
-    CatalogRepository::system(pool.clone())
+    AttricatRepository::system(pool.clone())
         .ensure_solution_pack_permissions()
         .await
         .unwrap();
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address: SocketAddr = listener.local_addr().unwrap();
     let mut state = AppState {
-        repository: CatalogRepository::system(pool.clone()),
+        repository: AttricatRepository::system(pool.clone()),
         agent_provider: None,
         registry: Arc::new(GitHubRegistry::new().unwrap()),
         official_registry: "attricat/attricat-extensions"
@@ -450,11 +450,11 @@ async fn start_configured_server(
 pub fn authenticated_client() -> Client {
     let mut headers = HeaderMap::new();
     headers.insert(
-        "x-catalog-user-id",
+        "x-attricat-user-id",
         HeaderValue::from_static(BOOTSTRAP_OWNER_ID),
     );
     headers.insert(
-        "x-catalog-workspace-id",
+        "x-attricat-workspace-id",
         HeaderValue::from_static(BOOTSTRAP_WORKSPACE_ID),
     );
     Client::builder().default_headers(headers).build().unwrap()

@@ -47,7 +47,7 @@ target_blueprint = "label"
 ```
 
 The relationship is the assignment. A product can have multiple labels, and a
-label can be assigned to multiple products. Catalog validates that every target
+label can be assigned to multiple products. Attricat validates that every target
 is a `label` record and retains current and historical assignments in the same
 way as other relationships.
 

@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
-use super::{CatalogRepository, RepositoryError};
+use super::{AttricatRepository, RepositoryError};
 
 #[derive(Debug, sqlx::FromRow)]
 pub struct AbandonedUpload {
@@ -10,7 +10,7 @@ pub struct AbandonedUpload {
     pub lease_token: Uuid,
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     /// Commit keys before the first external write. Even process death then
     /// leaves enough information for eventual object cleanup.
     pub async fn begin_file_uploads(
@@ -40,7 +40,7 @@ impl CatalogRepository {
     }
 }
 
-impl<S: super::RepositoryScope> CatalogRepository<S> {
+impl<S: super::RepositoryScope> AttricatRepository<S> {
     /// System maintenance claims at most one key without holding a database
     /// connection during S3 I/O. Expired cleaner leases are safely retryable.
     pub async fn claim_abandoned_upload(&self) -> Result<Option<AbandonedUpload>, RepositoryError> {

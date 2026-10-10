@@ -1,5 +1,5 @@
 [package]
-name = "catalog-domain"
+name = "attricat-domain"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

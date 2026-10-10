@@ -2,7 +2,7 @@
 //!
 //! Components get no WASI context, filesystem, environment, clocks, sockets, or
 //! pre-opened descriptors. The only imports are the versioned WIT functions in
-//! the `wit*/catalog-extension.wit` packages (`wit-host` is the unified,
+//! the `wit*/attricat-extension.wit` packages (`wit-host` is the unified,
 //! evolving ABI; the others are frozen legacy worlds). Every call is checked
 //! against the immutable release manifest and invocation-time grants.
 
@@ -22,8 +22,8 @@ use reqwest::{Client, Method, redirect::Policy};
 use url::Url;
 
 use async_trait::async_trait;
-use catalog_cache::{LocalRateLimiter, RateLimiter};
-use catalog_repository::round_trips::measure;
+use attricat_cache::{LocalRateLimiter, RateLimiter};
+use attricat_repository::round_trips::measure;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -36,7 +36,7 @@ use wasmtime::{
 };
 
 use crate::{
-    catalog_service::CatalogMutationService,
+    attricat_service::AttricatMutationService,
     constants::DEFAULT_LIST_PAGE_SIZE,
     domain_events::DomainEvent,
     extension_installer::installed_artifact_key,
@@ -45,10 +45,10 @@ use crate::{
     },
     model::{AppendAttributeValues, NewAttributeValue},
     repository::{
-        CatalogRepository, ClaimedExtensionOperationRun, ClaimedTask, CoordinatorLeadership,
-        DeliveryState, ExtensionCatalogBatch, ExtensionCatalogIntent, ExtensionCatalogPageRequest,
-        ExtensionConfigurationScope, ExtensionOperationArtifact, ExtensionRuntimeInstallation,
-        MaterializeScope, RepositoryError, SystemRepository,
+        AttricatRepository, ClaimedExtensionOperationRun, ClaimedTask, CoordinatorLeadership,
+        DeliveryState, ExtensionAttricatBatch, ExtensionAttricatIntent,
+        ExtensionAttricatPageRequest, ExtensionConfigurationScope, ExtensionOperationArtifact,
+        ExtensionRuntimeInstallation, MaterializeScope, RepositoryError, SystemRepository,
     },
     storage::{ObjectStore, ObjectStoreError, StoredObject},
     task_queue::TaskKind,
@@ -61,7 +61,7 @@ mod interactive;
 mod operation_batch;
 mod unified;
 
-use unified::host_unified::catalog::host as wit;
+use unified::host_unified::attricat::host as wit;
 
 use operation_batch::run_operation_batch;
 
@@ -278,7 +278,7 @@ impl ExtensionRuntime {
                 .lock()
                 .expect("component cache is not poisoned");
             if let Some(component) = cache.get(&key) {
-                metrics::counter!("catalog_extension_component_cache_total", "outcome" => "hit")
+                metrics::counter!("attricat_extension_component_cache_total", "outcome" => "hit")
                     .increment(1);
                 return Ok(component);
             }
@@ -301,7 +301,7 @@ impl ExtensionRuntime {
                         .map_err(|error| {
                             ExtensionRuntimeError::Runtime(format!("invalid component: {error}"))
                         })?;
-                metrics::counter!("catalog_extension_component_cache_total", "outcome" => "miss")
+                metrics::counter!("attricat_extension_component_cache_total", "outcome" => "miss")
                     .increment(1);
                 Ok::<_, ExtensionRuntimeError>(Arc::new(component))
             })
@@ -329,7 +329,7 @@ impl ExtensionRuntime {
     async fn invoke_operation_batch(
         &self,
         installation: &ExtensionRuntimeInstallation,
-        repository: CatalogRepository,
+        repository: AttricatRepository,
         run: &ClaimedExtensionOperationRun,
         cancelling: bool,
     ) -> Result<(Value, Value, bool), ExtensionRuntimeError> {
@@ -340,7 +340,7 @@ impl ExtensionRuntime {
     fn operation_state(
         &self,
         installation: &ExtensionRuntimeInstallation,
-        repository: CatalogRepository,
+        repository: AttricatRepository,
         run_id: Uuid,
     ) -> OperationState {
         OperationState::new(
@@ -356,7 +356,7 @@ impl ExtensionRuntime {
     pub async fn invoke_command(
         &self,
         installation: &ExtensionRuntimeInstallation,
-        repository: CatalogRepository,
+        repository: AttricatRepository,
         handler: &str,
         request: &str,
         max_response_bytes: u64,
@@ -374,7 +374,7 @@ impl ExtensionRuntime {
     async fn invoke(
         &self,
         installation: &ExtensionRuntimeInstallation,
-        repository: CatalogRepository,
+        repository: AttricatRepository,
         handler: &ManifestEventHandler,
         event: &DomainEvent,
     ) -> Result<(), ExtensionRuntimeError> {
@@ -416,7 +416,7 @@ pub struct OutputArtifactStream {
 
 struct OperationState {
     installation: ExtensionRuntimeInstallation,
-    repository: CatalogRepository,
+    repository: AttricatRepository,
     object_store: Arc<dyn ObjectStore>,
     run_id: Uuid,
     batch_key: String,
@@ -426,7 +426,7 @@ struct OperationState {
 impl OperationState {
     fn new(
         installation: ExtensionRuntimeInstallation,
-        repository: CatalogRepository,
+        repository: AttricatRepository,
         object_store: Arc<dyn ObjectStore>,
         run_id: Uuid,
     ) -> Self {
@@ -456,7 +456,7 @@ impl OperationState {
     fn artifact_access(
         &self,
         capability: &str,
-    ) -> Result<(CatalogRepository, String, Uuid), String> {
+    ) -> Result<(AttricatRepository, String, Uuid), String> {
         self.require(capability)?;
         Ok((
             self.repository.clone(),
@@ -467,7 +467,7 @@ impl OperationState {
 }
 
 async fn ensure_operation_artifact_access(
-    repository: CatalogRepository,
+    repository: AttricatRepository,
     extension_id: String,
     release_id: Uuid,
     capability: &str,
@@ -486,14 +486,14 @@ async fn ensure_operation_artifact_access(
 #[derive(Clone)]
 struct HostState {
     installation: ExtensionRuntimeInstallation,
-    repository: CatalogRepository,
+    repository: AttricatRepository,
     limits: StoreLimits,
 }
 
 impl HostState {
     fn new(
         installation: ExtensionRuntimeInstallation,
-        repository: CatalogRepository,
+        repository: AttricatRepository,
         max_memory_bytes: usize,
     ) -> Self {
         Self {
@@ -531,21 +531,21 @@ impl HostState {
             "secrets.get.v1" => "secrets.read",
             "storage.get.v1" | "storage.set.v1" | "storage.put.v1" | "storage.delete.v1"
             | "storage.list.v1" => "storage.extension",
-            "catalog.read.v1" => "catalog.read",
+            "attricat.read.v1" => "attricat.read",
             // Annotation-only batches need only the separately granted
-            // annotation capability; any value intent still needs catalog.write.
-            "catalog.command.v1" => {
-                match parse_storage_request::<CatalogCommandRequest>(&request) {
-                    Ok(CatalogCommandRequest::Batch { batch })
+            // annotation capability; any value intent still needs attricat.write.
+            "attricat.command.v1" => {
+                match parse_storage_request::<AttricatCommandRequest>(&request) {
+                    Ok(AttricatCommandRequest::Batch { batch })
                         if !batch.intents.is_empty()
                             && batch
                                 .intents
                                 .iter()
-                                .all(ExtensionCatalogIntent::is_annotation) =>
+                                .all(ExtensionAttricatIntent::is_annotation) =>
                     {
-                        "catalog.annotations.write"
+                        "attricat.annotations.write"
                     }
-                    _ => "catalog.write",
+                    _ => "attricat.write",
                 }
             }
             "events.emit.v1" => "events.emit",
@@ -568,7 +568,7 @@ impl HostState {
             .ok_or_else(|| "extension invocation is no longer authorized".to_owned())?;
         self.installation = installation;
         if let Err(error) = self.require(required) {
-            metrics::counter!("catalog_extension_host_calls_total", "outcome" => "denied", "operation" => operation).increment(1);
+            metrics::counter!("attricat_extension_host_calls_total", "outcome" => "denied", "operation" => operation).increment(1);
             return Err(error.to_string());
         }
         if operation == "configuration.get.v1" {
@@ -589,11 +589,11 @@ impl HostState {
                 .map_err(|error| error.to_string())?;
             return Ok("null".to_owned());
         }
-        if operation == "catalog.read.v1" {
-            return self.catalog_read_call(&request).await;
+        if operation == "attricat.read.v1" {
+            return self.attricat_read_call(&request).await;
         }
-        if operation == "catalog.command.v1" {
-            return self.catalog_command_call(&request).await;
+        if operation == "attricat.command.v1" {
+            return self.attricat_command_call(&request).await;
         }
         if operation == "secrets.get.v1" {
             let input: SecretGet = parse_host_request(&request, "secret request")?;
@@ -634,7 +634,7 @@ impl HostState {
         &mut self,
         request: wit::api::ReadRequest,
     ) -> Result<wit::api::ReadResponse, String> {
-        self.require_active("catalog.read").await?;
+        self.require_active("attricat.read").await?;
         let (record_id, context_id) = match request {
             wit::api::ReadRequest::Record(input) | wit::api::ReadRequest::Values(input) => {
                 (parse_uuid(&input.record_id, "record ID")?, None)
@@ -686,7 +686,7 @@ impl HostState {
         &mut self,
         request: wit::api::WriteRequest,
     ) -> Result<wit::api::WriteResponse, String> {
-        self.require_active("catalog.write").await?;
+        self.require_active("attricat.write").await?;
         if request.values.is_empty() || request.values.len() > MAX_WRITE_VALUES {
             return Err("writes require 1-100 scalar values".into());
         }
@@ -714,7 +714,7 @@ impl HostState {
         let repository = self
             .repository
             .for_extension(&self.installation.extension_id);
-        let values = CatalogMutationService::new(&repository)
+        let values = AttricatMutationService::new(&repository)
             .append_values(
                 record_id,
                 AppendAttributeValues {
@@ -807,10 +807,10 @@ impl HostState {
 
     /// The v1 JSON host call is retained for older components. Unlike generic
     /// search it exposes only the two bounded extension-data operations below.
-    async fn catalog_read_call(&self, request: &str) -> Result<String, String> {
-        let input: CatalogReadRequest = parse_storage_request(request)?;
+    async fn attricat_read_call(&self, request: &str) -> Result<String, String> {
+        let input: AttricatReadRequest = parse_storage_request(request)?;
         match input {
-            CatalogReadRequest::Page {
+            AttricatReadRequest::Page {
                 blueprint_id,
                 blueprint_version,
                 context_id,
@@ -820,7 +820,7 @@ impl HostState {
             } => {
                 let page = self
                     .repository
-                    .extension_catalog_page(ExtensionCatalogPageRequest {
+                    .extension_attricat_page(ExtensionAttricatPageRequest {
                         blueprint_id: parse_uuid(&blueprint_id, "blueprint ID")?,
                         blueprint_version,
                         context_id: context_id
@@ -838,7 +838,7 @@ impl HostState {
                     .map_err(|error| error.to_string())?;
                 bounded_serialize(&page)
             }
-            CatalogReadRequest::Changes {
+            AttricatReadRequest::Changes {
                 blueprint_id,
                 blueprint_version,
                 cursor,
@@ -846,7 +846,7 @@ impl HostState {
             } => {
                 let page = self
                     .repository
-                    .extension_catalog_changes(
+                    .extension_attricat_changes(
                         parse_uuid(&blueprint_id, "blueprint ID")?,
                         blueprint_version,
                         cursor,
@@ -856,7 +856,7 @@ impl HostState {
                     .map_err(|error| error.to_string())?;
                 bounded_serialize(&page)
             }
-            CatalogReadRequest::Lookup {
+            AttricatReadRequest::Lookup {
                 blueprint_id,
                 blueprint_version,
                 attribute_id,
@@ -864,7 +864,7 @@ impl HostState {
             } => {
                 let record = self
                     .repository
-                    .extension_catalog_lookup(
+                    .extension_attricat_lookup(
                         parse_uuid(&blueprint_id, "blueprint ID")?,
                         blueprint_version,
                         parse_uuid(&attribute_id, "attribute ID")?,
@@ -877,9 +877,9 @@ impl HostState {
         }
     }
 
-    async fn catalog_command_call(&self, request: &str) -> Result<String, String> {
-        let input: CatalogCommandRequest = parse_storage_request(request)?;
-        let CatalogCommandRequest::Batch { batch } = input;
+    async fn attricat_command_call(&self, request: &str) -> Result<String, String> {
+        let input: AttricatCommandRequest = parse_storage_request(request)?;
+        let AttricatCommandRequest::Batch { batch } = input;
         for capability in batch_capabilities(&batch) {
             self.require(capability)
                 .map_err(|error| error.to_string())?;
@@ -887,8 +887,8 @@ impl HostState {
         let repository = self
             .repository
             .for_extension(&self.installation.extension_id);
-        let outcomes = CatalogMutationService::new(&repository)
-            .execute_extension_catalog_batch(batch)
+        let outcomes = AttricatMutationService::new(&repository)
+            .execute_extension_attricat_batch(batch)
             .await
             .map_err(|error| error.to_string())?;
         bounded_serialize(&outcomes)
@@ -952,7 +952,7 @@ impl HostState {
         .collect();
         if addresses.is_empty()
             || addresses.iter().any(|address| {
-                !catalog_extension_manifest::extensions::is_public_destination(address.ip())
+                !attricat_extension_manifest::extensions::is_public_destination(address.ip())
             })
         {
             return Err("destination resolves to an unsafe address".into());
@@ -1064,7 +1064,7 @@ impl HostState {
             }
             bytes.extend_from_slice(&chunk);
         }
-        metrics::histogram!("catalog_extension_network_duration_seconds", "extension" => self.installation.extension_id.clone(), "host_permission" => rule.id.clone()).record(started.elapsed());
+        metrics::histogram!("attricat_extension_network_duration_seconds", "extension" => self.installation.extension_id.clone(), "host_permission" => rule.id.clone()).record(started.elapsed());
         Ok(
             json!({"status":status,"headers":response_headers,"body_base64":BASE64.encode(bytes)})
                 .to_string(),
@@ -1136,18 +1136,18 @@ impl HostState {
 }
 
 /// Capabilities required by a catalog batch: annotation intents are governed
-/// by `catalog.annotations.write`, value intents by `catalog.write`.
-fn batch_capabilities(batch: &ExtensionCatalogBatch) -> Vec<&'static str> {
+/// by `attricat.annotations.write`, value intents by `attricat.write`.
+fn batch_capabilities(batch: &ExtensionAttricatBatch) -> Vec<&'static str> {
     let mut capabilities = Vec::new();
     if batch
         .intents
         .iter()
-        .any(ExtensionCatalogIntent::is_annotation)
+        .any(ExtensionAttricatIntent::is_annotation)
     {
-        capabilities.push("catalog.annotations.write");
+        capabilities.push("attricat.annotations.write");
     }
     if batch.intents.iter().any(|intent| !intent.is_annotation()) {
-        capabilities.push("catalog.write");
+        capabilities.push("attricat.write");
     }
     capabilities
 }
@@ -1210,7 +1210,7 @@ struct EventEmit {
 
 #[derive(Deserialize)]
 #[serde(tag = "operation", rename_all = "snake_case", deny_unknown_fields)]
-enum CatalogReadRequest {
+enum AttricatReadRequest {
     Page {
         blueprint_id: String,
         blueprint_version: i64,
@@ -1235,9 +1235,9 @@ enum CatalogReadRequest {
 
 #[derive(Deserialize)]
 #[serde(tag = "operation", rename_all = "snake_case", deny_unknown_fields)]
-enum CatalogCommandRequest {
+enum AttricatCommandRequest {
     Batch {
-        batch: crate::repository::ExtensionCatalogBatch,
+        batch: crate::repository::ExtensionAttricatBatch,
     },
 }
 
@@ -1355,14 +1355,14 @@ impl ExtensionOperationTaskHandler {
 
     async fn fail_for_revoked_initiator(
         &self,
-        repository: &CatalogRepository,
+        repository: &AttricatRepository,
         task: &ClaimedTask,
     ) -> Result<TaskOutcome, TaskHandlerError> {
         repository
             .fail_extension_operation_for_revoked_initiator(task)
             .await
             .map_err(operation_task_error)?;
-        counter!("catalog_extension_operations_total", "outcome" => "initiator_revoked")
+        counter!("attricat_extension_operations_total", "outcome" => "initiator_revoked")
             .increment(1);
         Ok(TaskOutcome::DeadLettered)
     }
@@ -1391,7 +1391,7 @@ impl TaskHandler for ExtensionOperationTaskHandler {
         else {
             return Ok(TaskOutcome::Complete);
         };
-        counter!("catalog_extension_operations_total", "outcome" => "started").increment(1);
+        counter!("attricat_extension_operations_total", "outcome" => "started").increment(1);
         let operation_started = Instant::now();
         let Some(installation) = repository
             .runtime_extension_installation(&run.extension_id, run.installed_release_id)
@@ -1448,8 +1448,8 @@ impl TaskHandler for ExtensionOperationTaskHandler {
                     .fail_extension_operation_task(&task, &error.to_string())
                     .await
                     .map_err(operation_task_error)?;
-                counter!("catalog_extension_operations_total", "outcome" => "failed").increment(1);
-                histogram!("catalog_extension_operation_duration_seconds", "outcome" => "failed")
+                counter!("attricat_extension_operations_total", "outcome" => "failed").increment(1);
+                histogram!("attricat_extension_operation_duration_seconds", "outcome" => "failed")
                     .record(operation_started.elapsed().as_secs_f64());
                 return Ok(TaskOutcome::DeadLettered);
             }
@@ -1483,8 +1483,8 @@ impl TaskHandler for ExtensionOperationTaskHandler {
             .await
             .map_err(operation_task_error)?;
         let outcome = if terminal { "completed" } else { "rescheduled" };
-        counter!("catalog_extension_operations_total", "outcome" => outcome).increment(1);
-        histogram!("catalog_extension_operation_duration_seconds", "outcome" => outcome)
+        counter!("attricat_extension_operations_total", "outcome" => outcome).increment(1);
+        histogram!("attricat_extension_operation_duration_seconds", "outcome" => outcome)
             .record(operation_started.elapsed().as_secs_f64());
         if terminal {
             Ok(TaskOutcome::Complete)
@@ -1512,7 +1512,7 @@ impl WasmExtensionTaskHandler {
     async fn invoke_event(
         &self,
         event: DomainEvent,
-        repository: CatalogRepository,
+        repository: AttricatRepository,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let installations = repository.enabled_extension_handlers(&event).await?;
         for candidate in installations {
@@ -1564,7 +1564,7 @@ impl WasmExtensionTaskHandler {
                     )
                     .await
                 {
-                    metrics::counter!("catalog_extension_invocations_total", "outcome" => "failed")
+                    metrics::counter!("attricat_extension_invocations_total", "outcome" => "failed")
                         .increment(1);
                     tracing::warn!(
                         extension = %installation.extension_id,
@@ -1618,7 +1618,7 @@ impl TaskHandler for WasmExtensionTaskHandler {
             return Ok(TaskOutcome::Complete);
         };
         let context =
-            repository.for_event_delivery_task(&delivery.event, "catalog.extensions.wasm", &task);
+            repository.for_event_delivery_task(&delivery.event, "attricat.extensions.wasm", &task);
         self.invoke_event(delivery.event, context)
             .await
             .map_err(|error| TaskHandlerError {
@@ -1724,7 +1724,7 @@ async fn coordinate_workspace(
     }
     if !state.registered {
         scoped
-            .ensure_event_consumer("catalog.extensions.wasm", &[])
+            .ensure_event_consumer("attricat.extensions.wasm", &[])
             .await?;
         state.registered = true;
     }
@@ -1735,7 +1735,7 @@ async fn coordinate_workspace(
         MaterializeScope::NewEvents
     };
     state.history_pending = scoped
-        .materialize_event_delivery_tasks_with("catalog.extensions.wasm", &event_types, scope)
+        .materialize_event_delivery_tasks_with("attricat.extensions.wasm", &event_types, scope)
         .await?;
     state.event_types = Some(event_types);
     Ok(())
@@ -1998,7 +1998,7 @@ impl OperationState {
         .collect();
         if resolved.is_empty()
             || resolved.iter().any(|addr: &std::net::SocketAddr| {
-                !catalog_extension_manifest::extensions::is_public_destination(addr.ip())
+                !attricat_extension_manifest::extensions::is_public_destination(addr.ip())
             })
         {
             return Err("destination resolves to an unsafe address".into());
@@ -2178,7 +2178,7 @@ impl OperationState {
             )
             .await
             .map_err(|error| error.to_string())?;
-        let path = std::env::temp_dir().join(format!("catalog-http-input-{}", artifact.id));
+        let path = std::env::temp_dir().join(format!("attricat-http-input-{}", artifact.id));
         let result = async {
             let mut file = File::create(&path).map_err(|_| "temporary transfer unavailable".to_owned())?;
             let mut hash = Sha256::new();
@@ -2318,14 +2318,14 @@ impl OperationState {
 }
 
 impl OperationState {
-    async fn catalog_schema(
+    async fn attricat_schema(
         &mut self,
         blueprint_id: String,
         blueprint_version: u64,
         context_id: String,
     ) -> Result<String, String> {
         let mut host = HostState::new(self.installation.clone(), self.repository.clone(), 0);
-        host.require_active("catalog.read").await?;
+        host.require_active("attricat.read").await?;
         let blueprint = parse_uuid(&blueprint_id, "blueprint ID")?;
         let version = i64::try_from(blueprint_version).map_err(|_| "invalid blueprint version")?;
         let context = parse_uuid(&context_id, "context ID")?;
@@ -2359,7 +2359,7 @@ impl OperationState {
         )
     }
 
-    async fn catalog_page(
+    async fn attricat_page(
         &mut self,
         blueprint_id: String,
         blueprint_version: u64,
@@ -2368,7 +2368,7 @@ impl OperationState {
         limit: u32,
     ) -> Result<String, String> {
         let mut host = HostState::new(self.installation.clone(), self.repository.clone(), 0);
-        host.require_active("catalog.read").await?;
+        host.require_active("attricat.read").await?;
         // Keep results within the WIT JSON bound even for wide blueprints.
         if limit == 0 || limit > 16 {
             return Err("connector page limit must be 1-16".into());
@@ -2400,7 +2400,7 @@ impl OperationState {
         };
         let page = host
             .repository
-            .extension_catalog_page(ExtensionCatalogPageRequest {
+            .extension_attricat_page(ExtensionAttricatPageRequest {
                 blueprint_id: blueprint,
                 blueprint_version: version,
                 context_id: Some(context),
@@ -2420,7 +2420,7 @@ impl OperationState {
             let mut row = serde_json::Map::new();
             for value in host
                 .repository
-                .extension_catalog_values_at(record.id, page.snapshot_at)
+                .extension_attricat_values_at(record.id, page.snapshot_at)
                 .await
                 .map_err(|error| error.to_string())?
             {
@@ -2437,7 +2437,7 @@ impl OperationState {
         bounded_serialize(&json!({"rows":rows,"next_cursor":page.next_cursor}))
     }
 
-    async fn catalog_upsert_batch(&mut self, request: String) -> Result<(), String> {
+    async fn attricat_upsert_batch(&mut self, request: String) -> Result<(), String> {
         if request.len() > MAX_HOST_JSON_BYTES {
             return Err("request exceeds host JSON limit".into());
         }
@@ -2450,7 +2450,7 @@ impl OperationState {
             return Err("batch must contain 1-100 intents".into());
         }
         let mut host = HostState::new(self.installation.clone(), self.repository.clone(), 0);
-        host.require_active("catalog.write").await?;
+        host.require_active("attricat.write").await?;
         let version =
             i64::try_from(input.blueprint_version).map_err(|_| "invalid blueprint version")?;
         if let Some((selected_blueprint, selected_context, selected_version, _, direction)) = self
@@ -2493,7 +2493,7 @@ impl OperationState {
                     value,
                 });
             }
-            intents.push(ExtensionCatalogIntent::Upsert {
+            intents.push(ExtensionAttricatIntent::Upsert {
                 intent_key: row.row.to_string(),
                 blueprint_id: input.blueprint_id,
                 blueprint_version: version,
@@ -2508,8 +2508,8 @@ impl OperationState {
         let repository = host
             .repository
             .for_extension(&host.installation.extension_id);
-        let outcomes = CatalogMutationService::new(&repository)
-            .execute_extension_catalog_batch(ExtensionCatalogBatch {
+        let outcomes = AttricatMutationService::new(&repository)
+            .execute_extension_attricat_batch(ExtensionAttricatBatch {
                 batch_key: input.batch_key,
                 dry_run: false,
                 intents,
@@ -2524,7 +2524,7 @@ impl OperationState {
 }
 
 impl OperationState {
-    async fn catalog_data_read(&mut self, request: String) -> Result<String, String> {
+    async fn attricat_data_read(&mut self, request: String) -> Result<String, String> {
         if request.len() > MAX_HOST_JSON_BYTES {
             return Err("request exceeds host JSON limit".into());
         }
@@ -2538,11 +2538,11 @@ impl OperationState {
             return Err("scoped jobs must use host-filtered connector catalog calls".into());
         }
         let mut host = HostState::new(self.installation.clone(), self.repository.clone(), 0);
-        host.require_active("catalog.read").await?;
-        host.catalog_read_call(&request).await
+        host.require_active("attricat.read").await?;
+        host.attricat_read_call(&request).await
     }
 
-    async fn catalog_data_batch(&mut self, request: String) -> Result<String, String> {
+    async fn attricat_data_batch(&mut self, request: String) -> Result<String, String> {
         if request.len() > MAX_HOST_JSON_BYTES {
             return Err("request exceeds host JSON limit".into());
         }
@@ -2555,16 +2555,16 @@ impl OperationState {
         {
             return Err("scoped jobs must use host-filtered connector catalog calls".into());
         }
-        let input: CatalogCommandRequest = parse_storage_request(&request)?;
-        let CatalogCommandRequest::Batch { batch } = input;
+        let input: AttricatCommandRequest = parse_storage_request(&request)?;
+        let AttricatCommandRequest::Batch { batch } = input;
         require_operation_batch_key(&batch.batch_key, &self.batch_key)?;
         let mut host = HostState::new(self.installation.clone(), self.repository.clone(), 0);
         host.require_all_active(batch_capabilities(&batch)).await?;
         let repository = host
             .repository
             .for_extension(&host.installation.extension_id);
-        let outcomes = CatalogMutationService::new(&repository)
-            .execute_extension_catalog_batch(batch)
+        let outcomes = AttricatMutationService::new(&repository)
+            .execute_extension_attricat_batch(batch)
             .await
             .map_err(|error| error.to_string())?;
         bounded_serialize(&outcomes)
@@ -2666,7 +2666,8 @@ impl OperationState {
         if artifact.state == "completed" {
             return Ok(artifact.id.to_string());
         }
-        let path = std::env::temp_dir().join(format!("catalog-operation-finalize-{}", artifact.id));
+        let path =
+            std::env::temp_dir().join(format!("attricat-operation-finalize-{}", artifact.id));
         let result = async {
             let mut file =
                 File::create(&path).map_err(|_| "temporary output unavailable".to_owned())?;
@@ -2829,7 +2830,8 @@ impl OperationState {
             )
             .await
             .map_err(|_| "operation artifact quota exhausted".to_owned())?;
-        let path = std::env::temp_dir().join(format!("catalog-operation-artifact-{}", artifact.id));
+        let path =
+            std::env::temp_dir().join(format!("attricat-operation-artifact-{}", artifact.id));
         File::create(&path).map_err(|_| "temporary artifact storage is unavailable".to_owned())?;
         self.artifacts
             .push(OutputArtifactStream {

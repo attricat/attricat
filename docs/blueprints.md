@@ -51,7 +51,7 @@ context_editable = "default"
 - `default` permits writes only in the default context. Other contexts render it
   read-only, and the API rejects writes.
 
-Set `readonly = true` to make an attribute preview-only in the Catalog web app.
+Set `readonly = true` to make an attribute preview-only in the Attricat web app.
 It is intended for values managed through authorized API or CLI operations,
 including agent and extension actions; `readonly` does not restrict those
 server-side writes. Rules evaluate findings and do not write attribute values.
@@ -82,8 +82,8 @@ string. Missing contextual values resolve according to `context_fallback`.
 
 ### Attribute tags
 
-Attribute `tags` are free-form metadata for Catalog extensions and domain
-integrations. Catalog reserves the following visibility tags as default UI
+Attribute `tags` are free-form metadata for Attricat extensions and domain
+integrations. Attricat reserves the following visibility tags as default UI
 hints:
 
 | Tag | Default omission surface |
@@ -368,7 +368,7 @@ value_schema = '''{
   `user:<uuid>` / `team:<uuid>` work. Transition `permission`, `roles` and
   `separate_from` always check the acting principal, never an assignment
   attribute, so "only the assignee may close" cannot be declared. The helper
-  `catalog_validation::principal::principal_matches` exists but is not wired
+  `attricat_validation::principal::principal_matches` exists but is not wired
   into either.
 
 ## Unique Keys
@@ -512,15 +512,15 @@ must be unique; each relationship and the scalar leaf must exist.
 shorthand remains supported for local scalar fields, but cannot be combined
 with `columns`.
 
-A column can use a built-in `catalog.*` renderer or an installed extension cell
-renderer. Built-in `catalog.table_image@1` renders a direct image-only,
+A column can use a built-in `attricat.*` renderer or an installed extension cell
+renderer. Built-in `attricat.table_image@1` renders a direct image-only,
 single-file attribute as a thumbnail:
 
 ```toml
 [[views.table.columns]]
 field = "main_photo"
 label = "Image"
-renderer = { id = "catalog.table_image", version = 1 }
+renderer = { id = "attricat.table_image", version = 1 }
 ```
 
 It is not valid for relationship paths, multi-file attributes, or file
@@ -565,7 +565,7 @@ children = [
     relationships = [
       { source_blueprint = "product", field = "categories" },
     ],
-    component = { id = "catalog.incoming_relationship_list_display", version = 1 },
+    component = { id = "attricat.incoming_relationship_list_display", version = 1 },
   },
 ]
 ```
@@ -588,12 +588,12 @@ platform-registered component:
 [[views.detail.children]]
 type = "field"
 field = "website"
-component = { id = "catalog.url_display", version = 1 }
+component = { id = "attricat.url_display", version = 1 }
 ```
 
 Component IDs use lowercase, underscore-separated dotted namespaces. React
 component definitions are assembled by the TypeScript registry at
-`apps/catalog-web/src/features/views/components/registry.ts`, with each
+`apps/web/src/features/views/components/registry.ts`, with each
 definition in its own module. The Rust validation contract is
 `contracts/view-components.json`; it validates the
 version, allowed props, placement, value type, and requested view capability.
@@ -605,7 +605,7 @@ configuration, and component contracts. See
 
 ## Translated labels
 
-Catalog labels are literal text unless they reference the workspace lexicon
+Attricat labels are literal text unless they reference the workspace lexicon
 with double braces. The text inside the braces is both the lexicon key and the
 English default:
 

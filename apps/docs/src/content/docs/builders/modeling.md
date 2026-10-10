@@ -102,7 +102,7 @@ context_editable = "default"
 
 The Explorer detects self-referencing relationships and turns the facet for `product.categories` into a tree with roll-up counts. Selecting *Shirts* also matches products assigned to its children. See [Explore records](/guides/explore/#relationship-facets).
 
-To show the path on a product page, use the [`catalog.relationship_hierarchy`](/builders/views/#hierarchies) component. To flag a category that ends up as its own ancestor, add a rule with the [`acyclic`](/builders/rules/#predicates) predicate.
+To show the path on a product page, use the [`attricat.relationship_hierarchy`](/builders/views/#hierarchies) component. To flag a category that ends up as its own ancestor, add a rule with the [`acyclic`](/builders/rules/#predicates) predicate.
 
 ## Constraints across relationships
 

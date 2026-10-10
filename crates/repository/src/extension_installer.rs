@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use crate::{
     extensions::{ExtensionPackage, ManifestError},
-    repository::{CatalogRepository, ExtensionInstallation, RepositoryError},
+    repository::{AttricatRepository, ExtensionInstallation, RepositoryError},
     storage::{ObjectStore, ObjectStoreError, StoredObject},
 };
 
@@ -30,12 +30,12 @@ pub enum ExtensionInstallError {
 /// objects are deleted if either staging or persistence fails.
 #[derive(Clone)]
 pub struct ExtensionInstaller {
-    repository: CatalogRepository,
+    repository: AttricatRepository,
     object_store: Arc<dyn ObjectStore>,
 }
 
 impl ExtensionInstaller {
-    pub fn new(repository: CatalogRepository, object_store: Arc<dyn ObjectStore>) -> Self {
+    pub fn new(repository: AttricatRepository, object_store: Arc<dyn ObjectStore>) -> Self {
         Self {
             repository,
             object_store,

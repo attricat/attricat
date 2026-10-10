@@ -52,7 +52,7 @@ test("technical classifications are modeled as family relationships", () => {
   );
   assert.match(
     definitions.sku,
-    /field = "main_photo", label = "Image", renderer = \{ id = "catalog\.table_image", version = 1 \}/,
+    /field = "main_photo", label = "Image", renderer = \{ id = "attricat\.table_image", version = 1 \}/,
   );
   assert.match(definitions.sku, /field = "family\.product_type\.name"/);
   assert.match(definitions.sku, /field = "family\.interface_standard\.name"/);

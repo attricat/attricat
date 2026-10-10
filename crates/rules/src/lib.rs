@@ -1,5 +1,5 @@
 //! Strict, inert rule definition parsing. Candidate selection and evaluation are host-owned.
-use catalog_validation::{
+use attricat_validation::{
     is_valid_code,
     predicate::{AttributeTypes, PredicateError, Usage, validate_predicate},
 };
@@ -67,7 +67,7 @@ pub enum Trigger {
 
 /// Rules use the shared declarative predicate engine. Predicates cannot
 /// express SQL, templates, calls or selectors.
-pub use catalog_validation::predicate::{CompareOp, Predicate, Quantifier};
+pub use attricat_validation::predicate::{CompareOp, Predicate, Quantifier};
 
 /// Synchronous enforcement of an error-severity rule. Enforcing rules reject
 /// violating writes with `422 rule_violation` instead of only reporting findings.
@@ -89,14 +89,14 @@ pub struct Enforcement {
 #[serde(deny_unknown_fields)]
 pub struct TransitionSelector {
     /// Status attribute code.
-    #[schemars(regex(pattern = catalog_validation::CODE_PATTERN), extend("x-attricat-reference" = "attribute"))]
+    #[schemars(regex(pattern = attricat_validation::CODE_PATTERN), extend("x-attricat-reference" = "attribute"))]
     pub attribute_code: String,
     /// Source status code. Omit to guard every change into `to`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[schemars(regex(pattern = catalog_validation::CODE_PATTERN))]
+    #[schemars(regex(pattern = attricat_validation::CODE_PATTERN))]
     pub from: Option<String>,
     /// Destination status code.
-    #[schemars(regex(pattern = catalog_validation::CODE_PATTERN))]
+    #[schemars(regex(pattern = attricat_validation::CODE_PATTERN))]
     pub to: String,
 }
 
@@ -153,7 +153,7 @@ struct Raw {
     /// Definition format version. Only `1` is supported.
     format_version: u32,
     /// Stable rule identifier, unique within its owner.
-    #[schemars(regex(pattern = catalog_validation::CODE_PATTERN))]
+    #[schemars(regex(pattern = attricat_validation::CODE_PATTERN))]
     code: String,
     /// Human-readable rule name.
     name: String,

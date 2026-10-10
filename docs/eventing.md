@@ -1,6 +1,6 @@
-# Catalog domain eventing
+# Attricat domain eventing
 
-Catalog uses a PostgreSQL **transactional outbox** for durable internal domain
+Attricat uses a PostgreSQL **transactional outbox** for durable internal domain
 work. It is an internal, per-workspace integration mechanism—not an HTTP API,
 a browser feed, or a plugin capability. Never expose `domain_events`, delivery
 rows, or their payloads to a client.
@@ -16,7 +16,7 @@ storage inspection, but is **not** a delivery-order guarantee.
 The dispatcher is durable and **at least once**:
 
 - A handler can receive a duplicate, including after it has completed its own
-  write but before Catalog persists the delivery acknowledgement.
+  write but before Attricat persists the delivery acknowledgement.
 - Events can be delivered out of sequence. Different handlers, workspaces, and
   recovered leases are independent; do not infer causal ordering from arrival
   order.
@@ -197,7 +197,7 @@ fifth failed attempt the delivery becomes `dead_letter`; its immutable
 reset `attempts`. It can therefore become a dead letter again on its next
 failure.
 
-Catalog currently has no automatic outbox or delivery retention/pruning job and
+Attricat currently has no automatic outbox or delivery retention/pruning job and
 no retention configuration. Keep PostgreSQL backups while events and delivery
 records are retained. Do not manually delete `domain_events`, `event_consumers`,
 or `event_deliveries`: their foreign keys and consumer watermarks are part of
@@ -209,9 +209,9 @@ introducing retention.
 The dispatcher emits Prometheus metrics on the normal `/metrics` endpoint
 (`data_health.read`):
 
-- `catalog_event_deliveries_total{outcome="claimed|completed|retry|dead_letter"}`
+- `attricat_event_deliveries_total{outcome="claimed|completed|retry|dead_letter"}`
   counts lifecycle outcomes.
-- `catalog_event_delivery_queue_depth{workspace_id,consumer,status="pending|leased|completed|dead_letter"}`
+- `attricat_event_delivery_queue_depth{workspace_id,consumer,status="pending|leased|completed|dead_letter"}`
   is refreshed every 5 seconds by one dispatcher handler loop per API process,
   for each active workspace. For every consumer with deliveries in a workspace
   all four statuses are reported; a status with no deliveries is set to `0`, so
@@ -228,7 +228,7 @@ definitive operator list.
 2. Inspect terminal failures with a bearer token that has `data_health.read`:
 
    ```sh
-   acli --token "$CATALOG_TOKEN" event dead-letters
+   acli --token "$ATTRICAT_TOKEN" event dead-letters
    # Equivalent HTTP: GET /event-deliveries/dead-letters
    ```
 
@@ -239,7 +239,7 @@ definitive operator list.
 4. Replay one terminal delivery with a token authorized for `roles.manage`:
 
    ```sh
-   acli --token "$CATALOG_TOKEN" event replay <consumer-id> <event-id>
+   acli --token "$ATTRICAT_TOKEN" event replay <consumer-id> <event-id>
    # Equivalent HTTP: POST /event-deliveries/{consumer_id}/{event_id}/replay
    ```
 
@@ -268,4 +268,4 @@ event facts.
 
 ## Workflow consumer
 
-`catalog.workflows` is an internal consumer of the supported record v1 events. Its delivery handler is intentionally limited to durable workflow-run fan-out; independent workflow-run leases perform mutations. Delivery and worker attempts are at-least-once and unordered, but each run/action key, record mutation, audit record, and emitted outbox event commit in one transaction, so lease reclaim cannot duplicate effects. Workflow emitted events retain correlation/direct causation and persisted root/depth lineage, use `workflow:<id>` as source, and are not fed back into workflows by default (depth is capped at 8). Disabling cancels queued and leased runs; diagnostics expose no domain-event payloads.
+`attricat.workflows` is an internal consumer of the supported record v1 events. Its delivery handler is intentionally limited to durable workflow-run fan-out; independent workflow-run leases perform mutations. Delivery and worker attempts are at-least-once and unordered, but each run/action key, record mutation, audit record, and emitted outbox event commit in one transaction, so lease reclaim cannot duplicate effects. Workflow emitted events retain correlation/direct causation and persisted root/depth lineage, use `workflow:<id>` as source, and are not fed back into workflows by default (depth is capped at 8). Disabling cancels queued and leased runs; diagnostics expose no domain-event payloads.

@@ -30,11 +30,11 @@ Projektuj z myślą o tym: Twoje rozszerzenie prosi o uprawnienia, a administrat
   "version": "1.0.0",
   "description": "Shows warehouse stock on product pages.",
   "icons": { "48": "assets/icon-48.svg" },
-  "catalog": {
+  "attricat": {
     "id": "acme.inventory",
     "host_api": ">=1.0.0, <2.0.0"
   },
-  "permissions": ["catalog.read"],
+  "permissions": ["attricat.read"],
   "artifacts": [
     { "id": "panel", "kind": "client_component", "path": "dist/panel.js" }
   ],
@@ -52,8 +52,8 @@ Projektuj z myślą o tym: Twoje rozszerzenie prosi o uprawnienia, a administrat
 
 ```js
 // dist/panel.js
-export const mount = async (root, catalog) => {
-  const form = await catalog.request(`/api/v1/records/${catalog.context.record_id}`);
+export const mount = async (root, attricat) => {
+  const form = await attricat.request(`/api/v1/records/${attricat.context.record_id}`);
   root.textContent = `${form.blueprint.blueprint.name} v${form.record.blueprint_version}`;
   return () => root.replaceChildren();
 };
@@ -69,7 +69,7 @@ Trzy numery wersji są od siebie niezależne:
 | --- | --- |
 | `manifest_version` | Format manifestu. Obecnie `1`. |
 | `version` | Twoje wydanie, w formacie SemVer. |
-| `catalog.host_api` | Zakres SemVer wersji API hosta Attricat, z którymi działa Twój kod, np. `>=1.0.0, <2.0.0`. |
+| `attricat.host_api` | Zakres SemVer wersji API hosta Attricat, z którymi działa Twój kod, np. `>=1.0.0, <2.0.0`. |
 
 Attricat nigdy nie instaluje wydania, którego zakres `host_api` nie obejmuje działającej wersji API hosta.
 
@@ -104,7 +104,7 @@ Sprawdź, czy Twój kod obsługuje:
 - **Zduplikowane zdarzenia i zdarzenia w innej kolejności.** Dostarczanie odbywa się co najmniej raz. Używaj identyfikatora zdarzenia jako klucza idempotencji.
 - **Własne zdarzenia.** Zapis wykonany przez Twoją obsługę zdarzeń tworzy nowe zdarzenie. Ignoruj zdarzenia, których źródłem jest Twoje rozszerzenie, inaczej powstanie pętla.
 - **Brakujące uprawnienia.** Uprawnienia opcjonalne mogą nie zostać przyznane; zadbaj o łagodną degradację.
-- **Tryb jasny i ciemny.** W komponentach klienckich odczytuj `catalog.theme`.
+- **Tryb jasny i ciemny.** W komponentach klienckich odczytuj `attricat.theme`.
 
 ## Opublikuj
 
@@ -118,9 +118,9 @@ Aby dystrybuować rozszerzenie przez rejestr, opublikuj archiwum jako zasób Git
     "name": "Inventory panel",
     "description": "Shows warehouse stock on product pages.",
     "icon": "icon.svg",
-    "repository": "acme/catalog-inventory"
+    "repository": "acme/attricat-inventory"
   }]
 }
 ```
 
-Administratorzy obszaru roboczego dodają Twój rejestr poleceniem `acli extension-registry add --source acme/catalog-extensions`. Oficjalny rejestr to `attricat/attricat-extensions`.
+Administratorzy obszaru roboczego dodają Twój rejestr poleceniem `acli extension-registry add --source acme/attricat-extensions`. Oficjalny rejestr to `attricat/attricat-extensions`.

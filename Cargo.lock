@@ -138,19 +138,19 @@ version = "0.1.0"
 dependencies = [
  "async-stream",
  "async-trait",
+ "attricat-agent-runtime",
+ "attricat-cache",
+ "attricat-domain",
+ "attricat-events",
+ "attricat-extension-manifest",
+ "attricat-extension-runtime",
+ "attricat-http",
+ "attricat-repository",
+ "attricat-solution-pack",
+ "attricat-storage",
+ "attricat-workers",
  "axum",
  "bytes",
- "catalog-agent-runtime",
- "catalog-cache",
- "catalog-domain",
- "catalog-events",
- "catalog-extension-manifest",
- "catalog-extension-runtime",
- "catalog-http",
- "catalog-repository",
- "catalog-solution-pack",
- "catalog-storage",
- "catalog-workers",
  "chrono",
  "dotenvy",
  "image",
@@ -261,6 +261,404 @@ name = "atomic-waker"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
+
+[[package]]
+name = "attricat-agent-runtime"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "attricat-blueprint",
+ "attricat-domain",
+ "attricat-repository",
+ "attricat-rules",
+ "attricat-storage",
+ "attricat-validation",
+ "attricat-workers",
+ "attricat-workflow",
+ "axum",
+ "base64 0.22.1",
+ "bytes",
+ "chrono",
+ "futures-util",
+ "reqwest",
+ "secrecy",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
+ "url",
+ "uuid",
+]
+
+[[package]]
+name = "attricat-artifact-test-component"
+version = "0.1.0"
+dependencies = [
+ "sha2 0.10.9",
+ "wit-bindgen",
+]
+
+[[package]]
+name = "attricat-blueprint"
+version = "0.1.0"
+dependencies = [
+ "attricat-lexicon",
+ "attricat-rules",
+ "attricat-validation",
+ "schemars",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.20",
+ "toml",
+]
+
+[[package]]
+name = "attricat-cache"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "fred",
+ "futures-util",
+ "metrics",
+ "moka",
+ "rustls",
+ "rustls-native-certs",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "attricat-domain"
+version = "0.1.0"
+dependencies = [
+ "argon2",
+ "base64 0.22.1",
+ "chrono",
+ "rand 0.8.8",
+ "rust_decimal",
+ "secrecy",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "subtle",
+ "thiserror 2.0.20",
+ "uuid",
+]
+
+[[package]]
+name = "attricat-events"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror 2.0.20",
+ "uuid",
+]
+
+[[package]]
+name = "attricat-extension-manifest"
+version = "0.1.0"
+dependencies = [
+ "attricat-validation",
+ "semver",
+ "serde",
+ "serde_json",
+ "tar",
+ "thiserror 2.0.20",
+ "url",
+ "uuid",
+ "zstd",
+]
+
+[[package]]
+name = "attricat-extension-runtime"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "attricat-cache",
+ "attricat-domain",
+ "attricat-events",
+ "attricat-extension-manifest",
+ "attricat-repository",
+ "attricat-storage",
+ "attricat-workers",
+ "base64 0.22.1",
+ "chrono",
+ "futures-util",
+ "metrics",
+ "reqwest",
+ "semver",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
+ "url",
+ "uuid",
+ "wasmtime",
+ "wit-parser 0.258.3",
+]
+
+[[package]]
+name = "attricat-extension-transfer-test-component"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "wit-bindgen",
+]
+
+[[package]]
+name = "attricat-http"
+version = "0.1.0"
+dependencies = [
+ "async-stream",
+ "async-trait",
+ "attricat-agent-runtime",
+ "attricat-domain",
+ "attricat-extension-manifest",
+ "attricat-extension-runtime",
+ "attricat-lexicon",
+ "attricat-repository",
+ "attricat-rules",
+ "attricat-solution-pack",
+ "attricat-storage",
+ "attricat-validation",
+ "attricat-workflow",
+ "axum",
+ "base64 0.22.1",
+ "bytes",
+ "chrono",
+ "chrono-tz",
+ "lettre",
+ "metrics",
+ "metrics-exporter-prometheus",
+ "opentelemetry",
+ "opentelemetry-otlp",
+ "opentelemetry_sdk",
+ "rand 0.8.8",
+ "rust_decimal",
+ "secrecy",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sqlx",
+ "subtle",
+ "thiserror 2.0.20",
+ "tokio",
+ "tokio-stream",
+ "tower",
+ "tower-http",
+ "tracing",
+ "tracing-opentelemetry",
+ "tracing-subscriber",
+ "url",
+ "uuid",
+]
+
+[[package]]
+name = "attricat-interactive-test-component"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "wit-bindgen",
+]
+
+[[package]]
+name = "attricat-lexicon"
+version = "0.1.0"
+dependencies = [
+ "schemars",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+]
+
+[[package]]
+name = "attricat-repository"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "attricat-blueprint",
+ "attricat-cache",
+ "attricat-domain",
+ "attricat-events",
+ "attricat-extension-manifest",
+ "attricat-lexicon",
+ "attricat-rules",
+ "attricat-solution-pack",
+ "attricat-storage",
+ "attricat-validation",
+ "attricat-workflow",
+ "base64 0.22.1",
+ "bytes",
+ "chrono",
+ "chrono-tz",
+ "futures-util",
+ "metrics",
+ "reqwest",
+ "rust_decimal",
+ "schemars",
+ "semver",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sqlx",
+ "thiserror 2.0.20",
+ "tokio",
+ "toml",
+ "tracing",
+ "url",
+ "uuid",
+]
+
+[[package]]
+name = "attricat-rules"
+version = "0.1.0"
+dependencies = [
+ "attricat-validation",
+ "cron",
+ "schemars",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.20",
+ "toml",
+ "uuid",
+]
+
+[[package]]
+name = "attricat-solution-pack"
+version = "0.1.0"
+dependencies = [
+ "attricat-blueprint",
+ "attricat-extension-manifest",
+ "attricat-lexicon",
+ "attricat-rules",
+ "attricat-validation",
+ "attricat-workflow",
+ "base64 0.22.1",
+ "chrono",
+ "chrono-tz",
+ "image",
+ "quick-xml",
+ "regex",
+ "rust_decimal",
+ "semver",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "subtle",
+ "tar",
+ "thiserror 2.0.20",
+ "toml",
+ "unicode-normalization",
+ "url",
+ "uuid",
+ "zstd",
+]
+
+[[package]]
+name = "attricat-storage"
+version = "0.1.0"
+dependencies = [
+ "async-stream",
+ "async-trait",
+ "aws-config",
+ "aws-credential-types",
+ "aws-sdk-s3",
+ "aws-smithy-runtime-api",
+ "aws-smithy-types",
+ "bytes",
+ "chrono",
+ "futures-util",
+ "metrics",
+ "secrecy",
+ "serde",
+ "sha2 0.10.9",
+ "thiserror 2.0.20",
+ "tokio",
+ "url",
+ "uuid",
+]
+
+[[package]]
+name = "attricat-unified-test-component"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "wit-bindgen",
+]
+
+[[package]]
+name = "attricat-validation"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "jsonschema",
+ "schemars",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "toml",
+ "uuid",
+]
+
+[[package]]
+name = "attricat-workers"
+version = "0.1.0"
+dependencies = [
+ "async-stream",
+ "async-trait",
+ "attricat-domain",
+ "attricat-events",
+ "attricat-repository",
+ "attricat-rules",
+ "attricat-storage",
+ "attricat-workflow",
+ "axum",
+ "base64 0.22.1",
+ "bytes",
+ "chrono",
+ "futures-util",
+ "image",
+ "kamadak-exif",
+ "metrics",
+ "reqwest",
+ "secrecy",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sqlx",
+ "thiserror 2.0.20",
+ "tokio",
+ "tokio-stream",
+ "tracing",
+ "url",
+ "uuid",
+]
+
+[[package]]
+name = "attricat-workflow"
+version = "0.1.0"
+dependencies = [
+ "attricat-validation",
+ "cron",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.20",
+ "toml",
+ "uuid",
+]
 
 [[package]]
 name = "autocfg"
@@ -890,404 +1288,6 @@ checksum = "7dafe3a8757b027e2be6e4e5601ed563c55989fcf1546e933c66c8eb3a058d35"
 dependencies = [
  "bytes",
  "either",
-]
-
-[[package]]
-name = "catalog-agent-runtime"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "axum",
- "base64 0.22.1",
- "bytes",
- "catalog-blueprint",
- "catalog-domain",
- "catalog-repository",
- "catalog-rules",
- "catalog-storage",
- "catalog-validation",
- "catalog-workers",
- "catalog-workflow",
- "chrono",
- "futures-util",
- "reqwest",
- "secrecy",
- "serde",
- "serde_json",
- "thiserror 2.0.20",
- "tokio",
- "tracing",
- "url",
- "uuid",
-]
-
-[[package]]
-name = "catalog-artifact-test-component"
-version = "0.1.0"
-dependencies = [
- "sha2 0.10.9",
- "wit-bindgen",
-]
-
-[[package]]
-name = "catalog-blueprint"
-version = "0.1.0"
-dependencies = [
- "catalog-lexicon",
- "catalog-rules",
- "catalog-validation",
- "schemars",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "thiserror 2.0.20",
- "toml",
-]
-
-[[package]]
-name = "catalog-cache"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "bytes",
- "fred",
- "futures-util",
- "metrics",
- "moka",
- "rustls",
- "rustls-native-certs",
- "serde",
- "serde_json",
- "thiserror 2.0.20",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "catalog-domain"
-version = "0.1.0"
-dependencies = [
- "argon2",
- "base64 0.22.1",
- "chrono",
- "rand 0.8.8",
- "rust_decimal",
- "secrecy",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "subtle",
- "thiserror 2.0.20",
- "uuid",
-]
-
-[[package]]
-name = "catalog-events"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "serde",
- "serde_json",
- "sqlx",
- "thiserror 2.0.20",
- "uuid",
-]
-
-[[package]]
-name = "catalog-extension-manifest"
-version = "0.1.0"
-dependencies = [
- "catalog-validation",
- "semver",
- "serde",
- "serde_json",
- "tar",
- "thiserror 2.0.20",
- "url",
- "uuid",
- "zstd",
-]
-
-[[package]]
-name = "catalog-extension-runtime"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "base64 0.22.1",
- "catalog-cache",
- "catalog-domain",
- "catalog-events",
- "catalog-extension-manifest",
- "catalog-repository",
- "catalog-storage",
- "catalog-workers",
- "chrono",
- "futures-util",
- "metrics",
- "reqwest",
- "semver",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "thiserror 2.0.20",
- "tokio",
- "tracing",
- "url",
- "uuid",
- "wasmtime",
- "wit-parser 0.258.3",
-]
-
-[[package]]
-name = "catalog-extension-transfer-test-component"
-version = "0.1.0"
-dependencies = [
- "serde_json",
- "wit-bindgen",
-]
-
-[[package]]
-name = "catalog-http"
-version = "0.1.0"
-dependencies = [
- "async-stream",
- "async-trait",
- "axum",
- "base64 0.22.1",
- "bytes",
- "catalog-agent-runtime",
- "catalog-domain",
- "catalog-extension-manifest",
- "catalog-extension-runtime",
- "catalog-lexicon",
- "catalog-repository",
- "catalog-rules",
- "catalog-solution-pack",
- "catalog-storage",
- "catalog-validation",
- "catalog-workflow",
- "chrono",
- "chrono-tz",
- "lettre",
- "metrics",
- "metrics-exporter-prometheus",
- "opentelemetry",
- "opentelemetry-otlp",
- "opentelemetry_sdk",
- "rand 0.8.8",
- "rust_decimal",
- "secrecy",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "sqlx",
- "subtle",
- "thiserror 2.0.20",
- "tokio",
- "tokio-stream",
- "tower",
- "tower-http",
- "tracing",
- "tracing-opentelemetry",
- "tracing-subscriber",
- "url",
- "uuid",
-]
-
-[[package]]
-name = "catalog-interactive-test-component"
-version = "0.1.0"
-dependencies = [
- "serde_json",
- "wit-bindgen",
-]
-
-[[package]]
-name = "catalog-lexicon"
-version = "0.1.0"
-dependencies = [
- "schemars",
- "serde",
- "serde_json",
- "thiserror 2.0.20",
-]
-
-[[package]]
-name = "catalog-repository"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "base64 0.22.1",
- "bytes",
- "catalog-blueprint",
- "catalog-cache",
- "catalog-domain",
- "catalog-events",
- "catalog-extension-manifest",
- "catalog-lexicon",
- "catalog-rules",
- "catalog-solution-pack",
- "catalog-storage",
- "catalog-validation",
- "catalog-workflow",
- "chrono",
- "chrono-tz",
- "futures-util",
- "metrics",
- "reqwest",
- "rust_decimal",
- "schemars",
- "semver",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "sqlx",
- "thiserror 2.0.20",
- "tokio",
- "toml",
- "tracing",
- "url",
- "uuid",
-]
-
-[[package]]
-name = "catalog-rules"
-version = "0.1.0"
-dependencies = [
- "catalog-validation",
- "cron",
- "schemars",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "thiserror 2.0.20",
- "toml",
- "uuid",
-]
-
-[[package]]
-name = "catalog-solution-pack"
-version = "0.1.0"
-dependencies = [
- "base64 0.22.1",
- "catalog-blueprint",
- "catalog-extension-manifest",
- "catalog-lexicon",
- "catalog-rules",
- "catalog-validation",
- "catalog-workflow",
- "chrono",
- "chrono-tz",
- "image",
- "quick-xml",
- "regex",
- "rust_decimal",
- "semver",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "subtle",
- "tar",
- "thiserror 2.0.20",
- "toml",
- "unicode-normalization",
- "url",
- "uuid",
- "zstd",
-]
-
-[[package]]
-name = "catalog-storage"
-version = "0.1.0"
-dependencies = [
- "async-stream",
- "async-trait",
- "aws-config",
- "aws-credential-types",
- "aws-sdk-s3",
- "aws-smithy-runtime-api",
- "aws-smithy-types",
- "bytes",
- "chrono",
- "futures-util",
- "metrics",
- "secrecy",
- "serde",
- "sha2 0.10.9",
- "thiserror 2.0.20",
- "tokio",
- "url",
- "uuid",
-]
-
-[[package]]
-name = "catalog-unified-test-component"
-version = "0.1.0"
-dependencies = [
- "serde_json",
- "wit-bindgen",
-]
-
-[[package]]
-name = "catalog-validation"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "jsonschema",
- "schemars",
- "serde",
- "serde_json",
- "thiserror 2.0.20",
- "toml",
- "uuid",
-]
-
-[[package]]
-name = "catalog-workers"
-version = "0.1.0"
-dependencies = [
- "async-stream",
- "async-trait",
- "axum",
- "base64 0.22.1",
- "bytes",
- "catalog-domain",
- "catalog-events",
- "catalog-repository",
- "catalog-rules",
- "catalog-storage",
- "catalog-workflow",
- "chrono",
- "futures-util",
- "image",
- "kamadak-exif",
- "metrics",
- "reqwest",
- "secrecy",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "sqlx",
- "thiserror 2.0.20",
- "tokio",
- "tokio-stream",
- "tracing",
- "url",
- "uuid",
-]
-
-[[package]]
-name = "catalog-workflow"
-version = "0.1.0"
-dependencies = [
- "catalog-validation",
- "cron",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "thiserror 2.0.20",
- "toml",
- "uuid",
 ]
 
 [[package]]

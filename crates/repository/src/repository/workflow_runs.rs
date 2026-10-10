@@ -99,7 +99,7 @@ impl From<WorkflowRunRow> for ClaimedWorkflowRun {
     }
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     async fn enqueue_workflow_task(
         &self,
         tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
@@ -144,8 +144,8 @@ impl CatalogRepository {
         let snapshot = serde_json::to_value(event).expect("domain event serializes");
         let mut inserted = 0;
         for (workflow_id, version, plan) in rows {
-            let compiled: catalog_workflow::CompiledWorkflow = serde_json::from_value(plan.clone())
-                .map_err(|e| {
+            let compiled: attricat_workflow::CompiledWorkflow =
+                serde_json::from_value(plan.clone()).map_err(|e| {
                     RepositoryError::InvalidWorkflowDefinition(format!(
                         "stored compiled workflow is invalid: {e}"
                     ))
@@ -326,12 +326,12 @@ impl CatalogRepository {
                 RepositoryError::WorkflowNotPublished
             });
         };
-        let compiled: catalog_workflow::CompiledWorkflow = serde_json::from_value(plan.clone())
+        let compiled: attricat_workflow::CompiledWorkflow = serde_json::from_value(plan.clone())
             .map_err(|e| RepositoryError::InvalidWorkflowDefinition(e.to_string()))?;
         if !compiled
             .triggers
             .iter()
-            .any(|trigger| matches!(trigger, catalog_workflow::Trigger::Manual))
+            .any(|trigger| matches!(trigger, attricat_workflow::Trigger::Manual))
         {
             return Err(RepositoryError::InvalidWorkflowDefinition(
                 "enabled revision does not allow manual runs".into(),
@@ -382,13 +382,14 @@ impl CatalogRepository {
         let mut created = 0;
         let rows: Vec<(Uuid,i64,Value)>=sqlx::query_as("SELECT w.id,w.version,w.compiled_plan FROM workflows w JOIN workflow_lifecycles l ON l.workflow_id=w.id AND l.workspace_id=w.workspace_id WHERE w.workspace_id=$1 AND w.status='published' AND l.enabled_version=w.version FOR SHARE OF l").bind(ws).fetch_all(&mut *tx).await?;
         for (workflow_id, version, plan) in rows {
-            let compiled: catalog_workflow::CompiledWorkflow = serde_json::from_value(plan.clone())
-                .map_err(|e| RepositoryError::InvalidWorkflowDefinition(e.to_string()))?;
+            let compiled: attricat_workflow::CompiledWorkflow =
+                serde_json::from_value(plan.clone())
+                    .map_err(|e| RepositoryError::InvalidWorkflowDefinition(e.to_string()))?;
             // Whether the workflow has a pending run; read on first need and
             // kept current as this pass creates runs.
             let mut pending: Option<bool> = None;
             for (index, trigger) in compiled.triggers.iter().enumerate() {
-                let catalog_workflow::Trigger::Schedule {
+                let attricat_workflow::Trigger::Schedule {
                     cron,
                     target_record_id,
                     ..
@@ -396,7 +397,7 @@ impl CatalogRepository {
                 else {
                     continue;
                 };
-                let schedule = catalog_workflow::parse_six_field_cron(cron).map_err(|_| {
+                let schedule = attricat_workflow::parse_six_field_cron(cron).map_err(|_| {
                     RepositoryError::InvalidWorkflowDefinition(
                         "stored schedule cron is invalid".into(),
                     )
@@ -534,8 +535,8 @@ fn synthetic_trigger(
     }
 }
 
-fn workflow_trigger_matches(trigger: &catalog_workflow::Trigger, event: &DomainEvent) -> bool {
-    let catalog_workflow::Trigger::Event {
+fn workflow_trigger_matches(trigger: &attricat_workflow::Trigger, event: &DomainEvent) -> bool {
+    let attricat_workflow::Trigger::Event {
         event_type,
         envelope,
         facts,
@@ -545,7 +546,7 @@ fn workflow_trigger_matches(trigger: &catalog_workflow::Trigger, event: &DomainE
         return false;
     };
     event_type == &event.event_type
-        && catalog_workflow::changed_attributes_match(attributes, &event.payload)
+        && attricat_workflow::changed_attributes_match(attributes, &event.payload)
         && envelope.iter().all(|(key, expected)| match key.as_str() {
             "event_type" => expected == &Value::String(event.event_type.clone()),
             "aggregate_kind" => expected == &Value::String(event.aggregate_kind.clone()),
@@ -579,7 +580,7 @@ mod tests {
 
     #[test]
     fn matching_uses_exact_event_and_immutable_facts() {
-        let trigger = catalog_workflow::Trigger::Event {
+        let trigger = attricat_workflow::Trigger::Event {
             event_type: "record.updated.v1".into(),
             envelope: [("source_kind".into(), json!("api"))].into(),
             facts: [("facts.0.attribute_code".into(), json!("title"))].into(),
@@ -596,7 +597,7 @@ mod tests {
             correlation_id: Uuid::new_v4(),
             causation_id: None,
             source_kind: "api".into(),
-            source_name: "catalog_api".into(),
+            source_name: "attricat_api".into(),
             metadata: json!({}),
             payload: json!({"facts":[{"attribute_code":"title"}]}),
         };
@@ -607,7 +608,7 @@ mod tests {
         };
         assert!(!workflow_trigger_matches(&trigger, &different));
 
-        let metadata_trigger = catalog_workflow::Trigger::Event {
+        let metadata_trigger = attricat_workflow::Trigger::Event {
             event_type: "record.updated.v1".into(),
             envelope: [("metadata.tenant_hint".into(), json!("north"))].into(),
             facts: Default::default(),
@@ -623,7 +624,7 @@ mod tests {
 
     #[test]
     fn attribute_filters_match_any_changed_fact() {
-        let trigger = |attributes: &[&str]| catalog_workflow::Trigger::Event {
+        let trigger = |attributes: &[&str]| attricat_workflow::Trigger::Event {
             event_type: "relationship.changed.v1".into(),
             envelope: Default::default(),
             facts: Default::default(),
@@ -640,7 +641,7 @@ mod tests {
             correlation_id: Uuid::new_v4(),
             causation_id: None,
             source_kind: "api".into(),
-            source_name: "catalog_api".into(),
+            source_name: "attricat_api".into(),
             metadata: json!({}),
             payload: json!({"facts":[{"attribute_code":"license","change_kind":"relationship_add"}]}),
         };

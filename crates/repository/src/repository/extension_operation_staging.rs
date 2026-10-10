@@ -5,7 +5,7 @@ use super::extension_operation_artifacts::{
     MAX_OPERATION_ARTIFACT_BYTES, MAX_OPERATION_RUN_ARTIFACT_BYTES,
     MAX_OPERATION_WORKSPACE_ARTIFACT_BYTES,
 };
-use super::{CatalogRepository, ExtensionOperationArtifact, RepositoryError};
+use super::{AttricatRepository, ExtensionOperationArtifact, RepositoryError};
 use uuid::Uuid;
 
 #[derive(Debug)]
@@ -36,7 +36,7 @@ fn valid_name(name: &str) -> bool {
         && name != ".."
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     pub async fn reserve_extension_output_chunk(
         &self,
         run: Uuid,

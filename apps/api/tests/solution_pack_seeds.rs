@@ -124,7 +124,7 @@ fn manifest(id: &str, version: &str) -> Value {
         "name": "Seed fixture",
         "version": version,
         "description": "Seed resources fixture",
-        "catalog": {"host_api": "^1.0"},
+        "attricat": {"host_api": "^1.0"},
         "resources": {}
     })
 }

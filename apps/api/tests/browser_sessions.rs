@@ -2,7 +2,7 @@ mod support;
 
 use api::{
     account::{Password, SessionDigest, hash_password},
-    repository::CatalogRepository,
+    repository::AttricatRepository,
 };
 use reqwest::header::SET_COOKIE;
 use support::*;
@@ -97,7 +97,7 @@ async fn login_rotates_sessions_and_csrf_protects_mutations(pool: PgPool) {
         client
             .post(format!("{base_url}/data-health/refresh"))
             .header("cookie", &cookie)
-            .header("x-catalog-csrf", csrf_value)
+            .header("x-attricat-csrf", csrf_value)
             .send()
             .await
             .unwrap()
@@ -107,7 +107,7 @@ async fn login_rotates_sessions_and_csrf_protects_mutations(pool: PgPool) {
     let renewed = client
         .post(format!("{base_url}/auth/renew"))
         .header("cookie", &cookie)
-        .header("x-catalog-csrf", csrf_value)
+        .header("x-attricat-csrf", csrf_value)
         .send()
         .await
         .unwrap();
@@ -167,7 +167,7 @@ async fn password_reset_requests_are_rate_limited_without_disclosing_or_issuing_
 }
 
 #[sqlx::test]
-async fn session_workspace_selects_the_explicit_catalog_scope(pool: PgPool) {
+async fn session_workspace_selects_the_explicit_attricat_scope(pool: PgPool) {
     let (base_url, server) = start_session_server(pool.clone()).await;
     let owner_id = OWNER_ID.parse::<Uuid>().unwrap();
     let workspace_id = Uuid::new_v4();
@@ -224,7 +224,7 @@ async fn session_workspace_selects_the_explicit_catalog_scope(pool: PgPool) {
     let created = client
         .post(format!("{base_url}/blueprints"))
         .header("cookie", &second_cookie)
-        .header("x-catalog-csrf", csrf_value)
+        .header("x-attricat-csrf", csrf_value)
         .json(&json!({ "definition": "format_version = 1\ncode = \"second_only\"\nname = \"Second only\"\nkind = \"record\"\n\n[views.dropdown_option]\ntype = \"dropdown_option\"\nfields = [\"title\"]\n\n[[attributes]]\ncode = \"title\"\nvalue_type = \"string\"" }))
         .send()
         .await
@@ -284,7 +284,7 @@ async fn stale_password_verification_cannot_issue_a_session(pool: PgPool) {
         .await
         .unwrap();
 
-    let repository = CatalogRepository::system(pool.clone());
+    let repository = AttricatRepository::system(pool.clone());
     let credential = repository
         .local_login_credential("api-test-owner@example.test")
         .await
@@ -364,7 +364,7 @@ async fn time_zone_preference_persists_on_the_account_and_rejects_unknown_zones(
             .header("cookie", &cookie)
             .json(&body);
         if let Some(csrf) = csrf {
-            request = request.header("x-catalog-csrf", csrf);
+            request = request.header("x-attricat-csrf", csrf);
         }
         request.send()
     };
@@ -459,7 +459,7 @@ async fn display_name_updates_the_account_and_rejects_invalid_names(pool: PgPool
             .header("cookie", &cookie)
             .json(&body);
         if let Some(csrf) = csrf {
-            request = request.header("x-catalog-csrf", csrf);
+            request = request.header("x-attricat-csrf", csrf);
         }
         request.send()
     };
@@ -521,7 +521,7 @@ async fn sample_accounts_hold_their_roles_and_are_published(pool: PgPool) {
     server.abort();
 
     let workspace_id = BOOTSTRAP_WORKSPACE_ID.parse().unwrap();
-    let system = CatalogRepository::system(pool.clone());
+    let system = AttricatRepository::system(pool.clone());
     // Seeding twice leaves one membership with one grant.
     for _ in 0..2 {
         system

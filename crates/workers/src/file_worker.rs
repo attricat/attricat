@@ -16,7 +16,7 @@ use sqlx::{PgPool, Row};
 use tracing::{Instrument, info_span};
 use uuid::Uuid;
 
-use crate::repository::{CatalogRepository, RepositoryError, SystemRepository};
+use crate::repository::{AttricatRepository, RepositoryError, SystemRepository};
 use crate::storage::{ObjectStore, ObjectStoreError, StoredObject};
 
 const DEFAULT_MAX_PIXELS: u64 = 40_000_000;
@@ -108,7 +108,7 @@ pub struct FileWorker {
 impl FileWorker {
     pub fn new(pool: PgPool, store: Arc<dyn ObjectStore>, config: WorkerConfig) -> Self {
         Self {
-            repository: CatalogRepository::system(pool.clone()),
+            repository: AttricatRepository::system(pool.clone()),
             pool,
             store,
             config,
@@ -138,7 +138,7 @@ impl FileWorker {
         .fetch_optional(&self.pool)
         .await?;
         if job.is_some() {
-            counter!("catalog_file_worker_jobs_claimed_total").increment(1);
+            counter!("attricat_file_worker_jobs_claimed_total").increment(1);
         }
         Ok(job.map(
             |(id, workspace_id, file_id, kind, attempts, lease_token)| ClaimedJob {
@@ -374,10 +374,11 @@ impl FileWorker {
             .repository
             .mark_unreferenced_files_deleted(grace)
             .await?;
-        metrics::counter!("catalog_file_reconciliation_total", "outcome" => "success").increment(1);
-        metrics::counter!("catalog_file_reconciliation_files_marked_total").increment(marked);
+        metrics::counter!("attricat_file_reconciliation_total", "outcome" => "success")
+            .increment(1);
+        metrics::counter!("attricat_file_reconciliation_files_marked_total").increment(marked);
         let due_count = self.repository.queue_due_file_purges().await?;
-        metrics::counter!("catalog_file_purge_jobs_queued_total").increment(due_count);
+        metrics::counter!("attricat_file_purge_jobs_queued_total").increment(due_count);
         tracing::info!(
             files_marked = marked,
             purge_jobs_queued = due_count,
@@ -393,7 +394,7 @@ impl FileWorker {
         let changed = sqlx::query("UPDATE file_processing_jobs SET status = 'completed', locked_at = NULL, worker_id = NULL, lease_token = NULL, updated_at = now() WHERE id = $1 AND status = 'running' AND worker_id = $2 AND lease_token = $3")
             .bind(job.id).bind(&self.config.worker_id).bind(job.lease_token).execute(&self.pool).await?.rows_affected();
         if changed == 1 {
-            counter!("catalog_file_worker_jobs_completed_total").increment(1);
+            counter!("attricat_file_worker_jobs_completed_total").increment(1);
         } else {
             tracing::warn!(job_id = %job.id, "file job lease lost before completion");
         }
@@ -411,16 +412,16 @@ impl FileWorker {
         if terminal {
             sqlx::query("UPDATE files SET status = 'failed', processing_error = $2, updated_at = now() WHERE id = $1 AND deleted_at IS NULL").bind(job.file_id).bind(error).execute(&self.pool).await?;
         }
-        counter!("catalog_file_worker_jobs_failed_total", "terminal" => terminal.to_string())
+        counter!("attricat_file_worker_jobs_failed_total", "terminal" => terminal.to_string())
             .increment(1);
         Ok(())
     }
     pub async fn record_metrics(&self) -> Result<(), sqlx::Error> {
         const STATUSES: [&str; 4] = ["queued", "running", "retryable", "failed"];
         for status in STATUSES {
-            gauge!("catalog_file_worker_queue_depth", "status" => status).set(0.0);
-            gauge!("catalog_file_worker_oldest_age_seconds", "status" => status).set(0.0);
-            gauge!("catalog_file_worker_retries", "status" => status).set(0.0);
+            gauge!("attricat_file_worker_queue_depth", "status" => status).set(0.0);
+            gauge!("attricat_file_worker_oldest_age_seconds", "status" => status).set(0.0);
+            gauge!("attricat_file_worker_retries", "status" => status).set(0.0);
         }
         let rows: Vec<(String, i64, f64, i64)> = sqlx::query_as(
             "SELECT status,count(*)::bigint,COALESCE(extract(epoch FROM (clock_timestamp()-min(created_at))),0)::float8,COALESCE(sum(GREATEST(attempts-1,0)),0)::bigint FROM file_processing_jobs WHERE status IN ('queued','running','retryable','failed') GROUP BY status",
@@ -432,13 +433,14 @@ impl FileWorker {
             if matches!(status.as_str(), "queued" | "retryable") {
                 queued += count;
             }
-            gauge!("catalog_file_worker_queue_depth", "status" => status.clone()).set(count as f64);
-            gauge!("catalog_file_worker_oldest_age_seconds", "status" => status.clone())
+            gauge!("attricat_file_worker_queue_depth", "status" => status.clone())
+                .set(count as f64);
+            gauge!("attricat_file_worker_oldest_age_seconds", "status" => status.clone())
                 .set(oldest_age.max(0.0));
-            gauge!("catalog_file_worker_retries", "status" => status).set(retries as f64);
+            gauge!("attricat_file_worker_retries", "status" => status).set(retries as f64);
         }
         // Compatibility aggregate retained for existing dashboards.
-        gauge!("catalog_file_worker_jobs_queued").set(queued as f64);
+        gauge!("attricat_file_worker_jobs_queued").set(queued as f64);
         Ok(())
     }
 }

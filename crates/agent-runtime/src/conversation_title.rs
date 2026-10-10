@@ -1,6 +1,6 @@
 use crate::{
     agent_provider::{ChatMessage, OpenAiCompatibleClient},
-    repository::CatalogRepository,
+    repository::AttricatRepository,
 };
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -24,7 +24,7 @@ fn normalize_title(raw: &str) -> Option<String> {
 }
 
 pub async fn maybe_generate_title(
-    repository: &CatalogRepository,
+    repository: &AttricatRepository,
     provider: &OpenAiCompatibleClient,
     conversation_id: Uuid,
 ) {

@@ -1,0 +1,37 @@
+format_version = 1
+code = "new_blueprint"
+name = "New blueprint"
+kind = "record"
+
+# Required fields are enforced for API writes as well as in the form.
+record_schema = '{"type":"object","required":["name"]}'
+
+# Optional: edits by these workspace roles retain channel publication.
+# [publication]
+# retain_on_edit_roles = ["attricat_manager"]
+
+[views.dropdown_option]
+type = "dropdown_option"
+fields = ["name"]
+
+[views.detail]
+type = "stack"
+children = [
+  { type = "stack", component = { id = "attricat.record_heading", version = 1 }, children = [{ type = "field", field = "name" }] },
+  { type = "field", field = "notes", component = { id = "attricat.markdown_display", version = 1 } },
+]
+
+[views.table]
+type = "table"
+columns = [{ field = "name" }]
+
+[[attributes]]
+code = "name"
+name = "Name"
+value_type = "string"
+value_schema = '{"type":"string","minLength":1,"maxLength":200}'
+
+[[attributes]]
+code = "notes"
+name = "Notes"
+value_type = "string"

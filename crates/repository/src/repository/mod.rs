@@ -7,7 +7,7 @@
 //!
 //! 1. Workflow execution only: the workflow lifecycle row, then the run row.
 //! 2. The workspace relationship lock
-//!    ([`CatalogRepository::lock_relationship_cardinality_writes`]), taken
+//!    ([`AttricatRepository::lock_relationship_cardinality_writes`]), taken
 //!    by every write that changes relationship values and by context
 //!    reparenting.
 //! 3. A legacy extension upsert's lookup lock.
@@ -35,7 +35,7 @@
 
 use std::{collections::HashSet, num::NonZeroI64, str::FromStr};
 
-use catalog_validation::is_valid_code;
+use attricat_validation::is_valid_code;
 use chrono::{DateTime, NaiveDate, NaiveTime};
 use rust_decimal::Decimal;
 use serde_json::{Map, Value};
@@ -75,8 +75,8 @@ mod contexts;
 mod domain_events;
 mod error_codes;
 mod extension_annotations;
-mod extension_catalog_commands;
-mod extension_catalog_data;
+mod extension_attricat_commands;
+mod extension_attricat_data;
 mod extension_interactive_operations;
 mod extension_operation_artifacts;
 mod extension_operation_http_transfer;
@@ -152,11 +152,11 @@ pub use structural_constraints::UniqueKeyDuplicate;
 pub use agents::{
     AgentRun, AgentRunEvent, AgentToolCall, ApprovalDecision, Conversation, ConversationMessage,
 };
+pub use attricat_cache::QueryCache;
+pub use attricat_domain::model::{FileMetadata, FileVariantMetadata};
 pub use audit_events::{AuditEventFilter, AuditEventPage};
 pub use avatars::{AVATAR_VARIANT_KIND, OwnAvatar};
 pub use blueprint_connector_jobs::BlueprintConnectorJob;
-pub use catalog_cache::QueryCache;
-pub use catalog_domain::model::{FileMetadata, FileVariantMetadata};
 pub use domain_events::{
     EventConsumer, EventDelivery, EventPublisher, FailedEventDelivery, MaterializeScope,
 };
@@ -164,10 +164,10 @@ pub use extension_annotations::{
     ExtensionAnnotationNamespace, ExtensionAnnotationPatch, ExtensionAnnotations,
     MAX_ANNOTATION_PATCH_OPERATIONS,
 };
-pub use extension_catalog_data::{
-    ExtensionCatalogBatch, ExtensionCatalogChangePage, ExtensionCatalogIntent,
-    ExtensionCatalogIntentOutcome, ExtensionCatalogIntentStatus, ExtensionCatalogPage,
-    ExtensionCatalogPageRequest, MAX_EXTENSION_BATCH_INTENTS, MAX_EXTENSION_CATALOG_PAGE_SIZE,
+pub use extension_attricat_data::{
+    ExtensionAttricatBatch, ExtensionAttricatChangePage, ExtensionAttricatIntent,
+    ExtensionAttricatIntentOutcome, ExtensionAttricatIntentStatus, ExtensionAttricatPage,
+    ExtensionAttricatPageRequest, MAX_EXTENSION_ATTRICAT_PAGE_SIZE, MAX_EXTENSION_BATCH_INTENTS,
     MAX_EXTENSION_LOOKUP_VALUE_BYTES,
 };
 pub use extension_interactive_operations::{
@@ -236,7 +236,7 @@ pub struct UserAccount {
 #[derive(Clone)]
 /// The stable catalog persistence facade. Feature modules add inherent methods
 /// here so HTTP handlers and other callers do not depend on storage internals.
-pub struct CatalogRepository<S = WorkspaceScope> {
+pub struct AttricatRepository<S = WorkspaceScope> {
     pub(crate) pool: PgPool,
     workspace_id: S,
     audit_context: Option<AuditContext>,
@@ -274,12 +274,12 @@ pub struct SystemScope;
 /// workspace data until explicitly scoped.
 ///
 /// ```compile_fail
-/// # use catalog_repository::repository::CatalogRepository;
+/// # use attricat_repository::repository::AttricatRepository;
 /// # async fn example(pool: sqlx::PgPool) {
-/// CatalogRepository::system(pool).list_contexts().await;
+/// AttricatRepository::system(pool).list_contexts().await;
 /// # }
 /// ```
-pub type SystemRepository = CatalogRepository<SystemScope>;
+pub type SystemRepository = AttricatRepository<SystemScope>;
 
 mod scope_sealed {
     pub trait Sealed {}
@@ -449,8 +449,8 @@ pub enum RepositoryError {
     #[error("idempotency key was already used with a different request")]
     IdempotencyKeyReused,
     #[error(transparent)]
-    InvalidLexiconEntry(#[from] catalog_lexicon::EntryError),
-    #[error("CATALOG_WORKSPACE_ID does not identify an active workspace")]
+    InvalidLexiconEntry(#[from] attricat_lexicon::EntryError),
+    #[error("ATTRICAT_WORKSPACE_ID does not identify an active workspace")]
     BootstrapWorkspaceNotActive,
     #[error("invalid bootstrap password: {0}")]
     InvalidBootstrapPassword(String),
@@ -633,7 +633,7 @@ pub enum RepositoryError {
     #[error("blueprint code is already owned by another blueprint")]
     BlueprintCodeTaken,
     #[error("catalog code is already in use")]
-    CatalogCodeTaken,
+    AttricatCodeTaken,
     #[error("invalid team: {0}")]
     InvalidTeam(String),
     #[error("workflow code is already in use")]
@@ -723,7 +723,7 @@ pub(super) async fn workspace_resource_code_matches(
     .await?)
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     #[cfg(test)]
     const DEFAULT_WORKSPACE_ID: Uuid = Uuid::from_u128(0x00000000000040008000000000000002);
 
@@ -756,7 +756,7 @@ impl CatalogRepository {
     /// queue claiming. It must not be placed in a request extension or passed
     /// to a task handler that accesses workspace-owned data.
     pub fn system(pool: PgPool) -> SystemRepository {
-        CatalogRepository {
+        AttricatRepository {
             pool,
             workspace_id: SystemScope,
             audit_context: None,
@@ -945,9 +945,9 @@ impl CatalogRepository {
                     .as_ref()
                     .map(|context| context.correlation_id)
                     .unwrap_or_else(Uuid::new_v4),
-                action: "catalog.extensions.attribute_values.write".to_owned(),
+                action: "attricat.extensions.attribute_values.write".to_owned(),
                 authorization_scope: serde_json::json!({
-                    "capability": "catalog.write",
+                    "capability": "attricat.write",
                     "extension_id": extension_id,
                 }),
                 target: serde_json::json!({ "type": "extension", "id": extension_id }),
@@ -1011,7 +1011,7 @@ fn add_initiating_actor_metadata(metadata: &mut Value, audit: Option<&AuditConte
     }
 }
 
-impl<S> CatalogRepository<S> {
+impl<S> AttricatRepository<S> {
     /// Uses `cache` for this repository and every repository derived from it.
     /// The composition root shares one cache across requests and workers.
     pub fn with_cache(mut self, cache: QueryCache) -> Self {
@@ -1034,7 +1034,7 @@ impl<S> CatalogRepository<S> {
     }
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     pub fn with_audit_context(mut self, audit_context: AuditContext) -> Self {
         self.audit_context = Some(audit_context);
         self
@@ -1244,7 +1244,7 @@ impl CatalogRepository {
                             .as_ref()
                             .map(|context| context.handler_name.clone())
                     })
-                    .unwrap_or_else(|| "catalog_api".to_owned()),
+                    .unwrap_or_else(|| "attricat_api".to_owned()),
             },
             metadata: event_metadata(self.audit_context.as_ref(), self.event_context.is_some()),
             payload,
@@ -1423,7 +1423,7 @@ pub fn missing_required_fields(message: &str, target_codes: &HashSet<&str>) -> V
     fields.into_iter().collect()
 }
 
-impl<S: RepositoryScope> CatalogRepository<S> {
+impl<S: RepositoryScope> AttricatRepository<S> {
     /// Explicit provisioning/repair boundary, never part of a catalog read.
     pub async fn initialize_workspace(&self, workspace_id: Uuid) -> Result<(), RepositoryError> {
         // Creating the default context advances the context generation.
@@ -1566,18 +1566,18 @@ impl<S: RepositoryScope> CatalogRepository<S> {
         user_id: Uuid,
         workspace_id: Uuid,
     ) -> Result<(bool, Option<WorkspaceGenerations>), RepositoryError> {
-        let (active, catalog, contexts, extensions): (bool, Option<i64>, Option<i64>, Option<i64>) =
+        let (active, attricat, contexts, extensions): (bool, Option<i64>, Option<i64>, Option<i64>) =
             sqlx::query_as(
-                "SELECT EXISTS (SELECT 1 FROM users WHERE id = $1 AND state = 'active'), w.catalog_generation, w.contexts_generation, w.extensions_generation FROM (SELECT 1) one LEFT JOIN workspaces w ON w.id = $2",
+                "SELECT EXISTS (SELECT 1 FROM users WHERE id = $1 AND state = 'active'), w.attricat_generation, w.contexts_generation, w.extensions_generation FROM (SELECT 1) one LEFT JOIN workspaces w ON w.id = $2",
             )
             .bind(user_id)
             .bind(workspace_id)
             .fetch_one(&self.pool)
             .await?;
-        let generations = catalog.zip(contexts).zip(extensions).map(
-            |((catalog_generation, contexts_generation), extensions_generation)| {
+        let generations = attricat.zip(contexts).zip(extensions).map(
+            |((attricat_generation, contexts_generation), extensions_generation)| {
                 WorkspaceGenerations {
-                    catalog_generation,
+                    attricat_generation,
                     contexts_generation,
                     extensions_generation,
                 }
@@ -1950,9 +1950,9 @@ mod tests {
 
     #[tokio::test]
     async fn handler_commands_preserve_event_lineage() {
-        let repository = CatalogRepository::system(
+        let repository = AttricatRepository::system(
             PgPoolOptions::new()
-                .connect_lazy("postgres://postgres:postgres@localhost/catalog")
+                .connect_lazy("postgres://postgres:postgres@localhost/attricat")
                 .unwrap(),
         );
         let initiating_actor_user_id = Uuid::new_v4();
@@ -1968,7 +1968,7 @@ mod tests {
             correlation_id: Uuid::new_v4(),
             causation_id: None,
             source_kind: "api".to_owned(),
-            source_name: "catalog_api".to_owned(),
+            source_name: "attricat_api".to_owned(),
             metadata: serde_json::json!({
                 "initiating_actor_user_id": initiating_actor_user_id.to_string(),
                 "initiating_actor_token_id": initiating_actor_token_id.to_string(),
@@ -1980,7 +1980,7 @@ mod tests {
             .await
             .unwrap();
         let event = repository
-            .for_event_handler(&trigger, "catalog.computed_fields")
+            .for_event_handler(&trigger, "attricat.computed_fields")
             .core_event(
                 "context.updated.v1",
                 "context",
@@ -1990,9 +1990,9 @@ mod tests {
         assert_eq!(event.correlation_id, trigger.correlation_id);
         assert_eq!(event.causation_id, Some(trigger.id));
         assert_eq!(event.source.kind.as_str(), "worker");
-        assert_eq!(event.source.name, "catalog.computed_fields");
+        assert_eq!(event.source.name, "attricat.computed_fields");
         let extension_event = repository
-            .for_event_handler(&trigger, "catalog.extensions.wasm")
+            .for_event_handler(&trigger, "attricat.extensions.wasm")
             .for_extension("acme.computed")
             .core_event(
                 "context.updated.v1",
@@ -2010,13 +2010,13 @@ mod tests {
         );
         assert!(extension_event.validate().is_ok());
         let extension_repository = repository
-            .for_event_handler(&trigger, "catalog.extensions.wasm")
+            .for_event_handler(&trigger, "attricat.extensions.wasm")
             .for_extension("acme.computed");
         let audit = extension_repository.audit_context.as_ref().unwrap();
         assert_eq!(audit.correlation_id, trigger.correlation_id);
         assert_eq!(audit.actor_user_id, Some(initiating_actor_user_id));
         assert_eq!(audit.actor_token_id, Some(initiating_actor_token_id));
-        assert_eq!(audit.action, "catalog.extensions.wasm.execute");
+        assert_eq!(audit.action, "attricat.extensions.wasm.execute");
         assert_eq!(audit.metadata["extension_id"], "acme.computed");
 
         let command_event = repository.for_extension("acme.computed").core_event(

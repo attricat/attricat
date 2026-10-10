@@ -174,10 +174,10 @@ fn validate_declarative_checks(
     definition: &BlueprintDefinition,
     attributes: &[EffectiveAttribute],
 ) -> Result<(), BlueprintError> {
-    use catalog_validation::predicate::{
+    use attricat_validation::predicate::{
         MAX_RECORD_CHECKS, MAX_TRANSITION_CONDITIONS, Usage, record_checks, validate_checks,
     };
-    use catalog_validation::status::{STATUS_KEY, transition_edges};
+    use attricat_validation::status::{STATUS_KEY, transition_edges};
     let types: HashMap<String, String> = attributes
         .iter()
         .map(|attribute| (attribute.code.clone(), attribute.value_type.clone()))
@@ -213,7 +213,7 @@ fn validate_declarative_checks(
         }
     }
     for rule in &definition.rules {
-        catalog_rules::validate_against_attributes(rule, &types).map_err(|error| {
+        attricat_rules::validate_against_attributes(rule, &types).map_err(|error| {
             BlueprintError::InvalidRule(format!("rule '{}': {error}", rule.code))
         })?;
         for selector in rule

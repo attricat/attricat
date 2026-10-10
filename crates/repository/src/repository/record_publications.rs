@@ -7,7 +7,7 @@ use super::record_values::RecordValues;
 use super::*;
 use crate::domain_events::{RECORD_PUBLISHED_V1, RECORD_UNPUBLISHED_V1, RecordPublicationV1};
 use crate::persistence_rows::{Db, IntoDomain};
-use catalog_validation::predicate::Predicate;
+use attricat_validation::predicate::Predicate;
 use sqlx::{PgConnection, Postgres, Transaction};
 use uuid::Uuid;
 
@@ -23,7 +23,7 @@ struct GateCheck {
     code: String,
     /// Replaces the predicate's own failure message.
     message: Option<String>,
-    severity: Option<catalog_rules::Severity>,
+    severity: Option<attricat_rules::Severity>,
     predicate: Predicate,
 }
 
@@ -112,7 +112,7 @@ impl PublicationGate {
         if let Some(schema) = &self.record_schema {
             // The same document the write path validates.
             let document = subject.schema_document(&scope.path(self.context_id)?);
-            for error in catalog_validation::validate_json_schema(schema, &Value::Object(document))
+            for error in attricat_validation::validate_json_schema(schema, &Value::Object(document))
                 .map_err(RepositoryError::InvalidBlueprintDefinition)?
                 .into_iter()
                 .take(MAX_SCHEMA_VIOLATIONS)
@@ -189,7 +189,7 @@ pub(crate) struct RetainedPublication {
     pub(crate) withdrawn_context_ids: Vec<Uuid>,
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     pub async fn list_publication_channels(
         &self,
     ) -> Result<Vec<PublicationChannel>, RepositoryError> {
@@ -585,7 +585,7 @@ impl CatalogRepository {
         let Some((definition, blueprint_id, blueprint_version)) = row else {
             return Ok(None);
         };
-        let roles = catalog_blueprint::parse(&definition)
+        let roles = attricat_blueprint::parse(&definition)
             .map_err(RepositoryError::invalid_blueprint_definition)?
             .publication
             .retain_on_edit_roles;
@@ -910,7 +910,7 @@ impl CatalogRepository {
     }
 }
 
-impl<S: super::RepositoryScope> CatalogRepository<S> {
+impl<S: super::RepositoryScope> AttricatRepository<S> {
     /// Installs publication permissions in application code, preserving the
     /// declarative-only migration contract. Owners and administrators receive
     /// publication authority; editors deliberately do not.

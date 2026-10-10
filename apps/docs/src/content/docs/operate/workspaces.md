@@ -108,8 +108,8 @@ Holds come from two places:
 The record page lists the holds on its files and when they expire. Placing and releasing holds is recorded in the audit log.
 
 ```sh
-curl -X POST "$CATALOG_API_URL/files/<file-id>/retention-holds" \
-  -H "Authorization: Bearer $CATALOG_TOKEN" -H 'Content-Type: application/json' \
+curl -X POST "$ATTRICAT_API_URL/files/<file-id>/retention-holds" \
+  -H "Authorization: Bearer $ATTRICAT_TOKEN" -H 'Content-Type: application/json' \
   -d '{"days": 365, "reason": "Litigation hold 2026-14"}'
 ```
 

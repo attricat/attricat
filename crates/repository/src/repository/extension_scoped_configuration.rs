@@ -3,10 +3,10 @@ use uuid::Uuid;
 
 use crate::extensions::{ConfigurationScope, validate_schema};
 
-use super::{CatalogRepository, RepositoryError};
+use super::{AttricatRepository, RepositoryError};
 
 /// A manifest-declared extension value associated with a blueprint revision or
-/// an attribute. It is never merged into Catalog's blueprint definition.
+/// an attribute. It is never merged into Attricat's blueprint definition.
 #[derive(Clone, Debug)]
 pub struct ExtensionConfigurationScope {
     pub kind: ConfigurationScope,
@@ -15,7 +15,7 @@ pub struct ExtensionConfigurationScope {
     pub attribute_id: Option<Uuid>,
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     pub async fn extension_scoped_configuration_get(
         &self,
         extension_id: &str,

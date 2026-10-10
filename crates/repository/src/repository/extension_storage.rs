@@ -3,7 +3,7 @@ use sqlx::{Postgres, Transaction};
 use thiserror::Error;
 use uuid::Uuid;
 
-use super::{AuditContext, CatalogRepository};
+use super::{AttricatRepository, AuditContext};
 use crate::extension_policy;
 
 pub const MAX_EXTENSION_STORAGE_KEY_BYTES: usize = 256;
@@ -45,7 +45,7 @@ pub enum ExtensionStorageError {
     Audit(String),
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     pub async fn extension_storage_get(
         &self,
         extension_id: &str,

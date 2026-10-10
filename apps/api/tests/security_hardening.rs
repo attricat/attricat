@@ -3,9 +3,9 @@ mod support;
 use api::{
     agent_tools::{ToolError, execute_read},
     agents::AgentProviderConfig,
-    repository::{CatalogRepository, RepositoryError},
+    repository::{AttricatRepository, RepositoryError},
 };
-use catalog_agent_runtime::agent_runner::mutation_authorized;
+use attricat_agent_runtime::agent_runner::mutation_authorized;
 use chrono::Utc;
 use support::*;
 
@@ -98,7 +98,7 @@ async fn token_cannot_launder_owner_authority_through_roles_or_invitations(pool:
 #[sqlx::test]
 async fn role_cannot_retire_into_itself_and_delete_its_grants(pool: PgPool) {
     let (_, server) = start_server(pool.clone()).await;
-    let repository = CatalogRepository::system(pool.clone());
+    let repository = AttricatRepository::system(pool.clone());
     let role = create_role(&pool, "self-replacement", &["records.read"]).await;
     let (_, member) = add_workspace_user(&pool).await;
     let grant = grant_role(&pool, member, role, GrantScope::Workspace).await;
@@ -203,7 +203,7 @@ async fn queued_agent_runs_retain_and_enforce_the_initiating_token(pool: PgPool)
         .json()
         .await
         .unwrap();
-    let repository = CatalogRepository::new(pool.clone(), bootstrap_workspace_id());
+    let repository = AttricatRepository::new(pool.clone(), bootstrap_workspace_id());
     let actor = repository
         .agent_run_actor(run["id"].as_str().unwrap().parse().unwrap())
         .await
@@ -304,7 +304,7 @@ async fn queued_agent_runs_retain_and_enforce_the_initiating_token(pool: PgPool)
         std::sync::Arc::new(api::storage::FakeObjectStore::available());
     let run_id = run["id"].as_str().unwrap().parse().unwrap();
     api::agent_runner::run(
-        &CatalogRepository::new(pool.clone(), bootstrap_workspace_id()),
+        &AttricatRepository::new(pool.clone(), bootstrap_workspace_id()),
         &provider,
         &store,
         run_id,
@@ -347,7 +347,7 @@ async fn approving_another_users_agent_change_requires_the_mutation_permission(p
     let token = token(&owner, &base, &["agents.run"]).await;
     let agent_only = create_role(&pool, "agent-only", &["agents.run"]).await;
     let user = member_with_role(&pool, agent_only).await;
-    let repository = CatalogRepository::new(pool.clone(), bootstrap_workspace_id());
+    let repository = AttricatRepository::new(pool.clone(), bootstrap_workspace_id());
     let conversation = repository
         .create_conversation(
             Some(BOOTSTRAP_OWNER_ID.parse().unwrap()),
@@ -491,7 +491,7 @@ async fn relationship_hydration_does_not_expose_unreadable_records(pool: PgPool)
         }
     }
     assert_eq!(ids, vec![visible["id"].clone()]);
-    let repository = CatalogRepository::new(pool, bootstrap_workspace_id());
+    let repository = AttricatRepository::new(pool, bootstrap_workspace_id());
     let preview = execute_read(
         &repository,
         user,
@@ -524,7 +524,7 @@ async fn relationship_previews_have_a_global_expansion_budget(pool: PgPool) {
         .bind(&targets).bind(workspace).bind(blueprint_id).bind(json!({"preview":{"default":{}}})).execute(&pool).await.unwrap();
     sqlx::query("INSERT INTO attribute_values (id, workspace_id, record_id, attribute_id, context_id, active, relationship_target_record_id) SELECT gen_random_uuid(), $2, $3, a.id, c.id, true, target FROM unnest($1::uuid[]) target CROSS JOIN attributes a CROSS JOIN attribute_contexts c WHERE a.blueprint_id=$4 AND a.blueprint_version=1 AND a.code='related' AND c.workspace_id=$2 AND c.code='default'")
         .bind(&targets).bind(workspace).bind(root_id).bind(blueprint_id).execute(&pool).await.unwrap();
-    let repository = CatalogRepository::new(pool, workspace);
+    let repository = AttricatRepository::new(pool, workspace);
     assert!(repository.preview(root_id, 1, 10).await.is_ok());
     assert!(matches!(
         repository.preview(root_id, 1, 5000).await,
@@ -555,7 +555,7 @@ async fn concurrent_ownership_transfers_recheck_the_owner_after_locking(pool: Pg
     let (_, server) = start_server(pool.clone()).await;
     let (_, first) = add_workspace_user(&pool).await;
     let (_, second) = add_workspace_user(&pool).await;
-    let repository = CatalogRepository::system(pool.clone());
+    let repository = AttricatRepository::system(pool.clone());
     let owner = BOOTSTRAP_OWNER_ID.parse().unwrap();
     let workspace = bootstrap_workspace_id();
     let (left, right) = tokio::join!(

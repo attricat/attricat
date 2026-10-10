@@ -3,7 +3,7 @@ wit_bindgen::generate!({
     world: "operation-extension",
 });
 
-use exports::catalog::host::operations::{BatchResult, Guest, OperationRequest};
+use exports::attricat::host::operations::{BatchResult, Guest, OperationRequest};
 use sha2::{Digest, Sha256};
 
 struct Component;
@@ -18,19 +18,19 @@ impl Guest for Component {
     }
 
     fn process_batch(_request: OperationRequest) -> Result<BatchResult, String> {
-        let input = catalog::host::artifacts::open_input("source")?;
-        let output = catalog::host::artifacts::create_output("application/octet-stream")?;
+        let input = attricat::host::artifacts::open_input("source")?;
+        let output = attricat::host::artifacts::create_output("application/octet-stream")?;
         let mut hasher = Sha256::new();
         loop {
-            let chunk = catalog::host::artifacts::read(&input, 64 * 1024)?;
+            let chunk = attricat::host::artifacts::read(&input, 64 * 1024)?;
             if chunk.is_empty() {
                 break;
             }
             hasher.update(&chunk);
-            catalog::host::artifacts::write(&output, &chunk)?;
+            attricat::host::artifacts::write(&output, &chunk)?;
         }
         let checksum = format!("{:x}", hasher.finalize());
-        let completed = catalog::host::artifacts::complete(output, &checksum)?;
+        let completed = attricat::host::artifacts::complete(output, &checksum)?;
         Ok(BatchResult {
             checkpoint: format!("{{\"artifact_id\":\"{}\"}}", completed.artifact_id),
             progress: format!("{{\"bytes\":{}}}", completed.content_length),

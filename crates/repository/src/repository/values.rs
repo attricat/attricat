@@ -397,7 +397,7 @@ fn history_attribute_value(
     })
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     pub async fn form_values(
         &self,
         record_id: Uuid,
@@ -614,7 +614,7 @@ impl CatalogRepository {
     /// Values at the page cursor's database-clock high-water mark. Historical
     /// values survive writes to later pages; cursors expire before the value
     /// history retention window. All branches retain workspace isolation.
-    pub async fn extension_catalog_values_at(
+    pub async fn extension_attricat_values_at(
         &self,
         record_id: Uuid,
         snapshot_at: chrono::DateTime<chrono::Utc>,

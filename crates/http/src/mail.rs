@@ -117,7 +117,7 @@ mod tests {
             SmtpMailDelivery::new(
                 "localhost",
                 1025,
-                "Catalog <mail@example.test>",
+                "Attricat <mail@example.test>",
                 None,
                 None,
                 "disabled"
@@ -128,7 +128,7 @@ mod tests {
             SmtpMailDelivery::new(
                 "localhost",
                 1025,
-                "Catalog <mail@example.test>",
+                "Attricat <mail@example.test>",
                 Some("user".into()),
                 Some("secret".into()),
                 "disabled"
@@ -139,7 +139,7 @@ mod tests {
             SmtpMailDelivery::new(
                 "localhost",
                 587,
-                "Catalog <mail@example.test>",
+                "Attricat <mail@example.test>",
                 Some("user".into()),
                 None,
                 "starttls"
@@ -150,7 +150,7 @@ mod tests {
             SmtpMailDelivery::new(
                 "localhost",
                 587,
-                "Catalog <mail@example.test>",
+                "Attricat <mail@example.test>",
                 Some("user".into()),
                 Some("secret".into()),
                 "starttls"
@@ -192,8 +192,8 @@ impl MailDelivery for SmtpMailDelivery {
     ) -> Result<(), MailError> {
         self.deliver(
             recipient,
-            "Reset your Catalog password",
-            "Use this link to reset your Catalog password:",
+            "Reset your Attricat password",
+            "Use this link to reset your Attricat password:",
             reset_url,
         )
         .await
@@ -206,7 +206,7 @@ impl MailDelivery for SmtpMailDelivery {
     ) -> Result<(), MailError> {
         self.deliver(
             recipient,
-            "You've been invited to Catalog",
+            "You've been invited to Attricat",
             "Use this link to accept your workspace invitation:",
             invitation_url,
         )
@@ -220,7 +220,7 @@ impl MailDelivery for SmtpMailDelivery {
     ) -> Result<(), MailError> {
         self.deliver(
             recipient,
-            "Set up your Catalog workspace account",
+            "Set up your Attricat workspace account",
             "Use this one-time link to choose a password and join your workspace:",
             onboarding_url,
         )

@@ -25,7 +25,7 @@ type = "stack"
 children = [
   {
     type = "stack",
-    component = { id = "catalog.record_heading", version = 1 },
+    component = { id = "attricat.record_heading", version = 1 },
     children = [
       { type = "field", field = "title" },
       { type = "text", text = "Product details" },

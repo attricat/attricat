@@ -3,7 +3,7 @@ use api::{
         BlueprintMigrationBatchConfig, BlueprintMigrationBatchTaskHandler,
     },
     model::{CreateBlueprint, NewAttributeValue},
-    repository::CatalogRepository,
+    repository::AttricatRepository,
     task_worker::TaskHandler,
 };
 use serde_json::json;
@@ -25,7 +25,7 @@ value_type = "string"
 "#;
 
 async fn batch_with_two_old_records(
-    repository: &CatalogRepository,
+    repository: &AttricatRepository,
     pool: &PgPool,
 ) -> (uuid::Uuid, uuid::Uuid, uuid::Uuid) {
     let source = repository
@@ -87,7 +87,7 @@ async fn batch_with_two_old_records(
 
 #[sqlx::test]
 async fn safe_batch_uses_the_nearest_published_ancestor_when_drafts_intervene(pool: PgPool) {
-    let repository = CatalogRepository::new(
+    let repository = AttricatRepository::new(
         pool,
         uuid::Uuid::from_u128(0x00000000000040008000000000000002),
     );
@@ -142,7 +142,7 @@ async fn safe_batch_uses_the_nearest_published_ancestor_when_drafts_intervene(po
 
 #[sqlx::test]
 async fn safe_batch_rejects_an_unsafe_older_source_revision(pool: PgPool) {
-    let repository = CatalogRepository::new(
+    let repository = AttricatRepository::new(
         pool.clone(),
         uuid::Uuid::from_u128(0x00000000000040008000000000000002),
     );
@@ -224,7 +224,7 @@ async fn safe_batch_rejects_an_unsafe_older_source_revision(pool: PgPool) {
 
 #[sqlx::test]
 async fn safe_batch_task_is_transactional_and_migrates_each_record_once(pool: PgPool) {
-    let repository = CatalogRepository::new(
+    let repository = AttricatRepository::new(
         pool.clone(),
         uuid::Uuid::from_u128(0x00000000000040008000000000000002),
     );
@@ -295,7 +295,7 @@ async fn safe_batch_task_is_transactional_and_migrates_each_record_once(pool: Pg
 
 #[sqlx::test]
 async fn safe_batch_processes_multiple_scalar_candidates_in_one_concurrent_page(pool: PgPool) {
-    let repository = CatalogRepository::new(
+    let repository = AttricatRepository::new(
         pool.clone(),
         uuid::Uuid::from_u128(0x00000000000040008000000000000002),
     );
@@ -340,7 +340,7 @@ async fn safe_batch_processes_multiple_scalar_candidates_in_one_concurrent_page(
 
 #[sqlx::test]
 async fn batch_restart_from_newest_edge_finds_record_inserted_between_pages(pool: PgPool) {
-    let repository = CatalogRepository::new(
+    let repository = AttricatRepository::new(
         pool.clone(),
         uuid::Uuid::from_u128(0x00000000000040008000000000000002),
     );
@@ -438,7 +438,7 @@ async fn batch_restart_from_newest_edge_finds_record_inserted_between_pages(pool
 
 #[sqlx::test]
 async fn expired_batch_task_cannot_checkpoint_and_reclaim_reuses_migration_rows(pool: PgPool) {
-    let repository = CatalogRepository::new(
+    let repository = AttricatRepository::new(
         pool.clone(),
         uuid::Uuid::from_u128(0x00000000000040008000000000000002),
     );
@@ -505,7 +505,7 @@ async fn expired_batch_task_cannot_checkpoint_and_reclaim_reuses_migration_rows(
 
 #[sqlx::test]
 async fn safe_batch_archives_explicitly_approved_removed_values(pool: PgPool) {
-    let repository = CatalogRepository::new(
+    let repository = AttricatRepository::new(
         pool.clone(),
         uuid::Uuid::from_u128(0x00000000000040008000000000000002),
     );

@@ -1,7 +1,7 @@
 mod support;
 use api::{
     agent_tools::{execute_mutation, execute_read},
-    repository::CatalogRepository,
+    repository::AttricatRepository,
 };
 use support::*;
 
@@ -56,9 +56,9 @@ async fn add_member(pool: &PgPool, email: &str, name: &str, reader: bool) -> (Uu
             .unwrap();
     }
     let mut headers = reqwest::header::HeaderMap::new();
-    headers.insert("x-catalog-user-id", user.to_string().parse().unwrap());
+    headers.insert("x-attricat-user-id", user.to_string().parse().unwrap());
     headers.insert(
-        "x-catalog-workspace-id",
+        "x-attricat-workspace-id",
         workspace.to_string().parse().unwrap(),
     );
     (
@@ -469,7 +469,7 @@ async fn agent_tools_act_on_the_initiating_users_inbox(pool: PgPool) {
         .unwrap();
     }
     let workspace = bootstrap_workspace_id();
-    let repository = CatalogRepository::system(pool)
+    let repository = AttricatRepository::system(pool)
         .for_workspace(workspace)
         .await
         .unwrap();

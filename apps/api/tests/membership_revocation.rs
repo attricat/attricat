@@ -2,7 +2,7 @@ mod support;
 
 use std::time::Duration;
 
-use api::repository::{CatalogRepository, RepositoryError};
+use api::repository::{AttricatRepository, RepositoryError};
 use chrono::Utc;
 use sha2::{Digest, Sha256};
 use support::*;
@@ -20,7 +20,7 @@ async fn member(pool: &PgPool) -> (Uuid, Uuid, Uuid) {
     (user, membership, viewer)
 }
 
-async fn invitation(repository: &CatalogRepository, user: Uuid) -> String {
+async fn invitation(repository: &AttricatRepository, user: Uuid) -> String {
     let secret = format!("cat_inv_{}", Uuid::new_v4());
     repository
         .create_workspace_invitation(
@@ -73,7 +73,7 @@ async fn accept(client: &Client, base: &str, secret: &str) -> reqwest::Response 
 #[sqlx::test]
 async fn old_invitation_cannot_reactivate_a_disabled_member_but_a_new_one_can(pool: PgPool) {
     let (base, server) = start_server(pool.clone()).await;
-    let repository = CatalogRepository::new(pool.clone(), bootstrap_workspace_id());
+    let repository = AttricatRepository::new(pool.clone(), bootstrap_workspace_id());
     let (user, membership, _) = member(&pool).await;
     let client = token_client(user, &base).await;
     let old = invitation(&repository, user).await;
@@ -139,7 +139,7 @@ async fn old_invitation_cannot_reactivate_a_disabled_member_but_a_new_one_can(po
 #[sqlx::test]
 async fn old_invitation_cannot_restore_a_revoked_role_grant(pool: PgPool) {
     let (base, server) = start_server(pool.clone()).await;
-    let repository = CatalogRepository::new(pool.clone(), bootstrap_workspace_id());
+    let repository = AttricatRepository::new(pool.clone(), bootstrap_workspace_id());
     let (user, membership, grant) = member(&pool).await;
     let client = token_client(user, &base).await;
     let old = invitation(&repository, user).await;
@@ -168,7 +168,7 @@ async fn old_invitation_cannot_restore_a_revoked_role_grant(pool: PgPool) {
 #[sqlx::test]
 async fn acceptance_waiting_behind_deactivation_cannot_restore_membership(pool: PgPool) {
     let (_, server) = start_server(pool.clone()).await;
-    let repository = CatalogRepository::new(pool.clone(), bootstrap_workspace_id());
+    let repository = AttricatRepository::new(pool.clone(), bootstrap_workspace_id());
     let (user, membership, _) = member(&pool).await;
     let secret = invitation(&repository, user).await;
     let mut blocker = pool.begin().await.unwrap();

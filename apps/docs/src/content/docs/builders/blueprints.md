@@ -180,7 +180,7 @@ type = "stack"
 
 [[views.detail.children]]
 type = "stack"
-component = { id = "catalog.record_heading", version = 1 }
+component = { id = "attricat.record_heading", version = 1 }
 
 [[views.detail.children.children]]
 type = "field"
@@ -220,7 +220,7 @@ type = "table"
 [[views.table.columns]]
 field = "main_photo"
 label = "Image"
-renderer = { id = "catalog.table_image", version = 1 }
+renderer = { id = "attricat.table_image", version = 1 }
 
 [[views.table.columns]]
 field = "title"
@@ -233,7 +233,7 @@ label = "Brand"
 field = "price"
 ```
 
-The `catalog.record_heading` stack turns its first field into the page title and the rest into a subtitle. The table column `brand.name` follows the `brand` relationship and shows the brand's `name`. Because `brand` has `cardinality = "one"`, that column can also be sorted.
+The `attricat.record_heading` stack turns its first field into the page title and the rest into a subtitle. The table column `brand.name` follows the `brand` relationship and shows the brand's `name`. Because `brand` has `cardinality = "one"`, that column can also be sorted.
 
 [Views and layouts](/builders/views/) covers every block and component.
 

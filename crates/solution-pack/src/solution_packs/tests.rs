@@ -86,7 +86,7 @@ fn manifest_value() -> Value {
         "name": "Ecommerce",
         "version": "1.2.0",
         "description": "Starter catalog",
-        "catalog": {"host_api": ">=1.0.0, <2.0.0"},
+        "attricat": {"host_api": ">=1.0.0, <2.0.0"},
         "resources": {
             "blueprints": [
                 resource("blueprints/product", "blueprints/product.toml", PRODUCT_BLUEPRINT),
@@ -221,7 +221,7 @@ fn asset_manifest(bytes: &[u8], purpose: &str, media_type: &str) -> Value {
         "name": "Brand",
         "version": "1.0.0",
         "description": "Brand assets",
-        "catalog": {"host_api": ">=1.0.0, <2.0.0"},
+        "attricat": {"host_api": ">=1.0.0, <2.0.0"},
         "resources": {"presentation_assets": [{
             "key": "assets/brand-logo",
             "path": "assets/brand-logo.svg",
@@ -375,7 +375,7 @@ fn presentation_asset_path_runtime_and_schema_share_strict_ascii_grammar() {
         let mut manifest = asset_manifest(svg, "logo", "image/svg+xml");
         manifest["resources"]["presentation_assets"][0]["path"] = json!(path);
         assert!(
-            !catalog_validation::validate_json_schema(&schema, &manifest)
+            !attricat_validation::validate_json_schema(&schema, &manifest)
                 .unwrap()
                 .is_empty(),
             "schema accepted {path}"
@@ -399,7 +399,7 @@ fn validates_a_complete_archive_and_exposes_validated_content() {
     );
 
     let mut illustrative_range = manifest_value();
-    illustrative_range["catalog"]["host_api"] = json!(">=1.0.0 <2.0.0");
+    illustrative_range["attricat"]["host_api"] = json!(">=1.0.0 <2.0.0");
     ValidatedSolutionPack::from_tar_zst(&archive(&illustrative_range, &valid_files())).unwrap();
 }
 
@@ -1443,7 +1443,7 @@ fn published_sample_schema_allows_only_the_exact_native_time_object() {
         "../../../../contracts/solution-pack-sample-data-v1.schema.json"
     ))
     .unwrap();
-    catalog_validation::validate_json_schema_definition(&schema).unwrap();
+    attricat_validation::validate_json_schema_definition(&schema).unwrap();
     let sample = |value: Value| {
         json!({
             "format_version":1,
@@ -1458,7 +1458,7 @@ fn published_sample_schema_allows_only_the_exact_native_time_object() {
         })
     };
     assert!(
-        catalog_validation::validate_json_schema(
+        attricat_validation::validate_json_schema(
             &schema,
             &sample(json!({"time":"12:34:56","time_zone":"UTC"})),
         )
@@ -1471,7 +1471,7 @@ fn published_sample_schema_allows_only_the_exact_native_time_object() {
         json!({"copied":true}),
     ] {
         assert!(
-            !catalog_validation::validate_json_schema(&schema, &sample(invalid))
+            !attricat_validation::validate_json_schema(&schema, &sample(invalid))
                 .unwrap()
                 .is_empty()
         );
@@ -1484,9 +1484,9 @@ fn published_manifest_schema_accepts_the_v1_fixture_and_is_strict() {
         "../../../../contracts/solution-pack-manifest-v1.schema.json"
     ))
     .unwrap();
-    catalog_validation::validate_json_schema_definition(&schema).unwrap();
+    attricat_validation::validate_json_schema_definition(&schema).unwrap();
     assert!(
-        catalog_validation::validate_json_schema(&schema, &manifest_value())
+        attricat_validation::validate_json_schema(&schema, &manifest_value())
             .unwrap()
             .is_empty()
     );
@@ -1497,7 +1497,7 @@ fn published_manifest_schema_accepts_the_v1_fixture_and_is_strict() {
         let mut with_contexts = manifest_value();
         with_contexts["resources"]["contexts"] = contexts;
         assert!(
-            !catalog_validation::validate_json_schema(&schema, &with_contexts)
+            !attricat_validation::validate_json_schema(&schema, &with_contexts)
                 .unwrap()
                 .is_empty()
         );
@@ -1510,7 +1510,7 @@ fn published_manifest_schema_accepts_the_v1_fixture_and_is_strict() {
         "sha256": "0".repeat(64),
     }]);
     assert!(
-        catalog_validation::validate_json_schema(&schema, &with_navigation)
+        attricat_validation::validate_json_schema(&schema, &with_navigation)
             .unwrap()
             .is_empty()
     );
@@ -1524,13 +1524,13 @@ fn published_manifest_schema_accepts_the_v1_fixture_and_is_strict() {
         "sha256": "0".repeat(64),
     }]);
     assert!(
-        catalog_validation::validate_json_schema(&schema, &with_asset)
+        attricat_validation::validate_json_schema(&schema, &with_asset)
             .unwrap()
             .is_empty()
     );
     with_asset["resources"]["presentation_assets"][0]["media_type"] = json!("image/jpeg");
     assert!(
-        !catalog_validation::validate_json_schema(&schema, &with_asset)
+        !attricat_validation::validate_json_schema(&schema, &with_asset)
             .unwrap()
             .is_empty()
     );
@@ -1540,7 +1540,7 @@ fn published_manifest_schema_accepts_the_v1_fixture_and_is_strict() {
         with_navigation["resources"]["workspace_settings"][0].clone(),
     ]);
     assert!(
-        !catalog_validation::validate_json_schema(&schema, &duplicate_navigation)
+        !attricat_validation::validate_json_schema(&schema, &duplicate_navigation)
             .unwrap()
             .is_empty()
     );
@@ -1552,17 +1552,17 @@ fn published_manifest_schema_accepts_the_v1_fixture_and_is_strict() {
         "../../../../contracts/solution-pack-checks-v1.schema.json"
     ))
     .unwrap();
-    catalog_validation::validate_json_schema_definition(&checklist_schema).unwrap();
-    catalog_validation::validate_json_schema_definition(&checks_schema).unwrap();
+    attricat_validation::validate_json_schema_definition(&checklist_schema).unwrap();
+    attricat_validation::validate_json_schema_definition(&checks_schema).unwrap();
     let checklist = json!({"format_version":1,"items":[{"key":"checklist/publish","title":"Publish","markdown":"Publish it.","check":"checks/published"}]});
     let checks = json!({"format_version":1,"checks":[{"key":"checks/published","title":"Published","predicate":{"type":"blueprint_published","blueprint":"blueprints/product"}}]});
     assert!(
-        catalog_validation::validate_json_schema(&checklist_schema, &checklist)
+        attricat_validation::validate_json_schema(&checklist_schema, &checklist)
             .unwrap()
             .is_empty()
     );
     assert!(
-        catalog_validation::validate_json_schema(&checks_schema, &checks)
+        attricat_validation::validate_json_schema(&checks_schema, &checks)
             .unwrap()
             .is_empty()
     );
@@ -1571,7 +1571,7 @@ fn published_manifest_schema_accepts_the_v1_fixture_and_is_strict() {
         {"key":"checks/published","title":"Published","predicate":{"type":"blueprint_published","blueprint":"blueprints/product"}}
     ]});
     assert!(
-        !catalog_validation::validate_json_schema(&checks_schema, &duplicate_checks)
+        !attricat_validation::validate_json_schema(&checks_schema, &duplicate_checks)
             .unwrap()
             .is_empty()
     );
@@ -1581,7 +1581,7 @@ fn published_manifest_schema_accepts_the_v1_fixture_and_is_strict() {
         assert_eq!(valid_contribution_key(&contribution), valid);
         let value = json!({"format_version":1,"checks":[{"key":"checks/layout","title":"Layout","predicate":{"type":"workspace_extension_layout_placement_present","contribution":contribution}}]});
         assert_eq!(
-            catalog_validation::validate_json_schema(&checks_schema, &value)
+            attricat_validation::validate_json_schema(&checks_schema, &value)
                 .unwrap()
                 .is_empty(),
             valid
@@ -1590,7 +1590,7 @@ fn published_manifest_schema_accepts_the_v1_fixture_and_is_strict() {
     let mut unknown_check = checks;
     unknown_check["checks"][0]["predicate"]["query"] = json!("select 1");
     assert!(
-        !catalog_validation::validate_json_schema(&checks_schema, &unknown_check)
+        !attricat_validation::validate_json_schema(&checks_schema, &unknown_check)
             .unwrap()
             .is_empty()
     );
@@ -1600,7 +1600,7 @@ fn published_manifest_schema_accepts_the_v1_fixture_and_is_strict() {
         {"key":"checklist/publish","title":"Publish","markdown":"Publish it."}
     ]});
     assert!(
-        !catalog_validation::validate_json_schema(&checklist_schema, &duplicate_checklist)
+        !attricat_validation::validate_json_schema(&checklist_schema, &duplicate_checklist)
             .unwrap()
             .is_empty()
     );
@@ -1608,7 +1608,7 @@ fn published_manifest_schema_accepts_the_v1_fixture_and_is_strict() {
     manifest_with_guidance["documentation"] =
         json!({"readme":{"path":"README.md","sha256":"0".repeat(64)}});
     assert!(
-        catalog_validation::validate_json_schema(&schema, &manifest_with_guidance)
+        attricat_validation::validate_json_schema(&schema, &manifest_with_guidance)
             .unwrap()
             .is_empty()
     );
@@ -1623,7 +1623,7 @@ fn published_manifest_schema_accepts_the_v1_fixture_and_is_strict() {
     ] {
         manifest_with_guidance["documentation"]["readme"]["path"] = json!(unsafe_path);
         assert!(
-            !catalog_validation::validate_json_schema(&schema, &manifest_with_guidance)
+            !attricat_validation::validate_json_schema(&schema, &manifest_with_guidance)
                 .unwrap()
                 .is_empty(),
             "schema accepted unsafe path {unsafe_path}"
@@ -1634,17 +1634,17 @@ fn published_manifest_schema_accepts_the_v1_fixture_and_is_strict() {
         "../../../../contracts/solution-pack-explore-navigation-v1.schema.json"
     ))
     .unwrap();
-    catalog_validation::validate_json_schema_definition(&navigation_schema).unwrap();
+    attricat_validation::validate_json_schema_definition(&navigation_schema).unwrap();
     let navigation: Value = serde_json::from_slice(EXPLORE_NAVIGATION).unwrap();
     assert!(
-        catalog_validation::validate_json_schema(&navigation_schema, &navigation)
+        attricat_validation::validate_json_schema(&navigation_schema, &navigation)
             .unwrap()
             .is_empty()
     );
     let mut unknown_navigation = navigation;
     unknown_navigation["unknown"] = json!(true);
     assert!(
-        !catalog_validation::validate_json_schema(&navigation_schema, &unknown_navigation)
+        !attricat_validation::validate_json_schema(&navigation_schema, &unknown_navigation)
             .unwrap()
             .is_empty()
     );
@@ -1653,10 +1653,10 @@ fn published_manifest_schema_accepts_the_v1_fixture_and_is_strict() {
         "../../../../contracts/solution-pack-lexicon-v1.schema.json"
     ))
     .unwrap();
-    catalog_validation::validate_json_schema_definition(&lexicon_schema).unwrap();
+    attricat_validation::validate_json_schema_definition(&lexicon_schema).unwrap();
     let lexicon: Value = serde_json::from_slice(LEXICON).unwrap();
     assert!(
-        catalog_validation::validate_json_schema(&lexicon_schema, &lexicon)
+        attricat_validation::validate_json_schema(&lexicon_schema, &lexicon)
             .unwrap()
             .is_empty()
     );
@@ -1668,7 +1668,7 @@ fn published_manifest_schema_accepts_the_v1_fixture_and_is_strict() {
         "sha256": "0".repeat(64),
     }]);
     assert!(
-        catalog_validation::validate_json_schema(&schema, &with_lexicon)
+        attricat_validation::validate_json_schema(&schema, &with_lexicon)
             .unwrap()
             .is_empty()
     );
@@ -1677,7 +1677,7 @@ fn published_manifest_schema_accepts_the_v1_fixture_and_is_strict() {
         "../../../../contracts/solution-pack-extension-layout-v1.schema.json"
     ))
     .unwrap();
-    catalog_validation::validate_json_schema_definition(&layout_schema).unwrap();
+    attricat_validation::validate_json_schema_definition(&layout_schema).unwrap();
     let layout_entry = json!({
         "contribution": "acme.shop:nav",
         "outlet": "navigation",
@@ -1689,7 +1689,7 @@ fn published_manifest_schema_accepts_the_v1_fixture_and_is_strict() {
         "entries": [layout_entry.clone()],
     });
     assert!(
-        catalog_validation::validate_json_schema(&layout_schema, &valid_layout)
+        attricat_validation::validate_json_schema(&layout_schema, &valid_layout)
             .unwrap()
             .is_empty()
     );
@@ -1705,7 +1705,7 @@ fn published_manifest_schema_accepts_the_v1_fixture_and_is_strict() {
         }],
     });
     assert!(
-        catalog_validation::validate_json_schema(&layout_schema, &promoted_layout)
+        attricat_validation::validate_json_schema(&layout_schema, &promoted_layout)
             .unwrap()
             .is_empty()
     );
@@ -1728,7 +1728,7 @@ fn published_manifest_schema_accepts_the_v1_fixture_and_is_strict() {
         }),
     ] {
         assert!(
-            !catalog_validation::validate_json_schema(&layout_schema, &invalid_layout)
+            !attricat_validation::validate_json_schema(&layout_schema, &invalid_layout)
                 .unwrap()
                 .is_empty()
         );
@@ -1737,7 +1737,7 @@ fn published_manifest_schema_accepts_the_v1_fixture_and_is_strict() {
     let mut unknown = manifest_value();
     unknown["unknown"] = json!(true);
     assert!(
-        !catalog_validation::validate_json_schema(&schema, &unknown)
+        !attricat_validation::validate_json_schema(&schema, &unknown)
             .unwrap()
             .is_empty()
     );
@@ -1754,13 +1754,13 @@ fn published_manifest_schema_accepts_the_v1_fixture_and_is_strict() {
         }
     }]);
     assert!(
-        catalog_validation::validate_json_schema(&schema, &with_extension)
+        attricat_validation::validate_json_schema(&schema, &with_extension)
             .unwrap()
             .is_empty()
     );
     with_extension["extensions"][0]["unknown"] = json!(true);
     assert!(
-        !catalog_validation::validate_json_schema(&schema, &with_extension)
+        !attricat_validation::validate_json_schema(&schema, &with_extension)
             .unwrap()
             .is_empty()
     );
@@ -1791,7 +1791,7 @@ fn published_manifest_schema_accepts_the_v1_fixture_and_is_strict() {
         }]);
         *invalid.pointer_mut(pointer).unwrap() = json!(invalid_value);
         assert!(
-            !catalog_validation::validate_json_schema(&schema, &invalid)
+            !attricat_validation::validate_json_schema(&schema, &invalid)
                 .unwrap()
                 .is_empty(),
             "schema accepted invalid extension value '{invalid_value}'"
@@ -1806,7 +1806,7 @@ fn published_manifest_schema_accepts_the_v1_fixture_and_is_strict() {
         let mut invalid = manifest_value();
         invalid[field] = json!(invalid_value);
         assert!(
-            !catalog_validation::validate_json_schema(&schema, &invalid)
+            !attricat_validation::validate_json_schema(&schema, &invalid)
                 .unwrap()
                 .is_empty(),
             "schema accepted invalid {field} '{invalid_value}'"
@@ -1817,7 +1817,7 @@ fn published_manifest_schema_accepts_the_v1_fixture_and_is_strict() {
 
 #[test]
 fn rejects_unknown_fields_at_each_manifest_contract_level() {
-    for pointer in ["", "/catalog", "/resources", "/resources/blueprints/0"] {
+    for pointer in ["", "/attricat", "/resources", "/resources/blueprints/0"] {
         let mut manifest = manifest_value();
         manifest
             .pointer_mut(pointer)
@@ -1952,7 +1952,7 @@ fn rejects_invalid_manifest_versions_ids_keys_paths_and_digests() {
         ("/manifest_version", json!(2), "manifest_version 2"),
         ("/id", json!("Ecommerce"), "reverse-DNS"),
         ("/version", json!("latest"), "SemVer"),
-        ("/catalog/host_api", json!(">=2"), "incompatible"),
+        ("/attricat/host_api", json!(">=2"), "incompatible"),
         (
             "/resources/blueprints/0/key",
             json!("contexts/product"),
@@ -2223,7 +2223,7 @@ kind = "mixin"
         "name": "Complex",
         "version": "1.0.0",
         "description": "Complex pack",
-        "catalog": {"host_api": "^1.0"},
+        "attricat": {"host_api": "^1.0"},
         "resources": {"blueprints": resources}
     });
     assert_invalid(
@@ -2510,7 +2510,7 @@ value_type = "string"
         "name": "Includes",
         "version": "1.0.0",
         "description": "Include rewrite",
-        "catalog": {"host_api": "^1.0"},
+        "attricat": {"host_api": "^1.0"},
         "resources": {"blueprints": [
             resource("blueprints/product", "blueprints/product.toml", record),
             resource("blueprints/base", "blueprints/base.toml", mixin)
@@ -2568,8 +2568,8 @@ value_type = "string"
                     code: "mapped_base".to_owned(),
                     version: 7,
                     kind: "mixin".to_owned(),
-                    canonical_definition_hash: catalog_blueprint::raw_hash(base_definition),
-                    definition_hash: catalog_blueprint::raw_hash(base_definition),
+                    canonical_definition_hash: attricat_blueprint::raw_hash(base_definition),
+                    definition_hash: attricat_blueprint::raw_hash(base_definition),
                 },
             )]),
             installed_extensions: BTreeMap::new(),
@@ -2709,7 +2709,7 @@ value_type = "string"
         "name": "Long key",
         "version": "1.0.0",
         "description": "Mapped long logical key",
-        "catalog": {"host_api": "^1.0"},
+        "attricat": {"host_api": "^1.0"},
         "resources": {"blueprints": [resource(&key, "blueprints/long.toml", &blueprint)]}
     });
     let pack = ValidatedSolutionPack::from_tar_zst(&archive(
@@ -2739,8 +2739,8 @@ value_type = "string"
                     code: "shared".to_owned(),
                     version: 3,
                     kind: "record".to_owned(),
-                    canonical_definition_hash: catalog_blueprint::raw_hash(&definition),
-                    definition_hash: catalog_blueprint::raw_hash(&definition),
+                    canonical_definition_hash: attricat_blueprint::raw_hash(&definition),
+                    definition_hash: attricat_blueprint::raw_hash(&definition),
                 },
             )]),
             installed_extensions: BTreeMap::new(),
@@ -2893,8 +2893,8 @@ fn planner_blocks_required_resources_when_optional_dependencies_are_skipped() {
                     code: "ecom_product".to_owned(),
                     version: 1,
                     kind: "record".to_owned(),
-                    canonical_definition_hash: catalog_blueprint::raw_hash(product_definition),
-                    definition_hash: catalog_blueprint::raw_hash(product_definition),
+                    canonical_definition_hash: attricat_blueprint::raw_hash(product_definition),
+                    definition_hash: attricat_blueprint::raw_hash(product_definition),
                 },
             )]),
             installed_extensions: BTreeMap::new(),
@@ -3034,7 +3034,7 @@ target_blueprint = "blueprints/main"
                 "name": "Dependency",
                 "version": "1.0.0",
                 "description": "Mapped dependency closure",
-                "catalog": {"host_api": "^1.0"},
+                "attricat": {"host_api": "^1.0"},
                 "resources": {"blueprints": [
                     resource("blueprints/main", "blueprints/main.toml", main),
                     dep_resource
@@ -3093,8 +3093,8 @@ target_blueprint = "blueprints/main"
                         code: "deps_main".to_owned(),
                         version: 1,
                         kind: main_kind.to_owned(),
-                        canonical_definition_hash: catalog_blueprint::raw_hash(main_definition),
-                        definition_hash: catalog_blueprint::raw_hash(main_definition),
+                        canonical_definition_hash: attricat_blueprint::raw_hash(main_definition),
+                        definition_hash: attricat_blueprint::raw_hash(main_definition),
                     },
                 )]),
                 installed_extensions: BTreeMap::new(),
@@ -3159,7 +3159,7 @@ value_type = "string"
         "name": "Paths",
         "version": "1.0.0",
         "description": "Relationship table paths",
-        "catalog": {"host_api": "^1.0"},
+        "attricat": {"host_api": "^1.0"},
         "resources": {"blueprints": [
             resource("blueprints/product", "blueprints/product.toml", product),
             resource("blueprints/category", "blueprints/category.toml", category)
@@ -3307,10 +3307,10 @@ target_blueprint = "blueprints/product"
                 code: code.to_owned(),
                 version,
                 kind: "record".to_owned(),
-                canonical_definition_hash: catalog_blueprint::raw_hash(
+                canonical_definition_hash: attricat_blueprint::raw_hash(
                     payload["definition"].as_str().unwrap(),
                 ),
-                definition_hash: catalog_blueprint::raw_hash(
+                definition_hash: attricat_blueprint::raw_hash(
                     payload["definition"].as_str().unwrap(),
                 ),
             },
@@ -3594,7 +3594,7 @@ fn predicates_resolve_and_rewrite_pack_blueprint_codes() {
         definition.contains("blueprint_code = \"ecom_category\""),
         "{definition}"
     );
-    assert!(catalog_rules::compile(&definition).is_ok());
+    assert!(attricat_rules::compile(&definition).is_ok());
     let blueprint = action(&plan, "blueprints/product")
         .normalized_payload
         .as_ref()
@@ -3828,7 +3828,7 @@ fn seed_resources_plan_with_physical_references_in_dependency_order() {
     let definition = payload["definition"].as_str().unwrap();
     assert!(definition.contains("code = \"ecom_name-required\""));
     assert!(!definition.contains("blueprint"));
-    assert!(catalog_rules::compile(definition).is_ok());
+    assert!(attricat_rules::compile(definition).is_ok());
     assert_eq!(
         mapping(&plan, "rules/name-required").target_code,
         "ecom_name-required"
@@ -3838,7 +3838,7 @@ fn seed_resources_plan_with_physical_references_in_dependency_order() {
     let payload = workflow.normalized_payload.as_ref().unwrap();
     assert_eq!(payload["enabled"], json!(false));
     assert!(
-        catalog_workflow::compile(payload["definition"].as_str().unwrap())
+        attricat_workflow::compile(payload["definition"].as_str().unwrap())
             .unwrap()
             .code
             == "ecom_mark-reviewed"
@@ -4609,11 +4609,11 @@ fn context_mapping_requests_name_declared_contexts_and_distinct_targets() {
 fn published_seed_schemas_accept_the_seed_fixtures() {
     let schema = |source: &str| -> Value {
         let schema = serde_json::from_str(source).unwrap();
-        catalog_validation::validate_json_schema_definition(&schema).unwrap();
+        attricat_validation::validate_json_schema_definition(&schema).unwrap();
         schema
     };
     let accepts = |schema: &Value, value: &Value| {
-        catalog_validation::validate_json_schema(schema, value)
+        attricat_validation::validate_json_schema(schema, value)
             .unwrap()
             .is_empty()
     };
@@ -4711,7 +4711,7 @@ fn saved_search_presence_is_validated_in_the_contract_and_archive() {
         "../../../../contracts/solution-pack-saved-search-v1.schema.json"
     ))
     .unwrap();
-    catalog_validation::validate_json_schema_definition(&contract).unwrap();
+    attricat_validation::validate_json_schema_definition(&contract).unwrap();
     for (field, value) in [
         ("name", json!(false)),
         ("name", json!(true)),
@@ -4724,7 +4724,7 @@ fn saved_search_presence_is_validated_in_the_contract_and_archive() {
             "field":field, "operator":"is_set", "value":value
         });
         assert_eq!(
-            catalog_validation::validate_json_schema(&contract, &search)
+            attricat_validation::validate_json_schema(&contract, &search)
                 .unwrap()
                 .is_empty(),
             value.is_boolean()
@@ -4765,7 +4765,7 @@ fn saved_search_state_is_validated_with_physical_codes_while_planning() {
     let mut search: Value = serde_json::from_slice(UNNAMED_SEARCH).unwrap();
     let base = serde_json::to_vec(&search["state"]).unwrap().len();
     search["state"]["attributeFilters"][0]["value"] =
-        json!("x".repeat(catalog_validation::saved_search::MAX_STATE_BYTES - 20 - base));
+        json!("x".repeat(attricat_validation::saved_search::MAX_STATE_BYTES - 20 - base));
     let bytes = serde_json::to_vec(&search).unwrap();
     let path = "saved-searches/unnamed.json";
     let (mut manifest, files) = seed_manifest();

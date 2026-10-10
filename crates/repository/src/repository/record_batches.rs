@@ -12,14 +12,14 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 use super::record_commands::ChosenIdRecordCreate;
-use super::{AuthorizationActor, CatalogRepository, RepositoryError, validate_code};
+use super::{AttricatRepository, AuthorizationActor, RepositoryError, validate_code};
 use crate::model::{
     MAX_RECORD_BATCH_OPERATIONS, MAX_RECORD_BATCH_VALUES, RecordBatchOperation,
     RecordBatchOperationResult, RecordBatchRequest, RecordBatchResponse, SearchBlueprint,
     UpdateRecordFormRequest,
 };
 
-impl CatalogRepository {
+impl AttricatRepository {
     /// Checks every operation's permission for one principal, and for a
     /// personal API token its live permissions, before a batch runs. Existing
     /// records are checked in one query per permission.

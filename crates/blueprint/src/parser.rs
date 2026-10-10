@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use catalog_validation::{CODE_PATTERN, is_valid_code, validate_json_schema_definition};
+use attricat_validation::{CODE_PATTERN, is_valid_code, validate_json_schema_definition};
 use schemars::{JsonSchema, generate::SchemaSettings};
 use serde::Deserialize;
 
@@ -77,7 +77,7 @@ struct RawBlueprintDefinition {
     extensions: HashMap<String, toml::Value>,
     /// Data-health rules evaluated for this blueprint's records.
     #[serde(default)]
-    #[schemars(schema_with = "catalog_rules::embedded_rules_schema")]
+    #[schemars(schema_with = "attricat_rules::embedded_rules_schema")]
     rules: Vec<toml::Value>,
     /// Business keys whose normalized values must be unique across the
     /// blueprint family. Record blueprints only.
@@ -202,7 +202,7 @@ struct RawAttributeDeclaration {
     #[serde(default = "default_context_editable")]
     #[schemars(extend("enum" = CONTEXT_EDITABLE_SCOPES))]
     context_editable: String,
-    /// Preview-only in the Catalog web app. API writes remain allowed.
+    /// Preview-only in the Attricat web app. API writes remain allowed.
     #[serde(default)]
     readonly: bool,
     /// Selects `<include alias>.<attribute code>` from an include. The
@@ -429,7 +429,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                         &format!("attribute '{}'.value_schema", attribute.code),
                     )?;
                     if value_schema.as_ref().is_some_and(|schema| {
-                        schema.get(catalog_validation::status::STATUS_KEY).is_some()
+                        schema.get(attricat_validation::status::STATUS_KEY).is_some()
                     }) && value_type != "string"
                     {
                         return Err(BlueprintError::InvalidJsonSchema {
@@ -439,7 +439,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                     }
                     if value_schema.as_ref().is_some_and(|schema| {
                         schema
-                            .get(catalog_validation::principal::PRINCIPAL_KEY)
+                            .get(attricat_validation::principal::PRINCIPAL_KEY)
                             .is_some()
                     }) && (value_type != "string" || attribute.default_value.is_some())
                     {
@@ -450,7 +450,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                     }
                     if let (Some(schema), Some(default)) = (&value_schema, &attribute.default_value)
                     {
-                        catalog_validation::status::validate_status_transition(
+                        attricat_validation::status::validate_status_transition(
                             schema,
                             &serde_json::Value::Null,
                             default,
@@ -576,7 +576,7 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
     let rules = raw
         .rules
         .into_iter()
-        .map(catalog_rules::compile_embedded)
+        .map(attricat_rules::compile_embedded)
         .collect::<Result<Vec<_>, _>>()
         .map_err(|error| BlueprintError::InvalidRule(error.to_string()))?;
     let mut rule_codes = HashSet::new();
@@ -596,8 +596,8 @@ pub fn parse(source: &str) -> Result<BlueprintDefinition, BlueprintError> {
                 AttributeDeclaration::Selection { code, .. } => (code.clone(), None),
             })
             .collect();
-        catalog_rules::validate_against_attributes(rule, &types).map_err(|error| match error {
-            catalog_rules::RuleError::UnknownAttribute(attribute) => {
+        attricat_rules::validate_against_attributes(rule, &types).map_err(|error| match error {
+            attricat_rules::RuleError::UnknownAttribute(attribute) => {
                 BlueprintError::RuleUnknownAttribute {
                     rule: rule.code.clone(),
                     attribute,

@@ -22,7 +22,7 @@ pub struct FilePolicy {
 impl FilePolicy {
     /// Whether a file of a detected MIME type is accepted by this policy.
     pub fn allows(&self, mime: &str, filename: &str, size: u64) -> bool {
-        catalog_validation::files::FileConstraints {
+        attricat_validation::files::FileConstraints {
             allowed_mime_groups: &self.allowed_mime_groups,
             allowed_extensions: &self.allowed_extensions,
             max_bytes: self.max_bytes,
@@ -111,7 +111,7 @@ pub struct FileObject {
     pub sha256: String,
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     /// Validates the immutable record blueprint and returns its file policy before
     /// object bytes are accepted. The record is locked again while persisting,
     /// so a concurrent mutation cannot evade the cardinality check.

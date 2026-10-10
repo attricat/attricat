@@ -4,7 +4,7 @@
 use super::extension_operation_artifacts::{
     MAX_OPERATION_RUN_ARTIFACT_BYTES, MAX_OPERATION_WORKSPACE_ARTIFACT_BYTES,
 };
-use super::{CatalogRepository, ExtensionOperationArtifact, RepositoryError};
+use super::{AttricatRepository, ExtensionOperationArtifact, RepositoryError};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use uuid::Uuid;
@@ -39,7 +39,7 @@ pub enum DeliveryState {
     Uncertain,
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     pub async fn list_extension_http_deliveries(
         &self,
         run: Uuid,

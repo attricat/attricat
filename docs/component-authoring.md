@@ -1,6 +1,6 @@
 # Component Authoring
 
-View components connect declarative blueprint views to catalog-web renderers.
+View components connect declarative blueprint views to web renderers.
 They are platform components: blueprint definitions select a component by ID and
 version, but never execute arbitrary frontend code.
 
@@ -8,12 +8,12 @@ version, but never execute arbitrary frontend code.
 
 Every component has a TypeScript definition that owns its ID, version,
 applicability metadata, and any renderer or editor it implements. The central
-`apps/catalog-web/src/features/views/components/registry.ts` imports each
+`apps/web/src/features/views/components/registry.ts` imports each
 definition and exposes the runtime lookup map.
 
 Layout, relationship and table components have one module each in
 `views/components`. The string field controls (color, email, URL, phone,
-Markdown) share `apps/catalog-web/src/features/views/controls`:
+Markdown) share `apps/web/src/features/views/controls`:
 
 | File | Contents |
 | --- | --- |
@@ -38,7 +38,7 @@ See [JSON Schema Validation](json-schema-validation.md) for that contract.
 ## Add A Component
 
 1. Create a component module under
-   `apps/catalog-web/src/features/views/components` (or add a string control
+   `apps/web/src/features/views/components` (or add a string control
    to `views/controls`, as above).
 2. Export a definition that `satisfies ViewComponentDefinition`.
 3. Add that definition to `viewComponents` in `registry.ts` (string controls
@@ -55,7 +55,7 @@ import { AttributeValue } from "./values/AttributeValue";
 import type { ViewComponentDefinition } from "./componentTypes";
 
 export const priceDisplayComponent = {
-  id: "catalog.price_display",
+  id: "attricat.price_display",
   version: 1,
   capabilities: ["display"],
   placements: ["field"],
@@ -105,7 +105,7 @@ type ValueRenderer = ComponentType<{
 ```
 
 Table renderers receive the search projection rather than a fetched record:
-`catalog.table_image@1`, for example, renders the file metadata hydrated into
+`attricat.table_image@1`, for example, renders the file metadata hydrated into
 the projection for a direct image-only single-file attribute. Use
 `NotSetValue` for absent values and `EachValue` when a column can project
 several values.
@@ -126,7 +126,7 @@ disabled, required, error, helper text and `onChange`).
 a scalar attribute on the record page, in the record form and in the blueprint
 preview sandbox: a status annotation first, then the paired `valueEditor` when it
 supports the attribute's value type (`resolveValueEditor`), then the built-in
-input for the type, as for `catalog.field_edit`.
+input for the type, as for `attricat.field_edit`.
 
 Two optional fields add form behavior:
 
@@ -152,9 +152,9 @@ everywhere. See [Status attributes](status-control.md).
 `contracts/view-components.json`. Run it after changing either side:
 
 ```sh
-pnpm --dir apps/catalog-web test -- src/features/views/components/registry.test.ts
-cargo test -p catalog-blueprint
+pnpm --dir apps/web test -- src/features/views/components/registry.test.ts
+cargo test -p attricat-blueprint
 ```
 
-Run `pnpm --dir apps/catalog-web typecheck` as well when adding or
+Run `pnpm --dir apps/web typecheck` as well when adding or
 changing renderer types.

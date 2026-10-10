@@ -5,7 +5,7 @@ use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
 use super::generations::{Generation, advance_generation};
-use super::{CatalogRepository, RepositoryError};
+use super::{AttricatRepository, RepositoryError};
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct ExploreNavigationEntry {
@@ -20,7 +20,7 @@ pub struct ExploreNavigationItem {
     pub blueprint_name: String,
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     async fn require_workspace_navigation_permission(
         &self,
         actor_id: Uuid,
@@ -227,7 +227,7 @@ impl CatalogRepository {
         if updated.rows_affected() != 1 {
             return Err(RepositoryError::NotFound("workspace"));
         }
-        advance_generation(tx, workspace_id, Generation::Catalog).await?;
+        advance_generation(tx, workspace_id, Generation::Attricat).await?;
         Ok(())
     }
 }
@@ -272,8 +272,8 @@ mod tests {
 
     #[sqlx::test(migrations = "../../apps/api/migrations")]
     async fn workspace_lock_serializes_navigation_mutations(pool: sqlx::PgPool) {
-        let workspace_id = CatalogRepository::DEFAULT_WORKSPACE_ID;
-        let repository = CatalogRepository::new(pool, CatalogRepository::DEFAULT_WORKSPACE_ID);
+        let workspace_id = AttricatRepository::DEFAULT_WORKSPACE_ID;
+        let repository = AttricatRepository::new(pool, AttricatRepository::DEFAULT_WORKSPACE_ID);
         let mut first = repository.pool.begin().await.unwrap();
         repository
             .lock_explore_navigation_in_transaction(&mut first, workspace_id)

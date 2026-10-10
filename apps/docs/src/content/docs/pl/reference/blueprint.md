@@ -235,7 +235,7 @@ image_only = true
 | `allowed_extensions` | tablica ciągów znaków | Dowolne | Akceptowane rozszerzenia plików, wyłącznie litery i cyfry (`jpg`, a nie `*.jpg`). Początkowa `.` jest ignorowana. |
 | `max_bytes` | dodatnia liczba całkowita | Limit serwera | Limit rozmiaru pojedynczego pliku. Nie może przekraczać `FILE_UPLOAD_MAX_BYTES` serwera. |
 | `purposes` | tablica kodów | `[]` | Etykiety opisujące przeznaczenie plików, np. `product_image`. |
-| `image_only` | wartość logiczna | `false` | Akceptuje tylko obrazy. Wymagane dla renderera `catalog.table_image`. |
+| `image_only` | wartość logiczna | `false` | Akceptuje tylko obrazy. Wymagane dla renderera `attricat.table_image`. |
 
 Te klucze są odrzucane w każdym atrybucie, który nie ma `value_type = "file"`. Atrybuty plikowe nie mogą mieć `value_schema`, `default_value` ani `target_blueprint`.
 
@@ -338,7 +338,7 @@ label = "Category"
 [[views.table.columns]]
 field = "main_photo"
 label = "Image"
-renderer = { id = "catalog.table_image", version = 1 }
+renderer = { id = "attricat.table_image", version = 1 }
 ```
 
 | Klucz | Typ | Opis |
@@ -346,7 +346,7 @@ renderer = { id = "catalog.table_image", version = 1 }
 | `columns` | tablica tabel | Definicje kolumn. Musi być niepusta, z unikalnymi wartościami `field`. |
 | `columns[].field` | ciąg znaków | Lokalny atrybut skalarny, lokalny atrybut plikowy ze zgodnym rendererem lub ścieżka o maksymalnie trzech krokach relacji zakończona atrybutem skalarnym, np. `family.product_type.name`. |
 | `columns[].label` | ciąg znaków | Nagłówek kolumny. Domyślnie nazwa atrybutu. |
-| `columns[].renderer` | odwołanie do komponentu | `catalog.table_image@1`, komponent wyświetlania tekstu (`catalog.color_display@1`, `catalog.email_display@1`, `catalog.url_display@1` lub `catalog.phone_display@1`) albo renderer komórek z rozszerzenia. |
+| `columns[].renderer` | odwołanie do komponentu | `attricat.table_image@1`, komponent wyświetlania tekstu (`attricat.color_display@1`, `attricat.email_display@1`, `attricat.url_display@1` lub `attricat.phone_display@1`) albo renderer komórek z rozszerzenia. |
 | `fields` | tablica kodów atrybutów | Starszy skrót dla lokalnych kolumn skalarnych. Nie można go łączyć z `columns`. |
 | `component` | odwołanie do komponentu | Opcjonalny komponent tabeli. |
 
@@ -375,7 +375,7 @@ Każdy blok przyjmuje opcjonalne odwołanie `component`. Każdy `field` i `relat
 ### Odwołania do komponentów
 
 ```toml
-component = { id = "catalog.url_display", version = 1 }
+component = { id = "attricat.url_display", version = 1 }
 renderer = { id = "example.currency", version = 1, props = { currency = "USD" } }
 ```
 
@@ -389,26 +389,26 @@ Wbudowane komponenty:
 
 | ID | Wersja | Używany w | Typy wartości | Właściwości |
 | --- | --- | --- | --- | --- |
-| `catalog.field_display` | 1 | `field` (detail) | Skalarne | |
-| `catalog.field_edit` | 1 | `field` (edit) | Skalarne | |
-| `catalog.relationship_list_display` | 1 | `relationship_list` (detail) | `relationship` | |
-| `catalog.relationship_list_edit` | 1 | `relationship_list` (edit) | `relationship` | |
-| `catalog.relationship_hierarchy` | 1 | `relationship_list` (detail) | `relationship` | `parent_field` |
-| `catalog.incoming_relationship_list_display` | 1 | `incoming_relationship_list` | | |
-| `catalog.record_heading` | 1 | `stack` (detail) | | |
-| `catalog.table_display` | 1 | `table` | Skalarne | |
-| `catalog.table_edit` | 1 | `table` | Skalarne | |
-| `catalog.table_image` | 1 | `renderer` kolumny tabeli | `file` z `cardinality = "one"` i `image_only = true` | |
-| `catalog.color_display` | 1 | `field` (detail), `renderer` kolumny tabeli | `string` | |
-| `catalog.color_edit` | 1 | `field` (edit) | `string` | |
-| `catalog.email_display` | 1 | `field` (detail), `renderer` kolumny tabeli | `string` | |
-| `catalog.email_edit` | 1 | `field` (edit) | `string` | |
-| `catalog.url_display` | 1 | `field` (detail), `renderer` kolumny tabeli | `string` | |
-| `catalog.url_edit` | 1 | `field` (edit) | `string` | |
-| `catalog.phone_display` | 1 | `field` (detail), `renderer` kolumny tabeli | `string` | |
-| `catalog.phone_edit` | 1 | `field` (edit) | `string` | |
-| `catalog.markdown_display` | 1 | `field` (detail) | `string` | |
-| `catalog.markdown_edit` | 1 | `field` (edit) | `string` | |
+| `attricat.field_display` | 1 | `field` (detail) | Skalarne | |
+| `attricat.field_edit` | 1 | `field` (edit) | Skalarne | |
+| `attricat.relationship_list_display` | 1 | `relationship_list` (detail) | `relationship` | |
+| `attricat.relationship_list_edit` | 1 | `relationship_list` (edit) | `relationship` | |
+| `attricat.relationship_hierarchy` | 1 | `relationship_list` (detail) | `relationship` | `parent_field` |
+| `attricat.incoming_relationship_list_display` | 1 | `incoming_relationship_list` | | |
+| `attricat.record_heading` | 1 | `stack` (detail) | | |
+| `attricat.table_display` | 1 | `table` | Skalarne | |
+| `attricat.table_edit` | 1 | `table` | Skalarne | |
+| `attricat.table_image` | 1 | `renderer` kolumny tabeli | `file` z `cardinality = "one"` i `image_only = true` | |
+| `attricat.color_display` | 1 | `field` (detail), `renderer` kolumny tabeli | `string` | |
+| `attricat.color_edit` | 1 | `field` (edit) | `string` | |
+| `attricat.email_display` | 1 | `field` (detail), `renderer` kolumny tabeli | `string` | |
+| `attricat.email_edit` | 1 | `field` (edit) | `string` | |
+| `attricat.url_display` | 1 | `field` (detail), `renderer` kolumny tabeli | `string` | |
+| `attricat.url_edit` | 1 | `field` (edit) | `string` | |
+| `attricat.phone_display` | 1 | `field` (detail), `renderer` kolumny tabeli | `string` | |
+| `attricat.phone_edit` | 1 | `field` (edit) | `string` | |
+| `attricat.markdown_display` | 1 | `field` (detail) | `string` | |
+| `attricat.markdown_edit` | 1 | `field` (edit) | `string` | |
 
 Komponenty oznaczone *(edit)* są akceptowane tylko w przestarzałym widoku `edit`. Tam, gdzie pole w `detail` jest edytowalne, aplikacja internetowa używa komponentu edycji sparowanego z komponentem wyświetlania albo standardowego edytora dla typu wartości. Działanie tych komponentów opisano w sekcji [Kontrolki pól](/pl/builders/views/#kontrolki-pól).
 

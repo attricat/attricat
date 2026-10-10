@@ -1,11 +1,11 @@
-use catalog_lexicon::{Entry, EntryIdentity, Report, UsedReference};
+use attricat_lexicon::{Entry, EntryIdentity, Report, UsedReference};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::{FromRow, Postgres, Transaction};
 use uuid::Uuid;
 
-use super::{CatalogRepository, RepositoryError};
+use super::{AttricatRepository, RepositoryError};
 
 /// A stored translation. `source` is `workspace` for entries written through
 /// the API or `solution_pack` for entries a pack supplied and nobody has
@@ -84,7 +84,7 @@ impl EntryColumns {
     }
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     pub async fn list_lexicon_entries(
         &self,
         language: Option<&str>,
@@ -252,8 +252,8 @@ impl CatalogRepository {
         .await?;
         let mut references: Vec<UsedReference> = definitions
             .iter()
-            .filter_map(|definition| catalog_blueprint::parse(definition).ok())
-            .flat_map(|definition| catalog_blueprint::lexicon_references(&definition))
+            .filter_map(|definition| attricat_blueprint::parse(definition).ok())
+            .flat_map(|definition| attricat_blueprint::lexicon_references(&definition))
             .collect();
         let names: Vec<String> = sqlx::query_scalar(
             "SELECT name FROM reusable_attribute_definitions WHERE workspace_id = $1 AND deleted_at IS NULL",
@@ -262,7 +262,7 @@ impl CatalogRepository {
         .fetch_all(&self.pool)
         .await?;
         references.extend(names.iter().flat_map(|name| {
-            catalog_lexicon::references(name)
+            attricat_lexicon::references(name)
                 .unwrap_or_default()
                 .into_iter()
                 .map(|reference| UsedReference {
@@ -281,8 +281,8 @@ impl CatalogRepository {
         references.extend(
             schemas
                 .iter()
-                .flat_map(|schema| catalog_blueprint::status_option_texts("attribute", schema))
-                .flat_map(|text| catalog_lexicon::references(text.text).unwrap_or_default())
+                .flat_map(|schema| attricat_blueprint::status_option_texts("attribute", schema))
+                .flat_map(|text| attricat_lexicon::references(text.text).unwrap_or_default())
                 .map(|reference| UsedReference {
                     reference,
                     counted: false,
@@ -299,6 +299,6 @@ impl CatalogRepository {
             .into_iter()
             .map(Entry::from)
             .collect();
-        Ok(catalog_lexicon::report(&references, &entries, languages))
+        Ok(attricat_lexicon::report(&references, &entries, languages))
     }
 }

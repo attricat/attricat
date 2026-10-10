@@ -54,7 +54,7 @@ pub struct RuleCandidateResult {
     pub severity: String,
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     async fn enqueue_rule_task(
         &self,
         tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
@@ -154,7 +154,7 @@ impl CatalogRepository {
         id: Uuid,
         input: CreateRule,
     ) -> Result<Uuid, RepositoryError> {
-        let compiled = catalog_rules::compile(&input.definition)
+        let compiled = attricat_rules::compile(&input.definition)
             .map_err(|e| RepositoryError::InvalidRuleDefinition(e.to_string()))?;
         let ws = self.workspace_id.0;
         let valid_blueprint:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM blueprints WHERE id=$1 AND version=$2 AND workspace_id=$3 AND status='published' AND deleted_at IS NULL)").bind(input.blueprint_id).bind(input.blueprint_version).bind(ws).fetch_one(&mut **tx).await?;
@@ -193,7 +193,7 @@ impl CatalogRepository {
         id: Uuid,
         input: CreateRule,
     ) -> Result<Rule, RepositoryError> {
-        let compiled = catalog_rules::compile(&input.definition)
+        let compiled = attricat_rules::compile(&input.definition)
             .map_err(|e| RepositoryError::InvalidRuleDefinition(e.to_string()))?;
         let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
@@ -248,13 +248,13 @@ impl CatalogRepository {
     ) -> Result<(), RepositoryError> {
         let ws = self.workspace_id.0;
         if sqlx::query("UPDATE rules SET status='published',published_at=COALESCE(published_at,now()) WHERE workspace_id=$1 AND id=$2 AND version=$3").bind(ws).bind(id).bind(version).execute(&mut **tx).await?.rows_affected()==0{return Err(RepositoryError::NotFound("rule revision"));}
-        advance_generation(tx, ws, Generation::Catalog).await?;
+        advance_generation(tx, ws, Generation::Attricat).await?;
         Ok(())
     }
     /// Type-checks a standalone rule against its blueprint revision's attributes.
     async fn validate_rule_attributes(
         tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-        compiled: &catalog_rules::CompiledRule,
+        compiled: &attricat_rules::CompiledRule,
         blueprint_id: Uuid,
         blueprint_version: i64,
     ) -> Result<(), RepositoryError> {
@@ -267,7 +267,7 @@ impl CatalogRepository {
         .await?
         .into_iter()
         .collect();
-        catalog_rules::validate_against_attributes(compiled, &types)
+        attricat_rules::validate_against_attributes(compiled, &types)
             .map_err(|error| RepositoryError::InvalidRuleDefinition(error.to_string()))
     }
 
@@ -312,7 +312,7 @@ impl CatalogRepository {
         let Some((target_plan, blueprint_id, blueprint_version)) = target else {
             return Err(RepositoryError::RuleNotPublished);
         };
-        let target_rule: catalog_rules::CompiledRule = serde_json::from_value(target_plan)
+        let target_rule: attricat_rules::CompiledRule = serde_json::from_value(target_plan)
             .map_err(|error| RepositoryError::InvalidRuleDefinition(error.to_string()))?;
         if target_rule.enforcement.is_some() {
             let has_records: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM records WHERE workspace_id=$1 AND blueprint_id=$2 AND blueprint_version=$3 AND deleted_at IS NULL)")
@@ -337,7 +337,7 @@ impl CatalogRepository {
             return Err(RepositoryError::RuleNotPublished);
         }
         sqlx::query("UPDATE rule_lifecycles SET enabled_version=$3,activation_sequence=(SELECT COALESCE(max(sequence),0) FROM domain_events WHERE workspace_id=$1),enabled_at=now(),disabled_at=NULL,updated_at=now() WHERE workspace_id=$1 AND rule_id=$2").bind(ws).bind(id).bind(version).execute(&mut **tx).await?;
-        advance_generation(tx, ws, Generation::Catalog).await?;
+        advance_generation(tx, ws, Generation::Attricat).await?;
         let plan: serde_json::Value = sqlx::query_scalar(
             "SELECT compiled_plan FROM rules WHERE workspace_id=$1 AND id=$2 AND version=$3",
         )
@@ -346,13 +346,13 @@ impl CatalogRepository {
         .bind(version)
         .fetch_one(&mut **tx)
         .await?;
-        let compiled: catalog_rules::CompiledRule = serde_json::from_value(plan)
+        let compiled: attricat_rules::CompiledRule = serde_json::from_value(plan)
             .map_err(|error| RepositoryError::InvalidRuleDefinition(error.to_string()))?;
         for (index, trigger) in compiled.triggers.iter().enumerate() {
-            let catalog_rules::Trigger::Schedule { cron, .. } = trigger else {
+            let attricat_rules::Trigger::Schedule { cron, .. } = trigger else {
                 continue;
             };
-            let schedule = catalog_rules::parse_six_field_cron(cron).map_err(|_| {
+            let schedule = attricat_rules::parse_six_field_cron(cron).map_err(|_| {
                 RepositoryError::InvalidRuleDefinition("stored schedule cron is invalid".into())
             })?;
             let next = schedule.after(&Utc::now()).next().ok_or_else(|| {
@@ -366,7 +366,7 @@ impl CatalogRepository {
         let ws = self.workspace_id.0;
         let mut tx = self.pool.begin().await?;
         if sqlx::query("UPDATE rule_lifecycles SET enabled_version=NULL,disabled_at=now(),updated_at=now() WHERE workspace_id=$1 AND rule_id=$2").bind(ws).bind(id).execute(&mut *tx).await?.rows_affected()==0{return Err(RepositoryError::NotFound("rule"));}
-        advance_generation(&mut tx, ws, Generation::Catalog).await?;
+        advance_generation(&mut tx, ws, Generation::Attricat).await?;
         sqlx::query("UPDATE rule_runs SET status='cancelled',cancelled_at=clock_timestamp(),lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE workspace_id=$1 AND rule_id=$2 AND status IN ('pending','leased')").bind(ws).bind(id).execute(&mut *tx).await?;
         let queued_tasks: Vec<Uuid> = sqlx::query_scalar("SELECT t.id FROM tasks t JOIN rule_runs rr ON rr.id=t.subject_id WHERE t.workspace_id=$1 AND t.kind='rule_run.v1' AND t.status='queued' AND rr.rule_id=$2 FOR UPDATE OF t")
             .bind(ws).bind(id).fetch_all(&mut *tx).await?;
@@ -460,10 +460,10 @@ impl CatalogRepository {
         let rows: Vec<EventRuleRow> = sqlx::query_as("SELECT r.id, r.version, r.compiled_plan, r.blueprint_id, r.blueprint_version, (e.id IS NOT NULL) AS direct, (SELECT b.code FROM records x JOIN blueprints b ON b.id=x.blueprint_id AND b.version=x.blueprint_version WHERE x.workspace_id=$1 AND x.id=$3) AS event_blueprint FROM rules r JOIN rule_lifecycles l ON l.rule_id=r.id AND l.workspace_id=r.workspace_id LEFT JOIN records e ON e.id=$3 AND e.workspace_id=r.workspace_id AND e.blueprint_id=r.blueprint_id AND e.blueprint_version=r.blueprint_version AND e.deleted_at IS NULL WHERE r.workspace_id=$1 AND r.status='published' AND l.enabled_version=r.version AND $2 > COALESCE(l.activation_sequence,0) FOR SHARE OF l").bind(ws).bind(event.sequence).bind(event.aggregate_id).fetch_all(&mut *tx).await?;
         let mut rules = Vec::with_capacity(rows.len());
         for row in rows {
-            let compiled: catalog_rules::CompiledRule =
+            let compiled: attricat_rules::CompiledRule =
                 serde_json::from_value(row.compiled_plan.clone())
                     .map_err(|error| RepositoryError::InvalidRuleDefinition(error.to_string()))?;
-            if compiled.triggers.iter().any(|trigger| matches!(trigger, catalog_rules::Trigger::Event { event_type } if event_type == &event.event_type)) {
+            if compiled.triggers.iter().any(|trigger| matches!(trigger, attricat_rules::Trigger::Event { event_type } if event_type == &event.event_type)) {
                 rules.push((row, compiled));
             }
         }
@@ -540,12 +540,12 @@ impl CatalogRepository {
         tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         event: &DomainEvent,
         rule: &EventRuleRow,
-        compiled: &catalog_rules::CompiledRule,
+        compiled: &attricat_rules::CompiledRule,
     ) -> Result<Vec<Uuid>, RepositoryError> {
         const MAX_DEPENDENTS: i64 = 100;
         let ws = self.workspace_id.0;
         let requirements =
-            catalog_validation::predicate::Requirements::for_predicates([&compiled.predicate]);
+            attricat_validation::predicate::Requirements::for_predicates([&compiled.predicate]);
         let mut dependents: Vec<Uuid> = Vec::new();
         // The rule evaluates only records pinned to its revision; their
         // relationship may be a revision field or an additional attribute.
@@ -610,16 +610,16 @@ impl CatalogRepository {
         let rows: Vec<(Uuid, i64, serde_json::Value)> = sqlx::query_as("SELECT r.id,r.version,r.compiled_plan FROM rules r JOIN rule_lifecycles l ON l.rule_id=r.id AND l.workspace_id=r.workspace_id WHERE r.workspace_id=$1 AND r.status='published' AND l.enabled_version=r.version FOR SHARE OF l").bind(ws).fetch_all(&mut *tx).await?;
         let mut created = 0;
         for (rule_id, version, plan) in rows {
-            let compiled: catalog_rules::CompiledRule = serde_json::from_value(plan)
+            let compiled: attricat_rules::CompiledRule = serde_json::from_value(plan)
                 .map_err(|error| RepositoryError::InvalidRuleDefinition(error.to_string()))?;
             // Whether the rule has an unfinished run; read on first need and
             // kept current as this pass creates runs.
             let mut active: Option<bool> = None;
             for (index, trigger) in compiled.triggers.iter().enumerate() {
-                let catalog_rules::Trigger::Schedule { cron, .. } = trigger else {
+                let attricat_rules::Trigger::Schedule { cron, .. } = trigger else {
                     continue;
                 };
-                let schedule = catalog_rules::parse_six_field_cron(cron).map_err(|_| {
+                let schedule = attricat_rules::parse_six_field_cron(cron).map_err(|_| {
                     RepositoryError::InvalidRuleDefinition("stored schedule cron is invalid".into())
                 })?;
                 let state: Option<(chrono::DateTime<Utc>,)> = sqlx::query_as("SELECT next_run_at FROM rule_schedule_states WHERE workspace_id=$1 AND rule_id=$2 AND rule_version=$3 AND trigger_index=$4 FOR UPDATE").bind(ws).bind(rule_id).bind(version).bind(index as i32).fetch_optional(&mut *tx).await?;
@@ -980,14 +980,14 @@ struct EventRuleRow {
     event_blueprint: Option<String>,
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     /// Evaluates a rule for a candidate page with the shared predicate
     /// engine. A rule without a context checks every resolved context and
     /// fails when any of them fails.
     pub async fn evaluate_rule_candidates(
         &self,
         context_id: Option<Uuid>,
-        rule: &catalog_rules::CompiledRule,
+        rule: &attricat_rules::CompiledRule,
         candidates: &[Uuid],
     ) -> Result<Vec<RuleCandidateResult>, RepositoryError> {
         let ws = self.workspace_id.0;
@@ -998,7 +998,7 @@ impl CatalogRepository {
             .unwrap_or_else(|| scope.context_ids());
         let mut records = super::checks::load_current_records(&mut conn, ws, candidates).await?;
         let requirements =
-            catalog_validation::predicate::Requirements::for_predicates([&rule.predicate]);
+            attricat_validation::predicate::Requirements::for_predicates([&rule.predicate]);
         let prefetch =
             super::checks::prefetch_related(&mut conn, &scope, &records, &contexts, &requirements)
                 .await?;
@@ -1008,7 +1008,7 @@ impl CatalogRepository {
             let Some(subject) = records.remove(record_id) else {
                 continue;
             };
-            let mut failure: Option<catalog_validation::predicate::Failure> = None;
+            let mut failure: Option<attricat_validation::predicate::Failure> = None;
             let mut failing_contexts = Vec::new();
             for context in &contexts {
                 let outcomes = super::checks::evaluate_in_context_with(
@@ -1030,7 +1030,7 @@ impl CatalogRepository {
                 Some(failure) => (true, failure.message, failure.evidence),
                 None => (
                     false,
-                    catalog_validation::predicate::describe_predicate(&rule.predicate),
+                    attricat_validation::predicate::describe_predicate(&rule.predicate),
                     serde_json::json!({}),
                 ),
             };
@@ -1103,16 +1103,16 @@ fn dry_run_enable_gate(
 }
 
 /// The `rule_findings.severity` code, spelled as in rule definitions.
-fn severity_code(severity: &catalog_rules::Severity) -> &'static str {
+fn severity_code(severity: &attricat_rules::Severity) -> &'static str {
     match severity {
-        catalog_rules::Severity::Info => "info",
-        catalog_rules::Severity::Warning => "warning",
-        catalog_rules::Severity::Error => "error",
-        catalog_rules::Severity::Critical => "critical",
+        attricat_rules::Severity::Info => "info",
+        attricat_rules::Severity::Warning => "warning",
+        attricat_rules::Severity::Error => "error",
+        attricat_rules::Severity::Critical => "critical",
     }
 }
 
-impl<S: super::RepositoryScope> CatalogRepository<S> {
+impl<S: super::RepositoryScope> AttricatRepository<S> {
     pub async fn ensure_rule_permissions(&self) -> Result<(), RepositoryError> {
         let mut tx = self.pool.begin().await?;
         sqlx::query("INSERT INTO permissions(code,description) VALUES ('rules.read','Read workspace data quality rules and findings'),('rules.manage','Create and operate workspace data quality rules') ON CONFLICT(code) DO NOTHING").execute(&mut *tx).await?;

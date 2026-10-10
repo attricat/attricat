@@ -8,7 +8,7 @@ Execution lives in `crates/repository/src/repository/workflow_actions.rs`. Every
 
 ## Changed-attribute filters
 
-An event trigger may declare `attributes = ["code", ...]` (1-100 unique codes). Fan-out then creates a run only if `catalog_workflow::changed_attributes_match` finds a payload fact whose `attribute_code` is listed; it is ANDed with `envelope` and `facts`. The field is optional and omitted from the compiled plan when absent, so stored revisions and their hashes are unchanged. It is rejected on `record.migrated.v1`, whose payload has no facts.
+An event trigger may declare `attributes = ["code", ...]` (1-100 unique codes). Fan-out then creates a run only if `attricat_workflow::changed_attributes_match` finds a payload fact whose `attribute_code` is listed; it is ANDed with `envelope` and `facts`. The field is optional and omitted from the compiled plan when absent, so stored revisions and their hashes are unchanged. It is rejected on `record.migrated.v1`, whose payload has no facts.
 
 Verification for this contract: `record.created.v1`, `record.updated.v1`, `attribute_value.changed.v1`, `attribute_value.restored.v1` and `relationship.changed.v1` carry `facts[]` built from the audit before/after diff (`audit_changes`), so a fact exists only for a value that actually changed and always names its `attribute_code`. Relationship facts are one per added/removed target (`relationship_add`/`relationship_remove`). File attributes are excluded from the audit snapshot and the file-reference write paths (`files.rs`) enqueue no domain event, so a file attribute can never satisfy a filter. Emitting file-reference facts is a separate eventing contract change.
 
@@ -72,7 +72,7 @@ Webhooks, network delivery, secrets, and external effects remain deferred **for 
 
 ## Operations
 
-The `catalog.workflows` outbox consumer only creates durable event runs. Workers lease runs, retry with bounded exponential delay, and dead-letter after five attempts. Each action inserts its `(run, action index)` idempotency key in the same transaction as record locking, mutation, audit evidence, and outgoing outbox event. Disabling cancels queued and leased runs; every action rechecks this execution fence. `GET /workflow-runs` needs `workflows.read`; manual runs, replay, and lifecycle changes need the narrow `workflows.manage` permission.
+The `attricat.workflows` outbox consumer only creates durable event runs. Workers lease runs, retry with bounded exponential delay, and dead-letter after five attempts. Each action inserts its `(run, action index)` idempotency key in the same transaction as record locking, mutation, audit evidence, and outgoing outbox event. Disabling cancels queued and leased runs; every action rechecks this execution fence. `GET /workflow-runs` needs `workflows.read`; manual runs, replay, and lifecycle changes need the narrow `workflows.manage` permission.
 
 ## Workflows installed by solution packs
 

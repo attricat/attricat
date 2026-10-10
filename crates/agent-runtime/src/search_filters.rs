@@ -6,7 +6,7 @@ use crate::agent_tools::ToolError;
 use crate::{
     model::{BlueprintWithAttributes, RelationshipFilter, SearchFilter},
     repository::{
-        CatalogRepository, RecordRelationshipFilter, RecordSearchFilter, RepositoryError,
+        AttricatRepository, RecordRelationshipFilter, RecordSearchFilter, RepositoryError,
     },
 };
 
@@ -67,7 +67,7 @@ pub(crate) fn intersect_ids(current: Option<Vec<Uuid>>, next: Vec<Uuid>) -> Vec<
 /// `actor` is the person who started the conversation; `@me` filters on
 /// assignment attributes match them and their teams.
 pub(crate) async fn resolve_agent_filter(
-    repository: &CatalogRepository,
+    repository: &AttricatRepository,
     blueprint: &BlueprintWithAttributes,
     filter: &SearchFilter,
     actor: Uuid,
@@ -164,7 +164,7 @@ pub(crate) async fn resolve_agent_filter(
             value,
         });
     }
-    let presence = filter.operator == catalog_validation::saved_search::FILTER_OPERATOR_IS_SET;
+    let presence = filter.operator == attricat_validation::saved_search::FILTER_OPERATOR_IS_SET;
     let valid_operator = match value_type.as_str() {
         "string" => {
             presence || matches!(filter.operator.as_str(), "eq" | "contains" | "starts_with")
@@ -228,7 +228,7 @@ pub(crate) async fn resolve_agent_filter(
 }
 
 pub(crate) async fn resolve_agent_relationship_filter(
-    repository: &CatalogRepository,
+    repository: &AttricatRepository,
     blueprint: &BlueprintWithAttributes,
     filter: &RelationshipFilter,
 ) -> Result<RecordRelationshipFilter, ToolError> {

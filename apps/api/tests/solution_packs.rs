@@ -6,7 +6,7 @@ use api::{
     account::{Password, hash_password},
     extension_installer::ExtensionInstaller,
     extensions::ExtensionPackage,
-    repository::CatalogRepository,
+    repository::AttricatRepository,
     solution_packs::MAX_SOLUTION_PACK_INSPECTION_RESPONSE_BYTES,
     storage::FakeObjectStore,
 };
@@ -114,7 +114,7 @@ fn archive_with_sample_blueprint(blueprint: &[u8]) -> Vec<u8> {
         "name":"Sample pack",
         "version":"1.0.0",
         "description":"Explicit synthetic samples",
-        "catalog":{"host_api":"^1.0"},
+        "attricat":{"host_api":"^1.0"},
         "resources":{
             "blueprints":[{"key":"blueprints/product","path":"blueprints/product.toml","required":true,"sha256":digest(blueprint)}],
             "sample_data":{"key":"sample-data/default","path":"sample-data/sample-data.json","sha256":digest(SAMPLE)}
@@ -138,7 +138,7 @@ fn archive_with_sample(version: &str, blueprint: &[u8], sample: &[u8]) -> Vec<u8
         "name":"Sample pack",
         "version":version,
         "description":"Explicit synthetic samples",
-        "catalog":{"host_api":"^1.0"},
+        "attricat":{"host_api":"^1.0"},
         "resources":{
             "blueprints":[{"key":"blueprints/product","path":"blueprints/product.toml","required":true,"sha256":digest(blueprint)}],
             "sample_data":{"key":"sample-data/default","path":"sample-data/sample-data.json","sha256":digest(sample)}
@@ -164,7 +164,7 @@ fn archive_with_rejected_context_resource() -> Vec<u8> {
         "name": "Rejected context",
         "version": "1.0.0",
         "description": "Contexts are not pack resources",
-        "catalog": {"host_api": "^1.0"},
+        "attricat": {"host_api": "^1.0"},
         "resources": {
             "blueprints": [{"key":"blueprints/product","path":"blueprints/product.toml","required":true,"sha256":digest(PRODUCT_BLUEPRINT)}],
             "contexts": [{"key":"contexts/web","path":"contexts/web.json","required":true,"sha256":digest(CONTEXT)}]
@@ -192,7 +192,7 @@ fn archive_with_guidance_and_checks() -> Vec<u8> {
         "name":"Guided pack",
         "version":"1.0.0",
         "description":"Guidance and informational checks",
-        "catalog":{"host_api":"^1.0"},
+        "attricat":{"host_api":"^1.0"},
         "resources":{"blueprints":[{"key":"blueprints/product","path":"blueprints/product.toml","required":true,"sha256":digest(PRODUCT_BLUEPRINT)}]},
         "documentation":{
             "readme":{"path":"README.md","sha256":digest(README)},
@@ -224,7 +224,7 @@ fn archive_with_two_blueprints() -> Vec<u8> {
         "name": "Two blueprints",
         "version": "1.0.0",
         "description": "Retry fixture",
-        "catalog": {"host_api": "^1.0"},
+        "attricat": {"host_api": "^1.0"},
         "resources": {"blueprints": [
             {"key":"blueprints/product","path":"blueprints/product.toml","required":true,"sha256":digest(PRODUCT_BLUEPRINT)},
             {"key":"blueprints/category","path":"blueprints/category.toml","required":true,"sha256":digest(CATEGORY_BLUEPRINT)}
@@ -268,7 +268,7 @@ target_blueprint = "blueprints/category"
         "name": "Reverse order",
         "version": "1.0.0",
         "description": "Declaration order differs from dependency order",
-        "catalog": {"host_api": "^1.0"},
+        "attricat": {"host_api": "^1.0"},
         "resources": {"blueprints": [
             {"key":"blueprints/product","path":"blueprints/product.toml","required":true,"sha256":digest(DEPENDENT_PRODUCT)},
             {"key":"blueprints/category","path":"blueprints/category.toml","required":true,"sha256":digest(CATEGORY_BLUEPRINT)}
@@ -316,7 +316,7 @@ fn archive_with_all_checks() -> Vec<u8> {
         "name":"All checks",
         "version":"1.0.0",
         "description":"All informational check predicates",
-        "catalog":{"host_api":"^1.0"},
+        "attricat":{"host_api":"^1.0"},
         "resources":{
             "blueprints":[{"key":"blueprints/product","path":"blueprints/product.toml","required":true,"sha256":digest(PRODUCT_BLUEPRINT)}],
             "workspace_settings":[
@@ -348,7 +348,7 @@ fn archive_with_checklist(checklist: &[u8]) -> Vec<u8> {
         "name":"Checklist",
         "version":"1.0.0",
         "description":"Checklist boundary",
-        "catalog":{"host_api":"^1.0"},
+        "attricat":{"host_api":"^1.0"},
         "resources":{"blueprints":[{"key":"blueprints/product","path":"blueprints/product.toml","required":true,"sha256":digest(PRODUCT_BLUEPRINT)}]},
         "documentation":{"setup_checklist":{"path":"setup/checklist.json","sha256":digest(checklist)}}
     })).unwrap();
@@ -371,7 +371,7 @@ fn archive_with_extension_requirement(required: bool) -> Vec<u8> {
         "name": "Extension requirements",
         "version": "1.0.0",
         "description": "Extension requirement test",
-        "catalog": {"host_api": "^1.0"},
+        "attricat": {"host_api": "^1.0"},
         "resources": {
             "blueprints": [{
                 "key": "blueprints/product",
@@ -426,7 +426,7 @@ hidden = []
         "name": "Blueprint extension layout",
         "version": "1.0.0",
         "description": "Record blueprint contribution defaults",
-        "catalog": {"host_api": "^1.0"},
+        "attricat": {"host_api": "^1.0"},
         "resources": {
             "blueprints": [{
                 "key": "blueprints/product",
@@ -471,7 +471,7 @@ fn archive_with_extension_layout() -> Vec<u8> {
         "name": "Extension layout",
         "version": "1.0.0",
         "description": "Extension contribution defaults",
-        "catalog": {"host_api": "^1.0"},
+        "attricat": {"host_api": "^1.0"},
         "resources": {
             "workspace_settings": [{
                 "key": "workspace/extension-layout",
@@ -538,7 +538,7 @@ fn archive_with_both_workspace_settings(extension_layout_first: bool) -> Vec<u8>
         "name": "Both settings",
         "version": "1.0.0",
         "description": "Both bounded workspace settings",
-        "catalog": {"host_api": "^1.0"},
+        "attricat": {"host_api": "^1.0"},
         "resources": {
             "blueprints": [{
                 "key": "blueprints/product",
@@ -588,7 +588,7 @@ fn archive_with_explore_navigation_roles(role_codes: &[&str]) -> Vec<u8> {
         "name": "Navigation",
         "version": "1.0.0",
         "description": "Explore navigation defaults",
-        "catalog": {"host_api": "^1.0"},
+        "attricat": {"host_api": "^1.0"},
         "resources": {
             "blueprints": [{
                 "key": "blueprints/product",
@@ -646,7 +646,7 @@ fn release_archive(pack_id: &str, version: &str, blueprints: &[(&str, &[u8])]) -
         "name": "Release test pack",
         "version": version,
         "description": "Later-release fixture",
-        "catalog": {"host_api": ">=1.0.0, <2.0.0"},
+        "attricat": {"host_api": ">=1.0.0, <2.0.0"},
         "resources": {"blueprints": resources},
     }))
     .unwrap();
@@ -671,7 +671,7 @@ async fn install_layout_extension(pool: &PgPool) -> Uuid {
         "version": "1.0.0",
         "description": "Layout extension test",
         "icons": {"48": "icon.png"},
-        "catalog": {"id": "acme.layout", "host_api": "^1.0"},
+        "attricat": {"id": "acme.layout", "host_api": "^1.0"},
         "permissions": [],
         "artifacts": [{"id":"client","kind":"client_component","path":"client.js"}],
         "ui": [
@@ -746,11 +746,11 @@ fn principal_client(user_id: Uuid) -> Client {
         .default_headers({
             let mut headers = reqwest::header::HeaderMap::new();
             headers.insert(
-                "x-catalog-user-id",
+                "x-attricat-user-id",
                 reqwest::header::HeaderValue::from_str(&user_id.to_string()).unwrap(),
             );
             headers.insert(
-                "x-catalog-workspace-id",
+                "x-attricat-workspace-id",
                 reqwest::header::HeaderValue::from_static(BOOTSTRAP_WORKSPACE_ID),
             );
             headers
@@ -1083,7 +1083,7 @@ async fn inspection_requires_browser_session_csrf(pool: PgPool) {
         .post(format!("{base_url}/solution-packs/inspect"))
         .header("content-type", "application/zstd")
         .header("cookie", &cookie)
-        .header("x-catalog-csrf", csrf_value)
+        .header("x-attricat-csrf", csrf_value)
         .body(valid_archive())
         .send()
         .await
@@ -1107,7 +1107,7 @@ async fn inspection_requires_browser_session_csrf(pool: PgPool) {
         ))
         .header("content-type", "application/zstd")
         .header("cookie", &cookie)
-        .header("x-catalog-csrf", csrf_value)
+        .header("x-attricat-csrf", csrf_value)
         .body(valid_archive())
         .send()
         .await
@@ -1136,7 +1136,7 @@ async fn inspection_requires_browser_session_csrf(pool: PgPool) {
             "{base_url}/solution-packs/plans?prefix=csrf_multi&blueprint_publication=draft"
         ))
         .header("cookie", &cookie)
-        .header("x-catalog-csrf", csrf_value)
+        .header("x-attricat-csrf", csrf_value)
         .multipart(multipart_form())
         .send()
         .await
@@ -1162,7 +1162,7 @@ async fn inspection_requires_browser_session_csrf(pool: PgPool) {
     let valid_apply_csrf = client
         .post(apply_url)
         .header("cookie", &cookie)
-        .header("x-catalog-csrf", csrf_value)
+        .header("x-attricat-csrf", csrf_value)
         .send()
         .await
         .unwrap();
@@ -1187,7 +1187,7 @@ async fn inspection_requires_browser_session_csrf(pool: PgPool) {
         client
             .post(checks_url)
             .header("cookie", &cookie)
-            .header("x-catalog-csrf", csrf_value)
+            .header("x-attricat-csrf", csrf_value)
             .send()
             .await
             .unwrap()
@@ -2775,7 +2775,7 @@ async fn inspection_enforces_the_32_mib_compressed_body_limit(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-async fn plan_creation_persists_an_audited_immutable_dry_run_without_catalog_mutation(
+async fn plan_creation_persists_an_audited_immutable_dry_run_without_attricat_mutation(
     pool: PgPool,
 ) {
     let (base_url, server) = start_server(pool.clone()).await;
@@ -2848,9 +2848,9 @@ async fn plan_creation_persists_an_audited_immutable_dry_run_without_catalog_mut
             .unwrap(),
         context_count
     );
-    assert_eq!(sqlx::query_scalar::<_, i64>("SELECT count(*) FROM audit_events WHERE action = 'catalog.solution_packs.plans.create_or_apply'").fetch_one(&pool).await.unwrap(), 1);
+    assert_eq!(sqlx::query_scalar::<_, i64>("SELECT count(*) FROM audit_events WHERE action = 'attricat.solution_packs.plans.create_or_apply'").fetch_one(&pool).await.unwrap(), 1);
     let audit_target: Value = sqlx::query_scalar(
-        "SELECT target FROM audit_events WHERE action = 'catalog.solution_packs.plans.create_or_apply'",
+        "SELECT target FROM audit_events WHERE action = 'attricat.solution_packs.plans.create_or_apply'",
     )
     .fetch_one(&pool)
     .await
@@ -5254,7 +5254,7 @@ async fn concurrent_ordinary_layout_replacement_and_pack_append_do_not_lose_upda
         .fetch_one(&mut *blocker)
         .await
         .unwrap();
-    let ordinary_repository = CatalogRepository::new(
+    let ordinary_repository = AttricatRepository::new(
         pool.clone(),
         Uuid::from_u128(0x00000000000040008000000000000002),
     );
@@ -5993,7 +5993,7 @@ fn archive_with_lexicon() -> Vec<u8> {
         "name": "Lexicon",
         "version": "1.0.0",
         "description": "Polish labels",
-        "catalog": {"host_api": "^1.0"},
+        "attricat": {"host_api": "^1.0"},
         "resources": {
             "workspace_settings": [{
                 "key": "workspace/lexicon",
@@ -6114,7 +6114,7 @@ fn official_extension_archive(extension_id: &str, version: &str, description: &s
         "version": version,
         "description": description,
         "icons": {"48": "icon.png"},
-        "catalog": {"id": extension_id, "host_api": "^1.0"},
+        "attricat": {"id": extension_id, "host_api": "^1.0"},
         "permissions": ["network.request"],
         "host_permissions": [{
             "id": "api-read",
@@ -6353,7 +6353,7 @@ async fn interrupted_official_extension_install_resumes_without_reinstalling(poo
     .fetch_one(&pool)
     .await
     .unwrap();
-    let repository = CatalogRepository::system(pool.clone())
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(workspace_id)
         .await
         .unwrap();

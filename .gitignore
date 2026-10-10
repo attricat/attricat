@@ -4,13 +4,13 @@
 .acli-session
 .catalog-generator/
 /node_modules
-/apps/catalog-web/node_modules
-/apps/catalog-web/dist
+/apps/web/node_modules
+/apps/web/dist
 /apps/docs/node_modules
 /apps/docs/.astro
 /apps/docs/dist
-apps/catalog-web/test-results/
-apps/catalog-web/playwright-report/
+apps/web/test-results/
+apps/web/playwright-report/
 /deployment-evidence/
 
-apps/catalog-web/e2e/.auth.json
+apps/web/e2e/.auth.json

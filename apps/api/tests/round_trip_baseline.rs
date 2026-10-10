@@ -1,5 +1,5 @@
 //! Repeatable database round-trip measurements for hot request and worker
-//! paths. Counts come from `catalog_db_round_trips_*` metrics, which the
+//! paths. Counts come from `attricat_db_round_trips_*` metrics, which the
 //! telemetry layer records for every completed SQL statement.
 //!
 //! ```sh
@@ -29,7 +29,7 @@ use api::{
         self, ExtensionOperationTaskHandler, ExtensionRuntime, ExtensionRuntimeConfig,
         WasmExtensionTaskHandler,
     },
-    repository::CatalogRepository,
+    repository::AttricatRepository,
     rule_runtime,
     storage::FakeObjectStore,
     task_worker::{self, TaskHandlerRegistry, TaskWorkerConfig},
@@ -126,11 +126,11 @@ impl Snapshot {
             else {
                 continue;
             };
-            if series.starts_with("catalog_db_round_trips_per_operation_sum") {
+            if series.starts_with("attricat_db_round_trips_per_operation_sum") {
                 snapshot.per_operation.entry(scope).or_default().0 = value;
-            } else if series.starts_with("catalog_db_round_trips_per_operation_count") {
+            } else if series.starts_with("attricat_db_round_trips_per_operation_count") {
                 snapshot.per_operation.entry(scope).or_default().1 = value;
-            } else if series.starts_with("catalog_db_round_trips_total") {
+            } else if series.starts_with("attricat_db_round_trips_total") {
                 snapshot.totals.insert(scope, value);
             }
         }
@@ -165,7 +165,7 @@ fn unified_component() -> Vec<u8> {
             .args([
                 "build",
                 "-p",
-                "catalog-unified-test-component",
+                "attricat-unified-test-component",
                 "--target",
                 "wasm32-unknown-unknown",
                 "--release",
@@ -175,7 +175,7 @@ fn unified_component() -> Vec<u8> {
             .success()
     );
     let core =
-        root.join("target/wasm32-unknown-unknown/release/catalog_unified_test_component.wasm");
+        root.join("target/wasm32-unknown-unknown/release/attricat_unified_test_component.wasm");
     let component = root.join("target/round-trip-unified.component.wasm");
     assert!(
         Command::new("wasm-tools")
@@ -199,14 +199,14 @@ fn append_file(tar: &mut tar::Builder<&mut Vec<u8>>, path: &str, bytes: &[u8]) {
 }
 
 fn unified_archive() -> (String, Vec<(&'static str, String)>, Vec<u8>) {
-    let permissions = vec!["catalog.read".to_owned(), "events.subscribe".to_owned()];
+    let permissions = vec!["attricat.read".to_owned(), "events.subscribe".to_owned()];
     let manifest = json!({
         "manifest_version": 1,
         "name": "Round-trip probe",
         "version": "1.0.0",
         "description": "round-trip measurement",
         "icons": {"48": "icon.png"},
-        "catalog": {"id": UNIFIED_EXTENSION, "host_api": ">=1.0.0, <2.0.0"},
+        "attricat": {"id": UNIFIED_EXTENSION, "host_api": ">=1.0.0, <2.0.0"},
         "permissions": permissions,
         "configuration": {"version": 1, "schema": {"type": "object", "additionalProperties": false}},
         "artifacts": [{"id": "server", "kind": "server_wasm", "path": "server.wasm"}],
@@ -242,7 +242,7 @@ fn packaged_archive(path: &str) -> (String, Vec<(&'static str, String)>, Vec<u8>
         .find(|entry| entry.path().unwrap().to_str() == Some("manifest.json"))
         .map(|entry| serde_json::from_reader(entry).unwrap())
         .expect("archive has a manifest");
-    let id = manifest["catalog"]["id"].as_str().unwrap().to_owned();
+    let id = manifest["attricat"]["id"].as_str().unwrap().to_owned();
     let ids = |pointer: &str, field: Option<&str>| {
         manifest
             .pointer(pointer)
@@ -423,7 +423,7 @@ async fn database_round_trips(pool: PgPool) {
     }
 
     // Extension event delivery through the real coordinator and task worker.
-    let repository = CatalogRepository::system(pool.clone())
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(BOOTSTRAP_WORKSPACE_ID.parse().unwrap())
         .await
         .unwrap();
@@ -444,7 +444,7 @@ async fn database_round_trips(pool: PgPool) {
     repository.enable_extension(&extension_id).await.unwrap();
 
     let (shutdown_sender, shutdown) = tokio::sync::watch::channel(());
-    let system = CatalogRepository::system(pool.clone());
+    let system = AttricatRepository::system(pool.clone());
     let runtime = ExtensionRuntime::new(store.clone(), ExtensionRuntimeConfig::default()).unwrap();
     let mut workers = vec![
         extension_runtime::start_event_delivery_coordinator(

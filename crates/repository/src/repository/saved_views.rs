@@ -1,4 +1,4 @@
-use super::{CatalogRepository, RepositoryError};
+use super::{AttricatRepository, RepositoryError};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use serde_json::Value;
@@ -38,7 +38,7 @@ pub(super) fn state_hash(state: &Value) -> String {
     )
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     /// Lists named views visible to `actor`, optionally narrowed to views whose
     /// name or description contains `search` case-insensitively.
     pub async fn list_saved_views(
@@ -119,7 +119,7 @@ impl CatalogRepository {
 
     /// Inserts a saved view with a caller-chosen ID in the caller's
     /// transaction. The state must already be validated and normalized with
-    /// [`catalog_validation::saved_search`].
+    /// [`attricat_validation::saved_search`].
     pub(super) async fn create_saved_view_in_transaction(
         &self,
         tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,

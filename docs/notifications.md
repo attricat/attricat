@@ -25,7 +25,7 @@ Deleting a notification removes the row; there is no soft delete or archive.
 
 ## Delivery rules
 
-Producers call `CatalogRepository::notify_on` inside the transaction that
+Producers call `AttricatRepository::notify_on` inside the transaction that
 causes the notification, so the notification exists exactly when its cause
 commits and disappears with a rollback. `notify_users` opens its own
 transaction for producers that have none. Both apply these rules:
@@ -61,7 +61,7 @@ To add a producer:
    one. Write a self-contained English `title` and put everything a client
    needs to render the message in `data`.
 3. Add a translated message for the kind in
-   `apps/catalog-web/src/features/notifications/notificationMessage.ts` and both
+   `apps/web/src/features/notifications/notificationMessage.ts` and both
    locale files. Clients that do not know the kind show `title`.
 4. Document the kind in the table above and in the user guide.
 

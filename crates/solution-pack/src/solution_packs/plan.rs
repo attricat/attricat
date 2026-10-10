@@ -4,7 +4,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
-use catalog_blueprint::BlueprintKind;
+use attricat_blueprint::BlueprintKind;
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -885,7 +885,7 @@ fn plan_blueprint_outcomes(
             workspace,
             manifest,
         )?;
-        let canonical_definition_hash = catalog_blueprint::raw_hash(
+        let canonical_definition_hash = attricat_blueprint::raw_hash(
             normalized["definition"]
                 .as_str()
                 .expect("normalized blueprint definition is a string"),
@@ -1306,7 +1306,7 @@ fn plan_explore_navigation_action(
 /// Lexicon entries never conflict: apply adds missing entries, updates ones a
 /// pack supplied, and keeps entries the workspace wrote.
 fn plan_lexicon_action(
-    entries: &[catalog_lexicon::Entry],
+    entries: &[attricat_lexicon::Entry],
     resource: &SolutionPackResource,
 ) -> PlannedAction {
     let languages: BTreeSet<&str> = entries

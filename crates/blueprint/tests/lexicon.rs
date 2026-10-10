@@ -1,5 +1,5 @@
-use catalog_blueprint::{BlueprintError, lexicon_references, parse};
-use catalog_lexicon::{Reference, ReferenceError};
+use attricat_blueprint::{BlueprintError, lexicon_references, parse};
+use attricat_lexicon::{Reference, ReferenceError};
 
 const SOURCE: &str = r#"
 format_version = 1

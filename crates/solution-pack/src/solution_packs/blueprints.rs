@@ -3,7 +3,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
-use catalog_blueprint::{
+use attricat_blueprint::{
     BlueprintDefinition, BlueprintError, BlueprintKind, CompiledBlueprint, ResolvedInclude,
     ViewDefinition, ViewNode,
 };
@@ -111,7 +111,7 @@ pub(super) fn visit_embedded_predicate_blueprint_codes(
             return Ok(());
         };
         let mut rewritten = original.clone();
-        catalog_validation::predicate::visit_schema_blueprint_codes(&mut rewritten, visit)?;
+        attricat_validation::predicate::visit_schema_blueprint_codes(&mut rewritten, visit)?;
         if rewritten != original {
             *source = serde_json::to_string(&rewritten).expect("JSON value serializes");
         }
@@ -269,7 +269,7 @@ fn prepare_blueprint(
             "blueprint '{key}' is not valid strict blueprint TOML"
         ))
     })?;
-    let definition = catalog_blueprint::parse(&native_source).map_err(|error| {
+    let definition = attricat_blueprint::parse(&native_source).map_err(|error| {
         let message = match error {
             BlueprintError::Toml(_) => format!("blueprint '{key}' is invalid"),
             error => format!("blueprint '{key}' is invalid: {error}"),
@@ -363,7 +363,7 @@ fn reject_workspace_dependent_blueprint_constructs(
                 column
                     .renderer
                     .as_ref()
-                    .is_some_and(|renderer| !renderer.id.starts_with("catalog."))
+                    .is_some_and(|renderer| !renderer.id.starts_with("attricat."))
             }) =>
             {
                 return invalid(format!(
@@ -521,7 +521,7 @@ fn compile_pack_blueprint(
             attributes: dependency.attributes.clone(),
         });
     }
-    let definition = catalog_blueprint::compile(
+    let definition = attricat_blueprint::compile(
         blueprint.native_definition.clone(),
         &resolved,
         &blueprint.native_source,

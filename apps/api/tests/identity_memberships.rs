@@ -2,7 +2,7 @@ mod support;
 
 use std::collections::BTreeSet;
 
-use api::repository::CatalogRepository;
+use api::repository::AttricatRepository;
 use support::*;
 
 const BOOTSTRAP_WORKSPACE_ID: &str = "00000000-0000-4000-8000-000000000002";
@@ -208,7 +208,7 @@ async fn identity_memberships_seeded_roles_and_scoped_grants(pool: PgPool) {
         .await
         .unwrap();
     assert!(
-        CatalogRepository::system(pool.clone())
+        AttricatRepository::system(pool.clone())
             .set_workspace_membership_state(bootstrap_membership, user, workspace, "inactive")
             .await
             .is_err()

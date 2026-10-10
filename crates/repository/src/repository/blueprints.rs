@@ -7,9 +7,9 @@ use crate::domain_events::{
 };
 use crate::model::TablePathAttribute;
 use crate::persistence_rows::{Db, IntoDomain};
-use catalog_blueprint::{ViewDefinition, parse};
-use catalog_cache::{CacheKey, Policy};
-use catalog_validation::validate_json_schema;
+use attricat_blueprint::{ViewDefinition, parse};
+use attricat_cache::{CacheKey, Policy};
+use attricat_validation::validate_json_schema;
 use serde_json::json;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -20,7 +20,7 @@ struct LatestBlueprint {
     code: Option<String>,
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     pub async fn list_record_blueprints(
         &self,
         include_drafts: bool,
@@ -111,7 +111,7 @@ impl CatalogRepository {
             .await?
             .is_empty()
         {
-            return Err(RepositoryError::CatalogCodeTaken);
+            return Err(RepositoryError::AttricatCodeTaken);
         }
         self.insert_blueprint_revision_in_transaction(
             transaction,
@@ -171,7 +171,7 @@ impl CatalogRepository {
         blueprint_id: Uuid,
         version: i64,
         definition: String,
-        compiled: catalog_blueprint::CompiledBlueprint,
+        compiled: attricat_blueprint::CompiledBlueprint,
     ) -> Result<BlueprintWithAttributes, RepositoryError> {
         let includes = serde_json::to_value(&compiled.includes).map_err(|error| {
             RepositoryError::InvalidBlueprintDefinition(format!(
@@ -540,7 +540,7 @@ impl CatalogRepository {
             .bind(self.workspace_id.0)
             .execute(&mut *transaction)
             .await?;
-            advance_generation(&mut transaction, self.workspace_id.0, Generation::Catalog).await?;
+            advance_generation(&mut transaction, self.workspace_id.0, Generation::Attricat).await?;
             self.apply_published_structural_constraints(
                 &mut transaction,
                 blueprint_id,
@@ -627,7 +627,7 @@ impl CatalogRepository {
             .fetch_one(&mut **transaction)
             .await?
             .into_domain();
-            advance_generation(transaction, self.workspace_id.0, Generation::Catalog).await?;
+            advance_generation(transaction, self.workspace_id.0, Generation::Attricat).await?;
             self.apply_published_structural_constraints(
                 transaction,
                 blueprint_id,
@@ -860,11 +860,11 @@ impl CatalogRepository {
         let key = match by {
             LatestBy::Id(id) => CacheKey::new(
                 "blueprint_latest_id",
-                &[&workspace_id, &id, &generations.catalog_generation],
+                &[&workspace_id, &id, &generations.attricat_generation],
             ),
             LatestBy::Code(code) => CacheKey::new(
                 "blueprint_latest_code",
-                &[&workspace_id, &code, &generations.catalog_generation],
+                &[&workspace_id, &code, &generations.attricat_generation],
             ),
         };
         let latest = self
@@ -993,7 +993,7 @@ enum LatestBy<'a> {
 /// A published revision's row and attributes.
 pub(super) type CachedRevision = (Blueprint, Vec<Attribute>);
 
-impl CatalogRepository {
+impl AttricatRepository {
     /// `(provider, type, version, primitive)` of every attribute type declared
     /// by an enabled extension, each manifest decoded once.
     pub(super) async fn enabled_extension_attribute_types(
@@ -1025,7 +1025,7 @@ impl CatalogRepository {
 }
 
 fn validate_attribute_default_value(
-    attribute: &catalog_blueprint::EffectiveAttribute,
+    attribute: &attricat_blueprint::EffectiveAttribute,
 ) -> Result<(), RepositoryError> {
     let Some(default_value) = &attribute.default_value else {
         return Ok(());
@@ -1055,7 +1055,7 @@ fn validate_attribute_default_value(
 }
 
 pub(super) fn blueprint_event(
-    repository: &CatalogRepository,
+    repository: &AttricatRepository,
     event_type: &str,
     blueprint: &Blueprint,
 ) -> NewDomainEvent {
@@ -1071,7 +1071,7 @@ pub(super) fn blueprint_event(
         causation_id: None,
         source: EventSource {
             kind: EventSourceKind::Api,
-            name: "catalog_api".to_owned(),
+            name: "attricat_api".to_owned(),
         },
         metadata: json!({}),
         payload: serde_json::to_value(BlueprintRevisionV1 {

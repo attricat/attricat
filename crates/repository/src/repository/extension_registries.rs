@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::extension_registry::GitHubRepository;
 
-use super::{CatalogRepository, RepositoryError};
+use super::{AttricatRepository, RepositoryError};
 
 #[derive(Clone, Debug, serde::Serialize, FromRow)]
 pub struct ExtensionRegistrySource {
@@ -16,7 +16,7 @@ pub struct ExtensionRegistrySource {
     pub created_at: DateTime<Utc>,
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     pub async fn extension_registry_sources(
         &self,
     ) -> Result<Vec<ExtensionRegistrySource>, RepositoryError> {
@@ -52,7 +52,7 @@ impl CatalogRepository {
     }
 }
 
-impl<S: super::RepositoryScope> CatalogRepository<S> {
+impl<S: super::RepositoryScope> AttricatRepository<S> {
     /// System permissions are explicitly bootstrapped in application code so
     /// migrations only declare schema.
     pub async fn ensure_extension_registry_permissions(&self) -> Result<(), RepositoryError> {

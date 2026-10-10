@@ -28,11 +28,11 @@ The site is organized into sections, each a directory under `src/content/docs`:
 | --- | --- |
 | `start/` (plus `introduction.md`) | Concepts and a quickstart. |
 | `guides/` | Day-to-day use: Explorer, search syntax, records, contexts, publishing, agents. |
-| `builders/` | Catalog design: modeling, blueprints, views, validation, revisions, rules, workflows, solution packs, extension management. |
+| `builders/` | Attricat design: modeling, blueprints, views, validation, revisions, rules, workflows, solution packs, extension management. |
 | `extensions/` | Building extensions: packaging, manifest, server runtime, client contributions, operations. |
 | `operate/` | Workspace administration, deployment, monitoring, backup. |
 | `reference/` | Configuration, blueprint TOML, permissions, CLI, API, events. |
 
-`apps/catalog-web/src/app/documentation.ts` links to `builders/blueprints/`, `guides/contexts/`, `builders/extensions/`, and `operate/workspaces/`. Keep those slugs, or update that file when moving them. Reference pages describe what the code accepts; when a blueprint key, environment variable, permission, or CLI command changes, update the matching reference page in the same change.
+`apps/web/src/app/documentation.ts` links to `builders/blueprints/`, `guides/contexts/`, `builders/extensions/`, and `operate/workspaces/`. Keep those slugs, or update that file when moving them. Reference pages describe what the code accepts; when a blueprint key, environment variable, permission, or CLI command changes, update the matching reference page in the same change.
 
 Public English guides live in `src/content/docs`; their Polish equivalents use the matching path below `src/content/docs/pl`. Add or change both versions together so the language switcher never directs readers to stale content. Keep guides task-oriented and safe for public publication. Internal engineering, operational, and planning documentation remains under the repository-level `docs/` directory unless it has been deliberately adapted for this site.

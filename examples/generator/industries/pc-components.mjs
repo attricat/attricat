@@ -211,7 +211,7 @@ allowed_mime_groups = ["image", "text", "application"]
 allowed_extensions = ["png", "pdf", "txt"]
 max_bytes = 1048576`,
     `[
-  { field = "main_photo", label = "Image", renderer = { id = "catalog.table_image", version = 1 } },
+  { field = "main_photo", label = "Image", renderer = { id = "attricat.table_image", version = 1 } },
   { field = "name", label = "Product" },
   { field = "sku", label = "SKU" },
   { field = "family.name", label = "Family" },

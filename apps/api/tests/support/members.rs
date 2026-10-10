@@ -26,11 +26,11 @@ pub enum GrantScope {
 pub fn client_for(user: Uuid) -> Client {
     let mut headers = HeaderMap::new();
     headers.insert(
-        "x-catalog-user-id",
+        "x-attricat-user-id",
         HeaderValue::from_str(&user.to_string()).unwrap(),
     );
     headers.insert(
-        "x-catalog-workspace-id",
+        "x-attricat-workspace-id",
         HeaderValue::from_static(BOOTSTRAP_WORKSPACE_ID),
     );
     Client::builder().default_headers(headers).build().unwrap()

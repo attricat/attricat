@@ -9,12 +9,12 @@
 
 use std::{collections::HashMap, sync::Arc};
 
-use catalog_cache::{CacheKey, Policy};
+use attricat_cache::{CacheKey, Policy};
 use sqlx::PgConnection;
 use uuid::Uuid;
 
 use super::{
-    CatalogRepository, RepositoryError, SystemScope,
+    AttricatRepository, RepositoryError, SystemScope,
     checks::{EnabledRule, enabled_rule_sets},
     record_values::ContextTree,
 };
@@ -23,7 +23,7 @@ use super::{
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, sqlx::FromRow)]
 pub struct WorkspaceGenerations {
     /// Published blueprint revisions, enabled rules, Explore navigation.
-    pub catalog_generation: i64,
+    pub attricat_generation: i64,
     /// The context tree.
     pub contexts_generation: i64,
     /// Extension installations, grants, configuration and layout.
@@ -32,7 +32,7 @@ pub struct WorkspaceGenerations {
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum Generation {
-    Catalog,
+    Attricat,
     Contexts,
     Extensions,
 }
@@ -40,7 +40,7 @@ pub(crate) enum Generation {
 impl Generation {
     fn column(self) -> &'static str {
         match self {
-            Self::Catalog => "catalog_generation",
+            Self::Attricat => "attricat_generation",
             Self::Contexts => "contexts_generation",
             Self::Extensions => "extensions_generation",
         }
@@ -77,7 +77,7 @@ pub(crate) struct WritePrefetch {
 /// Enabled rules per blueprint revision.
 pub(crate) type EnabledRuleSets = HashMap<(Uuid, i64), Vec<EnabledRule>>;
 
-impl CatalogRepository<SystemScope> {
+impl AttricatRepository<SystemScope> {
     /// This database's random identity, created on first use. Shared cache
     /// keys include it, so two databases behind one Redis never share
     /// entries. A restored copy of a database keeps the identity, so its
@@ -96,7 +96,7 @@ impl CatalogRepository<SystemScope> {
     }
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     /// The context tree at this request's generation.
     pub(crate) async fn cached_context_tree(
         &self,
@@ -134,7 +134,7 @@ impl CatalogRepository {
             .fetch(
                 CacheKey::new(
                     "enabled_rules",
-                    &[&workspace_id, &generations.catalog_generation],
+                    &[&workspace_id, &generations.attricat_generation],
                 ),
                 &[],
                 Policy::Generation,

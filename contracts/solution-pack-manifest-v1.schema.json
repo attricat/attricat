@@ -10,7 +10,7 @@
     "name",
     "version",
     "description",
-    "catalog",
+    "attricat",
     "resources"
   ],
   "properties": {
@@ -34,7 +34,7 @@
       "minLength": 1,
       "maxLength": 4096
     },
-    "catalog": {
+    "attricat": {
       "type": "object",
       "additionalProperties": false,
       "required": [

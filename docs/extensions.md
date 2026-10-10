@@ -1,8 +1,8 @@
 # Extension manifest and lifecycle (v1)
 
 Extension v1 separates a package's **manifest syntax** (`manifest_version: 1`),
-its SemVer **release** (`version`), and the SemVer range for callable Catalog
-host functions (`catalog.host_api`). Event, capability, configuration, and UI
+its SemVer **release** (`version`), and the SemVer range for callable Attricat
+host functions (`attricat.host_api`). Event, capability, configuration, and UI
 contribution versions are independent contracts. A host never coerces or
 downgrades any of these contracts.
 
@@ -13,11 +13,11 @@ raw root `registry.json` with `registry_version: 1` and an `extensions` list;
 each entry supplies a stable `id`, `name`, `description`, optional `icon`, and a
 GitHub extension `repository`. Sources may be submitted as
 `github:owner/repository`, `owner/repository`, or the canonical GitHub URL.
-Catalog canonicalizes them and rejects non-GitHub origins, credentials,
+Attricat canonicalizes them and rejects non-GitHub origins, credentials,
 query/fragment suffixes, and ambiguous paths.
 
 Discovery loads trusted registry indexes only; an index is the sole authority
-for which extension repositories Catalog may resolve. The v1 index shape is:
+for which extension repositories Attricat may resolve. The v1 index shape is:
 
 ```json
 {
@@ -27,19 +27,19 @@ for which extension repositories Catalog may resolve. The v1 index shape is:
     "name": "Acme Example",
     "description": "Example extension",
     "icon": "icon.svg",
-    "repository": "acme/catalog-extension"
+    "repository": "acme/attricat-extension"
   }]
 }
 ```
 
 Opening a listed entry loads that extension repository's README and non-draft,
 non-prerelease GitHub Releases, returning its `.tar.zst` assets only when their
-download path belongs to that exact extension repository. Catalog stores no
+download path belongs to that exact extension repository. Attricat stores no
 global copy of indexes, READMEs, releases, or archives.
 
 A user with `extensions.manage` may alternatively install a local archive from
 **Extensions → Upload archive** (`/manage/extensions/sideload`). The archive is
-sent by Catalog's web client to `POST /extensions/sideload` as an
+sent by Attricat's web client to `POST /extensions/sideload` as an
 `application/zstd` request body and must be a `.tar.zst` extension package no
 larger than 32 MiB. The server enforces the request media type and validates
 the archive contents. Side-loaded
@@ -78,14 +78,14 @@ normally `default.local`:
 
 ```sh
 cargo run -p acli -- --session-file .acli-session auth discover default.local
-printf '%s' "$CATALOG_BOOTSTRAP_OWNER_PASSWORD" | \
+printf '%s' "$ATTRICAT_BOOTSTRAP_OWNER_PASSWORD" | \
   cargo run -p acli -- --session-file .acli-session auth login default.local \
-    --email "$CATALOG_BOOTSTRAP_OWNER_EMAIL" --password-stdin
+    --email "$ATTRICAT_BOOTSTRAP_OWNER_EMAIL" --password-stdin
 ```
 
 When verifying an inter-extension event, use two packaged server components:
 the producer should emit a manifest-declared export while handling a real
-Catalog event, and the enabled consumer should make an observable, idempotent
+Attricat event, and the enabled consumer should make an observable, idempotent
 host-mediated change (for example an extension-storage write). Confirm the
 producer event and completed consumer delivery through the API/CLI first; use
 `just sql` only if the CLI has no read endpoint for the resulting host state.
@@ -94,9 +94,9 @@ materialization or runtime failures.
 
 Registry installs validate the selected `.tar.zst` archive with bounded
 decompression and entry-path checks, then read and validate `manifest.json`
-before uploading declared extracted artifacts to Catalog S3 storage. Artifact
+before uploading declared extracted artifacts to Attricat S3 storage. Artifact
 integrity verification is deliberately deferred: selected release archives are
-trusted registry inputs in v1. Catalog retains only that installed release's
+trusted registry inputs in v1. Attricat retains only that installed release's
 immutable manifest and source identity alongside its workspace-owned
 installation; raw archives are not retained.
 
@@ -104,21 +104,21 @@ installation; raw archives are not retained.
 
 A manifest is strict JSON. Unknown fields at every v1 manifest object are
 invalid. It requires a positive supported `manifest_version`, `name`, SemVer
-`version`, `description`, a non-empty `icons` object, `catalog.id`,
-`catalog.host_api`, and at least one artifact. `catalog.id`, artifact,
+`version`, `description`, a non-empty `icons` object, `attricat.id`,
+`attricat.host_api`, and at least one artifact. `attricat.id`, artifact,
 dependency, permission-rule, handler, and contribution identifiers are stable
 ASCII IDs (`A-Z`, `a-z`, `0-9`, `.`, `_`, `-`). Artifact paths are relative and
-may not contain traversal segments. Catalog safely unpacks the selected trusted
-`.tar.zst` archive and writes only declared artifacts to Catalog S3 storage.
+may not contain traversal segments. Attricat safely unpacks the selected trusted
+`.tar.zst` archive and writes only declared artifacts to Attricat S3 storage.
 
-`catalog.host_api` and dependency ranges use SemVer ranges. A package is
+`attricat.host_api` and dependency ranges use SemVer ranges. A package is
 accepted only when the host API range matches the host's version, every
 declared artifact is present in the archive, configuration and dependencies
 validate, and every required capability is known and grantable.
 
 ## Capabilities and egress
 
-The v1 capability catalogue is: `catalog.read`, `catalog.write`,
+The v1 capability catalogue is: `attricat.read`, `attricat.write`,
 `events.subscribe`, `events.emit`, `storage.extension`, `artifacts.read`,
 `artifacts.write`, `configuration.read`,
 `configuration.write`, `secrets.read`, `logging.write`, `client.commands`,
@@ -134,14 +134,14 @@ The v1 capability catalogue is: `catalog.read`, `catalog.write`,
 `client.blueprint_publish_check`, `client.file_panel`,
 `client.audit_event_panel`, `client.data_health_card`, `client.action_dialog`,
 `client.operations.start`, `client.operations.read`,
-`client.operations.cancel`, `catalog.annotations.write`, `network.request`,
+`client.operations.cancel`, `attricat.annotations.write`, `network.request`,
 and `webhooks.receive`.
 
 Required `permissions` and `host_permissions` must be granted before an
 extension can be enabled. Optional variants are independently grantable and
 never become implicitly enabled. `network.request` authorizes only the
 operation class: each outbound request must additionally be matched to a
-granted host-permission rule. Catalog capabilities remain separate from egress.
+granted host-permission rule. Attricat capabilities remain separate from egress.
 
 A host-permission rule has a stable ID, one or more URL patterns, explicit
 methods, and non-zero request/response byte limits and timeout. V1 patterns
@@ -172,7 +172,7 @@ observability are deliberately deferred to #145.
 
 Discovery and validation are operations, not states. Installation persists a
 workspace-scoped installation in `disabled`; the only durable states are
-`disabled`, `enabled`, and `quarantined`. Catalog retains immutable snapshots
+`disabled`, `enabled`, and `quarantined`. Attricat retains immutable snapshots
 only for releases that have been installed, not every release discoverable from
 an external GitHub registry. Enablement requires valid configuration, enabled
 compatible dependencies without cycles, and every required capability and
@@ -190,7 +190,7 @@ request/correlation IDs, and bounded diagnostic codes may be recorded; secrets,
 credentials, raw packages, and payload bodies may not. SQL migrations remain
 declarative and contain no behavior.
 
-Catalog provides management APIs and web UI for registry sources, discovery,
+Attricat provides management APIs and web UI for registry sources, discovery,
 installation, configuration, grants, lifecycle actions, and client runtime
 descriptors. Server WASM execution, client components, storage, commands, mediated
 extension-owned event publication, and mediated network/secrets APIs are
@@ -198,10 +198,10 @@ implemented. Webhook delivery remains follow-on work.
 
 ## Host ABI versions and evolution
 
-The host ABI is the single WIT package `catalog:host` at
-`crates/extension-runtime/wit-host/catalog-extension.wit`, currently
-`catalog:host@1.0.0` (`SUPPORTED_HOST_API` in `crates/extension-manifest`). A
-release's `catalog.host_api` range must accept that version, for example
+The host ABI is the single WIT package `attricat:host` at
+`crates/extension-runtime/wit-host/attricat-extension.wit`, currently
+`attricat:host@1.0.0` (`SUPPORTED_HOST_API` in `crates/extension-manifest`). A
+release's `attricat.host_api` range must accept that version, for example
 `">=1.0.0, <2.0.0"` or `"^1.0"`. A release whose range accepts it may use every
 server and client feature in one component: event handlers, client commands,
 typed reads and writes, scoped configuration, scheduled, connector and
@@ -209,14 +209,14 @@ interactive operations, artifacts, transfer, connector jobs, every UI outlet,
 and version 2 selection actions. There are no per-feature `host_api` gates.
 
 The package defines the interfaces `api`, `handler`, `artifacts`,
-`catalog-data`, `catalog`, `transfer`, `selection` and `operations`. The
+`attricat-data`, `catalog`, `transfer`, `selection` and `operations`. The
 `imports` world imports every host interface. A component targets the combined
-`catalog-extension` world (exports `handler` and `operations`), or the narrower
+`attricat-extension` world (exports `handler` and `operations`), or the narrower
 `handler-extension` or `operation-extension` world. The host links every
 import for every invocation and loads only the export it needs. Run-bound
-interfaces (`artifacts`, `catalog-data`, `catalog`, `transfer`, `selection`)
+interfaces (`artifacts`, `attricat-data`, `catalog`, `transfer`, `selection`)
 return an error outside an operation run. Direct catalog access through `api`
-(`read`, `write`, and the `catalog.read.v1`/`catalog.command.v1` calls) returns
+(`read`, `write`, and the `attricat.read.v1`/`attricat.command.v1` calls) returns
 an error inside one, so operations, including interactive runs confined to
 their selection, reach catalog data only through their run-scoped interfaces.
 Other `api` calls (configuration, secrets, storage, events, network, logging)
@@ -238,7 +238,7 @@ and to the code that binds it:
 3. **One package, one binding.** Do not add another `wit-*` directory or a new
    parallel world family. Bump the `wit-host` package version and
    `SUPPORTED_HOST_API` together, and copy the released file to
-   `wit-released/catalog-host-<version>.wit`. Snapshots are never edited.
+   `wit-released/attricat-host-<version>.wit`. Snapshots are never edited.
 4. **Behavior is versioned with the ABI.** A released function keeps its
    semantics. Stricter behavior needs a new function or an opt-in field on a
    new type.
@@ -256,7 +256,7 @@ package.
 ## Server WASM runtime
 
 A `server_wasm` artifact is a WebAssembly **component** using the checked-in
-`catalog:host` WIT package at `crates/extension-runtime/wit-host/catalog-extension.wit`.
+`attricat:host` WIT package at `crates/extension-runtime/wit-host/attricat-extension.wit`.
 Components receive no WASI context, filesystem, environment, clock, socket, or
 pre-opened descriptor. Their only imports are the host interfaces described in
 [Host ABI versions and evolution](#host-abi-versions-and-evolution); event
@@ -279,7 +279,7 @@ messages (16 KiB). Every operation is capability checked at the point of call.
 `configuration.read`. `storage.get.v1`, `storage.set.v1` (also accepted as
 `storage.put.v1`), `storage.delete.v1`, and `storage.list.v1` are available to
 components with `storage.extension`. The JSON
-`catalog.read.v1` surface additionally provides bounded `page`, `changes`, and
+`attricat.read.v1` surface additionally provides bounded `page`, `changes`, and
 single-attribute `lookup` requests; `page` cursors pin a database-clock snapshot
 and `changes` cursors pin a domain-event sequence high-water mark. Cursors are
 opaque and filter/workspace-bound. A `lookup` resolves exactly like an upsert's
@@ -287,7 +287,7 @@ business key (below): a single-attribute unique key on a string attribute uses
 its normalized index
 across every revision of the blueprint family, and a value that matches more
 than one record fails with `lookup matched multiple records` rather than
-returning an arbitrary match. `catalog.command.v1` accepts a bounded,
+returning an arbitrary match. `attricat.command.v1` accepts a bounded,
 idempotent batch of typed `create`, `update`, `relationships`, or `upsert`
 intents. Each intent runs the ordinary record create or update path (validation,
 checks, audit, publication reconciliation and its domain event). An upsert
@@ -396,7 +396,7 @@ cannot forge them. Events use the existing transactional outbox and
 at-least-once dispatcher. They can be reordered or retried, so handlers must
 be idempotent. Failed components are quarantined and deliveries retry or dead
 letter under dispatcher policy. Consumers only receive declared provider
-contracts; core Catalog event subscriptions are unchanged. Handlers should
+contracts; core Attricat event subscriptions are unchanged. Handlers should
 ignore events whose source is their own extension ID to prevent feedback loops.
 
 Request/response calls, cancellation, and shared state are deliberately out of
@@ -407,14 +407,14 @@ scope for this contract and require a separately versioned design.
 A release may declare `server.operations`. Its WIT records (`operation-request` and `batch-result`) are the typed, versioned operation ABI; operation IDs, run IDs, batch keys, checkpoint, progress, and completion state are not overloaded into an unversioned host call.
 Each operation has a stable ID, component handler selector, object request schema,
 and 64 KiB-or-smaller request/checkpoint limits. The `operations` interface in
-`crates/extension-runtime/wit-host/catalog-extension.wit` receives a request
+`crates/extension-runtime/wit-host/attricat-extension.wit` receives a request
 containing the run ID, handler selector, configuration snapshot, input,
 checkpoint, and durable batch key. The host calls `prepare`, `start`,
 `process-batch`, `checkpoint`, `finish`, and cooperative `cancel`. The batch
 key is scoped to the run: `<run_id>:<batch_number>`. Every run records host
 ABI version 1.0.0.
 
-Catalog creates one durable run per workspace, pinned installed release, operation,
+Attricat creates one durable run per workspace, pinned installed release, operation,
 and idempotency key. The task queue leases the run with a fresh token; every
 checkpoint is committed with that same token, so a stale worker cannot advance
 progress after a lease expiry. The batch key changes only after a checkpoint
@@ -434,7 +434,7 @@ import host-managed `artifacts` resources. Releases need explicit
 approved inputs, read or write at most 64 KiB per call, and exchange opaque
 resource handles rather than object keys. An operation caller attaches a ready
 workspace file by sending `source_reference: {"input_file_id":"<uuid>"}` to
-the existing operation creation endpoint; Catalog locks and snapshots its
+the existing operation creation endpoint; Attricat locks and snapshots its
 metadata/key transactionally with the run. The component opens that attached
 input as `open-input("source")`, never by a file ID or object key. Output content is staged locally under
 the bounded artifact/run/workspace quotas, committed only after its SHA-256
@@ -449,22 +449,22 @@ token-, key-, and authorization-named fields are replaced with `[redacted]`.
 
 ### Connector catalog calls
 
-In addition to artifacts, operations import `catalog-data.read` and
-`catalog-data.batch`. Both take/return the same JSON
-shapes as `catalog.read.v1` and `catalog.command.v1` respectively. Calls are
+In addition to artifacts, operations import `attricat-data.read` and
+`attricat-data.batch`. Both take/return the same JSON
+shapes as `attricat.read.v1` and `attricat.command.v1` respectively. Calls are
 limited to 64 KiB of JSON; page size is at most 100 and batches at most 100
 intents. The host refreshes the release and grant before each call, requires
-`catalog.read` or `catalog.write`, and uses the workspace-scoped repository.
+`attricat.read` or `attricat.write`, and uses the workspace-scoped repository.
 Batch requests must carry the current operation request's `batch-key`; that
 key is scoped to the run ID and batch number. Intent keys and input hashes are
-persisted transactionally with Catalog mutation, audit and outbox, so a replay
+persisted transactionally with Attricat mutation, audit and outbox, so a replay
 of an already applied intent returns `already_applied` without duplicating it.
 Callers must keep intent keys stable across retries. The `catalog` interface
 also provides connector-shaped `schema`, `page` (1–16 rows), and `upsert-batch`
 operations. The upsert body carries `run_id`, the current `batch_key`, blueprint
 and context IDs, and up to 100 keyed rows with scalar attribute-code values.
 The host rejects mismatched business key values, rechecks grants and invokes
-Catalog's validated, audited, idempotent mutation service. Page cursors are
+Attricat's validated, audited, idempotent mutation service. Page cursors are
 workspace- and filter-bound and include a database-clock high-water mark;
 attribute values use retained history to return their as-of values across
 batches. Cursors expire after 30 days (before history retention expires).
@@ -585,7 +585,7 @@ remain available via `/extension-operation-runs`.
 
 The host enforces page filters from run metadata; the `catalog` interface
 signature carries no filter. Existing unscoped operations
-and schedules remain available separately. Catalog-event triggers are not
+and schedules remain available separately. Attricat-event triggers are not
 configured for connector jobs yet; run them manually or on an interval.
 
 ## Client extension runtime (v1)
@@ -643,16 +643,16 @@ screens, or an extension settings/dashboard experience.
 This is an internal routing tree, not a host routing tree: the browser's
 host-owned URL remains
 `/extensions/:extensionId/:contributionId`, and an extension cannot claim
-subpaths, add host route definitions, replace Catalog page chrome, or access
-Catalog's router. A route contribution must provide its own UI, localized text,
-and accessible labels inside the frame; Catalog owns the surrounding page,
+subpaths, add host route definitions, replace Attricat page chrome, or access
+Attricat's router. A route contribution must provide its own UI, localized text,
+and accessible labels inside the frame; Attricat owns the surrounding page,
 loading/error treatment, and navigation outside it.
 
 Today, such an application can use the granted mediated client APIs described
-below: read the limited Catalog resources through `catalog.request`, invoke its
-declared server commands through `catalog.command`, persist its own
-release-scoped state through `catalog.storage`, show host notifications, and
-navigate the user to a Catalog record. It still has no generic browser fetch,
+below: read the limited Attricat resources through `attricat.request`, invoke its
+declared server commands through `attricat.command`, persist its own
+release-scoped state through `attricat.storage`, show host notifications, and
+navigate the user to a Attricat record. It still has no generic browser fetch,
 host DOM access, browser credentials, arbitrary URL navigation, or
 inter-extension RPC. Required capabilities and the corresponding server command
 or artifact declarations remain necessary for each operation.
@@ -679,12 +679,12 @@ contextual actions—not an application-wide navigation tree.
   }
   ```
 
-  Catalog validates that `route` identifies a route contribution in the same
+  Attricat validates that `route` identifies a route contribution in the same
   installed release, then generates `/extensions/:extensionId/:contributionId`.
   Extensions cannot provide a path, host route, icon, or ordering. Workspace
   layout still controls hiding, ordering, and promotion of this entry.
 - **`navigation`** (`embedded`) remains available for a sandboxed compact
-  iframe contribution, such as a button or status indicator in Catalog's side
+  iframe contribution, such as a button or status indicator in Attricat's side
   navigation.
 - **`record_preview_panel`** (`embedded`) appears in the record extension
   drawer. It is appropriate for a record-specific summary, diagnostics, or a
@@ -702,7 +702,7 @@ contextual actions—not an application-wide navigation tree.
   context.
 - **`record_action`** (`embedded`, requiring `client.record_action`) is a
   host-owned record-page action area. Use it for a focused record action or
-  status; mutations still go through declared `catalog.command` commands.
+  status; mutations still go through declared `attricat.command` commands.
 - **`explorer_row_action`** (`action`, requiring
   `client.explorer_row_action`) is the Explorer row overflow UI for one record.
   Its strict context is `record_id`, `blueprint_id`, `blueprint_version`, and
@@ -752,13 +752,13 @@ contextual actions—not an application-wide navigation tree.
 
 - **`action_dialog`** (`dialog`, requiring `client.action_dialog`) is a
   host-managed dialog opened only by the same extension's version 2 selection
-  actions through `catalog.dialog.open()`. It requires a `title`, which the host
+  actions through `attricat.dialog.open()`. It requires a `title`, which the host
   renders. Its context is the opening action's selection context, captured when
   it opens; later Explorer selection changes do not alter it. The dialog
   outlives the menu, row, or selection toolbar that opened it and closes on
-  `catalog.dialog.close()`, its close controls, Escape pressed on the host, or
+  `attricat.dialog.close()`, its close controls, Escape pressed on the host, or
 navigation. Key presses inside the sandboxed frame never reach the host, so a
-dialog frame should call `catalog.dialog.close()` on Escape. Closing it
+dialog frame should call `attricat.dialog.close()` on Escape. Closing it
   before starting a run creates nothing; closing it afterwards does not cancel
   the run.
 
@@ -803,7 +803,7 @@ All mounted frames use the same mediated `catalog` API and capability checks
 as route contributions. The host re-authorizes every broker call and unmounts
 contributions when their runtime access is removed.
 
-Catalog loads runtime descriptors and JavaScript only for installations whose
+Attricat loads runtime descriptors and JavaScript only for installations whose
 effective runtime state is enabled. The deployment gate (`EXTENSIONS_MODE`),
 targeted `EXTENSION_DENYLIST`, workspace emergency gate, installation state,
 and grants are all checked before descriptors, artifacts, broker requests,
@@ -817,87 +817,87 @@ immediately after containment. Release IDs and
 object-store keys are never client addresses. The host
 runs every contribution in a distinct `<iframe sandbox="allow-scripts">` with
 an opaque origin and a CSP that denies network access. The host imports the
-artifact and calls its required `mount(root, catalog)` export *inside that
-frame*, not in Catalog's document. The artifact has no access to host DOM,
+artifact and calls its required `mount(root, attricat)` export *inside that
+frame*, not in Attricat's document. The artifact has no access to host DOM,
 cookies, storage, React state, or other extension frames. `mount` may return a
 cleanup function, which the frame calls during shutdown. The host revokes the
 frame port and removes the frame on unmount or load error.
 
 ### Client API
 
-A client artifact must export `mount(root, catalog)`. It runs only after the
+A client artifact must export `mount(root, attricat)`. It runs only after the
 artifact has been imported in its opaque frame; it may return a synchronous or
 asynchronous cleanup function. For example:
 
 ```js
-export const mount = (root, catalog) => {
-  root.textContent = `Current record: ${catalog.context.record_id}`;
+export const mount = (root, attricat) => {
+  root.textContent = `Current record: ${attricat.context.record_id}`;
   return () => root.replaceChildren();
 };
 ```
 
-The frame provides a versioned `MessageChannel` API as `globalThis.catalog` and
+The frame provides a versioned `MessageChannel` API as `globalThis.attricat` and
 passes that same object to `mount`. It may use only granted operations:
 
-- `catalog.navigate({ record_id })` requires `client.navigation` and resolves
-  only to Catalog's record route.
-- `catalog.notify({ message, severity? })` requires `client.notification`;
+- `attricat.navigate({ record_id })` requires `client.navigation` and resolves
+  only to Attricat's record route.
+- `attricat.notify({ message, severity? })` requires `client.notification`;
   messages are trimmed and limited to 512 characters and are displayed through
   a host-owned accessible notification surface.
-- `catalog.request(path)` requires `catalog.read` and is limited to `GET`
+- `attricat.request(path)` requires `attricat.read` and is limited to `GET`
   reads of `/api/records`, `/api/v1/records/:uuid`, or the exact revision
   route `/api/blueprints/:uuid/versions/:positive-version`. Responses are
   limited to 1 MiB measured as UTF-8 bytes. Revision reads are bound to the
   `blueprint_attribute_configuration` outlet's blueprint ID and revision.
-- `catalog.command({ command_id, payload })` requires `client.commands` and
+- `attricat.command({ command_id, payload })` requires `client.commands` and
   invokes a declared, bounded server command. The host validates the caller,
   contribution, release, installation state, configuration, and grants.
-- `catalog.refresh({ target: 'current_record' })` requires `client.refresh`
+- `attricat.refresh({ target: 'current_record' })` requires `client.refresh`
   and a record action, preview panel, or attribute decoration outlet with a
   current record. It invalidates the host's record-scoped views and awaits
   active refetches; it cannot select another record or mutate server data.
   Call it after a successful command that changes the current record.
-- `catalog.dialog.open()` requires `client.action_dialog` and a version 2
-  selection action; `catalog.dialog.close()` is available only inside the
+- `attricat.dialog.open()` requires `client.action_dialog` and a version 2
+  selection action; `attricat.dialog.close()` is available only inside the
   `action_dialog` frame.
-- `catalog.operations.start({ operation_id, input, idempotency_key })` requires
+- `attricat.operations.start({ operation_id, input, idempotency_key })` requires
   `client.operations.start` and is available in version 2 selection actions and
   the action dialog. The host supplies the frame's selection; the frame cannot
   name records, a workspace, a release, or a user. `idempotency_key` is 1–64
   visible ASCII characters. It resolves to `{ run_id }`.
-- `catalog.operations.list()`, `catalog.operations.get({ run_id })`, and
-  `catalog.operations.download({ run_id, artifact_id })` require
-  `client.operations.read`; `catalog.operations.cancel({ run_id })` requires
+- `attricat.operations.list()`, `attricat.operations.get({ run_id })`, and
+  `attricat.operations.download({ run_id, artifact_id })` require
+  `client.operations.read`; `attricat.operations.cancel({ run_id })` requires
   `client.operations.cancel`. They see only the signed-in user's runs of the
   calling extension, even when that user is an operator: the host sends these
   requests with `scope=own`, which the server enforces, and checks the run's
   `initiated_by_me` flag. Downloads are started by the host; the frame never
   receives a URL.
-- `catalog.storage.get/set/delete/list(...)` requires `storage.extension` and
+- `attricat.storage.get/set/delete/list(...)` requires `storage.extension` and
   provides release-scoped extension storage. Storage requests and values are
   bounded; `set` and `delete` support an optional optimistic
   `expected_revision`.
-- `catalog.context` contains only the documented outlet identifiers (the
+- `attricat.context` contains only the documented outlet identifiers (the
   record preview outlet supplies `record_id` and optional `context_id`).
-  `catalog.configuration` is supplied only when `configuration.read` is
-  granted. `client.events` dispatches a `catalog:context-changed.v1` event on
+  `attricat.configuration` is supplied only when `configuration.read` is
+  granted. `client.events` dispatches a `attricat:context-changed.v1` event on
   the `root` passed to `mount` at startup and after every host context update.
-  The event detail and `catalog.context` are replaced together through the
+  The event detail and `attricat.context` are replaced together through the
   versioned private `MessageChannel`; no browser event, route state, or host
   object is exposed. A frame remains mounted across context updates, so
   extensions must discard work scoped to the prior context.
-- `catalog.theme` is always supplied, without any capability, and contains `{ color_mode: 'light' | 'dark' }`, the mode Catalog is currently
+- `attricat.theme` is always supplied, without any capability, and contains `{ color_mode: 'light' | 'dark' }`, the mode Attricat is currently
   rendering (the user's explicit choice, otherwise the system preference). The
   frame document's `color-scheme` is set to match before `mount` runs, so
   native controls and system colors such as `Canvas` and `CanvasText` follow
-  it. A `catalog:theme-changed.v1` event with the same detail is dispatched on
+  it. A `attricat:theme-changed.v1` event with the same detail is dispatched on
   `root` after `mount` and whenever the user switches modes; the frame stays
   mounted, so extensions should restyle rather than reload. For example:
 
   ```js
-  export const mount = (root, catalog) => {
-    const apply = () => (root.dataset.mode = catalog.theme?.color_mode ?? 'light');
-    root.addEventListener('catalog:theme-changed.v1', apply);
+  export const mount = (root, attricat) => {
+    const apply = () => (root.dataset.mode = attricat.theme?.color_mode ?? 'light');
+    root.addEventListener('attricat:theme-changed.v1', apply);
     apply();
   };
   ```
@@ -917,10 +917,10 @@ other targets such as Explorer results require separate host implementations.
 reference with a validated filename and media type. `client.external_navigation`
 opens only allowlisted HTTPS URLs in a new tab. `client.files.read` and
 `client.files.upload` are restricted to file-detail context; upload selection
-and progress are host UI. `client.search` is a bounded authorized Catalog
+and progress are host UI. `client.search` is a bounded authorized Attricat
 search, `client.live_updates` is limited to typed current-context events, and
 `client.clipboard` writes bounded user-initiated text. The color mode is
-available to every contribution as `catalog.theme`; `client.theme.read` is
+available to every contribution as `attricat.theme`; `client.theme.read` is
 still accepted in manifests for compatibility but is no longer required. Locale
 reads return only the locale.
 
@@ -932,7 +932,7 @@ ports, reject pending calls, and discard subscriptions; broker calls are
 re-authorized immediately.
 
 There is no generic `fetch`, URL navigation, credential/header access, DOM
-bridge, event stream, or inter-extension RPC. Every mediated Catalog request
+bridge, event stream, or inter-extension RPC. Every mediated Attricat request
 uses the signed-in browser session in the parent and the server still applies
 normal authorization. Invalid messages, missing grants, failures, and startup
 timeouts are denied; frame startup failures render as host-owned warnings
@@ -985,10 +985,10 @@ A `server.operations` entry exposes itself to these actions with:
 
 `max_selection` is 1–50. The release needs `client.operations.start`. The run
 reads its selection through the `selection` interface of
-`crates/extension-runtime/wit-host/catalog-extension.wit` and can write
+`crates/extension-runtime/wit-host/attricat-extension.wit` and can write
 annotations with the `annotate` catalog intent.
 
-Starting a run (through `catalog.operations.start` or
+Starting a run (through `attricat.operations.start` or
 `POST /extensions/{extension_id}/{contribution_id}/operations`) checks the
 enabled exact release, the contribution's capability, the declared operation,
 its request schema and byte limit, and that the caller can read every selected
@@ -1011,12 +1011,12 @@ Inside the run:
   Members the initiator can no longer read are `unavailable`; deleted members
   are `deleted`. Membership and access are separate: frozen membership never
   grants access.
-- Generic `catalog-data.read` and the connector `catalog` calls are rejected.
-  `catalog-data.batch` accepts only `update`, `relationships`, and `annotate`
+- Generic `attricat-data.read` and the connector `catalog` calls are rejected.
+  `attricat-data.batch` accepts only `update`, `relationships`, and `annotate`
   intents for members of the selection, and checks the initiator's current
   grants for each intent (`records.write` for values, `records.read` for
   annotations, and `records.read` on every record a relationship links to,
-  selected or not). Writes are audited as `catalog.extensions.operations.write`
+  selected or not). Writes are audited as `attricat.extensions.operations.write`
   with the initiator as actor and the extension as event source.
 - Before every batch the host checks that the initiator is still an active
   workspace member (and that a token-started run's token is still live). If
@@ -1059,13 +1059,13 @@ Finalized outputs carry the extension's output name as the download filename.
 
 ## Extension-owned record annotations
 
-With the `catalog.annotations.write` capability an extension can patch its own
+With the `attricat.annotations.write` capability an extension can patch its own
 annotation namespace on a record: tags named `<extension-id>:<tag>` and the
 object at `system_metadata[<extension-id>]`. Callers supply only local names; the
 host derives the namespace from the extension's provenance, so one extension can
 never write another's. The intent is available from operation batches and
-from any `catalog.command.v1` batch (for example a client command) when the
-capability is granted; an annotation-only batch does not need `catalog.write`.
+from any `attricat.command.v1` batch (for example a client command) when the
+capability is granted; an annotation-only batch does not need `attricat.write`.
 
 ```json
 {"kind": "annotate", "intent_key": "doc-<run>-<record>", "record_id": "<uuid>",
@@ -1104,7 +1104,7 @@ record with `POST
 
 ## Context-aware catalog APIs
 
-The `api` interface in `crates/extension-runtime/wit-host/catalog-extension.wit`
+The `api` interface in `crates/extension-runtime/wit-host/attricat-extension.wit`
 has typed `read`, `write`, `scoped-configuration-get`, and
 `scoped-configuration-set` functions. Dynamic attribute and configuration
 values are JSON strings bounded to 64 KiB; identifiers, scope kinds, response
@@ -1112,12 +1112,12 @@ shapes, and write selectors are typed WIT records and variants. Components have
 no WASI, network, filesystem, database, browser credential, or ambient host
 access.
 
-Server components granted `catalog.read` can request a record, direct current
+Server components granted `attricat.read` can request a record, direct current
 values, or resolved values for a supplied record/context pair. Every typed read
 response includes the workspace-owned record, its pinned `BlueprintWithAttributes`
 metadata, direct values, and resolved values when requested. Resolved reads use
-Catalog's existing context/fallback path rather than a copy in the extension.
-`catalog.write` permits only validated scalar writes with an explicit context
+Attricat's existing context/fallback path rather than a copy in the extension.
+`attricat.write` permits only validated scalar writes with an explicit context
 ID; ordinary attribute/type/schema validation, audit records, and the domain-event
 outbox remain in force. A write made while handling an event inherits the
 triggering write's user and token audit attribution, keeps that event's
@@ -1125,15 +1125,15 @@ correlation ID, uses its ID as causation, and is published with `source_kind:
 plugin` and `source_name: extension:<extension-id>`. Handlers should ignore their own
 extension source name to prevent feedback loops.
 
-This mediation is required: an extension host API must never issue catalog-table
+This mediation is required: an extension host API must never issue attricat-table
 SQL or implement its own validation, projection, audit, or event logic. Every
-extension-initiated catalog mutation must use `CatalogMutationService` and its
+extension-initiated catalog mutation must use `AttricatMutationService` and its
 repository-backed transaction so validation, audit evidence, initiating-actor propagation, and
 the transactional outbox cannot be bypassed.
 
 A manifest may declare `scoped_configuration` with an object schema, positive
 version, and `blueprint` and/or `attribute` scopes. It requires
-`configuration.write`. Catalog persists these values separately from blueprint
+`configuration.write`. Attricat persists these values separately from blueprint
 schemas and verifies the workspace-owned blueprint revision and attribute on
 every get/set. Both attribute-scoped and blueprint-scoped values are
 operational. Values are release-bound and
@@ -1143,7 +1143,7 @@ quarantine, grant changes, or upgrade.
 A server manifest may declare bounded `server.commands` (stable ID, handler,
 object request/response schemas, and byte limits). They require
 `client.commands`. The only browser path is the opaque-frame MessageChannel
-`catalog.command`; Catalog validates the command and caller session, then
+`attricat.command`; Attricat validates the command and caller session, then
 rechecks contribution, enabled state, exact release, configuration, and grants.
 No extension receives browser cookies, routes, or arbitrary fetch access.
 
@@ -1193,7 +1193,7 @@ real bounded HTTPS input, denied redirects and idempotency-keyed PUT delivery
 through that packaged component. The test requires `httpbin.org`; it is
 opt-in to keep offline CI deterministic. For an
 S3-backed deployment, side-load the same archive via `acli extension sideload
---file ...`, grant `catalog.read`, `catalog.write`, `artifacts.read`,
+--file ...`, grant `attricat.read`, `attricat.write`, `artifacts.read`,
 `artifacts.write`, enable the release, then POST an export or import to
 `/extensions/attricat-connector-csv/operations` and inspect the run and
 `/extension-operation-runs/{run_id}/artifacts` afterward. The run list returns
@@ -1203,7 +1203,7 @@ without exposing input or secrets.
 
 When available, the sibling checkout at `../../attricat-extension-example`
 contains the packaged `attricat-extension-example` formula component using the
-`catalog:host` ABI and sandboxed client contributions. It
+`attricat:host` ABI and sandboxed client contributions. It
 responds to `record.updated.v1` by writing a calculated numeric attribute.
 
 The same checkout's `just pack` also writes `dist/reference-documents.tar.zst`
@@ -1222,7 +1222,7 @@ creating an owner personal API token:
 just setup
 just dev # separate terminal
 source .worktree
-export CATALOG_TOKEN=... # owner token for this worktree
+export ATTRICAT_TOKEN=... # owner token for this worktree
 just test-reference-extension-e2e
 ```
 

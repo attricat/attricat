@@ -1,4 +1,4 @@
-//! Run-bound host interfaces of `catalog:host@1.0.0`, for operation runs.
+//! Run-bound host interfaces of `attricat:host@1.0.0`, for operation runs.
 //!
 //! Artifact, transfer and administrative catalog calls apply to every run.
 //! Interactive runs are additionally confined to their frozen selection:
@@ -6,7 +6,7 @@
 //! write is checked against the selection and the initiator's live grants.
 
 use super::*;
-use crate::repository::{ExtensionCatalogBatch, InteractiveRunScope};
+use crate::repository::{ExtensionAttricatBatch, InteractiveRunScope};
 
 const SELECTION_SCOPE_ERROR: &str =
     "interactive runs read catalog data through their run-bound selection";
@@ -14,7 +14,7 @@ const SELECTION_SCOPE_ERROR: &str =
 // Borrow only the Sync repository field: `OperationState` holds a resource
 // table and is not Sync, so host futures cannot capture `&OperationState`.
 async fn load_scope(
-    repository: &CatalogRepository,
+    repository: &AttricatRepository,
     run_id: Uuid,
 ) -> Result<Option<InteractiveRunScope>, String> {
     repository
@@ -29,7 +29,7 @@ impl OperationState {
     async fn interactive_batch(
         &mut self,
         scope: InteractiveRunScope,
-        batch: ExtensionCatalogBatch,
+        batch: ExtensionAttricatBatch,
     ) -> Result<String, String> {
         for intent in &batch.intents {
             match intent.target_record_id() {
@@ -45,8 +45,8 @@ impl OperationState {
             self.run_id,
             &scope,
         );
-        let outcomes = CatalogMutationService::new(&repository)
-            .execute_extension_catalog_batch(batch)
+        let outcomes = AttricatMutationService::new(&repository)
+            .execute_extension_attricat_batch(batch)
             .await
             .map_err(|error| error.to_string())?;
         bounded_serialize(&outcomes)
@@ -74,7 +74,7 @@ impl wit::selection::Host for OperationState {
             .await?
             .ok_or_else(|| "this run has no interactive selection".to_owned())?;
         let mut host = HostState::new(self.installation.clone(), self.repository.clone(), 0);
-        host.require_active("catalog.read").await?;
+        host.require_active("attricat.read").await?;
         let page = self
             .repository
             .interactive_selection_page(&self.installation.extension_id, &scope, &cursor, limit)
@@ -84,12 +84,12 @@ impl wit::selection::Host for OperationState {
     }
 }
 
-impl wit::catalog_data::Host for OperationState {
+impl wit::attricat_data::Host for OperationState {
     async fn read(&mut self, request: String) -> Result<String, String> {
         if load_scope(&self.repository, self.run_id).await?.is_some() {
             return Err(SELECTION_SCOPE_ERROR.into());
         }
-        self.catalog_data_read(request).await
+        self.attricat_data_read(request).await
     }
 
     async fn batch(&mut self, request: String) -> Result<String, String> {
@@ -97,16 +97,16 @@ impl wit::catalog_data::Host for OperationState {
             return Err("request exceeds host JSON limit".into());
         }
         let Some(scope) = load_scope(&self.repository, self.run_id).await? else {
-            return self.catalog_data_batch(request).await;
+            return self.attricat_data_batch(request).await;
         };
-        let input: CatalogCommandRequest = parse_storage_request(&request)?;
-        let CatalogCommandRequest::Batch { batch } = input;
+        let input: AttricatCommandRequest = parse_storage_request(&request)?;
+        let AttricatCommandRequest::Batch { batch } = input;
         require_operation_batch_key(&batch.batch_key, &self.batch_key)?;
         self.interactive_batch(scope, batch).await
     }
 }
 
-impl wit::catalog::Host for OperationState {
+impl wit::attricat::Host for OperationState {
     async fn schema(
         &mut self,
         blueprint_id: String,
@@ -116,7 +116,7 @@ impl wit::catalog::Host for OperationState {
         if load_scope(&self.repository, self.run_id).await?.is_some() {
             return Err(SELECTION_SCOPE_ERROR.into());
         }
-        self.catalog_schema(blueprint_id, blueprint_version, context_id)
+        self.attricat_schema(blueprint_id, blueprint_version, context_id)
             .await
     }
 
@@ -131,7 +131,7 @@ impl wit::catalog::Host for OperationState {
         if load_scope(&self.repository, self.run_id).await?.is_some() {
             return Err(SELECTION_SCOPE_ERROR.into());
         }
-        self.catalog_page(blueprint_id, blueprint_version, context_id, cursor, limit)
+        self.attricat_page(blueprint_id, blueprint_version, context_id, cursor, limit)
             .await
     }
 
@@ -139,7 +139,7 @@ impl wit::catalog::Host for OperationState {
         if load_scope(&self.repository, self.run_id).await?.is_some() {
             return Err(SELECTION_SCOPE_ERROR.into());
         }
-        self.catalog_upsert_batch(request).await
+        self.attricat_upsert_batch(request).await
     }
 }
 

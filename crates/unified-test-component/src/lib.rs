@@ -1,15 +1,15 @@
-//! Fixture for the unified `catalog:host@1.6.0` ABI. One component exports
+//! Fixture for the unified `attricat:host@1.6.0` ABI. One component exports
 //! both the event/command `handler` and the checkpointed `operations`, and
 //! probes the boundary between them: run-bound interfaces fail outside a run,
 //! and direct `api` catalog access fails inside one.
 
 wit_bindgen::generate!({
     path: "../extension-runtime/wit-host",
-    world: "catalog-extension",
+    world: "attricat-extension",
 });
 
-use catalog::host::{api, catalog_data, selection};
-use exports::catalog::host::{
+use attricat::host::{api, attricat_data, selection};
+use exports::attricat::host::{
     handler::{self, CommandRequest, CommandResponse},
     operations::{self, BatchResult, OperationRequest},
 };
@@ -32,7 +32,7 @@ impl handler::Guest for Component {
             "handler": request.handler,
             "echo": payload,
             "selection_error": selection::describe().err(),
-            "catalog_data_error": catalog_data::read("{}").err(),
+            "attricat_data_error": attricat_data::read("{}").err(),
         });
         Ok(CommandResponse {
             payload: response.to_string(),
@@ -68,11 +68,11 @@ impl operations::Guest for Component {
                 "add_tags": ["unified"]
             }]
         }});
-        catalog_data::batch(&batch.to_string())?;
+        attricat_data::batch(&batch.to_string())?;
         let direct_read = api::read(&api::ReadRequest::Record(api::RecordReference {
             record_id: record_id.clone(),
         }));
-        let direct_command = api::call("catalog.read.v1", "{}");
+        let direct_command = api::call("attricat.read.v1", "{}");
         checkpoint["direct_read_error"] = json!(direct_read.err());
         checkpoint["direct_command_error"] = json!(direct_command.err());
         let mut seen = checkpoint["seen"].as_array().cloned().unwrap_or_default();

@@ -8,12 +8,12 @@ _assert-env:
     test -f .env || { echo "Missing .env; run 'just setup' first." >&2; exit 1; }
 
 dev: _assert-env
-    docker compose --env-file .env --project-name catalog-$POSTGRES_PORT -f apps/api/compose.yml up -d
-    docker compose --env-file .env --project-name catalog-$POSTGRES_PORT -f apps/api/compose.yml wait rustfs-init
+    docker compose --env-file .env --project-name attricat-$POSTGRES_PORT -f apps/api/compose.yml up -d
+    docker compose --env-file .env --project-name attricat-$POSTGRES_PORT -f apps/api/compose.yml wait rustfs-init
     trap 'just down' EXIT; process-compose --no-server --env .env up
 
 down: _assert-env
-    docker compose --env-file .env --project-name catalog-$POSTGRES_PORT -f apps/api/compose.yml down
+    docker compose --env-file .env --project-name attricat-$POSTGRES_PORT -f apps/api/compose.yml down
 
 migrate: _assert-env
     sqlx migrate run --source apps/api/migrations --database-url "$DATABASE_URL"
@@ -35,11 +35,11 @@ test-rust:
 
 # Regenerate the definition JSON Schemas derived from the Rust parser types.
 contracts:
-    UPDATE_CONTRACTS=1 cargo test --locked -p catalog-validation status_contract_is_current
-    UPDATE_CONTRACTS=1 cargo test --locked -p catalog-validation principal_contract_is_current
-    UPDATE_CONTRACTS=1 cargo test --locked -p catalog-blueprint --test definition_schema definition_schema_contract_is_current
-    UPDATE_CONTRACTS=1 cargo test --locked -p catalog-repository --lib definition_schema_contract_is_current
-    UPDATE_CONTRACTS=1 cargo test --locked -p catalog-lexicon --test conformance lexicon_schema_contract_is_current
+    UPDATE_CONTRACTS=1 cargo test --locked -p attricat-validation status_contract_is_current
+    UPDATE_CONTRACTS=1 cargo test --locked -p attricat-validation principal_contract_is_current
+    UPDATE_CONTRACTS=1 cargo test --locked -p attricat-blueprint --test definition_schema definition_schema_contract_is_current
+    UPDATE_CONTRACTS=1 cargo test --locked -p attricat-repository --lib definition_schema_contract_is_current
+    UPDATE_CONTRACTS=1 cargo test --locked -p attricat-lexicon --test conformance lexicon_schema_contract_is_current
 
 deny:
     cargo deny check
@@ -81,7 +81,7 @@ production-test image="attricat:local":
     just production-verify "{{image}}"
 
 sql: _assert-env
-    docker compose --env-file .env --project-name catalog-$POSTGRES_PORT -f apps/api/compose.yml exec postgres psql --username=postgres --dbname=catalog
+    docker compose --env-file .env --project-name attricat-$POSTGRES_PORT -f apps/api/compose.yml exec postgres psql --username=postgres --dbname=attricat
 
 test-s3-compat: _assert-env
     cargo test -p api --test s3_compat -- --ignored
@@ -131,18 +131,18 @@ reset-db: _assert-env
     sqlx database reset -y --force --source ./apps/api/migrations --database-url "$DATABASE_URL"
 
 generate size="small" industry="pc-components": _assert-env
-    CATALOG_SERVER="$CATALOG_API_URL" node examples/generate.mjs --industry "{{industry}}" --size "{{size}}" --concurrency 8
+    ATTRICAT_SERVER="$ATTRICAT_API_URL" node examples/generate.mjs --industry "{{industry}}" --size "{{size}}" --concurrency 8
 
 generate-resume size="small" industry="pc-components": _assert-env
-    CATALOG_SERVER="$CATALOG_API_URL" node examples/generate.mjs --industry "{{industry}}" --size "{{size}}" --resume
+    ATTRICAT_SERVER="$ATTRICAT_API_URL" node examples/generate.mjs --industry "{{industry}}" --size "{{size}}" --resume
 
 test-generator:
     node --test examples/generator/industries/*.test.mjs
 
 perf profile="smoke": _assert-env
-    test -n "$CATALOG_TOKEN" || { echo "Set CATALOG_TOKEN before running performance tests." >&2; exit 1; }
+    test -n "$ATTRICAT_TOKEN" || { echo "Set ATTRICAT_TOKEN before running performance tests." >&2; exit 1; }
     command -v k6 >/dev/null || { echo "Install k6 before running performance tests." >&2; exit 1; }
-    CATALOG_SERVER="$CATALOG_API_URL" PERF_PROFILE="{{profile}}" k6 run perf/explorer.js
+    ATTRICAT_SERVER="$ATTRICAT_API_URL" PERF_PROFILE="{{profile}}" k6 run perf/explorer.js
 
 test-reference-extension-e2e: _assert-env
-	@source .worktree; CATALOG_API_URL="http://127.0.0.1:$API_PORT/api" scripts/test-reference-extension-e2e.sh
+	@source .worktree; ATTRICAT_API_URL="http://127.0.0.1:$API_PORT/api" scripts/test-reference-extension-e2e.sh

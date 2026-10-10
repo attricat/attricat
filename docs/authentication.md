@@ -1,6 +1,6 @@
 # Browser Authentication
 
-Catalog keeps account identity separate from authentication providers. The `users` and
+Attricat keeps account identity separate from authentication providers. The `users` and
 `workspace_memberships` tables contain no provider-specific identifier. Local
 password credentials, email actions, and browser sessions are implemented;
 external identity providers are not.
@@ -8,7 +8,7 @@ external identity providers are not.
 ## External-provider identity adapter seam
 
 External providers (including future OIDC and SAML adapters) are isolated from
-Catalog accounts by `external_identities`. The stable provider key is the exact
+Attricat accounts by `external_identities`. The stable provider key is the exact
 verified `(issuer, subject)` pair, which is globally unique and links to one
 ordinary internal `users.id`. Provider-specific identifiers and claims never
 appear on `users` or `workspace_memberships`.
@@ -68,7 +68,7 @@ REST API. Production uses a separately operated SMTP service with TLS; see
 
 Each workspace has an immutable, unique `login_identifier`. It is trimmed and
 lowercased at the API boundary and must be a 3–253 character domain-like name;
-it is a sign-in routing key only, so Catalog performs no DNS lookup, ownership
+it is a sign-in routing key only, so Attricat performs no DNS lookup, ownership
 verification, or host routing. Existing bootstrap workspaces receive
 `<slug>.local` during migration.
 
@@ -100,8 +100,8 @@ passkeys, and switching workspaces after login are explicitly deferred.
 
 ## Browser sessions
 
-`POST /auth/login` verifies a local password and sets an opaque `catalog_session`
-HttpOnly cookie plus a separate `catalog_csrf` synchronizer-token cookie. The API
+`POST /auth/login` verifies a local password and sets an opaque `attricat_session`
+HttpOnly cookie plus a separate `attricat_csrf` synchronizer-token cookie. The API
 stores SHA-256 digests only. `POST /auth/renew` atomically revokes the old identifier
 and replaces both values; login issues fresh session and CSRF credentials. `POST
 /auth/logout` revokes the current session and clears both cookies. Sessions expire
@@ -119,7 +119,7 @@ invitation can authorize access again.
 Production cookies are `Secure`, `HttpOnly` (session only), `SameSite=Lax`, and
 path-scoped to `/`. `SESSION_COOKIE_SECURE=false` is exclusively for local HTTP
 development and test servers. Every cookie-authenticated unsafe request must send
-`X-Catalog-Csrf` equal to the current CSRF cookie. Login attempts are durably limited
+`X-Attricat-Csrf` equal to the current CSRF cookie. Login attempts are durably limited
 to five failures per normalized account email in fifteen minutes, shared across
 workspaces.
 
@@ -211,7 +211,7 @@ created before credential binding was introduced fail closed when next executed;
 resubmit those requests after upgrading. Their missing token provenance cannot
 safely be treated as browser-session authority.
 
-The CLI reads the bearer secret from `CATALOG_TOKEN` (or `--token`).
+The CLI reads the bearer secret from `ATTRICAT_TOKEN` (or `--token`).
 
 ## Attribute visibility
 

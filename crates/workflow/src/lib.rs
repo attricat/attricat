@@ -1,5 +1,5 @@
 //! Strict, inert workflow definition parsing. Execution is owned by the API runtime.
-use catalog_validation::is_valid_code;
+use attricat_validation::is_valid_code;
 use cron::Schedule;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

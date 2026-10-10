@@ -1,4 +1,4 @@
-use catalog_blueprint::{compile, parse};
+use attricat_blueprint::{compile, parse};
 
 const SOURCE: &str = r#"
 format_version = 1
@@ -10,7 +10,7 @@ type = "dropdown_option"
 fields = ["email"]
 [views.detail]
 type = "stack"
-children = [{ type = "field", field = "email", component = { id = "catalog.email_display", version = 1 } }]
+children = [{ type = "field", field = "email", component = { id = "attricat.email_display", version = 1 } }]
 [[attributes]]
 code = "email"
 value_type = "string"
@@ -27,7 +27,7 @@ fn server_email_format_accepts_control_addresses_and_rejects_invalid_data() {
         "a?b#c@example.test",
     ] {
         assert!(
-            catalog_validation::validate_json_schema(&schema, &serde_json::json!(value))
+            attricat_validation::validate_json_schema(&schema, &serde_json::json!(value))
                 .unwrap()
                 .is_empty(),
             "{value}"
@@ -41,7 +41,7 @@ fn server_email_format_accepts_control_addresses_and_rejects_invalid_data() {
         "a@example.test\r\nBcc:other@example.test",
     ] {
         assert!(
-            !catalog_validation::validate_json_schema(&schema, &serde_json::json!(value))
+            !attricat_validation::validate_json_schema(&schema, &serde_json::json!(value))
                 .unwrap()
                 .is_empty(),
             "{value}"
@@ -58,7 +58,7 @@ fn accepts_email_display_component() {
 fn rejects_incompatible_email_components() {
     for invalid in [
         // A detail view displays values; edit components pair with it in the UI.
-        SOURCE.replace("catalog.email_display", "catalog.email_edit"),
+        SOURCE.replace("attricat.email_display", "attricat.email_edit"),
         SOURCE.replace("value_type = \"string\"", "value_type = \"number\""),
         SOURCE.replace("version = 1 }", "version = 2 }"),
         SOURCE.replace(
@@ -73,14 +73,14 @@ fn rejects_incompatible_email_components() {
 #[test]
 fn email_display_is_a_string_table_renderer() {
     let renderer = serde_json::from_value(
-        serde_json::json!({"id": "catalog.email_display", "version": 1, "props": {}}),
+        serde_json::json!({"id": "attricat.email_display", "version": 1, "props": {}}),
     )
     .unwrap();
-    assert!(catalog_blueprint::validate_table_renderer(&renderer, "string").is_ok());
-    assert!(catalog_blueprint::validate_table_renderer(&renderer, "number").is_err());
+    assert!(attricat_blueprint::validate_table_renderer(&renderer, "string").is_ok());
+    assert!(attricat_blueprint::validate_table_renderer(&renderer, "number").is_err());
     let editor = serde_json::from_value(
-        serde_json::json!({"id": "catalog.email_edit", "version": 1, "props": {}}),
+        serde_json::json!({"id": "attricat.email_edit", "version": 1, "props": {}}),
     )
     .unwrap();
-    assert!(catalog_blueprint::validate_table_renderer(&editor, "string").is_err());
+    assert!(attricat_blueprint::validate_table_renderer(&editor, "string").is_err());
 }

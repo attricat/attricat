@@ -9,20 +9,20 @@ Kontrybucja kliencka to moduł JavaScript, który Attricat ładuje do izolowanej
 
 Każda kontrybucja dostaje własny element `<iframe sandbox="allow-scripts">` z nieprzezroczystym pochodzeniem (opaque origin) i zasadami Content Security Policy blokującymi dostęp do sieci. Ramka nie ma dostępu do strony Attricat, plików cookie, magazynu ani ramek innych rozszerzeń. Nie może wywoływać `fetch` wobec API.
 
-Wszystko przechodzi przez obiekt `catalog`, który host przekazuje do Twojego modułu. Każde wywołanie jest sprawdzane pod kątem przyznanych uprawnień i kontekstu kontrybucji.
+Wszystko przechodzi przez obiekt `attricat`, który host przekazuje do Twojego modułu. Każde wywołanie jest sprawdzane pod kątem przyznanych uprawnień i kontekstu kontrybucji.
 
 ## Kontrakt modułu
 
-Artefakt kliencki musi eksportować `mount(root, catalog)`. Może zwrócić funkcję czyszczącą, synchroniczną lub asynchroniczną, która zostanie uruchomiona po usunięciu ramki.
+Artefakt kliencki musi eksportować `mount(root, attricat)`. Może zwrócić funkcję czyszczącą, synchroniczną lub asynchroniczną, która zostanie uruchomiona po usunięciu ramki.
 
 ```js
-export const mount = (root, catalog) => {
+export const mount = (root, attricat) => {
   const render = () => {
-    root.dataset.mode = catalog.theme.color_mode;
-    root.textContent = `Record: ${catalog.context.record_id}`;
+    root.dataset.mode = attricat.theme.color_mode;
+    root.textContent = `Record: ${attricat.context.record_id}`;
   };
-  root.addEventListener('catalog:context-changed.v1', render);
-  root.addEventListener('catalog:theme-changed.v1', render);
+  root.addEventListener('attricat:context-changed.v1', render);
+  root.addEventListener('attricat:theme-changed.v1', render);
   render();
   return () => root.replaceChildren();
 };
@@ -30,28 +30,28 @@ export const mount = (root, catalog) => {
 
 Ramka pozostaje zamontowana, gdy użytkownik przełącza kontekst lub motyw. Nasłuchuj zdarzeń zmiany i aktualizuj widok, a wszelką pracę związaną z poprzednim kontekstem porzucaj.
 
-## API `catalog`
+## API `attricat`
 
 | Element | Wymaga | Opis |
 | --- | --- | --- |
-| `catalog.context` | | Identyfikatory dla miejsca osadzenia, np. `record_id` i `context_id`. Obecne są tylko pola udokumentowane dla danego miejsca osadzenia. |
-| `catalog.theme` | | `{ color_mode: 'light' \| 'dark' }`. Właściwość `color-scheme` ramki jest ustawiana odpowiednio przed `mount`, więc kolory systemowe, takie jak `Canvas` i `CanvasText`, za nią podążają. |
-| `catalog.configuration` | `configuration.read` | Konfiguracja instalacji. |
-| `catalog.request(path)` | `catalog.read` | `GET` jednego z adresów `/api/records`, `/api/v1/records/<uuid>` lub `/api/blueprints/<uuid>/versions/<n>`. Odpowiedzi są ograniczone do 1 MiB. Odczyty wersji w `blueprint_attribute_configuration` są ograniczone do wersji Schematu tego miejsca osadzenia. |
-| `catalog.command({ command_id, payload })` | `client.commands` | Wywołuje jedno z zadeklarowanych poleceń serwerowych rozszerzenia. |
-| `catalog.storage.get/set/delete/list(…)` | `storage.extension` | Magazyn klucz-wartość rozszerzenia. `set` i `delete` przyjmują `expected_revision`. |
-| `catalog.navigate({ record_id })` | `client.navigation` | Otwiera stronę rekordu. |
-| `catalog.notify({ message, severity })` | `client.notification` | Wyświetla powiadomienie hosta. Komunikaty są przycinane do 512 znaków. |
-| `catalog.refresh({ target: 'current_record' })` | `client.refresh` | Ponownie ładuje widoki bieżącego rekordu po zmianie wprowadzonej przez Twoje polecenie. Dostępne w miejscach osadzenia na stronach rekordów. |
-| `catalog.dialog.open()` / `catalog.dialog.close()` | `client.action_dialog` | Otwiera `action_dialog` rozszerzenia z akcji zaznaczenia w wersji 2, z zaznaczeniem tej akcji; `close` działa wewnątrz okna. |
-| `catalog.operations.start({ operation_id, input, idempotency_key })` | `client.operations.start` | Uruchamia [operację interaktywną](/pl/extensions/operations/#operacje-interaktywne) dla zaznaczenia ramki i zwraca `{ run_id }`. Dostępne w akcjach zaznaczenia w wersji 2 i w oknie akcji. |
-| `catalog.operations.list()` / `get({ run_id })` / `download({ run_id, artifact_id })` | `client.operations.read` | Tylko uruchomienia tego rozszerzenia rozpoczęte przez zalogowanego użytkownika, także gdy jest on operatorem. Pobieranie wykonuje host. |
-| `catalog.operations.cancel({ run_id })` | `client.operations.cancel` | Anuluje jedno z tych uruchomień. |
+| `attricat.context` | | Identyfikatory dla miejsca osadzenia, np. `record_id` i `context_id`. Obecne są tylko pola udokumentowane dla danego miejsca osadzenia. |
+| `attricat.theme` | | `{ color_mode: 'light' \| 'dark' }`. Właściwość `color-scheme` ramki jest ustawiana odpowiednio przed `mount`, więc kolory systemowe, takie jak `Canvas` i `CanvasText`, za nią podążają. |
+| `attricat.configuration` | `configuration.read` | Konfiguracja instalacji. |
+| `attricat.request(path)` | `attricat.read` | `GET` jednego z adresów `/api/records`, `/api/v1/records/<uuid>` lub `/api/blueprints/<uuid>/versions/<n>`. Odpowiedzi są ograniczone do 1 MiB. Odczyty wersji w `blueprint_attribute_configuration` są ograniczone do wersji Schematu tego miejsca osadzenia. |
+| `attricat.command({ command_id, payload })` | `client.commands` | Wywołuje jedno z zadeklarowanych poleceń serwerowych rozszerzenia. |
+| `attricat.storage.get/set/delete/list(…)` | `storage.extension` | Magazyn klucz-wartość rozszerzenia. `set` i `delete` przyjmują `expected_revision`. |
+| `attricat.navigate({ record_id })` | `client.navigation` | Otwiera stronę rekordu. |
+| `attricat.notify({ message, severity })` | `client.notification` | Wyświetla powiadomienie hosta. Komunikaty są przycinane do 512 znaków. |
+| `attricat.refresh({ target: 'current_record' })` | `client.refresh` | Ponownie ładuje widoki bieżącego rekordu po zmianie wprowadzonej przez Twoje polecenie. Dostępne w miejscach osadzenia na stronach rekordów. |
+| `attricat.dialog.open()` / `attricat.dialog.close()` | `client.action_dialog` | Otwiera `action_dialog` rozszerzenia z akcji zaznaczenia w wersji 2, z zaznaczeniem tej akcji; `close` działa wewnątrz okna. |
+| `attricat.operations.start({ operation_id, input, idempotency_key })` | `client.operations.start` | Uruchamia [operację interaktywną](/pl/extensions/operations/#operacje-interaktywne) dla zaznaczenia ramki i zwraca `{ run_id }`. Dostępne w akcjach zaznaczenia w wersji 2 i w oknie akcji. |
+| `attricat.operations.list()` / `get({ run_id })` / `download({ run_id, artifact_id })` | `client.operations.read` | Tylko uruchomienia tego rozszerzenia rozpoczęte przez zalogowanego użytkownika, także gdy jest on operatorem. Pobieranie wykonuje host. |
+| `attricat.operations.cancel({ run_id })` | `client.operations.cancel` | Anuluje jedno z tych uruchomień. |
 
 | Zdarzenie na `root` | Wymaga | Wywoływane |
 | --- | --- | --- |
-| `catalog:context-changed.v1` | `client.events` | Na starcie i przy każdej zmianie kontekstu miejsca osadzenia. |
-| `catalog:theme-changed.v1` | | Za każdym razem, gdy użytkownik przełącza tryb jasny i ciemny. |
+| `attricat:context-changed.v1` | `client.events` | Na starcie i przy każdej zmianie kontekstu miejsca osadzenia. |
+| `attricat:theme-changed.v1` | | Za każdym razem, gdy użytkownik przełącza tryb jasny i ciemny. |
 
 Kolejne pośredniczone operacje, każda z własnym uprawnieniem, obejmują okna potwierdzenia, pobieranie plików, otwieranie dozwolonych adresów HTTPS, odczyt i przesyłanie plików w kontekście pliku, wyszukiwanie w katalogu, aktualizacje na żywo, zapis do schowka i odczyt ustawień regionalnych. Okna dialogowe i postęp tych operacji rysuje host.
 
@@ -112,7 +112,7 @@ Kontrybucje do `record_action`, `explorer_row_action` i `explorer_bulk_action` m
 | --- | --- | --- | --- |
 | `action_dialog` | `dialog` | `client.action_dialog` | Kontekst zaznaczenia akcji, która je otworzyła, utrwalony w chwili otwarcia. |
 
-Kontrybucja `dialog` wymaga pola `title`. Twoje akcje w wersji 2 otwierają ją przez `catalog.dialog.open()`. Host rysuje okno wokół Twojej ramki, pokazuje, ilu rekordów dotyczy, i ostrzega o niezapisanych zmianach. Okno pozostaje otwarte po zamknięciu menu wiersza lub zmianie zaznaczenia i zamyka się przy nawigacji. Naciśnięcia klawiszy w Twojej ramce nie docierają do hosta, więc wywołaj `catalog.dialog.close()`, gdy użytkownik naciśnie Escape. Zamknięcie przed uruchomieniem niczego nie tworzy; zamknięcie później nie anuluje uruchomienia.
+Kontrybucja `dialog` wymaga pola `title`. Twoje akcje w wersji 2 otwierają ją przez `attricat.dialog.open()`. Host rysuje okno wokół Twojej ramki, pokazuje, ilu rekordów dotyczy, i ostrzega o niezapisanych zmianach. Okno pozostaje otwarte po zamknięciu menu wiersza lub zmianie zaznaczenia i zamyka się przy nawigacji. Naciśnięcia klawiszy w Twojej ramce nie docierają do hosta, więc wywołaj `attricat.dialog.close()`, gdy użytkownik naciśnie Escape. Zamknięcie przed uruchomieniem niczego nie tworzy; zamknięcie później nie anuluje uruchomienia.
 
 ### Schematy
 

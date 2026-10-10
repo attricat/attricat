@@ -1,6 +1,6 @@
 //! Typed, repository-backed catalogue tools for agent runs.
 //!
-//! Tools never call the Catalog HTTP API: this keeps authorization and audit
+//! Tools never call the Attricat HTTP API: this keeps authorization and audit
 //! context in the repository boundary and avoids granting the model a network
 //! capability.
 
@@ -12,8 +12,8 @@ use uuid::Uuid;
 
 use crate::{
     agents::MAX_TOOL_RESULT_BYTES,
-    catalog_read_service::CatalogReadService,
-    catalog_service::CatalogMutationService,
+    attricat_read_service::AttricatReadService,
+    attricat_service::AttricatMutationService,
     constants::{
         DEFAULT_INCOMING_RELATIONSHIP_PAGE_SIZE, DEFAULT_PAGE_SIZE,
         DEFAULT_PREVIEW_RELATIONSHIP_DEPTH, DEFAULT_RECORD_PAGE_SIZE, DEFAULT_STALE_AFTER_DAYS,
@@ -21,7 +21,7 @@ use crate::{
     },
     file_access::{AllowFileAccess, FileAccessOperation, authorize_file_read},
     repository::{
-        AuthorizationActor, CatalogRepository, RecordSearchSort, RepositoryError, SearchContext,
+        AttricatRepository, AuthorizationActor, RecordSearchSort, RepositoryError, SearchContext,
     },
     search_filters::{
         intersect_ids, resolve_agent_filter, resolve_agent_relationship_filter, search_fields_hint,
@@ -105,8 +105,8 @@ struct SavedSearchRelationshipFacet {
 
 fn valid_saved_filter(filter: &crate::model::SearchFilter) -> bool {
     !filter.field.is_empty()
-        && catalog_validation::saved_search::FILTER_OPERATORS.contains(&filter.operator.as_str())
-        && if filter.operator == catalog_validation::saved_search::FILTER_OPERATOR_IS_SET {
+        && attricat_validation::saved_search::FILTER_OPERATORS.contains(&filter.operator.as_str())
+        && if filter.operator == attricat_validation::saved_search::FILTER_OPERATOR_IS_SET {
             filter.value.is_boolean()
         } else {
             filter.value.is_string() || filter.value.is_number() || filter.value.is_boolean()
@@ -116,7 +116,7 @@ fn valid_saved_filter(filter: &crate::model::SearchFilter) -> bool {
 fn attribute_filter_parameters() -> Value {
     json!({"type":"array","maxItems":20,"items":{"type":"object","required":["field","operator","value"],"properties":{
         "field":{"type":"string","description":"Attribute code on the selected blueprint (including a searchable attached reusable attribute), or a path through up to three relationship attributes ending in an attribute of the last target, e.g. family.product_type.name. On a many-valued path the filter matches when any reached value matches."},
-        "operator":{"type":"string","enum":catalog_validation::saved_search::FILTER_OPERATORS,"description":"Allowed operators depend on the leaf attribute type. string (including status and user-or-team assignment strings): eq, contains, starts_with (contains and starts_with ignore case). number, integer, date, datetime, time: eq, gt, gte, lt, lte. boolean: eq. file: is_set only. Every listed type also accepts is_set. relationship and json leaves cannot be filtered; use relationship_filters for relationship targets."},
+        "operator":{"type":"string","enum":attricat_validation::saved_search::FILTER_OPERATORS,"description":"Allowed operators depend on the leaf attribute type. string (including status and user-or-team assignment strings): eq, contains, starts_with (contains and starts_with ignore case). number, integer, date, datetime, time: eq, gt, gte, lt, lte. boolean: eq. file: is_set only. Every listed type also accepts is_set. relationship and json leaves cannot be filtered; use relationship_filters for relationship targets."},
         "value":{"type":["string","number","boolean"],"description":"Typed by the leaf: text for string, a number for number and integer, true or false for boolean, YYYY-MM-DD for date, RFC 3339 for datetime, HH:MM or HH:MM:SS for time. For is_set, use a boolean: true means a present value, false means absent. Empty text, zero and false are present values; a file attribute is present while it has at least one attached file, so is_set false finds records without files. For a user-or-team assignment attribute, eq with \"@me\" matches the person who started this conversation and their teams; other assignment values are \"user:<id>\" or \"team:<id>\"."}
     },"additionalProperties":false}})
 }
@@ -1048,7 +1048,7 @@ fn named_id(names: &HashMap<String, String>, id: &str) -> String {
 /// mutation names, for [`change_summary_named`]. Only names the initiating
 /// user may read are returned; other IDs stay bare.
 pub async fn change_names(
-    repository: &CatalogRepository,
+    repository: &AttricatRepository,
     actor: Uuid,
     workspace: Uuid,
     name: &str,
@@ -1138,7 +1138,7 @@ pub async fn change_names(
 /// `stale_record` instead of overwriting a change saved while it waited for
 /// approval.
 pub async fn pin_record_versions(
-    repository: &CatalogRepository,
+    repository: &AttricatRepository,
     name: &str,
     arguments: &mut Value,
 ) -> Result<(), RepositoryError> {
@@ -1182,7 +1182,7 @@ pub async fn pin_record_versions(
 }
 
 pub async fn execute_read(
-    repository: &CatalogRepository,
+    repository: &AttricatRepository,
     actor: Uuid,
     workspace: Uuid,
     name: &str,
@@ -1639,10 +1639,10 @@ pub async fn execute_read(
             struct Input { definition: String }
             let definition = decode::<Input>(arguments)?.definition;
             if name == "validate_rule_definition" {
-                catalog_rules::compile(&definition)
+                attricat_rules::compile(&definition)
                     .map_err(|error| RepositoryError::InvalidRuleDefinition(error.to_string()))?;
             } else {
-                catalog_workflow::compile(&definition)
+                attricat_workflow::compile(&definition)
                     .map_err(|error| RepositoryError::InvalidWorkflowDefinition(error.to_string()))?;
             }
             json!({"valid": true})
@@ -1693,7 +1693,7 @@ pub async fn execute_read(
         }
         "get_record" => {
             let id = parse_uuid(&arguments, "record_id")?;
-            let (record, values) = CatalogReadService::new(repository)
+            let (record, values) = AttricatReadService::new(repository)
                 .record_with_values(id)
                 .await?;
             let mut output = serde_json::to_value(record).expect("models serialize");
@@ -2174,7 +2174,7 @@ pub async fn execute_read(
 }
 
 pub async fn execute_mutation(
-    repository: &CatalogRepository,
+    repository: &AttricatRepository,
     actor: Uuid,
     name: &str,
     arguments: Value,
@@ -2190,7 +2190,7 @@ pub async fn execute_mutation(
             }
             let input: Input = decode(arguments)?;
             serde_json::to_value(
-                CatalogMutationService::new(repository)
+                AttricatMutationService::new(repository)
                     .create_blueprint_revision(
                         input.blueprint_id,
                         CreateBlueprint {
@@ -2210,7 +2210,7 @@ pub async fn execute_mutation(
             }
             let input: Input = decode(arguments)?;
             serde_json::to_value(
-                CatalogMutationService::new(repository)
+                AttricatMutationService::new(repository)
                     .publish_blueprint_revision(input.blueprint_id, input.version)
                     .await?,
             )
@@ -2219,7 +2219,7 @@ pub async fn execute_mutation(
         "create_blueprint" => {
             let input: CreateBlueprint = decode(arguments)?;
             serde_json::to_value(
-                CatalogMutationService::new(repository)
+                AttricatMutationService::new(repository)
                     .create_blueprint(input)
                     .await?,
             )
@@ -2239,7 +2239,7 @@ pub async fn execute_mutation(
             }
             let input: Input = decode(arguments)?;
             serde_json::to_value(
-                CatalogMutationService::new(repository)
+                AttricatMutationService::new(repository)
                     .create_record(
                         crate::model::CreateRecordFormRequest {
                             blueprint: input.blueprint,
@@ -2262,7 +2262,7 @@ pub async fn execute_mutation(
                 expected_updated_at: Option<DateTime<Utc>>,
             }
             let input: Input = decode(arguments)?;
-            CatalogMutationService::new(repository)
+            AttricatMutationService::new(repository)
                 .delete_record_checked(input.record_id, input.expected_updated_at)
                 .await?;
             json!({"deleted": true})
@@ -2270,7 +2270,7 @@ pub async fn execute_mutation(
         "apply_record_batch" => {
             let input: crate::model::RecordBatchRequest = decode(arguments)?;
             serde_json::to_value(
-                CatalogMutationService::new(repository)
+                AttricatMutationService::new(repository)
                     .apply_record_batch(input)
                     .await?,
             )
@@ -2296,7 +2296,7 @@ pub async fn execute_mutation(
                 ));
             }
             serde_json::to_value(
-                CatalogMutationService::new(repository)
+                AttricatMutationService::new(repository)
                     .append_values(
                         input.record_id,
                         crate::model::AppendAttributeValues {
@@ -2337,7 +2337,7 @@ pub async fn execute_mutation(
                 ));
             }
             serde_json::to_value(
-                CatalogMutationService::new(repository)
+                AttricatMutationService::new(repository)
                     .update_record(
                         input.record_id,
                         crate::model::UpdateRecordFormRequest {
@@ -2363,7 +2363,7 @@ pub async fn execute_mutation(
             }
             let input: Input = decode(arguments)?;
             serde_json::to_value(
-                CatalogMutationService::new(repository)
+                AttricatMutationService::new(repository)
                     .restore_value_checked(
                         input.record_id,
                         input.history_id,
@@ -2376,7 +2376,7 @@ pub async fn execute_mutation(
         "replace_record_relationships" | "remove_record_relationships" => {
             let (record_id, relationships, expected_updated_at) =
                 decode_relationship_mutation(arguments, name == "remove_record_relationships")?;
-            let updated = CatalogMutationService::new(repository)
+            let updated = AttricatMutationService::new(repository)
                 .mutate_relationships_checked(
                     record_id,
                     crate::model::RelationshipMutation { relationships },
@@ -2414,7 +2414,7 @@ pub async fn execute_mutation(
                     "issues": preview.issues,
                 })
             } else {
-                let record = CatalogMutationService::new(repository)
+                let record = AttricatMutationService::new(repository)
                     .migrate_record_checked(
                         input.record_id,
                         crate::model::MigrateRecordRequest {
@@ -2440,7 +2440,7 @@ pub async fn execute_mutation(
             }
             let input: Input = decode(arguments)?;
             serde_json::to_value(
-                CatalogMutationService::new(repository)
+                AttricatMutationService::new(repository)
                     .publish_record(input.record_id, input.context_id)
                     .await?,
             )
@@ -2454,7 +2454,7 @@ pub async fn execute_mutation(
                 context_id: Uuid,
             }
             let input: Input = decode(arguments)?;
-            CatalogMutationService::new(repository)
+            AttricatMutationService::new(repository)
                 .unpublish_record(input.record_id, input.context_id)
                 .await?;
             json!({"unpublished": true})
@@ -2462,7 +2462,7 @@ pub async fn execute_mutation(
         "publish_record_to_all_channels" => {
             let record_id = parse_uuid(&arguments, "record_id")?;
             serde_json::to_value(
-                CatalogMutationService::new(repository)
+                AttricatMutationService::new(repository)
                     .publish_record_all_channels(record_id)
                     .await?,
             )
@@ -2480,7 +2480,7 @@ pub async fn execute_mutation(
             }
             let input: Input = decode(arguments)?;
             serde_json::to_value(
-                CatalogMutationService::new(repository)
+                AttricatMutationService::new(repository)
                     .link_file_checked(
                         input.record_id,
                         &input.attribute_code,
@@ -2806,7 +2806,7 @@ pub async fn execute_mutation(
                 ));
             }
             serde_json::to_value(
-                CatalogMutationService::new(repository)
+                AttricatMutationService::new(repository)
                     .update_record(
                         input.record_id,
                         crate::model::UpdateRecordFormRequest {
@@ -2835,7 +2835,7 @@ pub async fn execute_mutation(
                 return Err(ToolError::InvalidArguments("data must be an object".into()));
             }
             serde_json::to_value(
-                CatalogMutationService::new(repository)
+                AttricatMutationService::new(repository)
                     .update_context(
                         input.context_id,
                         crate::model::UpdateAttributeContext {
@@ -2848,13 +2848,13 @@ pub async fn execute_mutation(
             .expect("context serializes")
         }
         "delete_context" => {
-            CatalogMutationService::new(repository)
+            AttricatMutationService::new(repository)
                 .delete_context(parse_uuid(&arguments, "context_id")?)
                 .await?;
             json!({"deleted":true})
         }
         "duplicate_record" => serde_json::to_value(
-            CatalogMutationService::new(repository)
+            AttricatMutationService::new(repository)
                 .duplicate_record(parse_uuid(&arguments, "record_id")?)
                 .await?,
         )
@@ -2901,7 +2901,7 @@ pub async fn execute_mutation(
         "create_context" => {
             let input: CreateAttributeContext = decode(arguments)?;
             serde_json::to_value(
-                CatalogMutationService::new(repository)
+                AttricatMutationService::new(repository)
                     .create_context(input)
                     .await?,
             )
@@ -3025,7 +3025,7 @@ fn agent_table_relationships(
 }
 
 async fn resolve_agent_search_sort(
-    repository: &CatalogRepository,
+    repository: &AttricatRepository,
     blueprint: &crate::model::BlueprintWithAttributes,
     sort: Option<&crate::model::SearchSort>,
     effective_source_version: Option<i64>,
@@ -3183,7 +3183,7 @@ const MAX_NAMED_BLUEPRINTS: usize = 50;
 
 /// An unknown blueprint code names the record blueprints that do exist, so
 /// the model can correct the call without listing blueprints first.
-async fn unknown_blueprint(repository: &CatalogRepository, code: &str) -> ToolError {
+async fn unknown_blueprint(repository: &AttricatRepository, code: &str) -> ToolError {
     let blueprints = match repository.list_blueprints().await {
         Ok(blueprints) => blueprints,
         Err(error) => return error.into(),
@@ -3222,7 +3222,7 @@ struct AgentSearchScope {
 }
 
 async fn agent_search_scope(
-    repository: &CatalogRepository,
+    repository: &AttricatRepository,
     actor: Uuid,
     blueprint: &crate::model::SearchBlueprint,
     query: Option<&str>,
@@ -3316,7 +3316,7 @@ async fn agent_search_scope(
     })
 }
 
-pub(crate) fn tool_actor(repository: &CatalogRepository, user_id: Uuid) -> AuthorizationActor {
+pub(crate) fn tool_actor(repository: &AttricatRepository, user_id: Uuid) -> AuthorizationActor {
     repository
         .authorization_actor()
         .unwrap_or(AuthorizationActor {
@@ -3326,7 +3326,7 @@ pub(crate) fn tool_actor(repository: &CatalogRepository, user_id: Uuid) -> Autho
 }
 
 async fn read_authorized(
-    repository: &CatalogRepository,
+    repository: &AttricatRepository,
     actor: Uuid,
     workspace: Uuid,
     name: &str,

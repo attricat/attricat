@@ -64,11 +64,11 @@ struct ManifestSummary {
     name: String,
     version: String,
     description: String,
-    catalog: CatalogSummary,
+    attricat: AttricatSummary,
 }
 
 #[derive(Serialize)]
-struct CatalogSummary {
+struct AttricatSummary {
     host_api: String,
 }
 
@@ -183,8 +183,8 @@ pub(super) async fn inspect(
             name: manifest.name.clone(),
             version: manifest.version.clone(),
             description: manifest.description.clone(),
-            catalog: CatalogSummary {
-                host_api: manifest.catalog.host_api.clone(),
+            attricat: AttricatSummary {
+                host_api: manifest.attricat.host_api.clone(),
             },
         },
         resources: ResourceSummaries {
@@ -815,7 +815,7 @@ mod tests {
                 name: "Test".to_owned(),
                 version: "1.0.0".to_owned(),
                 description,
-                catalog: CatalogSummary {
+                attricat: AttricatSummary {
                     host_api: "^1.0".to_owned(),
                 },
             },

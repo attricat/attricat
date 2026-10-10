@@ -8,17 +8,17 @@ publish.workspace = true
 
 [dependencies]
 axum.workspace = true
-catalog-agent-runtime = { path = "../../crates/agent-runtime" }
-catalog-cache = { path = "../../crates/cache" }
-catalog-domain = { path = "../../crates/domain" }
-catalog-events = { path = "../../crates/events" }
-catalog-extension-manifest = { path = "../../crates/extension-manifest" }
-catalog-extension-runtime = { path = "../../crates/extension-runtime" }
-catalog-http = { path = "../../crates/http" }
-catalog-repository = { path = "../../crates/repository" }
-catalog-solution-pack = { path = "../../crates/solution-pack" }
-catalog-storage = { path = "../../crates/storage" }
-catalog-workers = { path = "../../crates/workers" }
+attricat-agent-runtime = { path = "../../crates/agent-runtime" }
+attricat-cache = { path = "../../crates/cache" }
+attricat-domain = { path = "../../crates/domain" }
+attricat-events = { path = "../../crates/events" }
+attricat-extension-manifest = { path = "../../crates/extension-manifest" }
+attricat-extension-runtime = { path = "../../crates/extension-runtime" }
+attricat-http = { path = "../../crates/http" }
+attricat-repository = { path = "../../crates/repository" }
+attricat-solution-pack = { path = "../../crates/solution-pack" }
+attricat-storage = { path = "../../crates/storage" }
+attricat-workers = { path = "../../crates/workers" }
 dotenvy.workspace = true
 metrics.workspace = true
 metrics-exporter-prometheus.workspace = true

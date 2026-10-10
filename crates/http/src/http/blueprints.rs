@@ -5,7 +5,7 @@ use super::{
     extractors::{ApiJson, ApiPath, ApiQuery},
 };
 use crate::{
-    catalog_service::CatalogMutationService,
+    attricat_service::AttricatMutationService,
     model::{
         Blueprint, BlueprintMigrationBatch, BlueprintMigrationBatchStatus,
         BlueprintMigrationImpact, BlueprintRecordPublicationSummary, BlueprintWithAttributes,
@@ -27,7 +27,7 @@ pub(super) async fn create_blueprint(
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiJson(input): ApiJson<CreateBlueprint>,
 ) -> Result<(StatusCode, Json<BlueprintWithAttributes>), ApiError> {
-    let blueprint = CatalogMutationService::new(&repository)
+    let blueprint = AttricatMutationService::new(&repository)
         .create_blueprint(input)
         .await?;
     invalidate_data_health(&state, &repository);
@@ -56,7 +56,7 @@ pub(super) async fn create_blueprint_revision(
     ApiPath(blueprint_id): ApiPath<Uuid>,
     ApiJson(input): ApiJson<CreateBlueprint>,
 ) -> Result<(StatusCode, Json<BlueprintWithAttributes>), ApiError> {
-    let blueprint = CatalogMutationService::new(&repository)
+    let blueprint = AttricatMutationService::new(&repository)
         .create_blueprint_revision(blueprint_id, input)
         .await?;
     invalidate_data_health(&state, &repository);
@@ -141,7 +141,7 @@ pub(super) async fn publish_blueprint_revision(
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath((blueprint_id, version)): ApiPath<(Uuid, i64)>,
 ) -> Result<Json<BlueprintWithAttributes>, ApiError> {
-    let blueprint = CatalogMutationService::new(&repository)
+    let blueprint = AttricatMutationService::new(&repository)
         .publish_blueprint_revision(blueprint_id, version)
         .await?;
     invalidate_data_health(&state, &repository);
@@ -153,7 +153,7 @@ pub(super) async fn publish_blueprint_records(
     ApiPath((blueprint_id, version)): ApiPath<(Uuid, i64)>,
     ApiJson(input): ApiJson<PublicationContextRequest>,
 ) -> Result<Json<BlueprintRecordPublicationSummary>, ApiError> {
-    let summary = CatalogMutationService::new(&repository)
+    let summary = AttricatMutationService::new(&repository)
         .publish_blueprint_records(blueprint_id, version, Some(input.context_id))
         .await?;
     invalidate_data_health(&state, &repository);
@@ -165,7 +165,7 @@ pub(super) async fn publish_blueprint_records_all_channels(
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiPath((blueprint_id, version)): ApiPath<(Uuid, i64)>,
 ) -> Result<Json<BlueprintRecordPublicationSummary>, ApiError> {
-    let summary = CatalogMutationService::new(&repository)
+    let summary = AttricatMutationService::new(&repository)
         .publish_blueprint_records(blueprint_id, version, None)
         .await?;
     invalidate_data_health(&state, &repository);

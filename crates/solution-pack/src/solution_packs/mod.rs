@@ -9,8 +9,8 @@ use std::{
     path::{Component, Path},
 };
 
-use catalog_blueprint::BlueprintKind;
-use catalog_validation::is_valid_code;
+use attricat_blueprint::BlueprintKind;
+use attricat_validation::is_valid_code;
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
@@ -100,7 +100,7 @@ pub struct SolutionPackManifest {
     pub name: String,
     pub version: String,
     pub description: String,
-    pub catalog: SolutionPackCatalog,
+    pub attricat: SolutionPackAttricat,
     pub resources: SolutionPackResources,
     #[serde(default)]
     pub extensions: Vec<SolutionPackExtensionRequirement>,
@@ -203,7 +203,7 @@ impl SolutionPackCheckPredicate {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct SolutionPackCatalog {
+pub struct SolutionPackAttricat {
     pub host_api: String,
 }
 
@@ -329,7 +329,7 @@ pub struct SolutionPackLexicon {
 #[serde(deny_unknown_fields)]
 pub struct SolutionPackLexiconLanguage {
     pub language: String,
-    pub entries: Vec<catalog_lexicon::LexiconFileEntry>,
+    pub entries: Vec<attricat_lexicon::LexiconFileEntry>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -370,7 +370,7 @@ pub struct ValidatedSolutionPack {
     blueprints: BTreeMap<String, SolutionPackBlueprint>,
     explore_navigation: Option<SolutionPackExploreNavigation>,
     extension_layout: Option<SolutionPackExtensionLayout>,
-    lexicon: Option<Vec<catalog_lexicon::Entry>>,
+    lexicon: Option<Vec<attricat_lexicon::Entry>>,
     configuration_templates: BTreeMap<String, Value>,
     presentation_assets: BTreeMap<String, ValidatedPresentationAsset>,
     sample_data: Option<ValidatedSampleData>,
@@ -398,8 +398,8 @@ pub struct SolutionPackBlueprint {
     dependencies: BTreeSet<String>,
     table_path_dependencies: BTreeSet<String>,
     kind: BlueprintKind,
-    effective_attributes: Vec<catalog_blueprint::EffectiveAttribute>,
-    unique_keys: Vec<catalog_blueprint::UniqueKeyDefinition>,
+    effective_attributes: Vec<attricat_blueprint::EffectiveAttribute>,
+    unique_keys: Vec<attricat_blueprint::UniqueKeyDefinition>,
     extension_layout: Vec<BlueprintExtensionLayoutEntry>,
 }
 
@@ -444,11 +444,11 @@ impl SolutionPackBlueprint {
         self.kind.clone()
     }
 
-    pub fn effective_attributes(&self) -> &[catalog_blueprint::EffectiveAttribute] {
+    pub fn effective_attributes(&self) -> &[attricat_blueprint::EffectiveAttribute] {
         &self.effective_attributes
     }
 
-    pub fn unique_keys(&self) -> &[catalog_blueprint::UniqueKeyDefinition] {
+    pub fn unique_keys(&self) -> &[attricat_blueprint::UniqueKeyDefinition] {
         &self.unique_keys
     }
 }
@@ -672,7 +672,7 @@ impl ValidatedSolutionPack {
     }
 
     /// Validated, normalized lexicon entries across all languages.
-    pub fn lexicon(&self) -> Option<&[catalog_lexicon::Entry]> {
+    pub fn lexicon(&self) -> Option<&[attricat_lexicon::Entry]> {
         self.lexicon.as_deref()
     }
 
@@ -739,11 +739,11 @@ fn validate_manifest(manifest: &SolutionPackManifest) -> Result<(), SolutionPack
     validate_bounded_text(&manifest.description, "description", MAX_DESCRIPTION_BYTES)?;
     let host = Version::parse(crate::extensions::SUPPORTED_HOST_API)
         .map_err(|_| SolutionPackError::Invalid("supported host API version is invalid".into()))?;
-    let host_api = parse_version_req(&manifest.catalog.host_api).map_err(|_| {
-        SolutionPackError::Invalid("catalog.host_api must be a SemVer range".into())
+    let host_api = parse_version_req(&manifest.attricat.host_api).map_err(|_| {
+        SolutionPackError::Invalid("attricat.host_api must be a SemVer range".into())
     })?;
     if !host_api.matches(&host) {
-        return invalid("catalog.host_api is incompatible with this host");
+        return invalid("attricat.host_api is incompatible with this host");
     }
 
     if manifest.resources.blueprints.is_empty()
@@ -1259,9 +1259,11 @@ fn validate_effective_sample_facts(
             // Status values follow workspace transitions and principals name
             // workspace users or teams, so samples leave them to defaults.
             if attribute.value_schema.as_ref().is_some_and(|schema| {
-                schema.get(catalog_validation::status::STATUS_KEY).is_some()
+                schema
+                    .get(attricat_validation::status::STATUS_KEY)
+                    .is_some()
                     || schema
-                        .get(catalog_validation::principal::PRINCIPAL_KEY)
+                        .get(attricat_validation::principal::PRINCIPAL_KEY)
                         .is_some()
             }) {
                 return invalid(format!(
@@ -1351,7 +1353,7 @@ fn validate_effective_sample_facts(
 fn validate_sample_context_editable(
     record: &str,
     context: Option<&String>,
-    attribute: &catalog_blueprint::EffectiveAttribute,
+    attribute: &attricat_blueprint::EffectiveAttribute,
 ) -> Result<(), SolutionPackError> {
     if context.is_some() && attribute.context_editable == "default" {
         return invalid(format!(
@@ -1364,7 +1366,7 @@ fn validate_sample_context_editable(
 
 fn validate_sample_value_for_attribute(
     value: &Value,
-    attribute: &catalog_blueprint::EffectiveAttribute,
+    attribute: &attricat_blueprint::EffectiveAttribute,
     defaulted: bool,
 ) -> Result<(), SolutionPackError> {
     let exact_time = value.as_object().and_then(|object| {
@@ -1531,7 +1533,7 @@ fn validate_explore_navigation(
 fn validate_lexicon(
     manifest: &SolutionPackManifest,
     files: &BTreeMap<String, Vec<u8>>,
-) -> Result<Option<Vec<catalog_lexicon::Entry>>, SolutionPackError> {
+) -> Result<Option<Vec<attricat_lexicon::Entry>>, SolutionPackError> {
     let Some(resource) = manifest
         .resources
         .workspace_settings
@@ -1559,12 +1561,12 @@ fn validate_lexicon(
     let mut languages = HashSet::new();
     let mut entries = Vec::new();
     for language in lexicon.languages {
-        let file = catalog_lexicon::LexiconFile {
-            format_version: catalog_lexicon::LEXICON_FILE_FORMAT_VERSION,
+        let file = attricat_lexicon::LexiconFile {
+            format_version: attricat_lexicon::LEXICON_FILE_FORMAT_VERSION,
             language: language.language,
             entries: language.entries,
         };
-        let canonical = catalog_lexicon::canonical_language(&file.language).ok_or_else(|| {
+        let canonical = attricat_lexicon::canonical_language(&file.language).ok_or_else(|| {
             SolutionPackError::Invalid(format!(
                 "workspace lexicon language '{}' is unsupported",
                 file.language
@@ -1585,10 +1587,10 @@ fn validate_lexicon(
                 "workspace lexicon language '{canonical}' is invalid: {error}"
             ))
         })?);
-        if entries.len() > catalog_lexicon::MAX_FILE_ENTRIES {
+        if entries.len() > attricat_lexicon::MAX_FILE_ENTRIES {
             return invalid(format!(
                 "workspace lexicon must contain at most {} entries",
-                catalog_lexicon::MAX_FILE_ENTRIES
+                attricat_lexicon::MAX_FILE_ENTRIES
             ));
         }
     }

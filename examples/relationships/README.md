@@ -7,7 +7,7 @@ date, datetime, and a wall-clock time with an IANA timezone.
 
 Run `just setup` once before other `just` recipes, then start `just dev` in
 another terminal (unless the development stack is already running). From the
-repository root, use an authenticated CLI session or set `CATALOG_TOKEN` to a
+repository root, use an authenticated CLI session or set `ATTRICAT_TOKEN` to a
 personal token with blueprint, context, and record write permissions. These
 examples use `jq` to capture API IDs; see [CLI authentication](../../docs/cli.md#browser-authentication)
 for session setup. Run the following commands from the repository root:

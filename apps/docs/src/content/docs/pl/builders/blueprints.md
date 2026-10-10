@@ -180,7 +180,7 @@ type = "stack"
 
 [[views.detail.children]]
 type = "stack"
-component = { id = "catalog.record_heading", version = 1 }
+component = { id = "attricat.record_heading", version = 1 }
 
 [[views.detail.children.children]]
 type = "field"
@@ -220,7 +220,7 @@ type = "table"
 [[views.table.columns]]
 field = "main_photo"
 label = "Image"
-renderer = { id = "catalog.table_image", version = 1 }
+renderer = { id = "attricat.table_image", version = 1 }
 
 [[views.table.columns]]
 field = "title"
@@ -233,7 +233,7 @@ label = "Brand"
 field = "price"
 ```
 
-Stos `catalog.record_heading` zamienia swoje pierwsze pole w tytuł strony, a pozostałe w podtytuł. Kolumna tabeli `brand.name` podąża za relacją `brand` i pokazuje `name` marki. Ponieważ `brand` ma `cardinality = "one"`, tę kolumnę można też sortować.
+Stos `attricat.record_heading` zamienia swoje pierwsze pole w tytuł strony, a pozostałe w podtytuł. Kolumna tabeli `brand.name` podąża za relacją `brand` i pokazuje `name` marki. Ponieważ `brand` ma `cardinality = "one"`, tę kolumnę można też sortować.
 
 [Widoki i układy](/pl/builders/views/) opisują wszystkie bloki i komponenty.
 

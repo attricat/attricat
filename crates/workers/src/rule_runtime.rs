@@ -6,13 +6,13 @@ use crate::{
     domain_events::{ALL_EVENT_TYPES_V1, DomainEvent},
     event_dispatcher::{EventHandler, EventHandlerCommandContext},
     repository::{
-        CatalogRepository, ClaimedRuleRun, RepositoryError, RuleCandidateResult, SystemRepository,
+        AttricatRepository, ClaimedRuleRun, RepositoryError, RuleCandidateResult, SystemRepository,
     },
     task_queue::TaskKind,
     task_worker::{TaskHandler, TaskHandlerError, TaskOutcome},
 };
 use async_trait::async_trait;
-use catalog_repository::round_trips::measure;
+use attricat_repository::round_trips::measure;
 use chrono::Utc;
 use std::{
     collections::HashMap,
@@ -28,7 +28,7 @@ pub struct RuleIntakeHandler;
 #[async_trait]
 impl EventHandler for RuleIntakeHandler {
     fn name(&self) -> &'static str {
-        "catalog.rules"
+        "attricat.rules"
     }
 
     fn event_types(&self) -> &'static [&'static str] {
@@ -124,7 +124,7 @@ impl TaskHandler for RuleTaskHandler {
 }
 
 async fn fail_rule_run(
-    scoped: &CatalogRepository,
+    scoped: &AttricatRepository,
     task: &crate::repository::ClaimedTask,
     error: RepositoryError,
 ) -> Result<TaskOutcome, TaskHandlerError> {
@@ -162,14 +162,13 @@ struct EvaluatedPage {
 }
 
 async fn evaluate_page(
-    repo: &CatalogRepository,
+    repo: &AttricatRepository,
     run: &ClaimedRuleRun,
 ) -> Result<EvaluatedPage, RepositoryError> {
-    let compiled: catalog_rules::CompiledRule =
-        serde_json::from_value(run.compiled_plan.clone())
-            .map_err(|error| RepositoryError::InvalidRuleDefinition(error.to_string()))?;
+    let compiled: attricat_rules::CompiledRule = serde_json::from_value(run.compiled_plan.clone())
+        .map_err(|error| RepositoryError::InvalidRuleDefinition(error.to_string()))?;
     let remaining =
-        (catalog_rules::MAX_CANDIDATES_PER_RUN as i64 - run.candidates_evaluated).max(0);
+        (attricat_rules::MAX_CANDIDATES_PER_RUN as i64 - run.candidates_evaluated).max(0);
     if remaining == 0 {
         let truncated = run.scope_record_id.is_none()
             && candidates_remain(repo, run, run.candidate_cursor).await?;
@@ -198,7 +197,7 @@ async fn evaluate_page(
     let page_size = PAGE_SIZE.min(remaining) as usize;
     let exhausted = candidates.len() < page_size || run.scope_record_id.is_some();
     let capped = run.candidates_evaluated + candidates.len() as i64
-        >= catalog_rules::MAX_CANDIDATES_PER_RUN as i64;
+        >= attricat_rules::MAX_CANDIDATES_PER_RUN as i64;
     let next_cursor = candidates.last().copied();
     // A run that reaches the cap with a full page may have missed candidates;
     // an enforcing rule cannot be enabled on such a dry run.
@@ -213,7 +212,7 @@ async fn evaluate_page(
 
 /// Whether the run's blueprint revision has live candidates after `cursor`.
 async fn candidates_remain(
-    repo: &CatalogRepository,
+    repo: &AttricatRepository,
     run: &ClaimedRuleRun,
     cursor: Option<Uuid>,
 ) -> Result<bool, RepositoryError> {
@@ -248,12 +247,12 @@ pub fn start_schedule_coordinator(
                 let (workspaces, delay) = match repository.polled_workspace_ids().await {
                     Ok(workspaces) => {
                         let workspaces = workspaces.as_ref().clone();
-                        metrics::gauge!("catalog_schedule_coordinator_healthy", "kind" => "rule")
+                        metrics::gauge!("attricat_schedule_coordinator_healthy", "kind" => "rule")
                             .set(1.0);
                         (workspaces, Duration::from_millis(250))
                     }
                     Err(error) => {
-                        metrics::gauge!("catalog_schedule_coordinator_healthy", "kind" => "rule")
+                        metrics::gauge!("attricat_schedule_coordinator_healthy", "kind" => "rule")
                             .set(0.0);
                         tracing::warn!(%error, "rule scheduler cannot discover workspaces");
                         (Vec::new(), Duration::from_secs(5))

@@ -38,7 +38,7 @@ use crate::{
 };
 
 use super::{
-    CatalogRepository, EventPublisher, ExploreNavigationEntry, RepositoryError,
+    AttricatRepository, EventPublisher, ExploreNavigationEntry, RepositoryError,
     blueprints::blueprint_event, record_commands::ChosenIdRecordCreate,
 };
 
@@ -409,7 +409,7 @@ fn manifest_contributions(
 }
 
 async fn load_prior_application(
-    repository: &CatalogRepository,
+    repository: &AttricatRepository,
     tx: &mut Transaction<'_, Postgres>,
     workspace_id: Uuid,
     application_id: Uuid,
@@ -566,7 +566,7 @@ async fn load_prior_application(
                             )
                         })?
                         .to_owned();
-                    let hash = catalog_blueprint::raw_hash(definition);
+                    let hash = attricat_blueprint::raw_hash(definition);
                     (kind, hash.clone(), hash)
                 }
                 _ => {
@@ -844,7 +844,7 @@ async fn latest_published_blueprint(
         code: existing.1,
         version: existing.2,
         kind: existing.3,
-        canonical_definition_hash: catalog_blueprint::raw_hash(&canonical_definition),
+        canonical_definition_hash: attricat_blueprint::raw_hash(&canonical_definition),
         definition_hash: existing.4,
     }))
 }
@@ -1027,7 +1027,7 @@ struct StagedSampleFile {
     sha256: String,
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     /// Collects workspace facts for seed resources and resolves prerequisite
     /// seeds. A reused blueprint is offered to the planner exactly like an
     /// explicit mapping, so only an exact definition match is reused.
@@ -1765,7 +1765,7 @@ impl CatalogRepository {
                             let canonical = toml::from_str::<toml::Value>(&definition)
                                 .ok()
                                 .and_then(|value| toml::to_string(&value).ok())
-                                .map(|definition| catalog_blueprint::raw_hash(&definition));
+                                .map(|definition| attricat_blueprint::raw_hash(&definition));
                             if compiled
                                 .ok()
                                 .map(|value| value.raw_definition_hash)
@@ -2343,7 +2343,7 @@ impl CatalogRepository {
         .bind(&manifest.name)
         .bind(&manifest.version)
         .bind(&manifest.description)
-        .bind(&manifest.catalog.host_api)
+        .bind(&manifest.attricat.host_api)
         .bind(prefix)
         .bind(publication.as_str())
         .bind(prior_application_id)
@@ -2756,7 +2756,7 @@ fn materialize_plan(
         pack_name: manifest.name.clone(),
         pack_version: manifest.version.clone(),
         pack_description: manifest.description.clone(),
-        host_api: manifest.catalog.host_api.clone(),
+        host_api: manifest.attricat.host_api.clone(),
         prefix: prefix.to_owned(),
         blueprint_publication: publication.as_str().to_owned(),
         prior_application_id,
@@ -3594,7 +3594,7 @@ async fn set_solution_pack_transaction_timeouts(
     Ok(())
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     /// Official releases a plan installs, in installation order. Returns none
     /// once the plan's application has finished, so re-applying a completed
     /// plan never re-enables an extension an operator disabled since.
@@ -6258,16 +6258,16 @@ fn json_sha256(value: &Value) -> Result<String, RepositoryError> {
 }
 
 /// Re-validates persisted lexicon entries; plans are data, not trusted code.
-fn parse_lexicon_payload(payload: Value) -> Result<Vec<catalog_lexicon::Entry>, RepositoryError> {
+fn parse_lexicon_payload(payload: Value) -> Result<Vec<attricat_lexicon::Entry>, RepositoryError> {
     #[derive(Deserialize)]
     #[serde(deny_unknown_fields)]
     struct LexiconPayload {
-        entries: Vec<catalog_lexicon::Entry>,
+        entries: Vec<attricat_lexicon::Entry>,
     }
     let payload: LexiconPayload = serde_json::from_value(payload).map_err(|_| {
         RepositoryError::InvalidSolutionPackPlan("persisted lexicon payload is invalid".into())
     })?;
-    if payload.entries.is_empty() || payload.entries.len() > catalog_lexicon::MAX_FILE_ENTRIES {
+    if payload.entries.is_empty() || payload.entries.len() > attricat_lexicon::MAX_FILE_ENTRIES {
         return Err(RepositoryError::InvalidSolutionPackPlan(
             "persisted lexicon payload is invalid".into(),
         ));
@@ -6367,7 +6367,7 @@ fn solution_pack_layout_error(error: RepositoryError) -> RepositoryError {
 
 fn solution_pack_mutation_error(error: RepositoryError) -> RepositoryError {
     match error {
-        RepositoryError::BlueprintCodeTaken | RepositoryError::CatalogCodeTaken => {
+        RepositoryError::BlueprintCodeTaken | RepositoryError::AttricatCodeTaken => {
             RepositoryError::SolutionPackPlanStale
         }
         RepositoryError::Database(sqlx::Error::Database(database_error))
@@ -6458,7 +6458,7 @@ fn seed_payload<T: serde::de::DeserializeOwned>(
         })
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     /// Workspace context ids of the pack contexts a sample record uses, from
     /// the plan's reviewed context mappings.
     async fn sample_context_ids(
@@ -6906,8 +6906,8 @@ impl CatalogRepository {
                         )
                     })?;
                 // Validated and normalized like every other saved-search write.
-                catalog_validation::saved_search::validate_state(
-                    catalog_validation::saved_search::EXPLORER_SEARCH_KIND,
+                attricat_validation::saved_search::validate_state(
+                    attricat_validation::saved_search::EXPLORER_SEARCH_KIND,
                     &payload.state,
                 )
                 .map_err(|reason| {
@@ -6915,7 +6915,7 @@ impl CatalogRepository {
                         "invalid persisted saved search state: {reason}"
                     ))
                 })?;
-                let state = catalog_validation::saved_search::normalize_state(&payload.state);
+                let state = attricat_validation::saved_search::normalize_state(&payload.state);
                 self.create_saved_view_in_transaction(
                     tx,
                     step.target_id,
@@ -6944,7 +6944,7 @@ fn bounded_diagnostic(message: &str) -> String {
     message.chars().take(1024).collect()
 }
 
-impl<S: super::RepositoryScope> CatalogRepository<S> {
+impl<S: super::RepositoryScope> AttricatRepository<S> {
     /// Solution-pack permissions are bootstrapped in application code so the
     /// database migration history remains declarative.
     pub async fn ensure_solution_pack_permissions(&self) -> Result<(), RepositoryError> {
@@ -6998,7 +6998,7 @@ mod tests {
         action: &str,
         with_application_step: bool,
     ) -> (Uuid, Option<Uuid>) {
-        let workspace_id = CatalogRepository::DEFAULT_WORKSPACE_ID;
+        let workspace_id = AttricatRepository::DEFAULT_WORKSPACE_ID;
         let plan_id = Uuid::new_v4();
         sqlx::query("INSERT INTO solution_pack_plans (id,workspace_id,source_kind,source_metadata,archive_sha256,manifest_version,pack_id,pack_name,pack_version,pack_description,host_api,prefix,blueprint_publication,ready,expires_at) VALUES ($1,$2,'local_archive','{\"side_loaded\":true}'::jsonb,$3,1,$4,'Legacy context','1.0.0','Legacy context evidence','^1.0','legacy','draft',true,clock_timestamp() + interval '24 hours')")
             .bind(plan_id)
@@ -7082,7 +7082,7 @@ mod tests {
             .await
             .unwrap();
         let repository =
-            CatalogRepository::new(pool.clone(), CatalogRepository::DEFAULT_WORKSPACE_ID);
+            AttricatRepository::new(pool.clone(), AttricatRepository::DEFAULT_WORKSPACE_ID);
         let object_store = crate::storage::FakeObjectStore::available();
         for (action, with_step) in [("skip", false), ("create", false), ("create", true)] {
             let (plan_id, application_id) =
@@ -7128,9 +7128,9 @@ mod tests {
 
     #[sqlx::test(migrations = "../../apps/api/migrations")]
     async fn failed_navigation_step_revalidates_and_resumes(pool: sqlx::PgPool) {
-        let workspace_id = CatalogRepository::DEFAULT_WORKSPACE_ID;
+        let workspace_id = AttricatRepository::DEFAULT_WORKSPACE_ID;
         let repository =
-            CatalogRepository::new(pool.clone(), CatalogRepository::DEFAULT_WORKSPACE_ID);
+            AttricatRepository::new(pool.clone(), AttricatRepository::DEFAULT_WORKSPACE_ID);
         let blueprint_id = Uuid::new_v4();
         let mut blueprint_tx = pool.begin().await.unwrap();
         repository
@@ -7205,7 +7205,7 @@ value_type = "string"
     async fn application_insertion_plan_lock_wins_against_expired_staging_cleanup(
         pool: sqlx::PgPool,
     ) {
-        let workspace_id = CatalogRepository::DEFAULT_WORKSPACE_ID;
+        let workspace_id = AttricatRepository::DEFAULT_WORKSPACE_ID;
         let plan_id = Uuid::new_v4();
         let object_key = format!("presentation-assets/{plan_id}");
         sqlx::query("INSERT INTO solution_pack_plans (id,workspace_id,source_kind,source_metadata,archive_sha256,manifest_version,pack_id,pack_name,pack_version,pack_description,host_api,prefix,blueprint_publication,ready,created_at,expires_at) VALUES ($1,$2,'local_archive','{\"side_loaded\":true}'::jsonb,$3,1,$4,'Cleanup race','1.0.0','Cleanup race','^1.0','cleanup_race','draft',true,clock_timestamp()-interval '2 hours',clock_timestamp()-interval '1 hour')")
@@ -7246,7 +7246,7 @@ value_type = "string"
             .await
             .unwrap();
         let cleanup_repository =
-            CatalogRepository::new(pool.clone(), CatalogRepository::DEFAULT_WORKSPACE_ID);
+            AttricatRepository::new(pool.clone(), AttricatRepository::DEFAULT_WORKSPACE_ID);
         let cleanup_store = object_store.clone();
         let cleanup = tokio::spawn(async move {
             cleanup_repository
@@ -7309,7 +7309,7 @@ value_type = "string"
 
     #[sqlx::test(migrations = "../../apps/api/migrations")]
     async fn ambiguous_commit_reconciliation_never_fails_a_later_pending_step(pool: sqlx::PgPool) {
-        let workspace_id = CatalogRepository::DEFAULT_WORKSPACE_ID;
+        let workspace_id = AttricatRepository::DEFAULT_WORKSPACE_ID;
         let plan_id = Uuid::new_v4();
         let application_id = Uuid::new_v4();
         sqlx::query("INSERT INTO solution_pack_plans (id,workspace_id,source_kind,source_metadata,archive_sha256,manifest_version,pack_id,pack_name,pack_version,pack_description,host_api,prefix,blueprint_publication,ready,expires_at) VALUES ($1,$2,'local_archive','{\"side_loaded\":true}'::jsonb,$3,1,'attricat.reconcile','Reconcile','1.0.0','Reconcile','^1.0','reconcile','draft',true,clock_timestamp() + interval '24 hours')")
@@ -7348,7 +7348,7 @@ value_type = "string"
             .await
             .unwrap();
         let repository =
-            CatalogRepository::new(pool.clone(), CatalogRepository::DEFAULT_WORKSPACE_ID);
+            AttricatRepository::new(pool.clone(), AttricatRepository::DEFAULT_WORKSPACE_ID);
         let reconciliation = tokio::spawn(async move {
             repository
                 .record_solution_pack_failure(
@@ -7379,14 +7379,14 @@ value_type = "string"
     }
 
     async fn insert_sample_lifecycle_fixture(pool: &PgPool, expired: bool) -> (Uuid, Uuid, Uuid) {
-        let workspace_id = CatalogRepository::DEFAULT_WORKSPACE_ID;
+        let workspace_id = AttricatRepository::DEFAULT_WORKSPACE_ID;
         let plan_id = Uuid::new_v4();
         let application_id = Uuid::new_v4();
         let target_id = Uuid::new_v4();
         let blueprint_id = Uuid::new_v4();
         let blueprint_code = format!("lifecycle_{}", plan_id.simple());
         let repository =
-            CatalogRepository::new(pool.clone(), CatalogRepository::DEFAULT_WORKSPACE_ID);
+            AttricatRepository::new(pool.clone(), AttricatRepository::DEFAULT_WORKSPACE_ID);
         let mut blueprint_tx = pool.begin().await.unwrap();
         repository
             .create_blueprint_in_transaction(
@@ -7451,7 +7451,7 @@ value_type = "string"
         let (plan_id, application_id, target_id) =
             insert_sample_lifecycle_fixture(&pool, false).await;
         let repository =
-            CatalogRepository::new(pool.clone(), CatalogRepository::DEFAULT_WORKSPACE_ID);
+            AttricatRepository::new(pool.clone(), AttricatRepository::DEFAULT_WORKSPACE_ID);
         assert!(
             !repository
                 .record_solution_pack_failure(
@@ -7529,7 +7529,7 @@ value_type = "string"
         let (plan_id, application_id, target_id) =
             insert_sample_lifecycle_fixture(&pool, false).await;
         let repository =
-            CatalogRepository::new(pool.clone(), CatalogRepository::DEFAULT_WORKSPACE_ID);
+            AttricatRepository::new(pool.clone(), AttricatRepository::DEFAULT_WORKSPACE_ID);
         let object_store = crate::storage::FakeObjectStore::available();
         let mut attempted_position = None;
         assert!(
@@ -7604,7 +7604,7 @@ value_type = "string"
     async fn manual_abandonment_is_terminal_and_scrubs_staging(pool: PgPool) {
         let (plan_id, application_id, _) = insert_sample_lifecycle_fixture(&pool, false).await;
         let repository =
-            CatalogRepository::new(pool.clone(), CatalogRepository::DEFAULT_WORKSPACE_ID);
+            AttricatRepository::new(pool.clone(), AttricatRepository::DEFAULT_WORKSPACE_ID);
         let application = repository
             .abandon_solution_pack_application(application_id)
             .await
@@ -7652,7 +7652,7 @@ value_type = "string"
         sqlx::query("UPDATE solution_pack_plans SET created_at=clock_timestamp()-interval '2 hours',expires_at=clock_timestamp()-interval '1 hour' WHERE id=$1")
             .bind(unstarted_plan_id).execute(&pool).await.unwrap();
         let repository =
-            CatalogRepository::new(pool.clone(), CatalogRepository::DEFAULT_WORKSPACE_ID);
+            AttricatRepository::new(pool.clone(), AttricatRepository::DEFAULT_WORKSPACE_ID);
         repository
             .cleanup_solution_pack_sample_staging()
             .await
@@ -7695,7 +7695,7 @@ value_type = "string"
             if extension_drift {
                 sqlx::query("INSERT INTO solution_pack_plan_extension_requirements (plan_id,workspace_id,position,logical_key,extension_id,version_requirement,required,status,reason_code,installed_release_id,installed_version,installed_state,configuration_matches,evaluation_template) VALUES ($1,$2,0,'extensions/drift','example.drift','^1.0',true,'satisfied','satisfied',$3,'1.0.0','enabled',true,'{}'::jsonb)")
                     .bind(plan_id)
-                    .bind(CatalogRepository::DEFAULT_WORKSPACE_ID)
+                    .bind(AttricatRepository::DEFAULT_WORKSPACE_ID)
                     .bind(Uuid::new_v4())
                     .execute(&pool)
                     .await
@@ -7705,7 +7705,7 @@ value_type = "string"
                     .bind(application_id).execute(&pool).await.unwrap();
             }
             let repository =
-                CatalogRepository::new(pool.clone(), CatalogRepository::DEFAULT_WORKSPACE_ID);
+                AttricatRepository::new(pool.clone(), AttricatRepository::DEFAULT_WORKSPACE_ID);
             let result = repository.prepare_solution_pack_application(plan_id).await;
             assert!(
                 matches!(result, Err(RepositoryError::SolutionPackPlanStale)),
@@ -7752,7 +7752,7 @@ value_type = "string"
             .await
             .unwrap();
         let cleanup_repository =
-            CatalogRepository::new(pool.clone(), CatalogRepository::DEFAULT_WORKSPACE_ID);
+            AttricatRepository::new(pool.clone(), AttricatRepository::DEFAULT_WORKSPACE_ID);
         let cleanup = tokio::spawn(async move {
             cleanup_repository
                 .cleanup_solution_pack_sample_staging()
@@ -7761,7 +7761,7 @@ value_type = "string"
         cleanup.await.unwrap().unwrap();
         let request_id = Uuid::new_v4();
         sqlx::query("INSERT INTO solution_pack_applications (id,workspace_id,plan_id,request_id,correlation_id,source_kind,source_metadata,archive_sha256,pack_id,pack_version,blueprint_publication,state,mapping_snapshot,resumable_until) VALUES ($1,$2,$3,$4,$4,'local_archive','{}'::jsonb,$5,$6,'1.0.0','publish','running','[]'::jsonb,clock_timestamp()+interval '30 days')")
-            .bind(application_id).bind(CatalogRepository::DEFAULT_WORKSPACE_ID).bind(plan_id).bind(request_id).bind("0".repeat(64)).bind(format!("attricat.lifecycle.{plan_id}")).execute(&mut *prepare).await.unwrap();
+            .bind(application_id).bind(AttricatRepository::DEFAULT_WORKSPACE_ID).bind(plan_id).bind(request_id).bind("0".repeat(64)).bind(format!("attricat.lifecycle.{plan_id}")).execute(&mut *prepare).await.unwrap();
         prepare.commit().await.unwrap();
         let staged: i64 = sqlx::query_scalar(
             "SELECT count(*) FROM solution_pack_plan_sample_records WHERE plan_id=$1",
@@ -7799,7 +7799,7 @@ value_type = "string"
             .await
             .unwrap();
         let repository =
-            CatalogRepository::new(pool.clone(), CatalogRepository::DEFAULT_WORKSPACE_ID);
+            AttricatRepository::new(pool.clone(), AttricatRepository::DEFAULT_WORKSPACE_ID);
         let abandon = tokio::spawn(async move {
             repository
                 .abandon_solution_pack_application(application_id)

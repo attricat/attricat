@@ -91,20 +91,20 @@ let env = existsSync(envFile)
   ? readFileSync(envFile, "utf8")
   : readFileSync(exampleEnvFile, "utf8");
 
-if (!/^CATALOG_DEVTOOLS=/m.test(env)) {
-  env = setEnvValue(env, "CATALOG_DEVTOOLS", "true");
+if (!/^ATTRICAT_DEVTOOLS=/m.test(env)) {
+  env = setEnvValue(env, "ATTRICAT_DEVTOOLS", "true");
 }
-if (!/^CATALOG_SAMPLE_ACCOUNTS=/m.test(env)) {
-  env = setEnvValue(env, "CATALOG_SAMPLE_ACCOUNTS", "true");
+if (!/^ATTRICAT_SAMPLE_ACCOUNTS=/m.test(env)) {
+  env = setEnvValue(env, "ATTRICAT_SAMPLE_ACCOUNTS", "true");
 }
 
 env = setEnvValue(
   env,
   "DATABASE_URL",
-  `postgres://postgres:postgres@localhost:${ports.POSTGRES_PORT}/catalog`,
+  `postgres://postgres:postgres@localhost:${ports.POSTGRES_PORT}/attricat`,
 );
 env = setEnvValue(env, "BIND_ADDR", `127.0.0.1:${ports.API_PORT}`);
-env = setEnvValue(env, "CATALOG_API_URL", `http://127.0.0.1:${ports.API_PORT}/api`);
+env = setEnvValue(env, "ATTRICAT_API_URL", `http://127.0.0.1:${ports.API_PORT}/api`);
 env = setEnvValue(env, "WEB_PORT", ports.WEB_PORT);
 env = setEnvValue(env, "DOCS_PORT", ports.DOCS_PORT);
 env = setEnvValue(env, "POSTGRES_PORT", ports.POSTGRES_PORT);
@@ -129,9 +129,9 @@ env = setEnvValue(
 );
 env = setEnvValue(env, "S3_ENDPOINT", `http://127.0.0.1:${ports.RUSTFS_PORT}`);
 env = setEnvValue(env, "S3_REGION", "us-east-1");
-env = setEnvValue(env, "S3_BUCKET", "catalog-files");
-env = setEnvValue(env, "S3_ACCESS_KEY_ID", "catalog-dev");
-env = setEnvValue(env, "S3_SECRET_ACCESS_KEY", "catalog-dev-secret");
+env = setEnvValue(env, "S3_BUCKET", "attricat-files");
+env = setEnvValue(env, "S3_ACCESS_KEY_ID", "attricat-dev");
+env = setEnvValue(env, "S3_SECRET_ACCESS_KEY", "attricat-dev-secret");
 env = setEnvValue(env, "S3_FORCE_PATH_STYLE", "true");
 env = setEnvValue(env, "S3_UPLOAD_TIMEOUT_SECONDS", "30");
 env = setEnvValue(env, "S3_DOWNLOAD_TIMEOUT_SECONDS", "30");

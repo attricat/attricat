@@ -25,16 +25,16 @@ Explorer performance is measured locally against the deterministic ByteForge Com
 Use a dedicated local database for performance work. Start a release-mode API against it, then create one of the documented [demo catalog profiles](../examples/generate.md):
 
 ```sh
-CATALOG_TOKEN=cat_pat_... just generate medium
+ATTRICAT_TOKEN=cat_pat_... just generate medium
 # Full benchmark dataset (1,000,000 records; this can take substantial time):
-CATALOG_TOKEN=cat_pat_... just generate large
+ATTRICAT_TOKEN=cat_pat_... just generate large
 ```
 
 The generator prints throughput, retries, and estimated ready time. It persists a resumable checkpoint under `.catalog-generator/`; inspect or resume it with:
 
 ```sh
 node examples/generate.mjs --size large --status
-CATALOG_TOKEN=cat_pat_... just generate-resume large
+ATTRICAT_TOKEN=cat_pat_... just generate-resume large
 ```
 
 Do not run a benchmark until its checkpoint reports `benchmark_ready: true`.
@@ -44,9 +44,9 @@ Do not run a benchmark until its checkpoint reports `benchmark_ready: true`.
 Install [k6](https://grafana.com/docs/k6/latest/set-up/install-k6/) and use a personal access token with `records.read`:
 
 ```sh
-CATALOG_TOKEN=cat_pat_... just perf smoke
-CATALOG_TOKEN=cat_pat_... just perf baseline
-CATALOG_TOKEN=cat_pat_... just perf load
+ATTRICAT_TOKEN=cat_pat_... just perf smoke
+ATTRICAT_TOKEN=cat_pat_... just perf baseline
+ATTRICAT_TOKEN=cat_pat_... just perf load
 ```
 
 `perf/explorer.js` covers scalar text/price sorting, related-manufacturer sorting, keyset pagination, and relationship-facet root expansion. It fails on request errors or missing `Server-Timing`; latency measurements are reported locally rather than treated as a gate until a stable hardware baseline is established.
@@ -55,7 +55,7 @@ Save the k6 JSON summary, the generator checkpoint, API git revision, PostgreSQL
 
 Latency often follows the number of database round trips per request.
 [Database round trips](../perf/round-trips.md) records the per-path baseline and
-how to measure it with the `catalog_db_round_trips_*` metrics.
+how to measure it with the `attricat_db_round_trips_*` metrics.
 
 ## Query plans
 

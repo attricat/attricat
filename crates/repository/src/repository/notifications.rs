@@ -1,12 +1,12 @@
 //! The per-user, per-workspace notification inbox.
 //!
-//! Producers call [`CatalogRepository::notify_on`] inside the transaction
+//! Producers call [`AttricatRepository::notify_on`] inside the transaction
 //! that causes the notification, so a notification exists exactly when its
 //! cause committed. Recipients only ever see and change their own rows: every
 //! read and write below is keyed by the workspace scope and the recipient.
 
-use super::{CatalogRepository, RepositoryError};
-use catalog_validation::principal::{PrincipalKind, PrincipalRef};
+use super::{AttricatRepository, RepositoryError};
+use attricat_validation::principal::{PrincipalKind, PrincipalRef};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -132,7 +132,7 @@ pub fn notification_excerpt(text: &str, limit: usize) -> String {
     excerpt
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     /// Delivers `notification` to each recipient that is an active member of
     /// this workspace, except the actor who caused it. A notification about
     /// a record only reaches recipients who may read that record, and an
@@ -403,7 +403,7 @@ struct Actor {
     name: String,
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     fn notification_actor_id(&self) -> Option<Uuid> {
         self.audit_context
             .as_ref()
@@ -672,7 +672,7 @@ impl CatalogRepository {
     }
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     /// Notifies a run's initiating user when it waits for their approval or
     /// fails, and when a run they did not start interactively completes; an
     /// interactive run's completion is already visible in the conversation.

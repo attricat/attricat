@@ -6,7 +6,7 @@ use api::{
     agent_provider::OpenAiCompatibleClient,
     agent_runner,
     agents::AgentProviderConfig,
-    repository::{ApprovalDecision, CatalogRepository},
+    repository::{ApprovalDecision, AttricatRepository},
     storage::{FakeObjectStore, ObjectStore},
 };
 use axum::{Router, routing::post};
@@ -18,7 +18,7 @@ use tokio::net::TcpListener;
 use uuid::Uuid;
 
 #[sqlx::test(migrations = "./migrations")]
-async fn catalog_mutation_creates_a_redacted_audit_event(pool: sqlx::PgPool) {
+async fn attricat_mutation_creates_a_redacted_audit_event(pool: sqlx::PgPool) {
     let (base_url, server) = start_server(pool.clone()).await;
     let request_id = Uuid::new_v4();
     let correlation_id = Uuid::new_v4();
@@ -47,7 +47,7 @@ async fn catalog_mutation_creates_a_redacted_audit_event(pool: sqlx::PgPool) {
     assert_eq!(event.1, Some(BOOTSTRAP_OWNER_ID.parse::<Uuid>().unwrap()));
     assert_eq!(event.2, request_id);
     assert_eq!(event.3, correlation_id);
-    assert_eq!(event.4, "catalog.blueprints.create_or_apply");
+    assert_eq!(event.4, "attricat.blueprints.create_or_apply");
     assert_eq!(event.5, "success");
     assert_eq!(
         event.6,
@@ -94,7 +94,7 @@ async fn approved_agent_mutation_has_explicit_redacted_provenance(pool: sqlx::Pg
     .unwrap();
     let workspace = BOOTSTRAP_WORKSPACE_ID.parse::<Uuid>().unwrap();
     let actor = BOOTSTRAP_OWNER_ID.parse::<Uuid>().unwrap();
-    let repository = CatalogRepository::system(pool.clone())
+    let repository = AttricatRepository::system(pool.clone())
         .for_workspace(workspace)
         .await
         .unwrap();
@@ -344,11 +344,11 @@ async fn invitation_acceptance_audits_the_invitation_workspace(pool: sqlx::PgPoo
     let (base_url, server) = start_server_with_test_mail(pool.clone(), mail_delivery.clone()).await;
     let mut inviter_headers = HeaderMap::new();
     inviter_headers.insert(
-        "x-catalog-user-id",
+        "x-attricat-user-id",
         HeaderValue::from_str(&inviter.to_string()).unwrap(),
     );
     inviter_headers.insert(
-        "x-catalog-workspace-id",
+        "x-attricat-workspace-id",
         HeaderValue::from_str(&invitation_workspace.to_string()).unwrap(),
     );
     let inviter_client = support::Client::builder()
@@ -385,11 +385,11 @@ async fn invitation_acceptance_audits_the_invitation_workspace(pool: sqlx::PgPoo
 
     let mut invitee_headers = HeaderMap::new();
     invitee_headers.insert(
-        "x-catalog-user-id",
+        "x-attricat-user-id",
         HeaderValue::from_str(&invitee.to_string()).unwrap(),
     );
     invitee_headers.insert(
-        "x-catalog-workspace-id",
+        "x-attricat-workspace-id",
         HeaderValue::from_static(BOOTSTRAP_WORKSPACE_ID),
     );
     let invitee_client = support::Client::builder()

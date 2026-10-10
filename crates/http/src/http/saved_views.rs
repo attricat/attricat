@@ -9,7 +9,7 @@ use super::{
     extractors::{ApiJson, ApiPath, ApiQuery},
 };
 use crate::repository::SavedView;
-use catalog_validation::saved_search;
+use attricat_validation::saved_search;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]

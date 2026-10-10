@@ -333,7 +333,7 @@ fn presence_filter_query(
     filter: &RecordSearchFilter,
     workspace_parameter: usize,
 ) -> String {
-    if filter.operator == catalog_validation::saved_search::FILTER_OPERATOR_IS_SET
+    if filter.operator == attricat_validation::saved_search::FILTER_OPERATOR_IS_SET
         && filter.value == "false"
     {
         format!(
@@ -375,7 +375,7 @@ fn renumber_parameters(sql: &str, map: impl Fn(usize) -> usize) -> String {
     renumbered
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     /// The [`SearchContext`] of the context `code`, or `None` when it does not exist.
     pub async fn search_context(
         &self,
@@ -2282,16 +2282,16 @@ impl CatalogRepository {
                 .await;
             if global {
                 match &result {
-                    Ok(_) => metrics::counter!("catalog_global_relationship_search_total", "outcome" => "success").increment(1),
+                    Ok(_) => metrics::counter!("attricat_global_relationship_search_total", "outcome" => "success").increment(1),
                     Err(RepositoryError::RelationshipSearchBudgetExceeded { dimension }) => {
-                        metrics::counter!("catalog_global_relationship_search_total", "outcome" => "budget_exceeded", "dimension" => *dimension).increment(1);
+                        metrics::counter!("attricat_global_relationship_search_total", "outcome" => "budget_exceeded", "dimension" => *dimension).increment(1);
                         tracing::warn!(dimension, "global relationship search budget exceeded");
                     }
                     Err(RepositoryError::RelationshipSearchTimedOut) => {
-                        metrics::counter!("catalog_global_relationship_search_total", "outcome" => "timed_out").increment(1);
+                        metrics::counter!("attricat_global_relationship_search_total", "outcome" => "timed_out").increment(1);
                         tracing::warn!("global relationship search statement timed out");
                     }
-                    Err(_) => metrics::counter!("catalog_global_relationship_search_total", "outcome" => "failed").increment(1),
+                    Err(_) => metrics::counter!("attricat_global_relationship_search_total", "outcome" => "failed").increment(1),
                 }
             }
             per_term.push(result?);
@@ -2854,11 +2854,12 @@ impl CatalogRepository {
         .bind(self.workspace_id.0)
         .fetch_all(&mut *transaction).await.map_err(global_search_error)?;
         transaction.commit().await.map_err(global_search_error)?;
-        metrics::histogram!("catalog_global_relationship_search_matches")
+        metrics::histogram!("attricat_global_relationship_search_matches")
             .record(budget.matches as f64);
-        metrics::histogram!("catalog_global_relationship_search_records")
+        metrics::histogram!("attricat_global_relationship_search_records")
             .record(budget.records as f64);
-        metrics::histogram!("catalog_global_relationship_search_edges").record(budget.edges as f64);
+        metrics::histogram!("attricat_global_relationship_search_edges")
+            .record(budget.edges as f64);
         tracing::info!(
             matches = budget.matches,
             records = budget.records,

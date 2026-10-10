@@ -1,7 +1,7 @@
 {
   "components": [
     {
-      "id": "catalog.color_display",
+      "id": "attricat.color_display",
       "version": 1,
       "capabilities": ["display"],
       "placements": ["field", "table"],
@@ -9,7 +9,7 @@
       "allowed_props": []
     },
     {
-      "id": "catalog.color_edit",
+      "id": "attricat.color_edit",
       "version": 1,
       "capabilities": ["edit"],
       "placements": ["field"],
@@ -17,7 +17,7 @@
       "allowed_props": []
     },
     {
-      "id": "catalog.email_display",
+      "id": "attricat.email_display",
       "version": 1,
       "capabilities": ["display"],
       "placements": ["field", "table"],
@@ -25,7 +25,7 @@
       "allowed_props": []
     },
     {
-      "id": "catalog.email_edit",
+      "id": "attricat.email_edit",
       "version": 1,
       "capabilities": ["edit"],
       "placements": ["field"],
@@ -33,7 +33,7 @@
       "allowed_props": []
     },
     {
-      "id": "catalog.url_display",
+      "id": "attricat.url_display",
       "version": 1,
       "capabilities": ["display"],
       "placements": ["field", "table"],
@@ -41,7 +41,7 @@
       "allowed_props": []
     },
     {
-      "id": "catalog.url_edit",
+      "id": "attricat.url_edit",
       "version": 1,
       "capabilities": ["edit"],
       "placements": ["field"],
@@ -49,7 +49,7 @@
       "allowed_props": []
     },
     {
-      "id": "catalog.phone_display",
+      "id": "attricat.phone_display",
       "version": 1,
       "capabilities": ["display"],
       "placements": ["field", "table"],
@@ -57,7 +57,7 @@
       "allowed_props": []
     },
     {
-      "id": "catalog.phone_edit",
+      "id": "attricat.phone_edit",
       "version": 1,
       "capabilities": ["edit"],
       "placements": ["field"],
@@ -65,7 +65,7 @@
       "allowed_props": []
     },
     {
-      "id": "catalog.markdown_display",
+      "id": "attricat.markdown_display",
       "version": 1,
       "capabilities": ["display"],
       "placements": ["field"],
@@ -73,7 +73,7 @@
       "allowed_props": []
     },
     {
-      "id": "catalog.markdown_edit",
+      "id": "attricat.markdown_edit",
       "version": 1,
       "capabilities": ["edit"],
       "placements": ["field"],
@@ -81,7 +81,7 @@
       "allowed_props": []
     },
     {
-      "id": "catalog.field_display",
+      "id": "attricat.field_display",
       "version": 1,
       "capabilities": ["display"],
       "placements": ["field"],
@@ -97,7 +97,7 @@
       "allowed_props": []
     },
     {
-      "id": "catalog.field_edit",
+      "id": "attricat.field_edit",
       "version": 1,
       "capabilities": ["edit"],
       "placements": ["field"],
@@ -113,7 +113,7 @@
       "allowed_props": []
     },
     {
-      "id": "catalog.relationship_list_display",
+      "id": "attricat.relationship_list_display",
       "version": 1,
       "capabilities": ["display"],
       "placements": ["relationship_list"],
@@ -121,7 +121,7 @@
       "allowed_props": []
     },
     {
-      "id": "catalog.relationship_list_edit",
+      "id": "attricat.relationship_list_edit",
       "version": 1,
       "capabilities": ["edit"],
       "placements": ["relationship_list"],
@@ -129,7 +129,7 @@
       "allowed_props": []
     },
     {
-      "id": "catalog.incoming_relationship_list_display",
+      "id": "attricat.incoming_relationship_list_display",
       "version": 1,
       "capabilities": ["display"],
       "placements": ["incoming_relationship_list"],
@@ -137,7 +137,7 @@
       "allowed_props": []
     },
     {
-      "id": "catalog.table_display",
+      "id": "attricat.table_display",
       "version": 1,
       "capabilities": ["display"],
       "placements": ["table"],
@@ -153,7 +153,7 @@
       "allowed_props": []
     },
     {
-      "id": "catalog.table_image",
+      "id": "attricat.table_image",
       "version": 1,
       "capabilities": ["display"],
       "placements": ["table"],
@@ -161,7 +161,7 @@
       "allowed_props": []
     },
     {
-      "id": "catalog.table_edit",
+      "id": "attricat.table_edit",
       "version": 1,
       "capabilities": ["edit"],
       "placements": ["table"],
@@ -177,7 +177,7 @@
       "allowed_props": []
     },
     {
-      "id": "catalog.record_heading",
+      "id": "attricat.record_heading",
       "version": 1,
       "capabilities": ["display"],
       "placements": ["stack"],
@@ -185,7 +185,7 @@
       "allowed_props": []
     },
     {
-      "id": "catalog.relationship_hierarchy",
+      "id": "attricat.relationship_hierarchy",
       "version": 1,
       "capabilities": ["display"],
       "placements": ["relationship_list"],

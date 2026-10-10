@@ -108,8 +108,8 @@ Blokady pochodzą z dwóch źródeł:
 Strona rekordu wyświetla blokady jego plików i datę ich wygaśnięcia. Zakładanie i zwalnianie blokad jest zapisywane w dzienniku audytu.
 
 ```sh
-curl -X POST "$CATALOG_API_URL/files/<file-id>/retention-holds" \
-  -H "Authorization: Bearer $CATALOG_TOKEN" -H 'Content-Type: application/json' \
+curl -X POST "$ATTRICAT_API_URL/files/<file-id>/retention-holds" \
+  -H "Authorization: Bearer $ATTRICAT_TOKEN" -H 'Content-Type: application/json' \
   -d '{"days": 365, "reason": "Litigation hold 2026-14"}'
 ```
 

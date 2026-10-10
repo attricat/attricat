@@ -2,7 +2,7 @@
 //! reference (`x-attricat-principal`).
 use std::collections::HashSet;
 
-use catalog_validation::principal::{
+use attricat_validation::principal::{
     CURRENT_USER_FILTER_VALUE, PrincipalKind, PrincipalRef, principal_kinds,
     validate_principal_value,
 };
@@ -13,8 +13,8 @@ use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
 use super::record_commands::Revalidation;
-use super::{CatalogRepository, RepositoryError};
-use catalog_domain::model::Record;
+use super::{AttricatRepository, RepositoryError};
+use attricat_domain::model::Record;
 
 pub const MAX_TEAMS: i64 = 1000;
 pub const MAX_TEAM_MEMBERS: usize = 1000;
@@ -58,7 +58,7 @@ pub struct WorkspaceDirectory {
 const TEAM_FIELDS: &str = "t.id, t.code, t.name, t.created_at, t.updated_at, COALESCE(array_agg(m.user_id ORDER BY m.user_id) FILTER (WHERE m.user_id IS NOT NULL), '{}') AS member_user_ids";
 
 fn validate_team_input(code: Option<&str>, name: &str) -> Result<(), RepositoryError> {
-    if code.is_some_and(|code| !catalog_validation::is_valid_code(code) || code.len() > 128) {
+    if code.is_some_and(|code| !attricat_validation::is_valid_code(code) || code.len() > 128) {
         return Err(RepositoryError::InvalidCode);
     }
     if name.trim().is_empty() || name.chars().count() > 200 {
@@ -69,7 +69,7 @@ fn validate_team_input(code: Option<&str>, name: &str) -> Result<(), RepositoryE
     Ok(())
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     pub async fn list_teams(&self) -> Result<Vec<Team>, RepositoryError> {
         Ok(sqlx::query_as::<_, Team>(&format!(
             "SELECT {TEAM_FIELDS} FROM teams t

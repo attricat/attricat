@@ -12,11 +12,11 @@ use crate::{
     task_queue::{TaskInsert, TaskKind},
 };
 
-use super::{CatalogRepository, RepositoryError};
-use catalog_cache::{CacheKey, Policy};
+use super::{AttricatRepository, RepositoryError};
+use attricat_cache::{CacheKey, Policy};
 use std::sync::Arc;
 
-/// What [`CatalogRepository::materialize_event_delivery_tasks_with`] scans.
+/// What [`AttricatRepository::materialize_event_delivery_tasks_with`] scans.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MaterializeScope {
     /// Legacy deliveries, the historical gap and new events.
@@ -180,7 +180,7 @@ pub trait EventPublisher {
 }
 
 #[async_trait]
-impl EventPublisher for CatalogRepository {
+impl EventPublisher for AttricatRepository {
     async fn enqueue_event(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
@@ -220,7 +220,7 @@ impl EventPublisher for CatalogRepository {
     }
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     /// [`EventPublisher::enqueue_event`] for several events: one outbox
     /// boundary lock and one INSERT. Sequences are allocated in `events`
     /// order.
@@ -655,7 +655,7 @@ pub struct FailedEventDelivery {
     pub last_error: Option<String>,
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     pub async fn list_failed_event_deliveries(
         &self,
     ) -> Result<Vec<FailedEventDelivery>, RepositoryError> {
@@ -716,7 +716,7 @@ impl CatalogRepository {
     }
 }
 
-impl<S: super::RepositoryScope> CatalogRepository<S> {
+impl<S: super::RepositoryScope> AttricatRepository<S> {
     /// Registers a durable consumer after the current high-water mark, so a
     /// newly installed internal handler receives future events only.
     pub async fn active_workspace_ids(&self) -> Result<Vec<Uuid>, RepositoryError> {
@@ -745,7 +745,7 @@ impl<S: super::RepositoryScope> CatalogRepository<S> {
     }
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     /// The highest outbox sequence of this repository's workspace.
     pub async fn latest_event_sequence(&self) -> Result<i64, RepositoryError> {
         Ok(sqlx::query_scalar(

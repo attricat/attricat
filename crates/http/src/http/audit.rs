@@ -88,7 +88,7 @@ fn action(method: &Method, route: &str) -> String {
         Method::DELETE => "delete",
         _ => "mutate",
     };
-    format!("catalog.{resource}.{verb}")
+    format!("attricat.{resource}.{verb}")
 }
 
 fn audit_permission(method: &Method, route: &str) -> &'static str {

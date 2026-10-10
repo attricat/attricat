@@ -1,5 +1,5 @@
 [package]
-name = "catalog-http"
+name = "attricat-http"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -12,17 +12,17 @@ async-trait.workspace = true
 axum.workspace = true
 base64.workspace = true
 bytes.workspace = true
-catalog-agent-runtime = { path = "../agent-runtime" }
-catalog-domain = { path = "../domain" }
-catalog-extension-manifest = { path = "../extension-manifest" }
-catalog-extension-runtime = { path = "../extension-runtime" }
-catalog-repository = { path = "../repository" }
-catalog-solution-pack = { path = "../solution-pack" }
-catalog-rules = { path = "../rules" }
-catalog-storage = { path = "../storage" }
-catalog-lexicon = { path = "../lexicon" }
-catalog-validation = { path = "../validation" }
-catalog-workflow = { path = "../workflow" }
+attricat-agent-runtime = { path = "../agent-runtime" }
+attricat-domain = { path = "../domain" }
+attricat-extension-manifest = { path = "../extension-manifest" }
+attricat-extension-runtime = { path = "../extension-runtime" }
+attricat-repository = { path = "../repository" }
+attricat-solution-pack = { path = "../solution-pack" }
+attricat-rules = { path = "../rules" }
+attricat-storage = { path = "../storage" }
+attricat-lexicon = { path = "../lexicon" }
+attricat-validation = { path = "../validation" }
+attricat-workflow = { path = "../workflow" }
 chrono.workspace = true
 chrono-tz.workspace = true
 lettre.workspace = true

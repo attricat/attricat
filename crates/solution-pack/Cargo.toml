@@ -1,5 +1,5 @@
 [package]
-name = "catalog-solution-pack"
+name = "attricat-solution-pack"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,12 +8,12 @@ publish.workspace = true
 
 [dependencies]
 base64.workspace = true
-catalog-blueprint = { path = "../blueprint" }
-catalog-lexicon = { path = "../lexicon" }
-catalog-rules = { path = "../rules" }
-catalog-workflow = { path = "../workflow" }
-catalog-extension-manifest = { path = "../extension-manifest" }
-catalog-validation = { path = "../validation" }
+attricat-blueprint = { path = "../blueprint" }
+attricat-lexicon = { path = "../lexicon" }
+attricat-rules = { path = "../rules" }
+attricat-workflow = { path = "../workflow" }
+attricat-extension-manifest = { path = "../extension-manifest" }
+attricat-validation = { path = "../validation" }
 chrono.workspace = true
 chrono-tz.workspace = true
 image.workspace = true

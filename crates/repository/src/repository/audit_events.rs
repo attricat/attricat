@@ -1,4 +1,4 @@
-use super::{CatalogRepository, RepositoryError};
+use super::{AttricatRepository, RepositoryError};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use serde_json::Value;
@@ -55,7 +55,7 @@ pub struct AuditEventPage {
     pub offset: i64,
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     pub async fn list_audit_events(
         &self,
         filter: AuditEventFilter,
@@ -104,7 +104,7 @@ impl CatalogRepository {
     }
 }
 
-impl<S: super::RepositoryScope> CatalogRepository<S> {
+impl<S: super::RepositoryScope> AttricatRepository<S> {
     /// Installs the audit-read permission in application code so database
     /// migrations remain declarative. Owners and administrators receive it.
     pub async fn ensure_audit_permissions(&self) -> Result<(), RepositoryError> {

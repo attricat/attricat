@@ -198,7 +198,7 @@ impl S3ObjectStore {
                 config.secret_access_key.expose_secret(),
                 None,
                 None,
-                "catalog-config",
+                "attricat-config",
             ))
             .load()
             .await;
@@ -482,7 +482,7 @@ impl ObjectStore for S3ObjectStore {
 }
 
 fn record_operation(operation: &'static str, outcome: &'static str) {
-    metrics::counter!("catalog_object_store_operations_total", "operation" => operation, "outcome" => outcome)
+    metrics::counter!("attricat_object_store_operations_total", "operation" => operation, "outcome" => outcome)
         .increment(1);
 }
 
@@ -491,7 +491,7 @@ fn record_readiness(ready: bool) {
         READINESS_OPERATION,
         if ready { "success" } else { "failure" },
     );
-    metrics::gauge!("catalog_object_store_ready").set(if ready { 1.0 } else { 0.0 });
+    metrics::gauge!("attricat_object_store_ready").set(if ready { 1.0 } else { 0.0 });
 }
 
 /// Deterministic in-memory storage for tests. It is intentionally not enabled
@@ -656,9 +656,9 @@ mod tests {
         [
             ("S3_ENDPOINT", "http://127.0.0.1:9000"),
             ("S3_REGION", "us-east-1"),
-            ("S3_BUCKET", "catalog-files"),
-            ("S3_ACCESS_KEY_ID", "catalog-dev"),
-            ("S3_SECRET_ACCESS_KEY", "catalog-dev-secret"),
+            ("S3_BUCKET", "attricat-files"),
+            ("S3_ACCESS_KEY_ID", "attricat-dev"),
+            ("S3_SECRET_ACCESS_KEY", "attricat-dev-secret"),
             ("S3_FORCE_PATH_STYLE", "true"),
             ("S3_UPLOAD_TIMEOUT_SECONDS", "30"),
             ("S3_DOWNLOAD_TIMEOUT_SECONDS", "30"),

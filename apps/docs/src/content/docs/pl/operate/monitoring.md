@@ -38,31 +38,31 @@ Oba procesy udostępniają metryki Prometheus. Trzymaj je w sieci prywatnej.
 | API | `GET /api/metrics` | Sesja lub token z `data_health.read`. |
 | Proces roboczy plików | `GET /metrics` na nasłuchu operacyjnym (port 3001) | `Authorization: Bearer $FILE_WORKER_METRICS_TOKEN`. |
 
-Etykiety mają ograniczony zbiór wartości: trasy są raportowane jako szablony, a nazwa pliku, identyfikator ani URL nigdy nie są etykietą. Jedyną serią z etykietą obszaru roboczego jest `catalog_event_delivery_queue_depth` (`workspace_id`).
+Etykiety mają ograniczony zbiór wartości: trasy są raportowane jako szablony, a nazwa pliku, identyfikator ani URL nigdy nie są etykietą. Jedyną serią z etykietą obszaru roboczego jest `attricat_event_delivery_queue_depth` (`workspace_id`).
 
 Przydatne serie:
 
 | Seria | Na co zwracać uwagę |
 | --- | --- |
-| `catalog_database_ready`, `catalog_object_store_ready` | Zero przez dwa interwały sondy. |
-| `catalog_task_queue_depth`, `catalog_task_queue_oldest_age_seconds`, `catalog_task_queue_retries` | Rosnąca głębokość, stare zadania, jakiekolwiek martwe wiadomości. |
-| `catalog_file_worker_queue_depth`, `catalog_file_worker_oldest_age_seconds`, `catalog_file_worker_retries` | To samo dla przetwarzania plików. |
-| `catalog_file_worker_jobs_failed_total` | Wzrosty. |
-| `catalog_event_delivery_queue_depth{workspace_id,consumer,status}` | Rosnące `pending`, jakiekolwiek `dead_letter`. |
-| `catalog_event_deliveries_total{outcome}` | Wzrosty `dead_letter`. |
-| `catalog_extension_operation_runs`, `catalog_extension_operation_oldest_age_seconds` | Zablokowane operacje rozszerzeń. |
-| `catalog_file_uploads_total`, `catalog_file_downloads_total`, `catalog_object_store_operations_total` | Wyniki z błędem. |
-| `catalog_value_history_cleanup_total{outcome}` | `failed`. Powtarzające się `budget_exhausted` oznacza, że każdy 10-sekundowy przebieg kończy się, zanim usunie całą starą historię. |
-| `catalog_upload_cleanup_total{outcome}` | `failed`. Nieudane usunięcia porzuconych przesłanych plików są ponawiane. |
-| `catalog_query_cache_requests_total{namespace,outcome}` | Malejący udział `hit` i `remote_hit` względem `miss`. |
-| `catalog_query_cache_redis_connected` | `0` na którejkolwiek replice: utraciła połączenie z Redis i do jego odnowienia buforuje tylko w pamięci. |
-| `catalog_query_cache_redis_circuit_opened_total` | Wzrosty: Redis jest połączony, ale stale przekracza limit czasu lub gubi polecenia, więc repliki co jakiś czas pomijają go na kilka sekund. |
-| `catalog_db_round_trips_per_operation{scope}` | Rosnąca liczba zapytań do bazy danych na trasę żądania, rodzaj zadania lub pętlę w tle. |
-| `catalog_db_round_trips_total{scope}` | Rosnące tempo dla `unscoped` albo pętla w tle, której tempo rośnie, gdy katalog jest bezczynny. |
+| `attricat_database_ready`, `attricat_object_store_ready` | Zero przez dwa interwały sondy. |
+| `attricat_task_queue_depth`, `attricat_task_queue_oldest_age_seconds`, `attricat_task_queue_retries` | Rosnąca głębokość, stare zadania, jakiekolwiek martwe wiadomości. |
+| `attricat_file_worker_queue_depth`, `attricat_file_worker_oldest_age_seconds`, `attricat_file_worker_retries` | To samo dla przetwarzania plików. |
+| `attricat_file_worker_jobs_failed_total` | Wzrosty. |
+| `attricat_event_delivery_queue_depth{workspace_id,consumer,status}` | Rosnące `pending`, jakiekolwiek `dead_letter`. |
+| `attricat_event_deliveries_total{outcome}` | Wzrosty `dead_letter`. |
+| `attricat_extension_operation_runs`, `attricat_extension_operation_oldest_age_seconds` | Zablokowane operacje rozszerzeń. |
+| `attricat_file_uploads_total`, `attricat_file_downloads_total`, `attricat_object_store_operations_total` | Wyniki z błędem. |
+| `attricat_value_history_cleanup_total{outcome}` | `failed`. Powtarzające się `budget_exhausted` oznacza, że każdy 10-sekundowy przebieg kończy się, zanim usunie całą starą historię. |
+| `attricat_upload_cleanup_total{outcome}` | `failed`. Nieudane usunięcia porzuconych przesłanych plików są ponawiane. |
+| `attricat_query_cache_requests_total{namespace,outcome}` | Malejący udział `hit` i `remote_hit` względem `miss`. |
+| `attricat_query_cache_redis_connected` | `0` na którejkolwiek replice: utraciła połączenie z Redis i do jego odnowienia buforuje tylko w pamięci. |
+| `attricat_query_cache_redis_circuit_opened_total` | Wzrosty: Redis jest połączony, ale stale przekracza limit czasu lub gubi polecenia, więc repliki co jakiś czas pomijają go na kilka sekund. |
+| `attricat_db_round_trips_per_operation{scope}` | Rosnąca liczba zapytań do bazy danych na trasę żądania, rodzaj zadania lub pętlę w tle. |
+| `attricat_db_round_trips_total{scope}` | Rosnące tempo dla `unscoped` albo pętla w tle, której tempo rośnie, gdy katalog jest bezczynny. |
 
 Wskaźnik dostarczania zdarzeń jest odświeżany co pięć sekund. Dla każdego odbiorcy, który ma dostarczenia w obszarze roboczym, raportowane są wszystkie cztery statusy, a statusy bez dostarczeń mają wartość `0`.
 
-Każda trasa żądania, rodzaj zadania i pętla w tle to osobny `scope` liczby zapytań. Aby zapisywać tę liczbę w logu dla każdej operacji, ustaw `RUST_LOG=catalog_repository::round_trips=debug`.
+Każda trasa żądania, rodzaj zadania i pętla w tle to osobny `scope` liczby zapytań. Aby zapisywać tę liczbę w logu dla każdej operacji, ustaw `RUST_LOG=attricat_repository::round_trips=debug`.
 
 Sugerowane alerty: powiadamiaj dyżurnego, gdy wskaźnik gotowości wynosi zero przez dwa interwały, gdy liczba martwych wiadomości lub nieudanych zadań jest większa od zera albo gdy rosną liczniki niepowodzeń. Ostrzegaj, gdy najstarszy element w kolejce jest starszy niż pięć minut przez dziesięć minut lub gdy kolejka rośnie przez piętnaście minut. Alarmuj, jeśli metryki znikną na dwa interwały pobierania. Dostosuj progi do wolumenu importów i eksportów.
 

@@ -68,7 +68,7 @@ The blueprint's **Migrations** tab lists every batch with its target revision, p
 | `completed` | Every eligible record was examined. Some may still need review. |
 | `superseded` | Replaced by a newer batch. |
 
-Two server settings tune batches: `BLUEPRINT_MIGRATION_PAGE_SIZE` and `BLUEPRINT_MIGRATION_CONCURRENCY`. See the [configuration reference](/reference/configuration/#catalog-behavior-and-limits).
+Two server settings tune batches: `BLUEPRINT_MIGRATION_PAGE_SIZE` and `BLUEPRINT_MIGRATION_CONCURRENCY`. See the [configuration reference](/reference/configuration/#attricat-behavior-and-limits).
 
 ### From the CLI
 

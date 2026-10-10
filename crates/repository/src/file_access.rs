@@ -7,7 +7,7 @@
 use async_trait::async_trait;
 use uuid::Uuid;
 
-use crate::repository::{CatalogRepository, RepositoryError};
+use crate::repository::{AttricatRepository, RepositoryError};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FileAccessOperation {
@@ -76,7 +76,7 @@ pub struct AllowFileAccess;
 /// Applies the same repository grant and deployment-specific file policy used
 /// by HTTP downloads to every caller that exposes file content.
 pub async fn authorize_file_read(
-    repository: &CatalogRepository,
+    repository: &AttricatRepository,
     policy: &dyn FileAccessPolicy,
     principal: Uuid,
     workspace: Uuid,

@@ -23,7 +23,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
-use catalog_validation::unique_key::normalize_key_component;
+use attricat_validation::unique_key::normalize_key_component;
 use serde::Serialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -34,7 +34,7 @@ use super::record_values::{
     ContextTree, RecordState, RecordValues, Selection, load_records, resolve_on_path,
 };
 use super::write_context::WriteContext;
-use super::{CatalogRepository, RepositoryError};
+use super::{AttricatRepository, RepositoryError};
 use crate::model::Record;
 
 /// Duplicate groups and hierarchy violations reported when publication fails.
@@ -148,7 +148,7 @@ fn key_codes(keys: &[EnforcedUniqueKey]) -> Vec<String> {
         .collect()
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     /// Applies unique keys to one record after its values changed. Called by
     /// every value-write path through record validation.
     pub(super) async fn sync_record_unique_keys(

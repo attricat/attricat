@@ -15,10 +15,10 @@ A production API needs, at a minimum:
 
 ```sh
 DATABASE_URL=postgres://attricat:…@postgres.example:5432/attricat
-CATALOG_AUTO_MIGRATE=false
-CATALOG_BOOTSTRAP_OWNER_EMAIL=owner@example.com
+ATTRICAT_AUTO_MIGRATE=false
+ATTRICAT_BOOTSTRAP_OWNER_EMAIL=owner@example.com
 SESSION_COOKIE_SECURE=true
-CATALOG_DEVTOOLS=false
+ATTRICAT_DEVTOOLS=false
 
 S3_ENDPOINT=https://s3.example.com
 S3_REGION=us-east-1
@@ -33,9 +33,9 @@ SMTP_HOST=smtp.example.com
 SMTP_PORT=587
 SMTP_TLS_MODE=starttls
 MAIL_FROM="Attricat <no-reply@example.com>"
-PASSWORD_RESET_URL=https://catalog.example.com/password-reset/confirm
-WORKSPACE_INVITATION_URL=https://catalog.example.com/invitations/accept
-WORKSPACE_ONBOARDING_URL=https://catalog.example.com/onboarding
+PASSWORD_RESET_URL=https://attricat.example.com/password-reset/confirm
+WORKSPACE_INVITATION_URL=https://attricat.example.com/invitations/accept
+WORKSPACE_ONBOARDING_URL=https://attricat.example.com/onboarding
 ```
 
 The file worker needs the same `DATABASE_URL` and `S3_*` values plus `FILE_WORKER_METRICS_TOKEN`, because the container image binds its operations listener outside loopback.
@@ -48,11 +48,11 @@ The file worker needs the same `DATABASE_URL` and `S3_*` values plus `FILE_WORKE
 | `DATABASE_REQUEST_POOL_CONNECTIONS` | `10` | Connections in the pool that serves HTTP requests, shared by all workspaces. Integer from 1 to 100. |
 | `DATABASE_TASK_POOL_CONNECTIONS` | `10` | Connections in the pool used by background workers, shared by all workspaces. Integer from 1 to 100. The API logs the total of the request, task, and maintenance pools at startup. Each API process may also hold up to three connections outside the pools for background coordinators, and these need session-mode connections: PgBouncer's transaction pooling is not supported. See [Run several API replicas](/operate/deployment/#run-several-api-replicas). |
 | `BIND_ADDR` | `127.0.0.1:3000` | Address the API listens on. The container image sets `0.0.0.0:3000`. |
-| `CATALOG_AUTO_MIGRATE` | `true` | Apply database migrations when the API starts. Set `false` in production and run the image's `migrate` role once before rolling out API replicas. |
+| `ATTRICAT_AUTO_MIGRATE` | `true` | Apply database migrations when the API starts. Set `false` in production and run the image's `migrate` role once before rolling out API replicas. |
 | `WEB_DIST_DIR` | Unset | Directory containing the compiled web app. When set, the API serves the app for every path outside `/api` and the health probes. The container image sets `/srv/attricat/web`. |
 | `RUST_LOG` | `info` | Log filter, for example `api=debug`. |
 | `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | Unset | OTLP/gRPC endpoint for trace export from the API and file worker. Leave unset to disable tracing export. |
-| `CATALOG_DEVTOOLS` | `true` in local development | Enables the web Inspector and the Explorer's SQL timing entries in the `Server-Timing` header. Set `false` in production. In other builds, including production, a browser can load the Inspector on demand by setting local storage `catalog.inspector-enabled` to `true` and reloading; SQL timings still require this setting on the API. SQL text and bind values are never exposed. |
+| `ATTRICAT_DEVTOOLS` | `true` in local development | Enables the web Inspector and the Explorer's SQL timing entries in the `Server-Timing` header. Set `false` in production. In other builds, including production, a browser can load the Inspector on demand by setting local storage `attricat.inspector-enabled` to `true` and reloading; SQL timings still require this setting on the API. SQL text and bind values are never exposed. |
 
 ## Bootstrap workspace and owner
 
@@ -60,13 +60,13 @@ On startup the API makes sure one workspace and its owner exist. These values ar
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `CATALOG_WORKSPACE_ID` | `00000000-0000-4000-8000-000000000002` | UUID of the workspace created at startup. It does not select a workspace for HTTP requests; the signed-in session or token does that. |
-| `CATALOG_BOOTSTRAP_WORKSPACE_NAME` | `Default workspace` | Display name used when the workspace is first created. |
-| `CATALOG_BOOTSTRAP_OWNER_EMAIL` | `owner@example.test` | Email of the initial owner. It is trimmed and lowercased. Startup creates the user, membership, and owner grant if they do not exist. Always set a real address in a deployment. |
-| `CATALOG_BOOTSTRAP_OWNER_ID` | Random UUID | Optional fixed UUID for the bootstrap owner. |
-| `CATALOG_BOOTSTRAP_OWNER_PASSWORD` | Unset | Optional first password for a newly created owner. It is hashed before storage and never changes an existing password. Supply it for the first start only, then remove it. |
-| `CATALOG_DEMO_MODE` | `false` | For public demo deployments only. Turns on `CATALOG_SAMPLE_ACCOUNTS`, gives the initial workspace the sign-in identifier `demo.attricat.com` and the default name `Demo`, and opens the sign-in page on that workspace with the editor account selected. Visitors can switch to the viewer, admin or owner account. Password reset, member and role-grant changes, ownership transfer, invitations and new users are turned off so visitors cannot lock the shared accounts out. If agents are configured, they can read the catalog and explain changes but cannot make them. Never enable it for a workspace with real data. |
-| `CATALOG_SAMPLE_ACCOUNTS` | `false` | Creates `viewer@`, `editor@` and `admin@` accounts on the owner's email domain, each with that built-in role and the `CATALOG_BOOTSTRAP_OWNER_PASSWORD` password (which must then stay set). The sign-in page offers them in a picker. Anyone who can reach the server can sign in with them, so use it only for local development and demos. |
+| `ATTRICAT_WORKSPACE_ID` | `00000000-0000-4000-8000-000000000002` | UUID of the workspace created at startup. It does not select a workspace for HTTP requests; the signed-in session or token does that. |
+| `ATTRICAT_BOOTSTRAP_WORKSPACE_NAME` | `Default workspace` | Display name used when the workspace is first created. |
+| `ATTRICAT_BOOTSTRAP_OWNER_EMAIL` | `owner@example.test` | Email of the initial owner. It is trimmed and lowercased. Startup creates the user, membership, and owner grant if they do not exist. Always set a real address in a deployment. |
+| `ATTRICAT_BOOTSTRAP_OWNER_ID` | Random UUID | Optional fixed UUID for the bootstrap owner. |
+| `ATTRICAT_BOOTSTRAP_OWNER_PASSWORD` | Unset | Optional first password for a newly created owner. It is hashed before storage and never changes an existing password. Supply it for the first start only, then remove it. |
+| `ATTRICAT_DEMO_MODE` | `false` | For public demo deployments only. Turns on `ATTRICAT_SAMPLE_ACCOUNTS`, gives the initial workspace the sign-in identifier `demo.attricat.com` and the default name `Demo`, and opens the sign-in page on that workspace with the editor account selected. Visitors can switch to the viewer, admin or owner account. Password reset, member and role-grant changes, ownership transfer, invitations and new users are turned off so visitors cannot lock the shared accounts out. If agents are configured, they can read the catalog and explain changes but cannot make them. Never enable it for a workspace with real data. |
+| `ATTRICAT_SAMPLE_ACCOUNTS` | `false` | Creates `viewer@`, `editor@` and `admin@` accounts on the owner's email domain, each with that built-in role and the `ATTRICAT_BOOTSTRAP_OWNER_PASSWORD` password (which must then stay set). The sign-in page offers them in a picker. Anyone who can reach the server can sign in with them, so use it only for local development and demos. |
 
 The bootstrap workspace's sign-in identifier is `default.local`.
 
@@ -89,7 +89,7 @@ Session lifetime (eight hours), the login rate limit (five failures per workspac
 | `HTTP_EVENT_STREAM_LIFETIME_SECONDS` | `900` | Longest an event stream stays open. The API then closes it, and clients reconnect with `Last-Event-ID`. |
 | `HTTP_DEFAULT_BODY_BYTES` | `2097152` (2 MiB) | Default request body limit. Upload routes use the file limits below instead. |
 
-## Catalog behavior and limits
+## Attricat behavior and limits
 
 | Variable | Default | Description |
 | --- | --- | --- |
@@ -173,10 +173,10 @@ Attricat sends password-reset, invitation, and onboarding email over SMTP.
 | `SMTP_TLS_MODE` | `starttls` | `starttls` or `implicit`. `disabled` is accepted only for an unauthenticated local relay such as Mailpit; startup rejects credentials combined with `disabled`. |
 | `SMTP_USERNAME` | Unset | SMTP username. Set both username and password, or neither. |
 | `SMTP_PASSWORD` | Unset | SMTP password. |
-| `MAIL_FROM` | `Catalog <no-reply@catalog.local>` | Sender address. |
-| `PASSWORD_RESET_URL` | Local URL | Absolute URL of the web app's password-reset confirmation page, for example `https://catalog.example.com/password-reset/confirm`. |
-| `WORKSPACE_INVITATION_URL` | Local URL | Absolute URL used in invitations to existing users, for example `https://catalog.example.com/invitations/accept`. |
-| `WORKSPACE_ONBOARDING_URL` | Local URL | Absolute URL used in onboarding links for new users, for example `https://catalog.example.com/onboarding`. |
+| `MAIL_FROM` | `Attricat <no-reply@attricat.local>` | Sender address. |
+| `PASSWORD_RESET_URL` | Local URL | Absolute URL of the web app's password-reset confirmation page, for example `https://attricat.example.com/password-reset/confirm`. |
+| `WORKSPACE_INVITATION_URL` | Local URL | Absolute URL used in invitations to existing users, for example `https://attricat.example.com/invitations/accept`. |
+| `WORKSPACE_ONBOARDING_URL` | Local URL | Absolute URL used in onboarding links for new users, for example `https://attricat.example.com/onboarding`. |
 
 ## Agents
 
@@ -206,7 +206,7 @@ These agent limits are fixed: 32 KiB per user message, 16 attachments per messag
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `CATALOG_API_URL` | `http://127.0.0.1:3000/api` | API base URL, including `/api`. The CLI uses it, and the Vite development server proxies `/api` to its origin. |
+| `ATTRICAT_API_URL` | `http://127.0.0.1:3000/api` | API base URL, including `/api`. The CLI uses it, and the Vite development server proxies `/api` to its origin. |
 | `WEB_PORT` | `5173` | Port of the Vite development server. |
 
 ## Local development services
@@ -215,7 +215,7 @@ The repository's local stack runs PostgreSQL, Mailpit (email capture), Jaeger (t
 
 | Variable | Default |
 | --- | --- |
-| `POSTGRES_DB` | `catalog` |
+| `POSTGRES_DB` | `attricat` |
 | `POSTGRES_USER` | `postgres` |
 | `POSTGRES_PASSWORD` | `postgres` |
 | `POSTGRES_PORT` | `5432` |
@@ -226,7 +226,7 @@ The repository's local stack runs PostgreSQL, Mailpit (email capture), Jaeger (t
 | `RUSTFS_PORT` | `9000` |
 | `RUSTFS_CONSOLE_PORT` | `9001` |
 
-`CATALOG_E2E_FIXTURE_EMAIL` and `CATALOG_E2E_FIXTURE_PASSWORD` create a test user for end-to-end tests. Never set them in production.
+`ATTRICAT_E2E_FIXTURE_EMAIL` and `ATTRICAT_E2E_FIXTURE_PASSWORD` create a test user for end-to-end tests. Never set them in production.
 
 ## CLI
 

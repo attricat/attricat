@@ -15,7 +15,7 @@ use crate::domain_events::{
 };
 use crate::model::{NewFileAttributeValue, UpdateRecordFormRequest};
 use crate::persistence_rows::{Db, IntoDomain};
-use catalog_validation::validate_json_schema;
+use attricat_validation::validate_json_schema;
 use chrono::Utc;
 use serde_json::{Map, Value};
 use sqlx::{Postgres, Transaction};
@@ -31,7 +31,7 @@ pub(super) struct AuditValueSnapshot {
     value: Value,
 }
 
-/// How [`CatalogRepository::validate_record_schema_with`] treats status.
+/// How [`AttricatRepository::validate_record_schema_with`] treats status.
 /// A value resolved against its [`WriteContext`] and validated in memory.
 struct PreparedValue {
     attribute_id: Uuid,
@@ -69,7 +69,7 @@ pub(super) enum CreateFileValues {
     /// Files the workspace already holds, such as a duplicated record's.
     Existing(Vec<NewFileAttributeValue>),
     /// Files staged by `uploaded_by` for the blueprint, which the create
-    /// claims; see [`CatalogRepository::claim_staged_files_in_transaction`].
+    /// claims; see [`AttricatRepository::claim_staged_files_in_transaction`].
     Staged {
         uploaded_by: Uuid,
         values: Vec<NewFileAttributeValue>,
@@ -97,7 +97,7 @@ struct CardinalityCheck<'a> {
     target_record_id: Uuid,
 }
 
-impl CatalogRepository {
+impl AttricatRepository {
     pub async fn create_record_with_values(
         &self,
         blueprint_id: Uuid,
@@ -1508,14 +1508,14 @@ impl CatalogRepository {
         struct Row {
             #[sqlx(flatten)]
             record: Db<Record>,
-            catalog_generation: Option<i64>,
+            attricat_generation: Option<i64>,
             contexts_generation: Option<i64>,
             extensions_generation: Option<i64>,
         }
         lock_record_writes(transaction, self.workspace_id.0, false).await?;
         let row = sqlx::query_as::<_, Row>(
             r#"SELECT e.id, e.blueprint_id, e.blueprint_version, e.projections, e.system_tags, e.system_metadata, ('attricat.sample'=ANY(e.system_tags)) AS is_sample, e.created_at, e.updated_at, e.deleted_at,
-                      w.catalog_generation, w.contexts_generation, w.extensions_generation
+                      w.attricat_generation, w.contexts_generation, w.extensions_generation
                FROM records e LEFT JOIN workspaces w ON w.id = e.workspace_id
                WHERE e.id = $1 AND e.workspace_id = $2 AND e.deleted_at IS NULL FOR UPDATE OF e"#,
         )
@@ -1525,13 +1525,13 @@ impl CatalogRepository {
         .await?
         .ok_or(RepositoryError::NotFound("record"))?;
         let generations = row
-            .catalog_generation
+            .attricat_generation
             .zip(row.contexts_generation)
             .zip(row.extensions_generation)
             .map(
-                |((catalog_generation, contexts_generation), extensions_generation)| {
+                |((attricat_generation, contexts_generation), extensions_generation)| {
                     WorkspaceGenerations {
-                        catalog_generation,
+                        attricat_generation,
                         contexts_generation,
                         extensions_generation,
                     }

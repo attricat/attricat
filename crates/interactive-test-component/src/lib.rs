@@ -1,4 +1,4 @@
-//! Interactive operation fixture (`catalog:host@1.0.0`). Each
+//! Interactive operation fixture (`attricat:host@1.0.0`). Each
 //! batch reads one selection member, appends a deterministic line to a run
 //! output, and annotates the member in the component's own namespace. It also
 //! probes the selection boundary so host tests can assert the denials.
@@ -8,8 +8,8 @@ wit_bindgen::generate!({
     world: "operation-extension",
 });
 
-use catalog::host::{artifacts, catalog_data, selection};
-use exports::catalog::host::operations::{BatchResult, Guest, OperationRequest};
+use attricat::host::{artifacts, attricat_data, selection};
+use exports::attricat::host::operations::{BatchResult, Guest, OperationRequest};
 use serde_json::{Value, json};
 
 const OUTPUT: &str = "summary.txt";
@@ -51,13 +51,13 @@ impl Guest for Component {
                     "set_metadata": {"run_id": request.run_id, "cleared": null}
                 }]
             }});
-            let outcomes = parse(&catalog_data::batch(&batch.to_string())?)?;
+            let outcomes = parse(&attricat_data::batch(&batch.to_string())?)?;
             checkpoint["annotation_status"] = outcomes[0]["status"].clone();
         }
-        let generic_read = catalog_data::read(
+        let generic_read = attricat_data::read(
             &json!({"operation": "lookup", "blueprint_id": described["blueprint_id"], "blueprint_version": described["blueprint_version"], "attribute_id": record_id, "value": "x"}).to_string(),
         );
-        let outside = catalog_data::batch(
+        let outside = attricat_data::batch(
             &json!({"operation": "batch", "batch": {
                 "batch_key": request.batch_key,
                 "dry_run": false,

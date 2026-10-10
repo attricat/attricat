@@ -2,7 +2,7 @@ mod support;
 
 use std::time::Duration;
 
-use api::repository::CatalogRepository;
+use api::repository::AttricatRepository;
 use sqlx::{PgPool, postgres::PgPoolOptions};
 use uuid::Uuid;
 
@@ -20,7 +20,7 @@ async fn workspace_scopes_share_one_bounded_pool_under_concurrency_and_close_cle
         .execute(&pool)
         .await
         .unwrap();
-        CatalogRepository::system(pool.clone())
+        AttricatRepository::system(pool.clone())
             .initialize_workspace(*workspace_id)
             .await
             .unwrap();
@@ -32,7 +32,7 @@ async fn workspace_scopes_share_one_bounded_pool_under_concurrency_and_close_cle
         .connect_with((*pool.connect_options()).clone())
         .await
         .unwrap();
-    let session = CatalogRepository::new(shared_pool.clone(), workspace_ids[0]);
+    let session = AttricatRepository::new(shared_pool.clone(), workspace_ids[0]);
 
     let mut requests = tokio::task::JoinSet::new();
     for workspace_id in workspace_ids.iter().copied() {
@@ -58,7 +58,7 @@ async fn workspace_scopes_share_one_bounded_pool_under_concurrency_and_close_cle
         .connect_with((*pool.connect_options()).clone())
         .await
         .unwrap();
-    let exhausted_session = CatalogRepository::new(exhausted.clone(), workspace_ids[0]);
+    let exhausted_session = AttricatRepository::new(exhausted.clone(), workspace_ids[0]);
     let held_first = exhausted.acquire().await.unwrap();
     let held_second = exhausted.acquire().await.unwrap();
     // Scope derivation is pure, even with no available database connections.

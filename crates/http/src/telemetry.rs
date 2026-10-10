@@ -86,7 +86,7 @@ where
         let Some(elapsed_seconds) = visitor.elapsed_seconds else {
             return;
         };
-        catalog_repository::round_trips::record_round_trip();
+        attricat_repository::round_trips::record_round_trip();
         let Some(scope) = context.event_scope(event) else {
             return;
         };

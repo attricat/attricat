@@ -8,9 +8,9 @@ cache stays correct and what a new write path must do to keep it that way.
 HTTP caching of downloads is a separate concern; see the
 [API reference](api.md#file-uploads-and-downloads).
 
-## The `catalog-cache` crate
+## The `attricat-cache` crate
 
-`crates/cache` (`catalog-cache`) is a leaf crate with no catalog knowledge. The
+`crates/cache` (`attricat-cache`) is a leaf crate with no catalog knowledge. The
 repository decides what is cached and under which key; the crate provides:
 
 - `QueryCache`: a bounded in-process LRU (L1, Moka, `CACHE_MAX_ENTRIES`
@@ -23,12 +23,12 @@ repository decides what is cached and under which key; the crate provides:
   `CACHE_KEY_PREFIX` (see [Configuration](configuration.md)).
 
 `apps/api` builds one `QueryCache` at startup and hands it to every request and
-worker repository with `CatalogRepository::with_cache`. Repositories built
+worker repository with `AttricatRepository::with_cache`. Repositories built
 without it (tests, maintenance) get a private in-memory cache.
 
 Keys are `namespace:part:part`; the namespace (`blueprint_revision`,
 `context_tree`, `enabled_rules`, `extension_manifest`, ...) labels the
-`catalog_query_cache_requests_total` metric.
+`attricat_query_cache_requests_total` metric.
 
 ## Correctness comes from keys, not invalidation
 
@@ -46,7 +46,7 @@ three policies:
 They never reach Redis or other replicas, so they must never be what keeps an
 entry correct.
 
-The data-health endpoints use their own response cache in `catalog-http`,
+The data-health endpoints use their own response cache in `attricat-http`,
 keyed by the workspace outbox high-water mark and bounded by
 `DATA_HEALTH_CACHE_TTL_SECONDS`.
 
@@ -56,7 +56,7 @@ keyed by the workspace outbox high-water mark and bounded by
 
 | Generation | Covers | Advanced by |
 | --- | --- | --- |
-| `catalog_generation` | Latest published revisions, enabled rules, Explore navigation | Publishing a blueprint revision, publishing, enabling or disabling a rule, writing Explore navigation |
+| `attricat_generation` | Latest published revisions, enabled rules, Explore navigation | Publishing a blueprint revision, publishing, enabling or disabling a rule, writing Explore navigation |
 | `contexts_generation` | The context tree | Creating, updating or deleting an attribute context |
 | `extensions_generation` | Client contributions and extension layout | Every installation, upgrade, enable, quarantine, removal, grant, revocation and configuration change (all commit through `commit_extension_mutation`), lifecycle state changes, layout writes and the workspace extensions mode |
 
@@ -163,13 +163,13 @@ limiter, so the limit applies per replica until Redis recovers.
 
 ## Metrics
 
-- `catalog_query_cache_requests_total{namespace,outcome}`: `outcome` is `hit`,
+- `attricat_query_cache_requests_total{namespace,outcome}`: `outcome` is `hit`,
   `remote_hit`, `miss`, `stale` or `stale_reload`.
-- `catalog_query_cache_invalidations_total`: process-local tag evictions.
-- `catalog_query_cache_redis_connected`: `1` while the Redis connection is
+- `attricat_query_cache_invalidations_total`: process-local tag evictions.
+- `attricat_query_cache_redis_connected`: `1` while the Redis connection is
   up, `0` while the client is disconnected and reconnecting. Each process
   reports its own connection.
-- `catalog_query_cache_redis_circuit_opened_total`: times the circuit breaker
+- `attricat_query_cache_redis_circuit_opened_total`: times the circuit breaker
   opened after repeated timeouts or connection failures. It counts openings,
   not skipped commands; a failed trial after the cooldown does not count
   again. A disconnect alone does not open the breaker, so watch the gauge for

@@ -7,7 +7,7 @@ use serde_json::Value;
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
-use super::{CatalogRepository, RepositoryError, StartExtensionOperation};
+use super::{AttricatRepository, RepositoryError, StartExtensionOperation};
 
 const MAX_SNAPSHOT_BYTES: usize = 64 * 1024;
 const MAX_DUE_PER_POLL: i64 = 16;
@@ -96,7 +96,7 @@ fn safe_snapshot(
 
 const PROJECTION: &str = "id,extension_id,installed_release_id,operation_id,interval_seconds,next_at,enabled,paused_reason,created_at,updated_at";
 
-impl CatalogRepository {
+impl AttricatRepository {
     pub async fn create_extension_operation_schedule(
         &self,
         input: CreateExtensionOperationSchedule,
@@ -131,7 +131,7 @@ impl CatalogRepository {
         {
             return Err(invalid("schedule input exceeds operation limit"));
         }
-        catalog_extension_manifest::validate_schema(&operation.request_schema, &input.input)
+        attricat_extension_manifest::validate_schema(&operation.request_schema, &input.input)
             .map_err(|_| invalid("schedule input does not match the operation schema"))?;
         safe_snapshot(
             &installation.configuration,
