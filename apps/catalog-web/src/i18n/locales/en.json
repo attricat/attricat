@@ -784,7 +784,6 @@
       "lt": "<",
       "lte": "≤"
     },
-    "treeOptions": "Tree options",
     "entityActionsFor": "Record actions for {{entityId}}",
     "viewEntityIdWithId": "View record ID {{entityId}}",
     "default": "Default",

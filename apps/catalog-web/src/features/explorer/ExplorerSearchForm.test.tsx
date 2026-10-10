@@ -128,6 +128,35 @@ describe('ExplorerSearchForm version scope', () => {
     expect(onContextChange).toHaveBeenCalledWith('storefront');
   });
 
+  it('ties the scope button to the popover it opens', async () => {
+    const user = userEvent.setup();
+    render(
+      <ExplorerSearchForm
+        blueprints={revisions}
+        currentVersion={3}
+        lockedBlueprint
+        onSubmit={vi.fn()}
+        revisions={revisions}
+        search={{ blueprint: 'product' }}
+      />,
+    );
+    const scopeButton = screen.getByRole('button', { name: /^Search scope/ });
+    expect(scopeButton.getAttribute('aria-expanded')).toBe('false');
+    expect(scopeButton.hasAttribute('aria-controls')).toBe(false);
+
+    await user.click(scopeButton);
+
+    expect(scopeButton.getAttribute('aria-expanded')).toBe('true');
+    const popover = document.getElementById(
+      scopeButton.getAttribute('aria-controls') ?? '',
+    );
+    expect(
+      popover?.contains(
+        screen.getByRole('combobox', { name: 'Version scope' }),
+      ),
+    ).toBe(true);
+  });
+
   it('marks the scope button when the scope differs from the defaults', () => {
     const scopeButton = () =>
       screen.getByRole('button', { name: /^Search scope/ });

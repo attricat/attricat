@@ -1,9 +1,8 @@
-import { Chip } from '@mui/material';
-import { CircleXIcon } from 'lucide-react';
 import type { Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RelationshipSelectorDialog } from '../../components/RelationshipSelectorDialog';
 import { useRelationshipSelectionLabels } from '../entities/components/useRelationshipSelectionLabels';
+import { ExplorerFilterChip } from './ExplorerFilterChip';
 import type {
   ExplorerRelationshipFacet,
   RelationshipFacetUpdate,
@@ -60,21 +59,14 @@ export const RelationshipFacetChip = ({
   return (
     <>
       {chipLabel && (
-        <Chip
-          deleteIcon={
-            <CircleXIcon
-              aria-label={t('explorer.removeRelationshipFilter', {
-                filter: chipLabel,
-              })}
-            />
-          }
+        <ExplorerFilterChip
+          chipRef={chipRef}
           label={chipLabel}
           onClick={onOpen}
           onDelete={onRemove}
-          ref={chipRef}
-          size="small"
-          sx={{ maxWidth: '100%', '& .MuiChip-label': { overflow: 'hidden' } }}
-          title={chipLabel}
+          removeLabel={t('explorer.removeRelationshipFilter', {
+            filter: chipLabel,
+          })}
         />
       )}
       <RelationshipSelectorDialog

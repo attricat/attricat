@@ -1,5 +1,5 @@
-import { Box, Button, Chip, Typography } from '@mui/material';
-import { CircleXIcon, PlusIcon } from 'lucide-react';
+import { Box, Button, Typography } from '@mui/material';
+import { PlusIcon } from 'lucide-react';
 import { useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 import { compactOutlinedActionButtonSx } from '../../components/CompactOutlinedActionButton';
@@ -21,6 +21,7 @@ import {
   type AttributeFilterRequest,
 } from './attributeFilterValues';
 import { explorerVisibilityScope, maximumAttributeFilters } from './constants';
+import { ExplorerFilterChip } from './ExplorerFilterChip';
 import { RelationshipFacetChip } from './RelationshipFacetChip';
 import type {
   ExplorerRelationshipFacet,
@@ -233,25 +234,13 @@ export const ExplorerFilterBar = ({
           directory.data,
         );
         return (
-          <Chip
-            deleteIcon={
-              <CircleXIcon
-                aria-label={t('explorer.removeAttributeFilter', {
-                  filter: label,
-                })}
-              />
-            }
+          <ExplorerFilterChip
+            chipRef={chipRef(key)}
             key={key}
             label={label}
             onClick={() => openFilter(filter, index)}
             onDelete={() => removeChip(index, () => onRemove(index))}
-            ref={chipRef(key)}
-            size="small"
-            sx={{
-              maxWidth: '100%',
-              '& .MuiChip-label': { overflow: 'hidden' },
-            }}
-            title={label}
+            removeLabel={t('explorer.removeAttributeFilter', { filter: label })}
           />
         );
       })}

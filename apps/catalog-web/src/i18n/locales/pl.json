@@ -800,7 +800,6 @@
       "lt": "<",
       "lte": "≤"
     },
-    "treeOptions": "Opcje drzewa",
     "entityActionsFor": "Akcje rekordu {{entityId}}",
     "viewEntityIdWithId": "Wyświetl identyfikator rekordu {{entityId}}",
     "default": "Domyślny",

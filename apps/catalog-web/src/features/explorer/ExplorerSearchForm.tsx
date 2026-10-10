@@ -15,7 +15,13 @@ import {
   useMediaQuery,
   useTheme,
 } from '@mui/material';
-import { useEffect, useState, type ReactNode, type RefObject } from 'react';
+import {
+  useEffect,
+  useId,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import { ExternalLinkIcon, RotateCcwIcon, SearchIcon } from 'lucide-react';
 import { useDocumentationUrl } from '../../app/documentation';
@@ -104,6 +110,7 @@ export const ExplorerSearchForm = ({
   const inlineActions = useMediaQuery(theme.breakpoints.up('md'));
   const [syntaxAnchor, setSyntaxAnchor] = useState<HTMLElement | null>(null);
   const [scopeAnchor, setScopeAnchor] = useState<HTMLElement | null>(null);
+  const scopePopoverId = useId();
   const [queryErrorContainer, setQueryErrorContainer] =
     useState<HTMLElement | null>(null);
   const submitValues = (value: SearchFormValues) => {
@@ -175,7 +182,9 @@ export const ExplorerSearchForm = ({
   const scopeButton = search.blueprint && (
     <Tooltip title={scopeLabel}>
       <IconButton
+        aria-controls={scopeAnchor ? scopePopoverId : undefined}
         aria-expanded={Boolean(scopeAnchor)}
+        aria-haspopup="true"
         aria-label={scopeLabel}
         color={revisionsError ? 'error' : scopeChanged ? 'primary' : 'default'}
         onClick={(event) => setScopeAnchor(event.currentTarget)}
@@ -285,7 +294,10 @@ export const ExplorerSearchForm = ({
         onClose={() => setScopeAnchor(null)}
         open={Boolean(scopeAnchor) && Boolean(search.blueprint)}
         slotProps={{
-          paper: { sx: { p: 2, width: searchScopePopoverWidth } },
+          paper: {
+            id: scopePopoverId,
+            sx: { p: 2, width: searchScopePopoverWidth },
+          },
         }}
       >
         <Stack spacing={2}>

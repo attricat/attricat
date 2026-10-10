@@ -75,7 +75,11 @@ export const ExplorerEntityPanel = ({
     // still count as inside it.
     <ClickAwayListener
       onClickAway={(event) => {
-        if (!pressedInside.current && closesPanelOnClick(event)) onClose();
+        // A press answers one click only; a later keyboard click outside, which
+        // has no press, still closes the panel.
+        const startedInside = pressedInside.current;
+        pressedInside.current = false;
+        if (!startedInside && closesPanelOnClick(event)) onClose();
       }}
     >
       {/* Holds the panel without affecting its fixed layout. */}

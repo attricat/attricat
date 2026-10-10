@@ -12,6 +12,8 @@ import {
   type EntitySearchResponse,
 } from '../entities/api';
 import { relationshipPickerMessageType } from '../entities/components/useRecentlyPreviewedEntities';
+import type { AttributeFilterRequest } from './attributeFilterValues';
+import { maximumAttributeFilters } from './constants';
 import { ExplorerFilterBar } from './ExplorerFilterBar';
 import type {
   ExplorerRelationshipFacet,
@@ -348,5 +350,97 @@ describe('ExplorerFilterBar', () => {
     expect(document.activeElement).toBe(
       screen.getByRole('button', { name: 'Add filter' }),
     );
+  });
+
+  it('edits a filter from its chip', async () => {
+    const onUpdate = vi.fn();
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ExplorerFilterBar
+          attributes={[{ code: 'stock', value_type: 'integer' }]}
+          blueprint="product"
+          filters={[{ field: 'stock', operator: 'gt', value: 5 }]}
+          onAdd={vi.fn()}
+          onRemove={vi.fn()}
+          onUpdate={onUpdate}
+        />
+      </QueryClientProvider>,
+    );
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole('button', { name: /^stock > "5"/ }));
+    const dialog = await screen.findByRole('dialog', { name: /^Edit filter/ });
+    const value = screen.getByRole('spinbutton', { name: 'Value' });
+    expect((value as HTMLInputElement).value).toBe('5');
+    await user.clear(value);
+    await user.type(value, '10{Enter}');
+
+    await waitFor(() => expect(dialog.isConnected).toBe(false));
+    expect(onUpdate).toHaveBeenCalledWith(0, {
+      field: 'stock',
+      operator: 'gt',
+      value: 10,
+    });
+  });
+
+  it('opens each new cell filter request once with its draft', async () => {
+    const queryClient = new QueryClient();
+    const bar = (filterRequest?: AttributeFilterRequest) => (
+      <QueryClientProvider client={queryClient}>
+        <ExplorerFilterBar
+          attributes={[{ code: 'stock', value_type: 'integer' }]}
+          blueprint="product"
+          filterRequest={filterRequest}
+          filters={[]}
+          onAdd={vi.fn()}
+          onRemove={vi.fn()}
+          onUpdate={vi.fn()}
+        />
+      </QueryClientProvider>
+    );
+    const request: AttributeFilterRequest = {
+      id: 1,
+      draft: { field: 'stock', operator: 'eq', value: '7' },
+    };
+    const { rerender } = render(bar());
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    rerender(bar(request));
+    await screen.findByRole('dialog', { name: /^Add filter/ });
+    expect(
+      (screen.getByRole('spinbutton', { name: 'Value' }) as HTMLInputElement)
+        .value,
+    ).toBe('7');
+
+    const user = userEvent.setup();
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    rerender(bar(request));
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('says when the filter limit is reached', () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ExplorerFilterBar
+          attributes={[{ code: 'stock', value_type: 'integer' }]}
+          blueprint="product"
+          filters={Array.from({ length: maximumAttributeFilters }, (_, i) => ({
+            field: 'stock',
+            operator: 'gt' as const,
+            value: i,
+          }))}
+          onAdd={vi.fn()}
+          onRemove={vi.fn()}
+          onUpdate={vi.fn()}
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(
+      screen.getByText(
+        new RegExp(`${maximumAttributeFilters} attribute filters`),
+      ),
+    ).toBeTruthy();
   });
 });
