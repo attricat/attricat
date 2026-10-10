@@ -56,6 +56,8 @@ docker run -d --env-file attricat.env -p 3000:3000 ghcr.io/attricat/attricat@sha
 docker run -d --env-file attricat.env ghcr.io/attricat/attricat@sha256:… file-worker
 ```
 
+Each release is also tagged with its version, such as `0.3.0`, and with its minor line, such as `0.3`, which moves to the latest patch release. From 1.0 a major tag, such as `1`, follows the latest release of that major version. Use these tags to find a release's digest, for example with `docker buildx imagetools inspect ghcr.io/attricat/attricat:0.3.0`, then deploy that digest. `latest` follows the main branch, not the latest release. The [releases page](https://github.com/attricat/attricat/releases) lists the changes in each version.
+
 The image runs as uid and gid 10001, works with a read-only root file system, and contains no compilers or build tools. The API listens on port 3000; the file worker's private health and metrics listener is on port 3001.
 
 ## Docker Compose

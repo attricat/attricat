@@ -12,7 +12,7 @@ fi
 export CATALOG_API_URL
 command -v jq >/dev/null || { echo 'jq is required' >&2; exit 1; }
 
-cli=(cargo run --quiet -p cli -- --token "$CATALOG_TOKEN")
+cli=(cargo run --quiet -p acli -- --token "$CATALOG_TOKEN")
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 

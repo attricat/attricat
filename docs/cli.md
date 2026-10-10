@@ -1,6 +1,6 @@
-# Catalog CLI
+# Attricat CLI
 
-`acli` is a JSON-first HTTP client for the Catalog API. It is intended for
+`acli` is a JSON-first HTTP client for the Attricat API. It is intended for
 automation, agents, and shell scripts; successful API response JSON is written
 unchanged to stdout and structured errors are written to stderr.
 
@@ -27,7 +27,7 @@ CATALOG_SERVER="http://127.0.0.1:$API_PORT/api" acli health
 During development, run the workspace binary without installing it:
 
 ```sh
-cargo run -p cli -- health
+cargo run -p acli -- health
 ```
 
 ## Commands
@@ -551,8 +551,8 @@ manufacturers, categories, families, SKUs, and reference data. See
 Start the local stack, then run:
 
 ```sh
-cargo run -p cli -- --session-file .acli-session auth login <workspace-login-identifier> --email <email> --password-stdin
-export CATALOG_TOKEN="$(cargo run -p cli -- --session-file .acli-session token create --generator | jq -r .secret)"
+cargo run -p acli -- --session-file .acli-session auth login <workspace-login-identifier> --email <email> --password-stdin
+export CATALOG_TOKEN="$(cargo run -p acli -- --session-file .acli-session token create --generator | jq -r .secret)"
 just generate
 ```
 

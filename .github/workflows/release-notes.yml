@@ -1,0 +1,26 @@
+# Called by release.yml after dist publishes the GitHub Release. Commit subjects
+# do not follow a convention, so GitHub generates the notes from merged changes
+# since the previous version tag.
+name: Release notes
+
+on:
+  workflow_call:
+    inputs:
+      plan:
+        required: true
+        type: string
+
+jobs:
+  notes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ fromJson(inputs.plan).announcement_tag }}
+    steps:
+      - name: Generate release notes
+        run: |
+          notes="$(gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" -f tag_name="$TAG" --jq .body)"
+          body="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body)"
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes "$notes"$'\n\n'"$body"

@@ -29,7 +29,7 @@ COPY docs docs
 ARG VCS_REF=unknown
 ARG VCS_BRANCH=unknown
 ENV ATTRICAT_BUILD_COMMIT=$VCS_REF ATTRICAT_BUILD_BRANCH=$VCS_BRANCH
-RUN cargo build --locked --release -p api --bins -p cli --bin acli
+RUN cargo build --locked --release -p api --bins -p acli --bin acli
 
 FROM debian:bookworm-slim AS runtime
 ARG VCS_REF=unknown

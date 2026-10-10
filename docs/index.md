@@ -1,4 +1,4 @@
-# Catalog Documentation
+# Attricat Documentation
 
 ## Getting Started
 
@@ -62,12 +62,12 @@ runs the ignored RustFS compatibility test.
 - [JSON Schema validation](json-schema-validation.md): attribute and record
   validation contracts.
 
-## Use Catalog
+## Use Attricat
 
 - [Install and operate solution packs](solution-packs.md): inspect existing archives,
   review plans, apply, verify, and recover. See [optional sample data](solution-pack-sample-data.md)
   for opt-in, automation warnings, retry, and cleanup limits.
-- [Catalog CLI](cli.md): automation and command-line workflows.
+- [Attricat CLI](cli.md): automation and command-line workflows.
 - [API reference](api.md): HTTP routes and API behavior.
 - [Saved searches](saved-views.md): named views, share links, and access rules.
 - [Relationship tree facets](search-facets.md): filter explorer results through
@@ -103,3 +103,8 @@ pnpm --dir apps/catalog-web test:e2e
 With Colima, ensure its Docker runtime is running. The test setup resolves the
 active Docker context and disables Ryuk because Colima cannot mount its socket
 into the cleanup sidecar.
+
+## Release
+
+- [Releasing](releasing.md): the product version, `just release`, and what a
+  version tag publishes.

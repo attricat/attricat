@@ -46,6 +46,10 @@ deny:
 
 ci: fmt-check check clippy test-rust deny
 
+# Bump the workspace version, then commit, tag and push it to start a release.
+release bump:
+    scripts/release.sh {{bump}}
+
 # Build the production application image used by the local release stack.
 production-build image="attricat:local":
     docker build --build-arg VCS_REF="$(git rev-parse HEAD)" --build-arg VCS_BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME:-$(git rev-parse --abbrev-ref HEAD)}}" --build-arg VERSION="$(git describe --always --dirty)" -t "{{image}}" .

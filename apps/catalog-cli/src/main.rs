@@ -33,7 +33,7 @@ const GENERATOR_TOKEN_PERMISSIONS: &[&str] = &[
 ];
 
 #[derive(Parser)]
-#[command(name = "acli", about = "JSON-first client for the Catalog API")]
+#[command(name = "acli", version, about = "JSON-first client for the Attricat API")]
 struct Cli {
     /// API base URL, including its `/api` path.
     #[arg(long, env = "CATALOG_SERVER")]

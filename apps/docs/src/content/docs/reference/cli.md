@@ -5,7 +5,23 @@ description: The acli command-line client, its configuration, authentication, in
 
 `acli` is a command-line client for the Attricat API, built for scripts, CI jobs, and agents. On success it prints the API's JSON response unchanged to standard output. Errors go to standard error as JSON. Every command has built-in help: `acli --help` and `acli <group> --help`.
 
-`acli` is included in the container image:
+## Install
+
+Each [release](https://github.com/attricat/attricat/releases) publishes `acli` binaries for Linux, macOS and Windows with the same version as the server. Install the latest release on Linux or macOS:
+
+```sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/attricat/attricat/releases/latest/download/acli-installer.sh | sh
+```
+
+On Windows, in PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/attricat/attricat/releases/latest/download/acli-installer.ps1 | iex"
+```
+
+The installer puts `acli` in `~/.local/bin` (or `$XDG_BIN_HOME`). To install a specific version, replace `latest/download` with `download/v0.3.0`, or download an archive and its `.sha256` checksum from the release. Use the `acli` version that matches your server; `acli --version` prints it.
+
+`acli` is also included in the container image:
 
 ```sh
 docker run --rm -e CATALOG_SERVER -e CATALOG_TOKEN ghcr.io/attricat/attricat@sha256:… acli health

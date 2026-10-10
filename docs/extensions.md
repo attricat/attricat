@@ -77,9 +77,9 @@ browser-session file for every subsequent command; the bootstrap workspace is
 normally `default.local`:
 
 ```sh
-cargo run -p cli -- --session-file .acli-session auth discover default.local
+cargo run -p acli -- --session-file .acli-session auth discover default.local
 printf '%s' "$CATALOG_BOOTSTRAP_OWNER_PASSWORD" | \
-  cargo run -p cli -- --session-file .acli-session auth login default.local \
+  cargo run -p acli -- --session-file .acli-session auth login default.local \
     --email "$CATALOG_BOOTSTRAP_OWNER_EMAIL" --password-stdin
 ```
 

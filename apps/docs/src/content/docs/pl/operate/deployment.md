@@ -56,6 +56,8 @@ docker run -d --env-file attricat.env -p 3000:3000 ghcr.io/attricat/attricat@sha
 docker run -d --env-file attricat.env ghcr.io/attricat/attricat@sha256:… file-worker
 ```
 
+Każde wydanie ma też tag z numerem wersji, np. `0.3.0`, oraz tag linii minor, np. `0.3`, który przechodzi na najnowsze wydanie poprawkowe. Od wersji 1.0 tag wersji głównej, np. `1`, wskazuje najnowsze wydanie tej wersji głównej. Za pomocą tych tagów znajdź skrót wydania, np. poleceniem `docker buildx imagetools inspect ghcr.io/attricat/attricat:0.3.0`, a potem wdrażaj ten skrót. `latest` wskazuje gałąź main, a nie najnowsze wydanie. Zmiany w każdej wersji opisuje [strona wydań](https://github.com/attricat/attricat/releases).
+
 Obraz działa jako uid i gid 10001, działa z systemem plików root tylko do odczytu i nie zawiera kompilatorów ani narzędzi do budowania. API nasłuchuje na porcie 3000; prywatny nasłuch procesu roboczego plików dla kontroli stanu i metryk działa na porcie 3001.
 
 ## Docker Compose

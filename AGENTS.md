@@ -56,7 +56,7 @@ migration files manually.
 To inspect catalog state, query the API through the CLI first:
 
 ```sh
-cargo run -p cli -- <command>
+cargo run -p acli -- <command>
 # or, after building/installing it:
 acli <command>
 ```

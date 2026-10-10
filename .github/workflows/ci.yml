@@ -5,6 +5,9 @@ on:
   push:
     branches:
       - main
+    # Version tags rebuild, verify and publish the image as that release.
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+*'
   workflow_dispatch:
 
 permissions:
@@ -138,6 +141,31 @@ jobs:
           docker tag attricat:ci "$repository:latest"
           docker push "$repository:latest"
           docker image inspect --format 'published={{index .RepoDigests 0}}' "$target" | tee -a deployment-evidence/result.txt
+      - name: Publish release images
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          workspace_version="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n 1)"
+          if [[ "$version" != "$workspace_version" ]]; then
+            echo "tag $GITHUB_REF_NAME does not match workspace version $workspace_version" >&2
+            exit 1
+          fi
+          echo "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          repository="ghcr.io/${GITHUB_REPOSITORY,,}"
+          tags=("$version")
+          # Pre-releases get only their exact tag. Before 1.0 a minor release may
+          # break compatibility, so `0` would not be a meaningful channel.
+          if [[ "$version" =~ ^([0-9]+)\.([0-9]+)\.[0-9]+$ ]]; then
+            tags+=("${BASH_REMATCH[1]}.${BASH_REMATCH[2]}")
+            [[ "${BASH_REMATCH[1]}" != 0 ]] && tags+=("${BASH_REMATCH[1]}")
+          fi
+          for tag in "${tags[@]}"; do
+            docker tag attricat:ci "$repository:$tag"
+            docker push "$repository:$tag"
+          done
+          docker image inspect --format 'published={{index .RepoDigests 0}}' "$repository:$version" | tee -a deployment-evidence/result.txt
       - name: Upload deployment evidence
         if: always()
         uses: actions/upload-artifact@v4

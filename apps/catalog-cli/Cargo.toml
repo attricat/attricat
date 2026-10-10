@@ -1,10 +1,11 @@
 [package]
-name = "cli"
-version = "0.1.0"
+name = "acli"
+version.workspace = true
 edition = "2024"
 rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
+repository.workspace = true
 
 [[bin]]
 name = "acli"
@@ -29,3 +30,8 @@ tempfile = "3"
 [dev-dependencies]
 axum = "0.8"
 tempfile = "3"
+
+# The standalone `acli` binaries are the only cargo-dist artifact; the server
+# ships in the container image.
+[package.metadata.dist]
+dist = true
