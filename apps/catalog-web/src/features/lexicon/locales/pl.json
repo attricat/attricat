@@ -22,7 +22,7 @@
     "allTranslated": "Wszystkie etykiety przetłumaczone",
     "fullyTranslated": "Każda tłumaczona etykieta ma tłumaczenie w języku {{language}}.",
     "untranslated": "Brak tłumaczenia",
-    "missingPluralCategories": "Brakujące formy liczbowe: {{categories}}. Wyświetlają się przy liczbach, na przykład przy liczbie wyników w Przeglądarce encji.",
+    "missingPluralCategories": "Brakujące formy liczbowe: {{categories}}. Wyświetlają się przy liczbach, na przykład przy liczbie wyników w Przeglądarce rekordów.",
     "translate": "Przetłumacz",
     "addPluralForm": "Dodaj formę „{{category}}”",
     "keyWithContext": "{{key}} · kontekst: {{context}}",
