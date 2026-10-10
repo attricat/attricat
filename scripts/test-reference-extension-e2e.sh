@@ -30,6 +30,12 @@ test -s "$archive" || { echo "missing packaged example archive: $archive" >&2; e
 while IFS= read -r permission; do
   "${cli[@]}" extension grant "$extension_id" --grant-kind capability --grant-id "$permission" >/dev/null
 done < <(jq -r '.permissions[]' "$manifest")
+while IFS= read -r contract; do
+  "${cli[@]}" extension grant "$extension_id" --grant-kind event_publish --grant-id "$contract" >/dev/null
+done < <(jq -r '.event_contracts.exports[]?.id' "$manifest")
+while IFS= read -r contract; do
+  "${cli[@]}" extension grant "$extension_id" --grant-kind event_subscribe --grant-id "$contract" >/dev/null
+done < <(jq -r '.event_contracts.consumes[]? | "\(.provider):\(.contract)"' "$manifest")
 "${cli[@]}" extension enable "$extension_id" >/dev/null
 "${cli[@]}" extension detail "$extension_id" | jq -e '.installation.state == "enabled"' >/dev/null
 "${cli[@]}" extension artifact "$extension_id" formula-workbench --output "$work/workbench.js" >/dev/null
