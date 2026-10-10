@@ -80,22 +80,23 @@ const usesDefaultLayout = (view: ViewDefinition | undefined) =>
   view.type === viewBlockTypes.extensionLayout;
 
 /**
- * Required attributes the view does not render. A form shows them after the
- * view so Save is never blocked by a field the user cannot see.
+ * Required attributes the detail view does not render. A form shows them after
+ * the view so Save is never blocked by a field the user cannot see.
  */
 export const unplacedRequiredAttributes = (
   attributes: readonly Attribute[],
   view: ViewDefinition,
   requiredCodes: readonly string[],
 ) => {
-  // Non-layout views render the default form; see EntityView.
+  // Non-layout views render every field not hidden from details; see
+  // EntityView.
   const usesFallback = usesDefaultLayout(view);
   const placed = viewPlacedFields(view);
   return attributes.filter(
     (attribute) =>
       requiredCodes.includes(attribute.code) &&
       (usesFallback
-        ? isHiddenByDefault(attribute, 'form')
+        ? isHiddenByDefault(attribute, 'detail')
         : !placed.has(attribute.code)),
   );
 };

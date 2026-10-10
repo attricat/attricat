@@ -509,6 +509,35 @@ describe('EntityForm', () => {
     await waitFor(() => expect(onSubmit).toHaveBeenCalledOnce());
   });
 
+  it('names a cleared schema-required field as required', () => {
+    const result = blueprint([attribute('title')]);
+    result.blueprint.entity_schema = { type: 'object', required: ['title'] };
+    renderForm({ blueprint: result });
+    const save = screen.getByRole('button', { name: 'Save' });
+    expect(titleBox()).toHaveProperty('required', true);
+    expect(save).toHaveProperty('disabled', true);
+
+    fireEvent.change(titleBox(), { target: { value: 'Shirt' } });
+    expect(save).toHaveProperty('disabled', false);
+    fireEvent.change(titleBox(), { target: { value: '   ' } });
+
+    expect(screen.getByText('A value is required.')).toBeTruthy();
+    expect(save).toHaveProperty('disabled', true);
+  });
+
+  it('offers a required field hidden from forms once when the detail view has no layout', () => {
+    const result = blueprint([
+      attribute('title'),
+      attribute('code', { tags: ['hidden:form'] }),
+    ]);
+    result.blueprint.entity_schema = { type: 'object', required: ['code'] };
+    result.blueprint.views.detail = { type: 'table', columns: [] } as never;
+    renderForm({ blueprint: result });
+
+    expect(screen.getAllByRole('textbox', { name: 'code' })).toHaveLength(1);
+    expect(screen.queryByText('Other attributes')).toBeNull();
+  });
+
   it('persists edited fields without file or readonly attributes', async () => {
     renderForm({
       blueprint: blueprint([

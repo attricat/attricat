@@ -363,6 +363,7 @@
     "loadingOptions": "Wczytywanie opcji...",
     "couldNotLoadEntities": "Nie udało się wczytać rekordów typu {{blueprint}}.",
     "openRelationshipSelector": "Wybierz",
+    "openRelationshipSelectorFor": "Wybierz: {{field}}",
     "selectRelationships": "Wybierz: {{blueprint}}",
     "selectOneRelationship": "Wybierz jeden rekord: {{blueprint}}",
     "selectRelationshipOption": "Wybierz",

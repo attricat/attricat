@@ -41,7 +41,7 @@ export const ViewTabs = ({
               }
               iconPosition="end"
               id={`${tabId}-tab-${index}`}
-              key={tab.label}
+              key={index}
               label={lexiconText(tab.label)}
               sx={invalid ? { color: 'error.main', minHeight: 48 } : undefined}
             />

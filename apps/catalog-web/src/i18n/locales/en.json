@@ -357,6 +357,7 @@
     "loadingOptions": "Loading options...",
     "couldNotLoadEntities": "Could not load {{blueprint}} records.",
     "openRelationshipSelector": "Choose",
+    "openRelationshipSelectorFor": "Choose {{field}}",
     "selectRelationships": "Select {{blueprint}}",
     "selectOneRelationship": "Select one {{blueprint}}",
     "selectRelationshipOption": "Select",

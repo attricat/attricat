@@ -86,7 +86,7 @@ const renderField = (
 
 const openSelector = async (user: ReturnType<typeof userEvent.setup>) => {
   await user.click(
-    await screen.findByRole('button', { name: 'related_products' }),
+    await screen.findByRole('button', { name: 'Choose related products' }),
   );
   return screen.findByRole('dialog', { name: /^Select product/ });
 };
@@ -234,7 +234,7 @@ describe('RelationshipField', () => {
     const user = userEvent.setup();
 
     await user.click(
-      await screen.findByRole('button', { name: 'related_products' }),
+      await screen.findByRole('button', { name: 'Choose related products' }),
     );
     const dialog = await screen.findByRole('dialog', {
       name: /^Select product, material/,
@@ -303,7 +303,7 @@ describe('RelationshipField', () => {
     const user = userEvent.setup();
 
     await user.click(
-      await screen.findByRole('button', { name: 'related_products' }),
+      await screen.findByRole('button', { name: 'Choose related products' }),
     );
     await screen.findByRole('dialog', { name: /^Select one product/ });
     expect(screen.queryByRole('radio')).toBeNull();

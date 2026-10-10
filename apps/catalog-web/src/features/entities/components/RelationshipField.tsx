@@ -213,7 +213,9 @@ export const RelationshipField = ({
               <RelationshipSelectionPills
                 action={
                   <Button
-                    aria-label={attribute.code}
+                    aria-label={t('entities.openRelationshipSelectorFor', {
+                      field: attributeLabel(attribute),
+                    })}
                     color="primary"
                     disabled={disabled}
                     onClick={openSelector}

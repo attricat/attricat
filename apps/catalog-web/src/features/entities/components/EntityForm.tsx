@@ -9,6 +9,7 @@ import type {
 } from '../api';
 import { attributeLabel } from '../entityDisplay';
 import {
+  entityFormValidationMessages,
   missingRequiredAttributes,
   relationshipTargetsForForm,
   serializeAttributeValues,
@@ -203,22 +204,6 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
         ? headingEditableAttributes(editableAttributes, detailView)
         : [];
     // Editable fields the layout leaves out.
-    const otherAttributes =
-      blueprint && detailView && !showAllAttributes
-        ? [
-            ...new Set([
-              ...unplacedEditableAttributes(editableAttributes, detailView),
-              ...unplacedRequiredAttributes(editableAttributes, detailView, [
-                ...requiredAttributes,
-                ...(contextId === defaultContextId
-                  ? entitySchemaRequiredAttributes(
-                      blueprint.blueprint.entity_schema,
-                    )
-                  : []),
-              ]),
-            ]),
-          ]
-        : [];
     // Required by the caller or, in the default context, by the entity schema.
     const requiredCodes = new Set([
       ...requiredAttributes,
@@ -226,16 +211,36 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
         ? entitySchemaRequiredAttributes(blueprint.blueprint.entity_schema)
         : []),
     ]);
+    const otherAttributes =
+      blueprint && detailView && !showAllAttributes
+        ? [
+            ...new Set([
+              ...unplacedEditableAttributes(editableAttributes, detailView),
+              ...unplacedRequiredAttributes(editableAttributes, detailView, [
+                ...requiredCodes,
+              ]),
+            ]),
+          ]
+        : [];
     const validateFields = (fields: Record<string, string>) => {
       if (!blueprint) return { fieldErrors: {} };
       const validation = validateEntityForm(
         editableAttributes,
         fields,
-        requiredAttributes,
+        // Schema-required fields read as required rather than as a schema
+        // failure once they are cleared.
+        [...requiredCodes],
         contextId === defaultContextId
           ? blueprint.blueprint.entity_schema
           : undefined,
-        undefined,
+        {
+          ...entityFormValidationMessages(),
+          // A migration fills what the target schema requires; a new record
+          // only needs a value.
+          ...(expectedUpdatedAt === undefined && {
+            required: t('entities.valueRequired'),
+          }),
+        },
         fieldEditors,
       );
       for (const attribute of editableAttributes) {

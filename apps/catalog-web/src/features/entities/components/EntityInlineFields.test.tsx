@@ -106,13 +106,15 @@ const renderFields = (
   {
     entitySchema,
     viewContextId = contextId,
+    onPendingChange,
   }: {
     entitySchema?: unknown;
     viewContextId?: string;
+    onPendingChange?: (pending: boolean) => void;
   } = {},
 ) => {
   const ref = createRef<EntityInlineFieldsHandle>();
-  render(
+  const { unmount } = render(
     <QueryClientProvider client={new QueryClient()}>
       <EntityInlineFields
         attributes={attributes}
@@ -120,6 +122,7 @@ const renderFields = (
         defaultContextId={contextId}
         entityId={entityId}
         form={form(canWrite, notes, entitySchema)}
+        onPendingChange={onPendingChange}
         ref={ref}
         resolvedValues={
           notes === undefined
@@ -139,7 +142,7 @@ const renderFields = (
       <button type="button">Elsewhere</button>
     </QueryClientProvider>,
   );
-  return ref;
+  return { ref, unmount };
 };
 
 describe('EntityInlineFields', () => {
@@ -306,6 +309,23 @@ describe('EntityInlineFields', () => {
     expect(screen.queryByText('A value is required.')).toBeNull();
   });
 
+  it('stops reporting changes as pending once the fields are gone', async () => {
+    const user = userEvent.setup();
+    // The save never finishes, so the change keeps waiting.
+    vi.mocked(updateEntity).mockReturnValue(new Promise(() => {}));
+    const onPendingChange = vi.fn();
+    const { unmount } = renderFields(true, undefined, { onPendingChange });
+
+    await user.type(screen.getByRole('textbox', { name: 'name' }), ' shade');
+    await user.click(screen.getByRole('button', { name: 'Elsewhere' }));
+    await waitFor(() => expect(updateEntity).toHaveBeenCalledOnce());
+    expect(onPendingChange).toHaveBeenLastCalledWith(true);
+
+    // For example another entity opens and the unsaved change is dropped.
+    unmount();
+    expect(onPendingChange).toHaveBeenLastCalledWith(false);
+  });
+
   it('shows values read-only to users who cannot edit', () => {
     renderFields(false);
     expect(screen.queryByRole('textbox')).toBeNull();
@@ -320,7 +340,7 @@ describe('EntityInlineFields', () => {
   });
 
   it('saves applied Smart Fill suggestions together', async () => {
-    const ref = renderFields();
+    const { ref } = renderFields();
     ref.current!.applySmartFillValues({
       name: 'Floor lamp',
       notes: 'Tall',

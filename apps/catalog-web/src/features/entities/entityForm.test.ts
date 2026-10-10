@@ -42,6 +42,34 @@ describe('entity form values', () => {
     );
   });
 
+  it('counts zero, false and empty JSON as values but not blank text', () => {
+    const typed = [
+      ...typedAttributes,
+      { code: 'specs', value_type: 'json' },
+      ...attributes,
+    ] satisfies Attribute[];
+    const codes = new Set(typed.map((attribute) => attribute.code));
+    const missing = (fields: Record<string, string>) =>
+      missingRequiredAttributes(typed, fields, codes).map(
+        (attribute) => attribute.code,
+      );
+    expect(
+      missing({
+        price: '0',
+        stock: '0',
+        available: 'false',
+        cutoff: '09:00 UTC',
+        specs: '[]',
+        title: '\t\n ',
+        related_products: ' , ',
+      }),
+    ).toEqual(['title', 'related_products']);
+    expect(
+      validateEntityForm(typed, { price: '0' }, ['price', 'available'])
+        .fieldErrors,
+    ).toEqual({ available: expect.any(String) });
+  });
+
   it('validates only configured URL editors, including required and optional clearing', () => {
     const validate = (title: string, required: string[] = []) =>
       validateEntityForm(

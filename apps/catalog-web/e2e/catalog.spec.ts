@@ -383,7 +383,7 @@ test('edits scalar values and replaces a typed relationship', async ({
   await commitField(page, entity.id, title, 'Enter');
   // A relationship choice saves as soon as it is applied.
   const relationshipSaved = entitySave(page, entity.id);
-  await page.getByRole('button', { name: 'categories' }).click();
+  await page.getByRole('button', { name: 'Choose categories' }).click();
   await page.getByRole('button', { name: 'Select Sale' }).click();
   await page.getByRole('button', { name: 'Apply' }).click();
   expect((await relationshipSaved).ok()).toBe(true);

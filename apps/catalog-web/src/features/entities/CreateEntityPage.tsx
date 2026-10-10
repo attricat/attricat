@@ -133,7 +133,8 @@ export const CreateEntityPage = ({
           }
           defaultContextId={defaultContextId}
           error={blueprint.error ?? create.error}
-          isLoadingBlueprint={blueprint.isFetching || create.isPending}
+          // A background refresh must not disable the fields being filled in.
+          isLoadingBlueprint={blueprint.isLoading || create.isPending}
           lockedBlueprint={search.locked}
           onLoadBlueprint={(code) =>
             void navigate({

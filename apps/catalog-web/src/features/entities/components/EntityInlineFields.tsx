@@ -1,6 +1,12 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { Alert, Box, Button, Stack, Typography } from '@mui/material';
-import { forwardRef, useImperativeHandle, type ReactNode } from 'react';
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  type ReactNode,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import { RotateCcwIcon } from 'lucide-react';
 import { checkViolationError } from '../../../api/checkViolations';
@@ -166,6 +172,13 @@ export const EntityInlineFields = forwardRef<EntityInlineFieldsHandle, Props>(
     }));
     // Leaving would drop changes that are not saved yet.
     useBeforeUnloadWarning(hasPending || saves.saving);
+    // Changes dropped with these fields, for example on opening another
+    // entity, no longer wait to be saved.
+    const reportPending = useRef(onPendingChange);
+    useEffect(() => {
+      reportPending.current = onPendingChange;
+    });
+    useEffect(() => () => reportPending.current?.(false), []);
 
     const violations = checkViolationError(saves.error);
     const placedViolations = violations
@@ -322,6 +335,8 @@ export const EntityInlineFields = forwardRef<EntityInlineFieldsHandle, Props>(
     const viewProps = {
       contextId: contextId ?? undefined,
       entityId,
+      // Tabs and accordions point to a field whose change was not saved.
+      invalidFields: new Set(Object.keys(fieldErrors)),
       renderAttributeDecoration,
       renderAttributePanel,
       renderFilePanel,

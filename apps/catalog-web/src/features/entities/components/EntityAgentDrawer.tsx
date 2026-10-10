@@ -148,7 +148,7 @@ export const EntityAgentDrawer = ({
                 onClick={() => void conversations.refetch()}
                 startIcon={<RotateCcwIcon />}
               >
-                {t('common.retry')}
+                {t('errors.retry')}
               </Button>
             }
           >
