@@ -123,153 +123,65 @@ pub(super) async fn upload(
     let span = info_span!("file.upload", %entity_id, attribute_code = %attribute_code);
     let result = async {
         authorize(&state, FileAccessOperation::Upload { entity_id }).await?;
-        let mut context_id = None;
-        let mut staged = Vec::new();
-        while let Some(field) = multipart
-            .next_field()
-            .await
-            .map_err(|error| multipart_error(error, "multipart body is malformed"))?
-        {
-            let name = field.name().unwrap_or_default().to_owned();
-            if name == "context_id" {
-                if context_id.is_some() {
-                    cleanup(&staged).await;
-                    return Err(ApiError::invalid_file("context_id may appear only once"));
-                }
-                let mut field = field;
-                let mut bytes = Vec::new();
-                while let Some(chunk) = field
-                    .chunk()
-                    .await
-                    .map_err(|error| multipart_error(error, "context_id is invalid"))?
-                {
-                    if bytes.len().saturating_add(chunk.len()) > MAX_CONTEXT_ID_BYTES {
-                        return Err(ApiError::invalid_file("context_id is invalid"));
-                    }
-                    bytes.extend_from_slice(&chunk);
-                }
-                context_id = Some(
-                    std::str::from_utf8(&bytes)
-                        .map_err(|_| ApiError::invalid_file("context_id is invalid"))?
-                        .parse()
-                        .map_err(|_| ApiError::invalid_file("context_id is invalid"))?,
-                );
-                continue;
-            }
-            if name != "file" && name != "files" {
-                cleanup(&staged).await;
-                return Err(ApiError::invalid_file(
-                    "multipart fields must be file or files",
-                ));
-            }
-            if staged.len() >= state.max_upload_files {
-                cleanup(&staged).await;
-                return Err(ApiError::file_count_exceeded());
-            }
-            let original_filename = field
-                .file_name()
-                .ok_or_else(|| ApiError::invalid_file("file name is required"))?
-                .to_owned();
-            let display_filename = sanitize_filename(&original_filename)
-                .ok_or_else(|| ApiError::invalid_file("file name is invalid"))?;
-            let declared_mime = field.content_type().map(ToString::to_string);
-            match stage_field(
-                field,
-                original_filename,
-                display_filename,
-                declared_mime,
-                state.max_upload_file_bytes,
-            )
-            .await
-            {
-                Ok(file) => staged.push(file),
-                Err(error) => {
-                    cleanup(&staged).await;
-                    return Err(error);
-                }
-            }
-        }
-        if staged.is_empty() {
-            return Err(ApiError::invalid_file("at least one file is required"));
-        }
-        let policy = match repository
+        let (context_id, staged) = read_upload_parts(&state, &mut multipart, true).await?;
+        let policy = repository
             .file_upload_policy(entity_id, &attribute_code, context_id)
-            .await
-        {
-            Ok(policy) => policy,
-            Err(error) => {
-                cleanup(&staged).await;
-                return Err(error.into());
-            }
-        };
-        if policy.cardinality == "one" && staged.len() != 1 {
-            cleanup(&staged).await;
-            return Err(ApiError::invalid_file(
-                "single-file attributes accept exactly one file",
-            ));
-        }
-        let mut uploads = Vec::with_capacity(staged.len());
-        for file in &staged {
-            let Some(mime) =
-                detected_mime(&file.signature, &file.display_filename, file.valid_text)
-            else {
-                cleanup(&staged).await;
-                return Err(ApiError::unsupported_media_type());
-            };
-            if policy.max_bytes.is_some_and(|limit| file.byte_size > limit) {
-                cleanup(&staged).await;
-                return Err(ApiError::file_too_large());
-            }
-            if !declared_mime_matches(file.declared_mime.as_deref(), mime)
-                || !allowed_by_policy(&policy, mime, &file.display_filename, file.byte_size)
-            {
-                cleanup(&staged).await;
-                return Err(ApiError::unsupported_media_type());
-            }
-            uploads.push((format!("files/{}", Uuid::new_v4()), mime.to_owned()));
-        }
-        reserve_upload_keys(
-            &state,
-            &repository,
-            uploads.iter().map(|(key, _)| key.clone()).collect(),
-        )
-        .await?;
-        for (file, (key, mime)) in staged.iter().zip(&uploads) {
-            // Stream from disk; the durable intent owns cleanup on cancellation.
-            if let Err(error) = state
-                .object_store
-                .put_file(key, &file.path, Some(mime))
-                .await
-            {
-                cleanup(&staged).await;
-                return Err(storage_error(error));
-            }
-        }
-        let records = staged
-            .iter()
-            .zip(&uploads)
-            .map(|(file, (key, mime))| NewUploadedFile {
-                original_filename: file.original_filename.clone(),
-                display_filename: file.display_filename.clone(),
-                mime_type: mime.clone(),
-                byte_size: file.byte_size,
-                sha256: file.sha256.clone(),
-                object_key: key.clone(),
-            })
-            .collect();
+            .await?;
+        let mimes = attribute_upload_mimes(&staged, &policy)?;
+        let records = store_uploads(&state, &repository, &staged, mimes).await?;
         let result = repository
             .persist_uploaded_files(entity_id, &attribute_code, context_id, records)
             .await;
         cleanup(&staged).await;
-        match result {
-            Ok(result) => {
-                metrics::counter!("catalog_file_uploads_total", "outcome" => "success")
-                    .increment(1);
-                invalidate_data_health(&state, &repository);
-                Ok((StatusCode::CREATED, Json(result)))
-            }
-            Err(error) => Err(error.into()),
-        }
+        let result = result?;
+        metrics::counter!("catalog_file_uploads_total", "outcome" => "success").increment(1);
+        invalidate_data_health(&state, &repository);
+        Ok((StatusCode::CREATED, Json(result)))
+    }
+    .instrument(span)
+    .await;
+    if result.is_err() {
+        metrics::counter!("catalog_file_uploads_total", "outcome" => "rejected").increment(1);
+    }
+    result
+}
+
+/// Uploads files for a blueprint's file attribute before the record that will
+/// reference them exists. It shares the streaming, signature validation,
+/// object-store and processing pipeline of entity uploads and applies the
+/// attribute policy of the blueprint's latest published revision. The files
+/// stay bound to the caller, blueprint, attribute and context until creating
+/// a record claims them, and are reclaimed if none does in time.
+pub(super) async fn upload_staged(
+    State(state): State<AppState>,
+    super::auth::AuthenticatedPrincipal(user_id, _): super::auth::AuthenticatedPrincipal,
+    super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
+    ApiPath((blueprint_id, attribute_code)): ApiPath<(Uuid, String)>,
+    mut multipart: Multipart,
+) -> Result<(StatusCode, Json<crate::repository::StagedUploadResult>), ApiError> {
+    let span = info_span!("file.upload_staged", %blueprint_id, attribute_code = %attribute_code);
+    let result = async {
+        authorize(&state, FileAccessOperation::StagedUpload { blueprint_id }).await?;
+        let (context_id, staged) = read_upload_parts(&state, &mut multipart, true).await?;
+        let (policy, context_id) = repository
+            .staged_upload_policy(blueprint_id, &attribute_code, context_id)
+            .await?;
+        let mimes = attribute_upload_mimes(&staged, &policy)?;
+        let records = store_uploads(&state, &repository, &staged, mimes).await?;
+        let result = repository
+            .persist_staged_uploads(
+                user_id,
+                blueprint_id,
+                &attribute_code,
+                Some(context_id),
+                records,
+            )
+            .await;
+        cleanup(&staged).await;
+        let result = result?;
+        metrics::counter!("catalog_file_uploads_total", "outcome" => "success").increment(1);
+        invalidate_data_health(&state, &repository);
+        Ok((StatusCode::CREATED, Json(result)))
     }
     .instrument(span)
     .await;
@@ -326,6 +238,32 @@ pub(super) async fn upload_conversation(
     )
     .await?;
     super::agents::readable_conversation(&repository, user_id, workspace, conversation_id).await?;
+    let (_, staged) = read_upload_parts(&state, &mut multipart, false).await?;
+    let mimes = accepted_upload_mimes(&staged, None)?;
+    let records = store_uploads(&state, &repository, &staged, mimes).await?;
+    let result = repository
+        .persist_conversation_uploads(conversation_id, user_id, records)
+        .await;
+    cleanup(&staged).await;
+    let files = result?;
+    metrics::counter!("catalog_file_uploads_total", "outcome" => "success").increment(1);
+    invalidate_data_health(&state, &repository);
+    Ok((
+        StatusCode::CREATED,
+        Json(serde_json::json!({ "files": files })),
+    ))
+}
+
+/// Reads a multipart upload: every `file` or `files` part is streamed to a
+/// temporary file, and with `accept_context` one optional `context_id` part
+/// names the attribute context. Temporary files are removed when the returned
+/// files, or those read before a failure, are dropped.
+async fn read_upload_parts(
+    state: &AppState,
+    multipart: &mut Multipart,
+    accept_context: bool,
+) -> Result<(Option<Uuid>, Vec<StagedFile>), ApiError> {
+    let mut context_id = None;
     let mut staged = Vec::new();
     while let Some(field) = multipart
         .next_field()
@@ -333,14 +271,19 @@ pub(super) async fn upload_conversation(
         .map_err(|error| multipart_error(error, "multipart body is malformed"))?
     {
         let name = field.name().unwrap_or_default().to_owned();
+        if accept_context && name == "context_id" {
+            if context_id.is_some() {
+                return Err(ApiError::invalid_file("context_id may appear only once"));
+            }
+            context_id = Some(read_context_id(field).await?);
+            continue;
+        }
         if name != "file" && name != "files" {
-            cleanup(&staged).await;
             return Err(ApiError::invalid_file(
                 "multipart fields must be file or files",
             ));
         }
         if staged.len() >= state.max_upload_files {
-            cleanup(&staged).await;
             return Err(ApiError::file_count_exceeded());
         }
         let original_filename = field
@@ -350,83 +293,124 @@ pub(super) async fn upload_conversation(
         let display_filename = sanitize_filename(&original_filename)
             .ok_or_else(|| ApiError::invalid_file("file name is invalid"))?;
         let declared_mime = field.content_type().map(ToString::to_string);
-        match stage_field(
-            field,
-            original_filename,
-            display_filename,
-            declared_mime,
-            state.max_upload_file_bytes,
-        )
-        .await
-        {
-            Ok(file) => staged.push(file),
-            Err(error) => {
-                cleanup(&staged).await;
-                return Err(error);
-            }
-        }
+        staged.push(
+            stage_field(
+                field,
+                original_filename,
+                display_filename,
+                declared_mime,
+                state.max_upload_file_bytes,
+            )
+            .await?,
+        );
     }
     if staged.is_empty() {
         return Err(ApiError::invalid_file("at least one file is required"));
     }
-    let mut uploads = Vec::with_capacity(staged.len());
-    for file in &staged {
-        let Some(mime) = detected_mime(&file.signature, &file.display_filename, file.valid_text)
-        else {
-            cleanup(&staged).await;
-            return Err(ApiError::unsupported_media_type());
-        };
-        if !declared_mime_matches(file.declared_mime.as_deref(), mime)
-            || !is_supported_upload_mime(mime)
-        {
-            cleanup(&staged).await;
-            return Err(ApiError::unsupported_media_type());
+    Ok((context_id, staged))
+}
+
+async fn read_context_id(mut field: axum::extract::multipart::Field<'_>) -> Result<Uuid, ApiError> {
+    let mut bytes = Vec::new();
+    while let Some(chunk) = field
+        .chunk()
+        .await
+        .map_err(|error| multipart_error(error, "context_id is invalid"))?
+    {
+        if bytes.len().saturating_add(chunk.len()) > MAX_CONTEXT_ID_BYTES {
+            return Err(ApiError::invalid_file("context_id is invalid"));
         }
-        uploads.push((format!("files/{}", Uuid::new_v4()), mime.to_owned()));
+        bytes.extend_from_slice(&chunk);
     }
+    std::str::from_utf8(&bytes)
+        .map_err(|_| ApiError::invalid_file("context_id is invalid"))?
+        .parse()
+        .map_err(|_| ApiError::invalid_file("context_id is invalid"))
+}
+
+/// [`accepted_upload_mimes`] for a file attribute, after its cardinality.
+fn attribute_upload_mimes(
+    staged: &[StagedFile],
+    policy: &FilePolicy,
+) -> Result<Vec<String>, ApiError> {
+    if policy.cardinality == "one" && staged.len() != 1 {
+        return Err(ApiError::invalid_file(
+            "single-file attributes accept exactly one file",
+        ));
+    }
+    accepted_upload_mimes(staged, Some(policy))
+}
+
+/// Detects each file's type from its signature, never its name, and checks it
+/// against the declared type and the attribute policy, or without one the
+/// supported upload types. Returns the detected types in order.
+fn accepted_upload_mimes(
+    staged: &[StagedFile],
+    policy: Option<&FilePolicy>,
+) -> Result<Vec<String>, ApiError> {
+    staged
+        .iter()
+        .map(|file| {
+            let mime = detected_mime(&file.signature, &file.display_filename, file.valid_text)
+                .ok_or_else(ApiError::unsupported_media_type)?;
+            if policy
+                .and_then(|policy| policy.max_bytes)
+                .is_some_and(|limit| file.byte_size > limit)
+            {
+                return Err(ApiError::file_too_large());
+            }
+            let allowed = match policy {
+                Some(policy) => {
+                    allowed_by_policy(policy, mime, &file.display_filename, file.byte_size)
+                }
+                None => is_supported_upload_mime(mime),
+            };
+            if !declared_mime_matches(file.declared_mime.as_deref(), mime) || !allowed {
+                return Err(ApiError::unsupported_media_type());
+            }
+            Ok(mime.to_owned())
+        })
+        .collect()
+}
+
+/// Streams accepted files to object storage under fresh keys, each covered by
+/// a durable upload intent first, and returns the records to persist.
+async fn store_uploads(
+    state: &AppState,
+    repository: &CatalogRepository,
+    staged: &[StagedFile],
+    mimes: Vec<String>,
+) -> Result<Vec<NewUploadedFile>, ApiError> {
+    let uploads: Vec<(String, String)> = mimes
+        .into_iter()
+        .map(|mime| (format!("files/{}", Uuid::new_v4()), mime))
+        .collect();
     reserve_upload_keys(
-        &state,
-        &repository,
+        state,
+        repository,
         uploads.iter().map(|(key, _)| key.clone()).collect(),
     )
     .await?;
     for (file, (key, mime)) in staged.iter().zip(&uploads) {
-        if let Err(error) = state
+        // Stream from disk; the durable intent owns cleanup on cancellation.
+        state
             .object_store
             .put_file(key, &file.path, Some(mime))
             .await
-        {
-            cleanup(&staged).await;
-            return Err(storage_error(error));
-        }
+            .map_err(storage_error)?;
     }
-    let records = staged
+    Ok(staged
         .iter()
-        .zip(&uploads)
-        .map(|(file, (key, mime))| NewUploadedFile {
+        .zip(uploads)
+        .map(|(file, (object_key, mime_type))| NewUploadedFile {
             original_filename: file.original_filename.clone(),
             display_filename: file.display_filename.clone(),
-            mime_type: mime.clone(),
+            mime_type,
             byte_size: file.byte_size,
             sha256: file.sha256.clone(),
-            object_key: key.clone(),
+            object_key,
         })
-        .collect();
-    let result = repository
-        .persist_conversation_uploads(conversation_id, user_id, records)
-        .await;
-    cleanup(&staged).await;
-    match result {
-        Ok(files) => {
-            metrics::counter!("catalog_file_uploads_total", "outcome" => "success").increment(1);
-            invalidate_data_health(&state, &repository);
-            Ok((
-                StatusCode::CREATED,
-                Json(serde_json::json!({ "files": files })),
-            ))
-        }
-        Err(error) => Err(error.into()),
-    }
+        .collect())
 }
 
 /// Replaces the caller's avatar in the active workspace. The upload shares the

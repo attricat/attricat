@@ -621,12 +621,19 @@ const getBlueprintRevisionRequestSchema = z.object({
   id: uuidSchema,
   version: z.number().int().positive(),
 });
+export const newFileAttributeValueSchema = z.object({
+  attribute_code: z.string().min(1),
+  context_id: uuidSchema.nullable().optional(),
+  file_ids: z.array(uuidSchema).min(1),
+});
 export const createEntityRequestSchema = z.object({
   blueprint: z.object({
     code: z.string().min(1),
     version: z.number().int().positive().optional(),
   }),
   values: z.array(newAttributeValueSchema),
+  /** Staged uploads the create claims, one ordered list per attribute. */
+  files: z.array(newFileAttributeValueSchema).optional(),
   system_tags: z.array(z.string()).optional(),
   system_metadata: jsonObjectSchema.optional(),
 });
@@ -670,6 +677,7 @@ export type BlueprintWithAttributes = z.infer<
   typeof blueprintWithAttributesSchema
 >;
 export type NewAttributeValue = z.infer<typeof newAttributeValueSchema>;
+export type NewFileAttributeValue = z.infer<typeof newFileAttributeValueSchema>;
 export type FormAttributeValue = z.infer<typeof formAttributeValueSchema>;
 export type RelationshipTargets = z.infer<typeof relationshipTargetsSchema>;
 export type Entity = z.infer<typeof entitySchema>;

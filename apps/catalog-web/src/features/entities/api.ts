@@ -55,6 +55,7 @@ export type {
   EntitySearchResponse,
   JsonSchema,
   NewAttributeValue,
+  NewFileAttributeValue,
   RelationshipTargets,
   ResolvedEntityPreview,
   RetentionHold,

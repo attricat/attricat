@@ -988,6 +988,11 @@ pub fn router(state: AppState) -> Router {
             post(files::upload).layer(axum::extract::DefaultBodyLimit::disable()),
         )
         .route(
+            "/blueprints/{blueprint_id}/file-attributes/{attribute_code}/staged-uploads",
+            // Streams and limits each file itself, like entity uploads.
+            post(files::upload_staged).layer(axum::extract::DefaultBodyLimit::disable()),
+        )
+        .route(
             "/entities/{entity_id}/file-attributes/{attribute_code}/references",
             put(files::update_references),
         )

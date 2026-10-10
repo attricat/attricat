@@ -5,10 +5,12 @@ import {
   useMemo,
   useState,
 } from 'react';
-import { uploadFiles } from './api';
+import { useTranslation } from 'react-i18next';
+import type { NewFileAttributeValue } from '../entities/api';
+import { uploadStagedFiles } from './api';
 import type { PendingFile } from './usePendingFileUploads';
 
-/** Files chosen before their entity exists, keyed by attribute code. */
+/** Files chosen before their record exists, keyed by attribute code. */
 export type QueuedFiles = Readonly<Record<string, readonly PendingFile[]>>;
 
 export type QueuedFileUploads = {
@@ -19,7 +21,7 @@ export type QueuedFileUploads = {
   ) => void;
 };
 
-/** Lets file editors queue files that upload once the entity is created. */
+/** Lets file editors queue files that upload when the record is created. */
 export const QueuedFileUploadsContext = createContext<QueuedFileUploads | null>(
   null,
 );
@@ -34,6 +36,8 @@ const noQueuedFiles: Record<string, PendingFile[]> = {};
  * such as choosing another blueprint, discards the queue.
  */
 export const useQueuedFileUploads = (scope: string | undefined) => {
+  const { t } = useTranslation();
+  const uploadFailed = t('files.uploadFailed');
   const [state, setState] = useState<{
     scope: string | undefined;
     pending: Record<string, PendingFile[]>;
@@ -54,42 +58,71 @@ export const useQueuedFileUploads = (scope: string | undefined) => {
     [scope],
   );
   const queue = useMemo(() => ({ pending, update }), [pending, update]);
-  /** Uploads each queued file and returns those that failed, with why. */
-  const uploadQueued = async (
+  /**
+   * Uploads each queued file that is not staged yet, one at a time, for the
+   * blueprint whose record is about to be created. Staged files keep their
+   * ID, so a later attempt does not upload them again; failed files keep
+   * their error so they can be retried or removed. Returns the file lists to
+   * create the record with and the files that failed, with why.
+   */
+  const stageQueued = async (
     files: QueuedFiles,
-    entityId: string,
+    blueprintId: string,
     contextId: string | null,
   ) => {
     const failed: { filename: string; message?: string }[] = [];
+    const staged: NewFileAttributeValue[] = [];
     for (const [attributeCode, items] of Object.entries(files)) {
+      const fileIds: string[] = [];
+      const change = (id: string, next: Partial<PendingFile>) =>
+        update(attributeCode, (queued) =>
+          queued.map((item) => (item.id === id ? { ...item, ...next } : item)),
+        );
       for (const item of items) {
+        if (item.stagedFileId) {
+          fileIds.push(item.stagedFileId);
+          continue;
+        }
         // Zero means "not started", so an upload never reports less than 1.
-        const progress = (value: number) =>
-          update(attributeCode, (queued) =>
-            queued.map((queuedItem) =>
-              queuedItem.id === item.id
-                ? { ...queuedItem, progress: Math.max(1, value) }
-                : queuedItem,
-            ),
-          );
-        progress(1);
+        change(item.id, { error: undefined, progress: 1 });
         try {
-          await uploadFiles({
-            entityId,
+          const result = await uploadStagedFiles({
+            blueprintId,
             attributeCode,
             contextId,
             files: [item.file],
-            onProgress: progress,
+            onProgress: (progress) =>
+              change(item.id, { progress: Math.max(1, progress) }),
           });
+          const stagedFileId = result.files[0].id;
+          fileIds.push(stagedFileId);
+          // Staged files read as ready again and can still be removed.
+          change(item.id, { progress: 0, stagedFileId });
         } catch (error) {
-          failed.push({
-            filename: item.file.name,
-            message: error instanceof Error ? error.message : undefined,
-          });
+          const message = error instanceof Error ? error.message : undefined;
+          failed.push({ filename: item.file.name, message });
+          change(item.id, { error: message ?? uploadFailed, progress: 0 });
         }
       }
+      if (fileIds.length > 0)
+        staged.push({
+          attribute_code: attributeCode,
+          context_id: contextId,
+          file_ids: fileIds,
+        });
     }
-    return failed;
+    return { failed, staged };
   };
-  return { queue, uploadQueued };
+  /** Uploads every queued file again, such as after its staging expired. */
+  const forgetStaged = () =>
+    setState((current) => ({
+      ...current,
+      pending: Object.fromEntries(
+        Object.entries(current.pending).map(([code, items]) => [
+          code,
+          items.map((item) => ({ ...item, stagedFileId: undefined })),
+        ]),
+      ),
+    }));
+  return { queue, stageQueued, forgetStaged };
 };

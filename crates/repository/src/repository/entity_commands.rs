@@ -13,7 +13,7 @@ use crate::domain_events::{
     ENTITY_UPDATED_V1, EntityMutationV1, NewDomainEvent, RELATIONSHIP_CHANGED_V1,
     RelationshipMutationV1,
 };
-use crate::model::UpdateEntityFormRequest;
+use crate::model::{NewFileAttributeValue, UpdateEntityFormRequest};
 use crate::persistence_rows::{Db, IntoDomain};
 use catalog_validation::validate_json_schema;
 use chrono::Utc;
@@ -62,11 +62,26 @@ pub(super) enum Revalidation {
     Structural,
 }
 
+/// File values a create writes before it validates the new entity, so that an
+/// entity schema requiring a file attribute can be satisfied.
+pub(super) enum CreateFileValues {
+    None,
+    /// Files the workspace already holds, such as a duplicated entity's.
+    Existing(Vec<NewFileAttributeValue>),
+    /// Files staged by `uploaded_by` for the blueprint, which the create
+    /// claims; see [`CatalogRepository::claim_staged_files_in_transaction`].
+    Staged {
+        uploaded_by: Uuid,
+        values: Vec<NewFileAttributeValue>,
+    },
+}
+
 pub(super) struct ChosenIdEntityCreate {
     pub entity_id: Uuid,
     pub blueprint_id: Uuid,
     pub blueprint_version: i64,
     pub values: Vec<NewAttributeValue>,
+    pub files: CreateFileValues,
     pub system_tags: Vec<String>,
     pub system_metadata: Value,
     pub host_sample_marker: bool,
@@ -91,6 +106,40 @@ impl CatalogRepository {
         system_tags: Vec<String>,
         system_metadata: Value,
     ) -> Result<Entity, RepositoryError> {
+        self.create_entity_with_staged_files(
+            blueprint_id,
+            blueprint_version,
+            values,
+            Vec::new(),
+            None,
+            system_tags,
+            system_metadata,
+        )
+        .await
+    }
+
+    /// [`Self::create_entity_with_values`], also claiming and linking `files`
+    /// that `uploaded_by` staged for the blueprint before the entity is
+    /// validated. Files require the uploader.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn create_entity_with_staged_files(
+        &self,
+        blueprint_id: Uuid,
+        blueprint_version: i64,
+        values: Vec<NewAttributeValue>,
+        files: Vec<NewFileAttributeValue>,
+        uploaded_by: Option<Uuid>,
+        system_tags: Vec<String>,
+        system_metadata: Value,
+    ) -> Result<Entity, RepositoryError> {
+        let files = match (files.is_empty(), uploaded_by) {
+            (true, _) => CreateFileValues::None,
+            (false, Some(uploaded_by)) => CreateFileValues::Staged {
+                uploaded_by,
+                values: files,
+            },
+            (false, None) => return Err(RepositoryError::InvalidFileReferences),
+        };
         let mut transaction = self.pool.begin().await?;
         let (entity, changes, event) = self
             .create_entity_in_transaction(
@@ -100,6 +149,7 @@ impl CatalogRepository {
                     blueprint_id,
                     blueprint_version,
                     values,
+                    files,
                     system_tags,
                     system_metadata,
                     host_sample_marker: false,
@@ -131,6 +181,7 @@ impl CatalogRepository {
             blueprint_id,
             blueprint_version,
             values,
+            files,
             system_tags,
             system_metadata,
             host_sample_marker,
@@ -205,12 +256,20 @@ impl CatalogRepository {
             .await?;
         self.insert_values_in(transaction, &write, &entity, values)
             .await?;
+        // Files are linked before validation, so the entity schema sees them.
+        let file_changes = self
+            .write_created_file_values(transaction, &entity, files)
+            .await?;
+        if !file_changes.is_empty() {
+            write.values_changed();
+        }
         self.validate_entity_schema_in(transaction, &write, &entity, Revalidation::Write)
             .await?;
         let preview = write.preview(transaction, entity.id).await?;
         let entity = self.store_preview(transaction, entity.id, preview).await?;
         let after = self.entity_audit_snapshot(transaction, entity.id).await?;
-        let changes = Self::audit_changes(entity.id, Vec::new(), after, false);
+        let mut changes = Self::audit_changes(entity.id, Vec::new(), after, false);
+        changes.extend(file_changes);
         let event = self.core_event(
             ENTITY_CREATED_V1,
             "entity",
@@ -224,6 +283,60 @@ impl CatalogRepository {
             .expect("entity-created payload is serializable"),
         );
         Ok((entity, changes, event))
+    }
+
+    /// Writes each file list of a new entity once and returns their audit
+    /// changes. Every file row is locked first, in ID order, so two writes
+    /// sharing files cannot deadlock (see [`Self::lock_files_in_transaction`]);
+    /// staged files are then claimed before they are linked.
+    async fn write_created_file_values(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        entity: &Entity,
+        files: CreateFileValues,
+    ) -> Result<Vec<AuditEventChange>, RepositoryError> {
+        let values = match files {
+            CreateFileValues::None => return Ok(Vec::new()),
+            CreateFileValues::Existing(values) => {
+                self.lock_created_files(transaction, &values).await?;
+                values
+            }
+            CreateFileValues::Staged {
+                uploaded_by,
+                values,
+            } => {
+                self.lock_created_files(transaction, &values).await?;
+                self.claim_staged_files_in_transaction(transaction, entity, uploaded_by, &values)
+                    .await?;
+                values
+            }
+        };
+        let mut changes = Vec::with_capacity(values.len());
+        for value in values {
+            changes.push(
+                self.link_files_in_transaction(
+                    transaction,
+                    entity,
+                    &value.attribute_code,
+                    value.context_id,
+                    &value.file_ids,
+                )
+                .await?,
+            );
+        }
+        Ok(changes)
+    }
+
+    async fn lock_created_files(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        values: &[NewFileAttributeValue],
+    ) -> Result<(), RepositoryError> {
+        let file_ids: Vec<Uuid> = values
+            .iter()
+            .flat_map(|value| value.file_ids.iter().copied())
+            .collect();
+        self.lock_files_in_transaction(transaction, &file_ids).await
     }
 
     /// Copies an entity's blueprint values, relationships and file
@@ -250,7 +363,7 @@ impl CatalogRepository {
         };
         // File references are grouped by attribute and context, in order, so
         // each list is written once instead of archiving every partial list.
-        let mut file_values: Vec<(String, Option<Uuid>, Vec<Uuid>)> = Vec::new();
+        let mut file_values: Vec<NewFileAttributeValue> = Vec::new();
         let values = self
             .form_values(entity_id)
             .await?
@@ -284,11 +397,15 @@ impl CatalogRepository {
                     files,
                 } => {
                     let ids = files.into_iter().map(|file| file.id);
-                    match file_values.iter_mut().find(|(code, context, _)| {
-                        *code == attribute_code && *context == context_id
+                    match file_values.iter_mut().find(|value| {
+                        value.attribute_code == attribute_code && value.context_id == context_id
                     }) {
-                        Some((_, _, list)) => list.extend(ids),
-                        None => file_values.push((attribute_code, context_id, ids.collect())),
+                        Some(value) => value.file_ids.extend(ids),
+                        None => file_values.push(NewFileAttributeValue {
+                            attribute_code,
+                            context_id,
+                            file_ids: ids.collect(),
+                        }),
                     }
                     None
                 }
@@ -303,7 +420,9 @@ impl CatalogRepository {
             .without_claimed_annotations(system_tags, source.system_metadata)
             .await?;
         // The copy, its file references and its audit/event commit together,
-        // so a failed file link cannot leave a partial duplicate behind.
+        // so a failed file link cannot leave a partial duplicate behind. The
+        // create links the files before it validates the copy, so an entity
+        // schema that requires a file attribute is satisfied.
         let mut transaction = self.pool.begin().await?;
         let (entity, changes, event) = self
             .create_entity_in_transaction(
@@ -313,33 +432,17 @@ impl CatalogRepository {
                     blueprint_id: source.blueprint_id,
                     blueprint_version: source.blueprint_version,
                     values,
+                    files: if file_values.is_empty() {
+                        CreateFileValues::None
+                    } else {
+                        CreateFileValues::Existing(file_values)
+                    },
                     system_tags,
                     system_metadata,
                     host_sample_marker: false,
                 },
             )
             .await?;
-        let entity = if file_values.is_empty() {
-            entity
-        } else {
-            let all_file_ids: Vec<Uuid> = file_values
-                .iter()
-                .flat_map(|(_, _, file_ids)| file_ids.iter().copied())
-                .collect();
-            self.lock_files_in_transaction(&mut transaction, &all_file_ids)
-                .await?;
-            for (attribute_code, context_id, file_ids) in file_values {
-                self.link_files_in_transaction(
-                    &mut transaction,
-                    &entity,
-                    &attribute_code,
-                    context_id,
-                    &file_ids,
-                )
-                .await?;
-            }
-            self.revalidate_entity(&mut transaction, &entity).await?
-        };
         self.commit_entity_mutation(transaction, changes, event)
             .await?;
         Ok(entity)

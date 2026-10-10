@@ -120,16 +120,21 @@ impl<'a> CatalogMutationService<'a> {
             .await
     }
 
+    /// Creates an entity. `input.files` must be files that `uploaded_by`
+    /// staged for the blueprint; without an uploader none may be given.
     pub async fn create_entity(
         &self,
         input: CreateEntityFormRequest,
+        uploaded_by: Option<Uuid>,
     ) -> Result<Entity, RepositoryError> {
         let blueprint = self.resolve_published_blueprint(&input.blueprint).await?;
         self.repository
-            .create_entity_with_values(
+            .create_entity_with_staged_files(
                 blueprint.blueprint.id,
                 blueprint.blueprint.version,
                 input.values,
+                input.files,
+                uploaded_by,
                 input.system_tags,
                 input.system_metadata,
             )

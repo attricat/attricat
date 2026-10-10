@@ -49,6 +49,7 @@ import { violationFieldErrors } from '../checkViolations';
 import { useViolationText } from '../../../components/useViolationText';
 import { ApiErrorAlert } from '../../../components/CheckViolationsAlert';
 import { EntityFormAttributeEditor } from './EntityFormAttributeEditor';
+import { useQueuedFileUploadsContext } from '../../files/queuedFileUploads';
 
 export type EntityFormHandle = {
   /** Removes the persisted draft after a confirmed save. */
@@ -169,6 +170,20 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
       },
     );
     const fieldEditors = viewFieldEditors(fieldComponents, editableAttributes);
+    // Files queued while creating a record are submitted with it, so they
+    // count toward required file attributes.
+    const queuedFiles = useQueuedFileUploadsContext()?.pending;
+    const fileCounts = useMemo(
+      () =>
+        queuedFiles &&
+        Object.fromEntries(
+          Object.entries(queuedFiles).map(([code, items]) => [
+            code,
+            items.length,
+          ]),
+        ),
+      [queuedFiles],
+    );
     const checks = checkViolationError(error);
     // A field's server violation is cleared once the user edits that field.
     const [editedAfterError, setEditedAfterError] = useState<{
@@ -245,6 +260,7 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
           }),
         },
         fieldEditors,
+        fileCounts,
       );
       for (const attribute of editableAttributes) {
         const config = statusConfiguration(attribute);
@@ -345,8 +361,14 @@ export const EntityForm = forwardRef<EntityFormHandle, EntityFormProps>(
       submittedAttributes,
       fields,
       requiredCodes,
+      fileCounts,
     );
-    const allFieldErrors = { ...serverFieldErrors, ...fieldErrors };
+    const allFieldErrors = Object.fromEntries(
+      Object.entries({ ...serverFieldErrors, ...fieldErrors }).filter(
+        // Queuing a file fills a required file field without a field change.
+        ([code]) => !((fileCounts?.[code] ?? 0) > 0),
+      ),
+    );
     const editorContext = {
       statusParentContextIds: noStatusParentContextIds,
       disabled: isLoadingBlueprint,

@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiRequestError } from '../entities/api';
-import { fileDownloadUrl, uploadConversationFiles, uploadFiles } from './api';
+import {
+  fileDownloadUrl,
+  uploadConversationFiles,
+  uploadFiles,
+  uploadStagedFiles,
+} from './api';
 
 const id = '123e4567-e89b-12d3-a456-426614174000';
 const fetchMock = vi.fn();
@@ -43,6 +48,42 @@ describe('file API client', () => {
     );
     expect(result.files[0].filename).toBe('shirt.png');
     expect(progress).toHaveBeenCalledWith(100);
+  });
+
+  it('stages files for a blueprint attribute before the record exists', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          attribute_code: 'images',
+          context_id: id,
+          expires_at: '2026-10-07T11:00:00Z',
+          files: [
+            {
+              id,
+              filename: 'shirt.png',
+              mime_type: 'image/png',
+              byte_size: 42,
+              sha256: 'abc',
+              status: 'queued',
+            },
+          ],
+        }),
+    });
+    const result = await uploadStagedFiles({
+      blueprintId: id,
+      attributeCode: 'images',
+      contextId: id,
+      files: [new File(['image'], 'shirt.png', { type: 'image/png' })],
+    });
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      `/api/blueprints/${id}/file-attributes/images/staged-uploads`,
+    );
+    const body = fetchMock.mock.calls[0][1].body as FormData;
+    expect(body.get('context_id')).toBe(id);
+    expect(body.get('file')).toBeInstanceOf(File);
+    expect(result.files[0].id).toBe(id);
   });
 
   it('uploads conversation attachments without an entity attribute', async () => {

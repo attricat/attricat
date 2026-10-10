@@ -648,10 +648,24 @@ pub struct CreateEntityFormRequest {
     pub blueprint: SearchBlueprint,
     #[serde(default)]
     pub values: Vec<NewAttributeValue>,
+    /// Files staged for the blueprint's file attributes by the caller, which
+    /// the create claims and links before validating the new entity.
+    #[serde(default)]
+    pub files: Vec<NewFileAttributeValue>,
     #[serde(default)]
     pub system_tags: Vec<String>,
     #[serde(default = "empty_json_object")]
     pub system_metadata: Value,
+}
+
+/// The ordered files of one file attribute in one context (the default
+/// context when omitted), written as a single value.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NewFileAttributeValue {
+    pub attribute_code: String,
+    pub context_id: Option<Uuid>,
+    pub file_ids: Vec<Uuid>,
 }
 
 #[derive(Clone, Debug, Deserialize)]

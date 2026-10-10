@@ -459,11 +459,12 @@ pub(super) async fn delete_entity(
 }
 pub(super) async fn create_entity_form(
     State(state): State<AppState>,
+    super::auth::AuthenticatedPrincipal(user_id, _): super::auth::AuthenticatedPrincipal,
     super::auth::ScopedRepository(repository): super::auth::ScopedRepository,
     ApiJson(input): ApiJson<CreateEntityFormRequest>,
 ) -> Result<(StatusCode, Json<Entity>), ApiError> {
     let entity = CatalogMutationService::new(&repository)
-        .create_entity(input)
+        .create_entity(input, Some(user_id))
         .await?;
     invalidate_data_health(&state, &repository);
     Ok((StatusCode::CREATED, Json(entity)))

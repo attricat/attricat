@@ -11,13 +11,14 @@ import {
   useQueuedFileUploads,
   type QueuedFiles,
 } from '../files/queuedFileUploads';
-import { useToast } from '../../components/useToast';
+import { ApiRequestError } from '../../api/request';
 import { createEntity, getBlueprintByCode } from './api';
 import { EntityForm, type EntityFormHandle } from './components/EntityForm';
 import { EntityPage } from './components/EntityPage';
 import { entityQueryKeys } from './queryKeys';
 import { invalidateEntitySearches } from './invalidateEntity';
 import { attributeValueKinds } from './valueTypes';
+import { invalidFileReferencesCode } from '../files/constants';
 
 export const CreateEntityPage = ({
   search,
@@ -42,7 +43,6 @@ export const CreateEntityPage = ({
     blueprint.data &&
       `${blueprint.data.blueprint.id}:${blueprint.data.blueprint.version}`,
   );
-  const toast = useToast();
   const contexts = useQuery({
     queryKey: contextQueryKeys.all(),
     queryFn: ({ signal }) => listContexts(signal),
@@ -64,51 +64,61 @@ export const CreateEntityPage = ({
       if (!resolved) throw new Error(t('entities.chooseBeforeCreate'));
       if (!defaultContextId)
         throw new Error(t('entities.defaultContextUnavailable'));
-      const entity = await createEntity({
-        blueprint: {
-          code: resolved.blueprint.code,
-          version: resolved.blueprint.version,
-        },
-        values: [
-          ...values.map((value) => ({
-            ...value,
-            context_id: defaultContextId,
-          })),
-          ...relationships.flatMap((relationship) =>
-            relationship.target_entity_ids.map((target_entity_id) => ({
-              kind: attributeValueKinds.relationship,
-              attribute_code: relationship.attribute_code,
-              context_id: defaultContextId,
-              target_entity_id,
-            })),
-          ),
-        ],
-      });
-      // The entity exists now: forget the draft before the slower uploads so
-      // leaving mid-upload cannot offer to create it again. A failed upload
-      // is retried on the entity's page.
-      entityFormRef.current?.clearDraft();
-      void invalidateEntitySearches(client);
-      const failedFiles = await queuedFiles.uploadQueued(
+      // Files upload first, so a record whose schema requires a file is
+      // created with it. If any fails, nothing is created and the queue
+      // keeps each file to retry or remove.
+      const staged = await queuedFiles.stageQueued(
         files,
-        entity.id,
+        resolved.blueprint.id,
         defaultContextId,
       );
-      return { entity, failedFiles };
-    },
-    onSuccess: ({ entity, failedFiles }) => {
-      if (failedFiles.length > 0)
-        toast.show({
-          message: t('files.uploadAfterCreateFailed', {
-            count: failedFiles.length,
-            files: failedFiles
+      if (staged.failed.length > 0)
+        throw new Error(
+          t('files.uploadBeforeCreateFailed', {
+            count: staged.failed.length,
+            files: staged.failed
               .map(({ filename, message }) =>
                 message ? `${filename} (${message})` : filename,
               )
               .join(', '),
           }),
-          severity: 'error',
+        );
+      try {
+        return await createEntity({
+          blueprint: {
+            code: resolved.blueprint.code,
+            version: resolved.blueprint.version,
+          },
+          values: [
+            ...values.map((value) => ({
+              ...value,
+              context_id: defaultContextId,
+            })),
+            ...relationships.flatMap((relationship) =>
+              relationship.target_entity_ids.map((target_entity_id) => ({
+                kind: attributeValueKinds.relationship,
+                attribute_code: relationship.attribute_code,
+                context_id: defaultContextId,
+                target_entity_id,
+              })),
+            ),
+          ],
+          files: staged.staged,
         });
+      } catch (error) {
+        // Staged files that can no longer be claimed, such as after their
+        // upload expired, upload again on the next attempt.
+        if (
+          error instanceof ApiRequestError &&
+          error.code === invalidFileReferencesCode
+        )
+          queuedFiles.forgetStaged();
+        throw error;
+      }
+    },
+    onSuccess: (entity) => {
+      entityFormRef.current?.clearDraft();
+      void invalidateEntitySearches(client);
       void navigate({
         to: '/entities/$entityId',
         params: { entityId: entity.id },

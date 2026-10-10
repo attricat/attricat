@@ -114,7 +114,7 @@ Public routes that need no credentials: `/health`, `/health/live`, `/health/read
 
 | Method | Path | Description |
 | --- | --- | --- |
-| `POST` | `/v1/entities` | Create a record with values and optional `system_tags` and `system_metadata`. |
+| `POST` | `/v1/entities` | Create a record with values, optional uploaded `files`, and optional `system_tags` and `system_metadata`. See [Files on a new record](#files-on-a-new-record). |
 | `POST` | `/v1/entities/batch` | Create, update, and delete several records at once: all changes are saved, or none are. See [Batch changes](#batch-changes). |
 | `GET`, `PUT` | `/v1/entities/{id}` | Read or update a record's form: values, relationships, removals, annotations. |
 | `GET`, `DELETE` | `/entities/{id}` | Read or delete a record. |
@@ -215,6 +215,7 @@ POST /api/v1/entities/search
 | Method | Path | Description |
 | --- | --- | --- |
 | `POST` | `/entities/{entity_id}/file-attributes/{attribute_code}/uploads` | Upload with `multipart/form-data`: one or more `files` parts and an optional `context_id` part. Returns `201`. |
+| `POST` | `/blueprints/{blueprint_id}/file-attributes/{attribute_code}/staged-uploads` | Upload files for a record you are about to create. Same body as above. Returns `201` with `files` and `expires_at`. |
 | `GET` | `/files/{file_id}` | Metadata and processing status. |
 | `GET` | `/files/{file_id}/download` | Original file. Supports one `Range`. |
 | `GET` | `/files/{file_id}/variants/{kind}/download` | `thumbnail` or `display` variant. |
@@ -222,6 +223,20 @@ POST /api/v1/entities/search
 | `POST` | `/files/{file_id}/retention-holds/{hold_id}/release` | Release an explicit hold early (`files.hold`). Holds placed by a status cannot be released. |
 
 Downloads return `409 file_processing` until the file is `ready`.
+
+#### Files on a new record
+
+A record whose schema requires a file is created with its files in one request. First upload each file to `/blueprints/{blueprint_id}/file-attributes/{attribute_code}/staged-uploads`, which needs permission to create records. Then pass the returned IDs to `POST /v1/entities`:
+
+```json
+{
+  "blueprint": { "code": "product" },
+  "values": [],
+  "files": [{ "attribute_code": "photos", "file_ids": ["…"] }]
+}
+```
+
+Add `context_id` to an entry for a context other than the default. Uploaded files can only be used by you, for the same blueprint, attribute and context, and only once. They are deleted if no record uses them within an hour. Otherwise the request returns `422 invalid_file_references`.
 
 ### Contexts and publication
 

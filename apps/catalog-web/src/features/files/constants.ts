@@ -67,3 +67,6 @@ export const uploadFormFields = {
 } as const;
 /** The square variant the file worker produces for member avatars. */
 export const AVATAR_VARIANT_KIND = 'avatar';
+
+/** API error code for file IDs a write cannot reference or claim. */
+export const invalidFileReferencesCode = 'invalid_file_references';

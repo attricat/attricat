@@ -340,6 +340,11 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
             target: TargetKind::BlueprintId,
         });
     }
+    // Files uploaded before their record exists are part of creating it, so
+    // they need the same permission as `POST /v1/entities`.
+    if path == "/blueprints/{blueprint_id}/file-attributes/{attribute_code}/staged-uploads" {
+        return Some(write(TargetKind::None));
+    }
     if path.starts_with("/blueprints/by-code/{code}") {
         return Some(Policy {
             permission: blueprint,
@@ -599,6 +604,19 @@ mod tests {
             target("/v1/entities/batch", TargetKind::EntityBatch),
             (None, None)
         );
+    }
+
+    #[test]
+    fn staged_uploads_require_the_entity_create_permission() {
+        let staged = policy(
+            &Method::POST,
+            "/blueprints/{blueprint_id}/file-attributes/{attribute_code}/staged-uploads",
+        )
+        .unwrap();
+        let create = policy(&Method::POST, "/v1/entities").unwrap();
+        assert_eq!(staged.permission, create.permission);
+        assert!(matches!(staged.target, TargetKind::None));
+        assert!(matches!(create.target, TargetKind::None));
     }
 
     #[test]

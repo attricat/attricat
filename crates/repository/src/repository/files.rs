@@ -1,10 +1,12 @@
 use super::*;
-use crate::constants::CONVERSATION_ATTACHMENT_LIFETIME_SECONDS;
+use crate::constants::{CONVERSATION_ATTACHMENT_LIFETIME_SECONDS, STAGED_UPLOAD_LIFETIME_SECONDS};
 use crate::domain_events::{ATTRIBUTE_VALUE_CHANGED_V1, AttributeValueMutationV1};
+use crate::model::NewFileAttributeValue;
 use crate::persistence_rows::{Db, IntoDomain};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use sqlx::Transaction;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct FilePolicy {
@@ -66,6 +68,30 @@ pub struct FileUploadResult {
     pub files: Vec<UploadedFile>,
     /// The entity's new `updated_at`, so an open edit form can adopt it.
     pub entity_updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// Files uploaded for a blueprint's file attribute before the record exists.
+#[derive(Clone, Debug, Serialize)]
+pub struct StagedUploadResult {
+    pub attribute_code: String,
+    pub context_id: Uuid,
+    pub files: Vec<UploadedFile>,
+    /// Creating a record must claim the files before this instant; unclaimed
+    /// files are reclaimed afterwards.
+    pub expires_at: DateTime<Utc>,
+}
+
+/// A file row locked while a create claims staged uploads.
+#[derive(sqlx::FromRow)]
+struct StagedFileRow {
+    id: Uuid,
+    staged_upload_user_id: Option<Uuid>,
+    staged_upload_blueprint_id: Option<Uuid>,
+    staged_upload_attribute_code: Option<String>,
+    staged_upload_context_id: Option<Uuid>,
+    mime_type: String,
+    display_filename: String,
+    byte_size: i64,
 }
 
 #[derive(Clone, Debug, sqlx::FromRow)]
@@ -358,9 +384,10 @@ impl CatalogRepository {
     }
 
     /// Appends files to a file attribute of `entity`, which the caller has
-    /// locked, in one value write, without revalidating, auditing or
-    /// committing, so the transaction that created the entity can link every
-    /// file of an attribute and context without archiving intermediate lists.
+    /// locked, in one value write, without revalidating or committing, so the
+    /// transaction that creates the entity can link every file of an
+    /// attribute and context without archiving intermediate lists. Returns
+    /// the audit change for the caller's mutation.
     pub(super) async fn link_files_in_transaction(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
@@ -368,7 +395,7 @@ impl CatalogRepository {
         attribute_code: &str,
         context_id: Option<Uuid>,
         file_ids: &[Uuid],
-    ) -> Result<(), RepositoryError> {
+    ) -> Result<AuditEventChange, RepositoryError> {
         let (change, file_ids) = self
             .prepare_file_link(transaction, entity, attribute_code, context_id, file_ids)
             .await?;
@@ -379,7 +406,94 @@ impl CatalogRepository {
             change.context_id,
             &file_ids,
         )
+        .await?;
+        self.file_value_audit_change(
+            transaction,
+            entity.id,
+            FileValueChange {
+                after: file_ids,
+                ..change
+            },
+        )
         .await
+    }
+
+    /// Claims files that `uploaded_by` staged for the new `entity`, which the
+    /// caller has locked along with the files (see
+    /// [`Self::lock_files_in_transaction`]). Each file must be live, inside its
+    /// staging window, unclaimed, staged for the entity's blueprint family and
+    /// for the value's attribute and context, and accepted by the attribute
+    /// of the entity's revision. Claiming ends the staging window and clears
+    /// the binding, so a file is claimed at most once; the caller then links
+    /// the files. Every rejection is the same error, so the response does not
+    /// reveal another user's uploads.
+    pub(super) async fn claim_staged_files_in_transaction(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        entity: &Entity,
+        uploaded_by: Uuid,
+        values: &[NewFileAttributeValue],
+    ) -> Result<(), RepositoryError> {
+        let mut requested = HashSet::new();
+        let mut lists = HashSet::new();
+        let mut expected = Vec::new();
+        for value in values {
+            let context_id = self
+                .file_upload_context(transaction, value.context_id)
+                .await?;
+            if value.file_ids.is_empty()
+                || !lists.insert((value.attribute_code.as_str(), context_id))
+            {
+                return Err(RepositoryError::InvalidFileReferences);
+            }
+            let (_, policy, _) = self
+                .file_upload_attribute(transaction, entity, &value.attribute_code)
+                .await?;
+            for file_id in &value.file_ids {
+                if !requested.insert(*file_id) {
+                    return Err(RepositoryError::InvalidFileReferences);
+                }
+                expected.push((
+                    *file_id,
+                    value.attribute_code.as_str(),
+                    context_id,
+                    policy.clone(),
+                ));
+            }
+        }
+        let file_ids: Vec<Uuid> = requested.into_iter().collect();
+        let rows: HashMap<Uuid, StagedFileRow> = sqlx::query_as::<_, StagedFileRow>(
+            "SELECT id, staged_upload_user_id, staged_upload_blueprint_id, staged_upload_attribute_code, staged_upload_context_id, mime_type, display_filename, byte_size FROM files WHERE id = ANY($1) AND workspace_id = $2 AND deleted_at IS NULL AND purpose = 'attachment' AND attachment_expires_at > now() ORDER BY id FOR UPDATE",
+        )
+        .bind(&file_ids)
+        .bind(self.workspace_id.0)
+        .fetch_all(&mut **transaction)
+        .await?
+        .into_iter()
+        .map(|row| (row.id, row))
+        .collect();
+        for (file_id, attribute_code, context_id, policy) in expected {
+            let claimable = rows.get(&file_id).is_some_and(|row| {
+                row.staged_upload_user_id == Some(uploaded_by)
+                    && row.staged_upload_blueprint_id == Some(entity.blueprint_id)
+                    && row.staged_upload_attribute_code.as_deref() == Some(attribute_code)
+                    && row.staged_upload_context_id == Some(context_id)
+                    && u64::try_from(row.byte_size).is_ok_and(|size| {
+                        policy.allows(&row.mime_type, &row.display_filename, size)
+                    })
+            });
+            if !claimable {
+                return Err(RepositoryError::InvalidFileReferences);
+            }
+        }
+        sqlx::query(
+            "UPDATE files SET attachment_expires_at = NULL, staged_upload_user_id = NULL, staged_upload_blueprint_id = NULL, staged_upload_attribute_code = NULL, staged_upload_context_id = NULL, updated_at = now() WHERE id = ANY($1) AND workspace_id = $2",
+        )
+        .bind(&file_ids)
+        .bind(self.workspace_id.0)
+        .execute(&mut **transaction)
+        .await?;
+        Ok(())
     }
 
     /// Locks the workspace's file rows among `file_ids`, in ID order. A write
@@ -431,9 +545,10 @@ impl CatalogRepository {
         unique.dedup();
         // Lock the files, in ID order, so reconciliation, which locks
         // candidates before marking them deleted, cannot reclaim one before
-        // this reference commits.
+        // this reference commits. A staged upload is linked only by the
+        // create that claims it.
         let live = sqlx::query_scalar::<_, Uuid>(
-            "SELECT id FROM files WHERE id = ANY($1) AND workspace_id = $2 AND deleted_at IS NULL AND purpose = 'attachment' ORDER BY id FOR UPDATE",
+            "SELECT id FROM files WHERE id = ANY($1) AND workspace_id = $2 AND deleted_at IS NULL AND purpose = 'attachment' AND staged_upload_user_id IS NULL ORDER BY id FOR UPDATE",
         )
         .bind(&unique)
         .bind(workspace_id)
@@ -464,6 +579,141 @@ impl CatalogRepository {
             },
             linked,
         ))
+    }
+
+    /// Validates a file attribute of the blueprint family's latest published
+    /// revision for uploads made before the record exists, and returns its
+    /// policy and the resolved context (the default context when omitted).
+    /// Creating the record checks the files again against its own revision.
+    pub async fn staged_upload_policy(
+        &self,
+        blueprint_id: Uuid,
+        attribute_code: &str,
+        context_id: Option<Uuid>,
+    ) -> Result<(FilePolicy, Uuid), RepositoryError> {
+        let mut transaction = self.pool.begin().await?;
+        let resolved = self
+            .staged_upload_attribute(&mut transaction, blueprint_id, attribute_code, context_id)
+            .await?;
+        transaction.commit().await?;
+        Ok(resolved)
+    }
+
+    async fn staged_upload_attribute(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        blueprint_id: Uuid,
+        attribute_code: &str,
+        context_id: Option<Uuid>,
+    ) -> Result<(FilePolicy, Uuid), RepositoryError> {
+        let workspace_id = self.workspace_id.0;
+        let revision: Option<i64> = sqlx::query_scalar(
+            "SELECT version FROM blueprints WHERE id = $1 AND workspace_id = $2 AND status = 'published' AND kind = 'entity' AND deleted_at IS NULL ORDER BY version DESC LIMIT 1",
+        )
+        .bind(blueprint_id)
+        .bind(workspace_id)
+        .fetch_optional(&mut **transaction)
+        .await?;
+        let version = revision.ok_or(RepositoryError::NotFound("blueprint"))?;
+        let row = sqlx::query_as::<_, (String, Option<Value>, String, bool)>(
+            "SELECT value_type, file_policy, context_editable, readonly FROM attributes WHERE code = $1 AND blueprint_id = $2 AND blueprint_version = $3 AND workspace_id = $4 AND deleted_at IS NULL",
+        )
+        .bind(attribute_code)
+        .bind(blueprint_id)
+        .bind(version)
+        .bind(workspace_id)
+        .fetch_optional(&mut **transaction)
+        .await?
+        .ok_or(RepositoryError::AttributeNotApplicable)?;
+        let (value_type, file_policy, context_editable, readonly) = row;
+        if value_type != "file" {
+            return Err(RepositoryError::AttributeNotApplicable);
+        }
+        if readonly {
+            return Err(RepositoryError::FileAttributeReadonly);
+        }
+        let policy = file_policy
+            .and_then(|value| serde_json::from_value(value).ok())
+            .ok_or(RepositoryError::InvalidFilePolicy)?;
+        let context_id = self.file_upload_context(transaction, context_id).await?;
+        self.validate_context_editable(transaction, Some(context_id), &context_editable)
+            .await?;
+        Ok((policy, context_id))
+    }
+
+    /// Persists files uploaded for a blueprint's file attribute before the
+    /// record exists, bound to the uploading user, the blueprint family, the
+    /// attribute and the context. A [`STAGED_UPLOAD_LIFETIME_SECONDS`] window
+    /// protects them from reconciliation until a create claims them; see
+    /// [`Self::claim_staged_files_in_transaction`].
+    pub async fn persist_staged_uploads(
+        &self,
+        uploaded_by: Uuid,
+        blueprint_id: Uuid,
+        attribute_code: &str,
+        context_id: Option<Uuid>,
+        files: Vec<NewUploadedFile>,
+    ) -> Result<StagedUploadResult, RepositoryError> {
+        let workspace_id = self.workspace_id.0;
+        let mut transaction = self.pool.begin().await?;
+        let (policy, context_id) = self
+            .staged_upload_attribute(&mut transaction, blueprint_id, attribute_code, context_id)
+            .await?;
+        if policy.cardinality == "one" && files.len() != 1 {
+            return Err(RepositoryError::FileCardinality);
+        }
+        let expires_at: DateTime<Utc> =
+            sqlx::query_scalar("SELECT now() + make_interval(secs => $1)")
+                .bind(STAGED_UPLOAD_LIFETIME_SECONDS)
+                .fetch_one(&mut *transaction)
+                .await?;
+        let mut result = Vec::with_capacity(files.len());
+        for file in files {
+            self.finish_file_upload(&mut transaction, &file.object_key)
+                .await?;
+            let id = Uuid::new_v4();
+            let status = "queued".to_owned();
+            sqlx::query(
+                "INSERT INTO files (id, workspace_id, original_filename, display_filename, mime_type, byte_size, sha256, original_key, status, attachment_expires_at, staged_upload_user_id, staged_upload_blueprint_id, staged_upload_attribute_code, staged_upload_context_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)",
+            )
+            .bind(id)
+            .bind(workspace_id)
+            .bind(&file.original_filename)
+            .bind(&file.display_filename)
+            .bind(&file.mime_type)
+            .bind(file.byte_size as i64)
+            .bind(&file.sha256)
+            .bind(&file.object_key)
+            .bind(&status)
+            .bind(expires_at)
+            .bind(uploaded_by)
+            .bind(blueprint_id)
+            .bind(attribute_code)
+            .bind(context_id)
+            .execute(&mut *transaction)
+            .await?;
+            sqlx::query("INSERT INTO file_processing_jobs (id, workspace_id, file_id, kind, status) VALUES ($1,$2,$3,'metadata','queued')")
+                .bind(Uuid::new_v4())
+                .bind(workspace_id)
+                .bind(id)
+                .execute(&mut *transaction)
+                .await?;
+            result.push(UploadedFile {
+                id,
+                filename: file.display_filename,
+                mime_type: file.mime_type,
+                byte_size: file.byte_size as i64,
+                sha256: file.sha256,
+                status,
+            });
+        }
+        transaction.commit().await?;
+        Ok(StagedUploadResult {
+            attribute_code: attribute_code.to_owned(),
+            context_id,
+            files: result,
+            expires_at,
+        })
     }
 
     /// Persists files uploaded from a conversation without creating an entity
@@ -617,7 +867,6 @@ impl CatalogRepository {
         entity: &Entity,
         change: FileValueChange<'_>,
     ) -> Result<Entity, RepositoryError> {
-        let workspace_id = self.workspace_id.0;
         self.write_file_value(
             &mut transaction,
             entity.id,
@@ -627,34 +876,10 @@ impl CatalogRepository {
         )
         .await?;
         let stored = self.revalidate_entity(&mut transaction, entity).await?;
-        let context_code: String = sqlx::query_scalar(
-            "SELECT code FROM attribute_contexts WHERE id = $1 AND workspace_id = $2",
-        )
-        .bind(change.context_id)
-        .bind(workspace_id)
-        .fetch_one(&mut *transaction)
-        .await?;
-        let file_list = |ids: &[Uuid]| {
-            (!ids.is_empty())
-                .then(|| Value::from(ids.iter().map(Uuid::to_string).collect::<Vec<_>>()))
-        };
-        let before_value = file_list(&change.before);
-        let after_value = file_list(&change.after);
-        let changes = vec![AuditEventChange {
-            entity_id: entity.id,
-            attribute_id: change.attribute_id,
-            attribute_code: change.attribute_code.to_owned(),
-            context_id: Some(change.context_id),
-            context_code: Some(context_code),
-            relationship_target_entity_id: None,
-            change_kind: match (&before_value, &after_value) {
-                (None, _) => "set",
-                (Some(_), None) => "remove",
-                (Some(_), Some(_)) => "replace",
-            },
-            before_value,
-            after_value,
-        }];
+        let changes = vec![
+            self.file_value_audit_change(&mut transaction, entity.id, change)
+                .await?,
+        ];
         let event = self.core_event(
             ATTRIBUTE_VALUE_CHANGED_V1,
             "entity",
@@ -668,6 +893,43 @@ impl CatalogRepository {
         self.commit_entity_mutation(transaction, changes, event)
             .await?;
         Ok(stored)
+    }
+
+    /// The audit change of one file value write: file IDs in order.
+    async fn file_value_audit_change(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        entity_id: Uuid,
+        change: FileValueChange<'_>,
+    ) -> Result<AuditEventChange, RepositoryError> {
+        let context_code: String = sqlx::query_scalar(
+            "SELECT code FROM attribute_contexts WHERE id = $1 AND workspace_id = $2",
+        )
+        .bind(change.context_id)
+        .bind(self.workspace_id.0)
+        .fetch_one(&mut **transaction)
+        .await?;
+        let file_list = |ids: &[Uuid]| {
+            (!ids.is_empty())
+                .then(|| Value::from(ids.iter().map(Uuid::to_string).collect::<Vec<_>>()))
+        };
+        let before_value = file_list(&change.before);
+        let after_value = file_list(&change.after);
+        Ok(AuditEventChange {
+            entity_id,
+            attribute_id: change.attribute_id,
+            attribute_code: change.attribute_code.to_owned(),
+            context_id: Some(change.context_id),
+            context_code: Some(context_code),
+            relationship_target_entity_id: None,
+            change_kind: match (&before_value, &after_value) {
+                (None, _) => "set",
+                (Some(_), None) => "remove",
+                (Some(_), Some(_)) => "replace",
+            },
+            before_value,
+            after_value,
+        })
     }
 
     /// Archives the local file value and stores `file_ids` as its new value,

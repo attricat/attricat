@@ -5158,6 +5158,7 @@ impl CatalogRepository {
                                 blueprint_id,
                                 blueprint_version,
                                 values,
+                                files: super::entity_commands::CreateFileValues::None,
                                 system_tags: vec!["attricat.sample".to_owned()],
                                 system_metadata: serde_json::json!({}),
                                 host_sample_marker: true,

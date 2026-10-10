@@ -32,6 +32,13 @@ export const fileUploadResultSchema = z.object({
   files: uploadedFilesSchema,
   entity_updated_at: z.string(),
 });
+/** Files uploaded for a blueprint attribute before the record exists. */
+export const stagedUploadResultSchema = z.object({
+  attribute_code: z.string(),
+  context_id: z.uuid(),
+  files: uploadedFilesSchema,
+  expires_at: z.string(),
+});
 export const conversationUploadResultSchema = z.object({
   files: uploadedFilesSchema,
 });
@@ -48,3 +55,4 @@ export const fileReferencesUpdateResultSchema = z.object({
 
 export type FileMetadata = z.infer<typeof fileMetadataSchema>;
 export type FileUploadResult = z.infer<typeof fileUploadResultSchema>;
+export type StagedUploadResult = z.infer<typeof stagedUploadResultSchema>;

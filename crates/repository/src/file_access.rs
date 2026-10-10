@@ -17,6 +17,11 @@ pub enum FileAccessOperation {
     UpdateReferences {
         entity_id: Uuid,
     },
+    /// Uploading files for a file attribute of a blueprint before the record
+    /// that will reference them exists.
+    StagedUpload {
+        blueprint_id: Uuid,
+    },
     ConversationUpload {
         conversation_id: Uuid,
     },

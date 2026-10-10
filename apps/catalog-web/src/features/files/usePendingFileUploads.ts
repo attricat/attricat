@@ -14,6 +14,8 @@ export type PendingFile = {
   id: string;
   progress: number;
   error?: string;
+  /** Set once a file queued before its record exists has been staged. */
+  stagedFileId?: string;
 };
 
 type Options = {
@@ -190,7 +192,11 @@ export const usePendingFileUploads = (options: Options) => {
       if (queuePermitted() && !lock.current)
         setPending((items) => items.filter((item) => item.id !== id));
     },
-    retry: (item: PendingFile) => void upload([item]),
+    // A queued file is staged again when the record is created.
+    retry: (item: PendingFile) =>
+      deferred
+        ? updatePending(item.id, { error: undefined, progress: 0 })
+        : void upload([item]),
     uploadPending: () =>
       void upload(pending.filter((item) => !item.error && item.progress === 0)),
   };

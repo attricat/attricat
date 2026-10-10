@@ -2239,12 +2239,16 @@ pub async fn execute_mutation(
             let input: Input = decode(arguments)?;
             serde_json::to_value(
                 CatalogMutationService::new(repository)
-                    .create_entity(crate::model::CreateEntityFormRequest {
-                        blueprint: input.blueprint,
-                        values: input.values,
-                        system_tags: input.system_tags,
-                        system_metadata: input.system_metadata,
-                    })
+                    .create_entity(
+                        crate::model::CreateEntityFormRequest {
+                            blueprint: input.blueprint,
+                            values: input.values,
+                            files: Vec::new(),
+                            system_tags: input.system_tags,
+                            system_metadata: input.system_metadata,
+                        },
+                        None,
+                    )
                     .await?,
             )
             .expect("models serialize")

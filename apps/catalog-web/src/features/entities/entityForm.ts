@@ -110,17 +110,26 @@ export const entityFormValidationMessages =
     schema: i18n.t('entities.schemaValidationFailed'),
   });
 
-/** Required editable attributes that have no value yet; files upload apart. */
+/**
+ * How many files each file attribute will hold, by code, for a form that
+ * submits files with its values (such as files queued while creating a
+ * record). Without it, file attributes save apart and are not checked.
+ */
+export type FormFileCounts = Readonly<Record<string, number>>;
+
+/** Required editable attributes that have no value yet. */
 export const missingRequiredAttributes = (
   attributes: readonly Attribute[],
   fields: Record<string, string>,
   requiredCodes: ReadonlySet<string>,
+  fileCounts?: FormFileCounts,
 ): Attribute[] =>
   attributes.filter((attribute) => {
     if (!requiredCodes.has(attribute.code) || attribute.readonly === true)
       return false;
     const value = fields[attribute.code] ?? '';
-    if (attribute.value_type === attributeValueTypes.file) return false;
+    if (attribute.value_type === attributeValueTypes.file)
+      return fileCounts !== undefined && !(fileCounts[attribute.code] > 0);
     if (attribute.value_type === attributeValueTypes.relationship)
       return relationshipIdsForField(value).length === 0;
     return !value.trim();
@@ -133,14 +142,26 @@ export const validateEntityForm = (
   entitySchema?: JsonSchema | null,
   messages: EntityFormValidationMessages = entityFormValidationMessages(),
   fieldRules: ReadonlyMap<string, FieldEditRules> = new Map(),
+  fileCounts?: FormFileCounts,
 ): EntityFormValidation => {
   const fieldErrors: Record<string, string> = {};
   const document: Record<string, unknown> = {};
+  // File values are validated by the server; the form only knows how many.
+  const fileCodes = new Set<string>();
 
   for (const attribute of attributes) {
     const value = fields[attribute.code] ?? '';
     const required = requiredAttributes.includes(attribute.code);
-    if (attribute.value_type === attributeValueTypes.file) continue;
+    if (attribute.value_type === attributeValueTypes.file) {
+      if (!fileCounts) continue;
+      fileCodes.add(attribute.code);
+      const count = fileCounts[attribute.code] ?? 0;
+      if (required && count === 0)
+        fieldErrors[attribute.code] = messages.required;
+      else if (count > 0)
+        document[attribute.code] = Array.from({ length: count }, () => ({}));
+      continue;
+    }
     if (attribute.value_type === attributeValueTypes.relationship) {
       const targetEntityIds = relationshipIdsForField(value);
       if (required && targetEntityIds.length === 0) {
@@ -189,6 +210,11 @@ export const validateEntityForm = (
       formError: messages.schema,
     };
   const formError = schemaErrors
+    .filter(
+      (error) =>
+        error.keyword === 'required' ||
+        !fileCodes.has(attributeCodeForSchemaError(error) ?? ''),
+    )
     .map((error) => {
       const attributeCode = attributeCodeForSchemaError(error);
       if (

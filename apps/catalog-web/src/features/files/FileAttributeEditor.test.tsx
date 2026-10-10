@@ -10,7 +10,12 @@ import type { ReactElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import type { Attribute } from '../entities/api';
-import { uploadFiles, updateFileReferences, getFileMetadata } from './api';
+import {
+  getFileMetadata,
+  updateFileReferences,
+  uploadFiles,
+  uploadStagedFiles,
+} from './api';
 import { FileAttributeEditor } from './FileAttributeEditor';
 import {
   QueuedFileUploadsContext,
@@ -20,6 +25,7 @@ import type { FileMetadata } from './schemas';
 
 vi.mock('./api', () => ({
   uploadFiles: vi.fn(),
+  uploadStagedFiles: vi.fn(),
   updateFileReferences: vi.fn(),
   getFileMetadata: vi.fn().mockRejectedValue(new Error('Unavailable')),
   fileDownloadUrl: (id: string) => `/files/${id}`,
@@ -49,6 +55,7 @@ const attribute = {
   },
 } as Attribute;
 const entityId = '123e4567-e89b-12d3-a456-426614174000';
+const blueprintId = '123e4567-e89b-12d3-a456-426614174002';
 const file = new File(['contents'], 'document.txt', { type: 'text/plain' });
 const renderEditor = (files: FileMetadata[] = [], id?: string) =>
   render(
@@ -63,6 +70,7 @@ const renderEditor = (files: FileMetadata[] = [], id?: string) =>
 
 beforeEach(() => {
   vi.mocked(uploadFiles).mockReset();
+  vi.mocked(uploadStagedFiles).mockReset();
   vi.mocked(updateFileReferences).mockReset();
   vi.mocked(getFileMetadata).mockRejectedValue(new Error('Unavailable'));
 });
@@ -154,11 +162,11 @@ describe('FileAttributeEditor', () => {
     expect(screen.queryByText('document.txt')).toBeNull();
   });
 
-  it('queues files for upload once a new entity is created', async () => {
-    vi.mocked(uploadFiles).mockResolvedValue({
-      files: [],
-    } as unknown as Awaited<ReturnType<typeof uploadFiles>>);
-    const failed: unknown[][] = [];
+  it('queues files to upload when a new record is created', async () => {
+    vi.mocked(uploadStagedFiles).mockResolvedValue({
+      files: [{ id: entityId }],
+    } as unknown as Awaited<ReturnType<typeof uploadStagedFiles>>);
+    const results: unknown[] = [];
     const Creating = () => {
       const queued = useQueuedFileUploads('product');
       return (
@@ -172,8 +180,8 @@ describe('FileAttributeEditor', () => {
           <button
             onClick={() =>
               void queued
-                .uploadQueued(queued.queue.pending, entityId, 'context-id')
-                .then((names) => failed.push(names))
+                .stageQueued(queued.queue.pending, blueprintId, 'context-id')
+                .then((result) => results.push(result))
             }
             type="button"
           >
@@ -190,17 +198,74 @@ describe('FileAttributeEditor', () => {
     );
     expect(screen.getByText('document.txt')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Upload 1/ })).toBeNull();
-    expect(uploadFiles).not.toHaveBeenCalled();
+    expect(uploadStagedFiles).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Create' }));
-    await waitFor(() => expect(failed).toEqual([[]]));
-    expect(uploadFiles).toHaveBeenCalledWith(
+    await waitFor(() =>
+      expect(results).toEqual([
+        {
+          failed: [],
+          staged: [
+            {
+              attribute_code: 'document',
+              context_id: 'context-id',
+              file_ids: [entityId],
+            },
+          ],
+        },
+      ]),
+    );
+    expect(uploadStagedFiles).toHaveBeenCalledWith(
       expect.objectContaining({
         attributeCode: 'document',
+        blueprintId,
         contextId: 'context-id',
-        entityId,
         files: [file],
       }),
     );
+    expect(uploadFiles).not.toHaveBeenCalled();
+  });
+
+  it('keeps a file that failed to upload before create, to retry or remove', async () => {
+    vi.mocked(uploadStagedFiles).mockRejectedValue(new Error('Too large'));
+    const Creating = () => {
+      const queued = useQueuedFileUploads('product');
+      return (
+        <QueuedFileUploadsContext value={queued.queue}>
+          <FileAttributeEditor
+            attribute={attribute}
+            contextId={null}
+            disabled={false}
+            files={[]}
+          />
+          <button
+            onClick={() =>
+              void queued.stageQueued(queued.queue.pending, blueprintId, null)
+            }
+            type="button"
+          >
+            Create
+          </button>
+        </QueuedFileUploadsContext>
+      );
+    };
+    render(<Creating />);
+    fireEvent.drop(
+      screen.getByRole('button', { name: 'Choose or drop files' })
+        .parentElement!,
+      { dataTransfer: { files: [file] } },
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+    expect((await screen.findByRole('alert')).textContent).toBe('Too large');
+    // Retrying queues the file again for the next create.
+    fireEvent.click(
+      screen.getByRole('button', { name: /Retry.*document\.txt/ }),
+    );
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByText('document.txt')).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole('button', { name: /Remove.*document\.txt/ }),
+    );
+    expect(screen.queryByText('document.txt')).toBeNull();
   });
 
   it('uploads each queued file only once when upload is clicked repeatedly', async () => {

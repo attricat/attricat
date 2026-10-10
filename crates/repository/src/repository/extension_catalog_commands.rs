@@ -450,6 +450,7 @@ impl CatalogRepository {
                     blueprint_id,
                     blueprint_version,
                     values,
+                    files: super::entity_commands::CreateFileValues::None,
                     system_tags,
                     system_metadata,
                     host_sample_marker: false,

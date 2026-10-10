@@ -172,7 +172,7 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `POST` | `/entities/{id}/relationships/remove` | Remove relationship targets. |
 | `POST` | `/v1/entities/search` | Search a selected blueprint across published revisions by default, or one explicit revision; supports text queries, validated filters, facets, and sorting. |
 | `POST` | `/v1/entities/labels` | Display labels for `{"entity_ids": [...]}` (1–100 IDs): `{"items": [{"id", "blueprint_code", "display"}]}`, with `display` per context code. Only live entities the caller may read are returned; other IDs are omitted. |
-| `POST` | `/v1/entities` | Create an entity atomically with form values and optional system annotations. |
+| `POST` | `/v1/entities` | Create an entity atomically with form values, optional staged `files`, and optional system annotations; see [Files on create](#files-on-create). |
 | `POST` | `/v1/entities/batch` | Apply create, update, and delete operations to several entities in one transaction; see [Entity batches](#entity-batches). |
 | `GET`, `PUT` | `/v1/entities/{id}` | Read or update an entity form atomically, including optional system annotations. |
 | `POST` | `/v1/entities/{id}/duplicate` | Create a copy on the source's blueprint revision; see [Entity duplication](#entity-duplication). |
@@ -189,6 +189,7 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `GET` | `/v1/entities/{id}/publications/readiness` | Evaluate each enabled channel's required checks without publishing: `[{ "context_id", "context_code", "ready", "violations" }]`. |
 | `GET`, `PUT` | `/publication-channels`, `/publication-channels/{context_id}` | List channel contexts or update one with `{ "enabled": true, "required_rule_codes": ["has-sku"], "require_valid_entity": true }`. The two check fields are optional; omitting one keeps its current value. |
 | `POST` | `/entities/{entity_id}/file-attributes/{attribute_code}/uploads` | Stream one or more multipart file parts to a file attribute. |
+| `POST` | `/blueprints/{blueprint_id}/file-attributes/{attribute_code}/staged-uploads` | Stage files for a file attribute before the entity exists (`entities.write`); see [Files on create](#files-on-create). |
 | `GET` | `/files/{file_id}` | Read safe file metadata and generated variant metadata. |
 | `GET` | `/files/{file_id}/download` | Download the original through the API, with one safe byte range. |
 | `GET` | `/files/{file_id}/variants/{kind}/download` | Download a ready generated variant through the API. |
@@ -593,8 +594,9 @@ event and domain event, or nothing does.
 }
 ```
 
-- `create` takes the `POST /v1/entities` fields plus an optional
-  caller-chosen `entity_id`, so later operations can link to the new entity.
+- `create` takes the `POST /v1/entities` fields except `files`, plus an
+  optional caller-chosen `entity_id`, so later operations can link to the new
+  entity.
   An existing ID returns `409 entity_id_taken`.
 - `update` takes the `PUT /v1/entities/{id}` fields (`values`,
   `relationships`, `remove_values`, `system_tags`, `system_metadata`, and
@@ -742,6 +744,43 @@ content signature, declared MIME type, extension, request limits, and the
 pinned file-attribute policy before persisting metadata and queuing processing.
 A successful response is `201` with the attribute, context, and safe file
 metadata; originals and storage keys are never returned.
+
+### Files on create
+
+A file attribute only accepts uploads for an existing entity, so an entity
+whose `entity_schema` requires one is created with staged files.
+`POST /blueprints/{blueprint_id}/file-attributes/{attribute_code}/staged-uploads`
+takes the same multipart body as an entity upload and applies the attribute
+policy of the family's latest published revision. It needs the permission to
+create entities (`entities.write`) and returns `201` with `attribute_code`,
+the resolved `context_id`, the `files`, and `expires_at`. Staged files belong
+to the uploading user, blueprint family, attribute, and context, and are
+reclaimed after one hour unless an entity claims them.
+
+`POST /v1/entities` claims them with an optional `files` list:
+
+```json
+{
+  "blueprint": { "code": "product" },
+  "values": [],
+  "files": [
+    { "attribute_code": "photos", "context_id": null, "file_ids": ["…", "…"] }
+  ]
+}
+```
+
+Each entry writes one ordered value of an attribute and context (the default
+context when `context_id` is omitted or null). The files are linked before the
+entity is validated, so they satisfy `required` in the entity schema, and the
+creation's audit event and `entity.created` facts include them. Every file
+must have been staged by the caller for the same blueprint family, attribute,
+and context, within its window, not claimed before, and accepted by the
+attribute of the revision being created; otherwise the request fails with
+`422 invalid_file_references`. A single-file attribute takes one file
+(`422 file_cardinality_exceeded`). A staged file can be claimed once, and
+cannot be linked to an existing entity in any other way.
+
+### Processing and downloads
 
 A newly accepted file has `status: "queued"`. Image files are processed into
 `thumbnail` and `display` WebP variants (avatar files get a single square

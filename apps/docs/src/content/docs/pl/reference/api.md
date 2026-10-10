@@ -114,7 +114,7 @@ Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/
 
 | Metoda | Ścieżka | Opis |
 | --- | --- | --- |
-| `POST` | `/v1/entities` | Tworzy rekord z wartościami oraz opcjonalnymi `system_tags` i `system_metadata`. |
+| `POST` | `/v1/entities` | Tworzy rekord z wartościami, opcjonalnymi przesłanymi plikami (`files`) oraz opcjonalnymi `system_tags` i `system_metadata`. Zobacz [Pliki nowego rekordu](#pliki-nowego-rekordu). |
 | `POST` | `/v1/entities/batch` | Tworzy, aktualizuje i usuwa kilka rekordów naraz: zapisują się wszystkie zmiany albo żadna. Zobacz [Zmiany wsadowe](#zmiany-wsadowe). |
 | `GET`, `PUT` | `/v1/entities/{id}` | Odczytuje lub aktualizuje formularz rekordu: wartości, relacje, usunięcia, adnotacje. |
 | `GET`, `DELETE` | `/entities/{id}` | Odczytuje lub usuwa rekord. |
@@ -215,6 +215,7 @@ POST /api/v1/entities/search
 | Metoda | Ścieżka | Opis |
 | --- | --- | --- |
 | `POST` | `/entities/{entity_id}/file-attributes/{attribute_code}/uploads` | Przesyłanie z `multipart/form-data`: jedna lub więcej części `files` i opcjonalna część `context_id`. Zwraca `201`. |
+| `POST` | `/blueprints/{blueprint_id}/file-attributes/{attribute_code}/staged-uploads` | Przesyła pliki dla rekordu, który zamierzasz utworzyć. Treść jak wyżej. Zwraca `201` z `files` i `expires_at`. |
 | `GET` | `/files/{file_id}` | Metadane i stan przetwarzania. |
 | `GET` | `/files/{file_id}/download` | Oryginalny plik. Obsługuje jeden zakres `Range`. |
 | `GET` | `/files/{file_id}/variants/{kind}/download` | Wariant `thumbnail` lub `display`. |
@@ -222,6 +223,20 @@ POST /api/v1/entities/search
 | `POST` | `/files/{file_id}/retention-holds/{hold_id}/release` | Zwolnienie jawnej blokady przed terminem (`files.hold`). Blokad założonych przez status nie można zwolnić. |
 
 Pobieranie zwraca `409 file_processing`, dopóki plik nie ma stanu `ready`.
+
+#### Pliki nowego rekordu
+
+Rekord, którego schemat wymaga pliku, tworzy się razem z plikami w jednym żądaniu. Najpierw prześlij każdy plik do `/blueprints/{blueprint_id}/file-attributes/{attribute_code}/staged-uploads`, co wymaga uprawnienia do tworzenia rekordów. Następnie przekaż zwrócone identyfikatory do `POST /v1/entities`:
+
+```json
+{
+  "blueprint": { "code": "product" },
+  "values": [],
+  "files": [{ "attribute_code": "photos", "file_ids": ["…"] }]
+}
+```
+
+Dodaj `context_id` do wpisu dla kontekstu innego niż domyślny. Przesłanych plików możesz użyć tylko Ty, dla tego samego schematu, atrybutu i kontekstu, i tylko raz. Pliki, których żaden rekord nie użyje w ciągu godziny, są usuwane. W przeciwnym razie żądanie zwraca `422 invalid_file_references`.
 
 ### Konteksty i publikacja
 

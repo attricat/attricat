@@ -42,6 +42,53 @@ describe('entity form values', () => {
     );
   });
 
+  it('treats a required file attribute as filled only when files are queued', () => {
+    const withFiles = [
+      { code: 'title', value_type: 'string' },
+      { code: 'photo', value_type: 'file' },
+    ] satisfies Attribute[];
+    const codes = new Set(['title', 'photo']);
+    const missing = (counts: Record<string, number>) =>
+      missingRequiredAttributes(
+        withFiles,
+        { title: 'Lamp' },
+        codes,
+        counts,
+      ).map((attribute) => attribute.code);
+    expect(missing({})).toEqual(['photo']);
+    expect(missing({ photo: 0 })).toEqual(['photo']);
+    expect(missing({ photo: 2 })).toEqual([]);
+  });
+
+  it('checks the entity schema against queued files', () => {
+    const withFiles = [
+      { code: 'title', value_type: 'string' },
+      { code: 'photo', value_type: 'file' },
+    ] satisfies Attribute[];
+    const schema = {
+      type: 'object',
+      required: ['photo'],
+      properties: { photo: { type: 'array', minItems: 1 } },
+    };
+    const validate = (
+      counts?: Record<string, number>,
+      required: string[] = [],
+    ) =>
+      validateEntityForm(
+        withFiles,
+        { title: 'Lamp' },
+        required,
+        schema,
+        undefined,
+        undefined,
+        counts,
+      );
+    // Without queued files the schema requires the file attribute.
+    expect(validate({}).fieldErrors.photo).toBeDefined();
+    expect(validate({}, ['photo']).fieldErrors.photo).toBeDefined();
+    expect(validate({ photo: 1 }, ['photo'])).toEqual({ fieldErrors: {} });
+  });
+
   it('counts zero, false and empty JSON as values but not blank text', () => {
     const typed = [
       ...typedAttributes,
