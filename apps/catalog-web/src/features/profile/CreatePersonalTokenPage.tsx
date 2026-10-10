@@ -104,7 +104,7 @@ export const CreatePersonalTokenPage = () => {
           throw new Error(t('profile.tokenExpiry'));
         }
         const token = await createToken({
-          label: value.label,
+          label: value.label.trim(),
           permissions: value.permissions,
           ...(expiresAt ? { expires_at: expiresAt.toISOString() } : {}),
         });

@@ -329,7 +329,7 @@ export const SideNavigation = ({
               icon={<InboxNavigationIcon unread={unreadNotifications} />}
               label={t(inboxNavigationItem.labelKey)}
               onClick={navigateAway}
-              selected={pathname.startsWith(inboxNavigationItem.to)}
+              selected={isWithinRoute(pathname, inboxNavigationItem.to)}
               to={inboxNavigationItem.to}
             />
           }

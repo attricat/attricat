@@ -57,6 +57,14 @@ const wiggle = (degrees: number) =>
   );
 const blink = gesture({ scaleY: [1, 0.1, 1] }, { scaleY: 1 });
 
+/** Top-left corners of the app grid's tiles, clockwise from the top left. */
+const appTileOrigins = [
+  [3, 3],
+  [14, 3],
+  [14, 14],
+  [3, 14],
+] as const;
+
 type AnimatedIcon = { body: ReactNode; svg?: Variants };
 
 const animatedNavigationIcons = new Map<LucideIcon, AnimatedIcon>([
@@ -80,35 +88,17 @@ const animatedNavigationIcons = new Map<LucideIcon, AnimatedIcon>([
   [
     AppsIcon,
     {
-      body: (
-        <>
-          <m.rect height="7" rx="1" variants={pulse(0)} width="7" x="3" y="3" />
-          <m.rect
-            height="7"
-            rx="1"
-            variants={pulse(1)}
-            width="7"
-            x="14"
-            y="3"
-          />
-          <m.rect
-            height="7"
-            rx="1"
-            variants={pulse(2)}
-            width="7"
-            x="14"
-            y="14"
-          />
-          <m.rect
-            height="7"
-            rx="1"
-            variants={pulse(3)}
-            width="7"
-            x="3"
-            y="14"
-          />
-        </>
-      ),
+      body: appTileOrigins.map(([x, y], order) => (
+        <m.rect
+          height="7"
+          key={order}
+          rx="1"
+          variants={pulse(order)}
+          width="7"
+          x={x}
+          y={y}
+        />
+      )),
     },
   ],
   // The check is drawn.

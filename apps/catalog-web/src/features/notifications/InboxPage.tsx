@@ -47,7 +47,10 @@ export const InboxPage = ({ filter }: { filter: InboxFilter }) => {
     },
     enabled: Boolean(workspaceId && userId),
   });
-  const { setRead, markAllRead, remove } = useInboxActions(workspaceId, userId);
+  const { isBusy, markAllRead, remove, setRead } = useInboxActions(
+    workspaceId,
+    userId,
+  );
   const pages = notifications.data?.pages ?? [];
   const items = pages.flatMap((page) => page.items);
   // The newest page reports the current count; later pages can be older.
@@ -57,11 +60,6 @@ export const InboxPage = ({ filter }: { filter: InboxFilter }) => {
       item.subject?.kind === 'entity' ? [item.subject.id] : [],
     ),
   );
-  const busyId = setRead.isPending
-    ? setRead.variables.id
-    : remove.isPending
-      ? remove.variables
-      : undefined;
   const error = notifications.error ?? session.error;
 
   return (
@@ -129,12 +127,12 @@ export const InboxPage = ({ filter }: { filter: InboxFilter }) => {
           <List disablePadding>
             {items.map((notification) => (
               <NotificationListItem
-                busy={busyId === notification.id}
+                busy={isBusy(notification.id)}
                 key={notification.id}
                 notification={notification}
                 onDelete={() => remove.mutate(notification.id)}
                 onOpen={() => {
-                  if (!notification.read)
+                  if (!notification.read && !isBusy(notification.id))
                     setRead.mutate({ id: notification.id, read: true });
                 }}
                 onToggleRead={() =>
